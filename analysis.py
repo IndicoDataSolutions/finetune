@@ -7,7 +7,10 @@ from sklearn.metrics import accuracy_score
 
 from datasets import _rocstories
 
-def rocstories(data_dir, pred_path, log_path):
+def evaluate_rocstories(data_dir, pred_path, log_path):
+    """
+    Evaluate how well model performed on validation and test data for rocstories
+    """
     preds = pd.read_csv(pred_path, delimiter='\t')['prediction'].values.tolist()
     _, _, _, labels = _rocstories(os.path.join(data_dir, 'cloze_test_test__spring2016 - cloze_test_ALL_test.csv'))
     test_accuracy = accuracy_score(labels, preds)*100.

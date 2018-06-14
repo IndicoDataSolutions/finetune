@@ -1,9 +1,10 @@
 import re
-import ftfy
 import json
-import spacy
 
+import ftfy
+import spacy
 from tqdm import tqdm
+
 
 def get_pairs(word):
     """
@@ -16,6 +17,7 @@ def get_pairs(word):
         pairs.add((prev_char, char))
         prev_char = char
     return pairs
+
 
 def text_standardize(text):
     """
@@ -31,6 +33,7 @@ def text_standardize(text):
     text = re.sub('\s*\n\s*', ' \n ', text)
     text = re.sub('[^\S\n]+', ' ', text)
     return text.strip()
+
 
 class TextEncoder(object):
     """
