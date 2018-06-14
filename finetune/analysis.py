@@ -5,9 +5,10 @@ import pandas as pd
 
 from sklearn.metrics import accuracy_score
 
-from datasets import _rocstories
+from finetune.datasets import _rocstories
 
-def evaluate_rocstories(data_dir, pred_path, log_path):
+
+def rocstories_analysis(data_dir, pred_path, log_path):
     """
     Evaluate how well model performed on validation and test data for rocstories
     """

@@ -13,11 +13,11 @@ from tqdm import tqdm
 from sklearn.utils import shuffle
 from sklearn.metrics import accuracy_score
 
-from opt import adam, warmup_cosine, warmup_linear, warmup_constant
-from datasets import rocstories
-from analysis import rocstories_analysis
-from text_utils import TextEncoder
-from utils import encode_dataset, flatten, iter_data, find_trainable_variables, get_ema_vars, convert_gradient_to_tensor, shape_list, ResultLogger, assign_to_gpu, average_grads, make_path
+from finetune.opt import adam, warmup_cosine, warmup_linear, warmup_constant
+from finetune.datasets import rocstories
+from finetune.analysis import rocstories_analysis
+from finetune.text_utils import TextEncoder
+from finetune.utils import encode_dataset, flatten, iter_data, find_trainable_variables, get_ema_vars, convert_gradient_to_tensor, shape_list, ResultLogger, assign_to_gpu, average_grads, make_path
 
 
 def gelu(x):

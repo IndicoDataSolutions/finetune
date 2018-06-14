@@ -15,7 +15,7 @@ Usage
 Currently this code implements the ROCStories Cloze Test result reported in the paper by running:
 
 ```bash
-python train.py --dataset rocstories --desc rocstories --submit --analysis --data_dir [data_path]
+python3 -m finetune.train --dataset rocstories --desc rocstories --submit --analysis --data_dir [data_path]
 ```
 
 The ROCStories dataset can be downloaded from the University of Rochester [ROCStories Corpora webpage](http://cs.rochester.edu/nlp/rocstories).
