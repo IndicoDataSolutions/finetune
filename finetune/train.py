@@ -13,11 +13,12 @@ from tqdm import tqdm
 from sklearn.utils import shuffle
 from sklearn.metrics import accuracy_score
 
-from finetune.opt import adam, warmup_cosine, warmup_linear, warmup_constant
+from finetune.opt import AdamWeightDecay, warmup_cosine, warmup_linear, warmup_constant
 from finetune.datasets import rocstories
 from finetune.analysis import rocstories_analysis
-from finetune.text_utils import TextEncoder
+from finetune.encoding import TextEncoder
 from finetune.utils import encode_dataset, flatten, iter_data, find_trainable_variables, get_ema_vars, convert_gradient_to_tensor, shape_list, ResultLogger, assign_to_gpu, average_grads, make_path
+from finetune.model import LanguageModelClassifier
 
 
 def gelu(x):
@@ -29,7 +30,7 @@ def swish(x):
 
 
 opt_fns = {
-    'adam':adam,
+    'adam': AdamWeightDecay,
 }
 
 
@@ -48,8 +49,8 @@ lr_schedules = {
 
 
 def _norm(x, g=None, b=None, e=1e-5, axis=[1]):
-    u = tf.reduce_mean(x, axis=axis, keep_dims=True)
-    s = tf.reduce_mean(tf.square(x-u), axis=axis, keep_dims=True)
+    u = tf.reduce_mean(x, axis=axis, keepdims=True)
+    s = tf.reduce_mean(tf.square(x-u), axis=axis, keepdims=True)
     x = (x - u) * tf.rsqrt(s + e)
     if g is not None and b is not None:
         x = x*g + b
@@ -183,7 +184,7 @@ def clf(x, ny, w_init=tf.random_normal_initializer(stddev=0.02), b_init=tf.const
 
 def model(X, M, Y, train=False, reuse=False):
     with tf.variable_scope('model', reuse=reuse):
-        we = tf.get_variable("we", [n_vocab+n_special+n_ctx, n_embd], initializer=tf.random_normal_initializer(stddev=0.02))
+        we = tf.get_variable("we", [encoder.vocab_size + n_ctx, n_embd], initializer=tf.random_normal_initializer(stddev=0.02))
         we = dropout(we, embd_pdrop, train)
 
         X = tf.reshape(X, [-1, n_ctx, 2])
@@ -217,6 +218,9 @@ def model(X, M, Y, train=False, reuse=False):
 
 
 def mgpu_train(*xs):
+    """
+    Finetune language model on text inputs
+    """
     gpu_ops = []
     gpu_grads = []
     xs = (tf.split(x, n_gpu, 0) for x in xs)
@@ -250,7 +254,6 @@ def mgpu_predict(*xs):
     ops = [tf.concat(op, 0) for op in zip(*gpu_ops)]
     return ops
 
-
 def transform_roc(X1, X2, X3):
     n_batch = len(X1)
     xmb = np.zeros((n_batch, 2, n_ctx, 2), dtype=np.int32)
@@ -258,41 +261,38 @@ def transform_roc(X1, X2, X3):
     start = encoder['_start_']
     delimiter = encoder['_delimiter_']
     for i, (x1, x2, x3), in enumerate(zip(X1, X2, X3)):
-        x12 = [start]+x1[:max_len]+[delimiter]+x2[:max_len]+[clf_token]
-        x13 = [start]+x1[:max_len]+[delimiter]+x3[:max_len]+[clf_token]
+        x12 = [start] + x1[:max_len] + [delimiter] + x2[:max_len] + [clf_token]
+        x13 = [start] + x1[:max_len] + [delimiter] + x3[:max_len] + [clf_token]
         l12 = len(x12)
         l13 = len(x13)
         xmb[i, 0, :l12, 0] = x12
         xmb[i, 1, :l13, 0] = x13
         mmb[i, 0, :l12] = 1
         mmb[i, 1, :l13] = 1
-    xmb[:, :, :, 1] = np.arange(n_vocab+n_special, n_vocab+n_special+n_ctx)
+    xmb[:, :, :, 1] = np.arange(encoder.vocab_size, encoder.vocab_size + n_ctx)
     return xmb, mmb
 
 
-def iter_apply(Xs, Ms, Ys):
+def iter_apply(Xs, Ms, Ys, multi_gpu=True):
     fns = [lambda x:np.concatenate(x, 0), lambda x:float(np.sum(x))]
     results = []
     for xmb, mmb, ymb in iter_data(Xs, Ms, Ys, n_batch=n_batch_train, truncate=False, verbose=True):
-        n = len(xmb)
-        if n == n_batch_train:
-            res = sess.run([eval_mgpu_logits, eval_mgpu_clf_loss], {X_train:xmb, M_train:mmb, Y_train:ymb})
+        if multi_gpu:
+            res = sess.run([eval_mgpu_logits, eval_mgpu_clf_loss], {X: xmb, M: mmb, Y: ymb})
         else:
-            res = sess.run([eval_logits, eval_clf_loss], {X:xmb, M:mmb, Y:ymb})
-        res = [r*n for r in res]
+            res = sess.run([eval_logits, eval_clf_loss], {X: xmb, M: mmb, Y: ymb})
         results.append(res)
     results = zip(*results)
-    return [fn(res) for res, fn in zip(results, fns)]
+    return [fn(res) for fn, res in zip(fns, results)]
 
 
-def iter_predict(Xs, Ms):
+def iter_predict(Xs, Ms, multi_gpu=True):
     logits = []
     for xmb, mmb in iter_data(Xs, Ms, n_batch=n_batch_train, truncate=False, verbose=True):
-        n = len(xmb)
-        if n == n_batch_train:
-            logits.append(sess.run(eval_mgpu_logits, {X_train:xmb, M_train:mmb}))
+        if multi_gpu:
+            logits.append(sess.run(eval_mgpu_logits, {X: xmb, M: mmb}))
         else:
-            logits.append(sess.run(eval_logits, {X:xmb, M:mmb}))
+            logits.append(sess.run(eval_logits, {X: xmb, M: mmb}))
     logits = np.concatenate(logits, 0)
     return logits
 
@@ -306,8 +306,6 @@ def log():
     global best_score
     tr_logits, tr_cost = iter_apply(trX[:n_valid], trM[:n_valid], trY[:n_valid])
     va_logits, va_cost = iter_apply(vaX, vaM, vaY)
-    tr_cost = tr_cost/len(trY[:n_valid])
-    va_cost = va_cost/n_valid
     tr_acc = accuracy_score(trY[:n_valid], np.argmax(tr_logits, 1))*100.
     va_acc = accuracy_score(vaY, np.argmax(va_logits, 1))*100.
     logger.log(n_epochs=n_epochs, n_updates=n_updates, tr_cost=tr_cost, va_cost=va_cost, tr_acc=tr_acc, va_acc=va_acc)
@@ -398,38 +396,29 @@ if __name__ == '__main__':
     tf.set_random_seed(seed)
 
     logger = ResultLogger(path=os.path.join(log_dir, '{}.jsonl'.format(desc)), **args.__dict__)
-    text_encoder = TextEncoder(encoder_path, bpe_path)
-    encoder = text_encoder.encoder
-    n_vocab = len(text_encoder.encoder)
+    encoder = TextEncoder()
 
-    (trX1, trX2, trX3, trY), (vaX1, vaX2, vaX3, vaY), (teX1, teX2, teX3) = encode_dataset(rocstories(data_dir), encoder=text_encoder)
+    (trX1, trX2, trX3, trY), (vaX1, vaX2, vaX3, vaY), (teX1, teX2, teX3) = encode_dataset(rocstories(data_dir), encoder=encoder)
     n_y = 2
-    encoder['_start_'] = len(encoder)
-    encoder['_delimiter_'] = len(encoder)
-    encoder['_classify_'] = len(encoder)
     clf_token = encoder['_classify_']
-    n_special = 3
-    max_len = n_ctx//2-2
+    max_len = n_ctx // 2 - 2
     n_ctx = min(max([len(x1[:max_len])+max(len(x2[:max_len]), len(x3[:max_len])) for x1, x2, x3 in zip(trX1, trX2, trX3)]+[len(x1[:max_len])+max(len(x2[:max_len]), len(x3[:max_len])) for x1, x2, x3 in zip(vaX1, vaX2, vaX3)]+[len(x1[:max_len])+max(len(x2[:max_len]), len(x3[:max_len])) for x1, x2, x3 in zip(teX1, teX2, teX3)])+3, n_ctx)
     trX, trM = transform_roc(trX1, trX2, trX3)
     vaX, vaM = transform_roc(vaX1, vaX2, vaX3)
+
     if submit:
         teX, teM = transform_roc(teX1, teX2, teX3)
 
     n_train = len(trY)
     n_valid = len(vaY)
-    n_batch_train = n_batch*n_gpu
-    n_updates_total = (n_train//n_batch_train)*n_iter
+    n_batch_train = n_batch * n_gpu
+    n_updates_total = (n_train // n_batch_train) * n_iter
 
-    X_train = tf.placeholder(tf.int32, [n_batch_train, 2, n_ctx, 2])
-    M_train = tf.placeholder(tf.float32, [n_batch_train, 2, n_ctx])
     X = tf.placeholder(tf.int32, [None, 2, n_ctx, 2])
     M = tf.placeholder(tf.float32, [None, 2, n_ctx])
-
-    Y_train = tf.placeholder(tf.int32, [n_batch_train])
     Y = tf.placeholder(tf.int32, [None])
 
-    train, logits, clf_losses, lm_losses = mgpu_train(X_train, M_train, Y_train)
+    train, logits, clf_losses, lm_losses = mgpu_train(X, M, Y)
     clf_loss = tf.reduce_mean(clf_losses)
 
     params = find_trainable_variables('model')
@@ -442,16 +431,16 @@ if __name__ == '__main__':
     init_params = np.split(np.concatenate(init_params, 0), offsets)[:-1]
     init_params = [param.reshape(shape) for param, shape in zip(init_params, shapes)]
     init_params[0] = init_params[0][:n_ctx]
-    init_params[0] = np.concatenate([init_params[1], (np.random.randn(n_special, n_embd)*0.02).astype(np.float32), init_params[0]], 0)
+    init_params[0] = np.concatenate([init_params[1], (np.random.randn(len(encoder.special_tokens), n_embd)*0.02).astype(np.float32), init_params[0]], 0)
     del init_params[1]
 
     if n_transfer == -1:
         n_transfer = 0
     else:
-        n_transfer = 1+n_transfer*12
+        n_transfer = 1 + n_transfer * 12
     sess.run([p.assign(ip) for p, ip in zip(params[:n_transfer], init_params[:n_transfer])])
 
-    eval_mgpu_logits, eval_mgpu_clf_losses, eval_mgpu_lm_losses = mgpu_predict(X_train, M_train, Y_train)
+    eval_mgpu_logits, eval_mgpu_clf_losses, eval_mgpu_lm_losses = mgpu_predict(X, M, Y)
     eval_logits, eval_clf_losses, eval_lm_losses = model(X, M, Y, train=False, reuse=True)
     eval_clf_loss = tf.reduce_mean(eval_clf_losses)
     eval_mgpu_clf_loss = tf.reduce_mean(eval_mgpu_clf_losses)
@@ -465,7 +454,7 @@ if __name__ == '__main__':
     best_score = 0
     for i in range(n_iter):
         for xmb, mmb, ymb in iter_data(*shuffle(trX, trM, trYt, random_state=np.random), n_batch=n_batch_train, truncate=True, verbose=True):
-            cost, _ = sess.run([clf_loss, train], {X_train:xmb, M_train:mmb, Y_train:ymb})
+            cost, _ = sess.run([clf_loss, train], {X: xmb, M: mmb, Y: ymb})
             n_updates += 1
             if n_updates in [1000, 2000, 4000, 8000, 16000, 32000] and n_epochs == 0:
                 log()

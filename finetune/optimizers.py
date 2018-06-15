@@ -25,9 +25,9 @@ schedules = {
 }
 
 
-def adam(params, grads, lr, schedule, t_total, b1=0.9, b2=0.999, e=1e-8, l2=0, vector_l2=False, max_grad_norm=-1, **kwargs):
+def AdamWeightDecay(params, grads, lr, schedule, t_total, b1=0.9, b2=0.999, e=1e-8, l2=0, vector_l2=False, max_grad_norm=-1, **kwargs):
     """
-    adam with weight decay fix
+    Adam with weight decay fix
     """
     t = tf.Variable(0, dtype=tf.float32, trainable=False)
     tt = t+1
