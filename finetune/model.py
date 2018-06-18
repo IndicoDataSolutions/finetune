@@ -1,19 +1,30 @@
 import os
+import random
 
 import pandas as pd
 import tensorflow as tf
 import numpy as np
+from sklearn.utils import shuffle
 
 from finetune.encoding import TextEncoder
 from finetune.optimizers import AdamWeightDecay
-from finetune.utils import find_trainable_variables
-from finetune.config import MAX_LENGTH, BATCH_SIZE, WEIGTH_STDDEV
+from finetune.utils import find_trainable_variables, shape_list
+from finetune.config import MAX_LENGTH, BATCH_SIZE, WEIGHT_STDDEV, N_EPOCHS, CLF_P_DROP, SEED
 
 SHAPES_PATH = os.path.join(os.path.dirname(__file__), '..', 'model', 'params_shapes.json')
 PARAM_PATH = os.path.join(os.path.dirname(__file__), '..', 'model', 'params_{}.npy')
 N_EMBED = 768
 
-def model(X, M, Y, train=False, reuse=False, max_length=MAX_LENGTH):
+
+
+def clf(x, ny, w_init=tf.random_normal_initializer(stddev=WEIGHT_STDDEV), b_init=tf.constant_initializer(0), train=False):
+    with tf.variable_scope('clf'):
+        nx = shape_list(x)[-1]
+        w = tf.get_variable("w", [nx, ny], initializer=w_init)
+        b = tf.get_variable("b", [ny], initializer=b_init)
+        return tf.matmul(x, w) + b
+
+def model(X, M, Y, n_classes, train=False, reuse=False, max_length=MAX_LENGTH):
     with tf.variable_scope('model', reuse=reuse):
         we = tf.get_variable("we", [encoder.vocab_size + max_length, N_EMBED], initializer=tf.random_normal_initializer(stddev=WEIGTH_STDDEV))
         we = dropout(we, embd_pdrop, train)
@@ -25,7 +36,7 @@ def model(X, M, Y, train=False, reuse=False, max_length=MAX_LENGTH):
         for layer in range(n_layer):
             h = block(h, 'h%d'%layer, train=train, scale=True)
 
-        # language model ignores last hidden state because we don't have a target 
+        # language model ignores last hidden state because we don't have a target
         lm_h = tf.reshape(h[:, :-1], [-1, N_EMBED]) # [batch, seq_len, embed] --> [batch * seq_len, embed]
         lm_logits = tf.matmul(lm_h, we, transpose_b=True) # tied weights
         lm_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
@@ -42,12 +53,9 @@ def model(X, M, Y, train=False, reuse=False, max_length=MAX_LENGTH):
 
         clf_h = tf.reshape(clf_h, [-1, N_EMBED])
         if train and clf_pdrop > 0:
-            shape = shape_list(clf_h)
-            shape[1] = 1
-            clf_h = tf.nn.dropout(clf_h, 1 - clf_pdrop, shape)
-        clf_h = tf.reshape(clf_h, [-1, N_EMBED])
-        clf_logits = clf(clf_h, 1, train=train)
-        clf_logits = tf.reshape(clf_logits, [-1, 2])
+            clf_h = tf.nn.dropout(clf_h, 1 - CLF_P_DROP)
+        clf_logits = clf(clf_h, n_classes, train=train)
+        # clf_logits = tf.reshape(clf_logits, [-1, n_classes])
 
         clf_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=clf_logits, labels=Y)
         return clf_logits, clf_losses, lm_losses
@@ -55,7 +63,12 @@ def model(X, M, Y, train=False, reuse=False, max_length=MAX_LENGTH):
 
 class LanguageModelClassifier(object):
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, max_length=MAX_LENGTH, *args, **kwargs):
+        # ensure results are reproducible
+        random.seed(SEED)
+        np.random.seed(SEED)
+        tf.set_random_seed(SEED)
+
         self.encoder = TextEncoder()
 
         # tf placeholders
@@ -75,19 +88,32 @@ class LanguageModelClassifier(object):
         Y: Class labels
         """
         token_idxs = self.encoder.encode_for_classification(X, max_length=max_length)
-        x, mask = self._array_format(token_idxs)
-        self._build_model(self.X, self.M, self.Y)
+        train_x, train_mask = self._array_format(token_idxs)
+        n_classes = len(np.unique(Y))
+        self._build_model(self.X, self.M, self.Y, n_classes=n_classes)
         self._load_saved_params()
+
+        dataset = shuffle(train_x, train_mask, Y, random_state=np.random)
+
+        best_score = 0
+        for i in range(N_EPOCHS):
+            N_BATCH_TRAIN = BATCH_SIZE * N_GPUS
+            for xmb, mmb, ymb in iter_data(*dataset, n_batch=N_BATCH_TRAIN, truncate=True, verbose=True):
+                cost, _ = sess.run([self.clf_loss, self.train], {X: xmb, M: mmb, Y: ymb})
+                n_updates += 1
+            n_epochs += 1
+
 
     def _array_format(self, token_idxs, max_length=MAX_LENGTH):
         """
         Returns numpy array of token idxs and corresponding mask
-        Returned `x` array contains two channels: 
+        Returned `x` array contains two channels:
             0: byte-pair encoding embedding
             1: positional embedding
         """
+        n = len(token_idxs)
         seq_lengths = [len(x) for x in token_idxs]
-        x    = np.zeros((n, max_length), dtype=np.int32)
+        x    = np.zeros((n, max_length, 2), dtype=np.int32)
         mask = np.zeros((n, max_length), dtype=np.float32)
         for i, seq_length in enumerate(seq_lengths):
             # BPE embedding
@@ -158,53 +184,9 @@ class LanguageModelClassifier(object):
         init_params[0] = np.concatenate([init_params[1], (np.random.randn(len(encoder.special_tokens), N_EMBED) * WEIGTH_STDDEV).astype(np.float32), init_params[0]], 0)
         del init_params[1]
         sess.run([p.assign(ip) for p, ip in zip(pretrained_params, init_params)])
-     
+
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--desc', type=str)
-    parser.add_argument('--dataset', type=str)
-    parser.add_argument('--log_dir', type=str, default='log/')
-    parser.add_argument('--save_dir', type=str, default='save/')
-    parser.add_argument('--data_dir', type=str, default='data/')
-    parser.add_argument('--submission_dir', type=str, default='submission/')
-    parser.add_argument('--submit', action='store_true')
-    parser.add_argument('--analysis', action='store_true')
-    parser.add_argument('--seed', type=int, default=42)
-    parser.add_argument('--n_iter', type=int, default=3)
-    parser.add_argument('--n_batch', type=int, default=8)
-    parser.add_argument('--max_grad_norm', type=int, default=1)
-    parser.add_argument('--lr', type=float, default=6.25e-5)
-    parser.add_argument('--lr_warmup', type=float, default=0.002)
-    parser.add_argument('--n_ctx', type=int, default=512)
-    parser.add_argument('--n_embd', type=int, default=768)
-    parser.add_argument('--n_head', type=int, default=12)
-    parser.add_argument('--n_layer', type=int, default=12)
-    parser.add_argument('--embd_pdrop', type=float, default=0.1)
-    parser.add_argument('--attn_pdrop', type=float, default=0.1)
-    parser.add_argument('--resid_pdrop', type=float, default=0.1)
-    parser.add_argument('--clf_pdrop', type=float, default=0.1)
-    parser.add_argument('--l2', type=float, default=0.01)
-    parser.add_argument('--vector_l2', action='store_true')
-    parser.add_argument('--n_gpu', type=int, default=4)
-    parser.add_argument('--opt', type=str, default='adam')
-    parser.add_argument('--afn', type=str, default='gelu')
-    parser.add_argument('--lr_schedule', type=str, default='warmup_linear')
-    parser.add_argument('--encoder_path', type=str, default='model/encoder_bpe_40000.json')
-    parser.add_argument('--bpe_path', type=str, default='model/vocab_40000.bpe')
-    parser.add_argument('--n_transfer', type=int, default=12)
-    parser.add_argument('--lm_coef', type=float, default=0.5)
-    parser.add_argument('--b1', type=float, default=0.9)
-    parser.add_argument('--b2', type=float, default=0.999)
-    parser.add_argument('--e', type=float, default=1e-8)
-
-    args = parser.parse_args()
-    print(args)
-    globals().update(args.__dict__)
-    random.seed(seed)
-    np.random.seed(seed)
-    tf.set_random_seed(seed)
-
     df = pd.read_csv("data/AirlineNegativity.csv")
     model = LanguageModelClassifier()
     model.finetune(df.Text.values, df.Target.values)

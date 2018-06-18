@@ -276,6 +276,7 @@ def transform_roc(X1, X2, X3):
 def iter_apply(Xs, Ms, Ys, multi_gpu=True):
     fns = [lambda x:np.concatenate(x, 0), lambda x:float(np.sum(x))]
     results = []
+    # sketchy, loses some examples at the end
     for xmb, mmb, ymb in iter_data(Xs, Ms, Ys, n_batch=n_batch_train, truncate=False, verbose=True):
         if multi_gpu:
             res = sess.run([eval_mgpu_logits, eval_mgpu_clf_loss], {X: xmb, M: mmb, Y: ymb})
@@ -288,6 +289,7 @@ def iter_apply(Xs, Ms, Ys, multi_gpu=True):
 
 def iter_predict(Xs, Ms, multi_gpu=True):
     logits = []
+        # sketchy, loses some examples at the end
     for xmb, mmb in iter_data(Xs, Ms, n_batch=n_batch_train, truncate=False, verbose=True):
         if multi_gpu:
             logits.append(sess.run(eval_mgpu_logits, {X: xmb, M: mmb}))
@@ -376,7 +378,7 @@ if __name__ == '__main__':
     parser.add_argument('--clf_pdrop', type=float, default=0.1)
     parser.add_argument('--l2', type=float, default=0.01)
     parser.add_argument('--vector_l2', action='store_true')
-    parser.add_argument('--n_gpu', type=int, default=4)
+    parser.add_argument('--n_gpu', type=int, default=3)
     parser.add_argument('--opt', type=str, default='adam')
     parser.add_argument('--afn', type=str, default='gelu')
     parser.add_argument('--lr_schedule', type=str, default='warmup_linear')
@@ -410,8 +412,13 @@ if __name__ == '__main__':
         teX, teM = transform_roc(teX1, teX2, teX3)
 
     n_train = len(trY)
-    n_valid = len(vaY)
     n_batch_train = n_batch * n_gpu
+
+    # REMOVE ME PLEASE
+    n_valid = (len(vaY) // n_batch_train) * n_batch_train
+    vaX = vaX[:n_valid]
+    vaY = vaY[:n_valid]
+
     n_updates_total = (n_train // n_batch_train) * n_iter
 
     X = tf.placeholder(tf.int32, [None, 2, n_ctx, 2])
@@ -437,7 +444,7 @@ if __name__ == '__main__':
     init_params[0] = np.concatenate([init_params[1], (np.random.randn(len(encoder.special_tokens), n_embd)*0.02).astype(np.float32), init_params[0]], 0)
     del init_params[1]
     sess.run([p.assign(ip) for p, ip in zip(pretrained_params, init_params)])
- 
+
     eval_mgpu_logits, eval_mgpu_clf_losses, eval_mgpu_lm_losses = mgpu_predict(X, M, Y)
     eval_logits, eval_clf_losses, eval_lm_losses = model(X, M, Y, train=False, reuse=True)
     eval_clf_loss = tf.reduce_mean(eval_clf_losses)
