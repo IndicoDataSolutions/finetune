@@ -13,7 +13,7 @@ from tqdm import tqdm
 from sklearn.utils import shuffle
 from sklearn.metrics import accuracy_score
 
-from finetune.opt import AdamWeightDecay, warmup_cosine, warmup_linear, warmup_constant
+from finetune.optimizers import AdamWeightDecay, warmup_cosine, warmup_linear, warmup_constant
 from finetune.datasets import rocstories
 from finetune.analysis import rocstories_analysis
 from finetune.encoding import TextEncoder
@@ -421,25 +421,23 @@ if __name__ == '__main__':
     train, logits, clf_losses, lm_losses = mgpu_train(X, M, Y)
     clf_loss = tf.reduce_mean(clf_losses)
 
-    params = find_trainable_variables('model')
+    pretrained_params = find_trainable_variables('model', exclude='model/clf')
+    print("PRETRAINED_PARAMS", pretrained_params)
     sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
     sess.run(tf.global_variables_initializer())
 
     shapes = json.load(open('model/params_shapes.json'))
     offsets = np.cumsum([np.prod(shape) for shape in shapes])
+
     init_params = [np.load('model/params_{}.npy'.format(n)) for n in range(10)]
     init_params = np.split(np.concatenate(init_params, 0), offsets)[:-1]
     init_params = [param.reshape(shape) for param, shape in zip(init_params, shapes)]
+    print(init_params[1].shape)
     init_params[0] = init_params[0][:n_ctx]
     init_params[0] = np.concatenate([init_params[1], (np.random.randn(len(encoder.special_tokens), n_embd)*0.02).astype(np.float32), init_params[0]], 0)
     del init_params[1]
-
-    if n_transfer == -1:
-        n_transfer = 0
-    else:
-        n_transfer = 1 + n_transfer * 12
-    sess.run([p.assign(ip) for p, ip in zip(params[:n_transfer], init_params[:n_transfer])])
-
+    sess.run([p.assign(ip) for p, ip in zip(pretrained_params, init_params)])
+ 
     eval_mgpu_logits, eval_mgpu_clf_losses, eval_mgpu_lm_losses = mgpu_predict(X, M, Y)
     eval_logits, eval_clf_losses, eval_lm_losses = model(X, M, Y, train=False, reuse=True)
     eval_clf_loss = tf.reduce_mean(eval_clf_losses)

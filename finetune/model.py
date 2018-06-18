@@ -1,3 +1,5 @@
+import os
+
 import pandas as pd
 import tensorflow as tf
 import numpy as np
@@ -5,42 +7,45 @@ import numpy as np
 from finetune.encoding import TextEncoder
 from finetune.optimizers import AdamWeightDecay
 from finetune.utils import find_trainable_variables
-from finetune.config import MAX_LENGTH, BATCH_SIZE
+from finetune.config import MAX_LENGTH, BATCH_SIZE, WEIGTH_STDDEV
 
-SHAPES_PATH = os.path.join(os.path.dirnam(__file__), '..', 'model', 'params_shapes.json')
+SHAPES_PATH = os.path.join(os.path.dirname(__file__), '..', 'model', 'params_shapes.json')
 PARAM_PATH = os.path.join(os.path.dirname(__file__), '..', 'model', 'params_{}.npy')
+N_EMBED = 768
 
-
-def model(X, M, Y, train=False, reuse=False):
+def model(X, M, Y, train=False, reuse=False, max_length=MAX_LENGTH):
     with tf.variable_scope('model', reuse=reuse):
-        we = tf.get_variable("we", [encoder.vocab_size + n_ctx, n_embd], initializer=tf.random_normal_initializer(stddev=0.02))
+        we = tf.get_variable("we", [encoder.vocab_size + max_length, N_EMBED], initializer=tf.random_normal_initializer(stddev=WEIGTH_STDDEV))
         we = dropout(we, embd_pdrop, train)
 
-        X = tf.reshape(X, [-1, n_ctx])
-        M = tf.reshape(M, [-1, n_ctx])
+        X = tf.reshape(X, [-1, max_length, 2])
+        M = tf.reshape(M, [-1, max_length])
 
         h = embed(X, we)
         for layer in range(n_layer):
             h = block(h, 'h%d'%layer, train=train, scale=True)
 
-        lm_h = tf.reshape(h[:, :-1], [-1, n_embd])
-        lm_logits = tf.matmul(lm_h, we, transpose_b=True)
-        lm_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=lm_logits, labels=tf.reshape(X[:, 1:, 0], [-1]))
-        lm_losses = tf.reshape(lm_losses, [shape_list(X)[0], shape_list(X)[1]-1])
+        # language model ignores last hidden state because we don't have a target 
+        lm_h = tf.reshape(h[:, :-1], [-1, N_EMBED]) # [batch, seq_len, embed] --> [batch * seq_len, embed]
+        lm_logits = tf.matmul(lm_h, we, transpose_b=True) # tied weights
+        lm_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
+            logits=lm_logits,
+            labels=tf.reshape(X[:, 1:, 0], [-1])
+        )
+        lm_losses = tf.reshape(lm_losses, [shape_list(X)[0], shape_list(X)[1] - 1])
+        lm_losses = tf.reduce_sum(lm_losses * M, 1) / tf.reduce_sum(M, 1)
 
-        # weird indexing on M is happening because of the _start_ token
-        lm_losses = tf.reduce_sum(lm_losses * M[:, 1:], 1) / tf.reduce_sum(M[:, 1:], 1)
-
-        clf_h = tf.reshape(h, [-1, n_embd])
+        # Use hidden state at classifier token as input to final proj. + softmax
+        clf_h = tf.reshape(h, [-1, N_EMBED]) # [batch * seq_len, embed]
         pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
-        clf_h = tf.gather(clf_h, tf.range(shape_list(X)[0], dtype=tf.int32) * n_ctx + pool_idx)
+        clf_h = tf.gather(clf_h, tf.range(shape_list(X)[0], dtype=tf.int32) * max_length + pool_idx)
 
-        clf_h = tf.reshape(clf_h, [-1, 2, n_embd])
+        clf_h = tf.reshape(clf_h, [-1, N_EMBED])
         if train and clf_pdrop > 0:
             shape = shape_list(clf_h)
             shape[1] = 1
             clf_h = tf.nn.dropout(clf_h, 1 - clf_pdrop, shape)
-        clf_h = tf.reshape(clf_h, [-1, n_embd])
+        clf_h = tf.reshape(clf_h, [-1, N_EMBED])
         clf_logits = clf(clf_h, 1, train=train)
         clf_logits = tf.reshape(clf_logits, [-1, 2])
 
@@ -54,9 +59,9 @@ class LanguageModelClassifier(object):
         self.encoder = TextEncoder()
 
         # tf placeholders
-        self.X = tf.placeholder(tf.int32,   [None, max_length]) # token idxs
-        self.M = tf.placeholder(tf.float32, [None, max_length]) # sequence mask
-        self.Y = tf.placeholder(tf.int32,   [None])             # classification targets
+        self.X = tf.placeholder(tf.int32,   [None, max_length, 2]) # token idxs (BPE embedding + positional)
+        self.M = tf.placeholder(tf.float32, [None, max_length])    # sequence mask
+        self.Y = tf.placeholder(tf.int32,   [None])                # classification targets
 
         # symbolic ops
         self.logits    = None # classification logits
@@ -71,35 +76,43 @@ class LanguageModelClassifier(object):
         """
         token_idxs = self.encoder.encode_for_classification(X, max_length=max_length)
         x, mask = self._array_format(token_idxs)
-        self._build_model()
+        self._build_model(self.X, self.M, self.Y)
         self._load_saved_params()
 
-    def _array_format(self, token_idxs):
+    def _array_format(self, token_idxs, max_length=MAX_LENGTH):
         """
         Returns numpy array of token idxs and corresponding mask
+        Returned `x` array contains two channels: 
+            0: byte-pair encoding embedding
+            1: positional embedding
         """
         seq_lengths = [len(x) for x in token_idxs]
         x    = np.zeros((n, max_length), dtype=np.int32)
         mask = np.zeros((n, max_length), dtype=np.float32)
         for i, seq_length in enumerate(seq_lengths):
-            x[:, :seq_length] = token_idxs[i]
-            # value of 1 means "consider this in cross-entropy LM loss"
+            # BPE embedding
+            x[:, :seq_length, 0] = token_idxs[i]
+            # masking: value of 1 means "consider this in cross-entropy LM loss"
             mask[:, 1:seq_length] = 1
+        # positional_embeddings
+        x[:, :, 1] = np.arange(encoder.vocab_size, encoder.vocab_size + max_length)
         return x, mask
 
-    def _build_model(self):
+    def _build_model(self, X, M, Y):
         """
         Finetune language model on text inputs
         """
         gpu_ops = []
         gpu_grads = []
-        xs = (tf.split(x, n_gpu, 0) for x in xs)
-        for i, xs in enumerate(zip(*xs)):
+        X = tf.split(X, n_gpu, 0)
+        M = tf.split(M, n_gpu, 0)
+        Y = tf.split(Y, n_gpu, 0)
+        for i, (splitX, splitM, splitY) in enumerate(zip(X, M, Y)):
             do_reuse = True if i > 0 else None
             device = tf.device(assign_to_gpu(i, "/gpu:0"))
             scope = tf.variable_scope(tf.get_variable_scope(), reuse=do_reuse)
             with device, scope:
-                clf_logits, clf_losses, lm_losses = model(self.X, self.M, self.Y, train=True, reuse=do_reuse)
+                clf_logits, clf_losses, lm_losses = model(splitX, splitM, splitY, train=True, reuse=do_reuse)
                 if lm_coef > 0:
                     train_loss = tf.reduce_mean(clf_losses) + lm_coef * tf.reduce_mean(lm_losses)
                 else:
@@ -128,20 +141,24 @@ class LanguageModelClassifier(object):
         )
         self.clf_loss = tf.reduce_mean(self.clf_losses)
 
-    def _load_saved_params(self):
-        params = find_trainable_variables('model')
-        self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
-        self.sess.run(tf.global_variables_initializer())
+    def _load_saved_params(self, max_length=MAX_LENGTH):
+        """
+        Load serialized model parameters into tf Tensors
+        """
+        pretrained_params = find_trainable_variables('model', exclude='model/clf')
+        sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
+        sess.run(tf.initialize_global_variables())
 
-        shapes = json.load(open(SHAPES_PATH))
+        shapes = json.load(open('model/params_shapes.json'))
         offsets = np.cumsum([np.prod(shape) for shape in shapes])
-        init_params = [np.load(PARAM_PATH.format(n)) for n in range(10)]
+        init_params = [np.load('model/params_{}.npy'.format(n)) for n in range(10)]
         init_params = np.split(np.concatenate(init_params, 0), offsets)[:-1]
         init_params = [param.reshape(shape) for param, shape in zip(init_params, shapes)]
-        init_params[0] = init_params[0][:n_ctx]
-        init_params[0] = np.concatenate([init_params[1], (np.random.randn(len(encoder.special_tokens), n_embd)*0.02).astype(np.float32), init_params[0]], 0)
+        init_params[0] = init_params[0][:max_length]
+        init_params[0] = np.concatenate([init_params[1], (np.random.randn(len(encoder.special_tokens), N_EMBED) * WEIGTH_STDDEV).astype(np.float32), init_params[0]], 0)
         del init_params[1]
-
+        sess.run([p.assign(ip) for p, ip in zip(pretrained_params, init_params)])
+     
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

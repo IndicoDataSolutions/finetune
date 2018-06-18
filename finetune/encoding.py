@@ -6,7 +6,7 @@ import spacy
 from tqdm import tqdm
 
 from finetune.text_utils import get_pairs, text_standardize
-
+from finetune.config import MAX_LENGTH
 
 ENCODER_PATH = os.path.join(os.path.dirname(__file__), '..', 'model/encoder_bpe_40000.json')
 BPE_PATH = os.path.join(os.path.dirname(__file__), '..', 'model/vocab_40000.bpe')
@@ -118,3 +118,6 @@ class TextEncoder(object):
             for token_idxs in batch_token_idxs
         ]
         return batch_token_idxs
+
+    def encode_for_comparison(self, texts,max_length=MAX_LENGTH, verbose=True):
+        pass

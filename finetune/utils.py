@@ -99,9 +99,14 @@ class ResultLogger(object):
         self.f_log.close()
 
 
-def find_trainable_variables(key):
-    return tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, ".*{}.*".format(key))
-
+def find_trainable_variables(key, exclude=None):
+    trainable_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, ".*{}.*".format(key))
+    if exclude is not None:
+        trainable_variables = [
+            var for var in trainable_variables
+            if exclude not in var.name
+        ]
+    return trainable_variables
 
 def flatten(outer):
     return [el for inner in outer for el in inner]
