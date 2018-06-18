@@ -33,3 +33,9 @@ SEED = 42
 
 # TRAINING
 N_EPOCHS = 3
+
+
+#MODEL
+N_HEADS = 12
+N_LAYER = 12
+ACT_FN = "gelu"

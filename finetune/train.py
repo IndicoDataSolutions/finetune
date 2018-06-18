@@ -18,7 +18,6 @@ from finetune.datasets import rocstories
 from finetune.analysis import rocstories_analysis
 from finetune.encoding import TextEncoder
 from finetune.utils import encode_dataset, flatten, iter_data, find_trainable_variables, get_ema_vars, convert_gradient_to_tensor, shape_list, ResultLogger, assign_to_gpu, average_grads, make_path
-from finetune.model import LanguageModelClassifier
 
 
 def gelu(x):
@@ -80,7 +79,7 @@ def mask_attn_weights(w):
     return w
 
 
-def _attn(q, k, v, train=False, scale=False):
+def _attn(q, k, v, attn_pdrop, train=False, scale=False):
     w = tf.matmul(q, k)
 
     if scale:
@@ -132,37 +131,37 @@ def conv1d(x, scope, nf, rf, w_init=tf.random_normal_initializer(stddev=0.02), b
         return c
 
 
-def attn(x, scope, n_state, n_head, train=False, scale=False):
+def attn(x, scope, n_state, n_head, resid_pdrop, attn_pdrop, train=False, scale=False):
     assert n_state % n_head == 0
     with tf.variable_scope(scope):
-        c = conv1d(x, 'c_attn', n_state*3, 1, train=train)
+        c = conv1d(x, 'c_attn', n_state * 3, 1, train=train)
         q, k, v = tf.split(c, 3, 2)
         q = split_heads(q, n_head)
         k = split_heads(k, n_head, k=True)
         v = split_heads(v, n_head)
-        a = _attn(q, k, v, train=train, scale=scale)
+        a = _attn(q, k, v, attn_pdrop=attn_pdrop, train=train, scale=scale)
         a = merge_heads(a)
         a = conv1d(a, 'c_proj', n_state, 1, train=train)
         a = dropout(a, resid_pdrop, train)
         return a
 
 
-def mlp(x, scope, n_state, train=False):
+def mlp(x, scope, n_state, act_fn, resid_pdrop, train=False):
     with tf.variable_scope(scope):
         nx = shape_list(x)[-1]
-        act = act_fns[afn]
+        act = act_fns[act_fn]
         h = act(conv1d(x, 'c_fc', n_state, 1, train=train))
         h2 = conv1d(h, 'c_proj', nx, 1, train=train)
         h2 = dropout(h2, resid_pdrop, train)
         return h2
 
 
-def block(x, scope, train=False, scale=False):
+def block(x, n_head, act_fn, resid_pdrop, attn_pdrop, scope, train=False, scale=False):
     with tf.variable_scope(scope):
         nx = shape_list(x)[-1]
-        a = attn(x, 'attn', nx, n_head, train=train, scale=scale)
+        a = attn(x, 'attn', nx, n_head, resid_pdrop, attn_pdrop, train=train, scale=scale)
         n = norm(x+a, 'ln_1')
-        m = mlp(n, 'mlp', nx*4, train=train)
+        m = mlp(n, 'mlp', nx*4, act_fn, resid_pdrop, train=train)
         h = norm(n+m, 'ln_2')
         return h
 
@@ -192,7 +191,7 @@ def model(X, M, Y, train=False, reuse=False):
 
         h = embed(X, we)
         for layer in range(n_layer):
-            h = block(h, 'h%d'%layer, train=train, scale=True)
+            h = block(h, n_head, afn,  resid_pdrop, attn_pdrop, 'h%d'%layer, train=train, scale=True)
 
         lm_h = tf.reshape(h[:, :-1], [-1, n_embd])
         lm_logits = tf.matmul(lm_h, we, transpose_b=True)

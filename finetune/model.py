@@ -8,13 +8,13 @@ from sklearn.utils import shuffle
 
 from finetune.encoding import TextEncoder
 from finetune.optimizers import AdamWeightDecay
-from finetune.utils import find_trainable_variables, shape_list
-from finetune.config import MAX_LENGTH, BATCH_SIZE, WEIGHT_STDDEV, N_EPOCHS, CLF_P_DROP, SEED
+from finetune.utils import find_trainable_variables, shape_list, assign_to_gpu
+from finetune.config import MAX_LENGTH, BATCH_SIZE, WEIGHT_STDDEV, N_EPOCHS, CLF_P_DROP, SEED, N_GPUS, WEIGHT_STDDEV, EMBED_P_DROP, RESID_P_DROP, N_HEADS, N_LAYER, ATTN_P_DROP, ACT_FN
+from finetune.train import block, dropout, embed
 
 SHAPES_PATH = os.path.join(os.path.dirname(__file__), '..', 'model', 'params_shapes.json')
 PARAM_PATH = os.path.join(os.path.dirname(__file__), '..', 'model', 'params_{}.npy')
 N_EMBED = 768
-
 
 
 def clf(x, ny, w_init=tf.random_normal_initializer(stddev=WEIGHT_STDDEV), b_init=tf.constant_initializer(0), train=False):
@@ -24,17 +24,17 @@ def clf(x, ny, w_init=tf.random_normal_initializer(stddev=WEIGHT_STDDEV), b_init
         b = tf.get_variable("b", [ny], initializer=b_init)
         return tf.matmul(x, w) + b
 
-def model(X, M, Y, n_classes, train=False, reuse=False, max_length=MAX_LENGTH):
+def model(X, M, Y, n_classes, vocab_size, train=False, reuse=False, max_length=MAX_LENGTH):
     with tf.variable_scope('model', reuse=reuse):
-        we = tf.get_variable("we", [encoder.vocab_size + max_length, N_EMBED], initializer=tf.random_normal_initializer(stddev=WEIGTH_STDDEV))
-        we = dropout(we, embd_pdrop, train)
+        we = tf.get_variable("we", [vocab_size + max_length, N_EMBED], initializer=tf.random_normal_initializer(stddev=WEIGHT_STDDEV))
+        we = dropout(we, EMBED_P_DROP, train)
 
         X = tf.reshape(X, [-1, max_length, 2])
         M = tf.reshape(M, [-1, max_length])
 
         h = embed(X, we)
-        for layer in range(n_layer):
-            h = block(h, 'h%d'%layer, train=train, scale=True)
+        for layer in range(N_LAYER):
+            h = block(h, N_HEADS, ACT_FN, RESID_P_DROP, ATTN_P_DROP,'h%d'%layer, train=train, scale=True)
 
         # language model ignores last hidden state because we don't have a target
         lm_h = tf.reshape(h[:, :-1], [-1, N_EMBED]) # [batch, seq_len, embed] --> [batch * seq_len, embed]
@@ -43,8 +43,9 @@ def model(X, M, Y, n_classes, train=False, reuse=False, max_length=MAX_LENGTH):
             logits=lm_logits,
             labels=tf.reshape(X[:, 1:, 0], [-1])
         )
+
         lm_losses = tf.reshape(lm_losses, [shape_list(X)[0], shape_list(X)[1] - 1])
-        lm_losses = tf.reduce_sum(lm_losses * M, 1) / tf.reduce_sum(M, 1)
+        lm_losses = tf.reduce_sum(lm_losses * M[:, 1:], 1) / tf.reduce_sum(M[:, 1:], 1)
 
         # Use hidden state at classifier token as input to final proj. + softmax
         clf_h = tf.reshape(h, [-1, N_EMBED]) # [batch * seq_len, embed]
@@ -121,24 +122,24 @@ class LanguageModelClassifier(object):
             # masking: value of 1 means "consider this in cross-entropy LM loss"
             mask[:, 1:seq_length] = 1
         # positional_embeddings
-        x[:, :, 1] = np.arange(encoder.vocab_size, encoder.vocab_size + max_length)
+        x[:, :, 1] = np.arange(self.encoder.vocab_size, self.encoder.vocab_size + max_length)
         return x, mask
 
-    def _build_model(self, X, M, Y):
+    def _build_model(self, X, M, Y, n_classes):
         """
         Finetune language model on text inputs
         """
         gpu_ops = []
         gpu_grads = []
-        X = tf.split(X, n_gpu, 0)
-        M = tf.split(M, n_gpu, 0)
-        Y = tf.split(Y, n_gpu, 0)
+        X = tf.split(X, N_GPUS, 0)
+        M = tf.split(M, N_GPUS, 0)
+        Y = tf.split(Y, N_GPUS, 0)
         for i, (splitX, splitM, splitY) in enumerate(zip(X, M, Y)):
             do_reuse = True if i > 0 else None
             device = tf.device(assign_to_gpu(i, "/gpu:0"))
             scope = tf.variable_scope(tf.get_variable_scope(), reuse=do_reuse)
             with device, scope:
-                clf_logits, clf_losses, lm_losses = model(splitX, splitM, splitY, train=True, reuse=do_reuse)
+                clf_logits, clf_losses, lm_losses = model(splitX, splitM, splitY, vocab_size=self.encoder.vocab_size, n_classes=n_classes, train=True, reuse=do_reuse)
                 if lm_coef > 0:
                     train_loss = tf.reduce_mean(clf_losses) + lm_coef * tf.reduce_mean(lm_losses)
                 else:
@@ -181,12 +182,12 @@ class LanguageModelClassifier(object):
         init_params = np.split(np.concatenate(init_params, 0), offsets)[:-1]
         init_params = [param.reshape(shape) for param, shape in zip(init_params, shapes)]
         init_params[0] = init_params[0][:max_length]
-        init_params[0] = np.concatenate([init_params[1], (np.random.randn(len(encoder.special_tokens), N_EMBED) * WEIGTH_STDDEV).astype(np.float32), init_params[0]], 0)
+        init_params[0] = np.concatenate([init_params[1], (np.random.randn(len(self.encoder.special_tokens), N_EMBED) * WEIGTH_STDDEV).astype(np.float32), init_params[0]], 0)
         del init_params[1]
         sess.run([p.assign(ip) for p, ip in zip(pretrained_params, init_params)])
 
 
 if __name__ == "__main__":
     df = pd.read_csv("data/AirlineNegativity.csv")
-    model = LanguageModelClassifier()
-    model.finetune(df.Text.values, df.Target.values)
+    classifier = LanguageModelClassifier()
+    classifier.finetune(df.Text.values, df.Target.values)
