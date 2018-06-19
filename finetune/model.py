@@ -111,22 +111,24 @@ class LanguageModelClassifier(object):
         # Alias for finetune
         return self.finetune(*args, **kwargs)
 
-    def predict(self, X):
+    def predict(self, X, max_length=None):
         predictions = []
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
-            for xmb, mmb in self._infer_prep(X):
+            max_length = max_length or self.max_length
+            for xmb, mmb in self._infer_prep(X, max_length=max_length):
                 class_idx = self.sess.run(self.predict_op, {self.X: xmb, self.M: mmb})
                 features = self.sess.run(self.features, {self.X: xmb, self.M: mmb})
                 class_labels = self.label_encoder.inverse_transform(class_idx)
                 predictions.append(class_labels)
         return np.concatenate(predictions)
 
-    def predict_proba(self, X):
+    def predict_proba(self, X, max_length=None):
         predictions = []
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
-            for xmb, mmb in self._infer_prep(X):
+            max_length = max_length or self.max_length
+            for xmb, mmb in self._infer_prep(X, max_length=max_length):
                 probas = self.sess.run(self.predict_proba_op, {self.X: xmb, self.M: mmb})
                 classes = self.label_encoder.classes_
                 predictions.extend([
@@ -134,7 +136,7 @@ class LanguageModelClassifier(object):
                 ])
         return np.asarray(predictions)
 
-    def featurize(self, X):
+    def featurize(self, X, max_length=None):
         """
         Embed inputs in learned feature space
         TODO: enable featurization without finetuning (using pre-trained model only)
@@ -142,7 +144,8 @@ class LanguageModelClassifier(object):
         features = []
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
-            for xmb, mmb in self._infer_prep(X):
+            max_length = max_length or self.max_length
+            for xmb, mmb in self._infer_prep(X, max_length=max_length):
                 feature_batch = self.sess.run(self.features, {self.X: xmb, self.M: mmb})
                 features.append(feature_batch)
         return np.concatenate(features)
@@ -150,8 +153,9 @@ class LanguageModelClassifier(object):
     def transform(self, *args, **kwargs):
         return self.featurize(*args, **kwargs)
 
-    def _infer_prep(self, X):
-        token_idxs = self.encoder.encode_for_classification(X, max_length=self.max_length)
+    def _infer_prep(self, X, max_length=None):
+        max_length = max_length or self.max_length
+        token_idxs = self.encoder.encode_for_classification(X, max_length=max_length)
         infer_x, infer_mask = self._array_format(token_idxs)
         n_batch_train = BATCH_SIZE * N_GPUS
         self._build_model(n_updates_total=0, n_classes=self.n_classes, reuse=True, train=False)
