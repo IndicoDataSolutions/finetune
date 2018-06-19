@@ -109,8 +109,6 @@ class LanguageModelClassifier(object):
             for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, truncate=True, verbose=True):
                 cost, _ = self.sess.run([self.clf_loss, self.train], {self.X: xmb, self.M: mmb, self.Y: ymb})
 
-    def infer(self, X, 
-                
 
     def _array_format(self, token_idxs, max_length=MAX_LENGTH):
         """
