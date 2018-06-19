@@ -1,6 +1,7 @@
 import os
 import random
 import json
+import warnings
 
 import pandas as pd
 import tensorflow as tf
@@ -27,7 +28,7 @@ def clf(x, ny, w_init=tf.random_normal_initializer(stddev=WEIGHT_STDDEV), b_init
         b = tf.get_variable("b", [ny], initializer=b_init)
         return tf.matmul(x, w) + b
 
-def model(X, M, Y, n_classes, encoder, train=False, reuse=False, max_length=MAX_LENGTH):
+def model(X, M, Y, n_classes, encoder, train=False, reuse=None, max_length=MAX_LENGTH):
     with tf.variable_scope('model', reuse=reuse):
         we = tf.get_variable("we", [encoder.vocab_size + max_length, N_EMBED], initializer=tf.random_normal_initializer(stddev=WEIGHT_STDDEV))
         we = dropout(we, EMBED_P_DROP, train)
@@ -95,11 +96,12 @@ class LanguageModelClassifier(object):
         """
         token_idxs = self.encoder.encode_for_classification(X, max_length=max_length)
         train_x, train_mask = self._array_format(token_idxs)
-        n_classes = len(np.unique(Y))
         n_batch_train = BATCH_SIZE * N_GPUS
         n_updates_total = (len(Y) // n_batch_train) * N_EPOCHS
         Y = self.label_encoder.fit_transform(Y)
-        self._build_model(self.X, self.M, self.Y, n_updates_total=n_updates_total, n_classes=n_classes)
+        self.n_classes = len(self.label_encoder.classes_)
+                
+        self._build_model(self.X, self.M, self.Y, n_updates_total=n_updates_total, n_classes=self.n_classes)
         self._load_saved_params()
 
         dataset = shuffle(train_x, train_mask, Y, random_state=np.random)
@@ -108,8 +110,31 @@ class LanguageModelClassifier(object):
         for i in range(N_EPOCHS):
             for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, truncate=True, verbose=True):
                 cost, _ = self.sess.run([self.clf_loss, self.train], {self.X: xmb, self.M: mmb, self.Y: ymb})
+                return #TODO(BEN) Remove
 
+    def _infer_prep(self, X, max_length=None):
+        max_length = max_length or MAX_LENGTH
+        token_idxs = self.encoder.encode_for_classification(X, max_length=max_length)
+        infer_x, infer_mask = self._array_format(token_idxs)
+        n_batch_train = BATCH_SIZE * N_GPUS
+        self._build_model(self.X, self.M, self.Y, n_updates_total=0, n_classes=self.n_classes, reuse=True, train=False) # Assumes a model has already been built.
+        yield from iter_data(infer_x, infer_mask, n_batch=n_batch_train, truncate=False, verbose=True)
+        
+    def predict(self, X, max_length=None):
+        predict_op = tf.argmax(self.logits, -1)
+        predictions = []
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore")
+            for xmb, mmb in self._infer_prep(X, max_length):
+                class_idx = self.sess.run(predict_op, {self.X: xmb, self.M: mmb})
+                class_labels = self.label_encoder.inverse_transform(class_idx)
+                predictions.append(class_labels)
+                assert len(xmb) == len(class_labels), "Loosing Data somewhere"
+        return np.concatenate(predictions)
 
+    def predict_proba(self, X, max_length=None):
+        raise Exception("NI") #TODO(BEN) implement
+    
     def _array_format(self, token_idxs, max_length=MAX_LENGTH):
         """
         Returns numpy array of token idxs and corresponding mask
@@ -130,7 +155,7 @@ class LanguageModelClassifier(object):
         x[:, :, 1] = np.arange(self.encoder.vocab_size, self.encoder.vocab_size + max_length)
         return x, mask
 
-    def _build_model(self, X, M, Y, n_updates_total, n_classes, reuse=None):
+    def _build_model(self, X, M, Y, n_updates_total, n_classes, reuse=None, train=True):
         """
         Finetune language model on text inputs
         """
@@ -140,11 +165,12 @@ class LanguageModelClassifier(object):
         M = tf.split(M, N_GPUS, 0)
         Y = tf.split(Y, N_GPUS, 0)
         for i, (splitX, splitM, splitY) in enumerate(zip(X, M, Y)):
-            do_reuse = reuse or True if i > 0 else None
+            do_reuse = True if i > 0 else reuse
+            
             device = tf.device(assign_to_gpu(i, "/gpu:0"))
             scope = tf.variable_scope(tf.get_variable_scope(), reuse=do_reuse)
             with device, scope:
-                clf_logits, clf_losses, lm_losses = model(splitX, splitM, splitY, n_classes=n_classes, encoder=self.encoder, train=True, reuse=do_reuse)
+                clf_logits, clf_losses, lm_losses = model(splitX, splitM, splitY, n_classes=n_classes, encoder=self.encoder, train=train, reuse=do_reuse)
                 if LM_LOSS_COEF > 0:
                     train_loss = tf.reduce_mean(clf_losses) + LM_LOSS_COEF * tf.reduce_mean(lm_losses)
                 else:
@@ -196,3 +222,5 @@ if __name__ == "__main__":
     df = pd.read_csv("data/AirlineNegativity.csv")
     classifier = LanguageModelClassifier()
     classifier.finetune(df.Text.values, df.Target.values)
+    print(len(classifier.predict(df.Text.values)))
+    print(len(df.Target.values))
