@@ -108,6 +108,24 @@ def find_trainable_variables(key, exclude=None):
         ]
     return trainable_variables
 
+
+def soft_split(*xs, n_splits=None):
+    """
+    Similar to tf.split but can accomodate batches that are not evenly divisible by n_splits
+    """
+    if not n_splits or not isinstance(n_splits, int):
+        raise ValueError("n_splits must be a valid integer.")
+
+    x = xs[0]
+    current_batch_size = tf.shape(x)[0]
+    n_per = tf.to_int32(tf.ceil(current_batch_size / n_splits))
+    for i in range(n_splits):
+        start = i * n_per
+        end = tf.minimum((i + 1) * n_per, current_batch_size)
+        i_range = tf.range(start, end)
+        yield [tf.gather(x, i_range) for x in xs]
+
+
 def flatten(outer):
     return [el for inner in outer for el in inner]
 
