@@ -229,10 +229,7 @@ class LanguageModelClassifier(object):
 
         # Optionally load saved model
         if hasattr(self, '_save_path'):
-            self.sess = tf.Session()
-            saver = tf.train.Saver()
-            saver.restore(self.sess, self._save_path)
-            del self._save_path
+            self._load()
 
     def _set_random_seed(self, seed=SEED):
         random.seed(seed)
@@ -304,6 +301,12 @@ class LanguageModelClassifier(object):
         model._initialize()
         tf.reset_default_graph()
         return model
+
+    def _load(self):
+        self.sess = tf.Session()
+        saver = tf.train.Saver()
+        saver.restore(self.sess, self._save_path)
+        del self._save_path
 
 if __name__ == "__main__":
     df = pd.read_csv("data/AirlineNegativity.csv")
