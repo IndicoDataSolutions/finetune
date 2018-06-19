@@ -97,7 +97,7 @@ class LanguageModelClassifier(object):
         n_updates_total = (len(Y) // n_batch_train) * N_EPOCHS
         Y = self.label_encoder.fit_transform(Y)
         self.n_classes = len(self.label_encoder.classes_)
-        self._build_model(self.X, self.M, self.Y, n_updates_total=n_updates_total, n_classes=self.n_classes)
+        self._build_model(n_updates_total=n_updates_total, n_classes=self.n_classes)
         self._load_saved_params()
 
         dataset = shuffle(train_x, train_mask, Y, random_state=np.random)
@@ -115,7 +115,7 @@ class LanguageModelClassifier(object):
         predictions = []
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
-            for xmb, mmb in self._infer_prep(X, self.max_length):
+            for xmb, mmb in self._infer_prep(X):
                 class_idx = self.sess.run(self.predict_op, {self.X: xmb, self.M: mmb})
                 features = self.sess.run(self.features, {self.X: xmb, self.M: mmb})
                 class_labels = self.label_encoder.inverse_transform(class_idx)
@@ -126,7 +126,7 @@ class LanguageModelClassifier(object):
         predictions = []
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
-            for xmb, mmb in self._infer_prep(X, self.max_length):
+            for xmb, mmb in self._infer_prep(X):
                 probas = self.sess.run(self.predict_proba_op, {self.X: xmb, self.M: mmb})
                 classes = self.label_encoder.classes_
                 predictions.extend([
@@ -142,7 +142,7 @@ class LanguageModelClassifier(object):
         features = []
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
-            for xmb, mmb in self._infer_prep(X, self.max_length):
+            for xmb, mmb in self._infer_prep(X):
                 feature_batch = self.sess.run(self.features, {self.X: xmb, self.M: mmb})
                 features.append(feature_batch)
         return np.concatenate(features)
@@ -154,7 +154,7 @@ class LanguageModelClassifier(object):
         token_idxs = self.encoder.encode_for_classification(X, max_length=self.max_length)
         infer_x, infer_mask = self._array_format(token_idxs)
         n_batch_train = BATCH_SIZE * N_GPUS
-        self._build_model(self.X, self.M, self.Y, n_updates_total=0, n_classes=self.n_classes, reuse=True, train=False)
+        self._build_model(n_updates_total=0, n_classes=self.n_classes, reuse=True, train=False)
         yield from iter_data(infer_x, infer_mask, n_batch=n_batch_train, truncate=False, verbose=True)
 
     def _array_format(self, token_idxs):
@@ -192,7 +192,7 @@ class LanguageModelClassifier(object):
             device = tf.device(assign_to_gpu(i, "/gpu:0"))
             scope = tf.variable_scope(tf.get_variable_scope(), reuse=do_reuse)
             with device, scope:
-                clf_logits, clf_losses, lm_losses = model(X, M, Y, n_classes=n_classes, encoder=self.encoder, train=train, reuse=do_reuse)
+                clf_logits, clf_losses, lm_losses, features = model(X, M, Y, n_classes=n_classes, encoder=self.encoder, train=train, reuse=do_reuse)
                 if LM_LOSS_COEF > 0:
                     train_loss = tf.reduce_mean(clf_losses) + LM_LOSS_COEF * tf.reduce_mean(lm_losses)
                 else:
@@ -275,9 +275,13 @@ class LanguageModelClassifier(object):
         Save in two steps:
             - Serialize tf graph to disk using tf.Saver
             - Serialize python model using pickle
+
+        Note:
+            Does not serialize state of Adam optimizer.
+            Should not be used to save / restore a training model.
         """
         self._save_path = path
-        saver = tf.train.Saver()
+        saver = tf.train.Saver(tf.trainable_variables())
         saver.save(self.sess, path)
         pickle.dump(self, open(self._save_path + '.pkl', 'wb'))
         del self._save_path
@@ -302,4 +306,5 @@ if __name__ == "__main__":
     classifier = LanguageModelClassifier()
     classifier.finetune(df.Text.values[:100], df.Target.values[:100])
     features = classifier.transform(df.Text.values[:10])
-    print(features.shape)
+    classifier.save('saved-models/airline-negativity')
+    print(classifier.predict(['text']))
