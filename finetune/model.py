@@ -2,6 +2,7 @@ import os
 import random
 import json
 import warnings
+import pickle
 
 import pandas as pd
 import tensorflow as tf
@@ -70,17 +71,13 @@ class LanguageModelClassifier(object):
 
     def __init__(self, max_length=MAX_LENGTH, *args, **kwargs):
         # ensure results are reproducible
-        random.seed(SEED)
-        np.random.seed(SEED)
-        tf.set_random_seed(SEED)
-
-        self.encoder = TextEncoder()
+        self.max_length = max_length
         self.label_encoder = LabelEncoder()
+        self._initialize()
 
-        # tf placeholders
-        self.X = tf.placeholder(tf.int32,   [None, max_length, 2]) # token idxs (BPE embedding + positional)
-        self.M = tf.placeholder(tf.float32, [None, max_length])    # sequence mask
-        self.Y = tf.placeholder(tf.int32,   [None])                # classification targets
+    def _initialize(self):
+        self._set_random_seed(SEED)
+        self.encoder = TextEncoder()
 
         # symbolic ops
         self.logits    = None # classification logits
@@ -89,18 +86,17 @@ class LanguageModelClassifier(object):
         self.train     = None # gradient + parameter update
         self.features  = None # hidden representation fed to classifier
 
-    def finetune(self, X, Y, batch_size=BATCH_SIZE, max_length=MAX_LENGTH):
+    def finetune(self, X, Y, batch_size=BATCH_SIZE):
         """
         X: List / array of text
         Y: Class labels
         """
-        token_idxs = self.encoder.encode_for_classification(X, max_length=max_length)
+        token_idxs = self.encoder.encode_for_classification(X, max_length=self.max_length)
         train_x, train_mask = self._array_format(token_idxs)
         n_batch_train = BATCH_SIZE * N_GPUS
         n_updates_total = (len(Y) // n_batch_train) * N_EPOCHS
         Y = self.label_encoder.fit_transform(Y)
         self.n_classes = len(self.label_encoder.classes_)
-
         self._build_model(self.X, self.M, self.Y, n_updates_total=n_updates_total, n_classes=self.n_classes)
         self._load_saved_params()
 
@@ -115,22 +111,22 @@ class LanguageModelClassifier(object):
         # Alias for finetune
         return self.finetune(*args, **kwargs)
 
-    def predict(self, X, max_length=None):
+    def predict(self, X):
         predictions = []
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
-            for xmb, mmb in self._infer_prep(X, max_length):
+            for xmb, mmb in self._infer_prep(X, self.max_length):
                 class_idx = self.sess.run(self.predict_op, {self.X: xmb, self.M: mmb})
                 features = self.sess.run(self.features, {self.X: xmb, self.M: mmb})
                 class_labels = self.label_encoder.inverse_transform(class_idx)
                 predictions.append(class_labels)
         return np.concatenate(predictions)
 
-    def predict_proba(self, X, max_length=None):
+    def predict_proba(self, X):
         predictions = []
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
-            for xmb, mmb in self._infer_prep(X, max_length):
+            for xmb, mmb in self._infer_prep(X, self.max_length):
                 probas = self.sess.run(self.predict_proba_op, {self.X: xmb, self.M: mmb})
                 classes = self.label_encoder.classes_
                 predictions.extend([
@@ -138,7 +134,7 @@ class LanguageModelClassifier(object):
                 ])
         return np.asarray(predictions)
 
-    def featurize(self, X, max_length=None):
+    def featurize(self, X):
         """
         Embed inputs in learned feature space
         TODO: enable featurization without finetuning (using pre-trained model only)
@@ -146,7 +142,7 @@ class LanguageModelClassifier(object):
         features = []
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
-            for xmb, mmb in self._infer_prep(X, max_length):
+            for xmb, mmb in self._infer_prep(X, self.max_length):
                 feature_batch = self.sess.run(self.features, {self.X: xmb, self.M: mmb})
                 features.append(feature_batch)
         return np.concatenate(features)
@@ -154,15 +150,14 @@ class LanguageModelClassifier(object):
     def transform(self, *args, **kwargs):
         return self.featurize(*args, **kwargs)
 
-    def _infer_prep(self, X, max_length=None):
-        max_length = max_length or MAX_LENGTH
-        token_idxs = self.encoder.encode_for_classification(X, max_length=max_length)
+    def _infer_prep(self, X):
+        token_idxs = self.encoder.encode_for_classification(X, max_length=self.max_length)
         infer_x, infer_mask = self._array_format(token_idxs)
         n_batch_train = BATCH_SIZE * N_GPUS
         self._build_model(self.X, self.M, self.Y, n_updates_total=0, n_classes=self.n_classes, reuse=True, train=False)
         yield from iter_data(infer_x, infer_mask, n_batch=n_batch_train, truncate=False, verbose=True)
 
-    def _array_format(self, token_idxs, max_length=MAX_LENGTH):
+    def _array_format(self, token_idxs):
         """
         Returns numpy array of token idxs and corresponding mask
         Returned `x` array contains two channels:
@@ -171,33 +166,33 @@ class LanguageModelClassifier(object):
         """
         n = len(token_idxs)
         seq_lengths = [len(x) for x in token_idxs]
-        x    = np.zeros((n, max_length, 2), dtype=np.int32)
-        mask = np.zeros((n, max_length), dtype=np.float32)
+        x    = np.zeros((n, self.max_length, 2), dtype=np.int32)
+        mask = np.zeros((n, self.max_length), dtype=np.float32)
         for i, seq_length in enumerate(seq_lengths):
             # BPE embedding
             x[i, :seq_length, 0] = token_idxs[i]
             # masking: value of 1 means "consider this in cross-entropy LM loss"
             mask[i, 1:seq_length] = 1
         # positional_embeddings
-        x[:, :, 1] = np.arange(self.encoder.vocab_size, self.encoder.vocab_size + max_length)
+        x[:, :, 1] = np.arange(self.encoder.vocab_size, self.encoder.vocab_size + self.max_length)
         return x, mask
 
-    def _build_model(self, X, M, Y, n_updates_total, n_classes, reuse=None, train=True):
+    def _build_model(self, n_updates_total, n_classes, train=True, reuse=None):
         """
         Finetune language model on text inputs
         """
         gpu_ops = []
         gpu_grads = []
-        X = tf.split(X, N_GPUS, 0)
-        M = tf.split(M, N_GPUS, 0)
-        Y = tf.split(Y, N_GPUS, 0)
-        for i, (splitX, splitM, splitY) in enumerate(zip(X, M, Y)):
+        self._define_placeholders()
+        splitX = tf.split(self.X, N_GPUS, 0)
+        splitM = tf.split(self.M, N_GPUS, 0)
+        splitY = tf.split(self.Y, N_GPUS, 0)
+        for i, (X, M, Y) in enumerate(zip(splitX, splitM, splitY)):
             do_reuse = True if i > 0 else reuse
-
             device = tf.device(assign_to_gpu(i, "/gpu:0"))
             scope = tf.variable_scope(tf.get_variable_scope(), reuse=do_reuse)
             with device, scope:
-                clf_logits, clf_losses, lm_losses, features = model(splitX, splitM, splitY, n_classes=n_classes, encoder=self.encoder, train=train, reuse=do_reuse)
+                clf_logits, clf_losses, lm_losses = model(X, M, Y, n_classes=n_classes, encoder=self.encoder, train=train, reuse=do_reuse)
                 if LM_LOSS_COEF > 0:
                     train_loss = tf.reduce_mean(clf_losses) + LM_LOSS_COEF * tf.reduce_mean(lm_losses)
                 else:
@@ -228,9 +223,27 @@ class LanguageModelClassifier(object):
         )
         self.clf_loss = tf.reduce_mean(self.clf_losses)
 
-    def _load_saved_params(self, max_length=MAX_LENGTH):
+        # Optionally load saved model
+        if hasattr(self, '_save_path'):
+            self.sess = tf.Session()
+            saver = tf.train.Saver()
+            saver.restore(self.sess, self._save_path)
+            del self._save_path
+
+    def _set_random_seed(self, seed=SEED):
+        random.seed(seed)
+        np.random.seed(seed)
+        tf.set_random_seed(seed)
+
+    def _define_placeholders(self):
+        # tf placeholders
+        self.X = tf.placeholder(tf.int32,   [None, self.max_length, 2]) # token idxs (BPE embedding + positional)
+        self.M = tf.placeholder(tf.float32, [None, self.max_length])    # sequence mask
+        self.Y = tf.placeholder(tf.int32,   [None])                     # classification targets
+
+    def _load_saved_params(self):
         """
-        Load serialized model parameters into tf Tensors
+        Load serialized base model parameters into tf Tensors
         """
         pretrained_params = find_trainable_variables('model', exclude='model/clf')
         self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
@@ -241,11 +254,48 @@ class LanguageModelClassifier(object):
         init_params = [np.load('model/params_{}.npy'.format(n)) for n in range(10)]
         init_params = np.split(np.concatenate(init_params, 0), offsets)[:-1]
         init_params = [param.reshape(shape) for param, shape in zip(init_params, shapes)]
-        init_params[0] = init_params[0][:max_length]
+        init_params[0] = init_params[0][:self.max_length]
         init_params[0] = np.concatenate([init_params[1], (np.random.randn(len(self.encoder.special_tokens), N_EMBED) * WEIGHT_STDDEV).astype(np.float32), init_params[0]], 0)
         del init_params[1]
         self.sess.run([p.assign(ip) for p, ip in zip(pretrained_params, init_params)])
 
+    def __getstate__(self):
+        """
+        Leave serialization of all tf objects to tf
+        """
+        required_fields = ['label_encoder', 'max_length', '_save_path']
+        serialized_state = {
+            k: v for k, v in self.__dict__.items()
+            if k in required_fields
+        }
+        return serialized_state
+
+    def save(self, path):
+        """
+        Save in two steps:
+            - Serialize tf graph to disk using tf.Saver
+            - Serialize python model using pickle
+        """
+        self._save_path = path
+        saver = tf.train.Saver()
+        saver.save(self.sess, path)
+        pickle.dump(self, open(self._save_path + '.pkl', 'wb'))
+        del self._save_path
+
+    @classmethod
+    def load(cls, path):
+        """
+        Load in three steps:
+            - Load pickled python object
+            - Clear tf graph
+            - Load serialized session using tf.train.Saver
+        """
+        if not path.endswith('.pkl'):
+            path += '.pkl'
+        model = pickle.load(open(path, 'rb'))
+        model._initialize()
+        tf.reset_default_graph()
+        return model
 
 if __name__ == "__main__":
     df = pd.read_csv("data/AirlineNegativity.csv")
@@ -253,6 +303,3 @@ if __name__ == "__main__":
     classifier.finetune(df.Text.values[:100], df.Target.values[:100])
     features = classifier.transform(df.Text.values[:10])
     print(features.shape)
-
-    # print(classifier.predict(df.Text.values[:100]))
-    # print(classifier.predict_proba(df.Text.values[:10]))
