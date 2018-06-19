@@ -1,16 +1,19 @@
 import os
 import random
+import json
 
 import pandas as pd
 import tensorflow as tf
 import numpy as np
 from sklearn.utils import shuffle
+from sklearn.preprocessing import LabelEncoder
 
+from functools import partial
 from finetune.encoding import TextEncoder
 from finetune.optimizers import AdamWeightDecay
-from finetune.utils import find_trainable_variables, shape_list, assign_to_gpu
-from finetune.config import MAX_LENGTH, BATCH_SIZE, WEIGHT_STDDEV, N_EPOCHS, CLF_P_DROP, SEED, N_GPUS, WEIGHT_STDDEV, EMBED_P_DROP, RESID_P_DROP, N_HEADS, N_LAYER, ATTN_P_DROP, ACT_FN
-from finetune.train import block, dropout, embed
+from finetune.utils import find_trainable_variables, shape_list, assign_to_gpu, average_grads, iter_data
+from finetune.config import MAX_LENGTH, BATCH_SIZE, WEIGHT_STDDEV, N_EPOCHS, CLF_P_DROP, SEED, N_GPUS, WEIGHT_STDDEV, EMBED_P_DROP, RESID_P_DROP, N_HEADS, N_LAYER, ATTN_P_DROP, ACT_FN, LM_LOSS_COEF, LR, B1, B2, L2_REG, VECTOR_L2, EPSILON,LR_SCHEDULE, MAX_GRAD_NORM, LM_LOSS_COEF, LR_WARMUP
+from finetune.train import block, dropout, embed, lr_schedules
 
 SHAPES_PATH = os.path.join(os.path.dirname(__file__), '..', 'model', 'params_shapes.json')
 PARAM_PATH = os.path.join(os.path.dirname(__file__), '..', 'model', 'params_{}.npy')
@@ -24,9 +27,9 @@ def clf(x, ny, w_init=tf.random_normal_initializer(stddev=WEIGHT_STDDEV), b_init
         b = tf.get_variable("b", [ny], initializer=b_init)
         return tf.matmul(x, w) + b
 
-def model(X, M, Y, n_classes, vocab_size, train=False, reuse=False, max_length=MAX_LENGTH):
+def model(X, M, Y, n_classes, encoder, train=False, reuse=False, max_length=MAX_LENGTH):
     with tf.variable_scope('model', reuse=reuse):
-        we = tf.get_variable("we", [vocab_size + max_length, N_EMBED], initializer=tf.random_normal_initializer(stddev=WEIGHT_STDDEV))
+        we = tf.get_variable("we", [encoder.vocab_size + max_length, N_EMBED], initializer=tf.random_normal_initializer(stddev=WEIGHT_STDDEV))
         we = dropout(we, EMBED_P_DROP, train)
 
         X = tf.reshape(X, [-1, max_length, 2])
@@ -49,11 +52,12 @@ def model(X, M, Y, n_classes, vocab_size, train=False, reuse=False, max_length=M
 
         # Use hidden state at classifier token as input to final proj. + softmax
         clf_h = tf.reshape(h, [-1, N_EMBED]) # [batch * seq_len, embed]
+        clf_token = encoder['_classify_']
         pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
         clf_h = tf.gather(clf_h, tf.range(shape_list(X)[0], dtype=tf.int32) * max_length + pool_idx)
 
         clf_h = tf.reshape(clf_h, [-1, N_EMBED])
-        if train and clf_pdrop > 0:
+        if train and CLF_P_DROP > 0:
             clf_h = tf.nn.dropout(clf_h, 1 - CLF_P_DROP)
         clf_logits = clf(clf_h, n_classes, train=train)
         # clf_logits = tf.reshape(clf_logits, [-1, n_classes])
@@ -71,6 +75,7 @@ class LanguageModelClassifier(object):
         tf.set_random_seed(SEED)
 
         self.encoder = TextEncoder()
+        self.label_encoder = LabelEncoder()
 
         # tf placeholders
         self.X = tf.placeholder(tf.int32,   [None, max_length, 2]) # token idxs (BPE embedding + positional)
@@ -91,19 +96,21 @@ class LanguageModelClassifier(object):
         token_idxs = self.encoder.encode_for_classification(X, max_length=max_length)
         train_x, train_mask = self._array_format(token_idxs)
         n_classes = len(np.unique(Y))
-        self._build_model(self.X, self.M, self.Y, n_classes=n_classes)
+        n_batch_train = BATCH_SIZE * N_GPUS
+        n_updates_total = (len(Y) // n_batch_train) * N_EPOCHS
+        Y = self.label_encoder.fit_transform(Y)
+        self._build_model(self.X, self.M, self.Y, n_updates_total=n_updates_total, n_classes=n_classes)
         self._load_saved_params()
 
         dataset = shuffle(train_x, train_mask, Y, random_state=np.random)
 
         best_score = 0
         for i in range(N_EPOCHS):
-            N_BATCH_TRAIN = BATCH_SIZE * N_GPUS
-            for xmb, mmb, ymb in iter_data(*dataset, n_batch=N_BATCH_TRAIN, truncate=True, verbose=True):
-                cost, _ = sess.run([self.clf_loss, self.train], {X: xmb, M: mmb, Y: ymb})
-                n_updates += 1
-            n_epochs += 1
+            for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, truncate=True, verbose=True):
+                cost, _ = self.sess.run([self.clf_loss, self.train], {self.X: xmb, self.M: mmb, self.Y: ymb})
 
+    def infer(self, X, 
+                
 
     def _array_format(self, token_idxs, max_length=MAX_LENGTH):
         """
@@ -125,7 +132,7 @@ class LanguageModelClassifier(object):
         x[:, :, 1] = np.arange(self.encoder.vocab_size, self.encoder.vocab_size + max_length)
         return x, mask
 
-    def _build_model(self, X, M, Y, n_classes):
+    def _build_model(self, X, M, Y, n_updates_total, n_classes, reuse=None):
         """
         Finetune language model on text inputs
         """
@@ -135,13 +142,13 @@ class LanguageModelClassifier(object):
         M = tf.split(M, N_GPUS, 0)
         Y = tf.split(Y, N_GPUS, 0)
         for i, (splitX, splitM, splitY) in enumerate(zip(X, M, Y)):
-            do_reuse = True if i > 0 else None
+            do_reuse = reuse or True if i > 0 else None
             device = tf.device(assign_to_gpu(i, "/gpu:0"))
             scope = tf.variable_scope(tf.get_variable_scope(), reuse=do_reuse)
             with device, scope:
-                clf_logits, clf_losses, lm_losses = model(splitX, splitM, splitY, vocab_size=self.encoder.vocab_size, n_classes=n_classes, train=True, reuse=do_reuse)
-                if lm_coef > 0:
-                    train_loss = tf.reduce_mean(clf_losses) + lm_coef * tf.reduce_mean(lm_losses)
+                clf_logits, clf_losses, lm_losses = model(splitX, splitM, splitY, n_classes=n_classes, encoder=self.encoder, train=True, reuse=do_reuse)
+                if LM_LOSS_COEF > 0:
+                    train_loss = tf.reduce_mean(clf_losses) + LM_LOSS_COEF * tf.reduce_mean(lm_losses)
                 else:
                     train_loss = tf.reduce_mean(clf_losses)
                 params = find_trainable_variables("model")
@@ -156,15 +163,15 @@ class LanguageModelClassifier(object):
         self.train = AdamWeightDecay(
             params=params,
             grads=grads,
-            lr=lr,
-            schedule=partial(lr_schedules[lr_schedule], warmup=lr_warmup),
+            lr=LR,
+            schedule=partial(lr_schedules[LR_SCHEDULE], warmup=LR_WARMUP),
             t_total=n_updates_total,
-            l2=l2,
-            max_grad_norm=max_grad_norm,
-            vector_l2=vector_l2,
-            b1=b1,
-            b2=b2,
-            e=e
+            l2=L2_REG,
+            max_grad_norm=MAX_GRAD_NORM,
+            vector_l2=VECTOR_L2,
+            b1=B1,
+            b2=B2,
+            e=EPSILON
         )
         self.clf_loss = tf.reduce_mean(self.clf_losses)
 
@@ -173,8 +180,8 @@ class LanguageModelClassifier(object):
         Load serialized model parameters into tf Tensors
         """
         pretrained_params = find_trainable_variables('model', exclude='model/clf')
-        sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
-        sess.run(tf.initialize_global_variables())
+        self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
+        self.sess.run(tf.global_variables_initializer())
 
         shapes = json.load(open('model/params_shapes.json'))
         offsets = np.cumsum([np.prod(shape) for shape in shapes])
@@ -182,9 +189,9 @@ class LanguageModelClassifier(object):
         init_params = np.split(np.concatenate(init_params, 0), offsets)[:-1]
         init_params = [param.reshape(shape) for param, shape in zip(init_params, shapes)]
         init_params[0] = init_params[0][:max_length]
-        init_params[0] = np.concatenate([init_params[1], (np.random.randn(len(self.encoder.special_tokens), N_EMBED) * WEIGTH_STDDEV).astype(np.float32), init_params[0]], 0)
+        init_params[0] = np.concatenate([init_params[1], (np.random.randn(len(self.encoder.special_tokens), N_EMBED) * WEIGHT_STDDEV).astype(np.float32), init_params[0]], 0)
         del init_params[1]
-        sess.run([p.assign(ip) for p, ip in zip(pretrained_params, init_params)])
+        self.sess.run([p.assign(ip) for p, ip in zip(pretrained_params, init_params)])
 
 
 if __name__ == "__main__":
