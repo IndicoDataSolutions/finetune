@@ -123,8 +123,7 @@ def soft_split(*xs, n_splits=None):
         start = i * n_per
         end = tf.minimum((i + 1) * n_per, current_batch_size)
         i_range = tf.range(start, end)
-        xs = [tf.gather(x, i_range) for x in xs]
-        yield xs
+        yield [tf.gather(x, i_range) for x in xs]
 
 
 def flatten(outer):
