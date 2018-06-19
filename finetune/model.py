@@ -13,7 +13,7 @@ from sklearn.preprocessing import LabelEncoder
 from functools import partial
 from finetune.encoding import TextEncoder
 from finetune.optimizers import AdamWeightDecay
-from finetune.utils import find_trainable_variables, shape_list, assign_to_gpu, average_grads, iter_data
+from finetune.utils import find_trainable_variables, shape_list, assign_to_gpu, average_grads, iter_data, soft_split
 from finetune.config import MAX_LENGTH, BATCH_SIZE, WEIGHT_STDDEV, N_EPOCHS, CLF_P_DROP, SEED, N_GPUS, WEIGHT_STDDEV, EMBED_P_DROP, RESID_P_DROP, N_HEADS, N_LAYER, ATTN_P_DROP, ACT_FN, LM_LOSS_COEF, LR, B1, B2, L2_REG, VECTOR_L2, EPSILON,LR_SCHEDULE, MAX_GRAD_NORM, LM_LOSS_COEF, LR_WARMUP
 from finetune.train import block, dropout, embed, lr_schedules
 
@@ -104,7 +104,7 @@ class LanguageModelClassifier(object):
 
         best_score = 0
         for i in range(N_EPOCHS):
-            for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, truncate=True, verbose=True):
+            for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=True):
                 cost, _ = self.sess.run([self.clf_loss, self.train_op], {self.X: xmb, self.M: mmb, self.Y: ymb})
 
     def fit(self, *args, **kwargs):
@@ -159,7 +159,7 @@ class LanguageModelClassifier(object):
         infer_x, infer_mask = self._array_format(token_idxs)
         n_batch_train = BATCH_SIZE * N_GPUS
         self._build_model(n_updates_total=0, n_classes=self.n_classes, reuse=True, train=False)
-        yield from iter_data(infer_x, infer_mask, n_batch=n_batch_train, truncate=False, verbose=True)
+        yield from iter_data(infer_x, infer_mask, n_batch=n_batch_train, verbose=True)
 
     def _array_format(self, token_idxs):
         """
@@ -188,10 +188,8 @@ class LanguageModelClassifier(object):
         gpu_ops = []
         gpu_grads = []
         self._define_placeholders()
-        splitX = tf.split(self.X, N_GPUS, 0)
-        splitM = tf.split(self.M, N_GPUS, 0)
-        splitY = tf.split(self.Y, N_GPUS, 0)
-        for i, (X, M, Y) in enumerate(zip(splitX, splitM, splitY)):
+
+        for i, (X, M, Y) in enumerate(soft_split(self.X, self.M, self.Y, n_splits=N_GPUS)):
             do_reuse = True if i > 0 else reuse
             device = tf.device(assign_to_gpu(i, "/gpu:0"))
             scope = tf.variable_scope(tf.get_variable_scope(), reuse=do_reuse)
@@ -247,7 +245,7 @@ class LanguageModelClassifier(object):
         Load serialized base model parameters into tf Tensors
         """
         pretrained_params = find_trainable_variables('model', exclude='model/clf')
-        self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
+        self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=False))
         self.sess.run(tf.global_variables_initializer())
 
         shapes = json.load(open('model/params_shapes.json'))
@@ -312,6 +310,6 @@ if __name__ == "__main__":
     df = pd.read_csv("data/AirlineNegativity.csv")
     classifier = LanguageModelClassifier()
     classifier.finetune(df.Text.values[:100], df.Target.values[:100])
-    features = classifier.transform(df.Text.values[:10])
-    classifier.save('saved-models/airline-negativity')
-    print(classifier.predict(['text']))
+    predictions = classifier.predict_proba(df.Text.values[:10])
+    print(predictions)
+    # classifier.save('saved-models/airline-negativity')
