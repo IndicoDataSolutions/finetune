@@ -59,12 +59,11 @@ def model(X, M, Y, n_classes, encoder, train=False, reuse=None, max_length=MAX_L
 
         clf_h = tf.reshape(clf_h, [-1, N_EMBED])
         if train and CLF_P_DROP > 0:
-            clf_h = tf.nn.dropout(clf_h, 1 - CLF_P_DROP)
+            clf_h = tf.nn.dropout(clf_h, keep_prob=(1 - CLF_P_DROP))
         clf_logits = clf(clf_h, n_classes, train=train)
-        # clf_logits = tf.reshape(clf_logits, [-1, n_classes])
 
         clf_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=clf_logits, labels=Y)
-        return clf_logits, clf_losses, lm_losses
+        return clf_logits, clf_losses, lm_losses, clf_h
 
 
 class LanguageModelClassifier(object):
@@ -88,6 +87,7 @@ class LanguageModelClassifier(object):
         self.clf_loss  = None # cross-entropy loss
         self.lm_losses = None # language modeling losses
         self.train     = None # gradient + parameter update
+        self.features  = None # hidden representation fed to classifier
 
     def finetune(self, X, Y, batch_size=BATCH_SIZE, max_length=MAX_LENGTH):
         """
@@ -100,7 +100,7 @@ class LanguageModelClassifier(object):
         n_updates_total = (len(Y) // n_batch_train) * N_EPOCHS
         Y = self.label_encoder.fit_transform(Y)
         self.n_classes = len(self.label_encoder.classes_)
-                
+
         self._build_model(self.X, self.M, self.Y, n_updates_total=n_updates_total, n_classes=self.n_classes)
         self._load_saved_params()
 
@@ -109,32 +109,43 @@ class LanguageModelClassifier(object):
         best_score = 0
         for i in range(N_EPOCHS):
             for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, truncate=True, verbose=True):
-                cost, _ = self.sess.run([self.clf_loss, self.train], {self.X: xmb, self.M: mmb, self.Y: ymb})
-                return #TODO(BEN) Remove
+                cost, _ = self.sess.run([self.clf_loss, self.train_op], {self.X: xmb, self.M: mmb, self.Y: ymb})
+
+    def fit(self, *args, **kwargs):
+        # Alias for finetune
+        return self.finetune(*args, **kwargs)
+
+    def predict(self, X, max_length=None):
+        predictions = []
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore")
+            for xmb, mmb in self._infer_prep(X, max_length):
+                class_idx = self.sess.run(self.predict_op, {self.X: xmb, self.M: mmb})
+                features = self.sess.run(self.features, {self.X: xmb, self.M: mmb})
+                class_labels = self.label_encoder.inverse_transform(class_idx)
+                predictions.append(class_labels)
+        return np.concatenate(predictions)
+
+    def predict_proba(self, X, max_length=None):
+        predictions = []
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore")
+            for xmb, mmb in self._infer_prep(X, max_length):
+                probas = self.sess.run(self.predict_proba_op, {self.X: xmb, self.M: mmb})
+                classes = self.label_encoder.classes_
+                predictions.extend([
+                    dict(zip(classes, proba)) for proba in probas
+                ])
+        return np.asarray(predictions)
 
     def _infer_prep(self, X, max_length=None):
         max_length = max_length or MAX_LENGTH
         token_idxs = self.encoder.encode_for_classification(X, max_length=max_length)
         infer_x, infer_mask = self._array_format(token_idxs)
         n_batch_train = BATCH_SIZE * N_GPUS
-        self._build_model(self.X, self.M, self.Y, n_updates_total=0, n_classes=self.n_classes, reuse=True, train=False) # Assumes a model has already been built.
+        self._build_model(self.X, self.M, self.Y, n_updates_total=0, n_classes=self.n_classes, reuse=True, train=False)
         yield from iter_data(infer_x, infer_mask, n_batch=n_batch_train, truncate=False, verbose=True)
-        
-    def predict(self, X, max_length=None):
-        predict_op = tf.argmax(self.logits, -1)
-        predictions = []
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore")
-            for xmb, mmb in self._infer_prep(X, max_length):
-                class_idx = self.sess.run(predict_op, {self.X: xmb, self.M: mmb})
-                class_labels = self.label_encoder.inverse_transform(class_idx)
-                predictions.append(class_labels)
-                assert len(xmb) == len(class_labels), "Loosing Data somewhere"
-        return np.concatenate(predictions)
 
-    def predict_proba(self, X, max_length=None):
-        raise Exception("NI") #TODO(BEN) implement
-    
     def _array_format(self, token_idxs, max_length=MAX_LENGTH):
         """
         Returns numpy array of token idxs and corresponding mask
@@ -148,9 +159,9 @@ class LanguageModelClassifier(object):
         mask = np.zeros((n, max_length), dtype=np.float32)
         for i, seq_length in enumerate(seq_lengths):
             # BPE embedding
-            x[:, :seq_length, 0] = token_idxs[i]
+            x[i, :seq_length, 0] = token_idxs[i]
             # masking: value of 1 means "consider this in cross-entropy LM loss"
-            mask[:, 1:seq_length] = 1
+            mask[i, 1:seq_length] = 1
         # positional_embeddings
         x[:, :, 1] = np.arange(self.encoder.vocab_size, self.encoder.vocab_size + max_length)
         return x, mask
@@ -166,11 +177,11 @@ class LanguageModelClassifier(object):
         Y = tf.split(Y, N_GPUS, 0)
         for i, (splitX, splitM, splitY) in enumerate(zip(X, M, Y)):
             do_reuse = True if i > 0 else reuse
-            
+
             device = tf.device(assign_to_gpu(i, "/gpu:0"))
             scope = tf.variable_scope(tf.get_variable_scope(), reuse=do_reuse)
             with device, scope:
-                clf_logits, clf_losses, lm_losses = model(splitX, splitM, splitY, n_classes=n_classes, encoder=self.encoder, train=train, reuse=do_reuse)
+                clf_logits, clf_losses, lm_losses, features = model(splitX, splitM, splitY, n_classes=n_classes, encoder=self.encoder, train=train, reuse=do_reuse)
                 if LM_LOSS_COEF > 0:
                     train_loss = tf.reduce_mean(clf_losses) + LM_LOSS_COEF * tf.reduce_mean(lm_losses)
                 else:
@@ -179,12 +190,14 @@ class LanguageModelClassifier(object):
                 grads = tf.gradients(train_loss, params)
                 grads = list(zip(grads, params))
                 gpu_grads.append(grads)
-                gpu_ops.append([clf_logits, clf_losses, lm_losses])
+                gpu_ops.append([clf_logits, clf_losses, lm_losses, features])
 
-        self.logits, self.clf_losses, self.lm_losses = [tf.concat(op, 0) for op in zip(*gpu_ops)]
+        self.logits, self.clf_losses, self.lm_losses, self.features = [tf.concat(op, 0) for op in zip(*gpu_ops)]
+        self.predict_op = tf.argmax(self.logits, -1)
+        self.predict_proba_op = tf.nn.softmax(self.logits, -1)
         grads = average_grads(gpu_grads)
         grads = [g for g, p in grads]
-        self.train = AdamWeightDecay(
+        self.train_op = AdamWeightDecay(
             params=params,
             grads=grads,
             lr=LR,
@@ -222,5 +235,5 @@ if __name__ == "__main__":
     df = pd.read_csv("data/AirlineNegativity.csv")
     classifier = LanguageModelClassifier()
     classifier.finetune(df.Text.values, df.Target.values)
-    print(len(classifier.predict(df.Text.values)))
-    print(len(df.Target.values))
+    print(classifier.predict(df.Text.values[:10]))
+    print(classifier.predict_proba(df.Text.values[:10]))
