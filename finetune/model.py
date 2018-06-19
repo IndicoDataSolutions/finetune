@@ -138,6 +138,22 @@ class LanguageModelClassifier(object):
                 ])
         return np.asarray(predictions)
 
+    def featurize(self, X, max_length=None):
+        """
+        Embed inputs in learned feature space
+        TODO: enable featurization without finetuning (using pre-trained model only)
+        """
+        features = []
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore")
+            for xmb, mmb in self._infer_prep(X, max_length):
+                feature_batch = self.sess.run(self.features, {self.X: xmb, self.M: mmb})
+                features.append(feature_batch)
+        return np.concatenate(features)
+
+    def transform(self, *args, **kwargs):
+        return self.featurize(*args, **kwargs)
+
     def _infer_prep(self, X, max_length=None):
         max_length = max_length or MAX_LENGTH
         token_idxs = self.encoder.encode_for_classification(X, max_length=max_length)
@@ -234,6 +250,9 @@ class LanguageModelClassifier(object):
 if __name__ == "__main__":
     df = pd.read_csv("data/AirlineNegativity.csv")
     classifier = LanguageModelClassifier()
-    classifier.finetune(df.Text.values, df.Target.values)
-    print(classifier.predict(df.Text.values[:10]))
-    print(classifier.predict_proba(df.Text.values[:10]))
+    classifier.finetune(df.Text.values[:100], df.Target.values[:100])
+    features = classifier.transform(df.Text.values[:10])
+    print(features.shape)
+
+    # print(classifier.predict(df.Text.values[:100]))
+    # print(classifier.predict_proba(df.Text.values[:10]))
