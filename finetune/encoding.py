@@ -1,3 +1,7 @@
+"""
+Convert plain text to format accepted by model (token idxs + special tokens)
+"""
+import re
 import json
 import os
 import warnings
@@ -6,11 +10,39 @@ import ftfy
 import spacy
 from tqdm import tqdm
 
-from finetune.text_utils import get_pairs, text_standardize
 from finetune.config import MAX_LENGTH
 
 ENCODER_PATH = os.path.join(os.path.dirname(__file__), '..', 'model/encoder_bpe_40000.json')
 BPE_PATH = os.path.join(os.path.dirname(__file__), '..', 'model/vocab_40000.bpe')
+
+
+def get_pairs(word):
+    """
+    Return set of symbol pairs in a word.
+    word is represented as tuple of symbols (symbols being variable-length strings)
+    """
+    pairs = set()
+    prev_char = word[0]
+    for char in word[1:]:
+        pairs.add((prev_char, char))
+        prev_char = char
+    return pairs
+
+
+def text_standardize(text):
+    """
+    Fixes some issues the spacy tokenizer had on books corpus
+    Also handles whitespace standardization
+    """
+    text = text.replace('—', '-')
+    text = text.replace('–', '-')
+    text = text.replace('―', '-')
+    text = text.replace('…', '...')
+    text = text.replace('´', "'")
+    text = re.sub('''(-+|~+|!+|"+|;+|\?+|\++|,+|\)+|\(+|\\+|\/+|\*+|\[+|\]+|}+|{+|\|+|_+)''', r' \1 ', text)
+    text = re.sub('\s*\n\s*', ' \n ', text)
+    text = re.sub('[^\S\n]+', ' ', text)
+    return ftfy.fix_text(text.strip().lower())
 
 
 class TextEncoder(object):
@@ -123,6 +155,3 @@ class TextEncoder(object):
             for token_idxs in batch_token_idxs
         ]
         return batch_token_idxs
-
-    def encode_for_comparison(self, texts,max_length=MAX_LENGTH, verbose=True):
-        pass

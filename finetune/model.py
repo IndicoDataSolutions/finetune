@@ -12,10 +12,15 @@ from sklearn.preprocessing import LabelEncoder
 
 from functools import partial
 from finetune.encoding import TextEncoder
-from finetune.optimizers import AdamWeightDecay
+from finetune.optimizers import AdamWeightDecay, schedules
 from finetune.utils import find_trainable_variables, shape_list, assign_to_gpu, average_grads, iter_data, soft_split
-from finetune.config import MAX_LENGTH, BATCH_SIZE, WEIGHT_STDDEV, N_EPOCHS, CLF_P_DROP, SEED, N_GPUS, WEIGHT_STDDEV, EMBED_P_DROP, RESID_P_DROP, N_HEADS, N_LAYER, ATTN_P_DROP, ACT_FN, LM_LOSS_COEF, LR, B1, B2, L2_REG, VECTOR_L2, EPSILON,LR_SCHEDULE, MAX_GRAD_NORM, LM_LOSS_COEF, LR_WARMUP
-from finetune.train import block, dropout, embed, lr_schedules
+from finetune.config import (
+    MAX_LENGTH, BATCH_SIZE, WEIGHT_STDDEV, N_EPOCHS, CLF_P_DROP, SEED,
+    N_GPUS, WEIGHT_STDDEV, EMBED_P_DROP, RESID_P_DROP, N_HEADS, N_LAYER,
+    ATTN_P_DROP, ACT_FN, LM_LOSS_COEF, LR, B1, B2, L2_REG, VECTOR_L2,
+    EPSILON, LR_SCHEDULE, MAX_GRAD_NORM, LM_LOSS_COEF, LR_WARMUP
+)
+from finetune.transformer import block, dropout, embed
 
 SHAPES_PATH = os.path.join(os.path.dirname(__file__), '..', 'model', 'params_shapes.json')
 PARAM_PATH = os.path.join(os.path.dirname(__file__), '..', 'model', 'params_{}.npy')
@@ -36,7 +41,6 @@ def featurizer(X, encoder, train=False, reuse=None, max_length=MAX_LENGTH):
         embed_weights = dropout(embed_weights, EMBED_P_DROP, train)
 
         X = tf.reshape(X, [-1, max_length, 2])
-        M = tf.reshape(M, [-1, max_length])
 
         h = embed(X, embed_weights)
         for layer in range(N_LAYER):
@@ -87,7 +91,7 @@ def classifier(hidden, targets, n_classes, train=False, reuse=None):
 
 class LanguageModelClassifier(object):
 
-    def __init__(self, max_length=MAX_LENGTH):
+    def __init__(self, *, max_length=MAX_LENGTH):
         # ensure results are reproducible
         self.max_length = max_length
         self.label_encoder = LabelEncoder()
@@ -212,7 +216,7 @@ class LanguageModelClassifier(object):
             params=params,
             grads=grads,
             lr=LR,
-            schedule=partial(lr_schedules[LR_SCHEDULE], warmup=LR_WARMUP),
+            schedule=partial(schedules[LR_SCHEDULE], warmup=LR_WARMUP),
             t_total=n_updates_total,
             l2=L2_REG,
             max_grad_norm=MAX_GRAD_NORM,
@@ -393,13 +397,11 @@ if __name__ == "__main__":
     )
     validation_df = pd.concat([validation_df, out_of_domain_validation_df])
     save_path = 'saved-models/cola'
-    model = LanguageModelClassifier.load(save_path)
-
-    # model.finetune(train_df.text.values, train_df.target.values)
-    # model.save(save_path)
-
-    predictions = model.predict(validation_df.text.values)
-    true_labels = validation_df.target.values
+    model = LanguageModelClassifier()
+    model.finetune(train_df.text.values[:100], train_df.target.values[:100])
+    model.save(save_path)
+    predictions = model.predict(validation_df.text.values[:100])
+    true_labels = validation_df.target.values[:100]
     from sklearn.metrics import matthews_corrcoef
     mc = matthews_corrcoef(true_labels, predictions)
     print(mc)

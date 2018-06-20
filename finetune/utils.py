@@ -12,18 +12,6 @@ from tensorflow.python.framework import function
 from tqdm import tqdm
 
 
-def encode_dataset(*splits, encoder):
-    encoded_splits = []
-    for split in splits[0]:
-        fields = []
-        for field in split:
-            if isinstance(field[0], str):
-                field = encoder.encode(field)
-            fields.append(field)
-        encoded_splits.append(fields)
-    return encoded_splits
-
-
 def stsb_label_encoding(labels, nclass=6):
     """
     Label encoding from Tree LSTM paper (Tai, Socher, Manning)
@@ -80,23 +68,6 @@ def _np_init(shape, dtype, partition_info, w):
 
 def np_init(w):
     return partial(_np_init, w=w)
-
-
-class ResultLogger(object):
-    def __init__(self, path, *args, **kwargs):
-        if 'time' not in kwargs:
-            kwargs['time'] = time.time()
-        self.f_log = open(make_path(path), 'w')
-        self.f_log.write(json.dumps(kwargs)+'\n')
-
-    def log(self, **kwargs):
-        if 'time' not in kwargs:
-            kwargs['time'] = time.time()
-        self.f_log.write(json.dumps(kwargs)+'\n')
-        self.f_log.flush()
-
-    def close(self):
-        self.f_log.close()
 
 
 def find_trainable_variables(key, exclude=None):
