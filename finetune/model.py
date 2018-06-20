@@ -92,6 +92,7 @@ class LanguageModelClassifier(object):
         self.max_length = max_length
         self.label_encoder = LabelEncoder()
         self._initialize()
+        self.n_classes  = None
 
     def _initialize(self):
         self._set_random_seed(SEED)
@@ -103,7 +104,6 @@ class LanguageModelClassifier(object):
         self.lm_losses  = None # language modeling losses
         self.train      = None # gradient + parameter update
         self.features   = None # hidden representation fed to classifier
-        self.n_classes  = None
         self.is_built   = False
         self.is_trained = False
 
@@ -325,7 +325,7 @@ class LanguageModelClassifier(object):
         """
         Leave serialization of all tf objects to tf
         """
-        required_fields = ['label_encoder', 'max_length', '_save_path']
+        required_fields = ['label_encoder', 'max_length', 'n_classes', '_save_path']
         serialized_state = {
             k: v for k, v in self.__dict__.items()
             if k in required_fields
@@ -394,7 +394,6 @@ if __name__ == "__main__":
 
     predictions = model.predict(validation_df.text.values)
     true_labels = validation_df.target.values
-    print(zip(true_labels.tolist(), predictions.tolist()))
     from sklearn.metrics import matthews_corrcoef
     mc = matthews_corrcoef(true_labels, predictions)
     print(mc)
