@@ -124,7 +124,6 @@ class LanguageModelClassifier(object):
 
         self.is_trained = True
 
-        best_score = 0
         for i in range(N_EPOCHS):
             for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=True):
                 cost, _ = self.sess.run([self.clf_loss, self.train_op], {self.X: xmb, self.M: mmb, self.Y: ymb})
@@ -142,7 +141,6 @@ class LanguageModelClassifier(object):
             max_length = max_length or self.max_length
             for xmb, mmb in self._infer_prep(X, max_length=max_length):
                 class_idx = self.sess.run(self.predict_op, {self.X: xmb, self.M: mmb})
-                features = self.sess.run(self.features, {self.X: xmb, self.M: mmb})
                 class_labels = self.label_encoder.inverse_transform(class_idx)
                 predictions.append(class_labels)
         return np.concatenate(predictions)
@@ -163,7 +161,6 @@ class LanguageModelClassifier(object):
     def featurize(self, X, max_length=None):
         """
         Embed inputs in learned feature space
-        TODO: enable featurization without finetuning (using pre-trained model only)
         """
         features = []
         with warnings.catch_warnings():
@@ -226,17 +223,18 @@ class LanguageModelClassifier(object):
         """
         Finetune language model on text inputs
         """
-        gpu_ops = []
         gpu_grads = []
         self._define_placeholders()
+
+        features_aggregator = []
+        losses_aggregator = []
+        params = find_trainable_variables("model")
 
         for i, (X, M, Y) in enumerate(soft_split(self.X, self.M, self.Y, n_splits=N_GPUS)):
             do_reuse = True if i > 0 else reuse
             device = tf.device(assign_to_gpu(i, "/gpu:0"))
             scope = tf.variable_scope(tf.get_variable_scope(), reuse=do_reuse)
 
-            features_aggregator = []
-            losses_aggregator = []
             with device, scope:
                 featurizer_state = featurizer(X, M, encoder=self.encoder, train=train, reuse=do_reuse)
                 language_model_state = language_model(
@@ -261,7 +259,6 @@ class LanguageModelClassifier(object):
                     if LM_LOSS_COEF > 0:
                         train_loss += LM_LOSS_COEF * tf.reduce_mean(language_model_state['losses'])
 
-                    params = find_trainable_variables("model")
                     grads = tf.gradients(train_loss, params)
                     grads = list(zip(grads, params))
                     gpu_grads.append(grads)
