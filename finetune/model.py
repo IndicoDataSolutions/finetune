@@ -509,6 +509,7 @@ class LanguageModelEntailment(LanguageModelBase):
 
 if __name__ == "__main__":
 
+<<<<<<< HEAD
     import json
     with open("data/questions.json", "rt") as fp:
         data = json.load(fp)
@@ -528,6 +529,34 @@ if __name__ == "__main__":
     model = LanguageModelEntailment()
 
     model.finetune(ques_train, ans_train, scores_train)
+=======
+    def predict_qa(self, q, a, max_length=None):
+        predictions = []
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore")
+            max_length = max_length or self.max_length
+            for xmb, mmb in self._infer_prep(q, a, max_length=max_length):
+                class_idx = self.sess.run(self.predict_op, {self.X: xmb, self.M: mmb})
+                class_labels = self.label_encoder.inverse_transform(class_idx)
+                predictions.append(class_labels)
+        return np.concatenate(predictions)
+
+if __name__ == "__main__":
+
+    import json
+    with open("/Users/work/Downloads/questions.json", "rt") as fp:
+        data = json.load(fp)
+
+    scores = []
+    questions = []
+    answers = []
+    for item in data:
+        row = data[item]
+        scores.append(row["score"])
+        questions.append(row["question"])
+        answers.append(row["answer"])
+
+    model = LanguageModelEntailment()
 
     save_path = 'saved-models/cola'
     model.save(save_path)
