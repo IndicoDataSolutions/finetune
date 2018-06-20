@@ -48,7 +48,7 @@ def featurizer(X, M, encoder, train=False, reuse=None, max_length=MAX_LENGTH):
         pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
         clf_h = tf.gather(clf_h, tf.range(shape_list(X)[0], dtype=tf.int32) * max_length + pool_idx)
 
-        clf_h = tf.reshape(clf_h, [-1, N_EMBED])
+        clf_h = tf.reshape(clf_h, [-1, N_EMBED]) # [batch, embed]
         return {
             'embed_weights': embed_weights,
             'features': clf_h,
@@ -59,7 +59,7 @@ def featurizer(X, M, encoder, train=False, reuse=None, max_length=MAX_LENGTH):
 def language_model(*, X, M, embed_weights, hidden, reuse=None):
     with tf.variable_scope('model', reuse=reuse):
         # language model ignores last hidden state because we don't have a target
-        lm_h = tf.reshape(hidden[:, :-1], [-1, N_EMBED]) # [batchidden, seq_len, embed] --> [batch * seq_len, embed]
+        lm_h = tf.reshape(hidden[:, :-1], [-1, N_EMBED]) # [batch, seq_len, embed] --> [batch * seq_len, embed]
         lm_logits = tf.matmul(lm_h, embed_weights, transpose_b=True) # tied weights
         lm_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
             logits=lm_logits,
@@ -76,15 +76,14 @@ def language_model(*, X, M, embed_weights, hidden, reuse=None):
 
 def classifier(hidden, targets, n_classes, train=False, reuse=None):
     with tf.variable_scope('model', reuse=reuse):
-        if train and CLF_P_DROP > 0:
-            hidden = tf.nn.dropout(hidden, keep_prob=(1 - CLF_P_DROP))
+        hidden = dropout(hidden, CLF_P_DROP, train)
         clf_logits = clf(hidden, n_classes, train=train)
-
         clf_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=clf_logits, labels=targets)
         return {
             'logits': clf_logits,
             'losses': clf_losses
         }
+
 
 class LanguageModelClassifier(object):
 
@@ -99,13 +98,14 @@ class LanguageModelClassifier(object):
         self.encoder = TextEncoder()
 
         # symbolic ops
-        self.logits    = None # classification logits
-        self.clf_loss  = None # cross-entropy loss
-        self.lm_losses = None # language modeling losses
-        self.train     = None # gradient + parameter update
-        self.features  = None # hidden representation fed to classifier
-        self.n_classes = None
-        self.is_built = False
+        self.logits     = None # classification logits
+        self.clf_loss   = None # cross-entropy loss
+        self.lm_losses  = None # language modeling losses
+        self.train      = None # gradient + parameter update
+        self.features   = None # hidden representation fed to classifier
+        self.n_classes  = None
+        self.is_built   = False
+        self.is_trained = False
 
     def finetune(self, X, Y, batch_size=BATCH_SIZE):
         """
@@ -122,10 +122,14 @@ class LanguageModelClassifier(object):
 
         dataset = shuffle(train_x, train_mask, Y, random_state=np.random)
 
+        self.is_trained = True
+
         best_score = 0
         for i in range(N_EPOCHS):
             for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=True):
                 cost, _ = self.sess.run([self.clf_loss, self.train_op], {self.X: xmb, self.M: mmb, self.Y: ymb})
+
+        return self
 
     def fit(self, *args, **kwargs):
         # Alias for finetune
@@ -283,7 +287,7 @@ class LanguageModelClassifier(object):
         # Optionally load saved model
         if hasattr(self, '_save_path'):
             self._load_finetuned_model()
-        else:
+        elif not self.is_trained:
             self._load_base_model()
 
         self.is_built = True
@@ -338,6 +342,9 @@ class LanguageModelClassifier(object):
             Does not serialize state of Adam optimizer.
             Should not be used to save / restore a training model.
         """
+
+        # Setting self._save_path indicates that we should load the saved model from
+        # disk at next training / inference
         self._save_path = path
         saver = tf.train.Saver(tf.trainable_variables())
         saver.save(self.sess, path)
@@ -363,9 +370,31 @@ class LanguageModelClassifier(object):
         self.sess = tf.Session()
         saver = tf.train.Saver()
         saver.restore(self.sess, self._save_path)
+
+        # if _save_path is present on the model, the saved model is loaded
+        # from disk the next time predict / predict_proba / featurize is called
         del self._save_path
+        self.is_trained = True
 
 if __name__ == "__main__":
-    df = pd.read_csv("data/AirlineNegativity.csv")
+    headers = ['annotator', 'target', 'original_target', 'text']
+    train_df = pd.read_csv(
+        "data/cola.train.csv",
+        names=headers,
+        delimiter='\t'
+    )
+    validation_df = pd.read_csv(
+        "data/cola.dev.csv",
+        names=headers,
+        delimiter='\t'
+    )
     model = LanguageModelClassifier()
-    features = model.transform(df.Text.values[:10])
+    model.finetune(train_df.text.values, train_df.target.values)
+    model.save('saved-models/cola')
+
+    predictions = model.predict(validation_df.text.values)
+    true_labels = validation_df.target.values
+    print(zip(true_labels.tolist(), predictions.tolist()))
+    from sklearn.metrics import matthews_corrcoef
+    mc = matthews_corrcoef(true_labels, predictions)
+    print(mc)

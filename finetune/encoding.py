@@ -1,5 +1,6 @@
 import json
 import os
+import warnings
 
 import ftfy
 import spacy
@@ -68,7 +69,7 @@ class TextEncoder(object):
                     break
 
                 if word[i] == first and i < len(word)-1 and word[i+1] == second:
-                    new_word.append(first+second)
+                    new_word.append(first + second)
                     i += 2
                 else:
                     new_word.append(word[i])
@@ -113,6 +114,10 @@ class TextEncoder(object):
         batch_token_idxs = self.encode(texts, verbose=verbose)
         # account for start + end tokens
         adjusted_max_length = max_length - 2
+        if any([len(token_idxs) > adjusted_max_length for token_idxs in batch_token_idxs]):
+            warnings.warn("Document is longer than max length allowed, trimming document to {} tokens.".format(
+                max_length
+            ))
         batch_token_idxs = [
             [self.encoder['_start_']] + token_idxs[:adjusted_max_length] + [self.encoder['_classify_']]
             for token_idxs in batch_token_idxs
