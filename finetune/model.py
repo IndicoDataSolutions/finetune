@@ -432,7 +432,7 @@ class LanguageModelEntailment(LanguageModelClassifier):
         tokens, mask = self._array_format(question_answer_pairs)
         return tokens, mask
 
-    def finetune_qa(self, q, a, Y, batch_size=BATCH_SIZE):
+    def finetune(self, q, a, Y, batch_size=BATCH_SIZE):
         """
         X: List / array of text
         Y: Class labels
@@ -454,7 +454,7 @@ class LanguageModelEntailment(LanguageModelClassifier):
 
         return self
 
-    def predict_qa(self, q, a, max_length=None):
+    def predict(self, q, a, max_length=None):
         predictions = []
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
@@ -464,6 +464,9 @@ class LanguageModelEntailment(LanguageModelClassifier):
                 class_labels = self.label_encoder.inverse_transform(class_idx)
                 predictions.append(class_labels)
         return np.concatenate(predictions)
+
+    def predict_proba(self, X, max_length=None):
+        # TODO(BEN)
 
 if __name__ == "__main__":
 
@@ -485,7 +488,7 @@ if __name__ == "__main__":
 
     model = LanguageModelEntailment()
 
-    model.finetune_qa(ques_train, ans_train, scores_train)
+    model.finetune(ques_train, ans_train, scores_train)
 
     save_path = 'saved-models/cola'
     model.save(save_path)
@@ -494,6 +497,15 @@ if __name__ == "__main__":
     # model.finetune(train_df.text.values, train_df.target.values)
     # model.save(save_path)
 
+<<<<<<< HEAD
     predictions = model.predict_qa(questions, answers)
     acc = np.mean(predictions == scores)
+=======
+    predictions = model.predict(ques_test, ans_test)
+    acc = np.mean(predictions == scores_test)
+>>>>>>> 9e33cfc... REFACTOR: remove _qa from predict
     print(acc)
+
+    from scipy.stats import spearmanr
+
+    print(spearmanr(predictions, scores_test))
