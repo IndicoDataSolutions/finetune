@@ -30,7 +30,7 @@ def clf(x, ny, w_init=tf.random_normal_initializer(stddev=WEIGHT_STDDEV), b_init
         return tf.matmul(x, w) + b
 
 
-def featurizer(X, M, encoder, train=False, reuse=None, max_length=MAX_LENGTH):
+def featurizer(X, encoder, train=False, reuse=None, max_length=MAX_LENGTH):
     with tf.variable_scope('model', reuse=reuse):
         embed_weights = tf.get_variable("we", [encoder.vocab_size + max_length, N_EMBED], initializer=tf.random_normal_initializer(stddev=WEIGHT_STDDEV))
         embed_weights = dropout(embed_weights, EMBED_P_DROP, train)
@@ -48,7 +48,7 @@ def featurizer(X, M, encoder, train=False, reuse=None, max_length=MAX_LENGTH):
         pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
         clf_h = tf.gather(clf_h, tf.range(shape_list(X)[0], dtype=tf.int32) * max_length + pool_idx)
 
-        clf_h = tf.reshape(clf_h, [-1, N_EMBED])
+        clf_h = tf.reshape(clf_h, [-1, N_EMBED]) # [batch, embed]
         return {
             'embed_weights': embed_weights,
             'features': clf_h,
@@ -59,7 +59,7 @@ def featurizer(X, M, encoder, train=False, reuse=None, max_length=MAX_LENGTH):
 def language_model(*, X, M, embed_weights, hidden, reuse=None):
     with tf.variable_scope('model', reuse=reuse):
         # language model ignores last hidden state because we don't have a target
-        lm_h = tf.reshape(hidden[:, :-1], [-1, N_EMBED]) # [batchidden, seq_len, embed] --> [batch * seq_len, embed]
+        lm_h = tf.reshape(hidden[:, :-1], [-1, N_EMBED]) # [batch, seq_len, embed] --> [batch * seq_len, embed]
         lm_logits = tf.matmul(lm_h, embed_weights, transpose_b=True) # tied weights
         lm_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
             logits=lm_logits,
@@ -76,36 +76,39 @@ def language_model(*, X, M, embed_weights, hidden, reuse=None):
 
 def classifier(hidden, targets, n_classes, train=False, reuse=None):
     with tf.variable_scope('model', reuse=reuse):
-        if train and CLF_P_DROP > 0:
-            hidden = tf.nn.dropout(hidden, keep_prob=(1 - CLF_P_DROP))
+        hidden = dropout(hidden, CLF_P_DROP, train)
         clf_logits = clf(hidden, n_classes, train=train)
-
         clf_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=clf_logits, labels=targets)
         return {
             'logits': clf_logits,
             'losses': clf_losses
         }
 
+
 class LanguageModelClassifier(object):
 
-    def __init__(self, max_length=MAX_LENGTH, *args, **kwargs):
+    def __init__(self, max_length=MAX_LENGTH):
         # ensure results are reproducible
         self.max_length = max_length
         self.label_encoder = LabelEncoder()
         self._initialize()
+        self.n_classes  = None
+        self._load_from_file = False
 
     def _initialize(self):
         self._set_random_seed(SEED)
         self.encoder = TextEncoder()
 
         # symbolic ops
-        self.logits    = None # classification logits
-        self.clf_loss  = None # cross-entropy loss
-        self.lm_losses = None # language modeling losses
-        self.train     = None # gradient + parameter update
-        self.features  = None # hidden representation fed to classifier
-        self.n_classes = None
-        self.is_built = False
+        self.logits     = None # classification logits
+        self.clf_loss   = None # cross-entropy loss
+        self.lm_losses  = None # language modeling losses
+        self.train      = None # gradient + parameter update
+        self.features   = None # hidden representation fed to classifier
+
+        # indicator vars
+        self.is_built   = False # has tf graph been constructed?
+        self.is_trained = False # has model been fine-tuned?
 
     def finetune(self, X, Y, batch_size=BATCH_SIZE):
         """
@@ -114,7 +117,7 @@ class LanguageModelClassifier(object):
         """
         token_idxs = self.encoder.encode_for_classification(X, max_length=self.max_length)
         train_x, train_mask = self._array_format(token_idxs)
-        n_batch_train = BATCH_SIZE * N_GPUS
+        n_batch_train = batch_size * N_GPUS
         n_updates_total = (len(Y) // n_batch_train) * N_EPOCHS
         Y = self.label_encoder.fit_transform(Y)
         self.n_classes = len(self.label_encoder.classes_)
@@ -122,10 +125,13 @@ class LanguageModelClassifier(object):
 
         dataset = shuffle(train_x, train_mask, Y, random_state=np.random)
 
-        best_score = 0
+        self.is_trained = True
+
         for i in range(N_EPOCHS):
             for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=True):
                 cost, _ = self.sess.run([self.clf_loss, self.train_op], {self.X: xmb, self.M: mmb, self.Y: ymb})
+
+        return self
 
     def fit(self, *args, **kwargs):
         # Alias for finetune
@@ -138,7 +144,6 @@ class LanguageModelClassifier(object):
             max_length = max_length or self.max_length
             for xmb, mmb in self._infer_prep(X, max_length=max_length):
                 class_idx = self.sess.run(self.predict_op, {self.X: xmb, self.M: mmb})
-                features = self.sess.run(self.features, {self.X: xmb, self.M: mmb})
                 class_labels = self.label_encoder.inverse_transform(class_idx)
                 predictions.append(class_labels)
         return np.concatenate(predictions)
@@ -159,7 +164,6 @@ class LanguageModelClassifier(object):
     def featurize(self, X, max_length=None):
         """
         Embed inputs in learned feature space
-        TODO: enable featurization without finetuning (using pre-trained model only)
         """
         features = []
         with warnings.catch_warnings():
@@ -222,19 +226,20 @@ class LanguageModelClassifier(object):
         """
         Finetune language model on text inputs
         """
-        gpu_ops = []
         gpu_grads = []
         self._define_placeholders()
+
+        features_aggregator = []
+        losses_aggregator = []
+        params = find_trainable_variables("model")
 
         for i, (X, M, Y) in enumerate(soft_split(self.X, self.M, self.Y, n_splits=N_GPUS)):
             do_reuse = True if i > 0 else reuse
             device = tf.device(assign_to_gpu(i, "/gpu:0"))
             scope = tf.variable_scope(tf.get_variable_scope(), reuse=do_reuse)
 
-            features_aggregator = []
-            losses_aggregator = []
             with device, scope:
-                featurizer_state = featurizer(X, M, encoder=self.encoder, train=train, reuse=do_reuse)
+                featurizer_state = featurizer(X, encoder=self.encoder, train=train, reuse=do_reuse)
                 language_model_state = language_model(
                     X=X,
                     M=M,
@@ -257,7 +262,6 @@ class LanguageModelClassifier(object):
                     if LM_LOSS_COEF > 0:
                         train_loss += LM_LOSS_COEF * tf.reduce_mean(language_model_state['losses'])
 
-                    params = find_trainable_variables("model")
                     grads = tf.gradients(train_loss, params)
                     grads = list(zip(grads, params))
                     gpu_grads.append(grads)
@@ -281,9 +285,9 @@ class LanguageModelClassifier(object):
             self.clf_loss = tf.reduce_mean(self.clf_losses)
 
         # Optionally load saved model
-        if hasattr(self, '_save_path'):
+        if self._load_from_file:
             self._load_finetuned_model()
-        else:
+        elif not self.is_trained:
             self._load_base_model()
 
         self.is_built = True
@@ -321,7 +325,7 @@ class LanguageModelClassifier(object):
         """
         Leave serialization of all tf objects to tf
         """
-        required_fields = ['label_encoder', 'max_length', '_save_path']
+        required_fields = ['label_encoder', 'max_length', 'n_classes', '_load_from_file']
         serialized_state = {
             k: v for k, v in self.__dict__.items()
             if k in required_fields
@@ -338,11 +342,15 @@ class LanguageModelClassifier(object):
             Does not serialize state of Adam optimizer.
             Should not be used to save / restore a training model.
         """
-        self._save_path = path
+
+        # Setting self._load_from_file indicates that we should load the saved model from
+        # disk at next training / inference. It is set temporarily so that the serialized
+        # model includes this information.
+        self._load_from_file = path
         saver = tf.train.Saver(tf.trainable_variables())
         saver.save(self.sess, path)
-        pickle.dump(self, open(self._save_path + '.pkl', 'wb'))
-        del self._save_path
+        pickle.dump(self, open(self._load_from_file + '.pkl', 'wb'))
+        self._load_from_file = False
 
     @classmethod
     def load(cls, path):
@@ -361,11 +369,37 @@ class LanguageModelClassifier(object):
 
     def _load_finetuned_model(self):
         self.sess = tf.Session()
-        saver = tf.train.Saver()
-        saver.restore(self.sess, self._save_path)
-        del self._save_path
+        saver = tf.train.Saver(tf.trainable_variables())
+        saver.restore(self.sess, self._load_from_file)
+        self._load_from_file = False
+        self.is_trained = True
 
 if __name__ == "__main__":
-    df = pd.read_csv("data/AirlineNegativity.csv")
-    model = LanguageModelClassifier()
-    features = model.transform(df.Text.values[:10])
+    headers = ['annotator', 'target', 'original_target', 'text']
+    train_df = pd.read_csv(
+        "data/cola.train.csv",
+        names=headers,
+        delimiter='\t'
+    )
+    validation_df = pd.read_csv(
+        "data/cola.dev.csv",
+        names=headers,
+        delimiter='\t'
+    )
+    out_of_domain_validation_df = pd.read_csv(
+        "data/cola.out_of_domain.dev.tsv",
+        names=headers,
+        delimiter='\t'
+    )
+    validation_df = pd.concat([validation_df, out_of_domain_validation_df])
+    save_path = 'saved-models/cola'
+    model = LanguageModelClassifier.load(save_path)
+
+    # model.finetune(train_df.text.values, train_df.target.values)
+    # model.save(save_path)
+
+    predictions = model.predict(validation_df.text.values)
+    true_labels = validation_df.target.values
+    from sklearn.metrics import matthews_corrcoef
+    mc = matthews_corrcoef(true_labels, predictions)
+    print(mc)
