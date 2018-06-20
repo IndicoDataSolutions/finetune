@@ -119,6 +119,13 @@ class LanguageModelClassifier(object):
         self.is_built   = False # has tf graph been constructed?
         self.is_trained = False # has model been fine-tuned?
 
+    def _text_to_ids(self, *Xs, max_length=None):
+        max_length = max_length or self.max_length
+        assert len(Xs) == 1, "This implementation assumes a single Xs"
+        token_idxs = self.encoder.encode_for_classification(Xs[0], max_length=self.max_length)
+        tokens, mask = self._array_format(token_idxs)
+        return tokens, mask
+
     def finetune(self, X, Y, batch_size=BATCH_SIZE):
         """
         :param X: list or array of text.
@@ -126,8 +133,7 @@ class LanguageModelClassifier(object):
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
         """
-        token_idxs = self.encoder.encode_for_classification(X, max_length=self.max_length)
-        train_x, train_mask = self._array_format(token_idxs)
+        train_x, train_mask = self._text_to_ids(X)
         n_batch_train = batch_size * N_GPUS
         n_updates_total = (len(Y) // n_batch_train) * N_EPOCHS
         Y = self.label_encoder.fit_transform(Y)
@@ -212,10 +218,8 @@ class LanguageModelClassifier(object):
         """
         return self.featurize(*args, **kwargs)
 
-    def _infer_prep(self, X, max_length=None):
-        max_length = max_length or self.max_length
-        token_idxs = self.encoder.encode_for_classification(X, max_length=max_length)
-        infer_x, infer_mask = self._array_format(token_idxs)
+    def _infer_prep(self, *X, max_length=None):
+        infer_x, infer_mask = self._text_to_ids(*X, max_length=max_length)
         n_batch_train = BATCH_SIZE * N_GPUS
         self._build_model(n_updates_total=0, n_classes=self.n_classes, train=False)
         yield from iter_data(infer_x, infer_mask, n_batch=n_batch_train, verbose=self.verbose)
@@ -410,6 +414,56 @@ class LanguageModelClassifier(object):
         self._load_from_file = False
         self.is_trained = True
 
+class LanguageModelEntailment(LanguageModelClassifier):
+    def _text_to_ids(self, *Xs, max_length=None):
+
+        max_length = max_length or self.max_length
+        assert len(Xs) == 2, "This implementation assumes 2 Xs"
+
+        question_idxs = self.encoder.encode_for_classification(Xs[0], max_length=self.max_length)
+        answer_ids = self.encoder.encode_for_classification(Xs[1], max_length=self.max_length)
+
+        start = self.encoder['_start_']
+        delimiter = self.encoder['_delimiter_']
+        clf_token = self.encoder['_classify_']
+
+        token_idxs = [start]+question_idxs+[delimiter]+answer_ids+[clf_token]
+        tokens, mask = self._array_format(token_idxs)
+        return tokens, mask
+
+    def finetune_qa(self, q, a, Y, batch_size=BATCH_SIZE):
+        """
+        X: List / array of text
+        Y: Class labels
+        """
+        train_x, train_mask = self._text_to_ids(q, a)
+        n_batch_train = batch_size * N_GPUS
+        n_updates_total = (len(Y) // n_batch_train) * N_EPOCHS
+        Y = self.label_encoder.fit_transform(Y)
+        self.n_classes = len(self.label_encoder.classes_)
+        self._build_model(n_updates_total=n_updates_total, n_classes=self.n_classes)
+
+        dataset = shuffle(train_x, train_mask, Y, random_state=np.random)
+
+        self.is_trained = True
+
+        for i in range(N_EPOCHS):
+            for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=True):
+                cost, _ = self.sess.run([self.clf_loss, self.train_op], {self.X: xmb, self.M: mmb, self.Y: ymb})
+
+        return self
+
+    def predict(self, q, a, max_length=None):
+        predictions = []
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore")
+            max_length = max_length or self.max_length
+            for xmb, mmb in self._infer_prep(q, a, max_length=max_length):
+                class_idx = self.sess.run(self.predict_op, {self.X: xmb, self.M: mmb})
+                class_labels = self.label_encoder.inverse_transform(class_idx)
+                predictions.append(class_labels)
+        return np.concatenate(predictions)
+
 if __name__ == "__main__":
     headers = ['annotator', 'target', 'original_target', 'text']
     train_df = pd.read_csv(
@@ -428,12 +482,17 @@ if __name__ == "__main__":
         delimiter='\t'
     )
     validation_df = pd.concat([validation_df, out_of_domain_validation_df])
+    model = LanguageModelEntailment()
+
+    model.finetune_qa(train_df.text.values, train_df.text.values, train_df.target.values)
+
     save_path = 'saved-models/cola'
-    model = LanguageModelClassifier()
-    model.finetune(train_df.text.values[:100], train_df.target.values[:100])
     model.save(save_path)
-    predictions = model.predict(validation_df.text.values[:100])
-    true_labels = validation_df.target.values[:100]
-    from sklearn.metrics import matthews_corrcoef
-    mc = matthews_corrcoef(true_labels, predictions)
-    print(mc)
+    model = LanguageModelEntailment.load(save_path)
+
+    # model.finetune(train_df.text.values, train_df.target.values)
+    # model.save(save_path)
+
+    predictions = model.predict(validation_df.text.values)
+    true_labels = validation_df.target.values
+
