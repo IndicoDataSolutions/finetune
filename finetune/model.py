@@ -368,7 +368,7 @@ class LanguageModelClassifier(object):
 
     def _load_finetuned_model(self):
         self.sess = tf.Session()
-        saver = tf.train.Saver()
+        saver = tf.train.Saver(tf.trainable_variables())
         saver.restore(self.sess, self._save_path)
 
         # if _save_path is present on the model, the saved model is loaded
@@ -388,9 +388,17 @@ if __name__ == "__main__":
         names=headers,
         delimiter='\t'
     )
-    model = LanguageModelClassifier()
-    model.finetune(train_df.text.values, train_df.target.values)
-    model.save('saved-models/cola')
+    out_of_domain_validation_df = pd.read_csv(
+        "data/cola.out_of_domain.dev.tsv",
+        names=headers,
+        delimiter='\t'
+    )
+    validation_df = pd.concat([validation_df, out_of_domain_validation_df])
+    save_path = 'saved-models/cola'
+    model = LanguageModelClassifier.load(save_path)
+
+    # model.finetune(train_df.text.values, train_df.target.values)
+    # model.save(save_path)
 
     predictions = model.predict(validation_df.text.values)
     true_labels = validation_df.target.values
