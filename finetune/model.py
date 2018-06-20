@@ -62,7 +62,7 @@ def featurizer(X, encoder, train=False, reuse=None, max_length=MAX_LENGTH):
 def language_model(*, X, M, embed_weights, hidden, reuse=None):
     with tf.variable_scope('model', reuse=reuse):
         # language model ignores last hidden state because we don't have a target
-        lm_h = tf.reshape(hidden[:, :-1], [-1, N_EMBED]) # [batch, seq_len, embed] --> [batch * seq_len, embed]
+        lm_h = tf.reshape(hidden>[:, :-1], [-1, N_EMBED]) # [batch, seq_len, embed] --> [batch * seq_len, embed]
         lm_logits = tf.matmul(lm_h, embed_weights, transpose_b=True) # tied weights
         lm_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
             logits=lm_logits,
