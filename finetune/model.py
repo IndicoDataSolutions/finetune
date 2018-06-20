@@ -455,7 +455,7 @@ class LanguageModelEntailment(LanguageModelClassifier):
 
         return self
 
-    def predict(self, q, a, max_length=None):
+    def predict_qa(self, q, a, max_length=None):
         predictions = []
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
@@ -467,26 +467,23 @@ class LanguageModelEntailment(LanguageModelClassifier):
         return np.concatenate(predictions)
 
 if __name__ == "__main__":
-    headers = ['annotator', 'target', 'original_target', 'text']
-    train_df = pd.read_csv(
-        "data/cola.train.csv",
-        names=headers,
-        delimiter='\t'
-    )
-    validation_df = pd.read_csv(
-        "data/cola.dev.csv",
-        names=headers,
-        delimiter='\t'
-    )
-#    out_of_domain_validation_df = pd.read_csv(
-#        "data/cola.out_of_domain.dev.tsv",
-#        names=headers,
-#        delimiter='\t'
-#    )
-#    validation_df = pd.concat([validation_df, out_of_domain_validation_df])
+
+    import json
+    with open("/Users/work/Downloads/questions.json", "rt") as fp:
+        data = json.load(fp)
+
+    scores = []
+    questions = []
+    answers = []
+    for item in data:
+        row = data[item]
+        scores.append(row["score"])
+        questions.append(row["question"])
+        answers.append(row["answer"])
+
     model = LanguageModelEntailment()
 
-    model.finetune_qa(train_df.text.values, train_df.text.values, train_df.target.values)
+    model.finetune_qa(questions, answers, scores)
 
     save_path = 'saved-models/cola'
     model.save(save_path)
@@ -495,6 +492,7 @@ if __name__ == "__main__":
     # model.finetune(train_df.text.values, train_df.target.values)
     # model.save(save_path)
 
-    predictions = model.predict(validation_df.text.values)
-    true_labels = validation_df.target.values
 
+    predictions = model.predict_qa(questions, answers)
+    acc = np.mean(predictions == scores)
+    print(acc)
