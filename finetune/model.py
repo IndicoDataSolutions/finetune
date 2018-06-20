@@ -30,7 +30,7 @@ def clf(x, ny, w_init=tf.random_normal_initializer(stddev=WEIGHT_STDDEV), b_init
         return tf.matmul(x, w) + b
 
 
-def featurizer(X, M, encoder, train=False, reuse=None, max_length=MAX_LENGTH):
+def featurizer(X, encoder, train=False, reuse=None, max_length=MAX_LENGTH):
     with tf.variable_scope('model', reuse=reuse):
         embed_weights = tf.get_variable("we", [encoder.vocab_size + max_length, N_EMBED], initializer=tf.random_normal_initializer(stddev=WEIGHT_STDDEV))
         embed_weights = dropout(embed_weights, EMBED_P_DROP, train)
@@ -87,12 +87,13 @@ def classifier(hidden, targets, n_classes, train=False, reuse=None):
 
 class LanguageModelClassifier(object):
 
-    def __init__(self, max_length=MAX_LENGTH, *args, **kwargs):
+    def __init__(self, max_length=MAX_LENGTH):
         # ensure results are reproducible
         self.max_length = max_length
         self.label_encoder = LabelEncoder()
         self._initialize()
         self.n_classes  = None
+        self._load_from_file = False
 
     def _initialize(self):
         self._set_random_seed(SEED)
@@ -104,8 +105,10 @@ class LanguageModelClassifier(object):
         self.lm_losses  = None # language modeling losses
         self.train      = None # gradient + parameter update
         self.features   = None # hidden representation fed to classifier
-        self.is_built   = False
-        self.is_trained = False
+
+        # indicator vars
+        self.is_built   = False # has tf graph been constructed?
+        self.is_trained = False # has model been fine-tuned?
 
     def finetune(self, X, Y, batch_size=BATCH_SIZE):
         """
@@ -114,7 +117,7 @@ class LanguageModelClassifier(object):
         """
         token_idxs = self.encoder.encode_for_classification(X, max_length=self.max_length)
         train_x, train_mask = self._array_format(token_idxs)
-        n_batch_train = BATCH_SIZE * N_GPUS
+        n_batch_train = batch_size * N_GPUS
         n_updates_total = (len(Y) // n_batch_train) * N_EPOCHS
         Y = self.label_encoder.fit_transform(Y)
         self.n_classes = len(self.label_encoder.classes_)
@@ -236,7 +239,7 @@ class LanguageModelClassifier(object):
             scope = tf.variable_scope(tf.get_variable_scope(), reuse=do_reuse)
 
             with device, scope:
-                featurizer_state = featurizer(X, M, encoder=self.encoder, train=train, reuse=do_reuse)
+                featurizer_state = featurizer(X, encoder=self.encoder, train=train, reuse=do_reuse)
                 language_model_state = language_model(
                     X=X,
                     M=M,
@@ -282,7 +285,7 @@ class LanguageModelClassifier(object):
             self.clf_loss = tf.reduce_mean(self.clf_losses)
 
         # Optionally load saved model
-        if hasattr(self, '_save_path'):
+        if self._load_from_file:
             self._load_finetuned_model()
         elif not self.is_trained:
             self._load_base_model()
@@ -322,7 +325,7 @@ class LanguageModelClassifier(object):
         """
         Leave serialization of all tf objects to tf
         """
-        required_fields = ['label_encoder', 'max_length', 'n_classes', '_save_path']
+        required_fields = ['label_encoder', 'max_length', 'n_classes', '_load_from_file']
         serialized_state = {
             k: v for k, v in self.__dict__.items()
             if k in required_fields
@@ -340,13 +343,14 @@ class LanguageModelClassifier(object):
             Should not be used to save / restore a training model.
         """
 
-        # Setting self._save_path indicates that we should load the saved model from
-        # disk at next training / inference
-        self._save_path = path
+        # Setting self._load_from_file indicates that we should load the saved model from
+        # disk at next training / inference. It is set temporarily so that the serialized
+        # model includes this information.
+        self._load_from_file = path
         saver = tf.train.Saver(tf.trainable_variables())
         saver.save(self.sess, path)
-        pickle.dump(self, open(self._save_path + '.pkl', 'wb'))
-        del self._save_path
+        pickle.dump(self, open(self._load_from_file + '.pkl', 'wb'))
+        self._load_from_file = False
 
     @classmethod
     def load(cls, path):
@@ -366,11 +370,8 @@ class LanguageModelClassifier(object):
     def _load_finetuned_model(self):
         self.sess = tf.Session()
         saver = tf.train.Saver(tf.trainable_variables())
-        saver.restore(self.sess, self._save_path)
-
-        # if _save_path is present on the model, the saved model is loaded
-        # from disk the next time predict / predict_proba / featurize is called
-        del self._save_path
+        saver.restore(self.sess, self._load_from_file)
+        self._load_from_file = False
         self.is_trained = True
 
 if __name__ == "__main__":
