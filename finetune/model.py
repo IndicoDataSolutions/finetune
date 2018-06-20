@@ -429,7 +429,6 @@ class LanguageModelEntailment(LanguageModelClassifier):
         question_answer_pairs = []
         for qid, aid in zip(question_ids, answer_ids):
             question_answer_pairs.append([start] + qid[1:-1] + [delimiter] + aid[1:-1] + [clf_token])
-            print(question_answer_pairs[-1])
         tokens, mask = self._array_format(question_answer_pairs)
         return tokens, mask
 
@@ -469,7 +468,7 @@ class LanguageModelEntailment(LanguageModelClassifier):
 if __name__ == "__main__":
 
     import json
-    with open("/Users/work/Downloads/questions.json", "rt") as fp:
+    with open("data/questions.json", "rt") as fp:
         data = json.load(fp)
 
     scores = []
@@ -479,11 +478,14 @@ if __name__ == "__main__":
         row = data[item]
         scores.append(row["score"])
         questions.append(row["question"])
-        answers.append(row["answer"])
+        answers.append(row["answers"][0]["answer"])
+
+    from sklearn.model_selection import train_test_split
+    scores_train, scores_test, ques_train, ques_test, ans_train, ans_test = train_test_split(scores, questions, answers, test_size=0.33, random_state=5)
 
     model = LanguageModelEntailment()
 
-    model.finetune_qa(questions, answers, scores)
+    model.finetune_qa(ques_train, ans_train, scores_train)
 
     save_path = 'saved-models/cola'
     model.save(save_path)
@@ -491,7 +493,6 @@ if __name__ == "__main__":
 
     # model.finetune(train_df.text.values, train_df.target.values)
     # model.save(save_path)
-
 
     predictions = model.predict_qa(questions, answers)
     acc = np.mean(predictions == scores)
