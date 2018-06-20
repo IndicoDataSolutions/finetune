@@ -420,15 +420,17 @@ class LanguageModelEntailment(LanguageModelClassifier):
         max_length = max_length or self.max_length
         assert len(Xs) == 2, "This implementation assumes 2 Xs"
 
-        question_idxs = self.encoder.encode_for_classification(Xs[0], max_length=self.max_length)
-        answer_ids = self.encoder.encode_for_classification(Xs[1], max_length=self.max_length)
+        question_ids = self.encoder.encode_for_classification(Xs[0], max_length=max_length//2)
+        answer_ids = self.encoder.encode_for_classification(Xs[1], max_length=max_length//2)
 
         start = self.encoder['_start_']
         delimiter = self.encoder['_delimiter_']
         clf_token = self.encoder['_classify_']
-
-        token_idxs = [start]+question_idxs+[delimiter]+answer_ids+[clf_token]
-        tokens, mask = self._array_format(token_idxs)
+        question_answer_pairs = []
+        for qid, aid in zip(question_ids, answer_ids):
+            question_answer_pairs.append([start] + qid[1:-1] + [delimiter] + aid[1:-1] + [clf_token])
+            print(question_answer_pairs[-1])
+        tokens, mask = self._array_format(question_answer_pairs)
         return tokens, mask
 
     def finetune_qa(self, q, a, Y, batch_size=BATCH_SIZE):
@@ -476,12 +478,12 @@ if __name__ == "__main__":
         names=headers,
         delimiter='\t'
     )
-    out_of_domain_validation_df = pd.read_csv(
-        "data/cola.out_of_domain.dev.tsv",
-        names=headers,
-        delimiter='\t'
-    )
-    validation_df = pd.concat([validation_df, out_of_domain_validation_df])
+#    out_of_domain_validation_df = pd.read_csv(
+#        "data/cola.out_of_domain.dev.tsv",
+#        names=headers,
+#        delimiter='\t'
+#    )
+#    validation_df = pd.concat([validation_df, out_of_domain_validation_df])
     model = LanguageModelEntailment()
 
     model.finetune_qa(train_df.text.values, train_df.text.values, train_df.target.values)
