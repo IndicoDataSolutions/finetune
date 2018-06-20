@@ -29,28 +29,18 @@ def clf(x, ny, w_init=tf.random_normal_initializer(stddev=WEIGHT_STDDEV), b_init
         b = tf.get_variable("b", [ny], initializer=b_init)
         return tf.matmul(x, w) + b
 
-def model(X, M, Y, n_classes, encoder, train=False, reuse=None, max_length=MAX_LENGTH):
+
+def featurizer(X, M, encoder, train=False, reuse=None, max_length=MAX_LENGTH):
     with tf.variable_scope('model', reuse=reuse):
-        we = tf.get_variable("we", [encoder.vocab_size + max_length, N_EMBED], initializer=tf.random_normal_initializer(stddev=WEIGHT_STDDEV))
-        we = dropout(we, EMBED_P_DROP, train)
+        embed_weights = tf.get_variable("we", [encoder.vocab_size + max_length, N_EMBED], initializer=tf.random_normal_initializer(stddev=WEIGHT_STDDEV))
+        embed_weights = dropout(embed_weights, EMBED_P_DROP, train)
 
         X = tf.reshape(X, [-1, max_length, 2])
         M = tf.reshape(M, [-1, max_length])
 
-        h = embed(X, we)
+        h = embed(X, embed_weights)
         for layer in range(N_LAYER):
             h = block(h, N_HEADS, ACT_FN, RESID_P_DROP, ATTN_P_DROP,'h%d'%layer, train=train, scale=True)
-
-        # language model ignores last hidden state because we don't have a target
-        lm_h = tf.reshape(h[:, :-1], [-1, N_EMBED]) # [batch, seq_len, embed] --> [batch * seq_len, embed]
-        lm_logits = tf.matmul(lm_h, we, transpose_b=True) # tied weights
-        lm_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
-            logits=lm_logits,
-            labels=tf.reshape(X[:, 1:, 0], [-1])
-        )
-
-        lm_losses = tf.reshape(lm_losses, [shape_list(X)[0], shape_list(X)[1] - 1])
-        lm_losses = tf.reduce_sum(lm_losses * M[:, 1:], 1) / tf.reduce_sum(M[:, 1:], 1)
 
         # Use hidden state at classifier token as input to final proj. + softmax
         clf_h = tf.reshape(h, [-1, N_EMBED]) # [batch * seq_len, embed]
@@ -59,13 +49,42 @@ def model(X, M, Y, n_classes, encoder, train=False, reuse=None, max_length=MAX_L
         clf_h = tf.gather(clf_h, tf.range(shape_list(X)[0], dtype=tf.int32) * max_length + pool_idx)
 
         clf_h = tf.reshape(clf_h, [-1, N_EMBED])
+        return {
+            'embed_weights': embed_weights,
+            'features': clf_h,
+            'sequence_features': h
+        }
+
+
+def language_model(*, X, M, embed_weights, hidden, reuse=None):
+    with tf.variable_scope('model', reuse=reuse):
+        # language model ignores last hidden state because we don't have a target
+        lm_h = tf.reshape(hidden[:, :-1], [-1, N_EMBED]) # [batchidden, seq_len, embed] --> [batch * seq_len, embed]
+        lm_logits = tf.matmul(lm_h, embed_weights, transpose_b=True) # tied weights
+        lm_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
+            logits=lm_logits,
+            labels=tf.reshape(X[:, 1:, 0], [-1])
+        )
+
+        lm_losses = tf.reshape(lm_losses, [shape_list(X)[0], shape_list(X)[1] - 1])
+        lm_losses = tf.reduce_sum(lm_losses * M[:, 1:], 1) / tf.reduce_sum(M[:, 1:], 1)
+        return {
+            'logits': lm_logits,
+            'losses': lm_losses,
+        }
+
+
+def classifier(hidden, targets, n_classes, train=False, reuse=None):
+    with tf.variable_scope('model', reuse=reuse):
         if train and CLF_P_DROP > 0:
-            clf_h = tf.nn.dropout(clf_h, keep_prob=(1 - CLF_P_DROP))
-        clf_logits = clf(clf_h, n_classes, train=train)
+            hidden = tf.nn.dropout(hidden, keep_prob=(1 - CLF_P_DROP))
+        clf_logits = clf(hidden, n_classes, train=train)
 
-        clf_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=clf_logits, labels=Y)
-        return clf_logits, clf_losses, lm_losses, clf_h
-
+        clf_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=clf_logits, labels=targets)
+        return {
+            'logits': clf_logits,
+            'losses': clf_losses
+        }
 
 class LanguageModelClassifier(object):
 
@@ -85,6 +104,8 @@ class LanguageModelClassifier(object):
         self.lm_losses = None # language modeling losses
         self.train     = None # gradient + parameter update
         self.features  = None # hidden representation fed to classifier
+        self.n_classes = None
+        self.is_built = False
 
     def finetune(self, X, Y, batch_size=BATCH_SIZE):
         """
@@ -98,7 +119,6 @@ class LanguageModelClassifier(object):
         Y = self.label_encoder.fit_transform(Y)
         self.n_classes = len(self.label_encoder.classes_)
         self._build_model(n_updates_total=n_updates_total, n_classes=self.n_classes)
-        self._load_saved_params()
 
         dataset = shuffle(train_x, train_mask, Y, random_state=np.random)
 
@@ -158,7 +178,7 @@ class LanguageModelClassifier(object):
         token_idxs = self.encoder.encode_for_classification(X, max_length=max_length)
         infer_x, infer_mask = self._array_format(token_idxs)
         n_batch_train = BATCH_SIZE * N_GPUS
-        self._build_model(n_updates_total=0, n_classes=self.n_classes, reuse=True, train=False)
+        self._build_model(n_updates_total=0, n_classes=self.n_classes, reuse=self.is_built, train=False)
         yield from iter_data(infer_x, infer_mask, n_batch=n_batch_train, verbose=True)
 
     def _array_format(self, token_idxs):
@@ -181,35 +201,9 @@ class LanguageModelClassifier(object):
         x[:, :, 1] = np.arange(self.encoder.vocab_size, self.encoder.vocab_size + self.max_length)
         return x, mask
 
-    def _build_model(self, n_updates_total, n_classes, train=True, reuse=None):
-        """
-        Finetune language model on text inputs
-        """
-        gpu_ops = []
-        gpu_grads = []
-        self._define_placeholders()
-
-        for i, (X, M, Y) in enumerate(soft_split(self.X, self.M, self.Y, n_splits=N_GPUS)):
-            do_reuse = True if i > 0 else reuse
-            device = tf.device(assign_to_gpu(i, "/gpu:0"))
-            scope = tf.variable_scope(tf.get_variable_scope(), reuse=do_reuse)
-            with device, scope:
-                clf_logits, clf_losses, lm_losses, features = model(X, M, Y, n_classes=n_classes, encoder=self.encoder, train=train, reuse=do_reuse)
-                if LM_LOSS_COEF > 0:
-                    train_loss = tf.reduce_mean(clf_losses) + LM_LOSS_COEF * tf.reduce_mean(lm_losses)
-                else:
-                    train_loss = tf.reduce_mean(clf_losses)
-                params = find_trainable_variables("model")
-                grads = tf.gradients(train_loss, params)
-                grads = list(zip(grads, params))
-                gpu_grads.append(grads)
-                gpu_ops.append([clf_logits, clf_losses, lm_losses, features])
-
-        self.logits, self.clf_losses, self.lm_losses, self.features = [tf.concat(op, 0) for op in zip(*gpu_ops)]
-        self.predict_op = tf.argmax(self.logits, -1)
-        self.predict_proba_op = tf.nn.softmax(self.logits, -1)
-        grads = average_grads(gpu_grads)
-        grads = [g for g, p in grads]
+    def _compile_train_op(self, *, params, grads, n_updates_total):
+        grads = average_grads(grads)
+        grads = [grad for grad, param in grads]
         self.train_op = AdamWeightDecay(
             params=params,
             grads=grads,
@@ -223,11 +217,76 @@ class LanguageModelClassifier(object):
             b2=B2,
             e=EPSILON
         )
-        self.clf_loss = tf.reduce_mean(self.clf_losses)
+
+    def _build_model(self, n_updates_total, n_classes, train=True, reuse=None):
+        """
+        Finetune language model on text inputs
+        """
+        gpu_ops = []
+        gpu_grads = []
+        self._define_placeholders()
+
+        for i, (X, M, Y) in enumerate(soft_split(self.X, self.M, self.Y, n_splits=N_GPUS)):
+            do_reuse = True if i > 0 else reuse
+            device = tf.device(assign_to_gpu(i, "/gpu:0"))
+            scope = tf.variable_scope(tf.get_variable_scope(), reuse=do_reuse)
+
+            features_aggregator = []
+            losses_aggregator = []
+            with device, scope:
+                featurizer_state = featurizer(X, M, encoder=self.encoder, train=train, reuse=do_reuse)
+                language_model_state = language_model(
+                    X=X,
+                    M=M,
+                    embed_weights=featurizer_state['embed_weights'],
+                    hidden=featurizer_state['sequence_features'],
+                    reuse=do_reuse
+                )
+                features_aggregator.append(featurizer_state['features'])
+
+                if n_classes is not None:
+                    classifier_state = classifier(
+                        hidden=featurizer_state['features'],
+                        targets=Y,
+                        n_classes=n_classes,
+                        train=train,
+                        reuse=do_reuse
+                    )
+                    train_loss = tf.reduce_mean(classifier_state['losses'])
+
+                    if LM_LOSS_COEF > 0:
+                        train_loss += LM_LOSS_COEF * tf.reduce_mean(language_model_state['losses'])
+
+                    params = find_trainable_variables("model")
+                    grads = tf.gradients(train_loss, params)
+                    grads = list(zip(grads, params))
+                    gpu_grads.append(grads)
+                    losses_aggregator.append([
+                        classifier_state['logits'],
+                        classifier_state['losses'],
+                        language_model_state['losses']
+                    ])
+
+        self.features = tf.concat(features_aggregator, 0)
+
+        if n_classes is not None:
+            self.logits, self.clf_losses, self.lm_losses = [tf.concat(op, 0) for op in zip(*losses_aggregator)]
+            self.predict_op = tf.argmax(self.logits, -1)
+            self.predict_proba_op = tf.nn.softmax(self.logits, -1)
+            self._compile_train_op(
+                params=params,
+                grads=gpu_grads,
+                n_updates_total=n_updates_total
+            )
+            self.clf_loss = tf.reduce_mean(self.clf_losses)
 
         # Optionally load saved model
         if hasattr(self, '_save_path'):
-            self._load()
+            self._load_finetuned_model()
+        else:
+            self._load_base_model()
+
+        self.is_built = True
 
     def _set_random_seed(self, seed=SEED):
         random.seed(seed)
@@ -240,7 +299,7 @@ class LanguageModelClassifier(object):
         self.M = tf.placeholder(tf.float32, [None, self.max_length])    # sequence mask
         self.Y = tf.placeholder(tf.int32,   [None])                     # classification targets
 
-    def _load_saved_params(self):
+    def _load_base_model(self):
         """
         Load serialized base model parameters into tf Tensors
         """
@@ -300,7 +359,7 @@ class LanguageModelClassifier(object):
         tf.reset_default_graph()
         return model
 
-    def _load(self):
+    def _load_finetuned_model(self):
         self.sess = tf.Session()
         saver = tf.train.Saver()
         saver.restore(self.sess, self._save_path)
@@ -308,8 +367,5 @@ class LanguageModelClassifier(object):
 
 if __name__ == "__main__":
     df = pd.read_csv("data/AirlineNegativity.csv")
-    classifier = LanguageModelClassifier()
-    classifier.finetune(df.Text.values[:100], df.Target.values[:100])
-    predictions = classifier.predict_proba(df.Text.values[:10])
-    print(predictions)
-    # classifier.save('saved-models/airline-negativity')
+    model = LanguageModelClassifier()
+    features = model.transform(df.Text.values[:10])
