@@ -91,13 +91,14 @@ def classifier(hidden, targets, n_classes, train=False, reuse=None):
 
 class LanguageModelClassifier(object):
 
-    def __init__(self, *, max_length=MAX_LENGTH):
+    def __init__(self, *, max_length=MAX_LENGTH, verbose=True):
         # ensure results are reproducible
         self.max_length = max_length
         self.label_encoder = LabelEncoder()
         self._initialize()
         self.n_classes  = None
         self._load_from_file = False
+        self.verbose = verbose
 
     def _initialize(self):
         self._set_random_seed(SEED)
@@ -132,7 +133,7 @@ class LanguageModelClassifier(object):
         self.is_trained = True
 
         for i in range(N_EPOCHS):
-            for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=True):
+            for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=self.verbose):
                 cost, _ = self.sess.run([self.clf_loss, self.train_op], {self.X: xmb, self.M: mmb, self.Y: ymb})
 
         return self
@@ -150,7 +151,7 @@ class LanguageModelClassifier(object):
                 class_idx = self.sess.run(self.predict_op, {self.X: xmb, self.M: mmb})
                 class_labels = self.label_encoder.inverse_transform(class_idx)
                 predictions.append(class_labels)
-        return np.concatenate(predictions)
+        return np.concatenate(predictions).tolist()
 
     def predict_proba(self, X, max_length=None):
         predictions = []
@@ -163,7 +164,7 @@ class LanguageModelClassifier(object):
                 predictions.extend([
                     dict(zip(classes, proba)) for proba in probas
                 ])
-        return np.asarray(predictions)
+        return predictions
 
     def featurize(self, X, max_length=None):
         """
@@ -187,7 +188,7 @@ class LanguageModelClassifier(object):
         infer_x, infer_mask = self._array_format(token_idxs)
         n_batch_train = BATCH_SIZE * N_GPUS
         self._build_model(n_updates_total=0, n_classes=self.n_classes, reuse=self.is_built, train=False)
-        yield from iter_data(infer_x, infer_mask, n_batch=n_batch_train, verbose=True)
+        yield from iter_data(infer_x, infer_mask, n_batch=n_batch_train, verbose=self.verbose)
 
     def _array_format(self, token_idxs):
         """
@@ -329,7 +330,9 @@ class LanguageModelClassifier(object):
         """
         Leave serialization of all tf objects to tf
         """
-        required_fields = ['label_encoder', 'max_length', 'n_classes', '_load_from_file']
+        required_fields = [
+            'label_encoder', 'max_length', 'n_classes', '_load_from_file', 'verbose'
+        ]
         serialized_state = {
             k: v for k, v in self.__dict__.items()
             if k in required_fields
