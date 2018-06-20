@@ -12,21 +12,6 @@ from tensorflow.python.framework import function
 from tqdm import tqdm
 
 
-def stsb_label_encoding(labels, nclass=6):
-    """
-    Label encoding from Tree LSTM paper (Tai, Socher, Manning)
-    https://arxiv.org/abs/1503.00075
-    """
-    Y = np.zeros((len(labels), nclass)).astype(np.float32)
-    for j, y in enumerate(labels):
-        for i in range(nclass):
-            if i == np.floor(y) + 1:
-                Y[j,i] = y - np.floor(y)
-            if i == np.floor(y):
-                Y[j,i] = np.floor(y) - y + 1
-    return Y
-
-
 def shape_list(x):
     """
     deal with dynamic shape in tensorflow cleanly
