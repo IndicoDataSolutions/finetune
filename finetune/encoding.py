@@ -175,11 +175,11 @@ class TextEncoder(object):
 
         question_ids = question_ids[:a_adj]
         answer_ids = answer_ids[:b_adj]
-        
         start = self.encoder['_start_']
         delimiter = self.encoder['_delimiter_']
         clf_token = self.encoder['_classify_']
         question_answer_pairs = []
         for qid, aid in zip(question_ids, answer_ids):
             question_answer_pairs.append([start] + qid + [delimiter] + aid + [clf_token])
+
         return question_answer_pairs

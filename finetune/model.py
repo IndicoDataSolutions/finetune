@@ -537,7 +537,6 @@ if __name__ == "__main__":
     model.save(save_path)
     model = LanguageModelEntailment.load(save_path)
 
-
     predictions = model.predict(ques_test, ans_test)
     acc = np.mean(predictions == scores_test)
     print(acc)
