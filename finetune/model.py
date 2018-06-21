@@ -90,9 +90,13 @@ def classifier(hidden, targets, n_classes, train=False, reuse=None):
 
 
 class LanguageModelClassifier(object):
+    """
+    A sklearn-style class for finetuning a Transformer language model on a classification task.
 
-    def __init__(self, *, max_length=MAX_LENGTH, verbose=True):
-        # ensure results are reproducible
+    :param max_length: Determines the number of tokens to be included in the document representation.
+                       Providing more than `max_length` tokens to the model as input will result in truncation.
+    """
+    def __init__(self, max_length=MAX_LENGTH, verbose=True):
         self.max_length = max_length
         self.label_encoder = LabelEncoder()
         self._initialize()
@@ -117,8 +121,10 @@ class LanguageModelClassifier(object):
 
     def finetune(self, X, Y, batch_size=BATCH_SIZE):
         """
-        X: List / array of text
-        Y: Class labels
+        :param X: list or array of text.
+        :param Y: integer or string-valued class labels.
+        :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
+                           corresponds to the number of training examples provided to each GPU.
         """
         token_idxs = self.encoder.encode_for_classification(X, max_length=self.max_length)
         train_x, train_mask = self._array_format(token_idxs)
@@ -136,13 +142,21 @@ class LanguageModelClassifier(object):
             for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=self.verbose):
                 cost, _ = self.sess.run([self.clf_loss, self.train_op], {self.X: xmb, self.M: mmb, self.Y: ymb})
 
-        return self
-
     def fit(self, *args, **kwargs):
-        # Alias for finetune
+        """
+        An alias for finetune.
+        """
         return self.finetune(*args, **kwargs)
 
     def predict(self, X, max_length=None):
+        """
+        Produces a list of most likely class labels as determined by the fine-tuned model.
+
+        :param X: list or array of text to embed.
+        :param max_length: the number of tokens to be included in the document representation.
+                           Providing more than `max_length` tokens as input will result in truncation.
+        :returns: list of class labels.
+        """
         predictions = []
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
@@ -154,6 +168,14 @@ class LanguageModelClassifier(object):
         return np.concatenate(predictions).tolist()
 
     def predict_proba(self, X, max_length=None):
+        """
+        Produces a probability distribution over classes for each example in X.
+
+        :param X: list or array of text to embed.
+        :param max_length: the number of tokens to be included in the document representation.
+                           Providing more than `max_length` tokens as input will result in truncation.
+        :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
+        """
         predictions = []
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
@@ -168,7 +190,12 @@ class LanguageModelClassifier(object):
 
     def featurize(self, X, max_length=None):
         """
-        Embed inputs in learned feature space
+        Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
+
+        :param X: list or array of text to embed.
+        :param max_length: the number of tokens to be included in the document representation.
+                           Providing more than `max_length` tokens as input will result in truncation.
+        :returns: np.array of features of shape (n_examples, embedding_size).
         """
         features = []
         with warnings.catch_warnings():
@@ -180,6 +207,9 @@ class LanguageModelClassifier(object):
         return np.concatenate(features)
 
     def transform(self, *args, **kwargs):
+        """
+        An alias for `featurize`.
+        """
         return self.featurize(*args, **kwargs)
 
     def _infer_prep(self, X, max_length=None):
@@ -229,7 +259,7 @@ class LanguageModelClassifier(object):
 
     def _build_model(self, n_updates_total, n_classes, train=True, reuse=None):
         """
-        Finetune language model on text inputs
+        Construct tensorflow symbolic graph.
         """
         gpu_grads = []
         self._define_placeholders()
@@ -362,10 +392,9 @@ class LanguageModelClassifier(object):
     @classmethod
     def load(cls, path):
         """
-        Load in three steps:
-            - Load pickled python object
-            - Clear tf graph
-            - Load serialized session using tf.train.Saver
+        Load a saved fine-tuned model from disk.
+
+        :param path: string path name to load model from.  Same value as previously provided to :meth:`save`.
         """
         if not path.endswith('.pkl'):
             path += '.pkl'
