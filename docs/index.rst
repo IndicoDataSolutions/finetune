@@ -15,10 +15,46 @@ Source code for finetune is available `on github <https://github.com/IndicoDataS
 
 Installation
 ============
+Finetune can be installed directly from PyPI by using `pip`
+
+.. code-block:: bash
+
+    pip install finetune
+
+
+or installed directly from source:
+
+.. code-block:: bash
+
+    git clone https://github.com/IndicoDataSolutions/finetune
+    cd finetune
+    python3 setup.py develop
+
+You can optionally run the provided test suite to ensure installation completed successfully.
+
+.. code-block:: bash
+
+    nosetests
 
 
 Finetune Quickstart Guide
 =========================
+
+Finetuning the base language model is as easy as calling :meth:`LanguageModelClassifier.fit`:
+
+.. code-block:: python3
+
+    model = LanguageModelClassifier()   # load base model
+    model.fit(trainX, trainY)           # finetune base model on custom data
+    predictions = model.predict(testX)  # predict on unseen examples
+    model.save(path)                    # serialize the model to disk
+
+Easily reload saved models from disk by using :meth:`LanguageModelClassifier.load`:
+
+.. code-block:: python3
+
+    model = LanguageModelClassifier.load(path)
+    predictions = model.predict(testX)
 
 
 Finetune API Reference
