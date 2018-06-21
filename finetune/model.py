@@ -1,10 +1,9 @@
 import os
 import random
-import json
 import warnings
 import pickle
 
-import pandas as pd
+from abc import ABCMeta, abstractmethod
 import tensorflow as tf
 import numpy as np
 from sklearn.utils import shuffle
@@ -88,8 +87,7 @@ def classifier(hidden, targets, n_classes, train=False, reuse=None):
             'losses': clf_losses
         }
 
-
-class LanguageModelClassifier(object):
+class LanguageModelBase(object, metaclass=ABCMeta):
     """
     A sklearn-style class for finetuning a Transformer language model on a classification task.
 
@@ -122,18 +120,12 @@ class LanguageModelClassifier(object):
     def _text_to_ids(self, *Xs, max_length=None):
         max_length = max_length or self.max_length
         assert len(Xs) == 1, "This implementation assumes a single Xs"
-        token_idxs = self.encoder.encode_for_classification(Xs[0], max_length=self.max_length)
+        token_idxs = self.encoder.encode_for_classification(Xs[0], max_length=max_length)
         tokens, mask = self._array_format(token_idxs)
         return tokens, mask
 
-    def finetune(self, X, Y, batch_size=BATCH_SIZE):
-        """
-        :param X: list or array of text.
-        :param Y: integer or string-valued class labels.
-        :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
-                           corresponds to the number of training examples provided to each GPU.
-        """
-        train_x, train_mask = self._text_to_ids(X)
+    def _finetune(self, *Xs, Y, batch_size=BATCH_SIZE):
+        train_x, train_mask = self._text_to_ids(*Xs)
         n_batch_train = batch_size * N_GPUS
         n_updates_total = (len(Y) // n_batch_train) * N_EPOCHS
         Y = self.label_encoder.fit_transform(Y)
@@ -148,45 +140,38 @@ class LanguageModelClassifier(object):
             for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=self.verbose):
                 cost, _ = self.sess.run([self.clf_loss, self.train_op], {self.X: xmb, self.M: mmb, self.Y: ymb})
 
+        return self
+
+    @abstractmethod
+    def finetune(self, *args, **kwargs):
+
     def fit(self, *args, **kwargs):
         """
         An alias for finetune.
         """
         return self.finetune(*args, **kwargs)
 
-    def predict(self, X, max_length=None):
-        """
-        Produces a list of most likely class labels as determined by the fine-tuned model.
 
-        :param X: list or array of text to embed.
-        :param max_length: the number of tokens to be included in the document representation.
-                           Providing more than `max_length` tokens as input will result in truncation.
-        :returns: list of class labels.
-        """
+    def _predict(self, *Xs, max_length=None):
         predictions = []
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
             max_length = max_length or self.max_length
-            for xmb, mmb in self._infer_prep(X, max_length=max_length):
+            for xmb, mmb in self._infer_prep(*Xs, max_length=max_length):
                 class_idx = self.sess.run(self.predict_op, {self.X: xmb, self.M: mmb})
                 class_labels = self.label_encoder.inverse_transform(class_idx)
                 predictions.append(class_labels)
         return np.concatenate(predictions).tolist()
 
-    def predict_proba(self, X, max_length=None):
-        """
-        Produces a probability distribution over classes for each example in X.
+    @abstractmethod
+    def predict(self, *args, **kwargs):
 
-        :param X: list or array of text to embed.
-        :param max_length: the number of tokens to be included in the document representation.
-                           Providing more than `max_length` tokens as input will result in truncation.
-        :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
-        """
+    def _predict_proba(self, *Xs, max_length=None):
         predictions = []
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
             max_length = max_length or self.max_length
-            for xmb, mmb in self._infer_prep(X, max_length=max_length):
+            for xmb, mmb in self._infer_prep(*Xs, max_length=max_length):
                 probas = self.sess.run(self.predict_proba_op, {self.X: xmb, self.M: mmb})
                 classes = self.label_encoder.classes_
                 predictions.extend([
@@ -194,23 +179,22 @@ class LanguageModelClassifier(object):
                 ])
         return predictions
 
-    def featurize(self, X, max_length=None):
-        """
-        Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
+    @abstractmethod
+    def predict_proba(self, *args, **kwargs):
 
-        :param X: list or array of text to embed.
-        :param max_length: the number of tokens to be included in the document representation.
-                           Providing more than `max_length` tokens as input will result in truncation.
-        :returns: np.array of features of shape (n_examples, embedding_size).
-        """
+    def _featurize(self, *Xs, max_length=None):
         features = []
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
             max_length = max_length or self.max_length
-            for xmb, mmb in self._infer_prep(X, max_length=max_length):
+            for xmb, mmb in self._infer_prep(*Xs, max_length=max_length):
                 feature_batch = self.sess.run(self.features, {self.X: xmb, self.M: mmb})
                 features.append(feature_batch)
         return np.concatenate(features)
+
+
+    @abstractmethod
+    def featurize(self, *args, **kwargs):
 
     def transform(self, *args, **kwargs):
         """
@@ -414,7 +398,52 @@ class LanguageModelClassifier(object):
         self._load_from_file = False
         self.is_trained = True
 
-class LanguageModelEntailment(LanguageModelClassifier):
+class LanguageModelClassifier(LanguageModelBase):
+
+    def featurize(self, X, max_length=None):
+        """
+        Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
+
+        :param X: list or array of text to embed.
+        :param max_length: the number of tokens to be included in the document representation.
+                           Providing more than `max_length` tokens as input will result in truncation.
+        :returns: np.array of features of shape (n_examples, embedding_size).
+        """
+        return self._featurize(X, max_length=max_length)
+
+    def predict(self, X, max_length=None):
+        """
+        Produces a list of most likely class labels as determined by the fine-tuned model.
+
+        :param X: list or array of text to embed.
+        :param max_length: the number of tokens to be included in the document representation.
+                           Providing more than `max_length` tokens as input will result in truncation.
+        :returns: list of class labels.
+        """
+        return self._predict(X, max_length=max_length)
+
+    def predict_proba(self, X, max_length=None):
+        """
+        Produces a probability distribution over classes for each example in X.
+
+        :param X: list or array of text to embed.
+        :param max_length: the number of tokens to be included in the document representation.
+                           Providing more than `max_length` tokens as input will result in truncation.
+        :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
+        """
+        return self._predict_proba(X, max_length=max_length)
+
+    def finetune(self, X, Y, batch_size=BATCH_SIZE):
+        """
+        :param X: list or array of text.
+        :param Y: integer or string-valued class labels.
+        :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
+                           corresponds to the number of training examples provided to each GPU.
+        """
+        return self._finetune(X, Y=Y, batch_size=batch_size)
+
+
+class LanguageModelEntailment(LanguageModelBase):
     def _text_to_ids(self, *Xs, max_length=None):
 
         max_length = max_length or self.max_length
@@ -434,39 +463,49 @@ class LanguageModelEntailment(LanguageModelClassifier):
 
     def finetune(self, q, a, Y, batch_size=BATCH_SIZE):
         """
-        X: List / array of text
-        Y: Class labels
+        :param q: list or array of text to embed as the queries.
+        :param a: list or array of text to embed as the answers.
+        :param Y: integer or string-valued class labels. It is necessary for the items of Y to be sortable.
+        :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
+                           corresponds to the number of training examples provided to each GPU.
         """
-        train_x, train_mask = self._text_to_ids(q, a)
-        n_batch_train = batch_size * N_GPUS
-        n_updates_total = (len(Y) // n_batch_train) * N_EPOCHS
-        Y = self.label_encoder.fit_transform(Y)
-        self.n_classes = len(self.label_encoder.classes_)
-        self._build_model(n_updates_total=n_updates_total, n_classes=self.n_classes)
-
-        dataset = shuffle(train_x, train_mask, Y, random_state=np.random)
-
-        self.is_trained = True
-
-        for i in range(N_EPOCHS):
-            for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=True):
-                cost, _ = self.sess.run([self.clf_loss, self.train_op], {self.X: xmb, self.M: mmb, self.Y: ymb})
-
-        return self
+        return self._finetune(q, a, Y=Y, batch_size=batch_size)
 
     def predict(self, q, a, max_length=None):
-        predictions = []
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore")
-            max_length = max_length or self.max_length
-            for xmb, mmb in self._infer_prep(q, a, max_length=max_length):
-                class_idx = self.sess.run(self.predict_op, {self.X: xmb, self.M: mmb})
-                class_labels = self.label_encoder.inverse_transform(class_idx)
-                predictions.append(class_labels)
-        return np.concatenate(predictions)
+        """
+        Produces a list of most likely class labels as determined by the fine-tuned model.
 
-    def predict_proba(self, X, max_length=None):
-        # TODO(BEN)
+        :param q: list or array of text to embed as the queries.
+        :param a: list or array of text to embed as the answers.
+        :param max_length: the number of tokens to be included in the document representation.
+                           Providing more than `max_length` tokens as input will result in truncation.
+        :returns: list of class labels.
+        """
+        return self._predict(q, a, max_length=max_length)
+
+    def predict_proba(self, q, a, max_length=None):
+        """
+        Produces a probability distribution over classes for each example in X.
+
+        :param q: list or array of text to embed as the queries.
+        :param a: list or array of text to embed as the answers.
+        :param max_length: the number of tokens to be included in the document representation.
+                           Providing more than `max_length` tokens as input will result in truncation.
+        :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
+        """
+        return self._predict_proba(q, a, max_length=max_length)
+
+    def featurize(self, q, a, max_length=None):
+        """
+        Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
+
+        :param q: list or array of text to embed as the queries.
+        :param a: list or array of text to embed as the answers.
+        :param max_length: the number of tokens to be included in the document representation.
+                           Providing more than `max_length` tokens as input will result in truncation.
+        :returns: np.array of features of shape (n_examples, embedding_size).
+        """
+        return self._featurize(q, a, max_length=max_length)
 
 if __name__ == "__main__":
 
@@ -497,13 +536,8 @@ if __name__ == "__main__":
     # model.finetune(train_df.text.values, train_df.target.values)
     # model.save(save_path)
 
-<<<<<<< HEAD
-    predictions = model.predict_qa(questions, answers)
-    acc = np.mean(predictions == scores)
-=======
     predictions = model.predict(ques_test, ans_test)
     acc = np.mean(predictions == scores_test)
->>>>>>> 9e33cfc... REFACTOR: remove _qa from predict
     print(acc)
 
     from scipy.stats import spearmanr
