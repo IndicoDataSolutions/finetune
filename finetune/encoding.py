@@ -162,9 +162,7 @@ class TextEncoder(object):
     def encode_for_entailment(self, question, answer, max_length=MAX_LENGTH, verbose=True):
         question_ids = self.encode(question)
         answer_ids = self.encode(answer)
-        adjusted_max_length = max_length - 2
-        total_length = len(question_ids) + len(answer_ids)
-        required_truncation_amount = min(adjusted_max_length - total_length, 0)
+        adjusted_max_length = max_length - 3
 
         a = len(question_ids)
         b = len(answer_ids)
@@ -183,5 +181,5 @@ class TextEncoder(object):
         clf_token = self.encoder['_classify_']
         question_answer_pairs = []
         for qid, aid in zip(question_ids, answer_ids):
-            question_answer_pairs.append([start] + qid[1:-1] + [delimiter] + aid[1:-1] + [clf_token])
+            question_answer_pairs.append([start] + qid + [delimiter] + aid + [clf_token])
         return question_answer_pairs
