@@ -87,7 +87,6 @@ class TestLanguageModelClassifier(unittest.TestCase):
         """
         model = LanguageModelClassifier(verbose=False)
         train_sample = self.dataset.sample(n=self.n_sample)
-        valid_sample = self.dataset.sample(n=self.n_sample)
         features = model.featurize(train_sample.Text)
         self.assertEqual(features.shape, (self.n_sample, self.n_hidden))
         model.fit(train_sample.Text, train_sample.Target)
