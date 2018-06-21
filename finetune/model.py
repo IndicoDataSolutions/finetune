@@ -8,6 +8,7 @@ import tensorflow as tf
 import numpy as np
 import tqdm
 from sklearn.utils import shuffle
+import json
 
 from functools import partial
 from finetune.encoding import TextEncoder
@@ -488,7 +489,7 @@ class LanguageModelEntailment(LanguageModelBase):
                            Providing more than `max_length` tokens as input will result in truncation.
         :returns: list of class labels.
         """
-        return self._predict(q, a, max_length=max_length)
+        return self.label_encoder.inverse_transform(self._predict_proba(q, a, max_length=max_length))
 
     def predict_proba(self, q, a, max_length=None):
         """
@@ -540,10 +541,15 @@ if __name__ == "__main__":
     model.save(save_path)
     model = LanguageModelEntailment.load(save_path)
 
-    predictions = model.predict(ques_test, ans_test)
-    acc = np.mean(predictions == scores_test)
-    print(acc)
+    print("TRAIN EVAL")
+    predictions = model.predict(ques_train, ans_train)
+    print(predictions)
 
     from scipy.stats import spearmanr
 
+    print(spearmanr(predictions, scores_train))
+
+    print("TEST EVAL")
+    predictions = model.predict(ques_test, ans_test)
+    print(predictions)
     print(spearmanr(predictions, scores_test))
