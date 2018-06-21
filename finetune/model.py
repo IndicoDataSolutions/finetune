@@ -6,6 +6,7 @@ import pickle
 from abc import ABCMeta, abstractmethod
 import tensorflow as tf
 import numpy as np
+import tqdm
 from sklearn.utils import shuffle
 from sklearn.preprocessing import LabelEncoder
 
@@ -141,12 +142,10 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         self.is_trained = True
         rolling_avg_loss = 0
         for i in range(N_EPOCHS):
-            for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=self.verbose):
+            for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=True)
                 cost, _ = self.sess.run([self.clf_loss, self.train_op], {self.X: xmb, self.M: mmb, self.Y: ymb})
                 rolling_avg_loss = rolling_avg_loss * 0.95 + cost *  0.05
-                print("LOSS = {}, ROLLING AVG = {}".format(cost, rolling_avg_loss))
-                
-
+                print("\nLOSS = {}, ROLLING AVG = {}".format(cost, rolling_avg_loss))
         return self
 
     @abstractmethod

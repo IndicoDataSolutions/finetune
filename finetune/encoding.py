@@ -167,19 +167,21 @@ class TextEncoder(object):
         a = len(question_ids)
         b = len(answer_ids)
 
-        half_max_len_1 = adjusted_max_length // 2 # Initial allocation for question
-        half_max_len_2 = adjusted_max_length - half_max_len_1 # Inial allocation for answer
-        spare = max(0, half_max_len_2 - min(a, b)) # Number of remaining tokens if either question or answer is shorter than its allocation
-        a_adj = min(a, half_max_len_2 + spare) # Truncate the question if its length is longer than its allocation plus any spare tokens.
-        b_adj = min(b, half_max_len_1 + spare)
-
         question_ids = question_ids[:a_adj]
         answer_ids = answer_ids[:b_adj]
+        half_max_len = adjusted_max_length // 2 # Initial allocation for question
+        
         start = self.encoder['_start_']
         delimiter = self.encoder['_delimiter_']
         clf_token = self.encoder['_classify_']
         question_answer_pairs = []
         for qid, aid in zip(question_ids, answer_ids):
             question_answer_pairs.append([start] + qid + [delimiter] + aid + [clf_token])
-
+            q = len(qid)
+            a = len(aid)
+            spare = max(0, half_max_len - min(q, a)) # Number of remaining tokens if either question or answer is shorter than its allocation
+            q_adj = min(q, half_max_len + spare) # Truncate the question if its length is longer than its allocation plus any spare tokens.
+            a_adj = min(a, half_max_len + spare)
+                                                            
+            question_answer_pairs.append([start] + qid[:q_adj] + [delimiter] + aid[:a_adj] + [clf_token])
         return question_answer_pairs
