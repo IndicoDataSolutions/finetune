@@ -167,8 +167,6 @@ class TextEncoder(object):
         a = len(question_ids)
         b = len(answer_ids)
 
-        question_ids = question_ids[:a_adj]
-        answer_ids = answer_ids[:b_adj]
         half_max_len = adjusted_max_length // 2 # Initial allocation for question
         
         start = self.encoder['_start_']
@@ -176,7 +174,6 @@ class TextEncoder(object):
         clf_token = self.encoder['_classify_']
         question_answer_pairs = []
         for qid, aid in zip(question_ids, answer_ids):
-            question_answer_pairs.append([start] + qid + [delimiter] + aid + [clf_token])
             q = len(qid)
             a = len(aid)
             spare = max(0, half_max_len - min(q, a)) # Number of remaining tokens if either question or answer is shorter than its allocation

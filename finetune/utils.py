@@ -194,15 +194,16 @@ class OrdinalClassificationEncoder:
         self.max_val = max_val
         self.lookup = None
         self.inverse_lookup = None
-        self.classes_ = None
+        self.keys = None
+        self.classes_ = [0, 1]
 
     def fit(self, y):
-        self.classes_ = list(set(y))
-        self.classes_.sort()
-        spaced_probs = np.linspace(self.min_val, self.max_val, len(self.classes_))
+        self.keys = list(set(y))
+        self.keys.sort()
+        spaced_probs = np.linspace(self.min_val, self.max_val, len(self.keys))
         prob_distrobutions = np.transpose([spaced_probs, 1 - spaced_probs])
         self.inverse_lookup = spaced_probs
-        self.lookup = dict(zip(self.classes_, prob_distrobutions))
+        self.lookup = dict(zip(self.keys, prob_distrobutions))
 
     def transform(self, y):
         return list(map(self.lookup.get, y))
@@ -211,7 +212,7 @@ class OrdinalClassificationEncoder:
         output = []
         for item in y:
             i_min = np.argmin(np.abs(self.inverse_lookup - item[0]))
-            output.append(self.classes_[i_min])
+            output.append(self.keys[i_min])
         return np.asarray(output)
 
     def fit_transform(self, y):
