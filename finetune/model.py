@@ -135,15 +135,19 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         dataset = shuffle(train_x, train_mask, Y, random_state=np.random)
 
         self.is_trained = True
-
+        rolling_avg_loss = 0
         for i in range(N_EPOCHS):
             for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=self.verbose):
                 cost, _ = self.sess.run([self.clf_loss, self.train_op], {self.X: xmb, self.M: mmb, self.Y: ymb})
+                rolling_avg_loss = rolling_avg_loss * 0.95 + cost *  0.05
+                print("LOSS = {}, ROLLING AVG = {}".format(cost, rolling_avg_loss))
+                
 
         return self
 
     @abstractmethod
     def finetune(self, *args, **kwargs):
+        """"""
 
     def fit(self, *args, **kwargs):
         """
@@ -165,6 +169,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
 
     @abstractmethod
     def predict(self, *args, **kwargs):
+        """"""
 
     def _predict_proba(self, *Xs, max_length=None):
         predictions = []
@@ -181,6 +186,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
 
     @abstractmethod
     def predict_proba(self, *args, **kwargs):
+        """"""
 
     def _featurize(self, *Xs, max_length=None):
         features = []
@@ -195,6 +201,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
 
     @abstractmethod
     def featurize(self, *args, **kwargs):
+        """"""
 
     def transform(self, *args, **kwargs):
         """
@@ -449,15 +456,8 @@ class LanguageModelEntailment(LanguageModelBase):
         max_length = max_length or self.max_length
         assert len(Xs) == 2, "This implementation assumes 2 Xs"
 
-        question_ids = self.encoder.encode_for_classification(Xs[0], max_length=max_length//2)
-        answer_ids = self.encoder.encode_for_classification(Xs[1], max_length=max_length//2)
+        question_answer_pairs = self.encoder.encode_for_entailment(*Xs, max_length=max_length)
 
-        start = self.encoder['_start_']
-        delimiter = self.encoder['_delimiter_']
-        clf_token = self.encoder['_classify_']
-        question_answer_pairs = []
-        for qid, aid in zip(question_ids, answer_ids):
-            question_answer_pairs.append([start] + qid[1:-1] + [delimiter] + aid[1:-1] + [clf_token])
         tokens, mask = self._array_format(question_answer_pairs)
         return tokens, mask
 
@@ -532,9 +532,6 @@ if __name__ == "__main__":
     save_path = 'saved-models/cola'
     model.save(save_path)
     model = LanguageModelEntailment.load(save_path)
-
-    # model.finetune(train_df.text.values, train_df.target.values)
-    # model.save(save_path)
 
     predictions = model.predict(ques_test, ans_test)
     acc = np.mean(predictions == scores_test)
