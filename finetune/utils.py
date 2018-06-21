@@ -11,6 +11,8 @@ import tensorflow as tf
 from tensorflow.python.framework import function
 from tqdm import tqdm
 
+from sklearn.preprocessing import LabelEncoder
+
 
 def shape_list(x):
     """
@@ -22,10 +24,10 @@ def shape_list(x):
 
 
 def np_softmax(x, t=1):
-    x = x/t
+    x = x / t
     x = x - np.max(x, axis=-1, keepdims=True)
     ex = np.exp(x)
-    return ex/np.sum(ex, axis=-1, keepdims=True)
+    return ex / np.sum(ex, axis=-1, keepdims=True)
 
 
 def make_path(f):
@@ -37,7 +39,7 @@ def make_path(f):
 
 def _identity_init(shape, dtype, partition_info, scale):
     n = shape[-1]
-    w = np.eye(n)*scale
+    w = np.eye(n) * scale
     if len([s for s in shape if s != 1]) == 2:
         w = w.reshape(shape)
     return w.astype(np.float32)
@@ -93,24 +95,25 @@ def remove_none(l):
 def iter_data(*datas, n_batch=128, truncate=False, verbose=False, max_batches=float("inf")):
     n = len(datas[0])
     if truncate:
-        n = (n//n_batch)*n_batch
-    n = min(n, max_batches*n_batch)
+        n = (n // n_batch) * n_batch
+    n = min(n, max_batches * n_batch)
     n_batches = 0
     if verbose:
         f = sys.stderr
     else:
         f = open(os.devnull, 'w')
-    for i in tqdm(range(0, n, n_batch), total=n//n_batch, file=f, ncols=80, leave=False):
+    for i in tqdm(range(0, n, n_batch), total=n // n_batch, file=f, ncols=80, leave=False):
         if n_batches >= max_batches: raise StopIteration
         if len(datas) == 1:
-            yield datas[0][i:i+n_batch]
+            yield datas[0][i:i + n_batch]
         else:
-            yield (d[i:i+n_batch] for d in datas)
+            yield (d[i:i + n_batch] for d in datas)
         n_batches += 1
+
 
 def get_ema_if_exists(v, gvs):
     name = v.name.split(':')[0]
-    ema_name = name+'/ExponentialMovingAverage:0'
+    ema_name = name + '/ExponentialMovingAverage:0'
     ema_v = [v for v in gvs if v.name == ema_name]
     if len(ema_v) == 0:
         ema_v = [v]
@@ -144,6 +147,7 @@ def assign_to_gpu(gpu=0, ps_dev="/device:CPU:0"):
             return ps_dev
         else:
             return "/gpu:%d" % gpu
+
     return _assign
 
 
@@ -182,3 +186,42 @@ def average_grads(tower_grads):
         grad_and_var = (grad, v)
         average_grads.append(grad_and_var)
     return average_grads
+
+
+class OrdinalClassificationEncoder:
+    def __init__(self, min_val=0.0, max_val=1.0):
+        self.min_val = min_val
+        self.max_val = max_val
+        self.lookup = None
+        self.inverse_lookup = None
+        self.classes_ = None
+
+    def fit(self, y):
+        self.classes_ = list(set(y))
+        self.classes_.sort()
+        spaced_probs = np.linspace(self.min_val, self.max_val, len(self.classes_))
+        prob_distrobutions = np.transpose([spaced_probs, 1 - spaced_probs])
+        self.inverse_lookup = spaced_probs
+        self.lookup = dict(zip(self.classes_, prob_distrobutions))
+
+    def transform(self, y):
+        return list(map(self.lookup.get, y))
+
+    def inverse_transform(self, y):
+        output = []
+        for item in y:
+            i_min = np.argmin(np.abs(self.inverse_lookup - item[0]))
+            output.append(self.classes_[i_min])
+        return np.asarray(output)
+
+    def fit_transform(self, y):
+        self.fit(y)
+        return self.transform(y)
+
+
+class OneHotLabelEncoder(LabelEncoder):
+    def fit_transform(self, y):
+        labels = super().fit_transform(y)
+        output = np.zeros([len(labels), len(self.classes_)], dtype=np.float)
+        output[np.arange(len(labels)), labels] = 1
+        return output

@@ -8,12 +8,11 @@ import tensorflow as tf
 import numpy as np
 import tqdm
 from sklearn.utils import shuffle
-from sklearn.preprocessing import LabelEncoder
 
 from functools import partial
 from finetune.encoding import TextEncoder
 from finetune.optimizers import AdamWeightDecay, schedules
-from finetune.utils import find_trainable_variables, shape_list, assign_to_gpu, average_grads, iter_data, soft_split
+from finetune.utils import find_trainable_variables, shape_list, assign_to_gpu, average_grads, iter_data, soft_split, OrdinalClassificationEncoder, OneHotLabelEncoder
 from finetune.config import (
     MAX_LENGTH, BATCH_SIZE, WEIGHT_STDDEV, N_EPOCHS, CLF_P_DROP, SEED,
     N_GPUS, WEIGHT_STDDEV, EMBED_P_DROP, RESID_P_DROP, N_HEADS, N_LAYER,
@@ -82,7 +81,7 @@ def classifier(hidden, targets, n_classes, train=False, reuse=None):
     with tf.variable_scope('model', reuse=reuse):
         hidden = dropout(hidden, CLF_P_DROP, train)
         clf_logits = clf(hidden, n_classes, train=train)
-        clf_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=clf_logits, labels=targets)
+        clf_losses = tf.nn.softmax_cross_entropy_with_logits(logits=clf_logits, labels=targets)
         return {
             'logits': clf_logits,
             'losses': clf_losses
@@ -97,7 +96,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
     """
     def __init__(self, max_length=MAX_LENGTH, verbose=True):
         self.max_length = max_length
-        self.label_encoder = LabelEncoder()
+        self.label_encoder = OneHotLabelEncoder()
         self._initialize()
         self.n_classes  = None
         self._load_from_file = False
@@ -334,7 +333,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         # tf placeholders
         self.X = tf.placeholder(tf.int32,   [None, self.max_length, 2]) # token idxs (BPE embedding + positional)
         self.M = tf.placeholder(tf.float32, [None, self.max_length])    # sequence mask
-        self.Y = tf.placeholder(tf.int32,   [None])                     # classification targets
+        self.Y = tf.placeholder(tf.float32, [None, self.n_classes])   # classification targets
 
     def _load_base_model(self):
         """
@@ -454,6 +453,11 @@ class LanguageModelClassifier(LanguageModelBase):
 
 
 class LanguageModelEntailment(LanguageModelBase):
+
+    def __init__(self, *, max_length=MAX_LENGTH, verbose=True):
+        super().__init__(max_length=max_length, verbose=verbose)
+        self.label_encoder = OrdinalClassificationEncoder()
+
     def _text_to_ids(self, *Xs, max_length=None):
 
         max_length = max_length or self.max_length
