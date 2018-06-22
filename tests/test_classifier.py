@@ -1,6 +1,7 @@
 import os
 import unittest
 import logging
+from copy import copy
 
 # required for tensorflow logging control
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -92,3 +93,14 @@ class TestLanguageModelClassifier(unittest.TestCase):
         model.fit(train_sample.Text, train_sample.Target)
         features = model.featurize(train_sample.Text)
         self.assertEqual(features.shape, (self.n_sample, self.n_hidden))
+
+    def test_reasonable_predictions(self):
+        model = LanguageModelClassifier(verbose=False)
+        trX = ['cat'] * 100 + ['finance']  * 100
+        trY = copy(trX)
+        teX = ['feline'] * 10 + ['investment'] * 10 
+        teY = ['cat'] * 10 + ['finance'] * 10
+        model.fit(trX, trY)
+        predY = model.predict(teX)
+        self.assertEqual(accuracy_score(teY, predY), 1.00)
+    
