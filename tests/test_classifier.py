@@ -2,6 +2,7 @@ import os
 import unittest
 import logging
 from copy import copy
+from pathlib import Path
 
 # required for tensorflow logging control
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -22,19 +23,19 @@ class TestLanguageModelClassifier(unittest.TestCase):
 
     n_sample = 100
     n_hidden = 768
-
-    @staticmethod
-    def _download_sst():
+    dataset_path = os.path.join(
+        enso.config.DATA_DIRECTORY, 'Classify', 'SST-binary.csv'
+    )
+    @classmethod
+    def _download_sst(cls):
         """
         Download Stanford Sentiment Treebank to enso `data` directory
         """
-        if not os.path.exists(enso.config.DATA_DIRECTORY):
-            os.mkdir(enso.config.DATA_DIRECTORY)
+        path = Path(cls.dataset_path)
+        if path.exists():
+            return
 
-        classification_dir = os.path.join(enso.config.DATA_DIRECTORY, 'Classify')
-        if not os.path.exists(classification_dir):
-            os.mkdir(classification_dir)
-
+        path.mkdir(parents=True, exist_ok=True)
         generic_download(
             url="https://s3.amazonaws.com/enso-data/SST-binary.csv",
             text_column="Text",
@@ -47,14 +48,8 @@ class TestLanguageModelClassifier(unittest.TestCase):
     def setUpClass(cls):
         cls._download_sst()
 
-    @staticmethod
-    def _dataset_path(filename):
-        return os.path.abspath(
-            os.path.join(enso.config.DATA_DIRECTORY, 'Classify', filename)
-        )
-
     def setUp(self):
-        self.dataset = pd.read_csv(self._dataset_path(SST_FILENAME))
+        self.dataset = pd.read_csv(self.dataset_path)
         tf.reset_default_graph()
 
     def test_fit_predict(self):
@@ -109,9 +104,8 @@ class TestLanguageModelClassifier(unittest.TestCase):
         model = LanguageModelClassifier(verbose=False)
         trX = ['cat'] * 100 + ['finance']  * 100
         trY = copy(trX)
-        teX = ['feline'] * 10 + ['investment'] * 10 
+        teX = ['feline'] * 10 + ['investment'] * 10
         teY = ['cat'] * 10 + ['finance'] * 10
         model.fit(trX, trY)
         predY = model.predict(teX)
         self.assertEqual(accuracy_score(teY, predY), 1.00)
-    
