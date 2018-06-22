@@ -221,8 +221,18 @@ class OrdinalClassificationEncoder:
 
 
 class OneHotLabelEncoder(LabelEncoder):
-    def fit_transform(self, y):
-        labels = super().fit_transform(y)
+
+    def _make_one_hot(self, labels):
         output = np.zeros([len(labels), len(self.classes_)], dtype=np.float)
         output[np.arange(len(labels)), labels] = 1
         return output
+
+    def fit_transform(self, y):
+        labels = super().fit_transform(y)
+        return self._make_one_hot(labels)
+
+    def transform(self, y):
+        labels = super().transform(y)
+        return self._make_one_hot(labels)
+
+
