@@ -217,7 +217,7 @@ class LanguageModelClassifier(object):
         token_idxs = self.encoder.encode_for_classification(X, max_length=max_length)
         infer_x, infer_mask = self._array_format(token_idxs)
         n_batch_train = BATCH_SIZE * N_GPUS
-        self._build_model(n_updates_total=0, n_classes=self.n_classes, reuse=self.is_built, train=False)
+        self._build_model(n_updates_total=0, n_classes=self.n_classes, train=False)
         yield from iter_data(infer_x, infer_mask, n_batch=n_batch_train, verbose=self.verbose)
 
     def _array_format(self, token_idxs):
@@ -257,7 +257,7 @@ class LanguageModelClassifier(object):
             e=EPSILON
         )
 
-    def _build_model(self, n_updates_total, n_classes, train=True, reuse=None):
+    def _build_model(self, n_updates_total, n_classes, train=True):
         """
         Construct tensorflow symbolic graph.
         """
@@ -269,7 +269,7 @@ class LanguageModelClassifier(object):
         params = find_trainable_variables("model")
 
         for i, (X, M, Y) in enumerate(soft_split(self.X, self.M, self.Y, n_splits=N_GPUS)):
-            do_reuse = True if i > 0 else reuse
+            do_reuse = True if i > 0 else tf.AUTO_REUSE
             device = tf.device(assign_to_gpu(i, "/gpu:0"))
             scope = tf.variable_scope(tf.get_variable_scope(), reuse=do_reuse)
 
