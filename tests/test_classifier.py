@@ -23,10 +23,17 @@ class TestLanguageModelClassifier(unittest.TestCase):
     n_hidden = 768
 
     @staticmethod
-    def _download_sst(self):
+    def _download_sst():
         """
         Download Stanford Sentiment Treebank to enso `data` directory
         """
+        if not os.path.exists(enso.config.DATA_DIRECTORY):
+            os.mkdir(enso.config.DATA_DIRECTORY)
+
+        classification_dir = os.path.join(enso.config.DATA_DIRECTORY, 'Classify')
+        if not os.path.exists(classification_dir):
+            os.mkdir(classification_dir)
+
         generic_download(
             url="https://s3.amazonaws.com/enso-data/SST-binary.csv",
             text_column="Text",
@@ -34,11 +41,15 @@ class TestLanguageModelClassifier(unittest.TestCase):
             filename=SST_FILENAME
         )
 
+
+    @classmethod
+    def setUpClass(cls):
+        cls._download_sst()
+
     @staticmethod
     def _dataset_path(filename):
-        enso_project_dir = os.path.dirname(os.path.dirname(enso.__file__))
         return os.path.abspath(
-            os.path.join(enso_project_dir, 'Data', 'Classify', filename)
+            os.path.join(enso.config.DATA_DIRECTORY, 'Classify', filename)
         )
 
     def setUp(self):
