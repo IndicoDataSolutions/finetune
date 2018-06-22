@@ -1,20 +1,7 @@
-import os
-import time
-import math
-import json
-import random
-import argparse
-from functools import partial
-
-import joblib
 import numpy as np
 import tensorflow as tf
-from tqdm import tqdm
-from sklearn.utils import shuffle
-from sklearn.metrics import accuracy_score
 
-from finetune.encoding import TextEncoder
-from finetune.utils import flatten, iter_data, find_trainable_variables, get_ema_vars, convert_gradient_to_tensor, shape_list, assign_to_gpu, average_grads, make_path
+from finetune.utils import get_ema_vars, convert_gradient_to_tensor, shape_list, assign_to_gpu, average_grads, make_path
 from finetune.activations import act_fns
 
 

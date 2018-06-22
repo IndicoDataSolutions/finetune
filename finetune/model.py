@@ -6,9 +6,7 @@ import pickle
 from abc import ABCMeta, abstractmethod
 import tensorflow as tf
 import numpy as np
-import tqdm
 from sklearn.utils import shuffle
-import json
 
 from functools import partial
 from finetune.encoding import TextEncoder
@@ -157,7 +155,6 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         An alias for finetune.
         """
         return self.finetune(*args, **kwargs)
-
 
     def _predict(self, *Xs, max_length=None):
         predictions = []
@@ -469,51 +466,51 @@ class LanguageModelEntailment(LanguageModelBase):
         tokens, mask = self._array_format(question_answer_pairs)
         return tokens, mask
 
-    def finetune(self, q, a, Y, batch_size=BATCH_SIZE):
+    def finetune(self, X_1, X_2, Y, batch_size=BATCH_SIZE):
         """
-        :param q: list or array of text to embed as the queries.
-        :param a: list or array of text to embed as the answers.
+        :param X_1: list or array of text to embed as the queries.
+        :param X_2: list or array of text to embed as the answers.
         :param Y: integer or string-valued class labels. It is necessary for the items of Y to be sortable.
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
         """
-        return self._finetune(q, a, Y=Y, batch_size=batch_size)
+        return self._finetune(X_1, X_2, Y=Y, batch_size=batch_size)
 
-    def predict(self, q, a, max_length=None):
+    def predict(self, X_1, X_2, max_length=None):
         """
-        Produces a list of most likely class labels as determined by the fine-tuned model.
+        Produces X_2 list of most likely class labels as determined by the fine-tuned model.
 
-        :param q: list or array of text to embed as the queries.
-        :param a: list or array of text to embed as the answers.
+        :param X_1: list or array of text to embed as the queries.
+        :param X_2: list or array of text to embed as the answers.
         :param max_length: the number of tokens to be included in the document representation.
                            Providing more than `max_length` tokens as input will result in truncation.
         :returns: list of class labels.
         """
-        return self.label_encoder.inverse_transform(self._predict_proba(q, a, max_length=max_length))
+        return self.label_encoder.inverse_transform(self._predict_proba(X_1, X_2, max_length=max_length))
 
-    def predict_proba(self, q, a, max_length=None):
+    def predict_proba(self, X_1, X_2, max_length=None):
         """
-        Produces a probability distribution over classes for each example in X.
+        Produces X_2 probability distribution over classes for each example in X.
 
-        :param q: list or array of text to embed as the queries.
-        :param a: list or array of text to embed as the answers.
+        :param X_1: list or array of text to embed as the queries.
+        :param X_2: list or array of text to embed as the answers.
         :param max_length: the number of tokens to be included in the document representation.
                            Providing more than `max_length` tokens as input will result in truncation.
-        :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
+        :returns: list of dictionaries.  Each dictionary maps from X_2 class label to its assigned class probability.
         """
-        return self._predict_proba(q, a, max_length=max_length)
+        return self._predict_proba(X_1, X_2, max_length=max_length)
 
-    def featurize(self, q, a, max_length=None):
+    def featurize(self, X_1, X_2, max_length=None):
         """
         Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
 
-        :param q: list or array of text to embed as the queries.
-        :param a: list or array of text to embed as the answers.
+        :param X_1: list or array of text to embed as the queries.
+        :param X_2: list or array of text to embed as the answers.
         :param max_length: the number of tokens to be included in the document representation.
                            Providing more than `max_length` tokens as input will result in truncation.
         :returns: np.array of features of shape (n_examples, embedding_size).
         """
-        return self._featurize(q, a, max_length=max_length)
+        return self._featurize(X_1, X_2, max_length=max_length)
 
 if __name__ == "__main__":
 

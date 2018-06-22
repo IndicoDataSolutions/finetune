@@ -1,9 +1,5 @@
 import os
-import re
 import sys
-import json
-import math
-import time
 from functools import partial
 
 import numpy as np
@@ -201,9 +197,9 @@ class OrdinalClassificationEncoder:
         self.keys = list(set(y))
         self.keys.sort()
         spaced_probs = np.linspace(self.min_val, self.max_val, len(self.keys))
-        prob_distrobutions = np.transpose([spaced_probs, 1 - spaced_probs])
+        prob_distributions = np.transpose([spaced_probs, 1 - spaced_probs])
         self.inverse_lookup = spaced_probs
-        self.lookup = dict(zip(self.keys, prob_distrobutions))
+        self.lookup = dict(zip(self.keys, prob_distributions))
 
     def transform(self, y):
         return list(map(self.lookup.get, y))
