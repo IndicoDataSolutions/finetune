@@ -257,16 +257,15 @@ class LanguageModelClassifier(object):
             e=EPSILON
         )
 
-    def _build_model(self, n_updates_total, n_classes, train=True):
-        """
-        Construct tensorflow symbolic graph.
-        """
+    def _construct_graph(self, n_updates_total, n_classes, train=True):
         gpu_grads = []
+
+        # store whether or not graph was previously compiled with dropout
+        self.train = train
         self._define_placeholders()
 
         features_aggregator = []
         losses_aggregator = []
-        params = find_trainable_variables("model")
 
         for i, (X, M, Y) in enumerate(soft_split(self.X, self.M, self.Y, n_splits=N_GPUS)):
             do_reuse = True if i > 0 else tf.AUTO_REUSE
@@ -297,6 +296,7 @@ class LanguageModelClassifier(object):
                     if LM_LOSS_COEF > 0:
                         train_loss += LM_LOSS_COEF * tf.reduce_mean(language_model_state['losses'])
 
+                    params = find_trainable_variables("model")
                     grads = tf.gradients(train_loss, params)
                     grads = list(zip(grads, params))
                     gpu_grads.append(grads)
@@ -318,6 +318,15 @@ class LanguageModelClassifier(object):
                 n_updates_total=n_updates_total
             )
             self.clf_loss = tf.reduce_mean(self.clf_losses)
+
+    def _build_model(self, n_updates_total, n_classes, train=True):
+        """
+        Construct tensorflow symbolic graph.
+        """
+        if not self.is_trained or train != self.train:
+            # reconstruct graph to include/remove dropout 
+            # #if `train` setting has changed
+            self._construct_graph(n_updates_total, n_classes, train=train)
 
         # Optionally load saved model
         if self._load_from_file:
@@ -361,7 +370,7 @@ class LanguageModelClassifier(object):
         Leave serialization of all tf objects to tf
         """
         required_fields = [
-            'label_encoder', 'max_length', 'n_classes', '_load_from_file', 'verbose'
+            'label_encoder', 'max_length', 'n_classes', '_load_from_file', 'verbose',
         ]
         serialized_state = {
             k: v for k, v in self.__dict__.items()
