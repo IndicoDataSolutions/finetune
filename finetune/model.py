@@ -213,7 +213,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
     def _infer_prep(self, *X, max_length=None):
         max_length = max_length or self.max_length
         infer_x, infer_mask = self._text_to_ids(*X, max_length=max_length)
-        n_batch_train = BATCH_SIZE * len(get_available_gpus())
+        n_batch_train = BATCH_SIZE * max(len(get_available_gpus()), 1)
         self._build_model(n_updates_total=0, n_classes=self.n_classes, train=False)
         yield from iter_data(infer_x, infer_mask, n_batch=n_batch_train, verbose=self.verbose)
 
