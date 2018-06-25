@@ -155,3 +155,30 @@ class TextEncoder(object):
             for token_idxs in batch_token_idxs
         ]
         return batch_token_idxs
+
+    def encode_for_comparison(self, texts,max_length=MAX_LENGTH, verbose=True):
+        pass
+
+    def encode_for_entailment(self, question, answer, max_length=MAX_LENGTH, verbose=True):
+        question_ids = self.encode(question)
+        answer_ids = self.encode(answer)
+        adjusted_max_length = max_length - 3
+
+        a = len(question_ids)
+        b = len(answer_ids)
+
+        half_max_len = adjusted_max_length // 2 # Initial allocation for question
+        
+        start = self.encoder['_start_']
+        delimiter = self.encoder['_delimiter_']
+        clf_token = self.encoder['_classify_']
+        question_answer_pairs = []
+        for qid, aid in zip(question_ids, answer_ids):
+            q = len(qid)
+            a = len(aid)
+            spare = max(0, half_max_len - min(q, a)) # Number of remaining tokens if either question or answer is shorter than its allocation
+            q_adj = min(q, half_max_len + spare) # Truncate the question if its length is longer than its allocation plus any spare tokens.
+            a_adj = min(a, half_max_len + spare)
+                                                            
+            question_answer_pairs.append([start] + qid[:q_adj] + [delimiter] + aid[:a_adj] + [clf_token])
+        return question_answer_pairs

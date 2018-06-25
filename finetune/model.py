@@ -1,19 +1,17 @@
 import os
 import random
-import json
 import warnings
 import pickle
 
-import pandas as pd
+from abc import ABCMeta, abstractmethod
 import tensorflow as tf
 import numpy as np
 from sklearn.utils import shuffle
-from sklearn.preprocessing import LabelEncoder
 
 from functools import partial
 from finetune.encoding import TextEncoder
 from finetune.optimizers import AdamWeightDecay, schedules
-from finetune.utils import find_trainable_variables, shape_list, assign_to_gpu, average_grads, iter_data, soft_split
+from finetune.utils import find_trainable_variables, shape_list, assign_to_gpu, average_grads, iter_data, soft_split, OrdinalClassificationEncoder, OneHotLabelEncoder
 from finetune.config import (
     MAX_LENGTH, BATCH_SIZE, WEIGHT_STDDEV, N_EPOCHS, CLF_P_DROP, SEED,
     N_GPUS, WEIGHT_STDDEV, EMBED_P_DROP, RESID_P_DROP, N_HEADS, N_LAYER,
@@ -82,14 +80,13 @@ def classifier(hidden, targets, n_classes, train=False, reuse=None):
     with tf.variable_scope('model', reuse=reuse):
         hidden = dropout(hidden, CLF_P_DROP, train)
         clf_logits = clf(hidden, n_classes, train=train)
-        clf_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=clf_logits, labels=targets)
+        clf_losses = tf.nn.softmax_cross_entropy_with_logits(logits=clf_logits, labels=targets)
         return {
             'logits': clf_logits,
             'losses': clf_losses
         }
 
-
-class LanguageModelClassifier(object):
+class LanguageModelBase(object, metaclass=ABCMeta):
     """
     A sklearn-style class for finetuning a Transformer language model on a classification task.
 
@@ -98,7 +95,7 @@ class LanguageModelClassifier(object):
     """
     def __init__(self, max_length=MAX_LENGTH, verbose=True):
         self.max_length = max_length
-        self.label_encoder = LabelEncoder()
+        self.label_encoder = OneHotLabelEncoder()
         self._initialize()
         self.n_classes  = None
         self._load_from_file = False
@@ -119,15 +116,19 @@ class LanguageModelClassifier(object):
         self.is_built   = False # has tf graph been constructed?
         self.is_trained = False # has model been fine-tuned?
 
-    def finetune(self, X, Y, batch_size=BATCH_SIZE):
+    def _text_to_ids(self, *Xs, max_length=None):
+        max_length = max_length or self.max_length
+        assert len(Xs) == 1, "This implementation assumes a single Xs"
+        token_idxs = self.encoder.encode_for_classification(Xs[0], max_length=max_length)
+        tokens, mask = self._array_format(token_idxs)
+        return tokens, mask
+
+    def _finetune(self, *Xs, Y, batch_size=BATCH_SIZE):
         """
-        :param X: list or array of text.
-        :param Y: integer or string-valued class labels.
-        :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
-                           corresponds to the number of training examples provided to each GPU.
+        X: List / array of text
+        Y: Class labels
         """
-        token_idxs = self.encoder.encode_for_classification(X, max_length=self.max_length)
-        train_x, train_mask = self._array_format(token_idxs)
+        train_x, train_mask = self._text_to_ids(*Xs)
         n_batch_train = batch_size * N_GPUS
         n_updates_total = (len(Y) // n_batch_train) * N_EPOCHS
         Y = self.label_encoder.fit_transform(Y)
@@ -137,10 +138,17 @@ class LanguageModelClassifier(object):
         dataset = shuffle(train_x, train_mask, Y, random_state=np.random)
 
         self.is_trained = True
-
+        rolling_avg_loss = 0
         for i in range(N_EPOCHS):
-            for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=self.verbose):
+            for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=True):
                 cost, _ = self.sess.run([self.clf_loss, self.train_op], {self.X: xmb, self.M: mmb, self.Y: ymb})
+                rolling_avg_loss = rolling_avg_loss * 0.95 + cost *  0.05
+                print("\nLOSS = {}, ROLLING AVG = {}".format(cost, rolling_avg_loss))
+        return self
+
+    @abstractmethod
+    def finetune(self, *args, **kwargs):
+        """"""
 
     def fit(self, *args, **kwargs):
         """
@@ -148,39 +156,27 @@ class LanguageModelClassifier(object):
         """
         return self.finetune(*args, **kwargs)
 
-    def predict(self, X, max_length=None):
-        """
-        Produces a list of most likely class labels as determined by the fine-tuned model.
-
-        :param X: list or array of text to embed.
-        :param max_length: the number of tokens to be included in the document representation.
-                           Providing more than `max_length` tokens as input will result in truncation.
-        :returns: list of class labels.
-        """
+    def _predict(self, *Xs, max_length=None):
         predictions = []
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
             max_length = max_length or self.max_length
-            for xmb, mmb in self._infer_prep(X, max_length=max_length):
+            for xmb, mmb in self._infer_prep(*Xs, max_length=max_length):
                 class_idx = self.sess.run(self.predict_op, {self.X: xmb, self.M: mmb})
                 class_labels = self.label_encoder.inverse_transform(class_idx)
                 predictions.append(class_labels)
         return np.concatenate(predictions).tolist()
 
-    def predict_proba(self, X, max_length=None):
-        """
-        Produces a probability distribution over classes for each example in X.
+    @abstractmethod
+    def predict(self, *args, **kwargs):
+        """"""
 
-        :param X: list or array of text to embed.
-        :param max_length: the number of tokens to be included in the document representation.
-                           Providing more than `max_length` tokens as input will result in truncation.
-        :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
-        """
+    def _predict_proba(self, *Xs, max_length=None):
         predictions = []
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
             max_length = max_length or self.max_length
-            for xmb, mmb in self._infer_prep(X, max_length=max_length):
+            for xmb, mmb in self._infer_prep(*Xs, max_length=max_length):
                 probas = self.sess.run(self.predict_proba_op, {self.X: xmb, self.M: mmb})
                 classes = self.label_encoder.classes_
                 predictions.extend([
@@ -188,23 +184,24 @@ class LanguageModelClassifier(object):
                 ])
         return predictions
 
-    def featurize(self, X, max_length=None):
-        """
-        Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
+    @abstractmethod
+    def predict_proba(self, *args, **kwargs):
+        """"""
 
-        :param X: list or array of text to embed.
-        :param max_length: the number of tokens to be included in the document representation.
-                           Providing more than `max_length` tokens as input will result in truncation.
-        :returns: np.array of features of shape (n_examples, embedding_size).
-        """
+    def _featurize(self, *Xs, max_length=None):
         features = []
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
             max_length = max_length or self.max_length
-            for xmb, mmb in self._infer_prep(X, max_length=max_length):
+            for xmb, mmb in self._infer_prep(*Xs, max_length=max_length):
                 feature_batch = self.sess.run(self.features, {self.X: xmb, self.M: mmb})
                 features.append(feature_batch)
         return np.concatenate(features)
+
+
+    @abstractmethod
+    def featurize(self, *args, **kwargs):
+        """"""
 
     def transform(self, *args, **kwargs):
         """
@@ -212,10 +209,8 @@ class LanguageModelClassifier(object):
         """
         return self.featurize(*args, **kwargs)
 
-    def _infer_prep(self, X, max_length=None):
-        max_length = max_length or self.max_length
-        token_idxs = self.encoder.encode_for_classification(X, max_length=max_length)
-        infer_x, infer_mask = self._array_format(token_idxs)
+    def _infer_prep(self, *X, max_length=None):
+        infer_x, infer_mask = self._text_to_ids(*X, max_length=max_length)
         n_batch_train = BATCH_SIZE * N_GPUS
         self._build_model(n_updates_total=0, n_classes=self.n_classes, train=False)
         yield from iter_data(infer_x, infer_mask, n_batch=n_batch_train, verbose=self.verbose)
@@ -345,7 +340,7 @@ class LanguageModelClassifier(object):
         # tf placeholders
         self.X = tf.placeholder(tf.int32,   [None, self.max_length, 2]) # token idxs (BPE embedding + positional)
         self.M = tf.placeholder(tf.float32, [None, self.max_length])    # sequence mask
-        self.Y = tf.placeholder(tf.int32,   [None])                     # classification targets
+        self.Y = tf.placeholder(tf.float32, [None, self.n_classes])   # classification targets
 
     def _load_base_model(self):
         """
@@ -419,30 +414,148 @@ class LanguageModelClassifier(object):
         self._load_from_file = False
         self.is_trained = True
 
+class LanguageModelClassifier(LanguageModelBase):
+
+    def featurize(self, X, max_length=None):
+        """
+        Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
+
+        :param X: list or array of text to embed.
+        :param max_length: the number of tokens to be included in the document representation.
+                           Providing more than `max_length` tokens as input will result in truncation.
+        :returns: np.array of features of shape (n_examples, embedding_size).
+        """
+        return self._featurize(X, max_length=max_length)
+
+    def predict(self, X, max_length=None):
+        """
+        Produces a list of most likely class labels as determined by the fine-tuned model.
+
+        :param X: list or array of text to embed.
+        :param max_length: the number of tokens to be included in the document representation.
+                           Providing more than `max_length` tokens as input will result in truncation.
+        :returns: list of class labels.
+        """
+        return self._predict(X, max_length=max_length)
+
+    def predict_proba(self, X, max_length=None):
+        """
+        Produces a probability distribution over classes for each example in X.
+
+        :param X: list or array of text to embed.
+        :param max_length: the number of tokens to be included in the document representation.
+                           Providing more than `max_length` tokens as input will result in truncation.
+        :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
+        """
+        return self._predict_proba(X, max_length=max_length)
+
+    def finetune(self, X, Y, batch_size=BATCH_SIZE):
+        """
+        :param X: list or array of text.
+        :param Y: integer or string-valued class labels.
+        :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
+                           corresponds to the number of training examples provided to each GPU.
+        """
+        return self._finetune(X, Y=Y, batch_size=batch_size)
+
+
+class LanguageModelEntailment(LanguageModelBase):
+
+    def __init__(self, *, max_length=MAX_LENGTH, verbose=True):
+        super().__init__(max_length=max_length, verbose=verbose)
+        self.label_encoder = OrdinalClassificationEncoder()
+
+    def _text_to_ids(self, *Xs, max_length=None):
+
+        max_length = max_length or self.max_length
+        assert len(Xs) == 2, "This implementation assumes 2 Xs"
+
+        question_answer_pairs = self.encoder.encode_for_entailment(*Xs, max_length=max_length)
+
+        tokens, mask = self._array_format(question_answer_pairs)
+        return tokens, mask
+
+    def finetune(self, X_1, X_2, Y, batch_size=BATCH_SIZE):
+        """
+        :param X_1: list or array of text to embed as the queries.
+        :param X_2: list or array of text to embed as the answers.
+        :param Y: integer or string-valued class labels. It is necessary for the items of Y to be sortable.
+        :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
+                           corresponds to the number of training examples provided to each GPU.
+        """
+        return self._finetune(X_1, X_2, Y=Y, batch_size=batch_size)
+
+    def predict(self, X_1, X_2, max_length=None):
+        """
+        Produces X_2 list of most likely class labels as determined by the fine-tuned model.
+
+        :param X_1: list or array of text to embed as the queries.
+        :param X_2: list or array of text to embed as the answers.
+        :param max_length: the number of tokens to be included in the document representation.
+                           Providing more than `max_length` tokens as input will result in truncation.
+        :returns: list of class labels.
+        """
+        return self.label_encoder.inverse_transform(self._predict_proba(X_1, X_2, max_length=max_length))
+
+    def predict_proba(self, X_1, X_2, max_length=None):
+        """
+        Produces X_2 probability distribution over classes for each example in X.
+
+        :param X_1: list or array of text to embed as the queries.
+        :param X_2: list or array of text to embed as the answers.
+        :param max_length: the number of tokens to be included in the document representation.
+                           Providing more than `max_length` tokens as input will result in truncation.
+        :returns: list of dictionaries.  Each dictionary maps from X_2 class label to its assigned class probability.
+        """
+        return self._predict_proba(X_1, X_2, max_length=max_length)
+
+    def featurize(self, X_1, X_2, max_length=None):
+        """
+        Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
+
+        :param X_1: list or array of text to embed as the queries.
+        :param X_2: list or array of text to embed as the answers.
+        :param max_length: the number of tokens to be included in the document representation.
+                           Providing more than `max_length` tokens as input will result in truncation.
+        :returns: np.array of features of shape (n_examples, embedding_size).
+        """
+        return self._featurize(X_1, X_2, max_length=max_length)
+
 if __name__ == "__main__":
-    headers = ['annotator', 'target', 'original_target', 'text']
-    train_df = pd.read_csv(
-        "data/cola.train.csv",
-        names=headers,
-        delimiter='\t'
-    )
-    validation_df = pd.read_csv(
-        "data/cola.dev.csv",
-        names=headers,
-        delimiter='\t'
-    )
-    out_of_domain_validation_df = pd.read_csv(
-        "data/cola.out_of_domain.dev.tsv",
-        names=headers,
-        delimiter='\t'
-    )
-    validation_df = pd.concat([validation_df, out_of_domain_validation_df])
+
+    import json
+    with open("data/questions.json", "rt") as fp:
+        data = json.load(fp)
+
+    scores = []
+    questions = []
+    answers = []
+    for item in data:
+        row = data[item]
+        scores.append(row["score"])
+        questions.append(row["question"])
+        answers.append(row["answers"][0]["answer"])
+
+    from sklearn.model_selection import train_test_split
+    scores_train, scores_test, ques_train, ques_test, ans_train, ans_test = train_test_split(scores, questions, answers, test_size=0.33, random_state=5)
+
+    model = LanguageModelEntailment()
+
+    model.finetune(ques_train, ans_train, scores_train)
+
     save_path = 'saved-models/cola'
-    model = LanguageModelClassifier()
-    model.finetune(train_df.text.values[:100], train_df.target.values[:100])
     model.save(save_path)
-    predictions = model.predict(validation_df.text.values[:100])
-    true_labels = validation_df.target.values[:100]
-    from sklearn.metrics import matthews_corrcoef
-    mc = matthews_corrcoef(true_labels, predictions)
-    print(mc)
+    model = LanguageModelEntailment.load(save_path)
+
+    print("TRAIN EVAL")
+    predictions = model.predict(ques_train, ans_train)
+    print(predictions)
+
+    from scipy.stats import spearmanr
+
+    print(spearmanr(predictions, scores_train))
+
+    print("TEST EVAL")
+    predictions = model.predict(ques_test, ans_test)
+    print(predictions)
+    print(spearmanr(predictions, scores_test))
