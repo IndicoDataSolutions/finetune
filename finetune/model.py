@@ -7,7 +7,6 @@ from abc import ABCMeta, abstractmethod
 import tensorflow as tf
 import numpy as np
 from sklearn.utils import shuffle
-from sklearn.model_selection import train_test_split
 
 from functools import partial
 from finetune.encoding import TextEncoder
@@ -28,6 +27,8 @@ PARAM_PATH = os.path.join(os.path.dirname(__file__), '..', 'model', 'params_{}.n
 N_EMBED = 768
 
 ROLLING_AVG_DECAY = 0.99
+
+
 
 
 def clf(x, ny, w_init=tf.random_normal_initializer(stddev=WEIGHT_STDDEV), b_init=tf.constant_initializer(0)):
@@ -120,6 +121,9 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         self.lm_losses = None  # language modeling losses
         self.train = None  # gradient + parameter update
         self.features = None  # hidden representation fed to classifier
+        self.summaries = None  # Tensorboard summaries
+        self.train_writer = None
+        self.valid_writer = None
 
         # indicator vars
         self.is_built = False  # has tf graph been constructed?
@@ -149,7 +153,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
 
         dataset = (x_t, m_t, y_t)
         val_dataset = (x_v, m_v, y_v)
-                                
+
         self.is_trained = True
         avg_train_loss = 0
         avg_val_loss = 0
@@ -160,8 +164,11 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                 global_step += 1
                 if global_step % eval_interval == 0:
                     sum_val_loss = 0
-                    for xval, mval, yval in iter_data(*val_dataset, n_batch=n_batch_train, verbose=True):
-                        val_cost = self.sess.run(self.clf_loss, {self.X: xval, self.M: mval, self.Y: yval})
+                    for val_step, (xval, mval, yval) in enumerate(
+                            iter_data(*val_dataset, n_batch=n_batch_train, verbose=True)):
+                        val_cost, summary = self.sess.run([self.clf_loss, self.summaries],
+                                                          {self.X: xval, self.M: mval, self.Y: yval})
+                        self.valid_writer.add_summary(summary, global_step + val_step)
                         sum_val_loss += val_cost
                         avg_val_loss = avg_val_loss * ROLLING_AVG_DECAY + val_cost * (1 - ROLLING_AVG_DECAY)
                         print("\nVAL: LOSS = {}, ROLLING AVG = {}".format(val_cost, avg_val_loss))
@@ -170,7 +177,9 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                         print("Autosaving new best model.")
                         self.save(self.autosave_path)
                         print("Done!!")
-                cost, _ = self.sess.run([self.clf_loss, self.train_op], {self.X: xmb, self.M: mmb, self.Y: ymb})
+                cost, _, summary = self.sess.run([self.clf_loss, self.train_op, self.summaries],
+                                                 {self.X: xmb, self.M: mmb, self.Y: ymb})
+                self.train_writer.add_summary(summary, global_step)
                 avg_train_loss = avg_train_loss * ROLLING_AVG_DECAY + cost * (1 - ROLLING_AVG_DECAY)
                 print("\nTRAIN: LOSS = {}, ROLLING AVG = {}".format(cost, avg_train_loss))
 
@@ -266,6 +275,9 @@ class LanguageModelBase(object, metaclass=ABCMeta):
 
     def _compile_train_op(self, *, params, grads, n_updates_total):
         grads = average_grads(grads)
+
+        self.summaries += tf.contrib.training.add_gradients_summaries(grads)
+
         grads = [grad for grad, param in grads]
         self.train_op = AdamWeightDecay(
             params=params,
@@ -283,6 +295,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
 
     def _construct_graph(self, n_updates_total, n_classes, train=True):
         gpu_grads = []
+        self.summaries = []
 
         # store whether or not graph was previously compiled with dropout
         self.train = train
@@ -342,6 +355,9 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                 n_updates_total=n_updates_total
             )
             self.clf_loss = tf.reduce_mean(self.clf_losses)
+            self.summaries.append(tf.summary.scalar('ClassifierLoss', self.clf_loss))
+            self.summaries.append(tf.summary.scalar('LanguageModelLoss', tf.reduce_mean(self.lm_losses)))
+        self.summaries = tf.summary.merge(self.summaries)
 
     def _build_model(self, n_updates_total, n_classes, train=True):
         """
@@ -351,6 +367,10 @@ class LanguageModelBase(object, metaclass=ABCMeta):
             # reconstruct graph to include/remove dropout 
             # #if `train` setting has changed
             self._construct_graph(n_updates_total, n_classes, train=train)
+
+            if train:
+                self.train_writer = tf.summary.FileWriter(self.autosave_path + '/train', self.sess.graph)
+                self.valid_writer = tf.summary.FileWriter(self.autosave_path + '/valid', self.sess.graph)
 
         # Optionally load saved model
         if self._load_from_file:
@@ -386,7 +406,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         init_params = [param.reshape(shape) for param, shape in zip(init_params, shapes)]
         init_params[0] = init_params[0][:self.max_length]
         init_params[0] = np.concatenate([init_params[1], (
-                    np.random.randn(len(self.encoder.special_tokens), N_EMBED) * WEIGHT_STDDEV).astype(np.float32),
+                np.random.randn(len(self.encoder.special_tokens), N_EMBED) * WEIGHT_STDDEV).astype(np.float32),
                                          init_params[0]], 0)
         del init_params[1]
         self.sess.run([p.assign(ip) for p, ip in zip(pretrained_params, init_params)])
