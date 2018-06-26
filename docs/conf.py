@@ -19,6 +19,7 @@
 
 # -- Project information -----------------------------------------------------
 import mock
+import sys
 
 project = 'finetune'
 copyright = '2018, Madison May, Ben Townsend'
@@ -33,7 +34,7 @@ release = '0.1.0'
 MOCK_MODULES = ['tensorflow', 'enso', 'spacy', 'scikit-learn', 'pandas', 'numpy']
 
 for mod_name in MOCK_MODULES:
-sys.modules[mod_name] = mock.Mock()
+    sys.modules[mod_name] = mock.Mock()
 
 
 # -- General configuration ---------------------------------------------------

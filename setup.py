@@ -12,7 +12,6 @@ REQUIREMENTS = [
     "ftfy>=4.4.0",
     "spacy>=2.0.0",
     "enso>=0.1.1",
-    "tensorflow-gpu>=1.6.0",
 ]
 
 setup(
