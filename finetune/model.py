@@ -129,7 +129,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         Y: Class labels
         """
         train_x, train_mask = self._text_to_ids(*Xs)
-        n_batch_train = batch_size * N_GPUS
+        n_batch_train = batch_size * max(len(get_available_gpus()), 1)
         n_updates_total = (len(Y) // n_batch_train) * N_EPOCHS
         Y = self.label_encoder.fit_transform(Y)
         self.n_classes = len(self.label_encoder.classes_)
@@ -148,7 +148,8 @@ class LanguageModelBase(object, metaclass=ABCMeta):
 
     @abstractmethod
     def finetune(self, *args, **kwargs):
-        """"""
+        """
+        """
 
     def fit(self, *args, **kwargs):
         """
@@ -262,9 +263,16 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         features_aggregator = []
         losses_aggregator = []
 
-        for i, (X, M, Y) in enumerate(soft_split(self.X, self.M, self.Y, n_splits=N_GPUS)):
+        gpus = get_available_gpus()
+        n_splits = max(len(gpus), 1)
+        for i, (X, M, Y) in enumerate(soft_split(self.X, self.M, self.Y, n_splits=n_splits)):
             do_reuse = True if i > 0 else tf.AUTO_REUSE
-            device = tf.device(assign_to_gpu(i, "/gpu:0"))
+
+            if gpus:
+                device = tf.device(assign_to_gpu(gpus[i], params_device=gpus[0]))
+            else:
+                device = tf.device('cpu')
+
             scope = tf.variable_scope(tf.get_variable_scope(), reuse=do_reuse)
 
             with device, scope:
@@ -319,7 +327,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         Construct tensorflow symbolic graph.
         """
         if not self.is_trained or train != self.train:
-            # reconstruct graph to include/remove dropout 
+            # reconstruct graph to include/remove dropout
             # #if `train` setting has changed
             self._construct_graph(n_updates_total, n_classes, train=train)
 
