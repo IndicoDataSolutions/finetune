@@ -85,7 +85,7 @@ def language_model(*, X, M, embed_weights, hidden, reuse=None):
 def classifier(hidden, targets, n_classes, train=False, reuse=None):
     with tf.variable_scope('model', reuse=reuse):
         hidden = dropout(hidden, CLF_P_DROP, train)
-        clf_logits = clf(hidden, n_classes, train=train)
+        clf_logits = clf(hidden, n_classes)
         clf_losses = tf.nn.softmax_cross_entropy_with_logits(logits=clf_logits, labels=targets)
         return {
             'logits': clf_logits,
@@ -132,7 +132,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         tokens, mask = self._array_format(token_idxs)
         return tokens, mask
 
-    def _finetune(self, *Xs, Y, batch_size=BATCH_SIZE, val_frac=0.1, eval_interval=10):
+    def _finetune(self, *Xs, Y, batch_size=BATCH_SIZE, val_frac=0.05, eval_interval=80):
         """
         X: List / array of text
         Y: Class labels
@@ -145,9 +145,11 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         self._build_model(n_updates_total=n_updates_total, n_classes=self.n_classes)
 
         dataset = shuffle(train_x, train_mask, Y, random_state=np.random)
+        x_t, x_v, m_t, m_v, y_t, y_v = train_test_split(*dataset, test_size=val_frac, random_state=31415)
 
-        dataset, val_dataset = train_test_split(dataset, test_size=val_frac, random_state=31415)
-
+        dataset = (x_t, m_t, y_t)
+        val_dataset = (x_v, m_v, y_v)
+                                
         self.is_trained = True
         avg_train_loss = 0
         avg_val_loss = 0
