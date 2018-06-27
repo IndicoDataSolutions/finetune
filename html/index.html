@@ -1,0 +1,278 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>Finetune documentation &#8212; finetune 0.1.0 documentation</title>
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <script type="text/javascript" src="_static/documentation_options.js"></script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="module-finetune">
+<span id="finetune-documentation"></span><h1>Finetune documentation<a class="headerlink" href="#module-finetune" title="Permalink to this headline">¶</a></h1>
+<p>Finetune is a python library designed to make finetuning pre-trained language models
+for custom natural language processing tasks a breeze.</p>
+<p>It ships with pre-trained model weights
+from <a class="reference external" href="https://s3-us-west-2.amazonaws.com/openai-assets/research-covers/language-unsupervised/language_understanding_paper.pdf">“Improving Language Understanding by Generative Pre-Training”</a>
+and builds off the <a class="reference external" href="https://github.com/openai/finetune-transformer-lm">OpenAI/finetune-language-model repository</a>.</p>
+<p>Source code for finetune is available <a class="reference external" href="https://github.com/IndicoDataSolutions/finetune-language-model">on github</a>.</p>
+</div>
+<div class="section" id="installation">
+<h1>Installation<a class="headerlink" href="#installation" title="Permalink to this headline">¶</a></h1>
+<p>Finetune can be installed directly from PyPI by using <cite>pip</cite></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip install finetune
+</pre></div>
+</div>
+<p>or installed directly from source:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git clone https://github.com/IndicoDataSolutions/finetune
+<span class="nb">cd</span> finetune
+python3 setup.py develop
+</pre></div>
+</div>
+<p>You can optionally run the provided test suite to ensure installation completed successfully.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>nosetests
+</pre></div>
+</div>
+</div>
+<div class="section" id="finetune-quickstart-guide">
+<h1>Finetune Quickstart Guide<a class="headerlink" href="#finetune-quickstart-guide" title="Permalink to this headline">¶</a></h1>
+<p>Finetuning the base language model is as easy as calling <a class="reference internal" href="#finetune.LanguageModelClassifier.fit" title="finetune.LanguageModelClassifier.fit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">LanguageModelClassifier.fit()</span></code></a>:</p>
+<div class="highlight-python3 notranslate"><div class="highlight"><pre><span></span><span class="n">model</span> <span class="o">=</span> <span class="n">LanguageModelClassifier</span><span class="p">()</span>   <span class="c1"># load base model</span>
+<span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">trainX</span><span class="p">,</span> <span class="n">trainY</span><span class="p">)</span>           <span class="c1"># finetune base model on custom data</span>
+<span class="n">predictions</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">testX</span><span class="p">)</span>  <span class="c1"># predict on unseen examples</span>
+<span class="n">model</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>                    <span class="c1"># serialize the model to disk</span>
+</pre></div>
+</div>
+<p>Easily reload saved models from disk by using <a class="reference internal" href="#finetune.LanguageModelClassifier.load" title="finetune.LanguageModelClassifier.load"><code class="xref py py-meth docutils literal notranslate"><span class="pre">LanguageModelClassifier.load()</span></code></a>:</p>
+<div class="highlight-python3 notranslate"><div class="highlight"><pre><span></span><span class="n">model</span> <span class="o">=</span> <span class="n">LanguageModelClassifier</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+<span class="n">predictions</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">testX</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="finetune-api-reference">
+<h1>Finetune API Reference<a class="headerlink" href="#finetune-api-reference" title="Permalink to this headline">¶</a></h1>
+<dl class="class">
+<dt id="finetune.LanguageModelClassifier">
+<em class="property">class </em><code class="descclassname">finetune.</code><code class="descname">LanguageModelClassifier</code><span class="sig-paren">(</span><em>max_length=256</em>, <em>verbose=True</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModelClassifier" title="Permalink to this definition">¶</a></dt>
+<dd><p>A sklearn-style class for finetuning a Transformer language model on a classification task.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>max_length</strong> – Determines the number of tokens to be included in the document representation.
+Providing more than <cite>max_length</cite> tokens to the model as input will result in truncation.</td>
+</tr>
+</tbody>
+</table>
+<dl class="method">
+<dt id="finetune.LanguageModelClassifier.featurize">
+<code class="descname">featurize</code><span class="sig-paren">(</span><em>X</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModelClassifier.featurize" title="Permalink to this definition">¶</a></dt>
+<dd><p>Embeds inputs in learned feature space. Can be called before or after calling <a class="reference internal" href="#module-finetune" title="finetune"><code class="xref py py-meth docutils literal notranslate"><span class="pre">finetune()</span></code></a>.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>X</strong> – list or array of text to embed.</li>
+<li><strong>max_length</strong> – the number of tokens to be included in the document representation.
+Providing more than <cite>max_length</cite> tokens as input will result in truncation.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">np.array of features of shape (n_examples, embedding_size).</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.LanguageModelClassifier.finetune">
+<code class="descname">finetune</code><span class="sig-paren">(</span><em>X</em>, <em>Y</em>, <em>batch_size=8</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModelClassifier.finetune" title="Permalink to this definition">¶</a></dt>
+<dd><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>X</strong> – list or array of text.</li>
+<li><strong>Y</strong> – integer or string-valued class labels.</li>
+<li><strong>batch_size</strong> – integer number of examples per batch. When N_GPUS &gt; 1, this number
+corresponds to the number of training examples provided to each GPU.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.LanguageModelClassifier.fit">
+<code class="descname">fit</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModelClassifier.fit" title="Permalink to this definition">¶</a></dt>
+<dd><p>An alias for finetune.</p>
+</dd></dl>
+
+<dl class="classmethod">
+<dt id="finetune.LanguageModelClassifier.load">
+<em class="property">classmethod </em><code class="descname">load</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModelClassifier.load" title="Permalink to this definition">¶</a></dt>
+<dd><p>Load a saved fine-tuned model from disk.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>path</strong> – string path name to load model from.  Same value as previously provided to <a class="reference internal" href="#finetune.LanguageModelClassifier.save" title="finetune.LanguageModelClassifier.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a>.</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.LanguageModelClassifier.predict">
+<code class="descname">predict</code><span class="sig-paren">(</span><em>X</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModelClassifier.predict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Produces a list of most likely class labels as determined by the fine-tuned model.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>X</strong> – list or array of text to embed.</li>
+<li><strong>max_length</strong> – the number of tokens to be included in the document representation.
+Providing more than <cite>max_length</cite> tokens as input will result in truncation.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">list of class labels.</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.LanguageModelClassifier.predict_proba">
+<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>X</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModelClassifier.predict_proba" title="Permalink to this definition">¶</a></dt>
+<dd><p>Produces a probability distribution over classes for each example in X.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>X</strong> – list or array of text to embed.</li>
+<li><strong>max_length</strong> – the number of tokens to be included in the document representation.
+Providing more than <cite>max_length</cite> tokens as input will result in truncation.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.LanguageModelClassifier.save">
+<code class="descname">save</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModelClassifier.save" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="docutils">
+<dt>Save in two steps:</dt>
+<dd><ul class="first last simple">
+<li>Serialize tf graph to disk using tf.Saver</li>
+<li>Serialize python model using pickle</li>
+</ul>
+</dd>
+<dt>Note:</dt>
+<dd>Does not serialize state of Adam optimizer.
+Should not be used to save / restore a training model.</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.LanguageModelClassifier.transform">
+<code class="descname">transform</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModelClassifier.transform" title="Permalink to this definition">¶</a></dt>
+<dd><p>An alias for <cite>featurize</cite>.</p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="#">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Finetune documentation</a></li>
+<li><a class="reference internal" href="#installation">Installation</a></li>
+<li><a class="reference internal" href="#finetune-quickstart-guide">Finetune Quickstart Guide</a></li>
+<li><a class="reference internal" href="#finetune-api-reference">Finetune API Reference</a></li>
+</ul>
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="#">Documentation overview</a><ul>
+  </ul></li>
+</ul>
+</div>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/index.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    </div>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2018, Madison May, Ben Townsend.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.7.2</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.10</a>
+      
+      |
+      <a href="_sources/index.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>
