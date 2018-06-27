@@ -136,7 +136,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         tokens, mask = self._array_format(token_idxs)
         return tokens, mask
 
-    def _finetune(self, *Xs, Y, batch_size=BATCH_SIZE, val_frac=0.05, eval_interval=80):
+    def _finetune(self, *Xs, Y, batch_size=BATCH_SIZE, val_frac=0.05, eval_interval=150):
         """
         X: List / array of text
         Y: Class labels
@@ -168,7 +168,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                             iter_data(*val_dataset, n_batch=n_batch_train, verbose=True)):
                         val_cost, summary = self.sess.run([self.clf_loss, self.summaries],
                                                           {self.X: xval, self.M: mval, self.Y: yval})
-                        self.valid_writer.add_summary(summary, global_step + val_step)
+                        self.valid_writer.add_summary(summary, global_step)
                         sum_val_loss += val_cost
                         avg_val_loss = avg_val_loss * ROLLING_AVG_DECAY + val_cost * (1 - ROLLING_AVG_DECAY)
                         print("\nVAL: LOSS = {}, ROLLING AVG = {}".format(val_cost, avg_val_loss))
@@ -368,16 +368,15 @@ class LanguageModelBase(object, metaclass=ABCMeta):
             # #if `train` setting has changed
             self._construct_graph(n_updates_total, n_classes, train=train)
 
-            if train:
-                self.train_writer = tf.summary.FileWriter(self.autosave_path + '/train', self.sess.graph)
-                self.valid_writer = tf.summary.FileWriter(self.autosave_path + '/valid', self.sess.graph)
-
         # Optionally load saved model
         if self._load_from_file:
             self._load_finetuned_model()
         elif not self.is_trained:
             self._load_base_model()
 
+        if train:
+            self.train_writer = tf.summary.FileWriter(self.autosave_path + '/train', self.sess.graph)
+            self.valid_writer = tf.summary.FileWriter(self.autosave_path + '/valid', self.sess.graph)
         self.is_built = True
 
     def _set_random_seed(self, seed=SEED):
