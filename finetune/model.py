@@ -2,6 +2,7 @@ import os
 import random
 import warnings
 import pickle
+import json
 
 from abc import ABCMeta, abstractmethod
 import tensorflow as tf
@@ -11,21 +12,24 @@ from sklearn.utils import shuffle
 from functools import partial
 from finetune.encoding import TextEncoder
 from finetune.optimizers import AdamWeightDecay, schedules
-from finetune.utils import find_trainable_variables, get_available_gpus, shape_list, assign_to_gpu, average_grads, iter_data, soft_split, OrdinalClassificationEncoder, OneHotLabelEncoder
+from sklearn.model_selection import train_test_split
 from finetune.config import (
-    MAX_LENGTH, BATCH_SIZE, WEIGHT_STDDEV, N_EPOCHS, CLF_P_DROP, SEED,
-    WEIGHT_STDDEV, EMBED_P_DROP, RESID_P_DROP, N_HEADS, N_LAYER,
-    ATTN_P_DROP, ACT_FN, LM_LOSS_COEF, LR, B1, B2, L2_REG, VECTOR_L2,
-    EPSILON, LR_SCHEDULE, MAX_GRAD_NORM, LM_LOSS_COEF, LR_WARMUP
-)
+    MAX_LENGTH, BATCH_SIZE, N_EPOCHS, CLF_P_DROP, SEED,
+    N_GPUS, WEIGHT_STDDEV, EMBED_P_DROP, RESID_P_DROP, N_HEADS, N_LAYER,
+    ATTN_P_DROP, ACT_FN, LR, B1, B2, L2_REG, VECTOR_L2)
+from finetune.utils import find_trainable_variables, get_available_gpus, shape_list, assign_to_gpu, average_grads, iter_data, soft_split, OrdinalClassificationEncoder, OneHotLabelEncoder
 from finetune.transformer import block, dropout, embed
 
 SHAPES_PATH = os.path.join(os.path.dirname(__file__), '..', 'model', 'params_shapes.json')
 PARAM_PATH = os.path.join(os.path.dirname(__file__), '..', 'model', 'params_{}.npy')
 N_EMBED = 768
 
+ROLLING_AVG_DECAY = 0.99
 
-def clf(x, ny, w_init=tf.random_normal_initializer(stddev=WEIGHT_STDDEV), b_init=tf.constant_initializer(0), train=False):
+
+
+
+def clf(x, ny, w_init=tf.random_normal_initializer(stddev=WEIGHT_STDDEV), b_init=tf.constant_initializer(0)):
     with tf.variable_scope('clf'):
         nx = shape_list(x)[-1]
         w = tf.get_variable("w", [nx, ny], initializer=w_init)
@@ -35,22 +39,23 @@ def clf(x, ny, w_init=tf.random_normal_initializer(stddev=WEIGHT_STDDEV), b_init
 
 def featurizer(X, encoder, train=False, reuse=None, max_length=MAX_LENGTH):
     with tf.variable_scope('model', reuse=reuse):
-        embed_weights = tf.get_variable("we", [encoder.vocab_size + max_length, N_EMBED], initializer=tf.random_normal_initializer(stddev=WEIGHT_STDDEV))
+        embed_weights = tf.get_variable("we", [encoder.vocab_size + max_length, N_EMBED],
+                                        initializer=tf.random_normal_initializer(stddev=WEIGHT_STDDEV))
         embed_weights = dropout(embed_weights, EMBED_P_DROP, train)
 
         X = tf.reshape(X, [-1, max_length, 2])
 
         h = embed(X, embed_weights)
         for layer in range(N_LAYER):
-            h = block(h, N_HEADS, ACT_FN, RESID_P_DROP, ATTN_P_DROP,'h%d'%layer, train=train, scale=True)
+            h = block(h, N_HEADS, ACT_FN, RESID_P_DROP, ATTN_P_DROP, 'h%d' % layer, train=train, scale=True)
 
         # Use hidden state at classifier token as input to final proj. + softmax
-        clf_h = tf.reshape(h, [-1, N_EMBED]) # [batch * seq_len, embed]
+        clf_h = tf.reshape(h, [-1, N_EMBED])  # [batch * seq_len, embed]
         clf_token = encoder['_classify_']
         pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
         clf_h = tf.gather(clf_h, tf.range(shape_list(X)[0], dtype=tf.int32) * max_length + pool_idx)
 
-        clf_h = tf.reshape(clf_h, [-1, N_EMBED]) # [batch, embed]
+        clf_h = tf.reshape(clf_h, [-1, N_EMBED])  # [batch, embed]
         return {
             'embed_weights': embed_weights,
             'features': clf_h,
@@ -61,8 +66,8 @@ def featurizer(X, encoder, train=False, reuse=None, max_length=MAX_LENGTH):
 def language_model(*, X, M, embed_weights, hidden, reuse=None):
     with tf.variable_scope('model', reuse=reuse):
         # language model ignores last hidden state because we don't have a target
-        lm_h = tf.reshape(hidden[:, :-1], [-1, N_EMBED]) # [batch, seq_len, embed] --> [batch * seq_len, embed]
-        lm_logits = tf.matmul(lm_h, embed_weights, transpose_b=True) # tied weights
+        lm_h = tf.reshape(hidden[:, :-1], [-1, N_EMBED])  # [batch, seq_len, embed] --> [batch * seq_len, embed]
+        lm_logits = tf.matmul(lm_h, embed_weights, transpose_b=True)  # tied weights
         lm_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
             logits=lm_logits,
             labels=tf.reshape(X[:, 1:, 0], [-1])
@@ -79,12 +84,13 @@ def language_model(*, X, M, embed_weights, hidden, reuse=None):
 def classifier(hidden, targets, n_classes, train=False, reuse=None):
     with tf.variable_scope('model', reuse=reuse):
         hidden = dropout(hidden, CLF_P_DROP, train)
-        clf_logits = clf(hidden, n_classes, train=train)
+        clf_logits = clf(hidden, n_classes)
         clf_losses = tf.nn.softmax_cross_entropy_with_logits(logits=clf_logits, labels=targets)
         return {
             'logits': clf_logits,
             'losses': clf_losses
         }
+
 
 class LanguageModelBase(object, metaclass=ABCMeta):
     """
@@ -93,11 +99,13 @@ class LanguageModelBase(object, metaclass=ABCMeta):
     :param max_length: Determines the number of tokens to be included in the document representation.
                        Providing more than `max_length` tokens to the model as input will result in truncation.
     """
-    def __init__(self, max_length=MAX_LENGTH, verbose=True):
+
+    def __init__(self, autosave_path, max_length=MAX_LENGTH, verbose=True):
         self.max_length = max_length
+        self.autosave_path = autosave_path
         self.label_encoder = OneHotLabelEncoder()
         self._initialize()
-        self.n_classes  = None
+        self.n_classes = None
         self._load_from_file = False
         self.verbose = verbose
 
@@ -106,15 +114,18 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         self.encoder = TextEncoder()
 
         # symbolic ops
-        self.logits     = None # classification logits
-        self.clf_loss   = None # cross-entropy loss
-        self.lm_losses  = None # language modeling losses
-        self.train      = None # gradient + parameter update
-        self.features   = None # hidden representation fed to classifier
+        self.logits = None  # classification logits
+        self.clf_loss = None  # cross-entropy loss
+        self.lm_losses = None  # language modeling losses
+        self.train = None  # gradient + parameter update
+        self.features = None  # hidden representation fed to classifier
+        self.summaries = None  # Tensorboard summaries
+        self.train_writer = None
+        self.valid_writer = None
 
         # indicator vars
-        self.is_built   = False # has tf graph been constructed?
-        self.is_trained = False # has model been fine-tuned?
+        self.is_built = False  # has tf graph been constructed?
+        self.is_trained = False  # has model been fine-tuned?
 
     def _text_to_ids(self, *Xs, max_length=None):
         max_length = max_length or self.max_length
@@ -123,10 +134,12 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         tokens, mask = self._array_format(token_idxs)
         return tokens, mask
 
-    def _finetune(self, *Xs, Y, batch_size=BATCH_SIZE):
+    def _finetune(self, *Xs, Y, batch_size=BATCH_SIZE, val_size=0.05, val_interval=150):
         """
         X: List / array of text
         Y: Class labels
+        val_size: Float fraction or int number that represents the size of the validation set.
+        val_interval: The interval for which validation is performed, measured in number of steps.
         """
         train_x, train_mask = self._text_to_ids(*Xs)
         n_batch_train = batch_size * max(len(get_available_gpus()), 1)
@@ -136,14 +149,39 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         self._build_model(n_updates_total=n_updates_total, n_classes=self.n_classes)
 
         dataset = shuffle(train_x, train_mask, Y, random_state=np.random)
+        x_tr, x_va, m_tr, m_va, y_tr, y_va = train_test_split(*dataset, test_size=val_size, random_state=31415)
+
+        dataset = (x_tr, m_tr, y_tr)
+        val_dataset = (x_va, m_va, y_va)
 
         self.is_trained = True
-        rolling_avg_loss = 0
+        avg_train_loss = 0
+        avg_val_loss = 0
+        global_step = 0
+        best_val_loss = float("inf")
         for i in range(N_EPOCHS):
             for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=True):
-                cost, _ = self.sess.run([self.clf_loss, self.train_op], {self.X: xmb, self.M: mmb, self.Y: ymb})
-                rolling_avg_loss = rolling_avg_loss * 0.95 + cost *  0.05
-                print("\nLOSS = {}, ROLLING AVG = {}".format(cost, rolling_avg_loss))
+                global_step += 1
+                if global_step % val_interval == 0:
+                    sum_val_loss = 0
+                    for xval, mval, yval in enumerate(iter_data(*val_dataset, n_batch=n_batch_train, verbose=True)):
+                        val_cost, summary = self.sess.run([self.clf_loss, self.summaries],
+                                                          {self.X: xval, self.M: mval, self.Y: yval})
+                        self.valid_writer.add_summary(summary, global_step)
+                        sum_val_loss += val_cost
+                        avg_val_loss = avg_val_loss * ROLLING_AVG_DECAY + val_cost * (1 - ROLLING_AVG_DECAY)
+                        print("\nVAL: LOSS = {}, ROLLING AVG = {}".format(val_cost, avg_val_loss))
+                    if sum_val_loss < best_val_loss:
+                        best_val_loss = sum_val_loss
+                        print("Autosaving new best model.")
+                        self.save(self.autosave_path)
+                        print("Done!!")
+                cost, _, summary = self.sess.run([self.clf_loss, self.train_op, self.summaries],
+                                                 {self.X: xmb, self.M: mmb, self.Y: ymb})
+                self.train_writer.add_summary(summary, global_step)
+                avg_train_loss = avg_train_loss * ROLLING_AVG_DECAY + cost * (1 - ROLLING_AVG_DECAY)
+                print("\nTRAIN: LOSS = {}, ROLLING AVG = {}".format(cost, avg_train_loss))
+
         return self
 
     @abstractmethod
@@ -199,7 +237,6 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                 features.append(feature_batch)
         return np.concatenate(features)
 
-
     @abstractmethod
     def featurize(self, *args, **kwargs):
         """"""
@@ -226,7 +263,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         """
         n = len(token_idxs)
         seq_lengths = [len(x) for x in token_idxs]
-        x    = np.zeros((n, self.max_length, 2), dtype=np.int32)
+        x = np.zeros((n, self.max_length, 2), dtype=np.int32)
         mask = np.zeros((n, self.max_length), dtype=np.float32)
         for i, seq_length in enumerate(seq_lengths):
             # BPE embedding
@@ -239,6 +276,9 @@ class LanguageModelBase(object, metaclass=ABCMeta):
 
     def _compile_train_op(self, *, params, grads, n_updates_total):
         grads = average_grads(grads)
+
+        self.summaries += tf.contrib.training.add_gradients_summaries(grads)
+
         grads = [grad for grad, param in grads]
         self.train_op = AdamWeightDecay(
             params=params,
@@ -256,6 +296,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
 
     def _construct_graph(self, n_updates_total, n_classes, train=True):
         gpu_grads = []
+        self.summaries = []
 
         # store whether or not graph was previously compiled with dropout
         self.train = train
@@ -264,6 +305,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         features_aggregator = []
         losses_aggregator = []
 
+        train_loss_tower = 0
         gpus = get_available_gpus()
         n_splits = max(len(gpus), 1)
         for i, (X, M, Y) in enumerate(soft_split(self.X, self.M, self.Y, n_splits=n_splits)):
@@ -300,6 +342,8 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                     if LM_LOSS_COEF > 0:
                         train_loss += LM_LOSS_COEF * tf.reduce_mean(language_model_state['losses'])
 
+                    train_loss_tower += train_loss
+
                     params = find_trainable_variables("model")
                     grads = tf.gradients(train_loss, params)
                     grads = list(zip(grads, params))
@@ -322,6 +366,10 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                 n_updates_total=n_updates_total
             )
             self.clf_loss = tf.reduce_mean(self.clf_losses)
+            self.summaries.append(tf.summary.scalar('ClassifierLoss', self.clf_loss))
+            self.summaries.append(tf.summary.scalar('LanguageModelLoss', tf.reduce_mean(self.lm_losses)))
+            self.summaries.append(tf.summary.scalar('TotalLoss', train_loss_tower / N_GPUS))
+            self.summaries = tf.summary.merge(self.summaries)
 
     def _build_model(self, n_updates_total, n_classes, train=True):
         """
@@ -338,6 +386,9 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         elif not self.is_trained:
             self._load_base_model()
 
+        if train:
+            self.train_writer = tf.summary.FileWriter(self.autosave_path + '/train', self.sess.graph)
+            self.valid_writer = tf.summary.FileWriter(self.autosave_path + '/valid', self.sess.graph)
         self.is_built = True
 
     def _set_random_seed(self, seed=SEED):
@@ -347,9 +398,9 @@ class LanguageModelBase(object, metaclass=ABCMeta):
 
     def _define_placeholders(self):
         # tf placeholders
-        self.X = tf.placeholder(tf.int32,   [None, self.max_length, 2]) # token idxs (BPE embedding + positional)
-        self.M = tf.placeholder(tf.float32, [None, self.max_length])    # sequence mask
-        self.Y = tf.placeholder(tf.float32, [None, self.n_classes])   # classification targets
+        self.X = tf.placeholder(tf.int32, [None, self.max_length, 2])  # token idxs (BPE embedding + positional)
+        self.M = tf.placeholder(tf.float32, [None, self.max_length])  # sequence mask
+        self.Y = tf.placeholder(tf.float32, [None, self.n_classes])  # classification targets
 
     def _load_base_model(self):
         """
@@ -365,7 +416,8 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         init_params = np.split(np.concatenate(init_params, 0), offsets)[:-1]
         init_params = [param.reshape(shape) for param, shape in zip(init_params, shapes)]
         init_params[0] = init_params[0][:self.max_length]
-        init_params[0] = np.concatenate([init_params[1], (np.random.randn(len(self.encoder.special_tokens), N_EMBED) * WEIGHT_STDDEV).astype(np.float32), init_params[0]], 0)
+        special_embed = (np.random.randn(len(self.encoder.special_tokens), N_EMBED) * WEIGHT_STDDEV).astype(np.float32)
+        init_params[0] = np.concatenate([init_params[1], special_embed, init_params[0]], 0)
         del init_params[1]
         self.sess.run([p.assign(ip) for p, ip in zip(pretrained_params, init_params)])
 
@@ -374,7 +426,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         Leave serialization of all tf objects to tf
         """
         required_fields = [
-            'label_encoder', 'max_length', 'n_classes', '_load_from_file', 'verbose',
+            'label_encoder', 'max_length', 'n_classes', '_load_from_file', 'verbose', 'autosave_path'
         ]
         serialized_state = {
             k: v for k, v in self.__dict__.items()
@@ -423,6 +475,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         self._load_from_file = False
         self.is_trained = True
 
+
 class LanguageModelClassifier(LanguageModelBase):
 
     def featurize(self, X, max_length=None):
@@ -458,24 +511,25 @@ class LanguageModelClassifier(LanguageModelBase):
         """
         return self._predict_proba(X, max_length=max_length)
 
-    def finetune(self, X, Y, batch_size=BATCH_SIZE):
+    def finetune(self, X, Y, batch_size=BATCH_SIZE, val_size=0.05, val_interval=150):
         """
         :param X: list or array of text.
         :param Y: integer or string-valued class labels.
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
+        :param val_size: Float fraction or int number that represents the size of the validation set.
+        :param val_interval: The interval for which validation is performed, measured in number of steps.
         """
-        return self._finetune(X, Y=Y, batch_size=batch_size)
+        return self._finetune(X, Y=Y, batch_size=batch_size, val_size=val_size, val_interval=val_interval)
 
 
 class LanguageModelEntailment(LanguageModelBase):
 
-    def __init__(self, *, max_length=MAX_LENGTH, verbose=True):
-        super().__init__(max_length=max_length, verbose=verbose)
+    def __init__(self, *args, **vargs):
+        super().__init__(*args, **vargs)
         self.label_encoder = OrdinalClassificationEncoder()
 
     def _text_to_ids(self, *Xs, max_length=None):
-
         max_length = max_length or self.max_length
         assert len(Xs) == 2, "This implementation assumes 2 Xs"
 
@@ -484,15 +538,17 @@ class LanguageModelEntailment(LanguageModelBase):
         tokens, mask = self._array_format(question_answer_pairs)
         return tokens, mask
 
-    def finetune(self, X_1, X_2, Y, batch_size=BATCH_SIZE):
+    def finetune(self, X_1, X_2, Y, batch_size=BATCH_SIZE, val_size=0.05, val_interval=150):
         """
         :param X_1: list or array of text to embed as the queries.
         :param X_2: list or array of text to embed as the answers.
         :param Y: integer or string-valued class labels. It is necessary for the items of Y to be sortable.
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
+        :param val_size: Float fraction or int number that represents the size of the validation set.
+        :param val_interval: The interval for which validation is performed, measured in number of steps.
         """
-        return self._finetune(X_1, X_2, Y=Y, batch_size=batch_size)
+        return self._finetune(X_1, X_2, Y=Y, batch_size=batch_size, val_size=val_size, val_interval=val_interval)
 
     def predict(self, X_1, X_2, max_length=None):
         """
@@ -530,9 +586,9 @@ class LanguageModelEntailment(LanguageModelBase):
         """
         return self._featurize(X_1, X_2, max_length=max_length)
 
+
 if __name__ == "__main__":
 
-    import json
     with open("data/questions.json", "rt") as fp:
         data = json.load(fp)
 
@@ -545,15 +601,14 @@ if __name__ == "__main__":
         questions.append(row["question"])
         answers.append(row["answers"][0]["answer"])
 
-    from sklearn.model_selection import train_test_split
-    scores_train, scores_test, ques_train, ques_test, ans_train, ans_test = train_test_split(scores, questions, answers, test_size=0.33, random_state=5)
+    scores_train, scores_test, ques_train, ques_test, ans_train, ans_test = train_test_split(
+        scores, questions, answers, test_size=0.33, random_state=5)
+    save_path = 'saved-models/cola'
 
-    model = LanguageModelEntailment()
+    model = LanguageModelEntailment(save_path)
 
     model.finetune(ques_train, ans_train, scores_train)
 
-    save_path = 'saved-models/cola'
-    model.save(save_path)
     model = LanguageModelEntailment.load(save_path)
 
     print("TRAIN EVAL")

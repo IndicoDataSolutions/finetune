@@ -57,7 +57,8 @@ class TestLanguageModelClassifier(unittest.TestCase):
         Ensure model training does not error out
         Ensure model returns predictions of the right type
         """
-        model = LanguageModelClassifier(verbose=False)
+        save_file_autosave = 'tests/saved-models/autosave_path'
+        model = LanguageModelClassifier(verbose=False, autosave_path=save_file_autosave)
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text, train_sample.Target)
@@ -75,8 +76,9 @@ class TestLanguageModelClassifier(unittest.TestCase):
         Ensure saving + loading does not cause errors
         Ensure saving + loading does not change predictions
         """
-        model = LanguageModelClassifier(verbose=False)
+        save_file_autosave = 'tests/saved-models/autosave_path'
         save_file = 'tests/saved-models/test-save-load'
+        model = LanguageModelClassifier(verbose=False, autosave_path=save_file_autosave)
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text, train_sample.Target)
@@ -92,7 +94,8 @@ class TestLanguageModelClassifier(unittest.TestCase):
         Ensure featurization returns an array of the right shape
         Ensure featurization is still possible after fit
         """
-        model = LanguageModelClassifier(verbose=False)
+        save_file_autosave = 'tests/saved-models/autosave_path'
+        model = LanguageModelClassifier(verbose=False, autosave_path=save_file_autosave)
         train_sample = self.dataset.sample(n=self.n_sample)
         features = model.featurize(train_sample.Text)
         self.assertEqual(features.shape, (self.n_sample, self.n_hidden))
@@ -101,7 +104,8 @@ class TestLanguageModelClassifier(unittest.TestCase):
         self.assertEqual(features.shape, (self.n_sample, self.n_hidden))
 
     def test_reasonable_predictions(self):
-        model = LanguageModelClassifier(verbose=False)
+        save_file_autosave = 'tests/saved-models/autosave_path'
+        model = LanguageModelClassifier(verbose=False, autosave_path=save_file_autosave)
         trX = ['cat'] * 100 + ['finance']  * 100
         trY = copy(trX)
         teX = ['feline'] * 10 + ['investment'] * 10
