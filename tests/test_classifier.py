@@ -35,7 +35,7 @@ class TestLanguageModelClassifier(unittest.TestCase):
         if path.exists():
             return
 
-        path.mkdir(parents=True, exist_ok=True)
+        path.parent.mkdir(parents=True, exist_ok=True)
         generic_download(
             url="https://s3.amazonaws.com/enso-data/SST-binary.csv",
             text_column="Text",
