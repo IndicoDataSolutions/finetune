@@ -1,6 +1,7 @@
 import os
 import random
 import warnings
+import logging
 import pickle
 import json
 
@@ -15,7 +16,7 @@ from finetune.optimizers import AdamWeightDecay, schedules
 from sklearn.model_selection import train_test_split
 from finetune.config import (
     MAX_LENGTH, BATCH_SIZE, N_EPOCHS, CLF_P_DROP, SEED,
-    N_GPUS, WEIGHT_STDDEV, EMBED_P_DROP, RESID_P_DROP, N_HEADS, N_LAYER,
+    WEIGHT_STDDEV, EMBED_P_DROP, RESID_P_DROP, N_HEADS, N_LAYER,
     ATTN_P_DROP, ACT_FN, LR, B1, B2, L2_REG, VECTOR_L2)
 from finetune.utils import find_trainable_variables, get_available_gpus, shape_list, assign_to_gpu, average_grads, iter_data, soft_split, OrdinalClassificationEncoder, OneHotLabelEncoder
 from finetune.transformer import block, dropout, embed
@@ -26,7 +27,7 @@ N_EMBED = 768
 
 ROLLING_AVG_DECAY = 0.99
 
-
+_LOGGER = logging.getLogger(__name__)
 
 
 def clf(x, ny, w_init=tf.random_normal_initializer(stddev=WEIGHT_STDDEV), b_init=tf.constant_initializer(0)):
@@ -134,7 +135,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         tokens, mask = self._array_format(token_idxs)
         return tokens, mask
 
-    def _finetune(self, *Xs, Y, batch_size=BATCH_SIZE, val_size=0.05, val_interval=150):
+    def _finetune(self, *Xs, Y, batch_size=BATCH_SIZE, val_size=0.05, val_interval=150, val_window_size=5):
         """
         X: List / array of text
         Y: Class labels
@@ -159,6 +160,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         avg_val_loss = 0
         global_step = 0
         best_val_loss = float("inf")
+        val_window = [float("inf")] * val_window_size
         for i in range(N_EPOCHS):
             for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=True):
                 global_step += 1
@@ -170,17 +172,19 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                         self.valid_writer.add_summary(summary, global_step)
                         sum_val_loss += val_cost
                         avg_val_loss = avg_val_loss * ROLLING_AVG_DECAY + val_cost * (1 - ROLLING_AVG_DECAY)
-                        print("\nVAL: LOSS = {}, ROLLING AVG = {}".format(val_cost, avg_val_loss))
-                    if sum_val_loss < best_val_loss:
-                        best_val_loss = sum_val_loss
-                        print("Autosaving new best model.")
+                        _LOGGER.info("\nVAL: LOSS = {}, ROLLING AVG = {}".format(val_cost, avg_val_loss))
+                    val_window.append(sum_val_loss)
+                    val_window.pop(0)
+                    if np.mean(val_window) <= best_val_loss:
+                        best_val_loss = np.mean(val_window)
+                        _LOGGER.info("Autosaving new best model.")
                         self.save(self.autosave_path)
-                        print("Done!!")
+                        _LOGGER.info("Done!!")
                 cost, _, summary = self.sess.run([self.clf_loss, self.train_op, self.summaries],
                                                  {self.X: xmb, self.M: mmb, self.Y: ymb})
                 self.train_writer.add_summary(summary, global_step)
                 avg_train_loss = avg_train_loss * ROLLING_AVG_DECAY + cost * (1 - ROLLING_AVG_DECAY)
-                print("\nTRAIN: LOSS = {}, ROLLING AVG = {}".format(cost, avg_train_loss))
+                _LOGGER.info("\nTRAIN: LOSS = {}, ROLLING AVG = {}".format(cost, avg_train_loss))
 
         return self
 
