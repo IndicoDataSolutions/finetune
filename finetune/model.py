@@ -149,10 +149,10 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         self._build_model(n_updates_total=n_updates_total, n_classes=self.n_classes)
 
         dataset = shuffle(train_x, train_mask, Y, random_state=np.random)
-        x_t, x_v, m_t, m_v, y_t, y_v = train_test_split(*dataset, test_size=val_frac, random_state=31415)
+        x_tr, x_va, m_tr, m_va, y_tr, y_va = train_test_split(*dataset, test_size=val_frac, random_state=31415)
 
-        dataset = (x_t, m_t, y_t)
-        val_dataset = (x_v, m_v, y_v)
+        dataset = (x_tr, m_tr, y_tr)
+        val_dataset = (x_va, m_va, y_va)
 
         self.is_trained = True
         avg_train_loss = 0
@@ -164,11 +164,10 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                 global_step += 1
                 if global_step % eval_interval == 0:
                     sum_val_loss = 0
-                    for val_step, (xval, mval, yval) in enumerate(
-                            iter_data(*val_dataset, n_batch=n_batch_train, verbose=True)):
+                    for xval, mval, yval in enumerate(iter_data(*val_dataset, n_batch=n_batch_train, verbose=True)):
                         val_cost, summary = self.sess.run([self.clf_loss, self.summaries],
                                                           {self.X: xval, self.M: mval, self.Y: yval})
-                        self.valid_writer.add_summary(summary, global_step + val_step)
+                        self.valid_writer.add_summary(summary, global_step)
                         sum_val_loss += val_cost
                         avg_val_loss = avg_val_loss * ROLLING_AVG_DECAY + val_cost * (1 - ROLLING_AVG_DECAY)
                         print("\nVAL: LOSS = {}, ROLLING AVG = {}".format(val_cost, avg_val_loss))
@@ -304,6 +303,8 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         features_aggregator = []
         losses_aggregator = []
 
+        train_loss_tower = 0
+
         for i, (X, M, Y) in enumerate(soft_split(self.X, self.M, self.Y, n_splits=N_GPUS)):
             do_reuse = True if i > 0 else tf.AUTO_REUSE
             device = tf.device(assign_to_gpu(i, "/gpu:0"))
@@ -333,6 +334,8 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                     if LM_LOSS_COEF > 0:
                         train_loss += LM_LOSS_COEF * tf.reduce_mean(language_model_state['losses'])
 
+                    train_loss_tower += train_loss
+
                     params = find_trainable_variables("model")
                     grads = tf.gradients(train_loss, params)
                     grads = list(zip(grads, params))
@@ -357,6 +360,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
             self.clf_loss = tf.reduce_mean(self.clf_losses)
             self.summaries.append(tf.summary.scalar('ClassifierLoss', self.clf_loss))
             self.summaries.append(tf.summary.scalar('LanguageModelLoss', tf.reduce_mean(self.lm_losses)))
+            self.summaries.append(tf.summary.scalar('TotalLoss', train_loss_tower / N_GPUS))
         self.summaries = tf.summary.merge(self.summaries)
 
     def _build_model(self, n_updates_total, n_classes, train=True):
