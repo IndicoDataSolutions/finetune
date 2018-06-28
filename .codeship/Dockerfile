@@ -11,3 +11,6 @@ ADD . /finetune
 WORKDIR /finetune
 
 RUN python3 setup.py develop --upgrade
+RUN pip3 uninstall setuptools && pip3 install setuptools --upgrade -y
+RUN python3 -m spacy download en
+ENV LANG C.UTF-8
