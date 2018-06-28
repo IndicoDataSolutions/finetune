@@ -5,9 +5,26 @@ from functools import partial
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.framework import function
+from tensorflow.python.client import device_lib
 from tqdm import tqdm
 
 from sklearn.preprocessing import LabelEncoder
+from finetune import config
+
+
+def format_gpu_string(num):
+    return '/device:GPU:{}'.format(num)
+
+
+def get_available_gpus():
+    if config.VISIBLE_GPUS is not None:
+        return config.VISIBLE_GPUS
+    local_device_protos = device_lib.list_local_devices()
+    config.VISIBLE_GPUS = [
+        int(x.name.split(':')[-1]) for x in local_device_protos
+        if x.device_type == 'GPU'
+    ]
+    return config.VISIBLE_GPUS
 
 
 def shape_list(x):
@@ -136,11 +153,11 @@ def convert_gradient_to_tensor(x):
     return x
 
 
-def assign_to_gpu(gpu=0, ps_dev="/device:CPU:0"):
+def assign_to_gpu(gpu=0, params_device="/device:CPU:0"):
     def _assign(op):
         node_def = op if isinstance(op, tf.NodeDef) else op.node_def
         if node_def.op == "Variable":
-            return ps_dev
+            return params_device
         else:
             return "/gpu:%d" % gpu
 

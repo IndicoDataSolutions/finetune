@@ -11,10 +11,10 @@ from sklearn.utils import shuffle
 from functools import partial
 from finetune.encoding import TextEncoder
 from finetune.optimizers import AdamWeightDecay, schedules
-from finetune.utils import find_trainable_variables, shape_list, assign_to_gpu, average_grads, iter_data, soft_split, OrdinalClassificationEncoder, OneHotLabelEncoder
+from finetune.utils import find_trainable_variables, get_available_gpus, shape_list, assign_to_gpu, average_grads, iter_data, soft_split, OrdinalClassificationEncoder, OneHotLabelEncoder
 from finetune.config import (
     MAX_LENGTH, BATCH_SIZE, WEIGHT_STDDEV, N_EPOCHS, CLF_P_DROP, SEED,
-    N_GPUS, WEIGHT_STDDEV, EMBED_P_DROP, RESID_P_DROP, N_HEADS, N_LAYER,
+    WEIGHT_STDDEV, EMBED_P_DROP, RESID_P_DROP, N_HEADS, N_LAYER,
     ATTN_P_DROP, ACT_FN, LM_LOSS_COEF, LR, B1, B2, L2_REG, VECTOR_L2,
     EPSILON, LR_SCHEDULE, MAX_GRAD_NORM, LM_LOSS_COEF, LR_WARMUP
 )
@@ -211,8 +211,9 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         return self.featurize(*args, **kwargs)
 
     def _infer_prep(self, *X, max_length=None):
+        max_length = max_length or self.max_length
         infer_x, infer_mask = self._text_to_ids(*X, max_length=max_length)
-        n_batch_train = BATCH_SIZE * N_GPUS
+        n_batch_train = BATCH_SIZE * max(len(get_available_gpus()), 1)
         self._build_model(n_updates_total=0, n_classes=self.n_classes, train=False)
         yield from iter_data(infer_x, infer_mask, n_batch=n_batch_train, verbose=self.verbose)
 
