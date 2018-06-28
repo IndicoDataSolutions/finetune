@@ -13,14 +13,11 @@ from functools import partial
 from finetune.encoding import TextEncoder
 from finetune.optimizers import AdamWeightDecay, schedules
 from sklearn.model_selection import train_test_split
-from finetune.utils import find_trainable_variables, shape_list, assign_to_gpu, average_grads, iter_data, soft_split, \
-    OrdinalClassificationEncoder, OneHotLabelEncoder
 from finetune.config import (
     MAX_LENGTH, BATCH_SIZE, N_EPOCHS, CLF_P_DROP, SEED,
     N_GPUS, WEIGHT_STDDEV, EMBED_P_DROP, RESID_P_DROP, N_HEADS, N_LAYER,
-    ATTN_P_DROP, ACT_FN, LR, B1, B2, L2_REG, VECTOR_L2,
-    EPSILON, LR_SCHEDULE, MAX_GRAD_NORM, LM_LOSS_COEF, LR_WARMUP
-)
+    ATTN_P_DROP, ACT_FN, LR, B1, B2, L2_REG, VECTOR_L2)
+from finetune.utils import find_trainable_variables, get_available_gpus, shape_list, assign_to_gpu, average_grads, iter_data, soft_split, OrdinalClassificationEncoder, OneHotLabelEncoder
 from finetune.transformer import block, dropout, embed
 
 SHAPES_PATH = os.path.join(os.path.dirname(__file__), '..', 'model', 'params_shapes.json')
@@ -145,7 +142,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         val_interval: The interval for which validation is performed, measured in number of steps.
         """
         train_x, train_mask = self._text_to_ids(*Xs)
-        n_batch_train = batch_size * N_GPUS
+        n_batch_train = batch_size * max(len(get_available_gpus()), 1)
         n_updates_total = (len(Y) // n_batch_train) * N_EPOCHS
         Y = self.label_encoder.fit_transform(Y)
         self.n_classes = len(self.label_encoder.classes_)
@@ -189,7 +186,8 @@ class LanguageModelBase(object, metaclass=ABCMeta):
 
     @abstractmethod
     def finetune(self, *args, **kwargs):
-        """"""
+        """
+        """
 
     def fit(self, *args, **kwargs):
         """
@@ -250,8 +248,9 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         return self.featurize(*args, **kwargs)
 
     def _infer_prep(self, *X, max_length=None):
+        max_length = max_length or self.max_length
         infer_x, infer_mask = self._text_to_ids(*X, max_length=max_length)
-        n_batch_train = BATCH_SIZE * N_GPUS
+        n_batch_train = BATCH_SIZE * max(len(get_available_gpus()), 1)
         self._build_model(n_updates_total=0, n_classes=self.n_classes, train=False)
         yield from iter_data(infer_x, infer_mask, n_batch=n_batch_train, verbose=self.verbose)
 
@@ -307,10 +306,16 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         losses_aggregator = []
 
         train_loss_tower = 0
-
-        for i, (X, M, Y) in enumerate(soft_split(self.X, self.M, self.Y, n_splits=N_GPUS)):
+        gpus = get_available_gpus()
+        n_splits = max(len(gpus), 1)
+        for i, (X, M, Y) in enumerate(soft_split(self.X, self.M, self.Y, n_splits=n_splits)):
             do_reuse = True if i > 0 else tf.AUTO_REUSE
-            device = tf.device(assign_to_gpu(i, "/gpu:0"))
+
+            if gpus:
+                device = tf.device(assign_to_gpu(gpus[i], params_device=gpus[0]))
+            else:
+                device = tf.device('cpu')
+
             scope = tf.variable_scope(tf.get_variable_scope(), reuse=do_reuse)
 
             with device, scope:
@@ -371,7 +376,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         Construct tensorflow symbolic graph.
         """
         if not self.is_trained or train != self.train:
-            # reconstruct graph to include/remove dropout 
+            # reconstruct graph to include/remove dropout
             # #if `train` setting has changed
             self._construct_graph(n_updates_total, n_classes, train=train)
 
