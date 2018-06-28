@@ -4,6 +4,7 @@ IndicoAPI setup
 from sys import version_info
 from setuptools import setup, find_packages
 
+
 REQUIREMENTS = [
     "pandas>=0.23.1",
     "IndicoIo>=1.1.5",
