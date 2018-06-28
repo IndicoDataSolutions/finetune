@@ -17,7 +17,10 @@ from sklearn.model_selection import train_test_split
 from finetune.config import (
     MAX_LENGTH, BATCH_SIZE, N_EPOCHS, CLF_P_DROP, SEED,
     WEIGHT_STDDEV, EMBED_P_DROP, RESID_P_DROP, N_HEADS, N_LAYER,
-    ATTN_P_DROP, ACT_FN, LR, B1, B2, L2_REG, VECTOR_L2)
+    ATTN_P_DROP, ACT_FN, LR, B1, B2, L2_REG, VECTOR_L2,
+    EPSILON, LR_SCHEDULE, MAX_GRAD_NORM, LM_LOSS_COEF, LR_WARMUP
+    
+)
 from finetune.utils import find_trainable_variables, get_available_gpus, shape_list, assign_to_gpu, average_grads, iter_data, soft_split, OrdinalClassificationEncoder, OneHotLabelEncoder
 from finetune.transformer import block, dropout, embed
 
@@ -165,8 +168,11 @@ class LanguageModelBase(object, metaclass=ABCMeta):
             for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=True):
                 global_step += 1
                 if global_step % val_interval == 0:
+                    summary = self.sess.run([self.summaries], {self.X: xmb, self.M: mmb, self.Y: ymb})
+                    self.train_writer.add_summary(summary, global_step)
+                    
                     sum_val_loss = 0
-                    for xval, mval, yval in enumerate(iter_data(*val_dataset, n_batch=n_batch_train, verbose=True)):
+                    for xval, mval, yval in iter_data(*val_dataset, n_batch=n_batch_train, verbose=True):
                         val_cost, summary = self.sess.run([self.clf_loss, self.summaries],
                                                           {self.X: xval, self.M: mval, self.Y: yval})
                         self.valid_writer.add_summary(summary, global_step)
@@ -180,8 +186,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                         _LOGGER.info("Autosaving new best model.")
                         self.save(self.autosave_path)
                         _LOGGER.info("Done!!")
-                cost, _, summary = self.sess.run([self.clf_loss, self.train_op, self.summaries],
-                                                 {self.X: xmb, self.M: mmb, self.Y: ymb})
+                cost, _= self.sess.run([self.clf_loss, self.train_op], {self.X: xmb, self.M: mmb, self.Y: ymb})
                 self.train_writer.add_summary(summary, global_step)
                 avg_train_loss = avg_train_loss * ROLLING_AVG_DECAY + cost * (1 - ROLLING_AVG_DECAY)
                 _LOGGER.info("\nTRAIN: LOSS = {}, ROLLING AVG = {}".format(cost, avg_train_loss))
@@ -372,7 +377,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
             self.clf_loss = tf.reduce_mean(self.clf_losses)
             self.summaries.append(tf.summary.scalar('ClassifierLoss', self.clf_loss))
             self.summaries.append(tf.summary.scalar('LanguageModelLoss', tf.reduce_mean(self.lm_losses)))
-            self.summaries.append(tf.summary.scalar('TotalLoss', train_loss_tower / N_GPUS))
+            self.summaries.append(tf.summary.scalar('TotalLoss', train_loss_tower / n_splits))
             self.summaries = tf.summary.merge(self.summaries)
 
     def _build_model(self, n_updates_total, n_classes, train=True):
