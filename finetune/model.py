@@ -137,10 +137,12 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         tokens, mask = self._array_format(token_idxs)
         return tokens, mask
 
-    def _finetune(self, *Xs, Y, batch_size=BATCH_SIZE, val_frac=0.05, eval_interval=150):
+    def _finetune(self, *Xs, Y, batch_size=BATCH_SIZE, val_size=0.05, val_interval=150):
         """
         X: List / array of text
         Y: Class labels
+        val_size: Float fraction or int number that represents the size of the validation set.
+        val_interval: The interval for which validation is performed, measured in number of steps.
         """
         train_x, train_mask = self._text_to_ids(*Xs)
         n_batch_train = batch_size * N_GPUS
@@ -150,7 +152,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         self._build_model(n_updates_total=n_updates_total, n_classes=self.n_classes)
 
         dataset = shuffle(train_x, train_mask, Y, random_state=np.random)
-        x_tr, x_va, m_tr, m_va, y_tr, y_va = train_test_split(*dataset, test_size=val_frac, random_state=31415)
+        x_tr, x_va, m_tr, m_va, y_tr, y_va = train_test_split(*dataset, test_size=val_size, random_state=31415)
 
         dataset = (x_tr, m_tr, y_tr)
         val_dataset = (x_va, m_va, y_va)
@@ -163,7 +165,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         for i in range(N_EPOCHS):
             for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=True):
                 global_step += 1
-                if global_step % eval_interval == 0:
+                if global_step % val_interval == 0:
                     sum_val_loss = 0
                     for xval, mval, yval in enumerate(iter_data(*val_dataset, n_batch=n_batch_train, verbose=True)):
                         val_cost, summary = self.sess.run([self.clf_loss, self.summaries],
@@ -409,9 +411,8 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         init_params = np.split(np.concatenate(init_params, 0), offsets)[:-1]
         init_params = [param.reshape(shape) for param, shape in zip(init_params, shapes)]
         init_params[0] = init_params[0][:self.max_length]
-        init_params[0] = np.concatenate([init_params[1], (
-                np.random.randn(len(self.encoder.special_tokens), N_EMBED) * WEIGHT_STDDEV).astype(np.float32),
-                                         init_params[0]], 0)
+        special_embed = (np.random.randn(len(self.encoder.special_tokens), N_EMBED) * WEIGHT_STDDEV).astype(np.float32)
+        init_params[0] = np.concatenate([init_params[1], special_embed, init_params[0]], 0)
         del init_params[1]
         self.sess.run([p.assign(ip) for p, ip in zip(pretrained_params, init_params)])
 
@@ -505,14 +506,16 @@ class LanguageModelClassifier(LanguageModelBase):
         """
         return self._predict_proba(X, max_length=max_length)
 
-    def finetune(self, X, Y, batch_size=BATCH_SIZE):
+    def finetune(self, X, Y, batch_size=BATCH_SIZE, val_size=0.05, val_interval=150):
         """
         :param X: list or array of text.
         :param Y: integer or string-valued class labels.
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
+        :param val_size: Float fraction or int number that represents the size of the validation set.
+        :param val_interval: The interval for which validation is performed, measured in number of steps.
         """
-        return self._finetune(X, Y=Y, batch_size=batch_size)
+        return self._finetune(X, Y=Y, batch_size=batch_size, val_size=val_size, val_interval=val_interval)
 
 
 class LanguageModelEntailment(LanguageModelBase):
@@ -530,15 +533,17 @@ class LanguageModelEntailment(LanguageModelBase):
         tokens, mask = self._array_format(question_answer_pairs)
         return tokens, mask
 
-    def finetune(self, X_1, X_2, Y, batch_size=BATCH_SIZE):
+    def finetune(self, X_1, X_2, Y, batch_size=BATCH_SIZE, val_size=0.05, val_interval=150):
         """
         :param X_1: list or array of text to embed as the queries.
         :param X_2: list or array of text to embed as the answers.
         :param Y: integer or string-valued class labels. It is necessary for the items of Y to be sortable.
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
+        :param val_size: Float fraction or int number that represents the size of the validation set.
+        :param val_interval: The interval for which validation is performed, measured in number of steps.
         """
-        return self._finetune(X_1, X_2, Y=Y, batch_size=batch_size)
+        return self._finetune(X_1, X_2, Y=Y, batch_size=batch_size, val_size=val_size, val_interval=val_interval)
 
     def predict(self, X_1, X_2, max_length=None):
         """
