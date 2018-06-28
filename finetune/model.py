@@ -2,6 +2,7 @@ import os
 import random
 import warnings
 import pickle
+import json
 
 from abc import ABCMeta, abstractmethod
 import tensorflow as tf
@@ -361,7 +362,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
             self.summaries.append(tf.summary.scalar('ClassifierLoss', self.clf_loss))
             self.summaries.append(tf.summary.scalar('LanguageModelLoss', tf.reduce_mean(self.lm_losses)))
             self.summaries.append(tf.summary.scalar('TotalLoss', train_loss_tower / N_GPUS))
-        self.summaries = tf.summary.merge(self.summaries)
+            self.summaries = tf.summary.merge(self.summaries)
 
     def _build_model(self, n_updates_total, n_classes, train=True):
         """
@@ -577,8 +578,6 @@ class LanguageModelEntailment(LanguageModelBase):
 
 
 if __name__ == "__main__":
-
-    import json
 
     with open("data/questions.json", "rt") as fp:
         data = json.load(fp)
