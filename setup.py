@@ -16,12 +16,12 @@ REQUIREMENTS = [
     "ftfy>=4.4.0",
     "spacy>=2.0.0",
     "msgpack-numpy>=0.4.1",
-    "setuptools-git>=1.2"
 ]
+
 setup(
     name="finetune",
     packages=find_packages(),
     version="0.1.0",
     install_requires=REQUIREMENTS,
-    include_package_data=True
+    include_package_data=False
 )

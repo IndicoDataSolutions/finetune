@@ -18,7 +18,7 @@ from finetune import config
 from finetune import LanguageModelClassifier
 
 config.BATCH_SIZE = 1
-config.MAX_LENGTH = 32
+config.MAX_LENGTH = 8
 config.N_EPOCHS = 1
 
 SST_FILENAME = "SST-binary.csv"
@@ -26,7 +26,7 @@ SST_FILENAME = "SST-binary.csv"
 
 class TestLanguageModelClassifier(unittest.TestCase):
 
-    n_sample = 10
+    n_sample = 4
     n_hidden = 768
     dataset_path = os.path.join(
         enso.config.DATA_DIRECTORY, 'Classify', 'SST-binary.csv'
