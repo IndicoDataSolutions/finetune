@@ -54,7 +54,7 @@ class TestLanguageModelClassifier(unittest.TestCase):
         cls._download_sst()
 
     def setUp(self):
-        self.dataset = pd.read_csv(self.dataset_path, n_rows=n_sample*3)
+        self.dataset = pd.read_csv(self.dataset_path, n_rows=self.n_sample*3)
         tf.reset_default_graph()
 
     def test_fit_predict(self):
