@@ -13,6 +13,7 @@ from sklearn.utils import shuffle
 from functools import partial
 from finetune.encoding import TextEncoder
 from finetune.optimizers import AdamWeightDecay, schedules
+from finetune.download import download_data_if_required
 from sklearn.model_selection import train_test_split
 from finetune.config import (
     MAX_LENGTH, BATCH_SIZE, N_EPOCHS, CLF_P_DROP, SEED,
@@ -23,7 +24,7 @@ from finetune.config import (
 from finetune.utils import find_trainable_variables, get_available_gpus, shape_list, assign_to_gpu, average_grads, iter_data, soft_split, OrdinalClassificationEncoder, OneHotLabelEncoder
 from finetune.transformer import block, dropout, embed
 
-SHAPES_PATH = os.path.join(os.path.dirname(__file__), 'model', 'param_shapes.json')
+SHAPES_PATH = os.path.join(os.path.dirname(__file__), 'model', 'params_shapes.json')
 PARAM_PATH = os.path.join(os.path.dirname(__file__), 'model', 'params_{}.npy')
 N_EMBED = 768
 
@@ -113,6 +114,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         self.verbose = verbose
 
     def _initialize(self):
+        download_data_if_required()
         self._set_random_seed(SEED)
         self.encoder = TextEncoder()
 
