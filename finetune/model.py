@@ -23,8 +23,8 @@ from finetune.config import (
 from finetune.utils import find_trainable_variables, get_available_gpus, shape_list, assign_to_gpu, average_grads, iter_data, soft_split, OrdinalClassificationEncoder, OneHotLabelEncoder
 from finetune.transformer import block, dropout, embed
 
-SHAPES_PATH = os.path.join(os.path.dirname(__file__), '..', 'model', 'params_shapes.json')
-PARAM_PATH = os.path.join(os.path.dirname(__file__), '..', 'model', 'params_{}.npy')
+SHAPES_PATH = os.path.join(os.path.dirname(__file__), 'model', 'param_shapes.json')
+PARAM_PATH = os.path.join(os.path.dirname(__file__), 'model', 'params_{}.npy')
 N_EMBED = 768
 
 ROLLING_AVG_DECAY = 0.99
@@ -420,9 +420,9 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=False))
         self.sess.run(tf.global_variables_initializer())
 
-        shapes = json.load(open('model/params_shapes.json'))
+        shapes = json.load(open(SHAPES_PATH))
         offsets = np.cumsum([np.prod(shape) for shape in shapes])
-        init_params = [np.load('model/params_{}.npy'.format(n)) for n in range(10)]
+        init_params = [np.load(PARAM_PATH.format(n)) for n in range(10)]
         init_params = np.split(np.concatenate(init_params, 0), offsets)[:-1]
         init_params = [param.reshape(shape) for param, shape in zip(init_params, shapes)]
         init_params[0] = init_params[0][:self.max_length]

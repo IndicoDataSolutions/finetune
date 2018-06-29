@@ -12,8 +12,8 @@ from tqdm import tqdm
 
 from finetune.config import MAX_LENGTH
 
-ENCODER_PATH = os.path.join(os.path.dirname(__file__), '..', 'model/encoder_bpe_40000.json')
-BPE_PATH = os.path.join(os.path.dirname(__file__), '..', 'model/vocab_40000.bpe')
+ENCODER_PATH = os.path.join(os.path.dirname(__file__), 'model/encoder_bpe_40000.json')
+BPE_PATH = os.path.join(os.path.dirname(__file__), 'model/vocab_40000.bpe')
 
 
 def get_pairs(word):
@@ -168,7 +168,7 @@ class TextEncoder(object):
         b = len(answer_ids)
 
         half_max_len = adjusted_max_length // 2 # Initial allocation for question
-        
+
         start = self.encoder['_start_']
         delimiter = self.encoder['_delimiter_']
         clf_token = self.encoder['_classify_']
@@ -179,6 +179,6 @@ class TextEncoder(object):
             spare = max(0, half_max_len - min(q, a)) # Number of remaining tokens if either question or answer is shorter than its allocation
             q_adj = min(q, half_max_len + spare) # Truncate the question if its length is longer than its allocation plus any spare tokens.
             a_adj = min(a, half_max_len + spare)
-                                                            
+
             question_answer_pairs.append([start] + qid[:q_adj] + [delimiter] + aid[:a_adj] + [clf_token])
         return question_answer_pairs
