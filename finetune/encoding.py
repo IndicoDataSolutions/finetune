@@ -54,7 +54,7 @@ class TextEncoder(object):
     def __init__(self):
         self.nlp = spacy.load('en', disable=['parser', 'tagger', 'ner', 'textcat'])
         self.encoder = json.load(open(ENCODER_PATH))
-        self.decoder = {v:k for k,v in self.encoder.items()}
+        self.decoder = {v: k for k, v in self.encoder.items()}
 
         self.special_tokens = ['_start_', '_delimiter_', '_classify_']
         for token in self.special_tokens:
@@ -64,6 +64,9 @@ class TextEncoder(object):
         merges = [tuple(merge.split()) for merge in merges]
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
+        self.start = self.encoder['_start_']
+        self.delimiter = self.encoder['_delimiter_']
+        self.clf_token = self.encoder['_classify_']
 
     @property
     def vocab_size(self):
@@ -76,7 +79,7 @@ class TextEncoder(object):
         self.encoder[key] = value
 
     def bpe(self, token):
-        word = tuple(token[:-1]) + ( token[-1] + '</w>',)
+        word = tuple(token[:-1]) + (token[-1] + '</w>',)
         if token in self.cache:
             return self.cache[token]
         pairs = get_pairs(word)
@@ -85,7 +88,7 @@ class TextEncoder(object):
             return token + '</w>'
 
         while True:
-            bigram = min(pairs, key = lambda pair: self.bpe_ranks.get(pair, float('inf')))
+            bigram = min(pairs, key=lambda pair: self.bpe_ranks.get(pair, float('inf')))
             if bigram not in self.bpe_ranks:
                 break
             first, second = bigram
@@ -100,7 +103,7 @@ class TextEncoder(object):
                     new_word.extend(word[i:])
                     break
 
-                if word[i] == first and i < len(word)-1 and word[i+1] == second:
+                if word[i] == first and i < len(word) - 1 and word[i + 1] == second:
                     new_word.append(first + second)
                     i += 2
                 else:
@@ -151,12 +154,12 @@ class TextEncoder(object):
                 max_length
             ))
         batch_token_idxs = [
-            [self.encoder['_start_']] + token_idxs[:adjusted_max_length] + [self.encoder['_classify_']]
+            [self.start] + token_idxs[:adjusted_max_length] + [self.clf_token]
             for token_idxs in batch_token_idxs
         ]
         return batch_token_idxs
 
-    def encode_for_comparison(self, texts,max_length=MAX_LENGTH, verbose=True):
+    def encode_for_comparison(self, texts, max_length=MAX_LENGTH, verbose=True):
         pass
 
     def encode_for_entailment(self, question, answer, max_length=MAX_LENGTH, verbose=True):
@@ -167,18 +170,39 @@ class TextEncoder(object):
         a = len(question_ids)
         b = len(answer_ids)
 
-        half_max_len = adjusted_max_length // 2 # Initial allocation for question
-        
-        start = self.encoder['_start_']
-        delimiter = self.encoder['_delimiter_']
-        clf_token = self.encoder['_classify_']
+        half_max_len = adjusted_max_length // 2  # Initial allocation for question
+
         question_answer_pairs = []
         for qid, aid in zip(question_ids, answer_ids):
             q = len(qid)
             a = len(aid)
-            spare = max(0, half_max_len - min(q, a)) # Number of remaining tokens if either question or answer is shorter than its allocation
-            q_adj = min(q, half_max_len + spare) # Truncate the question if its length is longer than its allocation plus any spare tokens.
+            spare = max(0, half_max_len - min(q,
+                                              a))  # Number of remaining tokens if either question or answer is shorter than its allocation
+            q_adj = min(q,
+                        half_max_len + spare)  # Truncate the question if its length is longer than its allocation plus any spare tokens.
             a_adj = min(a, half_max_len + spare)
-                                                            
-            question_answer_pairs.append([start] + qid[:q_adj] + [delimiter] + aid[:a_adj] + [clf_token])
+
+            question_answer_pairs.append([self.start] + qid[:q_adj] + [self.delimiter] + aid[:a_adj] + [self.clf_token])
         return question_answer_pairs
+
+    def encode_multi_input(self, *Xs, max_length=MAX_LENGTH, verbose=True):
+        encoded = [self.encode(x) for x in Xs]
+        num_samples = len(encoded)
+        adjusted_max_length = max_length - num_samples - 1
+        allocated_max_len = adjusted_max_length // num_samples
+        outputs = []
+        for single_datum in zip(*encoded):
+            overflows = [allocated_max_len - len(sequence) for sequence in single_datum]
+            spare = sum(overflows)
+            if spare >= 0:
+                cut_len = None
+            else:
+                empty_tokens = sum(max(overflow, 0) for overflow in overflows)
+                num_over = [min(overflow, 0) for overflow in overflows].count(0)
+                cut_len = allocated_max_len + (empty_tokens // num_over)
+            joined = [self.start]
+            for d in single_datum:
+                joined += (d[:cut_len] + [self.delimiter])
+            joined = joined[:-1] + [self.clf_token]
+            outputs.append(joined)
+        return outputs

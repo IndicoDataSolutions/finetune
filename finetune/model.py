@@ -19,9 +19,10 @@ from finetune.config import (
     WEIGHT_STDDEV, EMBED_P_DROP, RESID_P_DROP, N_HEADS, N_LAYER,
     ATTN_P_DROP, ACT_FN, LR, B1, B2, L2_REG, VECTOR_L2,
     EPSILON, LR_SCHEDULE, MAX_GRAD_NORM, LM_LOSS_COEF, LR_WARMUP
-    
+
 )
-from finetune.utils import find_trainable_variables, get_available_gpus, shape_list, assign_to_gpu, average_grads, iter_data, soft_split, OrdinalClassificationEncoder, OneHotLabelEncoder
+from finetune.utils import find_trainable_variables, get_available_gpus, shape_list, assign_to_gpu, average_grads, \
+    iter_data, soft_split, OrdinalClassificationEncoder, OneHotLabelEncoder
 from finetune.transformer import block, dropout, embed
 
 SHAPES_PATH = os.path.join(os.path.dirname(__file__), '..', 'model', 'params_shapes.json')
@@ -170,7 +171,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                 if global_step % val_interval == 0:
                     summary = self.sess.run([self.summaries], {self.X: xmb, self.M: mmb, self.Y: ymb})
                     self.train_writer.add_summary(summary, global_step)
-                    
+
                     sum_val_loss = 0
                     for xval, mval, yval in iter_data(*val_dataset, n_batch=n_batch_train, verbose=True):
                         val_cost, summary = self.sess.run([self.clf_loss, self.summaries],
@@ -186,7 +187,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                         _LOGGER.info("Autosaving new best model.")
                         self.save(self.autosave_path)
                         _LOGGER.info("Done!!")
-                cost, _= self.sess.run([self.clf_loss, self.train_op], {self.X: xmb, self.M: mmb, self.Y: ymb})
+                cost, _ = self.sess.run([self.clf_loss, self.train_op], {self.X: xmb, self.M: mmb, self.Y: ymb})
                 self.train_writer.add_summary(summary, global_step)
                 avg_train_loss = avg_train_loss * ROLLING_AVG_DECAY + cost * (1 - ROLLING_AVG_DECAY)
                 _LOGGER.info("\nTRAIN: LOSS = {}, ROLLING AVG = {}".format(cost, avg_train_loss))
@@ -530,6 +531,60 @@ class LanguageModelClassifier(LanguageModelBase):
         :param val_interval: The interval for which validation is performed, measured in number of steps.
         """
         return self._finetune(X, Y=Y, batch_size=batch_size, val_size=val_size, val_interval=val_interval)
+
+
+class LanguageModelGeneralAPI(LanguageModelBase): # TODO (BEN) add regression vs classification.
+    def _text_to_ids(self, *Xs, max_length=None):
+        max_length = max_length or self.max_length
+
+        question_answer_pairs = self.encoder.encode_multi_input(*Xs, max_length=max_length)
+
+        tokens, mask = self._array_format(question_answer_pairs)
+        return tokens, mask
+
+    def finetune(self, Xs, Y, batch_size=BATCH_SIZE, val_size=0.05, val_interval=150):
+        """
+        :param Xs: An itterable of lists or array of text, shape [n_inputs, batch, tokens]
+        :param Y: integer or string-valued class labels. It is necessary for the items of Y to be sortable.
+        :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
+                           corresponds to the number of training examples provided to each GPU.
+        :param val_size: Float fraction or int number that represents the size of the validation set.
+        :param val_interval: The interval for which validation is performed, measured in number of steps.
+        """
+        return self._finetune(*Xs, Y=Y, batch_size=batch_size, val_size=val_size, val_interval=val_interval)
+
+    def predict(self, Xs, max_length=None):
+        """
+        Produces a list of most likely class labels as determined by the fine-tuned model.
+
+        :param Xs: An itterable of lists or array of text, shape [n_inputs, batch, tokens]
+        :param max_length: the number of tokens to be included in the document representation.
+                           Providing more than `max_length` tokens as input will result in truncation.
+        :returns: list of class labels.
+        """
+        return self.label_encoder.inverse_transform(self._predict_proba(*Xs, max_length=max_length))
+
+    def predict_proba(self, Xs, max_length=None):
+        """
+        Produces X_2 probability distribution over classes for each example in X.
+
+        :param Xs: An itterable of lists or array of text, shape [n_inputs, batch, tokens]
+        :param max_length: the number of tokens to be included in the document representation.
+                           Providing more than `max_length` tokens as input will result in truncation.
+        :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
+        """
+        return self._predict_proba(*Xs, max_length=max_length)
+
+    def featurize(self, Xs, max_length=None):
+        """
+        Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
+
+        :param Xs: An itterable of lists or array of text, shape [n_inputs, batch, tokens]
+        :param max_length: the number of tokens to be included in the document representation.
+                           Providing more than `max_length` tokens as input will result in truncation.
+        :returns: np.array of features of shape (n_examples, embedding_size).
+        """
+        return self._featurize(*Xs, max_length=max_length)
 
 
 class LanguageModelEntailment(LanguageModelBase):
