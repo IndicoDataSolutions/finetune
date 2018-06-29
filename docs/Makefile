@@ -6,7 +6,7 @@ SPHINXOPTS    =
 SPHINXBUILD   = sphinx-build
 SPHINXPROJ    = finetune
 SOURCEDIR     = .
-BUILDDIR      = _build
+BUILDDIR      = ../../finetune-docs
 
 # Put it first so that "make" without argument is like "make help".
 help:

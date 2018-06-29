@@ -19,7 +19,6 @@ from finetune.config import (
     WEIGHT_STDDEV, EMBED_P_DROP, RESID_P_DROP, N_HEADS, N_LAYER,
     ATTN_P_DROP, ACT_FN, LR, B1, B2, L2_REG, VECTOR_L2,
     EPSILON, LR_SCHEDULE, MAX_GRAD_NORM, LM_LOSS_COEF, LR_WARMUP
-    
 )
 from finetune.utils import find_trainable_variables, get_available_gpus, shape_list, assign_to_gpu, average_grads, iter_data, soft_split, OrdinalClassificationEncoder, OneHotLabelEncoder
 from finetune.transformer import block, dropout, embed
@@ -168,9 +167,10 @@ class LanguageModelBase(object, metaclass=ABCMeta):
             for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=True):
                 global_step += 1
                 if global_step % val_interval == 0:
+
                     summary = self.sess.run([self.summaries], {self.X: xmb, self.M: mmb, self.Y: ymb})
                     self.train_writer.add_summary(summary, global_step)
-                    
+
                     sum_val_loss = 0
                     for xval, mval, yval in iter_data(*val_dataset, n_batch=n_batch_train, verbose=True):
                         val_cost, summary = self.sess.run([self.clf_loss, self.summaries],
@@ -181,13 +181,14 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                         _LOGGER.info("\nVAL: LOSS = {}, ROLLING AVG = {}".format(val_cost, avg_val_loss))
                     val_window.append(sum_val_loss)
                     val_window.pop(0)
+
                     if np.mean(val_window) <= best_val_loss:
                         best_val_loss = np.mean(val_window)
                         _LOGGER.info("Autosaving new best model.")
                         self.save(self.autosave_path)
                         _LOGGER.info("Done!!")
+
                 cost, _= self.sess.run([self.clf_loss, self.train_op], {self.X: xmb, self.M: mmb, self.Y: ymb})
-                self.train_writer.add_summary(summary, global_step)
                 avg_train_loss = avg_train_loss * ROLLING_AVG_DECAY + cost * (1 - ROLLING_AVG_DECAY)
                 _LOGGER.info("\nTRAIN: LOSS = {}, ROLLING AVG = {}".format(cost, avg_train_loss))
 
