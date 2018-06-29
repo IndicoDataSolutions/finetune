@@ -14,7 +14,11 @@ import enso
 from enso.download import generic_download
 from sklearn.metrics import accuracy_score
 
+from finetune import config
 from finetune import LanguageModelClassifier
+
+config.BATCH_SIZE = 1
+config.MAX_LENGTH = 128
 
 SST_FILENAME = "SST-binary.csv"
 

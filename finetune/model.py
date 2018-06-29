@@ -167,6 +167,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
             for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=True):
                 global_step += 1
                 if global_step % val_interval == 0:
+
                     summary = self.sess.run([self.summaries], {self.X: xmb, self.M: mmb, self.Y: ymb})
                     self.train_writer.add_summary(summary, global_step)
 
@@ -180,13 +181,14 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                         _LOGGER.info("\nVAL: LOSS = {}, ROLLING AVG = {}".format(val_cost, avg_val_loss))
                     val_window.append(sum_val_loss)
                     val_window.pop(0)
+
                     if np.mean(val_window) <= best_val_loss:
                         best_val_loss = np.mean(val_window)
                         _LOGGER.info("Autosaving new best model.")
                         self.save(self.autosave_path)
                         _LOGGER.info("Done!!")
+
                 cost, _= self.sess.run([self.clf_loss, self.train_op], {self.X: xmb, self.M: mmb, self.Y: ymb})
-                self.train_writer.add_summary(summary, global_step)
                 avg_train_loss = avg_train_loss * ROLLING_AVG_DECAY + cost * (1 - ROLLING_AVG_DECAY)
                 _LOGGER.info("\nTRAIN: LOSS = {}, ROLLING AVG = {}".format(cost, avg_train_loss))
 
