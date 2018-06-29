@@ -41,3 +41,6 @@ def download_data_if_required():
             fd = open(local_filepath, 'wb')
             fd.write(data)
             fd.close()
+
+if __name__ == "__main__":
+    download_data_if_required()

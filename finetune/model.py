@@ -11,9 +11,9 @@ import numpy as np
 from sklearn.utils import shuffle
 
 from functools import partial
+from finetune.download import download_data_if_required
 from finetune.encoding import TextEncoder
 from finetune.optimizers import AdamWeightDecay, schedules
-from finetune.download import download_data_if_required
 from sklearn.model_selection import train_test_split
 from finetune.config import (
     MAX_LENGTH, BATCH_SIZE, N_EPOCHS, CLF_P_DROP, SEED,
@@ -114,8 +114,9 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         self.verbose = verbose
 
     def _initialize(self):
-        download_data_if_required()
         self._set_random_seed(SEED)
+
+        download_data_if_required()
         self.encoder = TextEncoder()
 
         # symbolic ops
@@ -597,41 +598,3 @@ class LanguageModelEntailment(LanguageModelBase):
         :returns: np.array of features of shape (n_examples, embedding_size).
         """
         return self._featurize(X_1, X_2, max_length=max_length)
-
-
-if __name__ == "__main__":
-
-    with open("data/questions.json", "rt") as fp:
-        data = json.load(fp)
-
-    scores = []
-    questions = []
-    answers = []
-    for item in data:
-        row = data[item]
-        scores.append(row["score"])
-        questions.append(row["question"])
-        answers.append(row["answers"][0]["answer"])
-
-    scores_train, scores_test, ques_train, ques_test, ans_train, ans_test = train_test_split(
-        scores, questions, answers, test_size=0.33, random_state=5)
-    save_path = 'saved-models/cola'
-
-    model = LanguageModelEntailment(save_path)
-
-    model.finetune(ques_train, ans_train, scores_train)
-
-    model = LanguageModelEntailment.load(save_path)
-
-    print("TRAIN EVAL")
-    predictions = model.predict(ques_train, ans_train)
-    print(predictions)
-
-    from scipy.stats import spearmanr
-
-    print(spearmanr(predictions, scores_train))
-
-    print("TEST EVAL")
-    predictions = model.predict(ques_test, ans_test)
-    print(predictions)
-    print(spearmanr(predictions, scores_test))

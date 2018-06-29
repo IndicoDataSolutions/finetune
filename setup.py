@@ -17,7 +17,6 @@ REQUIREMENTS = [
     "ftfy>=4.4.0",
     "spacy>=2.0.0",
     "msgpack-numpy>=0.4.1",
-    "sh>=1.12.14"
 ]
 
 setup(

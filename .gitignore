@@ -109,3 +109,5 @@ venv.bak/
 *.jsonl
 
 .vscode
+
+finetune/model/*
