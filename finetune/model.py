@@ -97,6 +97,17 @@ def classifier(hidden, targets, n_classes, train=False, reuse=None):
         }
 
 
+def regressor(hidden, targets, n_classes, train=False, reuse=None):
+    with tf.variable_scope('model', reuse=reuse):
+        hidden = dropout(hidden, CLF_P_DROP, train)
+        outputs = clf(hidden, n_classes)
+        loss = tf.nn.l2_loss(outputs - targets)
+        return {
+            'logits': outputs,
+            'losses': loss
+        }
+
+
 class LanguageModelBase(object, metaclass=ABCMeta):
     """
     A sklearn-style class for finetuning a Transformer language model on a classification task.
@@ -108,11 +119,12 @@ class LanguageModelBase(object, metaclass=ABCMeta):
     def __init__(self, autosave_path, max_length=MAX_LENGTH, verbose=True):
         self.max_length = max_length
         self.autosave_path = autosave_path
-        self.label_encoder = OneHotLabelEncoder()
+        self.label_encoder = None
         self._initialize()
         self.n_classes = None
         self._load_from_file = False
         self.verbose = verbose
+        self.is_classification = None
 
     def _initialize(self):
         self._set_random_seed(SEED)
@@ -139,6 +151,22 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         tokens, mask = self._array_format(token_idxs)
         return tokens, mask
 
+    def feat_to_logits(self, hidden, targets, n_classes, train=False, reuse=None):
+        if self.is_classification:
+            return classifier(hidden, targets, n_classes, train=train, reuse=reuse)
+        return regressor(hidden, targets, n_classes, train=train, reuse=reuse)
+
+    def logits_to_predict(self, logits):
+        if self.is_classification:
+            return tf.argmax(logits, -1), tf.nn.softmax(logits, -1)
+        return logits
+
+    def get_target_encoder(self):
+        if self.is_classification:
+            return OneHotLabelEncoder()
+        else:
+            return #TODO(BEN) regression encoder
+
     def _finetune(self, *Xs, Y, batch_size=BATCH_SIZE, val_size=0.05, val_interval=150, val_window_size=5):
         """
         X: List / array of text
@@ -146,6 +174,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         val_size: Float fraction or int number that represents the size of the validation set.
         val_interval: The interval for which validation is performed, measured in number of steps.
         """
+        self.label_encoder = self.get_target_encoder()
         train_x, train_mask = self._text_to_ids(*Xs)
         n_batch_train = batch_size * max(len(get_available_gpus()), 1)
         n_updates_total = (len(Y) // n_batch_train) * N_EPOCHS
@@ -340,7 +369,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                 features_aggregator.append(featurizer_state['features'])
 
                 if n_classes is not None:
-                    classifier_state = classifier(
+                    classifier_state = self.feat_to_logits(
                         hidden=featurizer_state['features'],
                         targets=Y,
                         n_classes=n_classes,
@@ -368,8 +397,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
 
         if n_classes is not None:
             self.logits, self.clf_losses, self.lm_losses = [tf.concat(op, 0) for op in zip(*losses_aggregator)]
-            self.predict_op = tf.argmax(self.logits, -1)
-            self.predict_proba_op = tf.nn.softmax(self.logits, -1)
+            self.predict_op, self.predict_proba_op = self.logits_to_predict(self.logits)
             self._compile_train_op(
                 params=params,
                 grads=gpu_grads,
@@ -530,15 +558,18 @@ class LanguageModelClassifier(LanguageModelBase):
         :param val_size: Float fraction or int number that represents the size of the validation set.
         :param val_interval: The interval for which validation is performed, measured in number of steps.
         """
+        self.is_classification = True
         return self._finetune(X, Y=Y, batch_size=batch_size, val_size=val_size, val_interval=val_interval)
 
 
-class LanguageModelGeneralAPI(LanguageModelBase): # TODO (BEN) add regression vs classification.
+class LanguageModelGeneralAPI(LanguageModelBase):  # TODO (BEN) add regression vs classification.
+    def __init__(self, autosave_path, max_length=MAX_LENGTH, verbose=True, is_classification=None):
+        super().__init__(autosave_path=autosave_path, max_length=max_length, verbose=verbose)
+        self.is_classification = is_classification
+
     def _text_to_ids(self, *Xs, max_length=None):
         max_length = max_length or self.max_length
-
         question_answer_pairs = self.encoder.encode_multi_input(*Xs, max_length=max_length)
-
         tokens, mask = self._array_format(question_answer_pairs)
         return tokens, mask
 
@@ -551,6 +582,7 @@ class LanguageModelGeneralAPI(LanguageModelBase): # TODO (BEN) add regression vs
         :param val_size: Float fraction or int number that represents the size of the validation set.
         :param val_interval: The interval for which validation is performed, measured in number of steps.
         """
+        self.is_classification = self.is_classification or all(isinstance(x, int) for x in Y) # problem type inferrence.
         return self._finetune(*Xs, Y=Y, batch_size=batch_size, val_size=val_size, val_interval=val_interval)
 
     def predict(self, Xs, max_length=None):
@@ -566,7 +598,7 @@ class LanguageModelGeneralAPI(LanguageModelBase): # TODO (BEN) add regression vs
 
     def predict_proba(self, Xs, max_length=None):
         """
-        Produces X_2 probability distribution over classes for each example in X.
+        Produces a probability distribution over classes for each example in X.
 
         :param Xs: An itterable of lists or array of text, shape [n_inputs, batch, tokens]
         :param max_length: the number of tokens to be included in the document representation.
@@ -589,9 +621,8 @@ class LanguageModelGeneralAPI(LanguageModelBase): # TODO (BEN) add regression vs
 
 class LanguageModelEntailment(LanguageModelBase):
 
-    def __init__(self, *args, **vargs):
-        super().__init__(*args, **vargs)
-        self.label_encoder = OrdinalClassificationEncoder()
+    def get_target_encoder(self):
+        return OrdinalClassificationEncoder()
 
     def _text_to_ids(self, *Xs, max_length=None):
         max_length = max_length or self.max_length
@@ -612,6 +643,7 @@ class LanguageModelEntailment(LanguageModelBase):
         :param val_size: Float fraction or int number that represents the size of the validation set.
         :param val_interval: The interval for which validation is performed, measured in number of steps.
         """
+        self.is_classification = True
         return self._finetune(X_1, X_2, Y=Y, batch_size=batch_size, val_size=val_size, val_interval=val_interval)
 
     def predict(self, X_1, X_2, max_length=None):
