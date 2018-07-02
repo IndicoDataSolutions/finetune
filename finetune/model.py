@@ -18,10 +18,11 @@ from finetune.config import (
     MAX_LENGTH, BATCH_SIZE, N_EPOCHS, CLF_P_DROP, SEED,
     WEIGHT_STDDEV, EMBED_P_DROP, RESID_P_DROP, N_HEADS, N_LAYER,
     ATTN_P_DROP, ACT_FN, LR, B1, B2, L2_REG, VECTOR_L2,
-    EPSILON, LR_SCHEDULE, MAX_GRAD_NORM, LM_LOSS_COEF, LR_WARMUP
-    
+    EPSILON, LR_SCHEDULE, MAX_GRAD_NORM, LM_LOSS_COEF, LR_WARMUP, LM_DECODE_TEMP
+
 )
-from finetune.utils import find_trainable_variables, get_available_gpus, shape_list, assign_to_gpu, average_grads, iter_data, soft_split, OrdinalClassificationEncoder, OneHotLabelEncoder
+from finetune.utils import find_trainable_variables, get_available_gpus, shape_list, assign_to_gpu, average_grads, \
+    iter_data, soft_split, OrdinalClassificationEncoder, OneHotLabelEncoder, sample_with_temperature
 from finetune.transformer import block, dropout, embed
 
 SHAPES_PATH = os.path.join(os.path.dirname(__file__), '..', 'model', 'params_shapes.json')
@@ -121,6 +122,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         self.logits = None  # classification logits
         self.clf_loss = None  # cross-entropy loss
         self.lm_losses = None  # language modeling losses
+        self.lm_predict_op = None
         self.train = None  # gradient + parameter update
         self.features = None  # hidden representation fed to classifier
         self.summaries = None  # Tensorboard summaries
@@ -170,7 +172,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                 if global_step % val_interval == 0:
                     summary = self.sess.run([self.summaries], {self.X: xmb, self.M: mmb, self.Y: ymb})
                     self.train_writer.add_summary(summary, global_step)
-                    
+
                     sum_val_loss = 0
                     for xval, mval, yval in iter_data(*val_dataset, n_batch=n_batch_train, verbose=True):
                         val_cost, summary = self.sess.run([self.clf_loss, self.summaries],
@@ -186,7 +188,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                         _LOGGER.info("Autosaving new best model.")
                         self.save(self.autosave_path)
                         _LOGGER.info("Done!!")
-                cost, _= self.sess.run([self.clf_loss, self.train_op], {self.X: xmb, self.M: mmb, self.Y: ymb})
+                cost, _ = self.sess.run([self.clf_loss, self.train_op], {self.X: xmb, self.M: mmb, self.Y: ymb})
                 self.train_writer.add_summary(summary, global_step)
                 avg_train_loss = avg_train_loss * ROLLING_AVG_DECAY + cost * (1 - ROLLING_AVG_DECAY)
                 _LOGGER.info("\nTRAIN: LOSS = {}, ROLLING AVG = {}".format(cost, avg_train_loss))
@@ -313,6 +315,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
 
         features_aggregator = []
         losses_aggregator = []
+        lm_aggregator = []
 
         train_loss_tower = 0
         gpus = get_available_gpus()
@@ -337,6 +340,9 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                     reuse=do_reuse
                 )
                 features_aggregator.append(featurizer_state['features'])
+
+                lm_logits = language_model_state["lm_logits"]
+                lm_aggregator.append(sample_with_temperature(lm_logits, LM_DECODE_TEMP))
 
                 if n_classes is not None:
                     classifier_state = classifier(
@@ -364,6 +370,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                     ])
 
         self.features = tf.concat(features_aggregator, 0)
+        self.lm_predict_op = tf.concat(lm_aggregator, 0)
 
         if n_classes is not None:
             self.logits, self.clf_losses, self.lm_losses = [tf.concat(op, 0) for op in zip(*losses_aggregator)]
@@ -410,6 +417,16 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         self.X = tf.placeholder(tf.int32, [None, self.max_length, 2])  # token idxs (BPE embedding + positional)
         self.M = tf.placeholder(tf.float32, [None, self.max_length])  # sequence mask
         self.Y = tf.placeholder(tf.float32, [None, self.n_classes])  # classification targets
+
+    def lm_predict(self, max_length=None):
+        string = [self.encoder['_start_']]
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore")
+            for _ in range(max_length or self.max_length):
+                tokens, mask = self._array_format([string])
+                class_idx = self.sess.run(self.lm_predict_op, {self.X: tokens, self.M: mask})
+                string.append(class_idx)
+        return self.encoder.decode(string)
 
     def _load_base_model(self):
         """

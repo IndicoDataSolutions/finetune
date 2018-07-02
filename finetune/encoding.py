@@ -54,11 +54,12 @@ class TextEncoder(object):
     def __init__(self):
         self.nlp = spacy.load('en', disable=['parser', 'tagger', 'ner', 'textcat'])
         self.encoder = json.load(open(ENCODER_PATH))
-        self.decoder = {v:k for k,v in self.encoder.items()}
 
         self.special_tokens = ['_start_', '_delimiter_', '_classify_']
         for token in self.special_tokens:
             self.encoder[token] = len(self.encoder)
+
+        self.decoder = {v: k for k, v in self.encoder.items()}
 
         merges = open(BPE_PATH).read().split('\n')[1:-1]
         merges = [tuple(merge.split()) for merge in merges]
@@ -137,6 +138,16 @@ class TextEncoder(object):
                 ])
             batch_token_idxs.append(token_idxs)
         return batch_token_idxs
+
+    def decode(self, ids):
+        """
+        Convert a batch of ids [batch_size, id] into text(ish).
+        """
+        output_text = []
+        for sequence in ids:
+            output_text.append("".join([self.decoder[word_idx] for word_idx in sequence]))
+        return output_text
+
 
     def encode_for_classification(self, texts, max_length=MAX_LENGTH, verbose=True):
         """

@@ -28,3 +28,6 @@ LR = 6.25e-5
 LR_WARMUP = 0.002
 MAX_GRAD_NORM = 1
 LM_LOSS_COEF = 0.5
+
+# Language Modelling Endpoint
+LM_DECODE_TEMP = 0.5
