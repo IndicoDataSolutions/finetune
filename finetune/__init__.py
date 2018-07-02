@@ -1,1 +1,1 @@
-from .model import LanguageModelClassifier
+from .model import LanguageModelClassifier, LanguageModelGeneralAPI, LanguageModelEntailment
