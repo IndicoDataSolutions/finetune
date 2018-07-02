@@ -12,6 +12,7 @@ import enso
 from enso.download import generic_download
 
 from finetune import LanguageModelGeneralAPI
+import numpy as np
 
 SST_FILENAME = "SST-binary.csv"
 
@@ -69,3 +70,23 @@ class TestLanguageModelClassifier(unittest.TestCase):
         for i, prediction in enumerate(predictions):
             self.assertEqual(prediction, new_predictions[i])
 
+
+    def test_multifield_classify(self):
+        """                                                                                                                                                                         
+        Ensure fit predict works.                                                                                                                                                   
+        Ensure saving + loading does not cause errors                                                                                                                               
+        Ensure saving + loading does not change predictions                                                                                                                         
+        """
+        save_file_autosave = 'tests/saved-models/autosave_path'
+        save_file = 'tests/saved-models/test-save-load'
+        model = LanguageModelGeneralAPI(verbose=False, autosave_path=save_file_autosave)
+        train_sample = self.dataset.sample(n=self.n_sample)
+        valid_sample = self.dataset.sample(n=self.n_sample)
+        model.fit([train_sample.Text] * 3, [np.random.random() for _ in train_sample.Target])
+        self.assertTrue(not model.is_classification)
+        predictions = model.predict([valid_sample.Text] * 3)
+        model.save(save_file)
+        model = LanguageModelGeneralAPI.load(save_file)
+        new_predictions = model.predict([valid_sample.Text] * 3)
+        for i, prediction in enumerate(predictions):
+            self.assertEqual(prediction, new_predictions[i])

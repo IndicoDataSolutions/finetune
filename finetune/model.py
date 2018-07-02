@@ -22,7 +22,7 @@ from finetune.config import (
 
 )
 from finetune.utils import find_trainable_variables, get_available_gpus, shape_list, assign_to_gpu, average_grads, \
-    iter_data, soft_split, OrdinalClassificationEncoder, OneHotLabelEncoder
+    iter_data, soft_split, OrdinalClassificationEncoder, OneHotLabelEncoder, RegressionEncoder
 from finetune.transformer import block, dropout, embed
 
 SHAPES_PATH = os.path.join(os.path.dirname(__file__), '..', 'model', 'params_shapes.json')
@@ -159,13 +159,13 @@ class LanguageModelBase(object, metaclass=ABCMeta):
     def logits_to_predict(self, logits):
         if self.is_classification:
             return tf.argmax(logits, -1), tf.nn.softmax(logits, -1)
-        return logits
+        return logits, logits
 
     def get_target_encoder(self):
         if self.is_classification:
             return OneHotLabelEncoder()
         else:
-            return #TODO(BEN) regression encoder
+            return RegressionEncoder()
 
     def _finetune(self, *Xs, Y, batch_size=BATCH_SIZE, val_size=0.05, val_interval=150, val_window_size=5):
         """
@@ -463,7 +463,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         Leave serialization of all tf objects to tf
         """
         required_fields = [
-            'label_encoder', 'max_length', 'n_classes', '_load_from_file', 'verbose', 'autosave_path'
+            'label_encoder', 'max_length', 'n_classes', '_load_from_file', 'verbose', 'autosave_path', 'is_classification'
         ]
         serialized_state = {
             k: v for k, v in self.__dict__.items()
@@ -593,7 +593,7 @@ class LanguageModelGeneralAPI(LanguageModelBase):  # TODO (BEN) add regression v
                            Providing more than `max_length` tokens as input will result in truncation.
         :returns: list of class labels.
         """
-        return self.label_encoder.inverse_transform(self._predict_proba(*Xs, max_length=max_length))
+        return self._predict(*Xs, max_length=max_length)
 
     def predict_proba(self, Xs, max_length=None):
         """
