@@ -46,7 +46,7 @@ class TestLanguageModelClassifier(unittest.TestCase):
         cls._download_sst()
 
     def setUp(self):
-        self.save_file_autosave = 'tests/saved-models/autosave_path'
+        save_file_autosave = 'tests/saved-models/autosave_path'
         self.save_file = 'tests/saved-models/test-save-load'
         self.model = LanguageModelGeneralAPI(verbose=False, autosave_path=save_file_autosave)
 

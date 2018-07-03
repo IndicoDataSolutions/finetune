@@ -371,7 +371,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                     classifier_state = self.feat_to_logits(
                         hidden=featurizer_state['features'],
                         targets=Y,
-                        n_classes=n_classes,
+                        n_outputs=n_classes,
                         train=train,
                         reuse=do_reuse
                     )
