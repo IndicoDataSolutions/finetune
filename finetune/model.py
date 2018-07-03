@@ -97,10 +97,10 @@ def classifier(hidden, targets, n_classes, train=False, reuse=None):
         }
 
 
-def regressor(hidden, targets, n_classes, train=False, reuse=None):
+def regressor(hidden, targets, n_outputs, train=False, reuse=None):
     with tf.variable_scope('model', reuse=reuse):
         hidden = dropout(hidden, CLF_P_DROP, train)
-        outputs = clf(hidden, n_classes)
+        outputs = clf(hidden, n_outputs)
         loss = tf.nn.l2_loss(outputs - targets)
         return {
             'logits': outputs,
@@ -151,10 +151,10 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         tokens, mask = self._array_format(token_idxs)
         return tokens, mask
 
-    def feat_to_logits(self, hidden, targets, n_classes, train=False, reuse=None):
+    def feat_to_logits(self, hidden, targets, n_outputs, train=False, reuse=None):
         if self.is_classification:
-            return classifier(hidden, targets, n_classes, train=train, reuse=reuse)
-        return regressor(hidden, targets, n_classes, train=train, reuse=reuse)
+            return classifier(hidden, targets, n_outputs, train=train, reuse=reuse)
+        return regressor(hidden, targets, n_outputs, train=train, reuse=reuse)
 
     def logits_to_predict(self, logits):
         if self.is_classification:
@@ -574,48 +574,48 @@ class LanguageModelGeneralAPI(LanguageModelBase):  # TODO (BEN) add regression v
 
     def finetune(self, Xs, Y, batch_size=BATCH_SIZE, val_size=0.05, val_interval=150):
         """
-        :param Xs: An itterable of lists or array of text, shape [n_inputs, batch, tokens]
+        :param Xs: An iterable of lists or array of text, shape [batch, n_inputs, tokens]
         :param Y: integer or string-valued class labels. It is necessary for the items of Y to be sortable.
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
         :param val_size: Float fraction or int number that represents the size of the validation set.
         :param val_interval: The interval for which validation is performed, measured in number of steps.
         """
-        self.is_classification = self.is_classification or all(isinstance(x, int) for x in Y) # problem type inferrence.
-        return self._finetune(*Xs, Y=Y, batch_size=batch_size, val_size=val_size, val_interval=val_interval)
+        self.is_classification = self.is_classification or not np.array(Y).dtype == 'float'  # problem type inferrence.
+        return self._finetune(*list(zip(*Xs)), Y=Y, batch_size=batch_size, val_size=val_size, val_interval=val_interval)
 
     def predict(self, Xs, max_length=None):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
-        :param Xs: An itterable of lists or array of text, shape [n_inputs, batch, tokens]
+        :param Xs: An iterable of lists or array of text, shape [batch, n_inputs, tokens]
         :param max_length: the number of tokens to be included in the document representation.
                            Providing more than `max_length` tokens as input will result in truncation.
         :returns: list of class labels.
         """
-        return self._predict(*Xs, max_length=max_length)
+        return self._predict(*list(zip(*Xs)), max_length=max_length)
 
     def predict_proba(self, Xs, max_length=None):
         """
         Produces a probability distribution over classes for each example in X.
 
-        :param Xs: An itterable of lists or array of text, shape [n_inputs, batch, tokens]
+        :param Xs: An iterable of lists or array of text, shape [batch, n_inputs, tokens]
         :param max_length: the number of tokens to be included in the document representation.
                            Providing more than `max_length` tokens as input will result in truncation.
         :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
         """
-        return self._predict_proba(*Xs, max_length=max_length)
+        return self._predict_proba(*list(zip(*Xs)), max_length=max_length)
 
     def featurize(self, Xs, max_length=None):
         """
         Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
 
-        :param Xs: An itterable of lists or array of text, shape [n_inputs, batch, tokens]
+        :param Xs: An iterable of lists or array of text, shape [batch, n_inputs, tokens]
         :param max_length: the number of tokens to be included in the document representation.
                            Providing more than `max_length` tokens as input will result in truncation.
         :returns: np.array of features of shape (n_examples, embedding_size).
         """
-        return self._featurize(*Xs, max_length=max_length)
+        return self._featurize(*list(zip(*Xs)), max_length=max_length)
 
 
 class LanguageModelEntailment(LanguageModelBase):
