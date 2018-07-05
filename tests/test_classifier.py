@@ -1,6 +1,7 @@
 import os
 import unittest
 import logging
+import shutil
 from copy import copy
 from pathlib import Path
 
@@ -52,6 +53,11 @@ class TestLanguageModelClassifier(unittest.TestCase):
     def setUp(self):
         self.dataset = pd.read_csv(self.dataset_path, nrows=self.n_sample*3)
         tf.reset_default_graph()
+
+
+    def tearDown(self):
+        shutil.rmtree("tests/saved-models/")
+
 
     def test_fit_predict(self):
         """

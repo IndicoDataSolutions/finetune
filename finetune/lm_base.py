@@ -26,8 +26,8 @@ from finetune.network_modules import featurizer, language_model, classifier, reg
 from finetune.utils import find_trainable_variables, get_available_gpus, assign_to_gpu, average_grads, \
     iter_data, soft_split, sample_with_temperature
 
-SHAPES_PATH = os.path.join(os.path.dirname(__file__), '..', 'model', 'params_shapes.json')
-PARAM_PATH = os.path.join(os.path.dirname(__file__), '..', 'model', 'params_{}.npy')
+SHAPES_PATH = os.path.join(os.path.dirname(__file__), 'model', 'params_shapes.json')
+PARAM_PATH = os.path.join(os.path.dirname(__file__), 'model', 'params_{}.npy')
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -382,7 +382,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         :return: A string containing the generated text.
         """
         seed_text_tokens = self.encoder.encode([seed_text])
-        self._build_model(n_updates_total=0, n_classes=self.n_classes, train=False)
+        self._build_model(n_updates_total=0, target_dim=self.target_dim, train=False)
         string = [self.encoder['_start_']] + seed_text_tokens[0]
         eos = [self.encoder['_classify_']]
         with warnings.catch_warnings():
