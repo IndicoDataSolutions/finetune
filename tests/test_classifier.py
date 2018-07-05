@@ -14,6 +14,7 @@ import enso
 from enso.download import generic_download
 from sklearn.metrics import accuracy_score
 
+from finetune import config
 from finetune import LanguageModelClassifier
 
 SST_FILENAME = "SST-binary.csv"
@@ -35,7 +36,7 @@ class TestLanguageModelClassifier(unittest.TestCase):
         if path.exists():
             return
 
-        path.mkdir(parents=True, exist_ok=True)
+        path.parent.mkdir(parents=True, exist_ok=True)
         generic_download(
             url="https://s3.amazonaws.com/enso-data/SST-binary.csv",
             text_column="Text",
@@ -49,7 +50,7 @@ class TestLanguageModelClassifier(unittest.TestCase):
         cls._download_sst()
 
     def setUp(self):
-        self.dataset = pd.read_csv(self.dataset_path)
+        self.dataset = pd.read_csv(self.dataset_path, nrows=self.n_sample*3)
         tf.reset_default_graph()
 
     def test_fit_predict(self):
@@ -106,10 +107,11 @@ class TestLanguageModelClassifier(unittest.TestCase):
     def test_reasonable_predictions(self):
         save_file_autosave = 'tests/saved-models/autosave_path'
         model = LanguageModelClassifier(verbose=False, autosave_path=save_file_autosave)
-        trX = ['cat'] * 100 + ['finance']  * 100
+        n_per_class = self.n_sample // 2
+        trX = ['cat'] * n_per_class + ['finance']  * n_per_class
         trY = copy(trX)
-        teX = ['feline'] * 10 + ['investment'] * 10
-        teY = ['cat'] * 10 + ['finance'] * 10
+        teX = ['feline'] * n_per_class + ['investment'] * n_per_class
+        teY = ['cat'] * n_per_class + ['finance'] * n_per_class
         model.fit(trX, trY)
         predY = model.predict(teX)
         self.assertEqual(accuracy_score(teY, predY), 1.00)

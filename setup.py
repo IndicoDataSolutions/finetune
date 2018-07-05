@@ -1,8 +1,10 @@
 """
 IndicoAPI setup
 """
+import os
 from sys import version_info
 from setuptools import setup, find_packages
+from pathlib import Path
 
 REQUIREMENTS = [
     "pandas>=0.23.1",
@@ -16,9 +18,11 @@ REQUIREMENTS = [
     "spacy>=2.0.0",
     "msgpack-numpy>=0.4.1",
 ]
+
 setup(
     name="finetune",
     packages=find_packages(),
     version="0.1.0",
     install_requires=REQUIREMENTS,
+    include_package_data=False
 )
