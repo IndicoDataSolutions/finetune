@@ -11,90 +11,25 @@ import numpy as np
 from sklearn.utils import shuffle
 
 from functools import partial
+
+from finetune.download import download_data_if_required
 from finetune.encoding import TextEncoder
 from finetune.optimizers import AdamWeightDecay, schedules
 from sklearn.model_selection import train_test_split
 from finetune.config import (
-    MAX_LENGTH, BATCH_SIZE, N_EPOCHS, CLF_P_DROP, SEED,
-    WEIGHT_STDDEV, EMBED_P_DROP, RESID_P_DROP, N_HEADS, N_LAYER,
-    ATTN_P_DROP, ACT_FN, LR, B1, B2, L2_REG, VECTOR_L2,
-    EPSILON, LR_SCHEDULE, MAX_GRAD_NORM, LM_LOSS_COEF, LR_WARMUP, LM_DECODE_TEMP
-
+    MAX_LENGTH, BATCH_SIZE, N_EPOCHS, SEED, WEIGHT_STDDEV, LR, B1, B2, L2_REG, VECTOR_L2,
+    EPSILON, LR_SCHEDULE, MAX_GRAD_NORM, LM_LOSS_COEF, LR_WARMUP, N_EMBED, ROLLING_AVG_DECAY, LM_DECODE_TEMP
 )
-from finetune.utils import find_trainable_variables, get_available_gpus, shape_list, assign_to_gpu, average_grads, \
-    iter_data, soft_split, OrdinalClassificationEncoder, OneHotLabelEncoder, sample_with_temperature
-from finetune.transformer import block, dropout, embed
+
+from finetune.target_encoders import OneHotLabelEncoder, RegressionEncoder
+from finetune.network_modules import featurizer, language_model, classifier, regressor
+from finetune.utils import find_trainable_variables, get_available_gpus, assign_to_gpu, average_grads, \
+    iter_data, soft_split, sample_with_temperature
 
 SHAPES_PATH = os.path.join(os.path.dirname(__file__), '..', 'model', 'params_shapes.json')
 PARAM_PATH = os.path.join(os.path.dirname(__file__), '..', 'model', 'params_{}.npy')
-N_EMBED = 768
-
-ROLLING_AVG_DECAY = 0.99
 
 _LOGGER = logging.getLogger(__name__)
-
-
-def clf(x, ny, w_init=tf.random_normal_initializer(stddev=WEIGHT_STDDEV), b_init=tf.constant_initializer(0)):
-    with tf.variable_scope('clf'):
-        nx = shape_list(x)[-1]
-        w = tf.get_variable("w", [nx, ny], initializer=w_init)
-        b = tf.get_variable("b", [ny], initializer=b_init)
-        return tf.matmul(x, w) + b
-
-
-def featurizer(X, encoder, train=False, reuse=None, max_length=MAX_LENGTH):
-    with tf.variable_scope('model', reuse=reuse):
-        embed_weights = tf.get_variable("we", [encoder.vocab_size + max_length, N_EMBED],
-                                        initializer=tf.random_normal_initializer(stddev=WEIGHT_STDDEV))
-        embed_weights = dropout(embed_weights, EMBED_P_DROP, train)
-
-        X = tf.reshape(X, [-1, max_length, 2])
-
-        h = embed(X, embed_weights)
-        for layer in range(N_LAYER):
-            h = block(h, N_HEADS, ACT_FN, RESID_P_DROP, ATTN_P_DROP, 'h%d' % layer, train=train, scale=True)
-
-        # Use hidden state at classifier token as input to final proj. + softmax
-        clf_h = tf.reshape(h, [-1, N_EMBED])  # [batch * seq_len, embed]
-        clf_token = encoder['_classify_']
-        pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
-        clf_h = tf.gather(clf_h, tf.range(shape_list(X)[0], dtype=tf.int32) * max_length + pool_idx)
-
-        clf_h = tf.reshape(clf_h, [-1, N_EMBED])  # [batch, embed]
-        return {
-            'embed_weights': embed_weights,
-            'features': clf_h,
-            'sequence_features': h
-        }
-
-
-def language_model(*, X, M, embed_weights, hidden, reuse=None):
-    with tf.variable_scope('model', reuse=reuse):
-        # language model ignores last hidden state because we don't have a target
-        lm_h = tf.reshape(hidden[:, :-1], [-1, N_EMBED])  # [batch, seq_len, embed] --> [batch * seq_len, embed]
-        lm_logits = tf.matmul(lm_h, embed_weights, transpose_b=True)  # tied weights
-        lm_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
-            logits=lm_logits,
-            labels=tf.reshape(X[:, 1:, 0], [-1])
-        )
-
-        lm_losses = tf.reshape(lm_losses, [shape_list(X)[0], shape_list(X)[1] - 1])
-        lm_losses = tf.reduce_sum(lm_losses * M[:, 1:], 1) / tf.reduce_sum(M[:, 1:], 1)
-        return {
-            'logits': lm_logits,
-            'losses': lm_losses,
-        }
-
-
-def classifier(hidden, targets, n_classes, train=False, reuse=None):
-    with tf.variable_scope('model', reuse=reuse):
-        hidden = dropout(hidden, CLF_P_DROP, train)
-        clf_logits = clf(hidden, n_classes)
-        clf_losses = tf.nn.softmax_cross_entropy_with_logits(logits=clf_logits, labels=targets)
-        return {
-            'logits': clf_logits,
-            'losses': clf_losses
-        }
 
 
 class LanguageModelBase(object, metaclass=ABCMeta):
@@ -108,14 +43,17 @@ class LanguageModelBase(object, metaclass=ABCMeta):
     def __init__(self, autosave_path, max_length=MAX_LENGTH, verbose=True):
         self.max_length = max_length
         self.autosave_path = autosave_path
-        self.label_encoder = OneHotLabelEncoder()
+        self.label_encoder = None
         self._initialize()
-        self.n_classes = None
+        self.target_dim = None
         self._load_from_file = False
         self.verbose = verbose
+        self.is_classification = None
 
     def _initialize(self):
         self._set_random_seed(SEED)
+
+        download_data_if_required()
         self.encoder = TextEncoder()
 
         # symbolic ops
@@ -140,6 +78,22 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         tokens, mask = self._array_format(token_idxs)
         return tokens, mask
 
+    def target_model(self, hidden, targets, n_outputs, train=False, reuse=None):
+        if self.is_classification:
+            return classifier(hidden, targets, n_outputs, train=train, reuse=reuse)
+        return regressor(hidden, targets, n_outputs, train=train, reuse=reuse)
+
+    def predict_ops(self, logits):
+        if self.is_classification:
+            return tf.argmax(logits, -1), tf.nn.softmax(logits, -1)
+        return logits, logits
+
+    def get_target_encoder(self):
+        if self.is_classification:
+            return OneHotLabelEncoder()
+        else:
+            return RegressionEncoder()
+
     def _finetune(self, *Xs, Y, batch_size=BATCH_SIZE, val_size=0.05, val_interval=150, val_window_size=5):
         """
         X: List / array of text
@@ -147,12 +101,13 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         val_size: Float fraction or int number that represents the size of the validation set.
         val_interval: The interval for which validation is performed, measured in number of steps.
         """
+        self.label_encoder = self.get_target_encoder()
         train_x, train_mask = self._text_to_ids(*Xs)
         n_batch_train = batch_size * max(len(get_available_gpus()), 1)
         n_updates_total = (len(Y) // n_batch_train) * N_EPOCHS
         Y = self.label_encoder.fit_transform(Y)
-        self.n_classes = len(self.label_encoder.classes_)
-        self._build_model(n_updates_total=n_updates_total, n_classes=self.n_classes)
+        self.target_dim = len(self.label_encoder.target_dim)
+        self._build_model(n_updates_total=n_updates_total, target_dim=self.target_dim)
 
         dataset = shuffle(train_x, train_mask, Y, random_state=np.random)
         x_tr, x_va, m_tr, m_va, y_tr, y_va = train_test_split(*dataset, test_size=val_size, random_state=31415)
@@ -170,6 +125,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
             for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=True):
                 global_step += 1
                 if global_step % val_interval == 0:
+
                     summary = self.sess.run([self.summaries], {self.X: xmb, self.M: mmb, self.Y: ymb})
                     self.train_writer.add_summary(summary, global_step)
 
@@ -183,6 +139,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                         _LOGGER.info("\nVAL: LOSS = {}, ROLLING AVG = {}".format(val_cost, avg_val_loss))
                     val_window.append(sum_val_loss)
                     val_window.pop(0)
+
                     if np.mean(val_window) <= best_val_loss:
                         best_val_loss = np.mean(val_window)
                         _LOGGER.info("Autosaving new best model.")
@@ -227,7 +184,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
             max_length = max_length or self.max_length
             for xmb, mmb in self._infer_prep(*Xs, max_length=max_length):
                 probas = self.sess.run(self.predict_proba_op, {self.X: xmb, self.M: mmb})
-                classes = self.label_encoder.classes_
+                classes = self.label_encoder.target_dim
                 predictions.extend([
                     dict(zip(classes, proba)) for proba in probas
                 ])
@@ -261,7 +218,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         max_length = max_length or self.max_length
         infer_x, infer_mask = self._text_to_ids(*X, max_length=max_length)
         n_batch_train = BATCH_SIZE * max(len(get_available_gpus()), 1)
-        self._build_model(n_updates_total=0, n_classes=self.n_classes, train=False)
+        self._build_model(n_updates_total=0, target_dim=self.target_dim, train=False)
         yield from iter_data(infer_x, infer_mask, n_batch=n_batch_train, verbose=self.verbose)
 
     def _array_format(self, token_idxs):
@@ -304,7 +261,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
             e=EPSILON
         )
 
-    def _construct_graph(self, n_updates_total, n_classes, train=True):
+    def _construct_graph(self, n_updates_total, target_dim, train=True):
         gpu_grads = []
         self.summaries = []
 
@@ -343,15 +300,15 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                 lm_logits = language_model_state["logits"]
                 lm_aggregator.append(sample_with_temperature(lm_logits, LM_DECODE_TEMP))
 
-                if n_classes is not None:
-                    classifier_state = classifier(
+                if target_dim is not None:
+                    target_model_state = self.target_model(
                         hidden=featurizer_state['features'],
                         targets=Y,
-                        n_classes=n_classes,
+                        n_outputs=target_dim,
                         train=train,
                         reuse=do_reuse
                     )
-                    train_loss = tf.reduce_mean(classifier_state['losses'])
+                    train_loss = tf.reduce_mean(target_model_state['losses'])
 
                     if LM_LOSS_COEF > 0:
                         train_loss += LM_LOSS_COEF * tf.reduce_mean(language_model_state['losses'])
@@ -363,37 +320,36 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                     grads = list(zip(grads, params))
                     gpu_grads.append(grads)
                     losses_aggregator.append([
-                        classifier_state['logits'],
-                        classifier_state['losses'],
+                        target_model_state['logits'],
+                        target_model_state['losses'],
                         language_model_state['losses']
                     ])
 
         self.features = tf.concat(features_aggregator, 0)
         self.lm_predict_op = tf.concat(lm_aggregator, 0)
 
-        if n_classes is not None:
+        if target_dim is not None:
             self.logits, self.clf_losses, self.lm_losses = [tf.concat(op, 0) for op in zip(*losses_aggregator)]
-            self.predict_op = tf.argmax(self.logits, -1)
-            self.predict_proba_op = tf.nn.softmax(self.logits, -1)
+            self.predict_op, self.predict_proba_op = self.predict_ops(self.logits)
             self._compile_train_op(
                 params=params,
                 grads=gpu_grads,
                 n_updates_total=n_updates_total
             )
             self.clf_loss = tf.reduce_mean(self.clf_losses)
-            self.summaries.append(tf.summary.scalar('ClassifierLoss', self.clf_loss))
+            self.summaries.append(tf.summary.scalar('TargetModelLoss', self.clf_loss))
             self.summaries.append(tf.summary.scalar('LanguageModelLoss', tf.reduce_mean(self.lm_losses)))
             self.summaries.append(tf.summary.scalar('TotalLoss', train_loss_tower / n_splits))
             self.summaries = tf.summary.merge(self.summaries)
 
-    def _build_model(self, n_updates_total, n_classes, train=True):
+    def _build_model(self, n_updates_total, target_dim, train=True):
         """
         Construct tensorflow symbolic graph.
         """
         if not self.is_trained or train != self.train:
             # reconstruct graph to include/remove dropout
             # #if `train` setting has changed
-            self._construct_graph(n_updates_total, n_classes, train=train)
+            self._construct_graph(n_updates_total, target_dim, train=train)
 
         # Optionally load saved model
         if self._load_from_file:
@@ -415,7 +371,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         # tf placeholders
         self.X = tf.placeholder(tf.int32, [None, self.max_length, 2])  # token idxs (BPE embedding + positional)
         self.M = tf.placeholder(tf.float32, [None, self.max_length])  # sequence mask
-        self.Y = tf.placeholder(tf.float32, [None, self.n_classes])  # classification targets
+        self.Y = tf.placeholder(tf.float32, [None, self.target_dim])  # classification targets
 
     def lm_predict(self, max_length=None, seed_text=''):
         """
@@ -447,23 +403,25 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=False))
         self.sess.run(tf.global_variables_initializer())
 
-        shapes = json.load(open('model/params_shapes.json'))
-        offsets = np.cumsum([np.prod(shape) for shape in shapes])
-        init_params = [np.load('model/params_{}.npy'.format(n)) for n in range(10)]
-        init_params = np.split(np.concatenate(init_params, 0), offsets)[:-1]
-        init_params = [param.reshape(shape) for param, shape in zip(init_params, shapes)]
-        init_params[0] = init_params[0][:self.max_length]
-        special_embed = (np.random.randn(len(self.encoder.special_tokens), N_EMBED) * WEIGHT_STDDEV).astype(np.float32)
-        init_params[0] = np.concatenate([init_params[1], special_embed, init_params[0]], 0)
-        del init_params[1]
-        self.sess.run([p.assign(ip) for p, ip in zip(pretrained_params, init_params)])
+        with open(SHAPES_PATH) as shapes_file:
+            shapes = json.load(shapes_file)
+            offsets = np.cumsum([np.prod(shape) for shape in shapes])
+            init_params = [np.load(PARAM_PATH.format(n)) for n in range(10)]
+            init_params = np.split(np.concatenate(init_params, 0), offsets)[:-1]
+            init_params = [param.reshape(shape) for param, shape in zip(init_params, shapes)]
+            init_params[0] = init_params[0][:self.max_length]
+            special_embed = (np.random.randn(len(self.encoder.special_tokens), N_EMBED) * WEIGHT_STDDEV).astype(np.float32)
+            init_params[0] = np.concatenate([init_params[1], special_embed, init_params[0]], 0)
+            del init_params[1]
+            self.sess.run([p.assign(ip) for p, ip in zip(pretrained_params, init_params)])
 
     def __getstate__(self):
         """
         Leave serialization of all tf objects to tf
         """
         required_fields = [
-            'label_encoder', 'max_length', 'n_classes', '_load_from_file', 'verbose', 'autosave_path'
+            'label_encoder', 'max_length', 'target_dim', '_load_from_file', 'verbose', 'autosave_path',
+            'is_classification'
         ]
         serialized_state = {
             k: v for k, v in self.__dict__.items()
@@ -511,6 +469,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         saver.restore(self.sess, self._load_from_file)
         self._load_from_file = False
         self.is_trained = True
+
 
 
 class LanguageModelClassifier(LanguageModelBase):
@@ -622,41 +581,3 @@ class LanguageModelEntailment(LanguageModelBase):
         :returns: np.array of features of shape (n_examples, embedding_size).
         """
         return self._featurize(X_1, X_2, max_length=max_length)
-
-
-if __name__ == "__main__":
-
-    with open("data/questions.json", "rt") as fp:
-        data = json.load(fp)
-
-    scores = []
-    questions = []
-    answers = []
-    for item in data:
-        row = data[item]
-        scores.append(row["score"])
-        questions.append(row["question"])
-        answers.append(row["answers"][0]["answer"])
-
-    scores_train, scores_test, ques_train, ques_test, ans_train, ans_test = train_test_split(
-        scores, questions, answers, test_size=0.33, random_state=5)
-    save_path = 'saved-models/cola'
-
-    model = LanguageModelEntailment(save_path)
-
-    model.finetune(ques_train, ans_train, scores_train)
-
-    model = LanguageModelEntailment.load(save_path)
-
-    print("TRAIN EVAL")
-    predictions = model.predict(ques_train, ans_train)
-    print(predictions)
-
-    from scipy.stats import spearmanr
-
-    print(spearmanr(predictions, scores_train))
-
-    print("TEST EVAL")
-    predictions = model.predict(ques_test, ans_test)
-    print(predictions)
-    print(spearmanr(predictions, scores_test))
