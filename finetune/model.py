@@ -423,16 +423,17 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=False))
         self.sess.run(tf.global_variables_initializer())
 
-        shapes = json.load(open(SHAPES_PATH))
-        offsets = np.cumsum([np.prod(shape) for shape in shapes])
-        init_params = [np.load(PARAM_PATH.format(n)) for n in range(10)]
-        init_params = np.split(np.concatenate(init_params, 0), offsets)[:-1]
-        init_params = [param.reshape(shape) for param, shape in zip(init_params, shapes)]
-        init_params[0] = init_params[0][:self.max_length]
-        special_embed = (np.random.randn(len(self.encoder.special_tokens), N_EMBED) * WEIGHT_STDDEV).astype(np.float32)
-        init_params[0] = np.concatenate([init_params[1], special_embed, init_params[0]], 0)
-        del init_params[1]
-        self.sess.run([p.assign(ip) for p, ip in zip(pretrained_params, init_params)])
+        with open(SHAPES_PATH) as shapes_file:
+            shapes = json.load(shapes_file)
+            offsets = np.cumsum([np.prod(shape) for shape in shapes])
+            init_params = [np.load(PARAM_PATH.format(n)) for n in range(10)]
+            init_params = np.split(np.concatenate(init_params, 0), offsets)[:-1]
+            init_params = [param.reshape(shape) for param, shape in zip(init_params, shapes)]
+            init_params[0] = init_params[0][:self.max_length]
+            special_embed = (np.random.randn(len(self.encoder.special_tokens), N_EMBED) * WEIGHT_STDDEV).astype(np.float32)
+            init_params[0] = np.concatenate([init_params[1], special_embed, init_params[0]], 0)
+            del init_params[1]
+            self.sess.run([p.assign(ip) for p, ip in zip(pretrained_params, init_params)])
 
     def __getstate__(self):
         """
