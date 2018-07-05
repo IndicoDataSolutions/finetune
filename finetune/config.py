@@ -30,4 +30,4 @@ MAX_GRAD_NORM = 1
 LM_LOSS_COEF = 0.5
 
 # Language Modelling Endpoint
-LM_DECODE_TEMP = 0.5
+LM_DECODE_TEMP = 0.2

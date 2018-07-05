@@ -77,7 +77,7 @@ class TextEncoder(object):
         self.encoder[key] = value
 
     def bpe(self, token):
-        word = tuple(token[:-1]) + ( token[-1] + '</w>',)
+        word = tuple(token[:-1]) + (token[-1] + '</w>',)
         if token in self.cache:
             return self.cache[token]
         pairs = get_pairs(word)
@@ -86,7 +86,7 @@ class TextEncoder(object):
             return token + '</w>'
 
         while True:
-            bigram = min(pairs, key = lambda pair: self.bpe_ranks.get(pair, float('inf')))
+            bigram = min(pairs, key=lambda pair: self.bpe_ranks.get(pair, float('inf')))
             if bigram not in self.bpe_ranks:
                 break
             first, second = bigram
@@ -101,7 +101,7 @@ class TextEncoder(object):
                     new_word.extend(word[i:])
                     break
 
-                if word[i] == first and i < len(word)-1 and word[i+1] == second:
+                if word[i] == first and i < len(word) - 1 and word[i + 1] == second:
                     new_word.append(first + second)
                     i += 2
                 else:
@@ -143,11 +143,8 @@ class TextEncoder(object):
         """
         Convert a batch of ids [batch_size, id] into text(ish).
         """
-        output_text = []
-        for sequence in ids:
-            output_text.append("".join([self.decoder[word_idx] for word_idx in sequence]))
-        return output_text
 
+        return "".join([self.decoder.get(word_idx, '<unk>') for word_idx in ids]).replace("</w>", " ")
 
     def encode_for_classification(self, texts, max_length=MAX_LENGTH, verbose=True):
         """
@@ -167,7 +164,7 @@ class TextEncoder(object):
         ]
         return batch_token_idxs
 
-    def encode_for_comparison(self, texts,max_length=MAX_LENGTH, verbose=True):
+    def encode_for_comparison(self, texts, max_length=MAX_LENGTH, verbose=True):
         pass
 
     def encode_for_entailment(self, question, answer, max_length=MAX_LENGTH, verbose=True):
@@ -178,8 +175,8 @@ class TextEncoder(object):
         a = len(question_ids)
         b = len(answer_ids)
 
-        half_max_len = adjusted_max_length // 2 # Initial allocation for question
-        
+        half_max_len = adjusted_max_length // 2  # Initial allocation for question
+
         start = self.encoder['_start_']
         delimiter = self.encoder['_delimiter_']
         clf_token = self.encoder['_classify_']
@@ -187,9 +184,11 @@ class TextEncoder(object):
         for qid, aid in zip(question_ids, answer_ids):
             q = len(qid)
             a = len(aid)
-            spare = max(0, half_max_len - min(q, a)) # Number of remaining tokens if either question or answer is shorter than its allocation
-            q_adj = min(q, half_max_len + spare) # Truncate the question if its length is longer than its allocation plus any spare tokens.
+            spare = max(0, half_max_len - min(q,
+                                              a))  # Number of remaining tokens if either question or answer is shorter than its allocation
+            q_adj = min(q,
+                        half_max_len + spare)  # Truncate the question if its length is longer than its allocation plus any spare tokens.
             a_adj = min(a, half_max_len + spare)
-                                                            
+
             question_answer_pairs.append([start] + qid[:q_adj] + [delimiter] + aid[:a_adj] + [clf_token])
         return question_answer_pairs

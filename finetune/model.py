@@ -189,7 +189,6 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                         self.save(self.autosave_path)
                         _LOGGER.info("Done!!")
                 cost, _ = self.sess.run([self.clf_loss, self.train_op], {self.X: xmb, self.M: mmb, self.Y: ymb})
-                self.train_writer.add_summary(summary, global_step)
                 avg_train_loss = avg_train_loss * ROLLING_AVG_DECAY + cost * (1 - ROLLING_AVG_DECAY)
                 _LOGGER.info("\nTRAIN: LOSS = {}, ROLLING AVG = {}".format(cost, avg_train_loss))
 
@@ -341,7 +340,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                 )
                 features_aggregator.append(featurizer_state['features'])
 
-                lm_logits = language_model_state["lm_logits"]
+                lm_logits = language_model_state["logits"]
                 lm_aggregator.append(sample_with_temperature(lm_logits, LM_DECODE_TEMP))
 
                 if n_classes is not None:
@@ -418,14 +417,26 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         self.M = tf.placeholder(tf.float32, [None, self.max_length])  # sequence mask
         self.Y = tf.placeholder(tf.float32, [None, self.n_classes])  # classification targets
 
-    def lm_predict(self, max_length=None):
-        string = [self.encoder['_start_']]
+    def lm_predict(self, max_length=None, seed_text=''):
+        """
+        Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
+        Temperature parameter for decoding is set in the config.
+        :param max_length: The maximum length to decode to.
+        :param seed_text: Defaults to the empty string. This will form the starting point to begin modelling
+        :return: A string containing the generated text.
+        """
+        seed_text_tokens = self.encoder.encode([seed_text])
+        self._build_model(n_updates_total=0, n_classes=self.n_classes, train=False)
+        string = [self.encoder['_start_']] + seed_text_tokens[0]
+        eos = [self.encoder['_classify_']]
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
-            for _ in range(max_length or self.max_length):
+            for i in range(len(seed_text_tokens[0]), (max_length or self.max_length) - 1):
                 tokens, mask = self._array_format([string])
                 class_idx = self.sess.run(self.lm_predict_op, {self.X: tokens, self.M: mask})
-                string.append(class_idx)
+                string.append(class_idx[i])
+                if string[-1] == eos:
+                    break
         return self.encoder.decode(string)
 
     def _load_base_model(self):

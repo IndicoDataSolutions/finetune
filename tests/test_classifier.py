@@ -113,3 +113,34 @@ class TestLanguageModelClassifier(unittest.TestCase):
         model.fit(trX, trY)
         predY = model.predict(teX)
         self.assertEqual(accuracy_score(teY, predY), 1.00)
+
+    def test_language_model(self):
+        """
+        Ensure saving + loading does not cause errors
+        Ensure saving + loading does not change predictions
+        """
+        save_file_autosave = 'tests/saved-models/autosave_path'
+        model = LanguageModelClassifier(verbose=False, autosave_path=save_file_autosave)
+        lm_out = model.lm_predict(5)
+        self.assertEqual(type(lm_out), str)
+        lm_out_2 = model.lm_predict(seed_text="Indico RULE")
+        self.assertEqual(type(lm_out_2), str)
+        self.assertIn('_start_Indico RULE'.lower(), lm_out_2)
+
+    def test_save_load_language_model(self):
+        """
+        Ensure saving + loading does not cause errors
+        Ensure saving + loading does not change predictions
+        """
+        save_file_autosave = 'tests/saved-models/autosave_path'
+        save_file = 'tests/saved-models/test-save-load'
+        model = LanguageModelClassifier(verbose=False, autosave_path=save_file_autosave)
+        train_sample = self.dataset.sample(n=self.n_sample)
+        model.fit(train_sample.Text, train_sample.Target)
+        lm_out = model.lm_predict(5)
+        self.assertEqual(type(lm_out), str)
+        model.save(save_file)
+        model = LanguageModelClassifier.load(save_file)
+        lm_out_2 = model.lm_predict(seed_text="Indico RULE")
+        self.assertEqual(type(lm_out_2), str)
+        self.assertIn('_start_Indico RULE'.lower(), lm_out_2)
