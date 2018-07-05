@@ -31,6 +31,9 @@ PARAM_PATH = os.path.join(os.path.dirname(__file__), '..', 'model', 'params_{}.n
 
 _LOGGER = logging.getLogger(__name__)
 
+DROPOUT_ON = 1
+DROPOUT_OFF = 0
+
 
 class LanguageModelBase(object, metaclass=ABCMeta):
     """
@@ -79,8 +82,8 @@ class LanguageModelBase(object, metaclass=ABCMeta):
 
     def target_model(self, hidden, targets, n_outputs, train=False, reuse=None):
         if self.is_classification:
-            return classifier(hidden, targets, n_outputs, train=train, reuse=reuse)
-        return regressor(hidden, targets, n_outputs, train=train, reuse=reuse)
+            return classifier(hidden, targets, n_outputs, self.do_dropout, train=train, reuse=reuse)
+        return regressor(hidden, targets, n_outputs, self.do_dropout, train=train, reuse=reuse)
 
     def predict_ops(self, logits):
         if self.is_classification:
@@ -285,7 +288,8 @@ class LanguageModelBase(object, metaclass=ABCMeta):
             scope = tf.variable_scope(tf.get_variable_scope(), reuse=do_reuse)
 
             with device, scope:
-                featurizer_state = featurizer(X, encoder=self.encoder, train=train, reuse=do_reuse)
+                featurizer_state = featurizer(X, encoder=self.encoder, dropout_placeholder=self.do_dropout, train=train,
+                                              reuse=do_reuse)
                 language_model_state = language_model(
                     X=X,
                     M=M,
@@ -366,6 +370,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         self.X = tf.placeholder(tf.int32, [None, self.max_length, 2])  # token idxs (BPE embedding + positional)
         self.M = tf.placeholder(tf.float32, [None, self.max_length])  # sequence mask
         self.Y = tf.placeholder(tf.float32, [None, self.target_dim])  # classification targets
+        self.do_dropout = tf.Placeholder(tf.int32)  # 1 for do dropout and 0 to not do dropout
 
     def _load_base_model(self):
         """
@@ -382,7 +387,8 @@ class LanguageModelBase(object, metaclass=ABCMeta):
             init_params = np.split(np.concatenate(init_params, 0), offsets)[:-1]
             init_params = [param.reshape(shape) for param, shape in zip(init_params, shapes)]
             init_params[0] = init_params[0][:self.max_length]
-            special_embed = (np.random.randn(len(self.encoder.special_tokens), N_EMBED) * WEIGHT_STDDEV).astype(np.float32)
+            special_embed = (np.random.randn(len(self.encoder.special_tokens), N_EMBED) * WEIGHT_STDDEV).astype(
+                np.float32)
             init_params[0] = np.concatenate([init_params[1], special_embed, init_params[0]], 0)
             del init_params[1]
             self.sess.run([p.assign(ip) for p, ip in zip(pretrained_params, init_params)])
@@ -441,7 +447,6 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         saver.restore(self.sess, self._load_from_file)
         self._load_from_file = False
         self.is_trained = True
-
 
 
 class LanguageModelClassifier(LanguageModelBase):

@@ -23,9 +23,9 @@ def norm(x, scope, axis=[-1]):
         return _norm(x, g, b, axis=axis)
 
 
-def dropout(x, pdrop, train):
+def dropout(x, pdrop, train, dropout_placeholder):
     if train and pdrop > 0:
-        x = tf.nn.dropout(x, 1-pdrop)
+        x = tf.nn.dropout(x, 1 - (pdrop * dropout_placeholder))
     return x
 
 
@@ -89,7 +89,7 @@ def conv1d(x, scope, nf, rf, w_init=tf.random_normal_initializer(stddev=0.02), b
         return c
 
 
-def attn(x, scope, n_state, n_head, resid_pdrop, attn_pdrop, train=False, scale=False):
+def attn(x, scope, n_state, n_head, resid_pdrop, attn_pdrop, dropout_placeholder, train=False, scale=False):
     assert n_state % n_head == 0
     with tf.variable_scope(scope):
         c = conv1d(x, 'c_attn', n_state * 3, 1, train=train)
@@ -100,17 +100,17 @@ def attn(x, scope, n_state, n_head, resid_pdrop, attn_pdrop, train=False, scale=
         a = _attn(q, k, v, attn_pdrop=attn_pdrop, train=train, scale=scale)
         a = merge_heads(a)
         a = conv1d(a, 'c_proj', n_state, 1, train=train)
-        a = dropout(a, resid_pdrop, train)
+        a = dropout(a, resid_pdrop, train, dropout_placeholder)
         return a
 
 
-def mlp(x, scope, n_state, act_fn, resid_pdrop, train=False):
+def mlp(x, scope, n_state, act_fn, resid_pdrop, dropout_placeholder, train=False):
     with tf.variable_scope(scope):
         nx = shape_list(x)[-1]
         act = act_fns[act_fn]
         h = act(conv1d(x, 'c_fc', n_state, 1, train=train))
         h2 = conv1d(h, 'c_proj', nx, 1, train=train)
-        h2 = dropout(h2, resid_pdrop, train)
+        h2 = dropout(h2, resid_pdrop, train, dropout_placeholder)
         return h2
 
 

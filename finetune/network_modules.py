@@ -13,11 +13,11 @@ def mlp(x, ny, w_init=tf.random_normal_initializer(stddev=WEIGHT_STDDEV), b_init
         return tf.matmul(x, w) + b
 
 
-def featurizer(X, encoder, train=False, reuse=None, max_length=MAX_LENGTH):
+def featurizer(X, encoder, dropout_placeholder, train=False, reuse=None, max_length=MAX_LENGTH):
     with tf.variable_scope('model', reuse=reuse):
         embed_weights = tf.get_variable("we", [encoder.vocab_size + max_length, N_EMBED],
                                         initializer=tf.random_normal_initializer(stddev=WEIGHT_STDDEV))
-        embed_weights = dropout(embed_weights, EMBED_P_DROP, train)
+        embed_weights = dropout(embed_weights, EMBED_P_DROP, train, dropout_placeholder)
 
         X = tf.reshape(X, [-1, max_length, 2])
 
@@ -57,9 +57,9 @@ def language_model(*, X, M, embed_weights, hidden, reuse=None):
         }
 
 
-def classifier(hidden, targets, n_classes, train=False, reuse=None):
+def classifier(hidden, targets, n_classes, dropout_placeholder, train=False, reuse=None):
     with tf.variable_scope('model', reuse=reuse):
-        hidden = dropout(hidden, CLF_P_DROP, train)
+        hidden = dropout(hidden, CLF_P_DROP, train, dropout_placeholder)
         clf_logits = mlp(hidden, n_classes)
         clf_losses = tf.nn.softmax_cross_entropy_with_logits(logits=clf_logits, labels=targets)
         return {
@@ -68,9 +68,9 @@ def classifier(hidden, targets, n_classes, train=False, reuse=None):
         }
 
 
-def regressor(hidden, targets, n_outputs, train=False, reuse=None):
+def regressor(hidden, targets, n_outputs, dropout_placeholder, train=False, reuse=None):
     with tf.variable_scope('model', reuse=reuse):
-        hidden = dropout(hidden, CLF_P_DROP, train)
+        hidden = dropout(hidden, CLF_P_DROP, train, dropout_placeholder)
         outputs = mlp(hidden, n_outputs)
         loss = tf.nn.l2_loss(outputs - targets)
         return {
