@@ -19,11 +19,11 @@ from finetune.config import (
     MAX_LENGTH, BATCH_SIZE, N_EPOCHS, SEED, WEIGHT_STDDEV, LR, B1, B2, L2_REG, VECTOR_L2,
     EPSILON, LR_SCHEDULE, MAX_GRAD_NORM, LM_LOSS_COEF, LR_WARMUP, N_EMBED, ROLLING_AVG_DECAY
 )
-
-from finetune.utils import find_trainable_variables, get_available_gpus, assign_to_gpu, average_grads, \
-    iter_data, soft_split
 from finetune.target_encoders import OneHotLabelEncoder, RegressionEncoder
 from finetune.network_modules import featurizer, language_model, classifier, regressor
+from finetune.utils import find_trainable_variables, get_available_gpus, shape_list, assign_to_gpu, average_grads, \
+    iter_data, soft_split
+from finetune.transformer import block, dropout, embed
 
 SHAPES_PATH = os.path.join(os.path.dirname(__file__), '..', 'model', 'params_shapes.json')
 PARAM_PATH = os.path.join(os.path.dirname(__file__), '..', 'model', 'params_{}.npy')
