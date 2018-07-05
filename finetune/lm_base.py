@@ -356,6 +356,11 @@ class LanguageModelBase(object, metaclass=ABCMeta):
             self.valid_writer = tf.summary.FileWriter(self.autosave_path + '/valid', self.sess.graph)
         self.is_built = True
 
+    def _initialize_session(self):
+        gpus = get_available_gpus()
+        os.environ['CUDA_VISIBLE_DEVICES'] = ",".join(gpus)
+        self.sess = tf.Session()
+
     def _set_random_seed(self, seed=SEED):
         random.seed(seed)
         np.random.seed(seed)
@@ -372,7 +377,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         Load serialized base model parameters into tf Tensors
         """
         pretrained_params = find_trainable_variables('model', exclude='model/clf')
-        self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=False))
+        self._initialize_session()
         self.sess.run(tf.global_variables_initializer())
 
         with open(SHAPES_PATH) as shapes_file:
@@ -436,7 +441,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         return model
 
     def _load_finetuned_model(self):
-        self.sess = tf.Session()
+        self._initialize_session()
         saver = tf.train.Saver(tf.trainable_variables())
         saver.restore(self.sess, self._load_from_file)
         self._load_from_file = False
