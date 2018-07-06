@@ -10,8 +10,6 @@ import ftfy
 import spacy
 from tqdm import tqdm
 
-from finetune.config import MAX_LENGTH
-
 ENCODER_PATH = os.path.join(os.path.dirname(__file__), 'model/encoder_bpe_40000.json')
 BPE_PATH = os.path.join(os.path.dirname(__file__), 'model/vocab_40000.bpe')
 
@@ -141,7 +139,7 @@ class TextEncoder(object):
             batch_token_idxs.append(token_idxs)
         return batch_token_idxs
 
-    def encode_for_classification(self, texts, max_length=MAX_LENGTH, verbose=True):
+    def encode_for_classification(self, texts, max_length, verbose=True):
         """
         Convert a batch of raw text to btye-pair encoded token indices,
         and add appropriate special tokens to match expected model input
@@ -159,10 +157,10 @@ class TextEncoder(object):
         ]
         return batch_token_idxs
 
-    def encode_for_comparison(self, texts, max_length=MAX_LENGTH, verbose=True):
+    def encode_for_comparison(self, texts, max_length, verbose=True):
         pass
 
-    def encode_for_entailment(self, question, answer, max_length=MAX_LENGTH, verbose=True):
+    def encode_for_entailment(self, question, answer, max_length, verbose=True):
         question_ids = self.encode(question)
         answer_ids = self.encode(answer)
         adjusted_max_length = max_length - 3
@@ -180,7 +178,7 @@ class TextEncoder(object):
 
         return question_answer_pairs
 
-    def encode_multi_input(self, *Xs, max_length=MAX_LENGTH, verbose=True):
+    def encode_multi_input(self, *Xs, max_length, verbose=True):
         encoded = [self.encode(x) for x in Xs]
         num_samples = len(encoded)
         adjusted_max_length = max_length - num_samples - 1

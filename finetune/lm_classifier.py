@@ -1,4 +1,3 @@
-from finetune.config import BATCH_SIZE
 from finetune.lm_base import LanguageModelBase
 
 
@@ -37,7 +36,7 @@ class LanguageModelClassifier(LanguageModelBase):
         """
         return self._predict_proba(X, max_length=max_length)
 
-    def finetune(self, X, Y, batch_size=BATCH_SIZE, val_size=0.05, val_interval=150):
+    def finetune(self, X, Y, batch_size=None, val_size=0.05, val_interval=150):
         """
         :param X: list or array of text.
         :param Y: integer or string-valued class labels.

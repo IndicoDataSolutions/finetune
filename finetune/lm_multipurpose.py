@@ -1,12 +1,10 @@
 import numpy as np
-
-from finetune.config import MAX_LENGTH, BATCH_SIZE
 from finetune.lm_base import LanguageModelBase
 
 
 class LanguageModelGeneralAPI(LanguageModelBase):
 
-    def __init__(self, autosave_path, max_length=MAX_LENGTH, verbose=True):
+    def __init__(self, autosave_path, max_length=None, verbose=True):
         super().__init__(autosave_path=autosave_path, max_length=max_length, verbose=verbose)
         self.is_classification = None
 
@@ -16,7 +14,7 @@ class LanguageModelGeneralAPI(LanguageModelBase):
         tokens, mask = self._array_format(question_answer_pairs)
         return tokens, mask
 
-    def finetune(self, Xs, Y, batch_size=BATCH_SIZE, val_size=0.05, val_interval=150):
+    def finetune(self, Xs, Y, batch_size=None, val_size=0.05, val_interval=150):
         """
         :param Xs: An iterable of lists or array of text, shape [batch, n_inputs, tokens]
         :param Y: integer or string-valued class labels. It is necessary for the items of Y to be sortable.

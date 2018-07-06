@@ -8,22 +8,20 @@ from tensorflow.python.framework import function
 from tensorflow.python.client import device_lib
 from tqdm import tqdm
 
-from finetune import config
-
 
 def format_gpu_string(num):
     return '/device:GPU:{}'.format(num)
 
 
-def get_available_gpus():
-    if config.VISIBLE_GPUS is not None:
-        return config.VISIBLE_GPUS
+def get_available_gpus(hparams):
+    if hparams.VISIBLE_GPUS is not None:
+        return hparams.VISIBLE_GPUS
     local_device_protos = device_lib.list_local_devices()
-    config.VISIBLE_GPUS = [
+    hparams.VISIBLE_GPUS = [
         int(x.name.split(':')[-1]) for x in local_device_protos
         if x.device_type == 'GPU'
     ]
-    return config.VISIBLE_GPUS
+    return hparams.VISIBLE_GPUS
 
 
 def shape_list(x):

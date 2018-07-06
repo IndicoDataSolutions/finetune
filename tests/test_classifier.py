@@ -13,8 +13,6 @@ import numpy as np
 import enso
 from enso.download import generic_download
 from sklearn.metrics import accuracy_score
-
-from finetune import config
 from finetune import LanguageModelClassifier
 
 SST_FILENAME = "SST-binary.csv"
@@ -115,3 +113,9 @@ class TestLanguageModelClassifier(unittest.TestCase):
         model.fit(trX, trY)
         predY = model.predict(teX)
         self.assertEqual(accuracy_score(teY, predY), 1.00)
+
+    def test_validation(self):
+        model = LanguageModelClassifier(verbose=False)
+        train_sample = self.dataset.sample(n=20)
+        model.fit(train_sample.Text, train_sample.Target, val_size=0.5, val_interval=10)
+

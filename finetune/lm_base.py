@@ -84,8 +84,8 @@ class LanguageModelBase(object, metaclass=ABCMeta):
 
     def target_model(self, hidden, targets, n_outputs, train=False, reuse=None):
         if self.is_classification:
-            return classifier(hidden, targets, n_outputs, self.do_dropout, train=train, reuse=reuse)
-        return regressor(hidden, targets, n_outputs, self.do_dropout, train=train, reuse=reuse)
+            return classifier(hidden, targets, n_outputs, self.do_dropout, hparams=self.hparams, train=train, reuse=reuse)
+        return regressor(hidden, targets, n_outputs, self.do_dropout, hparams=self.hparams, train=train, reuse=reuse)
 
     def predict_ops(self, logits):
         if self.is_classification:
@@ -108,7 +108,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         batch_size = batch_size or self.hparams.BATCH_SIZE
         self.label_encoder = self.get_target_encoder()
         train_x, train_mask = self._text_to_ids(*Xs)
-        n_batch_train = batch_size * max(len(get_available_gpus()), 1)
+        n_batch_train = batch_size * max(len(get_available_gpus(self.hparams)), 1)
         n_updates_total = (len(Y) // n_batch_train) * self.hparams.N_EPOCHS
         Y = self.label_encoder.fit_transform(Y)
         self.target_dim = len(self.label_encoder.target_dim)
@@ -227,7 +227,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
     def _infer_prep(self, *X, max_length=None):
         max_length = max_length or self.max_length
         infer_x, infer_mask = self._text_to_ids(*X, max_length=max_length)
-        n_batch_train = self.hparams.BATCH_SIZE * max(len(get_available_gpus()), 1)
+        n_batch_train = self.hparams.BATCH_SIZE * max(len(get_available_gpus(self.hparams)), 1)
         self._build_model(n_updates_total=0, target_dim=self.target_dim, train=False)
         yield from iter_data(infer_x, infer_mask, n_batch=n_batch_train, verbose=self.verbose)
 
@@ -284,7 +284,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         losses_aggregator = []
 
         train_loss_tower = 0
-        gpus = get_available_gpus()
+        gpus = get_available_gpus(self.hparams)
         n_splits = max(len(gpus), 1)
         for i, (X, M, Y) in enumerate(soft_split(self.X, self.M, self.Y, n_splits=n_splits)):
             do_reuse = True if i > 0 else tf.AUTO_REUSE
@@ -372,7 +372,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         self.is_built = True
 
     def _initialize_session(self):
-        gpus = get_available_gpus()
+        gpus = get_available_gpus(self.hparams)
         os.environ['CUDA_VISIBLE_DEVICES'] = ",".join([str(gpu) for gpu in gpus])
         self.sess = tf.Session()
 
