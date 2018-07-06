@@ -18,10 +18,7 @@ from finetune.download import download_data_if_required
 from finetune.encoding import TextEncoder
 from finetune.optimizers import AdamWeightDecay, schedules
 from sklearn.model_selection import train_test_split
-from finetune.config import (
-    MAX_LENGTH, BATCH_SIZE, N_EPOCHS, SEED, WEIGHT_STDDEV, LR, B1, B2, L2_REG, VECTOR_L2,
-    EPSILON, LR_SCHEDULE, MAX_GRAD_NORM, LM_LOSS_COEF, LR_WARMUP, N_EMBED, ROLLING_AVG_DECAY, SUMMARIZE_GRADS
-)
+from finetune.config import get_default_hparms
 
 from finetune.target_encoders import OneHotLabelEncoder, RegressionEncoder
 from finetune.network_modules import featurizer, language_model, classifier, regressor
@@ -45,10 +42,11 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                        Providing more than `max_length` tokens to the model as input will result in truncation.
     """
 
-    def __init__(self, autosave_path=None, max_length=MAX_LENGTH, verbose=True):
+    def __init__(self, hparams=None, autosave_path=None, max_length=None, verbose=True):
+        self.hparams = hparams or get_default_hparms()
         self.autosave_path = autosave_path or tempfile.mkdtemp()
         _LOGGER.info("Writing intermediate checkpoints to {}".format(self.autosave_path))
-        self.max_length = max_length
+        self.max_length = max_length or self.hparams.MAX_LENGTH
         self.autosave_path = autosave_path
         self.label_encoder = None
         self._initialize()
@@ -58,7 +56,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         self.is_classification = None
 
     def _initialize(self):
-        self._set_random_seed(SEED)
+        self._set_random_seed(self.hparams.SEED)
 
         download_data_if_required()
         self.encoder = TextEncoder()
@@ -100,17 +98,18 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         else:
             return RegressionEncoder()
 
-    def _finetune(self, *Xs, Y, batch_size=BATCH_SIZE, val_size=0.05, val_interval=150, val_window_size=5):
+    def _finetune(self, *Xs, Y, batch_size=None, val_size=0.05, val_interval=150, val_window_size=5):
         """
         X: List / array of text
         Y: Class labels
         val_size: Float fraction or int number that represents the size of the validation set.
         val_interval: The interval for which validation is performed, measured in number of steps.
         """
+        batch_size = batch_size or self.hparams.BATCH_SIZE
         self.label_encoder = self.get_target_encoder()
         train_x, train_mask = self._text_to_ids(*Xs)
         n_batch_train = batch_size * max(len(get_available_gpus()), 1)
-        n_updates_total = (len(Y) // n_batch_train) * N_EPOCHS
+        n_updates_total = (len(Y) // n_batch_train) * self.hparams.N_EPOCHS
         Y = self.label_encoder.fit_transform(Y)
         self.target_dim = len(self.label_encoder.target_dim)
         self._build_model(n_updates_total=n_updates_total, target_dim=self.target_dim)
@@ -127,7 +126,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         global_step = 0
         best_val_loss = float("inf")
         val_window = [float("inf")] * val_window_size
-        for i in range(N_EPOCHS):
+        for i in range(self.hparams.N_EPOCHS):
             for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=True):
                 global_step += 1
                 if global_step % val_interval == 0:
@@ -139,10 +138,12 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                     sum_val_loss = 0
                     for xval, mval, yval in iter_data(*val_dataset, n_batch=n_batch_train, verbose=True):
                         val_cost, summary = self.sess.run([self.clf_loss, self.summaries],
-                                                          {self.X: xval, self.M: mval, self.Y: yval, self.do_dropout: DROPOUT_OFF})
+                                                          {self.X: xval, self.M: mval, self.Y: yval,
+                                                           self.do_dropout: DROPOUT_OFF})
                         self.valid_writer.add_summary(summary, global_step)
                         sum_val_loss += val_cost
-                        avg_val_loss = avg_val_loss * ROLLING_AVG_DECAY + val_cost * (1 - ROLLING_AVG_DECAY)
+                        avg_val_loss = avg_val_loss * self.hparams.ROLLING_AVG_DECAY + val_cost * (
+                                1 - self.hparams.ROLLING_AVG_DECAY)
                         _LOGGER.info("\nVAL: LOSS = {}, ROLLING AVG = {}".format(val_cost, avg_val_loss))
                     val_window.append(sum_val_loss)
                     val_window.pop(0)
@@ -152,8 +153,10 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                         _LOGGER.info("Autosaving new best model.")
                         self.save(self.autosave_path)
                         _LOGGER.info("Done!!")
-                cost, _ = self.sess.run([self.clf_loss, self.train_op], {self.X: xmb, self.M: mmb, self.Y: ymb, self.do_dropout: DROPOUT_ON})
-                avg_train_loss = avg_train_loss * ROLLING_AVG_DECAY + cost * (1 - ROLLING_AVG_DECAY)
+                cost, _ = self.sess.run([self.clf_loss, self.train_op],
+                                        {self.X: xmb, self.M: mmb, self.Y: ymb, self.do_dropout: DROPOUT_ON})
+                avg_train_loss = avg_train_loss * self.hparams.ROLLING_AVG_DECAY + cost * (
+                        1 - self.hparams.ROLLING_AVG_DECAY)
                 _LOGGER.info("\nTRAIN: LOSS = {}, ROLLING AVG = {}".format(cost, avg_train_loss))
 
         return self
@@ -224,7 +227,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
     def _infer_prep(self, *X, max_length=None):
         max_length = max_length or self.max_length
         infer_x, infer_mask = self._text_to_ids(*X, max_length=max_length)
-        n_batch_train = BATCH_SIZE * max(len(get_available_gpus()), 1)
+        n_batch_train = self.hparams.BATCH_SIZE * max(len(get_available_gpus()), 1)
         self._build_model(n_updates_total=0, target_dim=self.target_dim, train=False)
         yield from iter_data(infer_x, infer_mask, n_batch=n_batch_train, verbose=self.verbose)
 
@@ -251,22 +254,22 @@ class LanguageModelBase(object, metaclass=ABCMeta):
     def _compile_train_op(self, *, params, grads, n_updates_total):
         grads = average_grads(grads)
 
-        if SUMMARIZE_GRADS:
+        if self.hparams.SUMMARIZE_GRADS:
             self.summaries += tf.contrib.training.add_gradients_summaries(grads)
 
         grads = [grad for grad, param in grads]
         self.train_op = AdamWeightDecay(
             params=params,
             grads=grads,
-            lr=LR,
-            schedule=partial(schedules[LR_SCHEDULE], warmup=LR_WARMUP),
+            lr=self.hparams.LR,
+            schedule=partial(schedules[self.hparams.LR_SCHEDULE], warmup=self.hparams.LR_WARMUP),
             t_total=n_updates_total,
-            l2=L2_REG,
-            max_grad_norm=MAX_GRAD_NORM,
-            vector_l2=VECTOR_L2,
-            b1=B1,
-            b2=B2,
-            e=EPSILON
+            l2=self.hparams.L2_REG,
+            max_grad_norm=self.hparams.MAX_GRAD_NORM,
+            vector_l2=self.hparams.VECTOR_L2,
+            b1=self.hparams.B1,
+            b2=self.hparams.B2,
+            e=self.hparams.EPSILON
         )
 
     def _construct_graph(self, n_updates_total, target_dim, train=True):
@@ -294,11 +297,13 @@ class LanguageModelBase(object, metaclass=ABCMeta):
             scope = tf.variable_scope(tf.get_variable_scope(), reuse=do_reuse)
 
             with device, scope:
-                featurizer_state = featurizer(X, encoder=self.encoder, dropout_placeholder=self.do_dropout, train=train,
+                featurizer_state = featurizer(X, hparams=self.hparams, encoder=self.encoder,
+                                              dropout_placeholder=self.do_dropout, train=train,
                                               reuse=do_reuse)
                 language_model_state = language_model(
                     X=X,
                     M=M,
+                    hparams=self.hparams,
                     embed_weights=featurizer_state['embed_weights'],
                     hidden=featurizer_state['sequence_features'],
                     reuse=do_reuse
@@ -315,8 +320,8 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                     )
                     train_loss = tf.reduce_mean(target_model_state['losses'])
 
-                    if LM_LOSS_COEF > 0:
-                        train_loss += LM_LOSS_COEF * tf.reduce_mean(language_model_state['losses'])
+                    if self.hparams.LM_LOSS_COEF > 0:
+                        train_loss += self.hparams.LM_LOSS_COEF * tf.reduce_mean(language_model_state['losses'])
 
                     train_loss_tower += train_loss
 
@@ -371,7 +376,8 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         os.environ['CUDA_VISIBLE_DEVICES'] = ",".join([str(gpu) for gpu in gpus])
         self.sess = tf.Session()
 
-    def _set_random_seed(self, seed=SEED):
+    def _set_random_seed(self, seed=None):
+        seed = seed or self.hparams.SEED
         random.seed(seed)
         np.random.seed(seed)
         tf.set_random_seed(seed)
@@ -398,8 +404,8 @@ class LanguageModelBase(object, metaclass=ABCMeta):
             init_params = np.split(np.concatenate(init_params, 0), offsets)[:-1]
             init_params = [param.reshape(shape) for param, shape in zip(init_params, shapes)]
             init_params[0] = init_params[0][:self.max_length]
-            special_embed = (np.random.randn(len(self.encoder.special_tokens), N_EMBED) * WEIGHT_STDDEV).astype(
-                np.float32)
+            special_embed = (np.random.randn(len(self.encoder.special_tokens),
+                                             self.hparams.N_EMBED) * self.hparams.WEIGHT_STDDEV).astype(np.float32)
             init_params[0] = np.concatenate([init_params[1], special_embed, init_params[0]], 0)
             del init_params[1]
             self.sess.run([p.assign(ip) for p, ip in zip(pretrained_params, init_params)])
