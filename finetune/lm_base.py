@@ -10,6 +10,8 @@ import tensorflow as tf
 import numpy as np
 from sklearn.utils import shuffle
 
+import tempfile
+
 from functools import partial
 
 from finetune.download import download_data_if_required
@@ -18,7 +20,7 @@ from finetune.optimizers import AdamWeightDecay, schedules
 from sklearn.model_selection import train_test_split
 from finetune.config import (
     MAX_LENGTH, BATCH_SIZE, N_EPOCHS, SEED, WEIGHT_STDDEV, LR, B1, B2, L2_REG, VECTOR_L2,
-    EPSILON, LR_SCHEDULE, MAX_GRAD_NORM, LM_LOSS_COEF, LR_WARMUP, N_EMBED, ROLLING_AVG_DECAY
+    EPSILON, LR_SCHEDULE, MAX_GRAD_NORM, LM_LOSS_COEF, LR_WARMUP, N_EMBED, ROLLING_AVG_DECAY, SUMMARIZE_GRADS
 )
 
 from finetune.target_encoders import OneHotLabelEncoder, RegressionEncoder
@@ -31,6 +33,9 @@ PARAM_PATH = os.path.join(os.path.dirname(__file__), 'model', 'params_{}.npy')
 
 _LOGGER = logging.getLogger(__name__)
 
+DROPOUT_ON = 1
+DROPOUT_OFF = 0
+
 
 class LanguageModelBase(object, metaclass=ABCMeta):
     """
@@ -40,7 +45,9 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                        Providing more than `max_length` tokens to the model as input will result in truncation.
     """
 
-    def __init__(self, autosave_path, max_length=MAX_LENGTH, verbose=True):
+    def __init__(self, autosave_path=None, max_length=MAX_LENGTH, verbose=True):
+        self.autosave_path = autosave_path or tempfile.mkdtemp()
+        _LOGGER.info("Writing intermediate checkpoints to {}".format(self.autosave_path))
         self.max_length = max_length
         self.autosave_path = autosave_path
         self.label_encoder = None
@@ -79,8 +86,8 @@ class LanguageModelBase(object, metaclass=ABCMeta):
 
     def target_model(self, hidden, targets, n_outputs, train=False, reuse=None):
         if self.is_classification:
-            return classifier(hidden, targets, n_outputs, train=train, reuse=reuse)
-        return regressor(hidden, targets, n_outputs, train=train, reuse=reuse)
+            return classifier(hidden, targets, n_outputs, self.do_dropout, train=train, reuse=reuse)
+        return regressor(hidden, targets, n_outputs, self.do_dropout, train=train, reuse=reuse)
 
     def predict_ops(self, logits):
         if self.is_classification:
@@ -126,12 +133,13 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                 if global_step % val_interval == 0:
 
                     summary = self.sess.run(self.summaries, {self.X: xmb, self.M: mmb, self.Y: ymb})
+
                     self.train_writer.add_summary(summary, global_step)
 
                     sum_val_loss = 0
                     for xval, mval, yval in iter_data(*val_dataset, n_batch=n_batch_train, verbose=True):
                         val_cost, summary = self.sess.run([self.clf_loss, self.summaries],
-                                                          {self.X: xval, self.M: mval, self.Y: yval})
+                                                          {self.X: xval, self.M: mval, self.Y: yval, self.do_dropout: DROPOUT_OFF})
                         self.valid_writer.add_summary(summary, global_step)
                         sum_val_loss += val_cost
                         avg_val_loss = avg_val_loss * ROLLING_AVG_DECAY + val_cost * (1 - ROLLING_AVG_DECAY)
@@ -144,7 +152,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                         _LOGGER.info("Autosaving new best model.")
                         self.save(self.autosave_path)
                         _LOGGER.info("Done!!")
-                cost, _ = self.sess.run([self.clf_loss, self.train_op], {self.X: xmb, self.M: mmb, self.Y: ymb})
+                cost, _ = self.sess.run([self.clf_loss, self.train_op], {self.X: xmb, self.M: mmb, self.Y: ymb, self.do_dropout: DROPOUT_ON})
                 avg_train_loss = avg_train_loss * ROLLING_AVG_DECAY + cost * (1 - ROLLING_AVG_DECAY)
                 _LOGGER.info("\nTRAIN: LOSS = {}, ROLLING AVG = {}".format(cost, avg_train_loss))
 
@@ -243,7 +251,8 @@ class LanguageModelBase(object, metaclass=ABCMeta):
     def _compile_train_op(self, *, params, grads, n_updates_total):
         grads = average_grads(grads)
 
-        self.summaries += tf.contrib.training.add_gradients_summaries(grads)
+        if SUMMARIZE_GRADS:
+            self.summaries += tf.contrib.training.add_gradients_summaries(grads)
 
         grads = [grad for grad, param in grads]
         self.train_op = AdamWeightDecay(
@@ -285,7 +294,8 @@ class LanguageModelBase(object, metaclass=ABCMeta):
             scope = tf.variable_scope(tf.get_variable_scope(), reuse=do_reuse)
 
             with device, scope:
-                featurizer_state = featurizer(X, encoder=self.encoder, train=train, reuse=do_reuse)
+                featurizer_state = featurizer(X, encoder=self.encoder, dropout_placeholder=self.do_dropout, train=train,
+                                              reuse=do_reuse)
                 language_model_state = language_model(
                     X=X,
                     M=M,
@@ -371,6 +381,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         self.X = tf.placeholder(tf.int32, [None, self.max_length, 2])  # token idxs (BPE embedding + positional)
         self.M = tf.placeholder(tf.float32, [None, self.max_length])  # sequence mask
         self.Y = tf.placeholder(tf.float32, [None, self.target_dim])  # classification targets
+        self.do_dropout = tf.placeholder(tf.float32)  # 1 for do dropout and 0 to not do dropout
 
     def _load_base_model(self):
         """
