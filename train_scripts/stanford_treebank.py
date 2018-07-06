@@ -1,19 +1,11 @@
 import os
-import unittest
-import logging
-from copy import copy
 from pathlib import Path
 
-# required for tensorflow logging control
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-
-import tensorflow as tf
 import pandas as pd
 import numpy as np
 import enso
 import tempfile
 from enso.download import generic_download
-from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
 from finetune import LanguageModelClassifier
 import logging
