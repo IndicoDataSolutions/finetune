@@ -12,7 +12,6 @@ N_LAYER = 12
 ACT_FN = "gelu"
 N_EMBED = 768
 
-
 # REGULARIZATION
 EMBED_P_DROP = 0.1
 ATTN_P_DROP = 0.1
@@ -34,3 +33,6 @@ ROLLING_AVG_DECAY = 0.99
 
 # Language Modelling Endpoint
 LM_DECODE_TEMP = 0.2
+
+# Logging
+SUMMARIZE_GRADS = False
