@@ -416,7 +416,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         """
         required_fields = [
             'label_encoder', 'max_length', 'target_dim', '_load_from_file', 'verbose', 'autosave_path',
-            'is_classification'
+            'is_classification', "hparams"
         ]
         serialized_state = {
             k: v for k, v in self.__dict__.items()
