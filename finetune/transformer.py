@@ -37,7 +37,7 @@ def mask_attn_weights(w):
     return w
 
 
-def _attn(q, k, v, attn_pdrop, train=False, scale=False):
+def _attn(q, k, v, attn_pdrop, dropout_placeholder, train=False, scale=False):
     w = tf.matmul(q, k)
 
     if scale:
@@ -47,7 +47,7 @@ def _attn(q, k, v, attn_pdrop, train=False, scale=False):
     w = mask_attn_weights(w)
     w = tf.nn.softmax(w)
 
-    w = dropout(w, attn_pdrop, train)
+    w = dropout(w, attn_pdrop, train, dropout_placeholder)
 
     a = tf.matmul(w, v)
     return a
@@ -97,7 +97,7 @@ def attn(x, scope, n_state, n_head, resid_pdrop, attn_pdrop, dropout_placeholder
         q = split_heads(q, n_head)
         k = split_heads(k, n_head, k=True)
         v = split_heads(v, n_head)
-        a = _attn(q, k, v, attn_pdrop=attn_pdrop, train=train, scale=scale)
+        a = _attn(q, k, v, attn_pdrop=attn_pdrop, dropout_placeholder=dropout_placeholder, train=train, scale=scale)
         a = merge_heads(a)
         a = conv1d(a, 'c_proj', n_state, 1, train=train)
         a = dropout(a, resid_pdrop, train, dropout_placeholder)
@@ -114,12 +114,12 @@ def mlp(x, scope, n_state, act_fn, resid_pdrop, dropout_placeholder, train=False
         return h2
 
 
-def block(x, n_head, act_fn, resid_pdrop, attn_pdrop, scope, train=False, scale=False):
+def block(x, n_head, act_fn, resid_pdrop, attn_pdrop, scope, dropout_placeholder, train=False, scale=False):
     with tf.variable_scope(scope):
         nx = shape_list(x)[-1]
-        a = attn(x, 'attn', nx, n_head, resid_pdrop, attn_pdrop, train=train, scale=scale)
+        a = attn(x, 'attn', nx, n_head, resid_pdrop, attn_pdrop, dropout_placeholder, train=train, scale=scale)
         n = norm(x + a, 'ln_1')
-        m = mlp(n, 'mlp', nx * 4, act_fn, resid_pdrop, train=train)
+        m = mlp(n, 'mlp', nx * 4, act_fn, resid_pdrop, dropout_placeholder, train=train)
         h = norm(n + m, 'ln_2')
         return h
 

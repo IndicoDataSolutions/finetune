@@ -10,6 +10,8 @@ import tensorflow as tf
 import numpy as np
 from sklearn.utils import shuffle
 
+import tempfile
+
 from functools import partial
 
 from finetune.download import download_data_if_required
@@ -26,8 +28,8 @@ from finetune.network_modules import featurizer, language_model, classifier, reg
 from finetune.utils import find_trainable_variables, get_available_gpus, shape_list, assign_to_gpu, average_grads, \
     iter_data, soft_split
 
-SHAPES_PATH = os.path.join(os.path.dirname(__file__), '..', 'model', 'params_shapes.json')
-PARAM_PATH = os.path.join(os.path.dirname(__file__), '..', 'model', 'params_{}.npy')
+SHAPES_PATH = os.path.join(os.path.dirname(__file__), 'model', 'params_shapes.json')
+PARAM_PATH = os.path.join(os.path.dirname(__file__), 'model', 'params_{}.npy')
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -43,7 +45,9 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                        Providing more than `max_length` tokens to the model as input will result in truncation.
     """
 
-    def __init__(self, autosave_path, max_length=MAX_LENGTH, verbose=True):
+    def __init__(self, autosave_path=None, max_length=MAX_LENGTH, verbose=True):
+        self.autosave_path = autosave_path or tempfile.mkdtemp()
+        _LOGGER.info("Writing intermediate checkpoints to {}".format(self.autosave_path))
         self.max_length = max_length
         self.autosave_path = autosave_path
         self.label_encoder = None
@@ -128,13 +132,13 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                 global_step += 1
                 if global_step % val_interval == 0:
 
-                    summary = self.sess.run([self.summaries], {self.X: xmb, self.M: mmb, self.Y: ymb})
+                    summary = self.sess.run([self.summaries], {self.X: xmb, self.M: mmb, self.Y: ymb, self.do_dropout: DROPOUT_OFF})
                     self.train_writer.add_summary(summary, global_step)
 
                     sum_val_loss = 0
                     for xval, mval, yval in iter_data(*val_dataset, n_batch=n_batch_train, verbose=True):
                         val_cost, summary = self.sess.run([self.clf_loss, self.summaries],
-                                                          {self.X: xval, self.M: mval, self.Y: yval})
+                                                          {self.X: xval, self.M: mval, self.Y: yval, self.do_dropout: DROPOUT_OFF})
                         self.valid_writer.add_summary(summary, global_step)
                         sum_val_loss += val_cost
                         avg_val_loss = avg_val_loss * ROLLING_AVG_DECAY + val_cost * (1 - ROLLING_AVG_DECAY)
@@ -147,7 +151,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                         _LOGGER.info("Autosaving new best model.")
                         self.save(self.autosave_path)
                         _LOGGER.info("Done!!")
-                cost, _ = self.sess.run([self.clf_loss, self.train_op], {self.X: xmb, self.M: mmb, self.Y: ymb})
+                cost, _ = self.sess.run([self.clf_loss, self.train_op], {self.X: xmb, self.M: mmb, self.Y: ymb, self.do_dropout: DROPOUT_ON})
                 avg_train_loss = avg_train_loss * ROLLING_AVG_DECAY + cost * (1 - ROLLING_AVG_DECAY)
                 _LOGGER.info("\nTRAIN: LOSS = {}, ROLLING AVG = {}".format(cost, avg_train_loss))
 
@@ -370,7 +374,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         self.X = tf.placeholder(tf.int32, [None, self.max_length, 2])  # token idxs (BPE embedding + positional)
         self.M = tf.placeholder(tf.float32, [None, self.max_length])  # sequence mask
         self.Y = tf.placeholder(tf.float32, [None, self.target_dim])  # classification targets
-        self.do_dropout = tf.Placeholder(tf.int32)  # 1 for do dropout and 0 to not do dropout
+        self.do_dropout = tf.placeholder(tf.float32)  # 1 for do dropout and 0 to not do dropout
 
     def _load_base_model(self):
         """

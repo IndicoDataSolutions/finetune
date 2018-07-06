@@ -23,7 +23,7 @@ def featurizer(X, encoder, dropout_placeholder, train=False, reuse=None, max_len
 
         h = embed(X, embed_weights)
         for layer in range(N_LAYER):
-            h = block(h, N_HEADS, ACT_FN, RESID_P_DROP, ATTN_P_DROP, 'h%d' % layer, train=train, scale=True)
+            h = block(h, N_HEADS, ACT_FN, RESID_P_DROP, ATTN_P_DROP, 'h%d' % layer, dropout_placeholder, train=train, scale=True)
 
         # Use hidden state at classifier token as input to final proj. + softmax
         clf_h = tf.reshape(h, [-1, N_EMBED])  # [batch * seq_len, embed]
