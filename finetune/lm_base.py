@@ -47,7 +47,6 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         self.autosave_path = autosave_path or tempfile.mkdtemp()
         _LOGGER.info("Writing intermediate checkpoints to {}".format(self.autosave_path))
         self.max_length = max_length or self.hparams.MAX_LENGTH
-        self.autosave_path = autosave_path
         self.label_encoder = None
         self._initialize()
         self.target_dim = None
