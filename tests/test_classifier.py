@@ -14,6 +14,7 @@ import numpy as np
 import enso
 from enso.download import generic_download
 from sklearn.metrics import accuracy_score
+from unittest.mock import MagicMock
 
 from finetune import config
 from finetune import LanguageModelClassifier
@@ -22,12 +23,12 @@ SST_FILENAME = "SST-binary.csv"
 
 
 class TestLanguageModelClassifier(unittest.TestCase):
-
     n_sample = 100
     n_hidden = 768
     dataset_path = os.path.join(
         enso.config.DATA_DIRECTORY, 'Classify', 'SST-binary.csv'
     )
+
     @classmethod
     def _download_sst(cls):
         """
@@ -45,19 +46,17 @@ class TestLanguageModelClassifier(unittest.TestCase):
             filename=SST_FILENAME
         )
 
-
     @classmethod
     def setUpClass(cls):
         cls._download_sst()
 
     def setUp(self):
-        self.dataset = pd.read_csv(self.dataset_path, nrows=self.n_sample*3)
+        self.dataset = pd.read_csv(self.dataset_path, nrows=self.n_sample * 3)
+        os.mkdir("tests/saved-models")
         tf.reset_default_graph()
-
 
     def tearDown(self):
         shutil.rmtree("tests/saved-models/")
-
 
     def test_fit_predict(self):
         """
@@ -114,7 +113,7 @@ class TestLanguageModelClassifier(unittest.TestCase):
         save_file_autosave = 'tests/saved-models/autosave_path'
         model = LanguageModelClassifier(verbose=False, autosave_path=save_file_autosave)
         n_per_class = self.n_sample // 2
-        trX = ['cat'] * n_per_class + ['finance']  * n_per_class
+        trX = ['cat'] * n_per_class + ['finance'] * n_per_class
         trY = copy(trX)
         teX = ['feline'] * n_per_class + ['investment'] * n_per_class
         teY = ['cat'] * n_per_class + ['finance'] * n_per_class
@@ -152,3 +151,16 @@ class TestLanguageModelClassifier(unittest.TestCase):
         lm_out_2 = model.lm_predict(seed_text="Indico RULE")
         self.assertEqual(type(lm_out_2), str)
         self.assertIn('_start_Indico RULE'.lower(), lm_out_2)
+
+    def test_early_termination_lm(self):
+        save_file_autosave = 'tests/saved-models/autosave_path'
+        model = LanguageModelClassifier(verbose=False, autosave_path=save_file_autosave)
+
+        # A dirty mock to make all model inferences output a hundred _classify_ tokens
+        def mock_load_base_model(*args, **kwargs):
+            model.sess = MagicMock()
+            model.sess.run = MagicMock(return_value=100 * [model.encoder['_classify_']])
+
+        model._load_base_model = mock_load_base_model
+        lm_out = model.lm_predict()
+        self.assertEqual(lm_out, '_start__classify_')

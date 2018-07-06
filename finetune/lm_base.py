@@ -384,7 +384,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         seed_text_tokens = self.encoder.encode([seed_text])
         self._build_model(n_updates_total=0, target_dim=self.target_dim, train=False)
         string = [self.encoder['_start_']] + seed_text_tokens[0]
-        eos = [self.encoder['_classify_']]
+        eos = self.encoder['_classify_']
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
             for i in range(len(seed_text_tokens[0]), (max_length or self.max_length) - 1):
@@ -410,7 +410,8 @@ class LanguageModelBase(object, metaclass=ABCMeta):
             init_params = np.split(np.concatenate(init_params, 0), offsets)[:-1]
             init_params = [param.reshape(shape) for param, shape in zip(init_params, shapes)]
             init_params[0] = init_params[0][:self.max_length]
-            special_embed = (np.random.randn(len(self.encoder.special_tokens), N_EMBED) * WEIGHT_STDDEV).astype(np.float32)
+            special_embed = (np.random.randn(len(self.encoder.special_tokens), N_EMBED) * WEIGHT_STDDEV).astype(
+                np.float32)
             init_params[0] = np.concatenate([init_params[1], special_embed, init_params[0]], 0)
             del init_params[1]
             self.sess.run([p.assign(ip) for p, ip in zip(pretrained_params, init_params)])
@@ -469,115 +470,3 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         saver.restore(self.sess, self._load_from_file)
         self._load_from_file = False
         self.is_trained = True
-
-
-
-class LanguageModelClassifier(LanguageModelBase):
-
-    def featurize(self, X, max_length=None):
-        """
-        Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
-
-        :param X: list or array of text to embed.
-        :param max_length: the number of tokens to be included in the document representation.
-                           Providing more than `max_length` tokens as input will result in truncation.
-        :returns: np.array of features of shape (n_examples, embedding_size).
-        """
-        return self._featurize(X, max_length=max_length)
-
-    def predict(self, X, max_length=None):
-        """
-        Produces a list of most likely class labels as determined by the fine-tuned model.
-
-        :param X: list or array of text to embed.
-        :param max_length: the number of tokens to be included in the document representation.
-                           Providing more than `max_length` tokens as input will result in truncation.
-        :returns: list of class labels.
-        """
-        return self._predict(X, max_length=max_length)
-
-    def predict_proba(self, X, max_length=None):
-        """
-        Produces a probability distribution over classes for each example in X.
-
-        :param X: list or array of text to embed.
-        :param max_length: the number of tokens to be included in the document representation.
-                           Providing more than `max_length` tokens as input will result in truncation.
-        :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
-        """
-        return self._predict_proba(X, max_length=max_length)
-
-    def finetune(self, X, Y, batch_size=BATCH_SIZE, val_size=0.05, val_interval=150):
-        """
-        :param X: list or array of text.
-        :param Y: integer or string-valued class labels.
-        :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
-                           corresponds to the number of training examples provided to each GPU.
-        :param val_size: Float fraction or int number that represents the size of the validation set.
-        :param val_interval: The interval for which validation is performed, measured in number of steps.
-        """
-        return self._finetune(X, Y=Y, batch_size=batch_size, val_size=val_size, val_interval=val_interval)
-
-
-class LanguageModelEntailment(LanguageModelBase):
-
-    def __init__(self, *args, **vargs):
-        super().__init__(*args, **vargs)
-        self.label_encoder = OrdinalClassificationEncoder()
-
-    def _text_to_ids(self, *Xs, max_length=None):
-        max_length = max_length or self.max_length
-        assert len(Xs) == 2, "This implementation assumes 2 Xs"
-
-        question_answer_pairs = self.encoder.encode_for_entailment(*Xs, max_length=max_length)
-
-        tokens, mask = self._array_format(question_answer_pairs)
-        return tokens, mask
-
-    def finetune(self, X_1, X_2, Y, batch_size=BATCH_SIZE, val_size=0.05, val_interval=150):
-        """
-        :param X_1: list or array of text to embed as the queries.
-        :param X_2: list or array of text to embed as the answers.
-        :param Y: integer or string-valued class labels. It is necessary for the items of Y to be sortable.
-        :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
-                           corresponds to the number of training examples provided to each GPU.
-        :param val_size: Float fraction or int number that represents the size of the validation set.
-        :param val_interval: The interval for which validation is performed, measured in number of steps.
-        """
-        return self._finetune(X_1, X_2, Y=Y, batch_size=batch_size, val_size=val_size, val_interval=val_interval)
-
-    def predict(self, X_1, X_2, max_length=None):
-        """
-        Produces X_2 list of most likely class labels as determined by the fine-tuned model.
-
-        :param X_1: list or array of text to embed as the queries.
-        :param X_2: list or array of text to embed as the answers.
-        :param max_length: the number of tokens to be included in the document representation.
-                           Providing more than `max_length` tokens as input will result in truncation.
-        :returns: list of class labels.
-        """
-        return self.label_encoder.inverse_transform(self._predict_proba(X_1, X_2, max_length=max_length))
-
-    def predict_proba(self, X_1, X_2, max_length=None):
-        """
-        Produces X_2 probability distribution over classes for each example in X.
-
-        :param X_1: list or array of text to embed as the queries.
-        :param X_2: list or array of text to embed as the answers.
-        :param max_length: the number of tokens to be included in the document representation.
-                           Providing more than `max_length` tokens as input will result in truncation.
-        :returns: list of dictionaries.  Each dictionary maps from X_2 class label to its assigned class probability.
-        """
-        return self._predict_proba(X_1, X_2, max_length=max_length)
-
-    def featurize(self, X_1, X_2, max_length=None):
-        """
-        Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
-
-        :param X_1: list or array of text to embed as the queries.
-        :param X_2: list or array of text to embed as the answers.
-        :param max_length: the number of tokens to be included in the document representation.
-                           Providing more than `max_length` tokens as input will result in truncation.
-        :returns: np.array of features of shape (n_examples, embedding_size).
-        """
-        return self._featurize(X_1, X_2, max_length=max_length)
