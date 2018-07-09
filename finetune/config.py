@@ -4,44 +4,50 @@ import tensorflow as tf
 def get_default_hparms():
     return tf.contrib.training.HParams(
         # TRAINING SETTINGS
-        BATCH_SIZE=4,
-        VISIBLE_GPUS=None,
-        N_EPOCHS=3,
-        SEED=42,
+        batchSize=4,
+        visibleGpus=None,
+        nEpochs=3,
+        seed=42,
 
         # MODEL DEFINITION + INITIALIZATION
-        WEIGHT_STDDEV=0.02,
-        MAX_LENGTH=512,
-        N_HEADS=12,
-        N_LAYER=12,
-        ACT_FN="gelu",
-        N_EMBED=768,
+        weightStddev=0.02,
+        maxLength=512,
+        nHeads=12,
+        nLayer=12,
+        actFn="gelu",
+        nEmbed=768,
 
         # REGULARIZATION
-        EMBED_P_DROP=0.1,
-        ATTN_P_DROP=0.1,
-        RESID_P_DROP=0.1,
-        CLF_P_DROP=0.1,
-        L2_REG=0.01,
-        VECTOR_L2=True,
+        embedPDrop=0.1,
+        attnPDrop=0.1,
+        residPDrop=0.1,
+        clfPDrop=0.1,
+        l2Reg=0.01,
+        vectorL2=True,
 
         # LOSS + OPTIMIZATION
         B1=0.9,
         B2=0.999,
-        EPSILON=1e-8,
-        LR_SCHEDULE='warmup_linear',
-        LR=6.25e-5,
-        LR_WARMUP=0.002,
-        MAX_GRAD_NORM=1,
-        LM_LOSS_COEF=0.5,
-        ROLLING_AVG_DECAY=0.99,
+        epsilon=1e-8,
+        lrSchedule='warmup_linear',
+        lr=6.25e-5,
+        lrWarmup=0.002,
+        maxGradNorm=1,
+        lmLossCoef=0.5,
+        rollingAvgDecay=0.99,
 
         # Logging
-        SUMMARIZE_GRADS=False
+        summarizeGrads=False,
+
+        # Validation
+        # Validation
+        val_size=0.05,
+        val_interval=150,
+        val_window_size=5
     )
 
 
 def cpu_hparams():
     hparam = get_default_hparms()
-    hparam.VISIBLE_GPUS = []
+    hparam.visibleGpus = []
     return hparam
