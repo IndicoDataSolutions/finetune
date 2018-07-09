@@ -119,7 +119,7 @@ class TestLanguageModelClassifier(unittest.TestCase):
         hparams = get_default_hparms()
         hparams.val_interval = 10
         hparams.val_size = 0.5
-        model = LanguageModelClassifier(verbose=False)
+        model = LanguageModelClassifier(verbose=False, hparams=hparams)
         train_sample = self.dataset.sample(n=20)
         model.fit(train_sample.Text, train_sample.Target)
 
