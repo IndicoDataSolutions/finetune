@@ -21,9 +21,10 @@ from sklearn.model_selection import train_test_split
 from finetune.config import get_default_hparams
 
 from finetune.target_encoders import OneHotLabelEncoder, RegressionEncoder
-from finetune.network_modules import featurizer, language_model, classifier, regressor
+from finetune.network_modules import featurizer, language_model, classifier, regressor, sequence_labeler
 from finetune.utils import find_trainable_variables, get_available_gpus, shape_list, assign_to_gpu, average_grads, \
     iter_data, soft_split
+from finetune.errors import InvalidTargetType
 
 SHAPES_PATH = os.path.join(os.path.dirname(__file__), 'model', 'params_shapes.json')
 PARAM_PATH = os.path.join(os.path.dirname(__file__), 'model', 'params_{}.npy')
@@ -32,6 +33,10 @@ _LOGGER = logging.getLogger(__name__)
 
 DROPOUT_ON = 1
 DROPOUT_OFF = 0
+
+CLASSIFICATION = 'classification'
+REGRESSION = 'regression'
+SEQUENCE_LABELING = 'sequence-labeling'
 
 
 class LanguageModelBase(object, metaclass=ABCMeta):
@@ -51,7 +56,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         self.target_dim = None
         self._load_from_file = False
         self.verbose = verbose
-        self.is_classification = None
+        self.target_type = None
 
     def _initialize(self):
         self._set_random_seed(self.hparams.seed)
@@ -80,21 +85,30 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         tokens, mask = self._array_format(token_idxs)
         return tokens, mask
 
-    def target_model(self, hidden, targets, n_outputs, train=False, reuse=None):
-        if self.is_classification:
-            return classifier(hidden, targets, n_outputs, self.do_dropout, hparams=self.hparams, train=train, reuse=reuse)
-        return regressor(hidden, targets, n_outputs, self.do_dropout, hparams=self.hparams, train=train, reuse=reuse)
+    def target_model(self, featurizer_state, targets, n_outputs, train=False, reuse=None):
+        if self.target_type == CLASSIFICATION:
+            return classifier(featurizer_state['features'], targets, n_outputs, self.do_dropout, train=train, reuse=reuse)
+        elif self.target_type == REGRESSION:
+            return regressor(featurizer_state['features'], targets, n_outputs, self.do_dropout, train=train, reuse=reuse)
+        elif self.target_type == SEQUENCE_LABELING:
+            return sequence_labeler(featurizer_state['sequence_features'], targets, n_outputs, self.do_dropout, train=train, reuse=reuse)
+        else:
+            raise InvalidTargetType(self.target_type)
 
     def predict_ops(self, logits):
-        if self.is_classification:
+        if self.target_type == CLASSIFICATION:
             return tf.argmax(logits, -1), tf.nn.softmax(logits, -1)
         return logits, logits
 
     def get_target_encoder(self):
-        if self.is_classification:
+        if self.target_type == CLASSIFICATION:
             return OneHotLabelEncoder()
-        else:
+        elif self.target_type == REGRESSION:
             return RegressionEncoder()
+        elif self.target_type == SEQUENCE_LABELING:
+            return SequenceLabelingEncoder()
+        else: 
+            raise InvalidTargetType(self.target_type)
 
     def _finetune(self, *Xs, Y, batch_size=None):
         """
@@ -308,7 +322,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
 
                 if target_dim is not None:
                     target_model_state = self.target_model(
-                        hidden=featurizer_state['features'],
+                        featurize_state=featurizer_state,
                         targets=Y,
                         n_outputs=target_dim,
                         train=train,
@@ -411,8 +425,8 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         Leave serialization of all tf objects to tf
         """
         required_fields = [
-            'label_encoder', 'max_length', 'target_dim', '_load_from_file', 'verbose', 'autosave_path',
-            'is_classification', "hparams"
+            'label_encoder', 'max_length', 'target_dim', '_load_from_file', 'verbose', 'autosave_path', "hparams",
+            'target_type'
         ]
         serialized_state = {
             k: v for k, v in self.__dict__.items()
