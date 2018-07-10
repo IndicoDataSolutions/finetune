@@ -23,11 +23,13 @@ or installed directly from source:
 git clone https://github.com/IndicoDataSolutions/finetune
 cd finetune
 python3 setup.py develop
+python -m spacy download en
 ```
 
 You can optionally run the provided test suite to ensure installation completed successfully.
 
 ```bash
+pip install nose
 nosetests
 ```
 
