@@ -14,14 +14,14 @@ def format_gpu_string(num):
 
 
 def get_available_gpus(hparams):
-    if hparams.visibleGpus is not None:
-        return hparams.visibleGpus
+    if hparams.visible_gpus is not None:
+        return hparams.visible_gpus
     local_device_protos = device_lib.list_local_devices()
-    hparams.visibleGpus = [
+    hparams.visible_gpus = [
         int(x.name.split(':')[-1]) for x in local_device_protos
         if x.device_type == 'GPU'
     ]
-    return hparams.visibleGpus
+    return hparams.visible_gpus
 
 
 def shape_list(x):

@@ -14,7 +14,7 @@ import enso
 from enso.download import generic_download
 from sklearn.metrics import accuracy_score
 from finetune import LanguageModelClassifier
-from finetune.config import get_default_hparms
+from finetune.config import get_default_hparams
 
 SST_FILENAME = "SST-binary.csv"
 
@@ -116,7 +116,7 @@ class TestLanguageModelClassifier(unittest.TestCase):
         self.assertEqual(accuracy_score(teY, predY), 1.00)
 
     def test_validation(self):
-        hparams = get_default_hparms()
+        hparams = get_default_hparams()
         hparams.val_interval = 10
         hparams.val_size = 0.5
         model = LanguageModelClassifier(verbose=False, hparams=hparams)

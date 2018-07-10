@@ -18,7 +18,7 @@ from finetune.download import download_data_if_required
 from finetune.encoding import TextEncoder
 from finetune.optimizers import AdamWeightDecay, schedules
 from sklearn.model_selection import train_test_split
-from finetune.config import get_default_hparms
+from finetune.config import get_default_hparams
 
 from finetune.target_encoders import OneHotLabelEncoder, RegressionEncoder
 from finetune.network_modules import featurizer, language_model, classifier, regressor
@@ -43,7 +43,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
     """
 
     def __init__(self, hparams=None, autosave_path=None, verbose=True):
-        self.hparams = hparams or get_default_hparms()
+        self.hparams = hparams or get_default_hparams()
         self.autosave_path = autosave_path or tempfile.mkdtemp()
         _LOGGER.info("Writing intermediate checkpoints to {}".format(self.autosave_path))
         self.label_encoder = None
@@ -74,7 +74,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         self.is_trained = False  # has model been fine-tuned?
 
     def _text_to_ids(self, *Xs, max_length=None):
-        max_length = max_length or self.hparams.maxLength
+        max_length = max_length or self.hparams.max_length
         assert len(Xs) == 1, "This implementation assumes a single Xs"
         token_idxs = self.encoder.encode_for_classification(Xs[0], max_length=max_length)
         tokens, mask = self._array_format(token_idxs)
@@ -101,11 +101,11 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         X: List / array of text
         Y: Class labels
         """
-        batch_size = batch_size or self.hparams.batchSize
+        batch_size = batch_size or self.hparams.batch_size
         self.label_encoder = self.get_target_encoder()
         train_x, train_mask = self._text_to_ids(*Xs)
         n_batch_train = batch_size * max(len(get_available_gpus(self.hparams)), 1)
-        n_updates_total = (len(Y) // n_batch_train) * self.hparams.nEpochs
+        n_updates_total = (len(Y) // n_batch_train) * self.hparams.n_epochs
         Y = self.label_encoder.fit_transform(Y)
         self.target_dim = len(self.label_encoder.target_dim)
         self._build_model(n_updates_total=n_updates_total, target_dim=self.target_dim)
@@ -122,7 +122,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         global_step = 0
         best_val_loss = float("inf")
         val_window = [float("inf")] * self.hparams.val_window_size
-        for i in range(self.hparams.nEpochs):
+        for i in range(self.hparams.n_epochs):
             for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=True):
                 global_step += 1
                 if global_step % self.hparams.val_interval == 0:
@@ -138,8 +138,8 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                                                            self.do_dropout: DROPOUT_OFF})
                         self.valid_writer.add_summary(summary, global_step)
                         sum_val_loss += val_cost
-                        avg_val_loss = avg_val_loss * self.hparams.rollingAvgDecay + val_cost * (
-                                1 - self.hparams.rollingAvgDecay)
+                        avg_val_loss = avg_val_loss * self.hparams.rolling_avg_decay + val_cost * (
+                                1 - self.hparams.rolling_avg_decay)
                         _LOGGER.info("\nVAL: LOSS = {}, ROLLING AVG = {}".format(val_cost, avg_val_loss))
                     val_window.append(sum_val_loss)
                     val_window.pop(0)
@@ -151,8 +151,8 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                         _LOGGER.info("Done!!")
                 cost, _ = self.sess.run([self.clf_loss, self.train_op],
                                         {self.X: xmb, self.M: mmb, self.Y: ymb, self.do_dropout: DROPOUT_ON})
-                avg_train_loss = avg_train_loss * self.hparams.rollingAvgDecay + cost * (
-                        1 - self.hparams.rollingAvgDecay)
+                avg_train_loss = avg_train_loss * self.hparams.rolling_avg_decay + cost * (
+                        1 - self.hparams.rolling_avg_decay)
                 _LOGGER.info("\nTRAIN: LOSS = {}, ROLLING AVG = {}".format(cost, avg_train_loss))
 
         return self
@@ -172,7 +172,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         predictions = []
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
-            max_length = max_length or self.hparams.maxLength
+            max_length = max_length or self.hparams.max_length
             for xmb, mmb in self._infer_prep(*Xs, max_length=max_length):
                 class_idx = self.sess.run(self.predict_op, {self.X: xmb, self.M: mmb})
                 class_labels = self.label_encoder.inverse_transform(class_idx)
@@ -187,7 +187,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         predictions = []
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
-            max_length = max_length or self.hparams.maxLength
+            max_length = max_length or self.hparams.max_length
             for xmb, mmb in self._infer_prep(*Xs, max_length=max_length):
                 probas = self.sess.run(self.predict_proba_op, {self.X: xmb, self.M: mmb})
                 classes = self.label_encoder.target_dim
@@ -204,7 +204,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         features = []
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
-            max_length = max_length or self.hparams.maxLength
+            max_length = max_length or self.hparams.max_length
             for xmb, mmb in self._infer_prep(*Xs, max_length=max_length):
                 feature_batch = self.sess.run(self.features, {self.X: xmb, self.M: mmb})
                 features.append(feature_batch)
@@ -221,9 +221,9 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         return self.featurize(*args, **kwargs)
 
     def _infer_prep(self, *X, max_length=None):
-        max_length = max_length or self.hparams.maxLength
+        max_length = max_length or self.hparams.max_length
         infer_x, infer_mask = self._text_to_ids(*X, max_length=max_length)
-        n_batch_train = self.hparams.batchSize * max(len(get_available_gpus(self.hparams)), 1)
+        n_batch_train = self.hparams.batch_size * max(len(get_available_gpus(self.hparams)), 1)
         self._build_model(n_updates_total=0, target_dim=self.target_dim, train=False)
         yield from iter_data(infer_x, infer_mask, n_batch=n_batch_train, verbose=self.verbose)
 
@@ -236,21 +236,21 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         """
         n = len(token_idxs)
         seq_lengths = [len(x) for x in token_idxs]
-        x = np.zeros((n, self.hparams.maxLength, 2), dtype=np.int32)
-        mask = np.zeros((n, self.hparams.maxLength), dtype=np.float32)
+        x = np.zeros((n, self.hparams.max_length, 2), dtype=np.int32)
+        mask = np.zeros((n, self.hparams.max_length), dtype=np.float32)
         for i, seq_length in enumerate(seq_lengths):
             # BPE embedding
             x[i, :seq_length, 0] = token_idxs[i]
             # masking: value of 1 means "consider this in cross-entropy LM loss"
             mask[i, 1:seq_length] = 1
         # positional_embeddings
-        x[:, :, 1] = np.arange(self.encoder.vocab_size, self.encoder.vocab_size + self.hparams.maxLength)
+        x[:, :, 1] = np.arange(self.encoder.vocab_size, self.encoder.vocab_size + self.hparams.max_length)
         return x, mask
 
     def _compile_train_op(self, *, params, grads, n_updates_total):
         grads = average_grads(grads)
 
-        if self.hparams.summarizeGrads:
+        if self.hparams.summarize_grads:
             self.summaries += tf.contrib.training.add_gradients_summaries(grads)
 
         grads = [grad for grad, param in grads]
@@ -258,13 +258,13 @@ class LanguageModelBase(object, metaclass=ABCMeta):
             params=params,
             grads=grads,
             lr=self.hparams.lr,
-            schedule=partial(schedules[self.hparams.lrSchedule], warmup=self.hparams.lrWarmup),
+            schedule=partial(schedules[self.hparams.lr_schedule], warmup=self.hparams.lr_warmup),
             t_total=n_updates_total,
-            l2=self.hparams.l2Reg,
-            max_grad_norm=self.hparams.maxGradNorm,
-            vector_l2=self.hparams.vectorL2,
-            b1=self.hparams.B1,
-            b2=self.hparams.B2,
+            l2=self.hparams.l2_reg,
+            max_grad_norm=self.hparams.max_grad_norm,
+            vector_l2=self.hparams.vector_l2,
+            b1=self.hparams.b1,
+            b2=self.hparams.b2,
             e=self.hparams.epsilon
         )
 
@@ -316,8 +316,8 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                     )
                     train_loss = tf.reduce_mean(target_model_state['losses'])
 
-                    if self.hparams.lmLossCoef > 0:
-                        train_loss += self.hparams.lmLossCoef * tf.reduce_mean(language_model_state['losses'])
+                    if self.hparams.lm_loss_coef > 0:
+                        train_loss += self.hparams.lm_loss_coef * tf.reduce_mean(language_model_state['losses'])
 
                     train_loss_tower += train_loss
 
@@ -380,8 +380,8 @@ class LanguageModelBase(object, metaclass=ABCMeta):
 
     def _define_placeholders(self):
         # tf placeholders
-        self.X = tf.placeholder(tf.int32, [None, self.hparams.maxLength, 2])  # token idxs (BPE embedding + positional)
-        self.M = tf.placeholder(tf.float32, [None, self.hparams.maxLength])  # sequence mask
+        self.X = tf.placeholder(tf.int32, [None, self.hparams.max_length, 2])  # token idxs (BPE embedding + positional)
+        self.M = tf.placeholder(tf.float32, [None, self.hparams.max_length])  # sequence mask
         self.Y = tf.placeholder(tf.float32, [None, self.target_dim])  # classification targets
         self.do_dropout = tf.placeholder(tf.float32)  # 1 for do dropout and 0 to not do dropout
 
@@ -399,9 +399,9 @@ class LanguageModelBase(object, metaclass=ABCMeta):
             init_params = [np.load(PARAM_PATH.format(n)) for n in range(10)]
             init_params = np.split(np.concatenate(init_params, 0), offsets)[:-1]
             init_params = [param.reshape(shape) for param, shape in zip(init_params, shapes)]
-            init_params[0] = init_params[0][:self.hparams.maxLength]
+            init_params[0] = init_params[0][:self.hparams.max_length]
             special_embed = (np.random.randn(len(self.encoder.special_tokens),
-                                             self.hparams.nEmbed) * self.hparams.weightStddev).astype(np.float32)
+                                             self.hparams.n_embed) * self.hparams.weight_stddev).astype(np.float32)
             init_params[0] = np.concatenate([init_params[1], special_embed, init_params[0]], 0)
             del init_params[1]
             self.sess.run([p.assign(ip) for p, ip in zip(pretrained_params, init_params)])

@@ -4,7 +4,7 @@ import tensorflow as tf
 
 
 def mlp(x, ny, hparams, w_init=None, b_init=None):
-    w_init = w_init or tf.random_normal_initializer(stddev=hparams.weightStddev)
+    w_init = w_init or tf.random_normal_initializer(stddev=hparams.weight_stddev)
     b_init = b_init or tf.constant_initializer(0)
     with tf.variable_scope('clf'):
         nx = shape_list(x)[-1]
@@ -14,26 +14,26 @@ def mlp(x, ny, hparams, w_init=None, b_init=None):
 
 
 def featurizer(X, encoder, dropout_placeholder, hparams, train=False, reuse=None, max_length=None):
-    max_length = max_length or hparams.maxLength
+    max_length = max_length or hparams.max_length
     with tf.variable_scope('model', reuse=reuse):
-        embed_weights = tf.get_variable("we", [encoder.vocab_size + max_length, hparams.nEmbed],
-                                        initializer=tf.random_normal_initializer(stddev=hparams.weightStddev))
-        embed_weights = dropout(embed_weights, hparams.embedPDrop, train, dropout_placeholder)
+        embed_weights = tf.get_variable("we", [encoder.vocab_size + max_length, hparams.n_embed],
+                                        initializer=tf.random_normal_initializer(stddev=hparams.weight_stddev))
+        embed_weights = dropout(embed_weights, hparams.embed_p_drop, train, dropout_placeholder)
 
         X = tf.reshape(X, [-1, max_length, 2])
 
         h = embed(X, embed_weights)
-        for layer in range(hparams.nLayer):
-            h = block(h, hparams.nHeads, hparams.actFn, hparams.residPDrop, hparams.attnPDrop, 'h%d' % layer,
+        for layer in range(hparams.n_layer):
+            h = block(h, hparams.n_heads, hparams.act_fn, hparams.resid_p_drop, hparams.attn_p_drop, 'h%d' % layer,
                       dropout_placeholder, train=train, scale=True)
 
         # Use hidden state at classifier token as input to final proj. + softmax
-        clf_h = tf.reshape(h, [-1, hparams.nEmbed])  # [batch * seq_len, embed]
+        clf_h = tf.reshape(h, [-1, hparams.n_embed])  # [batch * seq_len, embed]
         clf_token = encoder['_classify_']
         pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
         clf_h = tf.gather(clf_h, tf.range(shape_list(X)[0], dtype=tf.int32) * max_length + pool_idx)
 
-        clf_h = tf.reshape(clf_h, [-1, hparams.nEmbed])  # [batch, embed]
+        clf_h = tf.reshape(clf_h, [-1, hparams.n_embed])  # [batch, embed]
         return {
             'embed_weights': embed_weights,
             'features': clf_h,
@@ -44,7 +44,7 @@ def featurizer(X, encoder, dropout_placeholder, hparams, train=False, reuse=None
 def language_model(*, X, M, embed_weights, hidden, hparams, reuse=None):
     with tf.variable_scope('model', reuse=reuse):
         # language model ignores last hidden state because we don't have a target
-        lm_h = tf.reshape(hidden[:, :-1], [-1, hparams.nEmbed])  # [batch, seq_len, embed] --> [batch * seq_len, embed]
+        lm_h = tf.reshape(hidden[:, :-1], [-1, hparams.n_embed])  # [batch, seq_len, embed] --> [batch * seq_len, embed]
         lm_logits = tf.matmul(lm_h, embed_weights, transpose_b=True)  # tied weights
         lm_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
             logits=lm_logits,
@@ -61,7 +61,7 @@ def language_model(*, X, M, embed_weights, hidden, hparams, reuse=None):
 
 def classifier(hidden, targets, n_classes, dropout_placeholder, hparams, train=False, reuse=None):
     with tf.variable_scope('model', reuse=reuse):
-        hidden = dropout(hidden, hparams.clfPDrop, train, dropout_placeholder)
+        hidden = dropout(hidden, hparams.clf_p_drop, train, dropout_placeholder)
         clf_logits = mlp(hidden, n_classes, hparams)
         clf_losses = tf.nn.softmax_cross_entropy_with_logits(logits=clf_logits, labels=targets)
         return {
@@ -72,7 +72,7 @@ def classifier(hidden, targets, n_classes, dropout_placeholder, hparams, train=F
 
 def regressor(hidden, targets, n_outputs, dropout_placeholder, hparams, train=False, reuse=None):
     with tf.variable_scope('model', reuse=reuse):
-        hidden = dropout(hidden, hparams.clfPDrop, train, dropout_placeholder)
+        hidden = dropout(hidden, hparams.clf_p_drop, train, dropout_placeholder)
         outputs = mlp(hidden, n_outputs, hparams)
         loss = tf.nn.l2_loss(outputs - targets)
         return {
