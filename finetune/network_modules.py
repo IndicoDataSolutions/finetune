@@ -26,7 +26,6 @@ def featurizer(X, encoder, dropout_placeholder, hparams, train=False, reuse=None
         for layer in range(hparams.n_layer):
             h = block(h, hparams.n_heads, hparams.act_fn, hparams.resid_p_drop, hparams.attn_p_drop, 'h%d' % layer,
                       dropout_placeholder, train=train, scale=True)
-
         # Use hidden state at classifier token as input to final proj. + softmax
         clf_h = tf.reshape(h, [-1, hparams.n_embed])  # [batch * seq_len, embed]
         clf_token = encoder['_classify_']
@@ -78,4 +77,21 @@ def regressor(hidden, targets, n_outputs, dropout_placeholder, hparams, train=Fa
         return {
             'logits': outputs,
             'losses': loss
+        }
+
+
+def sequence_labeler(hidden, targets, n_outputs, dropout_placeholder, train=False, reuse=None):
+    with tf.variable_scope('model', reuse=reuse):
+        flat_logits = tf.layers.dense(hidden, n_outputs)
+        logits = tf.reshape(flat_logits, tf.concat([tf.shape(hidden)[:2], [n_outputs]], 0))
+        # TODO (BEN): ADD: correct way to find lengths. - Same method in decoding. Cheating for now.
+        with tf.device(None):
+            log_likelihood, transition_params = tf.contrib.crf.crf_log_likelihood(logits, targets, tf.shape(targets)[:1])
+        loss = tf.reduce_mean(-log_likelihood)
+        return {
+            'logits': logits,
+            'losses': loss,
+            'predict_params': {
+                'transition_matrix': transition_params
+            }
         }

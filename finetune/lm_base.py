@@ -20,10 +20,10 @@ from finetune.optimizers import AdamWeightDecay, schedules
 from sklearn.model_selection import train_test_split
 from finetune.config import get_default_hparams
 
-from finetune.target_encoders import OneHotLabelEncoder, RegressionEncoder
+from finetune.target_encoders import OneHotLabelEncoder, RegressionEncoder, SequenceLabelingEncoder
 from finetune.network_modules import featurizer, language_model, classifier, regressor, sequence_labeler
 from finetune.utils import find_trainable_variables, get_available_gpus, shape_list, assign_to_gpu, average_grads, \
-    iter_data, soft_split
+    iter_data, soft_split, sequence_predict
 from finetune.errors import InvalidTargetType
 
 SHAPES_PATH = os.path.join(os.path.dirname(__file__), 'model', 'params_shapes.json')
@@ -95,9 +95,12 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         else:
             raise InvalidTargetType(self.target_type)
 
-    def predict_ops(self, logits):
+    def predict_ops(self, logits, **kwargs):
         if self.target_type == CLASSIFICATION:
             return tf.argmax(logits, -1), tf.nn.softmax(logits, -1)
+        if self.target_type == sequence_labeler:
+            return sequence_predict(logits, kwargs)
+
         return logits, logits
 
     def get_target_encoder(self):
@@ -115,11 +118,14 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         X: List / array of text
         Y: Class labels
         """
-        batch_size = batch_size or self.hparams.batch_size
+
+        train_x, train_mask, *sequence_targets = self._text_to_ids(*Xs)
+        Y = Y or sequence_targets[0]
+        print(np.shape(train_x))
+        print(np.shape(Y))
         self.label_encoder = self.get_target_encoder()
-        train_x, train_mask = self._text_to_ids(*Xs)
         n_batch_train = batch_size * max(len(get_available_gpus(self.hparams)), 1)
-        n_updates_total = (len(Y) // n_batch_train) * self.hparams.n_epochs
+        n_updates_total = (len(Y) // n_batch_train) * self.hparams.num_epochs
         Y = self.label_encoder.fit_transform(Y)
         self.target_dim = len(self.label_encoder.target_dim)
         self._build_model(n_updates_total=n_updates_total, target_dim=self.target_dim)
@@ -322,7 +328,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
 
                 if target_dim is not None:
                     target_model_state = self.target_model(
-                        featurize_state=featurizer_state,
+                        featurizer_state=featurizer_state,
                         targets=Y,
                         n_outputs=target_dim,
                         train=train,
@@ -345,11 +351,13 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                         language_model_state['losses']
                     ])
 
+        predict_params = target_model_state.get("predict_params", {}) # This is intentionally not aggregated
+
         self.features = tf.concat(features_aggregator, 0)
 
         if target_dim is not None:
             self.logits, self.clf_losses, self.lm_losses = [tf.concat(op, 0) for op in zip(*losses_aggregator)]
-            self.predict_op, self.predict_proba_op = self.predict_ops(self.logits)
+            self.predict_op, self.predict_proba_op = self.predict_ops(self.logits, **predict_params)
             self._compile_train_op(
                 params=params,
                 grads=gpu_grads,
@@ -384,7 +392,8 @@ class LanguageModelBase(object, metaclass=ABCMeta):
     def _initialize_session(self):
         gpus = get_available_gpus(self.hparams)
         os.environ['CUDA_VISIBLE_DEVICES'] = ",".join([str(gpu) for gpu in gpus])
-        self.sess = tf.Session()
+        conf = tf.ConfigProto(allow_soft_placement=True)
+        self.sess = tf.Session(config=conf)
 
     def _set_random_seed(self, seed=None):
         seed = seed or self.hparams.seed
@@ -396,8 +405,12 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         # tf placeholders
         self.X = tf.placeholder(tf.int32, [None, self.hparams.max_length, 2])  # token idxs (BPE embedding + positional)
         self.M = tf.placeholder(tf.float32, [None, self.hparams.max_length])  # sequence mask
-        self.Y = tf.placeholder(tf.float32, [None, self.target_dim])  # classification targets
         self.do_dropout = tf.placeholder(tf.float32)  # 1 for do dropout and 0 to not do dropout
+
+        if self.target_type == SEQUENCE_LABELING:
+            self.Y = tf.placeholder(tf.int32, [None, self.hparams.max_length])  # classification targets
+        else:
+            self.Y = tf.placeholder(tf.float32, [None, self.target_dim])  # classification targets
 
     def _load_base_model(self):
         """

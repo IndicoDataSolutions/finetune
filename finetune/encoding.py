@@ -13,6 +13,8 @@ from tqdm import tqdm
 ENCODER_PATH = os.path.join(os.path.dirname(__file__), 'model/encoder_bpe_40000.json')
 BPE_PATH = os.path.join(os.path.dirname(__file__), 'model/vocab_40000.bpe')
 
+PAD_LABEL = "<PAD>"
+
 
 def get_pairs(word):
     """
@@ -119,16 +121,20 @@ class TextEncoder(object):
         self.cache[token] = word
         return word
 
-    def encode(self, texts, verbose=True):
+    def _encode(self, texts, verbose=True):
         """
         Convert a batch of raw text to a batch of byte-pair encoded token indices.
         """
         batch_token_idxs = []
-
+        batch_label_idxs = []
+        label = None
         if verbose:
             texts = tqdm(texts, ncols=80, leave=False)
 
         for text in texts:
+            if len(text) == 2:
+                text, label = text
+
             text = self.nlp(text_standardize(text))
             token_idxs = []
             for token in text:
@@ -137,6 +143,11 @@ class TextEncoder(object):
                     for t in self.bpe(token.text).split()
                 ])
             batch_token_idxs.append(token_idxs)
+            if label is not None:
+                batch_label_idxs.append([label] * len(token_idxs))
+
+        if label is not None:
+            return batch_token_idxs, batch_label_idxs
         return batch_token_idxs
 
     def encode_for_classification(self, texts, max_length, verbose=True):
@@ -144,7 +155,7 @@ class TextEncoder(object):
         Convert a batch of raw text to btye-pair encoded token indices,
         and add appropriate special tokens to match expected model input
         """
-        batch_token_idxs = self.encode(texts, verbose=verbose)
+        batch_token_idxs = self._encode(texts, verbose=verbose)
         # account for start + end tokens
         adjusted_max_length = max_length - 2
         if any([len(token_idxs) > adjusted_max_length for token_idxs in batch_token_idxs]):
@@ -161,30 +172,23 @@ class TextEncoder(object):
         pass
 
     def encode_for_entailment(self, question, answer, max_length, verbose=True):
-        question_ids = self.encode(question)
-        answer_ids = self.encode(answer)
-        adjusted_max_length = max_length - 3
-
-        half_max_len = adjusted_max_length // 2  # Initial allocation for question
-        question_answer_pairs = []
-        for qid, aid in zip(question_ids, answer_ids):
-            q = len(qid)
-            a = len(aid)
-            spare = max(0, half_max_len - min(q, a))
-            q_adj = min(q, half_max_len + spare)
-            a_adj = min(a, half_max_len + spare)
-
-            question_answer_pairs.append([self.start] + qid[:q_adj] + [self.delimiter] + aid[:a_adj] + [self.clf_token])
-
-        return question_answer_pairs
+        question_ids = self._encode(question)
+        answer_ids = self._encode(answer)
+        return self._multi_input_encoding_common([question_ids, answer_ids], max_length, verbose)
 
     def encode_multi_input(self, *Xs, max_length, verbose=True):
-        encoded = [self.encode(x) for x in Xs]
+        encoded = [self._encode(x) for x in Xs]
+        return self._multi_input_encoding_common(encoded, max_length, verbose)
+
+    def _multi_input_encoding_common(self, encoded, max_length, verbose, start=None, delimiter=None, classify=None):
+        start = start or self.start
+        delimiter = delimiter or self.delimiter
+        clf_token = classify or self.clf_token
         num_samples = len(encoded)
         adjusted_max_length = max_length - num_samples - 1
         allocated_max_len = adjusted_max_length // num_samples
         outputs = []
-        for single_datum in zip(*encoded):
+        for single_datum in tqdm(zip(*encoded), disable=not verbose):
             overflows = [allocated_max_len - len(sequence) for sequence in single_datum]
             spare = sum(overflows)
             if spare >= 0:
@@ -193,9 +197,26 @@ class TextEncoder(object):
                 empty_tokens = sum(max(overflow, 0) for overflow in overflows)
                 num_over = [min(overflow, 0) for overflow in overflows].count(0)
                 cut_len = allocated_max_len + (empty_tokens // num_over)
-            joined = [self.start]
+            joined = [start]
             for d in single_datum:
-                joined += (d[:cut_len] + [self.delimiter])
-            joined = joined[:-1] + [self.clf_token]
+                joined += (d[:cut_len] + [delimiter])
+            joined = joined[:-1] + [clf_token]
             outputs.append(joined)
         return outputs
+
+    def encode_multi_input_sequence_labeling(self, *Xs, max_length, verbose=True):
+        # Xs = [n_inputs, n_batch, n_items_in_seq, 2]
+        text = []
+        labels_out = []
+        for input in Xs:
+            input_text = []
+            input_labels = []
+            for batch in input:
+                tokens, labels = self._encode(batch)
+                input_text.extend(tokens)
+                input_labels.extend(labels * len(tokens))
+            text.append(input_text)
+            labels_out.append(input_labels)
+
+        return (self._multi_input_encoding_common(text, max_length, verbose),
+                self._multi_input_encoding_common(labels_out, max_length, verbose, PAD_LABEL, PAD_LABEL, PAD_LABEL))

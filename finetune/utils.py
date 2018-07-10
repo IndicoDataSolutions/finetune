@@ -177,3 +177,61 @@ def average_grads(tower_grads):
         grad_and_var = (grad, v)
         average_grads.append(grad_and_var)
     return average_grads
+
+
+def viterbi_decode(score, transition_params, none_index=None, recall_bias=0.):
+    """
+    Adapted from: https://github.com/tensorflow/tensorflow/blob/r1.8/tensorflow/contrib/crf/python/ops/crf.py
+    Decode the highest scoring sequence of tags outside of TensorFlow.
+    This should only be used at test time.
+    Args:
+      score: A [seq_len, num_tags] matrix of unary potentials (logits)
+      transition_params: A [num_tags, num_tags] matrix of binary potentials. (transition probabilities)
+    Returns:
+      viterbi: A [seq_len] list of integers containing the highest scoring tag
+          indices.
+      viterbi_score: A float containing the score for the Viterbi sequence.
+    """
+    trellis = np.zeros_like(score)
+    backpointers = np.zeros_like(score, dtype=np.int32)
+
+    if recall_bias != 0:
+        assert none_index is not None, "Must set none_index to use recall bias"
+        # Attenuate logits of default label class
+        # by interpolating between current value and lowest logit response
+        mins = np.min(score, axis=1)
+        maxs = score[:, none_index]
+        diffs = maxs - mins
+        score[:, none_index] -= recall_bias * diffs
+
+    trellis[0] = score[0]
+
+    for t in range(1, score.shape[0]):
+        v = np.expand_dims(trellis[t - 1], 1) + transition_params
+        trellis[t] = score[t] + np.max(v, 0)
+        backpointers[t] = np.argmax(v, 0)
+
+    viterbi = [np.argmax(trellis[-1])]
+    for bp in reversed(backpointers[1:]):
+        viterbi.append(bp[viterbi[-1]])
+    viterbi.reverse()
+
+    viterbi_score = np.max(trellis[-1])
+
+    return viterbi, viterbi_score
+
+
+def sequence_predict(logits, transition_matrix):
+    def _sequence_predict(logits, transition_matrix):
+        predictions = []
+        scores = []
+        for logit in logits:
+            viterbi_sequence, viterbi_score = viterbi_decode(logit, transition_matrix)
+            predictions.append(viterbi_sequence)
+            scores.append(viterbi_score)
+        return np.array(predictions, dtype=np.int32), np.array(scores, dtype=np.float32)
+
+    return tf.py_func(_sequence_predict, [logits, transition_matrix], [tf.int32, tf.float32])
+
+
+
