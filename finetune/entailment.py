@@ -2,7 +2,7 @@ import json
 
 from sklearn.model_selection import train_test_split
 
-from finetune.base import BaseModel
+from finetune.base import BaseModel, CLASSIFICATION
 from finetune.target_encoders import OrdinalClassificationEncoder
 
 
@@ -28,7 +28,7 @@ class Entailment(BaseModel):
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
         """
-        self.is_classification = True
+        self.target_type = CLASSIFICATION
         return self._finetune(X_1, X_2, Y=Y, batch_size=batch_size)
 
     def predict(self, X_1, X_2, max_length=None):
@@ -88,7 +88,7 @@ if __name__ == "__main__":
     scores_train, scores_test, ques_train, ques_test, ans_train, ans_test = train_test_split(
         scores, questions, answers, test_size=0.33, random_state=5)
 
-    #model.finetune(ques_train, ans_train, scores_train)
+    model.finetune(ques_train, ans_train, scores_train)
 
     model = LanguageModelEntailment.load(save_path)
 

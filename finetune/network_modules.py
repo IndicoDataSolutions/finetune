@@ -1,4 +1,4 @@
-from finetune.transformer import dropout, embed, block
+from finetune.transformer import dropout, embed, block, attn, norm
 from finetune.utils import shape_list
 import tensorflow as tf
 
@@ -26,7 +26,6 @@ def featurizer(X, encoder, dropout_placeholder, hparams, train=False, reuse=None
         for layer in range(hparams.n_layer):
             h = block(h, hparams.n_heads, hparams.act_fn, hparams.resid_p_drop, hparams.attn_p_drop, 'h%d' % layer,
                       dropout_placeholder, train=train, scale=True)
-
         # Use hidden state at classifier token as input to final proj. + softmax
         clf_h = tf.reshape(h, [-1, hparams.n_embed])  # [batch * seq_len, embed]
         clf_token = encoder['_classify_']
@@ -78,4 +77,24 @@ def regressor(hidden, targets, n_outputs, dropout_placeholder, hparams, train=Fa
         return {
             'logits': outputs,
             'losses': loss
+        }
+
+
+def sequence_labeler(hidden, targets, n_outputs, dropout_placeholder, hparams, train=False, reuse=None):
+    with tf.variable_scope('model/clf', reuse=reuse):
+        nx = shape_list(hidden)[-1]
+        a = attn(hidden, 'seq_label_attn', nx, hparams.seq_num_heads, hparams.seq_dropout, hparams.seq_dropout, dropout_placeholder, train=train, scale=False, mask=False)
+        n = norm(hidden + a, 'seq_label_residual')
+        flat_logits = tf.layers.dense(n, n_outputs)
+        logits = tf.reshape(flat_logits, tf.concat([tf.shape(hidden)[:2], [n_outputs]], 0))
+        # TODO (BEN): ADD: correct way to find lengths. - Same method in decoding. Cheating for now.
+        with tf.device(None):
+            log_likelihood, transition_params = tf.contrib.crf.crf_log_likelihood(logits, targets, 512 * tf.ones(tf.shape(targets)[0]))
+        loss = tf.reduce_mean(-log_likelihood)
+        return {
+            'logits': logits,
+            'losses': loss,
+            'predict_params': {
+                'transition_matrix': transition_params
+            }
         }
