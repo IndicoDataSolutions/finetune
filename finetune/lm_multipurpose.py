@@ -1,7 +1,7 @@
 import numpy as np
 
 from finetune.config import MAX_LENGTH, BATCH_SIZE
-from finetune.lm_base import LanguageModelBase
+from finetune.lm_base import LanguageModelBase, CLASSIFICATION, REGRESSION, SEQUENCE_LABELING
 
 
 class LanguageModelGeneralAPI(LanguageModelBase):
@@ -25,7 +25,20 @@ class LanguageModelGeneralAPI(LanguageModelBase):
         :param val_size: Float fraction or int number that represents the size of the validation set.
         :param val_interval: The interval for which validation is performed, measured in number of steps.
         """
-        self.is_classification = self.is_classification or not np.array(Y).dtype == 'float'  # problem type inferrence.
+        if self.target_type is None:
+            if np.array(Y).dtype == 'float':
+                self.target_type = REGRESSION
+            else:
+                if len(Y.shape) == 1: # [batch]
+                    self.target_type == CLASSIFICATION
+                elif len(Y.shape) == 2: # [batch, sequence_length]
+                    self.target_type == SEQUENCE_LABELING
+                else:
+                    raise InvalidTargetType(
+                        "targets must either be a 1-d array of classification targets or a "
+                        "2-d array of sequence labels."
+                    )
+        self.target_type = self.target_type or not np.array(Y).dtype == 'float'  # problem type inferrence.
         return self._finetune(*list(zip(*Xs)), Y=Y, batch_size=batch_size, val_size=val_size, val_interval=val_interval)
 
     def predict(self, Xs, max_length=None):

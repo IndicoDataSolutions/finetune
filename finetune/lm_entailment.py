@@ -31,7 +31,7 @@ class LanguageModelEntailment(LanguageModelBase):
         :param val_size: Float fraction or int number that represents the size of the validation set.
         :param val_interval: The interval for which validation is performed, measured in number of steps.
         """
-        self.is_classification = True
+        self.target_type = CLASSIFICATION
         return self._finetune(X_1, X_2, Y=Y, batch_size=batch_size, val_size=val_size, val_interval=val_interval)
 
     def predict(self, X_1, X_2, max_length=None):
@@ -91,7 +91,7 @@ if __name__ == "__main__":
     scores_train, scores_test, ques_train, ques_test, ans_train, ans_test = train_test_split(
         scores, questions, answers, test_size=0.33, random_state=5)
 
-    #model.finetune(ques_train, ans_train, scores_train)
+    model.finetune(ques_train, ans_train, scores_train)
 
     model = LanguageModelEntailment.load(save_path)
 

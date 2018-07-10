@@ -1,8 +1,8 @@
 from finetune.config import BATCH_SIZE
-from finetune.lm_base import LanguageModelBase, CLASSIFICATION
+from finetune.lm_base import LanguageModelBase
 
 
-class LanguageModelClassifier(LanguageModelBase):
+class LanguageModelSequenceLabeling(LanguageModelBase):
 
     def featurize(self, X, max_length=None):
         """
@@ -46,5 +46,5 @@ class LanguageModelClassifier(LanguageModelBase):
         :param val_size: Float fraction or int number that represents the size of the validation set.
         :param val_interval: The interval for which validation is performed, measured in number of steps.
         """
-        self.target_type = CLASSIFICATION
+        self.is_classification = True
         return self._finetune(X, Y=Y, batch_size=batch_size, val_size=val_size, val_interval=val_interval)
