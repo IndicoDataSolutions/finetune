@@ -5,6 +5,9 @@ import re
 import json
 import os
 import warnings
+import functools
+
+import numpy as np
 
 import ftfy
 import spacy
@@ -37,6 +40,7 @@ def text_standardize(text):
     text = text.replace('—', '-')
     text = text.replace('–', '-')
     text = text.replace('―', '-')
+
     text = text.replace('…', '...')
     text = text.replace('´', "'")
     text = re.sub('''(-+|~+|!+|"+|;+|\?+|\++|,+|\)+|\(+|\\+|\/+|\*+|\[+|\]+|}+|{+|\|+|_+)''', r' \1 ', text)
@@ -127,35 +131,43 @@ class TextEncoder(object):
         """
         batch_token_idxs = []
         batch_label_idxs = []
+        batch_character_locs = []
         label = None
         if verbose:
             texts = tqdm(texts, ncols=80, leave=False)
 
         for text in texts:
-            if len(text) == 2:
+            if type(text) != str and len(text) == 2:
                 text, label = text
 
+            raw_text = text.lower()
             text = self.nlp(text_standardize(text))
             token_idxs = []
+            tok_pos = []
             for token in text:
+                bpe_toks = self.bpe(token.text).split()
                 token_idxs.extend([
                     self.encoder.get(t, self.UNK_IDX)
-                    for t in self.bpe(token.text).split()
+                    for t in bpe_toks
                 ])
+                token_idx = raw_text.find(token.text, tok_pos[-1] if tok_pos else 0)
+                assert len("".join(bpe_toks).replace("</w>", "")) == len(token), "{}, {}".format(bpe_toks, token)
+                token_positions = np.cumsum([len(tok.replace("</w>", '')) for tok in bpe_toks]) + token_idx
+
+                tok_pos.extend(token_positions)
             batch_token_idxs.append(token_idxs)
+            batch_character_locs.append(tok_pos)
             if label is not None:
                 batch_label_idxs.append([label] * len(token_idxs))
 
-        if label is not None:
-            return batch_token_idxs, batch_label_idxs
-        return batch_token_idxs
+        return batch_token_idxs, batch_label_idxs, batch_character_locs
 
     def encode_for_classification(self, texts, max_length, verbose=True):
         """
         Convert a batch of raw text to btye-pair encoded token indices,
         and add appropriate special tokens to match expected model input
         """
-        batch_token_idxs = self._encode(texts, verbose=verbose)
+        batch_token_idxs, *_ = self._encode(texts, verbose=verbose)
         # account for start + end tokens
         adjusted_max_length = max_length - 2
         if any([len(token_idxs) > adjusted_max_length for token_idxs in batch_token_idxs]):
@@ -172,12 +184,12 @@ class TextEncoder(object):
         pass
 
     def encode_for_entailment(self, question, answer, max_length, verbose=True):
-        question_ids = self._encode(question)
-        answer_ids = self._encode(answer)
+        question_ids, *_ = self._encode(question)
+        answer_ids, *_ = self._encode(answer)
         return self._multi_input_encoding_common([question_ids, answer_ids], max_length, verbose)
 
     def encode_multi_input(self, *Xs, max_length, verbose=True):
-        encoded = [self._encode(x) for x in Xs]
+        encoded = [self._encode(x)[0] for x in Xs]
         return self._multi_input_encoding_common(encoded, max_length, verbose)
 
     def _multi_input_encoding_common(self, encoded, max_length, verbose, start=None, delimiter=None, classify=None):
@@ -196,7 +208,10 @@ class TextEncoder(object):
             else:
                 empty_tokens = sum(max(overflow, 0) for overflow in overflows)
                 num_over = [min(overflow, 0) for overflow in overflows].count(0)
-                cut_len = allocated_max_len + (empty_tokens // num_over)
+                if num_over == 0:
+                    cut_len = allocated_max_len
+                else:
+                    cut_len = allocated_max_len + (empty_tokens // num_over)
             joined = [start]
             for d in single_datum:
                 joined += (d[:cut_len] + [delimiter])
@@ -212,11 +227,26 @@ class TextEncoder(object):
             input_text = []
             input_labels = []
             for batch in input:
-                tokens, labels = self._encode(batch)
-                input_text.extend(tokens)
-                input_labels.extend(labels * len(tokens))
+                tokens, labels, _ = self._encode(batch)
+                tokens_single = functools.reduce(lambda x, y: x + y, tokens, [])
+                labels_single = functools.reduce(lambda x, y: x + y, labels, [])
+                input_text.append(tokens_single)
+                input_labels.append(labels_single)
             text.append(input_text)
             labels_out.append(input_labels)
 
         return (self._multi_input_encoding_common(text, max_length, verbose),
                 self._multi_input_encoding_common(labels_out, max_length, verbose, PAD_LABEL, PAD_LABEL, PAD_LABEL))
+
+    def encode_multi_input_sequence_labeling_inferrence(self, *Xs, max_length=MAX_LENGTH, verbose=True):
+        # Xs = [n_inputs, n_batch, n_items_in_seq, 2]
+        text = []
+        positions_out = []
+        for input in Xs:
+            print(input)
+            tokens, _, token_positions = self._encode(input)
+            text.append(tokens)
+            positions_out.append(token_positions)
+
+        return (self._multi_input_encoding_common(text, max_length, verbose),
+                self._multi_input_encoding_common(positions_out, max_length, verbose, -1, -1, -1))

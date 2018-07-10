@@ -1,50 +1,124 @@
-from finetune.config import BATCH_SIZE
-from finetune.lm_base import LanguageModelBase
+import numpy as np
+
+from finetune.config import MAX_LENGTH, BATCH_SIZE
+from finetune.lm_base import LanguageModelBase, SEQUENCE_LABELING
+from finetune.target_encoders import SequenceLabelingEncoder
+from finetune.utils import sequence_predict
+from finetune.encoding import text_standardize
 
 
-class LanguageModelSequenceLabeling(LanguageModelBase):
+class LanguageModelSequence(LanguageModelBase):
 
-    def featurize(self, X, max_length=None):
+    def __init__(self, autosave_path, max_length=MAX_LENGTH, verbose=True, label_pad_target="<PAD>"):
+        super().__init__(autosave_path=autosave_path, max_length=max_length, verbose=verbose)
+        self.label_pad_target = label_pad_target
+
+    def _text_to_ids_with_labels(self, *Xs, max_length=MAX_LENGTH):
+        question_answer_pairs, labels = self.encoder.encode_multi_input_sequence_labeling(*Xs, max_length=max_length)
+
+        tokens, mask = self._array_format(question_answer_pairs)
+        padded_labels = []
+        for sequence in labels:
+            padded_labels.append(sequence + (self.max_length - len(sequence)) * [self.label_pad_target])
+
+        return tokens, mask, padded_labels
+
+    def _text_to_ids_with_token_positions(self, *Xs, max_length=MAX_LENGTH):
+        tokens_ids, tok_pos = self.encoder.encode_multi_input_sequence_labeling_inferrence(*Xs, max_length=max_length)
+        x, m = self._array_format(tokens_ids)
+
+        return x, m, tok_pos
+
+    def _finetune(self, *Xs, Y, batch_size=BATCH_SIZE, val_size=0.05, val_interval=150, val_window_size=5):
         """
-        Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
-
-        :param X: list or array of text to embed.
-        :param max_length: the number of tokens to be included in the document representation.
-                           Providing more than `max_length` tokens as input will result in truncation.
-        :returns: np.array of features of shape (n_examples, embedding_size).
+        X: List / array of text
+        Y: Class labels
+        val_size: Float fraction or int number that represents the size of the validation set.
+        val_interval: The interval for which validation is performed, measured in number of steps.
         """
-        return self._featurize(X, max_length=max_length)
+        train_x, train_mask, sequence_labels = self._text_to_ids_with_labels(*Xs)
+        return self._training_loop(train_x, train_mask, sequence_labels, batch_size, val_size, val_interval,
+                                   val_window_size)
 
-    def predict(self, X, max_length=None):
-        """
-        Produces a list of most likely class labels as determined by the fine-tuned model.
+    def get_target_encoder(self):
+        return SequenceLabelingEncoder()
 
-        :param X: list or array of text to embed.
-        :param max_length: the number of tokens to be included in the document representation.
-                           Providing more than `max_length` tokens as input will result in truncation.
-        :returns: list of class labels.
-        """
-        return self._predict(X, max_length=max_length)
+    def predict_ops(self, logits):
+        return sequence_predict(logits, self.predict_params)
 
-    def predict_proba(self, X, max_length=None):
+    def _text_to_ids(self, *Xs, max_length=MAX_LENGTH):
         """
-        Produces a probability distribution over classes for each example in X.
+        For sequence labeling this is a NOOP. See LanguageModelSequence._text_to_ids* for specific train and predict
+        implementations.
+        """
+        return Xs
 
-        :param X: list or array of text to embed.
-        :param max_length: the number of tokens to be included in the document representation.
-                           Providing more than `max_length` tokens as input will result in truncation.
-        :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
+    def finetune(self, XYs, batch_size=BATCH_SIZE, val_size=0.05, val_interval=150):
         """
-        return self._predict_proba(X, max_length=max_length)
-
-    def finetune(self, X, Y, batch_size=BATCH_SIZE, val_size=0.05, val_interval=150):
-        """
-        :param X: list or array of text.
-        :param Y: integer or string-valued class labels.
+        :param XYs: An array of labeled text snippets. Format: [batch_size, sequences_per_data, snippets_per_sequence, 2]
+            where the final dimension is of the format [text_snippet, label]
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
         :param val_size: Float fraction or int number that represents the size of the validation set.
         :param val_interval: The interval for which validation is performed, measured in number of steps.
         """
-        self.is_classification = True
-        return self._finetune(X, Y=Y, batch_size=batch_size, val_size=val_size, val_interval=val_interval)
+        self.target_type = SEQUENCE_LABELING
+        return self._finetune(*list(zip(*XYs)), Y=None, batch_size=batch_size, val_size=val_size,
+                              val_interval=val_interval)
+
+    def predict(self, Xs, max_length=MAX_LENGTH):
+        """
+        Produces a list of most likely class labels as determined by the fine-tuned model.
+
+        :param Xs: An iterable of lists or array of text, shape [batch, n_inputs, tokens]
+        :param max_length: the number of tokens to be included in the document representation.
+                           Providing more than `max_length` tokens as input will result in truncation.
+        :returns: list of class labels.
+        """
+        sequence_major = list(zip(*Xs))
+        x_pred, m_pred, tok_pos = self._text_to_ids_with_token_positions(*sequence_major, max_length=max_length)
+        sparse_predictions = self._predict(x_pred, m_pred, max_length=max_length)
+        output = []
+
+        for texts, labels, token_position in zip(Xs, sparse_predictions, tok_pos):
+            current_sequence = -1
+            output_for_item = []
+            start_of_token = float("inf")
+            for lab, pos in zip(labels, token_position):
+                if pos == -1:
+                    continue  # Put in earlier to identify padding and meta tokens
+                if pos < start_of_token:
+                    # Next sequence
+                    start_of_token = 0
+                    output_for_item.append([])
+                    current_sequence += 1
+                    text = texts[current_sequence]
+                if output_for_item[-1] and lab == output_for_item[-1][-1][1]:
+                    output_for_item[-1][-1][0] += text[start_of_token: pos]
+                else:
+                    output_for_item[-1].append([text[start_of_token: pos], lab])
+                start_of_token = pos
+            output.append(output_for_item)
+        return output
+
+    def predict_proba(self, Xs, max_length=None):
+        """
+        Produces a probability distribution over classes for each example in X.
+
+        :param Xs: An iterable of lists or array of text, shape [batch, n_inputs, tokens]
+        :param max_length: the number of tokens to be included in the document representation.
+                           Providing more than `max_length` tokens as input will result in truncation.
+        :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
+        """
+        raise NotImplemented  # TODO(BEN)
+
+    def featurize(self, Xs, max_length=None):
+        """
+        Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
+
+        :param Xs: An iterable of lists or array of text, shape [batch, n_inputs, tokens]
+        :param max_length: the number of tokens to be included in the document representation.
+                           Providing more than `max_length` tokens as input will result in truncation.
+        :returns: np.array of features of shape (n_examples, embedding_size).
+        """
+        return self._featurize(*list(zip(*Xs)), max_length=max_length)

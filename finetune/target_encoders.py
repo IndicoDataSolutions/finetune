@@ -109,11 +109,9 @@ class SequenceLabelingEncoder(LabelEncoder):
     def inverse_transform(self, y):
         shape = np.shape(y)
         flat = np.reshape(y, [-1])
-        labels = super().inverse_transform(flat)
+        labels = super().inverse_transform(list(flat))  # list to fix sklearn out of sync with numpy issue
         return np.reshape(labels, shape)
 
     @property
     def target_dim(self):
         return self.classes_
-
-

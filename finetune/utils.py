@@ -221,7 +221,9 @@ def viterbi_decode(score, transition_params, none_index=None, recall_bias=0.):
     return viterbi, viterbi_score
 
 
-def sequence_predict(logits, transition_matrix):
+def sequence_predict(logits, predict_params):
+    transition_matrix = predict_params["transition_matrix"]
+
     def _sequence_predict(logits, transition_matrix):
         predictions = []
         scores = []
@@ -232,6 +234,3 @@ def sequence_predict(logits, transition_matrix):
         return np.array(predictions, dtype=np.int32), np.array(scores, dtype=np.float32)
 
     return tf.py_func(_sequence_predict, [logits, transition_matrix], [tf.int32, tf.float32])
-
-
-

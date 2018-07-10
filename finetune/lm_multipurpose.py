@@ -1,11 +1,7 @@
 import numpy as np
 
 from finetune.lm_base import LanguageModelBase, CLASSIFICATION, REGRESSION, SEQUENCE_LABELING
-
-
-class InvalidTargetType(Exception):
-    pass
-
+from finetune.errors import InvalidTargetType
 
 class LanguageModelGeneralAPI(LanguageModelBase):
 
@@ -14,7 +10,6 @@ class LanguageModelGeneralAPI(LanguageModelBase):
         self.is_classification = None
 
     def _text_to_ids(self, *Xs, max_length=None):
-        labels = None
         max_length = max_length or self.max_length
         if type(Xs[0][0]) == str:
             question_answer_pairs = self.encoder.encode_multi_input(*Xs, max_length=max_length)
@@ -38,9 +33,7 @@ class LanguageModelGeneralAPI(LanguageModelBase):
                            corresponds to the number of training examples provided to each GPU.
         """
         if self.target_type is None:
-            if Y is None:
-                self.target_type = SEQUENCE_LABELING
-            elif np.array(Y).dtype == 'float':
+            if np.array(Y).dtype == 'float':
                 self.target_type = REGRESSION
             elif len(Y.shape) == 1:  # [batch]
                 self.target_type = CLASSIFICATION
@@ -49,23 +42,6 @@ class LanguageModelGeneralAPI(LanguageModelBase):
                     "targets must either be a 1-d array of classification targets or a "
                     "2-d array of sequence labels."
                 )
-
-        """if self.target_type is None:
-            if np.array(Y).dtype == 'float':
-                self.target_type = REGRESSION
-            else:
-                if len(Y.shape) == 1:  # [batch]
-                    self.target_type = CLASSIFICATION
-                elif len(Y.shape) == 2:  # [batch, sequence_length]
-                    self.target_type = SEQUENCE_LABELING
-                else:
-                    raise InvalidTargetType(
-                        "targets must either be a 1-d array of classification targets or a "
-                        "2-d array of sequence labels."
-                    )
-        self.target_type = self.target_type or not np.array(Y).dtype == 'float'  # problem type inferrence.
-        return self._finetune(*list(zip(*Xs)), Y=Y, batch_size=batch_size)
-                    )"""
 
         return self._finetune(*list(zip(*Xs)), Y=Y, batch_size=batch_size)
 

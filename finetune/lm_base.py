@@ -73,6 +73,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         self.summaries = None  # Tensorboard summaries
         self.train_writer = None
         self.valid_writer = None
+        self.predict_params = None
 
         # indicator vars
         self.is_built = False  # has tf graph been constructed?
@@ -95,11 +96,9 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         else:
             raise InvalidTargetType(self.target_type)
 
-    def predict_ops(self, logits, **kwargs):
+    def predict_ops(self, logits):
         if self.target_type == CLASSIFICATION:
             return tf.argmax(logits, -1), tf.nn.softmax(logits, -1)
-        if self.target_type == sequence_labeler:
-            return sequence_predict(logits, kwargs)
 
         return logits, logits
 
@@ -119,14 +118,15 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         Y: Class labels
         """
 
-        train_x, train_mask, *sequence_targets = self._text_to_ids(*Xs)
-        Y = Y or sequence_targets[0]
-        print(np.shape(train_x))
-        print(np.shape(Y))
+        train_x, train_mask = self._text_to_ids(*Xs)
+        return self._training_loop(train_x, train_mask, Y, batch_size)
+
+    def _training_loop(self, train_x, train_mask, Y, batch_size):
         self.label_encoder = self.get_target_encoder()
         n_batch_train = batch_size * max(len(get_available_gpus(self.hparams)), 1)
         n_updates_total = (len(Y) // n_batch_train) * self.hparams.num_epochs
         Y = self.label_encoder.fit_transform(Y)
+
         self.target_dim = len(self.label_encoder.target_dim)
         self._build_model(n_updates_total=n_updates_total, target_dim=self.target_dim)
 
@@ -147,7 +147,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                 global_step += 1
                 if global_step % self.hparams.val_interval == 0:
 
-                    summary = self.sess.run(self.summaries, {self.X: xmb, self.M: mmb, self.Y: ymb})
+                    summary = self.sess.run(self.summaries, {self.X: xmb, self.M: mmb, self.Y: ymb, self.do_dropout: DROPOUT_OFF})
 
                     self.train_writer.add_summary(summary, global_step)
 
@@ -351,13 +351,13 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                         language_model_state['losses']
                     ])
 
-        predict_params = target_model_state.get("predict_params", {}) # This is intentionally not aggregated
+        self.predict_params = target_model_state.get("predict_params", {}) # This is intentionally not aggregated
 
         self.features = tf.concat(features_aggregator, 0)
 
         if target_dim is not None:
             self.logits, self.clf_losses, self.lm_losses = [tf.concat(op, 0) for op in zip(*losses_aggregator)]
-            self.predict_op, self.predict_proba_op = self.predict_ops(self.logits, **predict_params)
+            self.predict_op, self.predict_proba_op = self.predict_ops(self.logits)
             self._compile_train_op(
                 params=params,
                 grads=gpu_grads,

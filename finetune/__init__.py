@@ -1,3 +1,4 @@
 from finetune.lm_entailment import LanguageModelEntailment
 from finetune.lm_multipurpose import LanguageModelGeneralAPI
 from finetune.lm_classifier import LanguageModelClassifier
+from finetune.lm_sequence_labeling import LanguageModelSequence
