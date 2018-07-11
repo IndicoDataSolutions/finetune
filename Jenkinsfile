@@ -1,12 +1,12 @@
 pipeline {
   agent {
-    docker {
-      image 'indico/finetune'
+    dockerfile {
+      filename 'docker/Dockerfile'
     }
 
   }
   stages {
-    stage('') {
+    stage('error') {
       steps {
         echo 'Running tests...'
         sh 'nosetests'
