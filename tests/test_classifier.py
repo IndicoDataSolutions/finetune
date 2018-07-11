@@ -60,7 +60,19 @@ class TestLanguageModelClassifier(unittest.TestCase):
         model = LanguageModelClassifier(verbose=False, autosave_path=save_file_autosave)
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
-        model.fit(train_sample.Text)
+        # model.fit(train_sample.Text)
+
+        # Ensure model can still be fit with text + targets
+        model.fit(train_sample.Text, train_sample.Target)
+
+        predictions = model.predict(valid_sample.Text)
+        for prediction in predictions:
+            self.assertIsInstance(prediction, (np.int, np.int64))
+
+        probabilities = model.predict_proba(valid_sample.Text)
+        for proba in probabilities:
+            self.assertIsInstance(proba, dict)
+
 
     def test_fit_predict(self):
         """
