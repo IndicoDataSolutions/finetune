@@ -353,7 +353,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         """
         if not self.is_trained or train != self.train:
             # reconstruct graph to include/remove dropout
-            # #if `train` setting has changed
+            # if `train` setting has changed
             self._construct_graph(n_updates_total, target_dim, train=train)
 
         # Optionally load saved model
