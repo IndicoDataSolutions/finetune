@@ -5,22 +5,12 @@ from finetune.utils import get_ema_vars, convert_gradient_to_tensor, shape_list,
 from finetune.activations import act_fns
 
 
-def _norm(x, g=None, b=None, e=1e-5, axis=[1]):
-    u = tf.reduce_mean(x, axis=axis, keepdims=True)
-    s = tf.reduce_mean(tf.square(x-u), axis=axis, keepdims=True)
-    x = (x - u) * tf.rsqrt(s + e)
-    if g is not None and b is not None:
-        x = x*g + b
-    return x
-
-
-def norm(x, scope, axis=[-1]):
+def norm(x, scope, axis=[-1], e=1e-5):
     with tf.variable_scope(scope):
-        n_state = shape_list(x)[-1]
-        g = tf.get_variable("g", [n_state], initializer=tf.constant_initializer(1))
-        b = tf.get_variable("b", [n_state], initializer=tf.constant_initializer(0))
-        g, b = get_ema_vars(g, b)
-        return _norm(x, g, b, axis=axis)
+        u = tf.reduce_mean(x, axis=axis, keepdims=True)
+        s = tf.reduce_mean(tf.square(x - u), axis=axis, keepdims=True)
+        x = (x - u) * tf.rsqrt(s + e)
+        return x
 
 
 def dropout(x, pdrop, train, dropout_placeholder):
