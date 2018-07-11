@@ -14,7 +14,7 @@ Installation
 Finetune can be installed directly from PyPI by using `pip`
 
 ```
-pip install finetune
+pip3 install finetune
 ```
 
 or installed directly from source:
@@ -23,11 +23,13 @@ or installed directly from source:
 git clone https://github.com/IndicoDataSolutions/finetune
 cd finetune
 python3 setup.py develop
+python3 -m spacy download en
 ```
 
 You can optionally run the provided test suite to ensure installation completed successfully.
 
 ```bash
+pip3 install nose
 nosetests
 ```
 
