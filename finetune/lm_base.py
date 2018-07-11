@@ -96,7 +96,19 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         else:
             return RegressionEncoder()
 
-    def _finetune(self, *Xs, Y, batch_size=None):
+    def _eval(self, *attrs, feed_dict):
+        result = {}
+        attribute_names = [attr for attr in attrs if getattr(self, attr) != None]
+        output_tensors = [getattr(self, attr) for attr in attribute_names]
+        tensor_vals = self.sess.run(output_tensors, feed_dict=feed_dict)
+        return {
+            attr: val
+            for i, (attr, val) in enumerate(zip(attribute_names, tensor_vals))
+            if (attr is not None)
+            and (val is not None)
+        }
+    
+    def _finetune(self, *Xs, Y=None, batch_size=None):
         """
         X: List / array of text
         Y: Class labels
@@ -105,9 +117,16 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         self.label_encoder = self.get_target_encoder()
         train_x, train_mask = self._text_to_ids(*Xs)
         n_batch_train = batch_size * max(len(get_available_gpus(self.hparams)), 1)
-        n_updates_total = (len(Y) // n_batch_train) * self.hparams.n_epochs
-        Y = self.label_encoder.fit_transform(Y)
-        self.target_dim = len(self.label_encoder.target_dim)
+        n_examples = train_x.shape[0]
+        n_updates_total = (n_examples // n_batch_train) * self.hparams.n_epochs
+
+        if Y is not None:
+            Y = self.label_encoder.fit_transform(Y)
+            self.target_dim = len(self.label_encoder.target_dim)
+        else:
+            Y = [[None]] * n_examples 
+            self.target_dim = None
+    
         self._build_model(n_updates_total=n_updates_total, target_dim=self.target_dim)
 
         dataset = shuffle(train_x, train_mask, Y, random_state=np.random)
@@ -133,14 +152,18 @@ class LanguageModelBase(object, metaclass=ABCMeta):
 
                     sum_val_loss = 0
                     for xval, mval, yval in iter_data(*val_dataset, n_batch=n_batch_train, verbose=True):
-                        val_cost, summary = self.sess.run([self.clf_loss, self.summaries],
-                                                          {self.X: xval, self.M: mval, self.Y: yval,
-                                                           self.do_dropout: DROPOUT_OFF})
-                        self.valid_writer.add_summary(summary, global_step)
+                        outputs = self._eval('clf_loss', 'summary', feed_dict={
+                            self.X: xval, self.M: mval, self.Y: yval,
+                            self.do_dropout: DROPOUT_OFF
+                        })
+                        self.valid_writer.add_summary(outputs.get('summary'), global_step)
+
+                        val_cost = outputs.get('clf_loss', 0)
                         sum_val_loss += val_cost
                         avg_val_loss = avg_val_loss * self.hparams.rolling_avg_decay + val_cost * (
                                 1 - self.hparams.rolling_avg_decay)
                         _LOGGER.info("\nVAL: LOSS = {}, ROLLING AVG = {}".format(val_cost, avg_val_loss))
+                    
                     val_window.append(sum_val_loss)
                     val_window.pop(0)
 
@@ -149,8 +172,14 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                         _LOGGER.info("Autosaving new best model.")
                         self.save(self.autosave_path)
                         _LOGGER.info("Done!!")
-                cost, _ = self.sess.run([self.clf_loss, self.train_op],
-                                        {self.X: xmb, self.M: mmb, self.Y: ymb, self.do_dropout: DROPOUT_ON})
+                
+                outputs = self._eval('clf_loss', 'train_op', feed_dict={
+                    self.X: xmb,
+                    self.M: mmb,
+                    self.Y: ymb,
+                    self.do_dropout: DROPOUT_ON
+                })
+                cost = outputs.get('clf_loss', 0)
                 avg_train_loss = avg_train_loss * self.hparams.rolling_avg_decay + cost * (
                         1 - self.hparams.rolling_avg_decay)
                 _LOGGER.info("\nTRAIN: LOSS = {}, ROLLING AVG = {}".format(cost, avg_train_loss))
@@ -268,7 +297,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
             e=self.hparams.epsilon
         )
 
-    def _construct_graph(self, n_updates_total, target_dim, train=True):
+    def _construct_graph(self, n_updates_total, target_dim=None, train=True):
         gpu_grads = []
         self.summaries = []
 
@@ -293,9 +322,14 @@ class LanguageModelBase(object, metaclass=ABCMeta):
             scope = tf.variable_scope(tf.get_variable_scope(), reuse=do_reuse)
 
             with device, scope:
-                featurizer_state = featurizer(X, hparams=self.hparams, encoder=self.encoder,
-                                              dropout_placeholder=self.do_dropout, train=train,
-                                              reuse=do_reuse)
+                featurizer_state = featurizer(
+                    X, 
+                    hparams=self.hparams,
+                    encoder=self.encoder,
+                    dropout_placeholder=self.do_dropout,
+                    train=train,
+                    reuse=do_reuse
+                )
                 language_model_state = language_model(
                     X=X,
                     M=M,
@@ -304,7 +338,15 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                     hidden=featurizer_state['sequence_features'],
                     reuse=do_reuse
                 )
+
+                lm_loss_coef = self.hparams.lm_loss_coef
+                if target_dim is None:
+                    lm_loss_coef = 1.0
+
+                train_loss = lm_loss_coef * tf.reduce_mean(language_model_state['losses'])
+
                 features_aggregator.append(featurizer_state['features'])
+                losses_aggregator.append([language_model_state['losses']])
 
                 if target_dim is not None:
                     target_model_state = self.target_model(
@@ -314,38 +356,37 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                         train=train,
                         reuse=do_reuse
                     )
-                    train_loss = tf.reduce_mean(target_model_state['losses'])
-
-                    if self.hparams.lm_loss_coef > 0:
-                        train_loss += self.hparams.lm_loss_coef * tf.reduce_mean(language_model_state['losses'])
-
-                    train_loss_tower += train_loss
-
-                    params = find_trainable_variables("model")
-                    grads = tf.gradients(train_loss, params)
-                    grads = list(zip(grads, params))
-                    gpu_grads.append(grads)
-                    losses_aggregator.append([
+                    train_loss += tf.reduce_mean(target_model_state['losses'])
+                    losses_aggregator[-1].extend([
                         target_model_state['logits'],
-                        target_model_state['losses'],
-                        language_model_state['losses']
+                        target_model_state['losses']
                     ])
+
+                params = find_trainable_variables("model")
+                grads = tf.gradients(train_loss, params)
+                grads = list(zip(grads, params))
+                gpu_grads.append(grads)
+
+                train_loss_tower += train_loss
 
         self.features = tf.concat(features_aggregator, 0)
 
-        if target_dim is not None:
-            self.logits, self.clf_losses, self.lm_losses = [tf.concat(op, 0) for op in zip(*losses_aggregator)]
+        if target_dim is None:
+            self.lm_losses = [tf.concat(op, 0) for op in zip(*losses_aggregator)]
+        else:
+            self.lm_losses, self.logits, self.clf_losses = [tf.concat(op, 0) for op in zip(*losses_aggregator)]
             self.predict_op, self.predict_proba_op = self.predict_ops(self.logits)
-            self._compile_train_op(
-                params=params,
-                grads=gpu_grads,
-                n_updates_total=n_updates_total
-            )
             self.clf_loss = tf.reduce_mean(self.clf_losses)
             self.summaries.append(tf.summary.scalar('TargetModelLoss', self.clf_loss))
-            self.summaries.append(tf.summary.scalar('LanguageModelLoss', tf.reduce_mean(self.lm_losses)))
-            self.summaries.append(tf.summary.scalar('TotalLoss', train_loss_tower / n_splits))
-            self.summaries = tf.summary.merge(self.summaries)
+
+        self._compile_train_op(
+            params=params,
+            grads=gpu_grads,
+            n_updates_total=n_updates_total
+        )
+        self.summaries.append(tf.summary.scalar('LanguageModelLoss', tf.reduce_mean(self.lm_losses)))
+        self.summaries.append(tf.summary.scalar('TotalLoss', train_loss_tower / n_splits))
+        self.summaries = tf.summary.merge(self.summaries)
 
     def _build_model(self, n_updates_total, target_dim, train=True):
         """
@@ -382,7 +423,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         # tf placeholders
         self.X = tf.placeholder(tf.int32, [None, self.hparams.max_length, 2])  # token idxs (BPE embedding + positional)
         self.M = tf.placeholder(tf.float32, [None, self.hparams.max_length])  # sequence mask
-        self.Y = tf.placeholder(tf.float32, [None, self.target_dim])  # classification targets
+        self.Y = tf.placeholder(tf.float32, [None, self.target_dim or 1])  # classification targets
         self.do_dropout = tf.placeholder(tf.float32)  # 1 for do dropout and 0 to not do dropout
 
     def _load_base_model(self):
