@@ -132,7 +132,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                     self.train_writer.add_summary(summary, global_step)
 
                     sum_val_loss = 0
-                    for xval, mval, yval in iter_data(*val_dataset, n_batch=n_batch_train, verbose=True):
+                    for xval, mval, yval in iter_data(*val_dataset, n_batch=n_batch_train, verbose=self.verbose):
                         val_cost, summary = self.sess.run([self.clf_loss, self.summaries],
                                                           {self.X: xval, self.M: mval, self.Y: yval,
                                                            self.do_dropout: DROPOUT_OFF})
