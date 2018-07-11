@@ -47,6 +47,7 @@ Finetuning the base language model is as easy as calling :meth:`LanguageModelCla
     model = LanguageModelClassifier()   # load base model
     model.fit(trainX, trainY)           # finetune base model on custom data
     predictions = model.predict(testX)  # predict on unseen examples
+    # [{'class_1': 0.23, 'class_2': 0.54, 'class_3': 0.13}, ...]
     model.save(path)                    # serialize the model to disk
 
 Easily reload saved models from disk by using :meth:`LanguageModelClassifier.load`:
