@@ -9,15 +9,15 @@ LABEL com.nvidia.volumes.needed="nvidia_driver"
 LABEL com.nvidia.cuda.version="${CUDA_VERSION}"
 
 # nvidia-container-runtime
-ENV NVIDIA_VISIBLE_DEVICES all
-ENV NVIDIA_DRIVER_CAPABILITIES compute,utility
-ENV NVIDIA_REQUIRE_CUDA "cuda>=8.0"
+ENV NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility \
+    NVIDIA_REQUIRE_CUDA="cuda>=8.0" \
+    LANG=C.UTF-8
 
-RUN apt-get update
-RUN mkdir /Finetune
+RUN apt-get update && mkdir /Finetune
 ADD requirements.txt /Finetune/requirements.txt
-RUN pip3 install -r /Finetune/requirements.txt
-RUN python3 -m spacy download en
-ENV LANG C.UTF-8
+RUN pip3 install -r /Finetune/requirements.txt && \
+    python3 -m spacy download en
+
 WORKDIR /Finetune
 CMD ["sleep","infinity"]
