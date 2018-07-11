@@ -8,11 +8,11 @@ import json
 from abc import ABCMeta, abstractmethod
 import tensorflow as tf
 import numpy as np
-from sklearn.utils import shuffle
 
 import tempfile
 
 from functools import partial
+from sklearn.utils import shuffle
 
 from finetune.download import download_data_if_required
 from finetune.encoding import TextEncoder
@@ -97,7 +97,11 @@ class LanguageModelBase(object, metaclass=ABCMeta):
             return RegressionEncoder()
 
     def _eval(self, *attrs, feed_dict):
-        result = {}
+        """
+        Evaluate the value of each of the provided attrs.
+        Returns a `dict` that maps from name to result value.  
+        If any result value is None, that result is excluded from the results `dict`.
+        """
         attribute_names = [attr for attr in attrs if getattr(self, attr) != None]
         output_tensors = [getattr(self, attr) for attr in attribute_names]
         tensor_vals = self.sess.run(output_tensors, feed_dict=feed_dict)
@@ -122,12 +126,13 @@ class LanguageModelBase(object, metaclass=ABCMeta):
 
         if Y is not None:
             Y = self.label_encoder.fit_transform(Y)
-            self.target_dim = len(self.label_encoder.target_dim)
+            target_dim = len(self.label_encoder.target_dim)
         else:
-            Y = [[None]] * n_examples 
-            self.target_dim = None
-    
-        self._build_model(n_updates_total=n_updates_total, target_dim=self.target_dim)
+            # only language model will be trained, mock fake target
+            Y = [[None]] * n_examples
+            target_dim = None
+
+        self._build_model(n_updates_total=n_updates_total, target_dim=target_dim)
 
         dataset = shuffle(train_x, train_mask, Y, random_state=np.random)
         x_tr, x_va, m_tr, m_va, y_tr, y_va = train_test_split(*dataset, test_size=self.hparams.val_size, random_state=31415)
@@ -146,14 +151,17 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                 global_step += 1
                 if global_step % self.hparams.val_interval == 0:
 
-                    summary = self.sess.run(self.summaries, {
-                        self.X: xmb,
-                        self.M: mmb,
-                        self.Y: ymb,
-                        self.do_dropout: DROPOUT_OFF
-                    })
+                    outputs = self._eval(
+                        'summaries',
+                        feed_dict={
+                            self.X: xmb,
+                            self.M: mmb,
+                            self.Y: ymb,
+                            self.do_dropout: DROPOUT_OFF
+                        }
+                    )
 
-                    self.train_writer.add_summary(summary, global_step)
+                    self.train_writer.add_summary(outputs.get('summary'), global_step)
 
                     sum_val_loss = 0
                     for xval, mval, yval in iter_data(*val_dataset, n_batch=n_batch_train, verbose=self.verbose):
@@ -165,18 +173,14 @@ class LanguageModelBase(object, metaclass=ABCMeta):
 
                         val_cost = outputs.get('clf_loss', 0)
                         sum_val_loss += val_cost
-                        avg_val_loss = avg_val_loss * self.hparams.rolling_avg_decay + val_cost * (
-                                1 - self.hparams.rolling_avg_decay)
-                        _LOGGER.info("\nVAL: LOSS = {}, ROLLING AVG = {}".format(val_cost, avg_val_loss))
                     
                     val_window.append(sum_val_loss)
                     val_window.pop(0)
 
                     if np.mean(val_window) <= best_val_loss:
                         best_val_loss = np.mean(val_window)
-                        _LOGGER.info("Autosaving new best model.")
+                        _LOGGER.info("Autosaving new best model...")
                         self.save(self.autosave_path)
-                        _LOGGER.info("Done!!")
                 
                 outputs = self._eval('clf_loss', 'train_op', feed_dict={
                     self.X: xmb,
@@ -185,9 +189,6 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                     self.do_dropout: DROPOUT_ON
                 })
                 cost = outputs.get('clf_loss', 0)
-                avg_train_loss = avg_train_loss * self.hparams.rolling_avg_decay + cost * (
-                        1 - self.hparams.rolling_avg_decay)
-                _LOGGER.info("\nTRAIN: LOSS = {}, ROLLING AVG = {}".format(cost, avg_train_loss))
 
         return self
 
@@ -308,6 +309,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
 
         # store whether or not graph was previously compiled with dropout
         self.train = train
+        self.target_dim = target_dim
         self._define_placeholders()
 
         features_aggregator = []
@@ -397,7 +399,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         """
         Construct tensorflow symbolic graph.
         """
-        if not self.is_trained or train != self.train:
+        if not self.is_trained or train != self.train or self.target_dim != target_dim:
             # reconstruct graph to include/remove dropout
             # if `train` setting has changed
             self._construct_graph(n_updates_total, target_dim, train=train)
@@ -428,6 +430,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         # tf placeholders
         self.X = tf.placeholder(tf.int32, [None, self.hparams.max_length, 2])  # token idxs (BPE embedding + positional)
         self.M = tf.placeholder(tf.float32, [None, self.hparams.max_length])  # sequence mask
+        # when target dim is not set, an array of [None] targets is passed as a placeholder
         self.Y =  tf.stop_gradient(tf.placeholder(tf.float32, [None, self.target_dim or 1])) # classification targets
         self.do_dropout = tf.placeholder(tf.float32)  # 1 for do dropout and 0 to not do dropout
 

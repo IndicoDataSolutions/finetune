@@ -7,6 +7,23 @@ import tensorflow as tf
 from tensorflow.python.framework import function
 from tensorflow.python.client import device_lib
 from tqdm import tqdm
+from sklearn.utils import shuffle
+
+
+def shuffle_data(*args):
+    """
+    Thin passthrough fn to sklearn.utils.shuffle, but allows for passing through None values
+    """
+    shuffled = shuffle(arg for arg in args if arg is not None)
+    results = []
+    idx = 0
+    for arg in args:
+        if arg is None:
+            results.append(arg)
+        else:
+            results.append(shuffled[idx])
+            idx += 1
+    return tuple(results) 
 
 
 def format_gpu_string(num):
