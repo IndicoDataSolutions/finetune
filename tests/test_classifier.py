@@ -61,6 +61,20 @@ class TestLanguageModelClassifier(unittest.TestCase):
             n_epochs=1,
             **kwargs
         )
+        
+    def test_fit_lm_only(self):
+        """
+        Ensure LM only training does not error out
+        """
+        save_file_autosave = 'tests/saved-models/autosave_path'
+        model = LanguageModelClassifier(
+            hparams=self.default_hparams(),
+            verbose=False,
+            autosave_path=save_file_autosave
+        )
+        train_sample = self.dataset.sample(n=self.n_sample)
+        valid_sample = self.dataset.sample(n=self.n_sample)
+        model.fit(train_sample.Text)
 
     def test_fit_predict(self):
         """

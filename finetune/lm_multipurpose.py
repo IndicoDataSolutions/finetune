@@ -13,7 +13,7 @@ class LanguageModelGeneralAPI(LanguageModelBase):
         tokens, mask = self._array_format(question_answer_pairs)
         return tokens, mask
 
-    def finetune(self, Xs, Y, batch_size=None):
+    def finetune(self, Xs, Y=None, batch_size=None):
         """
         :param Xs: An iterable of lists or array of text, shape [batch, n_inputs, tokens]
         :param Y: integer or string-valued class labels. It is necessary for the items of Y to be sortable.
