@@ -2,7 +2,6 @@ import json
 
 from sklearn.model_selection import train_test_split
 
-from finetune.config import BATCH_SIZE
 from finetune.lm_base import LanguageModelBase
 from finetune.target_encoders import OrdinalClassificationEncoder
 
@@ -13,7 +12,7 @@ class LanguageModelEntailment(LanguageModelBase):
         return OrdinalClassificationEncoder()
 
     def _text_to_ids(self, *Xs, max_length=None):
-        max_length = max_length or self.max_length
+        max_length = max_length or self.hparams.max_length
         assert len(Xs) == 2, "This implementation assumes 2 Xs"
 
         question_answer_pairs = self.encoder.encode_for_entailment(*Xs, max_length=max_length)
@@ -21,18 +20,16 @@ class LanguageModelEntailment(LanguageModelBase):
         tokens, mask = self._array_format(question_answer_pairs)
         return tokens, mask
 
-    def finetune(self, X_1, X_2, Y, batch_size=BATCH_SIZE, val_size=0.05, val_interval=150):
+    def finetune(self, X_1, X_2, Y, batch_size=None):
         """
         :param X_1: list or array of text to embed as the queries.
         :param X_2: list or array of text to embed as the answers.
         :param Y: integer or string-valued class labels. It is necessary for the items of Y to be sortable.
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
-        :param val_size: Float fraction or int number that represents the size of the validation set.
-        :param val_interval: The interval for which validation is performed, measured in number of steps.
         """
         self.is_classification = True
-        return self._finetune(X_1, X_2, Y=Y, batch_size=batch_size, val_size=val_size, val_interval=val_interval)
+        return self._finetune(X_1, X_2, Y=Y, batch_size=batch_size)
 
     def predict(self, X_1, X_2, max_length=None):
         """
