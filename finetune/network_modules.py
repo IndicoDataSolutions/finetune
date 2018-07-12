@@ -81,10 +81,10 @@ def regressor(hidden, targets, n_outputs, dropout_placeholder, hparams, train=Fa
 
 
 def sequence_labeler(hidden, targets, n_outputs, dropout_placeholder, train=False, reuse=None):
-    with tf.variable_scope('model', reuse=reuse):
+    with tf.variable_scope('model/clf', reuse=reuse):
         nx = shape_list(hidden)[-1]
-        a = attn(hidden, 'attn', nx, 16, 0.3, 0.3, dropout_placeholder, train=train, scale=False, mask=False)
-        n = norm(hidden + a, 'ln_1')
+        a = attn(hidden, 'seq_label_attn', nx, 16, 0.3, 0.3, dropout_placeholder, train=train, scale=False, mask=False)
+        n = norm(hidden + a, 'seq_label_residual')
         flat_logits = tf.layers.dense(n, n_outputs)
         logits = tf.reshape(flat_logits, tf.concat([tf.shape(hidden)[:2], [n_outputs]], 0))
         # TODO (BEN): ADD: correct way to find lengths. - Same method in decoding. Cheating for now.

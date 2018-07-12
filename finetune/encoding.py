@@ -238,7 +238,7 @@ class TextEncoder(object):
         return (self._multi_input_encoding_common(text, max_length, verbose),
                 self._multi_input_encoding_common(labels_out, max_length, verbose, PAD_LABEL, PAD_LABEL, PAD_LABEL))
 
-    def encode_multi_input_sequence_labeling_inferrence(self, *Xs, max_length=MAX_LENGTH, verbose=True):
+    def encode_multi_input_sequence_labeling_inferrence(self, *Xs, max_length, verbose=True):
         # Xs = [n_inputs, n_batch, n_items_in_seq, 2]
         text = []
         positions_out = []

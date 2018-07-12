@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 
-from finetune.utils import get_ema_vars, convert_gradient_to_tensor, shape_list, assign_to_gpu, average_grads, make_path
+from finetune.utils import convert_gradient_to_tensor, shape_list, assign_to_gpu, average_grads, make_path
 from finetune.activations import act_fns
 
 

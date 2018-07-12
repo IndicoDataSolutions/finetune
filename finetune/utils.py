@@ -74,6 +74,7 @@ def find_trainable_variables(key, exclude=None):
             var for var in trainable_variables
             if exclude not in var.name
         ]
+    print(trainable_variables)
     return trainable_variables
 
 

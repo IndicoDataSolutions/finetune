@@ -124,7 +124,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
     def _training_loop(self, train_x, train_mask, Y, batch_size):
         self.label_encoder = self.get_target_encoder()
         n_batch_train = batch_size * max(len(get_available_gpus(self.hparams)), 1)
-        n_updates_total = (len(Y) // n_batch_train) * self.hparams.num_epochs
+        n_updates_total = (len(Y) // n_batch_train) * self.hparams.n_epochs
         Y = self.label_encoder.fit_transform(Y)
 
         self.target_dim = len(self.label_encoder.target_dim)
@@ -431,6 +431,9 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                                              self.hparams.n_embed) * self.hparams.weight_stddev).astype(np.float32)
             init_params[0] = np.concatenate([init_params[1], special_embed, init_params[0]], 0)
             del init_params[1]
+            print(len(pretrained_params))
+            print(len(init_params))
+
             self.sess.run([p.assign(ip) for p, ip in zip(pretrained_params, init_params)])
 
     def __getstate__(self):

@@ -1,6 +1,5 @@
 import numpy as np
 
-from finetune.config import MAX_LENGTH, BATCH_SIZE
 from finetune.lm_base import LanguageModelBase, SEQUENCE_LABELING
 from finetune.target_encoders import SequenceLabelingEncoder
 from finetune.utils import sequence_predict
@@ -9,27 +8,27 @@ from finetune.encoding import text_standardize
 
 class LanguageModelSequence(LanguageModelBase):
 
-    def __init__(self, autosave_path, max_length=MAX_LENGTH, verbose=True, label_pad_target="<PAD>"):
-        super().__init__(autosave_path=autosave_path, max_length=max_length, verbose=verbose)
+    def __init__(self, autosave_path, verbose=True, label_pad_target="<PAD>"):
+        super().__init__(autosave_path=autosave_path, verbose=verbose)
         self.label_pad_target = label_pad_target
 
-    def _text_to_ids_with_labels(self, *Xs, max_length=MAX_LENGTH):
-        question_answer_pairs, labels = self.encoder.encode_multi_input_sequence_labeling(*Xs, max_length=max_length)
+    def _text_to_ids_with_labels(self, *Xs):
+        question_answer_pairs, labels = self.encoder.encode_multi_input_sequence_labeling(*Xs, max_length=self.hparams.max_length)
 
         tokens, mask = self._array_format(question_answer_pairs)
         padded_labels = []
         for sequence in labels:
-            padded_labels.append(sequence + (self.max_length - len(sequence)) * [self.label_pad_target])
+            padded_labels.append(sequence + (self.hparams.max_length - len(sequence)) * [self.label_pad_target])
 
         return tokens, mask, padded_labels
 
-    def _text_to_ids_with_token_positions(self, *Xs, max_length=MAX_LENGTH):
-        tokens_ids, tok_pos = self.encoder.encode_multi_input_sequence_labeling_inferrence(*Xs, max_length=max_length)
+    def _text_to_ids_with_token_positions(self, *Xs):
+        tokens_ids, tok_pos = self.encoder.encode_multi_input_sequence_labeling_inferrence(*Xs, max_length=self.hparams.max_length)
         x, m = self._array_format(tokens_ids)
 
         return x, m, tok_pos
 
-    def _finetune(self, *Xs, Y, batch_size=BATCH_SIZE, val_size=0.05, val_interval=150, val_window_size=5):
+    def _finetune(self, *Xs, Y, batch_size=None):
         """
         X: List / array of text
         Y: Class labels
@@ -37,8 +36,7 @@ class LanguageModelSequence(LanguageModelBase):
         val_interval: The interval for which validation is performed, measured in number of steps.
         """
         train_x, train_mask, sequence_labels = self._text_to_ids_with_labels(*Xs)
-        return self._training_loop(train_x, train_mask, sequence_labels, batch_size, val_size, val_interval,
-                                   val_window_size)
+        return self._training_loop(train_x, train_mask, sequence_labels, batch_size=batch_size or self.hparams.batch_size)
 
     def get_target_encoder(self):
         return SequenceLabelingEncoder()
@@ -46,14 +44,14 @@ class LanguageModelSequence(LanguageModelBase):
     def predict_ops(self, logits):
         return sequence_predict(logits, self.predict_params)
 
-    def _text_to_ids(self, *Xs, max_length=MAX_LENGTH):
+    def _text_to_ids(self, *Xs, max_length=None):
         """
         For sequence labeling this is a NOOP. See LanguageModelSequence._text_to_ids* for specific train and predict
         implementations.
         """
         return Xs
 
-    def finetune(self, XYs, batch_size=BATCH_SIZE, val_size=0.05, val_interval=150):
+    def finetune(self, XYs, batch_size=None):
         """
         :param XYs: An array of labeled text snippets. Format: [batch_size, sequences_per_data, snippets_per_sequence, 2]
             where the final dimension is of the format [text_snippet, label]
@@ -63,10 +61,9 @@ class LanguageModelSequence(LanguageModelBase):
         :param val_interval: The interval for which validation is performed, measured in number of steps.
         """
         self.target_type = SEQUENCE_LABELING
-        return self._finetune(*list(zip(*XYs)), Y=None, batch_size=batch_size, val_size=val_size,
-                              val_interval=val_interval)
+        return self._finetune(*list(zip(*XYs)), Y=None, batch_size=batch_size)
 
-    def predict(self, Xs, max_length=MAX_LENGTH):
+    def predict(self, Xs, max_length=None):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
