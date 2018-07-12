@@ -9,7 +9,7 @@ pipeline {
     stage('error') {
       steps {
         echo 'Running tests...'
-        sh 'CUDA_VISIBLE_DEVICES="" nosetests -sv --nologcapture'
+        sh './scripts/build_docker.sh '
       }
     }
   }
