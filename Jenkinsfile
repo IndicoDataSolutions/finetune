@@ -3,10 +3,10 @@ pipeline {
   stages {
     stage('Build Docker Image') {
       steps {
+        sh 'echo $USER'
         sh 'docker container rm -f finetune || true'
         sh './docker/build_docker.sh '
         sh 'ls -lah'
-        sh 'echo $USER'
       }
     }
     stage('Start Docker Image') {
