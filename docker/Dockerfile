@@ -19,6 +19,5 @@ ADD requirements.txt /Finetune/requirements.txt
 RUN pip3 install -r /Finetune/requirements.txt && \
     python3 -m spacy download en
 
-ADD . /Finetune
 WORKDIR /Finetune
 CMD ["sleep","infinity"]
