@@ -6,19 +6,16 @@ pipeline {
         sh 'echo $USER'
         sh 'docker container rm -f finetune || true'
         sh './docker/build_docker.sh '
-        sh 'ls -lah'
       }
     }
     stage('Start Docker Image') {
       steps {
         sh 'docker run --runtime=nvidia -d -v $PWD:/Finetune --name finetune finetune '
-        sh 'ls -lah'
       }
     }
     stage('Run Tests ') {
       steps {
         sh 'docker exec finetune nosetests'
-        sh 'ls -lah'
       }
     }
     stage('Remove container') {
