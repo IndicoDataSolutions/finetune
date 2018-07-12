@@ -17,6 +17,7 @@ pipeline {
     stage('Run Tests ') {
       steps {
         sh 'docker exec finetune nosetests'
+        sh 'ls -lah'
       }
     }
     stage('Remove container') {
