@@ -96,20 +96,21 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         else:
             return RegressionEncoder()
 
-    def _eval(self, *attrs, feed_dict):
+    def _eval(self, *tensors, feed_dict):
         """
-        Evaluate the value of each of the provided attrs.
-        Returns a `dict` that maps from name to result value.  
+        Evaluate the value of each of the provided tensors.
+        Returns a `dict` that maps from tensor to result value.  
         If any result value is None, that result is excluded from the results `dict`.
         """
-        attribute_names = [attr for attr in attrs if getattr(self, attr) != None]
-        output_tensors = [getattr(self, attr) for attr in attribute_names]
-        tensor_vals = self.sess.run(output_tensors, feed_dict=feed_dict)
+        tensors = [
+            tensor if tensor is not None else tf.no_op()
+            for tensor in tensors
+        ]
+        values = self.sess.run(tensors, feed_dict=feed_dict)
         return {
-            attr: val
-            for i, (attr, val) in enumerate(zip(attribute_names, tensor_vals))
-            if (attr is not None)
-            and (val is not None)
+            tensor: value
+            for tensor, value in zip(tensors, values)
+            if value is not None
         }
     
     def _finetune(self, *Xs, Y=None, batch_size=None):
@@ -152,7 +153,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                 if global_step % self.hparams.val_interval == 0:
 
                     outputs = self._eval(
-                        'summaries',
+                        self.summaries,
                         feed_dict={
                             self.X: xmb,
                             self.M: mmb,
@@ -161,17 +162,17 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                         }
                     )
 
-                    self.train_writer.add_summary(outputs.get('summary'), global_step)
+                    self.train_writer.add_summary(outputs.get(self.summaries), global_step)
 
                     sum_val_loss = 0
                     for xval, mval, yval in iter_data(*val_dataset, n_batch=n_batch_train, verbose=self.verbose):
-                        outputs = self._eval('clf_loss', 'summary', feed_dict={
+                        outputs = self._eval(self.clf_loss, self.summaries, feed_dict={
                             self.X: xval, self.M: mval, self.Y: yval,
                             self.do_dropout: DROPOUT_OFF
                         })
-                        self.valid_writer.add_summary(outputs.get('summary'), global_step)
+                        self.valid_writer.add_summary(outputs.get(self.summaries), global_step)
 
-                        val_cost = outputs.get('clf_loss', 0)
+                        val_cost = outputs.get(self.clf_loss, 0)
                         sum_val_loss += val_cost
                     
                     val_window.append(sum_val_loss)
@@ -182,13 +183,13 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                         _LOGGER.info("Autosaving new best model...")
                         self.save(self.autosave_path)
                 
-                outputs = self._eval('clf_loss', 'train_op', feed_dict={
+                outputs = self._eval(self.clf_loss, self.train_op, feed_dict={
                     self.X: xmb,
                     self.M: mmb,
                     self.Y: ymb,
                     self.do_dropout: DROPOUT_ON
                 })
-                cost = outputs.get('clf_loss', 0)
+                cost = outputs.get(self.clf_loss, 0)
 
         return self
 
