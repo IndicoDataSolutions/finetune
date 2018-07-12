@@ -9,14 +9,11 @@ pipeline {
     }
     stage('Start Docker Image') {
       steps {
-        sh './docker/start_docker.sh'
-        sh '''echo "Currently in $PWD"
-ls'''
+        sh 'docker run --runtime=nvidia -d -v $PWD:/Finetune --name finetune finetune '
       }
     }
     stage('Run Tests ') {
       steps {
-        sh 'docker ps'
         sh 'docker exec finetune nosetests'
       }
     }
