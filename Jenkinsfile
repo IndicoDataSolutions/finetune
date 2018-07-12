@@ -6,6 +6,7 @@ pipeline {
         sh 'docker container rm -f finetune || true'
         sh './docker/build_docker.sh '
         sh 'ls -lah'
+        sh 'echo $USER'
       }
     }
     stage('Start Docker Image') {
