@@ -15,6 +15,7 @@ pipeline {
     stage('Run Tests ') {
       steps {
         sh 'docker exec finetune nosetests -sv --nologcapture'
+        sh 'pwd && ls'
       }
     }
     stage('Remove container') {
