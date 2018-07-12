@@ -1,15 +1,19 @@
 import numpy as np
 import tensorflow as tf
 
-from finetune.utils import get_ema_vars, convert_gradient_to_tensor, shape_list, assign_to_gpu, average_grads, make_path
+from finetune.utils import convert_gradient_to_tensor, shape_list, assign_to_gpu, average_grads, make_path
 from finetune.activations import act_fns
 
 
 def norm(x, scope, axis=[-1], e=1e-5):
     with tf.variable_scope(scope):
+        n_state = shape_list(x)[-1]
+        g = tf.get_variable("g", [n_state], initializer=tf.constant_initializer(1))
+        b = tf.get_variable("b", [n_state], initializer=tf.constant_initializer(0))
         u = tf.reduce_mean(x, axis=axis, keepdims=True)
         s = tf.reduce_mean(tf.square(x - u), axis=axis, keepdims=True)
         x = (x - u) * tf.rsqrt(s + e)
+        x = x * g + b
         return x
 
 
