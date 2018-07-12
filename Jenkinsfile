@@ -13,15 +13,26 @@ pipeline {
         sh './docker/start_docker.sh'
       }
     }
-    stage('Run Tests ') {
+    stage('Test') {
       steps {
-        sh 'docker exec finetune nosetests -sv --nologcapture'
+        sh 'docker exec finetune nosetests -sv --nologcapture --with-xunit'
+      }
+
+      post {
+        always {
+          junit "**/nosetests.xml"
+        }
       }
     }
     stage('Remove container') {
       steps {
         sh 'docker rm -f finetune'
       }
+    }
+  }
+  post { 
+    always { 
+      cleanWs()
     }
   }
 }

@@ -125,10 +125,7 @@ class TextEncoder(object):
         """
         batch_token_idxs = []
 
-        if verbose:
-            texts = tqdm(texts, ncols=80, leave=False)
-
-        for text in texts:
+        for text in tqdm(texts, ncols=80, leave=False, disable=(not verbose)):
             text = self.nlp(text_standardize(text))
             token_idxs = []
             for token in text:
@@ -161,8 +158,8 @@ class TextEncoder(object):
         pass
 
     def encode_for_entailment(self, question, answer, max_length, verbose=True):
-        question_ids = self.encode(question)
-        answer_ids = self.encode(answer)
+        question_ids = self.encode(question, verbose=verbose)
+        answer_ids = self.encode(answer, verbose=verbose)
         adjusted_max_length = max_length - 3
 
         half_max_len = adjusted_max_length // 2  # Initial allocation for question
@@ -179,7 +176,7 @@ class TextEncoder(object):
         return question_answer_pairs
 
     def encode_multi_input(self, *Xs, max_length, verbose=True):
-        encoded = [self.encode(x) for x in Xs]
+        encoded = [self.encode(x, verbose=verbose) for x in Xs]
         num_samples = len(encoded)
         adjusted_max_length = max_length - num_samples - 1
         allocated_max_len = adjusted_max_length // num_samples

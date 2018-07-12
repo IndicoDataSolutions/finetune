@@ -85,10 +85,10 @@ def soft_split(*xs, n_splits=None):
         raise ValueError("n_splits must be a valid integer.")
 
     x = xs[0]
-    current_batch_size = tf.shape(x)[0]
+    current_batch_size = shape_list(x)[0]
     n_per = tf.to_int32(tf.ceil(current_batch_size / n_splits))
     for i in range(n_splits):
-        start = i * n_per
+        start = tf.minimum(i * n_per, current_batch_size)
         end = tf.minimum((i + 1) * n_per, current_batch_size)
         i_range = tf.range(start, end)
         yield [tf.gather(x, i_range) for x in xs]
@@ -113,10 +113,7 @@ def iter_data(*datas, n_batch=128, truncate=False, verbose=False, max_batches=fl
     else:
         f = open(os.devnull, 'w')
     
-    iterable = range(0, n, n_batch)
-    if verbose:
-        iterable = tqdm(iterable, total=n // n_batch, file=f, ncols=80, leave=False)
-    for i in iterable:
+    for i in  tqdm(range(0, n, n_batch), total=n // n_batch, file=f, ncols=80, leave=False, disable=(not verbose)):
         if n_batches >= max_batches: raise StopIteration
         if len(datas) == 1:
             yield datas[0][i:i + n_batch]

@@ -76,7 +76,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
     def _text_to_ids(self, *Xs, max_length=None):
         max_length = max_length or self.hparams.max_length
         assert len(Xs) == 1, "This implementation assumes a single Xs"
-        token_idxs = self.encoder.encode_for_classification(Xs[0], max_length=max_length)
+        token_idxs = self.encoder.encode_for_classification(Xs[0], max_length=max_length, verbose=self.verbose)
         tokens, mask = self._array_format(token_idxs)
         return tokens, mask
 
@@ -123,11 +123,16 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         best_val_loss = float("inf")
         val_window = [float("inf")] * self.hparams.val_window_size
         for i in range(self.hparams.n_epochs):
-            for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=True):
+            for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=self.verbose):
                 global_step += 1
                 if global_step % self.hparams.val_interval == 0:
 
-                    summary = self.sess.run(self.summaries, {self.X: xmb, self.M: mmb, self.Y: ymb})
+                    summary = self.sess.run(self.summaries, {
+                        self.X: xmb,
+                        self.M: mmb,
+                        self.Y: ymb,
+                        self.do_dropout: DROPOUT_OFF
+                    })
 
                     self.train_writer.add_summary(summary, global_step)
 
@@ -382,7 +387,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         # tf placeholders
         self.X = tf.placeholder(tf.int32, [None, self.hparams.max_length, 2])  # token idxs (BPE embedding + positional)
         self.M = tf.placeholder(tf.float32, [None, self.hparams.max_length])  # sequence mask
-        self.Y = tf.placeholder(tf.float32, [None, self.target_dim])  # classification targets
+        self.Y = tf.stop_gradient(tf.placeholder(tf.float32, [None, self.target_dim]))  # classification targets
         self.do_dropout = tf.placeholder(tf.float32)  # 1 for do dropout and 0 to not do dropout
 
     def _load_base_model(self):

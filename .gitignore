@@ -109,3 +109,4 @@ venv.bak/
 *.jsonl
 
 .vscode
+tests/saved-models/
