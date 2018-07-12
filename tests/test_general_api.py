@@ -64,6 +64,8 @@ class TestLanguageModelClassifier(unittest.TestCase):
         Ensure saving + loading does not cause errors
         Ensure saving + loading does not change predictions
         """
+        self.model.hparams.batch_size = 2
+        self.model.hparams.max_length = 256
         self.model.fit(self.text_data_train, self.train_targets)
         self.assertTrue(self.model.is_classification)
         predictions = self.model.predict(self.text_data_valid)
@@ -80,6 +82,8 @@ class TestLanguageModelClassifier(unittest.TestCase):
         Ensure saving + loading does not change predictions                                                                                                                         
         """
 
+        self.model.hparams.batch_size = 2
+        self.model.hparams.max_length = 256
         self.model.fit(self.text_data_train, [np.random.random() for _ in self.train_targets])
         self.assertTrue(not self.model.is_classification)
         predictions = self.model.predict(self.text_data_valid)

@@ -63,7 +63,7 @@ def classifier(hidden, targets, n_classes, dropout_placeholder, hparams, train=F
     with tf.variable_scope('model', reuse=reuse):
         hidden = dropout(hidden, hparams.clf_p_drop, train, dropout_placeholder)
         clf_logits = mlp(hidden, n_classes, hparams)
-        clf_losses = tf.nn.softmax_cross_entropy_with_logits(logits=clf_logits, labels=targets)
+        clf_losses = tf.nn.softmax_cross_entropy_with_logits_v2(logits=clf_logits, labels=targets)
         return {
             'logits': clf_logits,
             'losses': clf_losses

@@ -123,7 +123,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         best_val_loss = float("inf")
         val_window = [float("inf")] * self.hparams.val_window_size
         for i in range(self.hparams.n_epochs):
-            for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=True):
+            for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=self.verbose):
                 global_step += 1
                 if global_step % self.hparams.val_interval == 0:
 
