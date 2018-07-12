@@ -88,7 +88,7 @@ class TestLanguageModelSequenceLabel(unittest.TestCase):
 
         model = LanguageModelSequence(verbose=False, autosave_path=save_file_autosave)
         model.fit(list(zip(*[self.dataset])))
-        predictions = model.predict(list(zip(*self.dataset_no_labels])))
+        predictions = model.predict(list(zip(*self.dataset_no_labels)))
         model.save(save_file_autosave)
 
     def test_load_predict(self):

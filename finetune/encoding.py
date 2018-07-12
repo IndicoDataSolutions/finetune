@@ -180,19 +180,28 @@ class TextEncoder(object):
         ]
         return batch_token_idxs
 
-    def encode_for_comparison(self, texts, max_length, verbose=True):
-        pass
-
     def encode_for_entailment(self, question, answer, max_length, verbose=True):
         question_ids, *_ = self._encode(question)
         answer_ids, *_ = self._encode(answer)
-        return self._multi_input_encoding_common([question_ids, answer_ids], max_length, verbose)
+        return self._cut_and_concat([question_ids, answer_ids], max_length, verbose)
 
     def encode_multi_input(self, *Xs, max_length, verbose=True):
         encoded = [self._encode(x)[0] for x in Xs]
-        return self._multi_input_encoding_common(encoded, max_length, verbose)
+        return self._cut_and_concat(encoded, max_length, verbose)
 
-    def _multi_input_encoding_common(self, encoded, max_length, verbose, start=None, delimiter=None, classify=None):
+    def _cut_and_concat(self, encoded, max_length, verbose, start=None, delimiter=None, classify=None):
+        """
+        Takes some tokenized text and arranges it into a format that maximises the amount of kept text from each
+        whilst keeping the overall sequence length within max_length tokens. It also adds the 3 special tokens. Start,
+         Classify and Delimiter.
+        :param encoded: Lists of shape [sequences, batch, num_tokens]
+        :param max_length: Int representing the max length of a single sample
+        :param verbose: Bool of whether to print he TQDM bar or not.
+        :param start: Override the default start token.
+        :param delimiter: Override the default delimiter token.
+        :param classify: Override the default classify token
+        :return: Formatted outputs of the form. [batch, num_tokens'] where num_tokens' <= max_length
+        """
         start = start or self.start
         delimiter = delimiter or self.delimiter
         clf_token = classify or self.clf_token
@@ -219,7 +228,7 @@ class TextEncoder(object):
             outputs.append(joined)
         return outputs
 
-    def encode_multi_input_sequence_labeling(self, *Xs, max_length, verbose=True):
+    def encode_input_sequence_labeling(self, *Xs, max_length, verbose=True):
         # Xs = [n_inputs, n_batch, n_items_in_seq, 2]
         text = []
         labels_out = []
@@ -235,10 +244,10 @@ class TextEncoder(object):
             text.append(input_text)
             labels_out.append(input_labels)
 
-        return (self._multi_input_encoding_common(text, max_length, verbose),
-                self._multi_input_encoding_common(labels_out, max_length, verbose, PAD_LABEL, PAD_LABEL, PAD_LABEL))
+        return (self._cut_and_concat(text, max_length, verbose),
+                self._cut_and_concat(labels_out, max_length, verbose, PAD_LABEL, PAD_LABEL, PAD_LABEL))
 
-    def encode_multi_input_sequence_labeling_inferrence(self, *Xs, max_length, verbose=True):
+    def encode_sequence_labeling_inferrence(self, *Xs, max_length, verbose=True):
         # Xs = [n_inputs, n_batch, n_items_in_seq, 2]
         text = []
         positions_out = []
@@ -248,5 +257,5 @@ class TextEncoder(object):
             text.append(tokens)
             positions_out.append(token_positions)
 
-        return (self._multi_input_encoding_common(text, max_length, verbose),
-                self._multi_input_encoding_common(positions_out, max_length, verbose, -1, -1, -1))
+        return (self._cut_and_concat(text, max_length, verbose),
+                self._cut_and_concat(positions_out, max_length, verbose, -1, -1, -1))

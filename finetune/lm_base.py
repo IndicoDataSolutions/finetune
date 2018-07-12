@@ -88,11 +88,14 @@ class LanguageModelBase(object, metaclass=ABCMeta):
 
     def target_model(self, featurizer_state, targets, n_outputs, train=False, reuse=None):
         if self.target_type == CLASSIFICATION:
-            return classifier(featurizer_state['features'], targets, n_outputs, self.do_dropout, train=train, reuse=reuse)
+            return classifier(featurizer_state['features'], targets, n_outputs, self.do_dropout, hparams=self.hparams,
+                              train=train, reuse=reuse)
         elif self.target_type == REGRESSION:
-            return regressor(featurizer_state['features'], targets, n_outputs, self.do_dropout, train=train, reuse=reuse)
+            return regressor(featurizer_state['features'], targets, n_outputs, self.do_dropout, hparams=self.hparams,
+                             train=train, reuse=reuse)
         elif self.target_type == SEQUENCE_LABELING:
-            return sequence_labeler(featurizer_state['sequence_features'], targets, n_outputs, self.do_dropout, train=train, reuse=reuse)
+            return sequence_labeler(featurizer_state['sequence_features'], targets, n_outputs, self.do_dropout,
+                                    train=train, reuse=reuse)
         else:
             raise InvalidTargetType(self.target_type)
 
@@ -109,7 +112,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
             return RegressionEncoder()
         elif self.target_type == SEQUENCE_LABELING:
             return SequenceLabelingEncoder()
-        else: 
+        else:
             raise InvalidTargetType(self.target_type)
 
     def _finetune(self, *Xs, Y, batch_size=None):
@@ -121,7 +124,8 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         train_x, train_mask = self._text_to_ids(*Xs)
         return self._training_loop(train_x, train_mask, Y, batch_size)
 
-    def _training_loop(self, train_x, train_mask, Y, batch_size):
+    def _training_loop(self, train_x, train_mask, Y, batch_size=None):
+        batch_size = batch_size or self.hparams.batch_size
         self.label_encoder = self.get_target_encoder()
         n_batch_train = batch_size * max(len(get_available_gpus(self.hparams)), 1)
         n_updates_total = (len(Y) // n_batch_train) * self.hparams.n_epochs
@@ -131,7 +135,8 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         self._build_model(n_updates_total=n_updates_total, target_dim=self.target_dim)
 
         dataset = shuffle(train_x, train_mask, Y, random_state=np.random)
-        x_tr, x_va, m_tr, m_va, y_tr, y_va = train_test_split(*dataset, test_size=self.hparams.val_size, random_state=31415)
+        x_tr, x_va, m_tr, m_va, y_tr, y_va = train_test_split(*dataset, test_size=self.hparams.val_size,
+                                                              random_state=31415)
 
         dataset = (x_tr, m_tr, y_tr)
         val_dataset = (x_va, m_va, y_va)
@@ -147,7 +152,8 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                 global_step += 1
                 if global_step % self.hparams.val_interval == 0:
 
-                    summary = self.sess.run(self.summaries, {self.X: xmb, self.M: mmb, self.Y: ymb, self.do_dropout: DROPOUT_OFF})
+                    summary = self.sess.run(self.summaries,
+                                            {self.X: xmb, self.M: mmb, self.Y: ymb, self.do_dropout: DROPOUT_OFF})
 
                     self.train_writer.add_summary(summary, global_step)
 
@@ -351,11 +357,10 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                         language_model_state['losses']
                     ])
 
-        self.predict_params = target_model_state.get("predict_params", {}) # This is intentionally not aggregated
-
         self.features = tf.concat(features_aggregator, 0)
 
         if target_dim is not None:
+            self.predict_params = target_model_state.get("predict_params", {})
             self.logits, self.clf_losses, self.lm_losses = [tf.concat(op, 0) for op in zip(*losses_aggregator)]
             self.predict_op, self.predict_proba_op = self.predict_ops(self.logits)
             self._compile_train_op(

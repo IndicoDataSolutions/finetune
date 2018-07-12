@@ -10,13 +10,13 @@ class LanguageModelGeneralAPI(LanguageModelBase):
         self.is_classification = None
 
     def _text_to_ids(self, *Xs, max_length=None):
-        max_length = max_length or self.max_length
+        max_length = max_length or self.hparams.max_length
         if type(Xs[0][0]) == str:
             question_answer_pairs = self.encoder.encode_multi_input(*Xs, max_length=max_length)
             return self._array_format(question_answer_pairs)
 
         else:
-            question_answer_pairs, labels = self.encoder.encode_multi_input_sequence_labeling(*Xs, max_length=max_length)
+            question_answer_pairs, labels = self.encoder.encode_input_sequence_labeling(*Xs, max_length=max_length)
             print("here", np.shape(labels))
 
             tokens, mask = self._array_format(question_answer_pairs)

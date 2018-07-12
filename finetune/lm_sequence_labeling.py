@@ -13,7 +13,7 @@ class LanguageModelSequence(LanguageModelBase):
         self.label_pad_target = label_pad_target
 
     def _text_to_ids_with_labels(self, *Xs):
-        question_answer_pairs, labels = self.encoder.encode_multi_input_sequence_labeling(*Xs, max_length=self.hparams.max_length)
+        question_answer_pairs, labels = self.encoder.encode_input_sequence_labeling(*Xs, max_length=self.hparams.max_length)
 
         tokens, mask = self._array_format(question_answer_pairs)
         padded_labels = []
@@ -23,7 +23,7 @@ class LanguageModelSequence(LanguageModelBase):
         return tokens, mask, padded_labels
 
     def _text_to_ids_with_token_positions(self, *Xs):
-        tokens_ids, tok_pos = self.encoder.encode_multi_input_sequence_labeling_inferrence(*Xs, max_length=self.hparams.max_length)
+        tokens_ids, tok_pos = self.encoder.encode_sequence_labeling_inferrence(*Xs, max_length=self.hparams.max_length)
         x, m = self._array_format(tokens_ids)
 
         return x, m, tok_pos
@@ -73,7 +73,7 @@ class LanguageModelSequence(LanguageModelBase):
         :returns: list of class labels.
         """
         sequence_major = list(zip(*Xs))
-        x_pred, m_pred, tok_pos = self._text_to_ids_with_token_positions(*sequence_major, max_length=max_length)
+        x_pred, m_pred, tok_pos = self._text_to_ids_with_token_positions(*sequence_major)
         sparse_predictions = self._predict(x_pred, m_pred, max_length=max_length)
         output = []
 

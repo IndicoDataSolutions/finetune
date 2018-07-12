@@ -12,6 +12,7 @@ import enso
 from enso.download import generic_download
 
 from finetune import LanguageModelGeneralAPI
+from finetune.lm_base import CLASSIFICATION, REGRESSION
 import numpy as np
 
 SST_FILENAME = "SST-binary.csv"
@@ -65,7 +66,7 @@ class TestLanguageModelClassifier(unittest.TestCase):
         Ensure saving + loading does not change predictions
         """
         self.model.fit(self.text_data_train, self.train_targets)
-        self.assertTrue(self.model.is_classification)
+        self.assertEqual(self.model.target_type, CLASSIFICATION)
         predictions = self.model.predict(self.text_data_valid)
         self.model.save(self.save_file)
         model = LanguageModelGeneralAPI.load(self.save_file)
@@ -81,7 +82,7 @@ class TestLanguageModelClassifier(unittest.TestCase):
         """
 
         self.model.fit(self.text_data_train, [np.random.random() for _ in self.train_targets])
-        self.assertTrue(not self.model.is_classification)
+        self.assertEqual(self.model.target_type, REGRESSION)
         predictions = self.model.predict(self.text_data_valid)
         self.model.save(self.save_file)
         model = LanguageModelGeneralAPI.load(self.save_file)
