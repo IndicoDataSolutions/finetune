@@ -76,7 +76,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
     def _text_to_ids(self, *Xs, max_length=None):
         max_length = max_length or self.hparams.max_length
         assert len(Xs) == 1, "This implementation assumes a single Xs"
-        token_idxs = self.encoder.encode_for_classification(Xs[0], max_length=max_length)
+        token_idxs = self.encoder.encode_for_classification(Xs[0], max_length=max_length, verbose=self.verbose)
         tokens, mask = self._array_format(token_idxs)
         return tokens, mask
 
