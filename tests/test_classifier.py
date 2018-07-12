@@ -74,7 +74,6 @@ class TestLanguageModelClassifier(unittest.TestCase):
         )
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
-        # model.fit(train_sample.Text)
 
         # Ensure model can still be fit with text + targets
         model.fit(train_sample.Text, train_sample.Target)
@@ -87,6 +86,13 @@ class TestLanguageModelClassifier(unittest.TestCase):
         for proba in probabilities:
             self.assertIsInstance(proba, dict)
 
+    def default_hparams(self, **kwargs):
+        return get_hparams(
+            batch_size=2,
+            max_length=128,
+            n_epochs=1,
+            **kwargs
+        )
 
     def test_fit_predict(self):
         """

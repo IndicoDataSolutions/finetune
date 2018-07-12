@@ -432,7 +432,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         self.X = tf.placeholder(tf.int32, [None, self.hparams.max_length, 2])  # token idxs (BPE embedding + positional)
         self.M = tf.placeholder(tf.float32, [None, self.hparams.max_length])  # sequence mask
         # when target dim is not set, an array of [None] targets is passed as a placeholder
-        self.Y =  tf.stop_gradient(tf.placeholder(tf.float32, [None, self.target_dim or 1])) # classification targets
+        self.Y = tf.stop_gradient(tf.placeholder(tf.float32, [None, self.target_dim or 1])) # classification targets
         self.do_dropout = tf.placeholder(tf.float32)  # 1 for do dropout and 0 to not do dropout
 
     def _load_base_model(self):

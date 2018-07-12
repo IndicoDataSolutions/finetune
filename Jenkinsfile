@@ -13,7 +13,6 @@ pipeline {
         sh './docker/start_docker.sh'
       }
     }
-<<<<<<< HEAD
     stage('Test') {
       steps {
         sh 'docker exec finetune nosetests -sv --nologcapture --with-xunit'
@@ -23,11 +22,6 @@ pipeline {
         always {
           junit "**/nosetests.xml"
         }
-=======
-    stage('Run Tests ') {
-      steps {
-        sh 'docker exec finetune nosetests -sv --nologcapture'
->>>>>>> df45c2a... Added Jenkinsfile
       }
     }
     stage('Remove container') {

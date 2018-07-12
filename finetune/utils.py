@@ -125,19 +125,8 @@ def iter_data(*datas, n_batch=128, truncate=False, verbose=False, max_batches=fl
         n = (n // n_batch) * n_batch
     n = min(n, max_batches * n_batch)
     n_batches = 0
-    if verbose:
-        f = sys.stderr
-    else:
-        f = open(os.devnull, 'w')
     
-<<<<<<< HEAD
-    for i in  tqdm(range(0, n, n_batch), total=n // n_batch, file=f, ncols=80, leave=False, disable=(not verbose)):
-=======
-    iterable = range(0, n, n_batch)
-    if verbose:
-        iterable = tqdm(iterable, total=n // n_batch, file=f, ncols=80, leave=False)
-    for i in iterable:
->>>>>>> df45c2a... Added Jenkinsfile
+    for i in tqdm(range(0, n, n_batch), total=n // n_batch, file=f, ncols=80, leave=False, disable=(not verbose)):
         if n_batches >= max_batches: raise StopIteration
         if len(datas) == 1:
             yield datas[0][i:i + n_batch]
