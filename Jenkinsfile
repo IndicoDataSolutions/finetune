@@ -9,8 +9,8 @@ pipeline {
     }
     stage('Start Docker Image') {
       steps {
-        sh 'docker run --runtime=nvidia -v $PWD:/Finetune --name finetune finetune '
-        sh 'ls -lah '
+        sh 'docker run --runtime=nvidia -d -v $PWD:/Finetune --name finetune finetune '
+        sh 'docker logs finetune'
       }
     }
     stage('Run Tests ') {
