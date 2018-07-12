@@ -10,6 +10,7 @@ pipeline {
     stage('Start Docker Image') {
       steps {
         sh './docker/start_docker.sh'
+        sh 'echo "Currently in $PWD"'
       }
     }
     stage('Run Tests ') {
