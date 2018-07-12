@@ -3,7 +3,7 @@ pipeline {
   stages {
     stage('Build Docker Image') {
       steps {
-        sh 'docker container prune -f'
+        sh 'docker container rm -f finetune'
         sh './docker/build_docker.sh '
       }
     }
