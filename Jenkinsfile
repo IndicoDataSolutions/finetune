@@ -16,6 +16,7 @@ pipeline {
     stage('Run Tests ') {
       steps {
         sh 'docker exec finetune nosetests'
+        sleep 10000
       }
     }
     stage('Remove container') {
