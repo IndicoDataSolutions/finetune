@@ -9,7 +9,7 @@ pipeline {
     stage('error') {
       steps {
         echo 'Running tests...'
-        sh 'nosetests'
+        sh 'CUDA_VISIBLE_DEVICES="" nosetests -sv --nologcapture'
       }
     }
   }
