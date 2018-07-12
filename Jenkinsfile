@@ -11,5 +11,15 @@ pipeline {
         sh './docker/start_docker.sh'
       }
     }
+    stage('Run Tests ') {
+      steps {
+        sh 'docker exec -it finetune nosetests -sv --nologcapture'
+      }
+    }
+    stage('Remove container') {
+      steps {
+        sh 'docker rm -f finetune'
+      }
+    }
   }
 }
