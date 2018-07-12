@@ -14,6 +14,7 @@ pipeline {
     }
     stage('Run Tests ') {
       steps {
+        sh 'docker exec finetune ls /Finetune'
         sh 'docker exec finetune nosetests'
       }
     }
