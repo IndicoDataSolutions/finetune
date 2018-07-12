@@ -76,7 +76,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
     def _text_to_ids(self, *Xs, max_length=None):
         max_length = max_length or self.hparams.max_length
         assert len(Xs) == 1, "This implementation assumes a single Xs"
-        token_idxs = self.encoder.encode_for_classification(Xs[0], max_length=max_length)
+        token_idxs = self.encoder.encode_for_classification(Xs[0], max_length=max_length, verbose=self.verbose)
         tokens, mask = self._array_format(token_idxs)
         return tokens, mask
 
@@ -123,7 +123,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         best_val_loss = float("inf")
         val_window = [float("inf")] * self.hparams.val_window_size
         for i in range(self.hparams.n_epochs):
-            for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=True):
+            for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=self.verbose):
                 global_step += 1
                 if global_step % self.hparams.val_interval == 0:
 
@@ -132,7 +132,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                     self.train_writer.add_summary(summary, global_step)
 
                     sum_val_loss = 0
-                    for xval, mval, yval in iter_data(*val_dataset, n_batch=n_batch_train, verbose=True):
+                    for xval, mval, yval in iter_data(*val_dataset, n_batch=n_batch_train, verbose=self.verbose):
                         val_cost, summary = self.sess.run([self.clf_loss, self.summaries],
                                                           {self.X: xval, self.M: mval, self.Y: yval,
                                                            self.do_dropout: DROPOUT_OFF})

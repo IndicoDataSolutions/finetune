@@ -112,7 +112,11 @@ def iter_data(*datas, n_batch=128, truncate=False, verbose=False, max_batches=fl
         f = sys.stderr
     else:
         f = open(os.devnull, 'w')
-    for i in tqdm(range(0, n, n_batch), total=n // n_batch, file=f, ncols=80, leave=False):
+    
+    iterable = range(0, n, n_batch)
+    if verbose:
+        iterable = tqdm(iterable, total=n // n_batch, file=f, ncols=80, leave=False)
+    for i in iterable:
         if n_batches >= max_batches: raise StopIteration
         if len(datas) == 1:
             yield datas[0][i:i + n_batch]
