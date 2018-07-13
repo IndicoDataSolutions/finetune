@@ -166,4 +166,3 @@ class TestLanguageModelClassifier(unittest.TestCase):
         model = LanguageModelClassifier(hparams=hparams, verbose=False)
         train_sample = self.dataset.sample(n=20)
         model.fit(train_sample.Text, train_sample.Target)
-
