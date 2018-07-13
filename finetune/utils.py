@@ -72,7 +72,7 @@ def find_trainable_variables(key, exclude=None):
     if exclude is not None:
         trainable_variables = [
             var for var in trainable_variables
-            if exclude not in var.name
+            if not exclude in var.name 
         ]
     return trainable_variables
 
