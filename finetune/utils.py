@@ -74,7 +74,6 @@ def find_trainable_variables(key, exclude=None):
             var for var in trainable_variables
             if exclude not in var.name
         ]
-    print(trainable_variables)
     return trainable_variables
 
 
@@ -121,7 +120,7 @@ def iter_data(*datas, n_batch=128, truncate=False, verbose=False, max_batches=fl
             yield (d[i:i + n_batch] for d in datas)
         n_batches += 1
 
-        
+
 @function.Defun(
     python_grad_func=lambda x, dy: tf.convert_to_tensor(dy),
     shape_func=lambda op: [op.inputs[0].get_shape()])
@@ -235,3 +234,43 @@ def sequence_predict(logits, predict_params):
         return np.array(predictions, dtype=np.int32), np.array(scores, dtype=np.float32)
 
     return tf.py_func(_sequence_predict, [logits, transition_matrix], [tf.int32, tf.float32])
+
+
+def finetune_to_indico_sequence(data, none_value):
+    dataset = []
+    for dataum in data:
+        if len(dataum) != 1:
+            raise ValueError("Indico format sequence data only accepts single field data")
+        dataum = dataum[0]
+        single_entry = ["", []]
+        char_loc = 0
+        for sub_str, label in dataum:
+            single_entry[0] += sub_str
+            if label != none_value:
+                single_entry[1].append(
+                    {
+                        "start": char_loc,
+                        "end": char_loc + len(sub_str),
+                        "label": label
+                    }
+                )
+            char_loc += len(sub_str)
+        dataset.append(single_entry)
+    return dataset
+
+
+def indico_to_finetune_sequence(data, none_value):
+    dataset = []
+    for text, tags in data:
+        last_loc = 0
+        new_data = []
+        for annotation in tags:
+            start = annotation["start"]
+            end = annotation["end"]
+            label = annotation["label"]
+            if start != last_loc:
+                new_data.append([text[last_loc:start], none_value])
+            new_data.append([text[start: end], label])
+            last_loc = end
+        dataset.append([new_data])
+    return dataset

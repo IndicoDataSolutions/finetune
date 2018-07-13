@@ -80,10 +80,10 @@ def regressor(hidden, targets, n_outputs, dropout_placeholder, hparams, train=Fa
         }
 
 
-def sequence_labeler(hidden, targets, n_outputs, dropout_placeholder, train=False, reuse=None):
+def sequence_labeler(hidden, targets, n_outputs, dropout_placeholder, hparams, train=False, reuse=None):
     with tf.variable_scope('model/clf', reuse=reuse):
         nx = shape_list(hidden)[-1]
-        a = attn(hidden, 'seq_label_attn', nx, 16, 0.3, 0.3, dropout_placeholder, train=train, scale=False, mask=False)
+        a = attn(hidden, 'seq_label_attn', nx, hparams.seq_num_heads, hparams.seq_dropout, hparams.seq_dropout, dropout_placeholder, train=train, scale=False, mask=False)
         n = norm(hidden + a, 'seq_label_residual')
         flat_logits = tf.layers.dense(n, n_outputs)
         logits = tf.reshape(flat_logits, tf.concat([tf.shape(hidden)[:2], [n_outputs]], 0))

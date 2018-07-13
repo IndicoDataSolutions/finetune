@@ -3,7 +3,6 @@ import numpy as np
 from finetune.lm_base import LanguageModelBase, SEQUENCE_LABELING
 from finetune.target_encoders import SequenceLabelingEncoder
 from finetune.utils import sequence_predict
-from finetune.encoding import text_standardize
 
 
 class LanguageModelSequence(LanguageModelBase):
@@ -13,20 +12,13 @@ class LanguageModelSequence(LanguageModelBase):
         self.label_pad_target = label_pad_target
 
     def _text_to_ids_with_labels(self, *Xs):
-        question_answer_pairs, labels = self.encoder.encode_input_sequence_labeling(*Xs, max_length=self.hparams.max_length)
 
-        tokens, mask = self._array_format(question_answer_pairs)
+        encoder_out = self.encoder.encode_input_sequence_labeling(*Xs, max_length=self.hparams.max_length)
+        tokens, mask = self._array_format(encoder_out.token_ids)
         padded_labels = []
-        for sequence in labels:
+        for sequence in encoder_out.labels:
             padded_labels.append(sequence + (self.hparams.max_length - len(sequence)) * [self.label_pad_target])
-
-        return tokens, mask, padded_labels
-
-    def _text_to_ids_with_token_positions(self, *Xs):
-        tokens_ids, tok_pos = self.encoder.encode_sequence_labeling_inferrence(*Xs, max_length=self.hparams.max_length)
-        x, m = self._array_format(tokens_ids)
-
-        return x, m, tok_pos
+        return tokens, mask, padded_labels, encoder_out.char_locs
 
     def _finetune(self, *Xs, Y, batch_size=None):
         """
@@ -35,8 +27,9 @@ class LanguageModelSequence(LanguageModelBase):
         val_size: Float fraction or int number that represents the size of the validation set.
         val_interval: The interval for which validation is performed, measured in number of steps.
         """
-        train_x, train_mask, sequence_labels = self._text_to_ids_with_labels(*Xs)
-        return self._training_loop(train_x, train_mask, sequence_labels, batch_size=batch_size or self.hparams.batch_size)
+        train_x, train_mask, sequence_labels, _ = self._text_to_ids_with_labels(*Xs)
+        return self._training_loop(train_x, train_mask, sequence_labels,
+                                   batch_size=batch_size or self.hparams.batch_size)
 
     def get_target_encoder(self):
         return SequenceLabelingEncoder()
@@ -67,13 +60,13 @@ class LanguageModelSequence(LanguageModelBase):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
-        :param Xs: An iterable of lists or array of text, shape [batch, n_inputs, tokens]
+        :param Xs: An iterable of lists or array of text, shape [batch, tokens]
         :param max_length: the number of tokens to be included in the document representation.
                            Providing more than `max_length` tokens as input will result in truncation.
         :returns: list of class labels.
         """
         sequence_major = list(zip(*Xs))
-        x_pred, m_pred, tok_pos = self._text_to_ids_with_token_positions(*sequence_major)
+        x_pred, m_pred, _, tok_pos = self._text_to_ids_with_labels(*sequence_major)
         sparse_predictions = self._predict(x_pred, m_pred, max_length=max_length)
         output = []
 

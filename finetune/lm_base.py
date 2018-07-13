@@ -94,7 +94,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
             return regressor(featurizer_state['features'], targets, n_outputs, self.do_dropout, hparams=self.hparams,
                              train=train, reuse=reuse)
         elif self.target_type == SEQUENCE_LABELING:
-            return sequence_labeler(featurizer_state['sequence_features'], targets, n_outputs, self.do_dropout,
+            return sequence_labeler(featurizer_state['sequence_features'], targets, n_outputs, self.do_dropout, hparams=self.hparams,
                                     train=train, reuse=reuse)
         else:
             raise InvalidTargetType(self.target_type)
@@ -436,8 +436,6 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                                              self.hparams.n_embed) * self.hparams.weight_stddev).astype(np.float32)
             init_params[0] = np.concatenate([init_params[1], special_embed, init_params[0]], 0)
             del init_params[1]
-            print(len(pretrained_params))
-            print(len(init_params))
 
             self.sess.run([p.assign(ip) for p, ip in zip(pretrained_params, init_params)])
 
