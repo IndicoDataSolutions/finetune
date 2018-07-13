@@ -47,6 +47,13 @@ def get_default_hparams():
     )
 
 
+def get_hparams(**kwargs):
+    hparams = get_default_hparams()
+    for k, v in kwargs.items():
+        setattr(hparams, k, v)
+    return hparams
+
+
 def cpu_hparams():
     hparam = get_default_hparams()
     hparam.visibleGpus = []
