@@ -20,10 +20,11 @@ from finetune.optimizers import AdamWeightDecay, schedules
 from sklearn.model_selection import train_test_split
 from finetune.config import get_default_hparams
 
-from finetune.target_encoders import OneHotLabelEncoder, RegressionEncoder
-from finetune.network_modules import featurizer, language_model, classifier, regressor
+from finetune.target_encoders import OneHotLabelEncoder, RegressionEncoder, SequenceLabelingEncoder
+from finetune.network_modules import featurizer, language_model, classifier, regressor, sequence_labeler
 from finetune.utils import find_trainable_variables, get_available_gpus, shape_list, assign_to_gpu, average_grads, \
-    iter_data, soft_split
+    iter_data, soft_split, sequence_predict
+from finetune.errors import InvalidTargetType
 
 SHAPES_PATH = os.path.join(os.path.dirname(__file__), 'model', 'params_shapes.json')
 PARAM_PATH = os.path.join(os.path.dirname(__file__), 'model', 'params_{}.npy')
@@ -32,6 +33,10 @@ _LOGGER = logging.getLogger(__name__)
 
 DROPOUT_ON = 1
 DROPOUT_OFF = 0
+
+CLASSIFICATION = 'classification'
+REGRESSION = 'regression'
+SEQUENCE_LABELING = 'sequence-labeling'
 
 
 class LanguageModelBase(object, metaclass=ABCMeta):
@@ -51,7 +56,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         self.target_dim = None
         self._load_from_file = False
         self.verbose = verbose
-        self.is_classification = None
+        self.target_type = None
 
     def _initialize(self):
         self._set_random_seed(self.hparams.seed)
@@ -68,6 +73,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         self.summaries = None  # Tensorboard summaries
         self.train_writer = None
         self.valid_writer = None
+        self.predict_params = None
 
         # indicator vars
         self.is_built = False  # has tf graph been constructed?
@@ -80,39 +86,58 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         tokens, mask = self._array_format(token_idxs)
         return tokens, mask
 
-    def target_model(self, hidden, targets, n_outputs, train=False, reuse=None):
-        if self.is_classification:
-            return classifier(hidden, targets, n_outputs, self.do_dropout, hparams=self.hparams, train=train, reuse=reuse)
-        return regressor(hidden, targets, n_outputs, self.do_dropout, hparams=self.hparams, train=train, reuse=reuse)
+    def target_model(self, featurizer_state, targets, n_outputs, train=False, reuse=None):
+        if self.target_type == CLASSIFICATION:
+            return classifier(featurizer_state['features'], targets, n_outputs, self.do_dropout, hparams=self.hparams,
+                              train=train, reuse=reuse)
+        elif self.target_type == REGRESSION:
+            return regressor(featurizer_state['features'], targets, n_outputs, self.do_dropout, hparams=self.hparams,
+                             train=train, reuse=reuse)
+        elif self.target_type == SEQUENCE_LABELING:
+            return sequence_labeler(featurizer_state['sequence_features'], targets, n_outputs, self.do_dropout, hparams=self.hparams,
+                                    train=train, reuse=reuse)
+        else:
+            raise InvalidTargetType(self.target_type)
 
     def predict_ops(self, logits):
-        if self.is_classification:
+        if self.target_type == CLASSIFICATION:
             return tf.argmax(logits, -1), tf.nn.softmax(logits, -1)
+
         return logits, logits
 
     def get_target_encoder(self):
-        if self.is_classification:
+        if self.target_type == CLASSIFICATION:
             return OneHotLabelEncoder()
-        else:
+        elif self.target_type == REGRESSION:
             return RegressionEncoder()
+        elif self.target_type == SEQUENCE_LABELING:
+            return SequenceLabelingEncoder()
+        else:
+            raise InvalidTargetType(self.target_type)
 
     def _finetune(self, *Xs, Y, batch_size=None):
         """
         X: List / array of text
         Y: Class labels
         """
+
+        train_x, train_mask = self._text_to_ids(*Xs)
+        return self._training_loop(train_x, train_mask, Y, batch_size)
+
+    def _training_loop(self, train_x, train_mask, Y, batch_size=None):
         batch_size = batch_size or self.hparams.batch_size
         self.label_encoder = self.get_target_encoder()
-        train_x, train_mask = self._text_to_ids(*Xs)
         n_batch_train = batch_size * max(len(get_available_gpus(self.hparams)), 1)
         n_updates_total = (len(Y) // n_batch_train) * self.hparams.n_epochs
         Y = self.label_encoder.fit_transform(Y)
+
         self.target_dim = len(self.label_encoder.target_dim)
         self._build_model(n_updates_total=n_updates_total, target_dim=self.target_dim)
 
-        dataset = shuffle(train_x, train_mask, Y, random_state=np.random)
-        x_tr, x_va, m_tr, m_va, y_tr, y_va = train_test_split(*dataset, test_size=self.hparams.val_size, random_state=31415)
+        dataset = (train_x, train_mask, Y)
 
+        x_tr, x_va, m_tr, m_va, y_tr, y_va = train_test_split(*dataset, test_size=self.hparams.val_size,
+                                                              random_state=self.hparams.seed)
         dataset = (x_tr, m_tr, y_tr)
         val_dataset = (x_va, m_va, y_va)
 
@@ -127,7 +152,8 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                 global_step += 1
                 if global_step % self.hparams.val_interval == 0:
 
-                    summary = self.sess.run(self.summaries, {self.X: xmb, self.M: mmb, self.Y: ymb})
+                    summary = self.sess.run(self.summaries,
+                                            {self.X: xmb, self.M: mmb, self.Y: ymb, self.do_dropout: DROPOUT_OFF})
 
                     self.train_writer.add_summary(summary, global_step)
 
@@ -308,7 +334,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
 
                 if target_dim is not None:
                     target_model_state = self.target_model(
-                        hidden=featurizer_state['features'],
+                        featurizer_state=featurizer_state,
                         targets=Y,
                         n_outputs=target_dim,
                         train=train,
@@ -334,6 +360,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         self.features = tf.concat(features_aggregator, 0)
 
         if target_dim is not None:
+            self.predict_params = target_model_state.get("predict_params", {})
             self.logits, self.clf_losses, self.lm_losses = [tf.concat(op, 0) for op in zip(*losses_aggregator)]
             self.predict_op, self.predict_proba_op = self.predict_ops(self.logits)
             self._compile_train_op(
@@ -370,7 +397,8 @@ class LanguageModelBase(object, metaclass=ABCMeta):
     def _initialize_session(self):
         gpus = get_available_gpus(self.hparams)
         os.environ['CUDA_VISIBLE_DEVICES'] = ",".join([str(gpu) for gpu in gpus])
-        self.sess = tf.Session()
+        conf = tf.ConfigProto(allow_soft_placement=True)
+        self.sess = tf.Session(config=conf)
 
     def _set_random_seed(self, seed=None):
         seed = seed or self.hparams.seed
@@ -382,8 +410,12 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         # tf placeholders
         self.X = tf.placeholder(tf.int32, [None, self.hparams.max_length, 2])  # token idxs (BPE embedding + positional)
         self.M = tf.placeholder(tf.float32, [None, self.hparams.max_length])  # sequence mask
-        self.Y = tf.placeholder(tf.float32, [None, self.target_dim])  # classification targets
         self.do_dropout = tf.placeholder(tf.float32)  # 1 for do dropout and 0 to not do dropout
+
+        if self.target_type == SEQUENCE_LABELING:
+            self.Y = tf.placeholder(tf.int32, [None, self.hparams.max_length])  # classification targets
+        else:
+            self.Y = tf.placeholder(tf.float32, [None, self.target_dim])  # classification targets
 
     def _load_base_model(self):
         """
@@ -404,6 +436,7 @@ class LanguageModelBase(object, metaclass=ABCMeta):
                                              self.hparams.n_embed) * self.hparams.weight_stddev).astype(np.float32)
             init_params[0] = np.concatenate([init_params[1], special_embed, init_params[0]], 0)
             del init_params[1]
+
             self.sess.run([p.assign(ip) for p, ip in zip(pretrained_params, init_params)])
 
     def __getstate__(self):
@@ -411,8 +444,8 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         Leave serialization of all tf objects to tf
         """
         required_fields = [
-            'label_encoder', 'max_length', 'target_dim', '_load_from_file', 'verbose', 'autosave_path',
-            'is_classification', "hparams"
+            'label_encoder', 'max_length', 'target_dim', '_load_from_file', 'verbose', 'autosave_path', "hparams",
+            'target_type', 'label_pad_target'
         ]
         serialized_state = {
             k: v for k, v in self.__dict__.items()

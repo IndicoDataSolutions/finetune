@@ -120,7 +120,7 @@ def iter_data(*datas, n_batch=128, truncate=False, verbose=False, max_batches=fl
             yield (d[i:i + n_batch] for d in datas)
         n_batches += 1
 
-        
+
 @function.Defun(
     python_grad_func=lambda x, dy: tf.convert_to_tensor(dy),
     shape_func=lambda op: [op.inputs[0].get_shape()])
@@ -177,3 +177,100 @@ def average_grads(tower_grads):
         grad_and_var = (grad, v)
         average_grads.append(grad_and_var)
     return average_grads
+
+
+def viterbi_decode(score, transition_params, none_index=None, recall_bias=0.):
+    """
+    Adapted from: https://github.com/tensorflow/tensorflow/blob/r1.8/tensorflow/contrib/crf/python/ops/crf.py
+    Decode the highest scoring sequence of tags outside of TensorFlow.
+    This should only be used at test time.
+    Args:
+      score: A [seq_len, num_tags] matrix of unary potentials (logits)
+      transition_params: A [num_tags, num_tags] matrix of binary potentials. (transition probabilities)
+    Returns:
+      viterbi: A [seq_len] list of integers containing the highest scoring tag
+          indices.
+      viterbi_score: A float containing the score for the Viterbi sequence.
+    """
+    trellis = np.zeros_like(score)
+    backpointers = np.zeros_like(score, dtype=np.int32)
+
+    if recall_bias != 0:
+        assert none_index is not None, "Must set none_index to use recall bias"
+        # Attenuate logits of default label class
+        # by interpolating between current value and lowest logit response
+        mins = np.min(score, axis=1)
+        maxs = score[:, none_index]
+        diffs = maxs - mins
+        score[:, none_index] -= recall_bias * diffs
+
+    trellis[0] = score[0]
+
+    for t in range(1, score.shape[0]):
+        v = np.expand_dims(trellis[t - 1], 1) + transition_params
+        trellis[t] = score[t] + np.max(v, 0)
+        backpointers[t] = np.argmax(v, 0)
+
+    viterbi = [np.argmax(trellis[-1])]
+    for bp in reversed(backpointers[1:]):
+        viterbi.append(bp[viterbi[-1]])
+    viterbi.reverse()
+
+    viterbi_score = np.max(trellis[-1])
+
+    return viterbi, viterbi_score
+
+
+def sequence_predict(logits, predict_params):
+    transition_matrix = predict_params["transition_matrix"]
+
+    def _sequence_predict(logits, transition_matrix):
+        predictions = []
+        scores = []
+        for logit in logits:
+            viterbi_sequence, viterbi_score = viterbi_decode(logit, transition_matrix)
+            predictions.append(viterbi_sequence)
+            scores.append(viterbi_score)
+        return np.array(predictions, dtype=np.int32), np.array(scores, dtype=np.float32)
+
+    return tf.py_func(_sequence_predict, [logits, transition_matrix], [tf.int32, tf.float32])
+
+
+def finetune_to_indico_sequence(data, none_value):
+    dataset = []
+    for dataum in data:
+        if len(dataum) != 1:
+            raise ValueError("Indico format sequence data only accepts single field data")
+        dataum = dataum[0]
+        single_entry = ["", []]
+        char_loc = 0
+        for sub_str, label in dataum:
+            single_entry[0] += sub_str
+            if label != none_value:
+                single_entry[1].append(
+                    {
+                        "start": char_loc,
+                        "end": char_loc + len(sub_str),
+                        "label": label
+                    }
+                )
+            char_loc += len(sub_str)
+        dataset.append(single_entry)
+    return dataset
+
+
+def indico_to_finetune_sequence(data, none_value):
+    dataset = []
+    for text, tags in data:
+        last_loc = 0
+        new_data = []
+        for annotation in tags:
+            start = annotation["start"]
+            end = annotation["end"]
+            label = annotation["label"]
+            if start != last_loc:
+                new_data.append([text[last_loc:start], none_value])
+            new_data.append([text[start: end], label])
+            last_loc = end
+        dataset.append([new_data])
+    return dataset

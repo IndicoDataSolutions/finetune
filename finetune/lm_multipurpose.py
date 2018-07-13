@@ -1,6 +1,7 @@
 import numpy as np
-from finetune.lm_base import LanguageModelBase
 
+from finetune.lm_base import LanguageModelBase, CLASSIFICATION, REGRESSION, SEQUENCE_LABELING
+from finetune.errors import InvalidTargetType
 
 class LanguageModelGeneralAPI(LanguageModelBase):
 
@@ -10,9 +11,19 @@ class LanguageModelGeneralAPI(LanguageModelBase):
 
     def _text_to_ids(self, *Xs, max_length=None):
         max_length = max_length or self.hparams.max_length
-        question_answer_pairs = self.encoder.encode_multi_input(*Xs, max_length=max_length)
-        tokens, mask = self._array_format(question_answer_pairs)
-        return tokens, mask
+        if type(Xs[0][0]) == str:
+            question_answer_pairs = self.encoder.encode_multi_input(*Xs, max_length=max_length)
+            return self._array_format(question_answer_pairs)
+
+        else:
+            question_answer_pairs, labels = self.encoder.encode_input_sequence_labeling(*Xs, max_length=max_length)
+            print("here", np.shape(labels))
+
+            tokens, mask = self._array_format(question_answer_pairs)
+            padded_labels = []
+            for sequence in labels:
+                padded_labels.append(sequence + (self.hparams.max_length - len(sequence)) * ["<PAD>"])
+            return tokens, mask, padded_labels
 
     def finetune(self, Xs, Y, batch_size=None):
         """
@@ -21,7 +32,17 @@ class LanguageModelGeneralAPI(LanguageModelBase):
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
         """
-        self.is_classification = self.is_classification or not np.array(Y).dtype == 'float'  # problem type inferrence.
+        if self.target_type is None:
+            if np.array(Y).dtype == 'float':
+                self.target_type = REGRESSION
+            elif len(Y.shape) == 1:  # [batch]
+                self.target_type = CLASSIFICATION
+            else:
+                raise InvalidTargetType(
+                    "targets must either be a 1-d array of classification targets or a "
+                    "2-d array of sequence labels."
+                )
+
         return self._finetune(*list(zip(*Xs)), Y=Y, batch_size=batch_size)
 
     def predict(self, Xs, max_length=None):

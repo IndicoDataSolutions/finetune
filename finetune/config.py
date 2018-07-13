@@ -40,10 +40,13 @@ def get_default_hparams():
         summarize_grads=False,
 
         # Validation
-        # Validation
         val_size=0.05,
         val_interval=150,
-        val_window_size=5
+        val_window_size=5,
+
+        # Sequence Labeling
+        seq_num_heads=16,
+        seq_dropout=0.3
     )
 
 
