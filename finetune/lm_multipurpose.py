@@ -4,13 +4,12 @@ from finetune.lm_base import LanguageModelBase
 
 class LanguageModelGeneralAPI(LanguageModelBase):
 
-    def __init__(self, autosave_path, verbose=True):
-        super().__init__(autosave_path=autosave_path, verbose=verbose)
-        self.is_classification = None
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
     def _text_to_ids(self, *Xs, max_length=None):
         max_length = max_length or self.hparams.max_length
-        question_answer_pairs = self.encoder.encode_multi_input(*Xs, max_length=max_length)
+        question_answer_pairs = self.encoder.encode_multi_input(*Xs, max_length=max_length, verbose=self.verbose)
         tokens, mask = self._array_format(question_answer_pairs)
         return tokens, mask
 

@@ -1,9 +1,10 @@
 import os
 import unittest
-
+import warnings
 from pathlib import Path
 
-# required for tensorflow logging control
+# prevent excessive warning logs 
+warnings.filterwarnings('ignore')
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 import tensorflow as tf
@@ -12,6 +13,7 @@ import enso
 from enso.download import generic_download
 
 from finetune import LanguageModelGeneralAPI
+from finetune.config import get_hparams
 import numpy as np
 
 SST_FILENAME = "SST-binary.csv"
@@ -48,7 +50,8 @@ class TestLanguageModelClassifier(unittest.TestCase):
     def setUp(self):
         save_file_autosave = 'tests/saved-models/autosave_path'
         self.save_file = 'tests/saved-models/test-save-load'
-        self.model = LanguageModelGeneralAPI(verbose=False, autosave_path=save_file_autosave)
+        hparams = get_hparams(batch_size=2, max_length=256)
+        self.model = LanguageModelGeneralAPI(hparams=hparams, verbose=False, autosave_path=save_file_autosave)
 
         self.dataset = pd.read_csv(self.dataset_path)
         train_sample = self.dataset.sample(n=self.n_sample)
@@ -79,7 +82,6 @@ class TestLanguageModelClassifier(unittest.TestCase):
         Ensure saving + loading does not cause errors                                                                                                                               
         Ensure saving + loading does not change predictions                                                                                                                         
         """
-
         self.model.fit(self.text_data_train, [np.random.random() for _ in self.train_targets])
         self.assertTrue(not self.model.is_classification)
         predictions = self.model.predict(self.text_data_valid)

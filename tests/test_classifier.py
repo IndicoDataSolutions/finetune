@@ -3,8 +3,10 @@ import unittest
 import logging
 from copy import copy
 from pathlib import Path
+import warnings
 
-# required for tensorflow logging control
+# prevent excessive warning logs 
+warnings.filterwarnings('ignore')
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 import tensorflow as tf
@@ -14,14 +16,14 @@ import enso
 from enso.download import generic_download
 from sklearn.metrics import accuracy_score
 from finetune import LanguageModelClassifier
-from finetune.config import get_default_hparams
+from finetune.config import get_hparams
 
 SST_FILENAME = "SST-binary.csv"
 
 
 class TestLanguageModelClassifier(unittest.TestCase):
 
-    n_sample = 100
+    n_sample = 20
     n_hidden = 768
     dataset_path = os.path.join(
         enso.config.DATA_DIRECTORY, 'Classify', 'SST-binary.csv'
@@ -52,13 +54,25 @@ class TestLanguageModelClassifier(unittest.TestCase):
         self.dataset = pd.read_csv(self.dataset_path, nrows=self.n_sample*3)
         tf.reset_default_graph()
 
+    def default_hparams(self, **kwargs):
+        return get_hparams(
+            batch_size=2,
+            max_length=128,
+            n_epochs=1,
+            **kwargs
+        )
+
     def test_fit_predict(self):
         """
         Ensure model training does not error out
         Ensure model returns predictions of the right type
         """
         save_file_autosave = 'tests/saved-models/autosave_path'
-        model = LanguageModelClassifier(verbose=False, autosave_path=save_file_autosave)
+        model = LanguageModelClassifier(
+            hparams=self.default_hparams(), 
+            verbose=False,
+            autosave_path=save_file_autosave
+        )
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text, train_sample.Target)
@@ -71,6 +85,20 @@ class TestLanguageModelClassifier(unittest.TestCase):
         for proba in probabilities:
             self.assertIsInstance(proba, dict)
 
+    def test_fit_predict_batch_size_1(self):
+        """
+        Ensure training is possible with batch size of 1
+        """
+        save_file_autosave = 'tests/saved-models/autosave_path'
+        model = LanguageModelClassifier(
+            hparams=self.default_hparams(),
+            verbose=False,
+            autosave_path=save_file_autosave
+        )
+        train_sample = self.dataset.sample(n=self.n_sample)
+        valid_sample = self.dataset.sample(n=self.n_sample)
+        model.fit(train_sample.Text, train_sample.Target)
+
     def test_save_load(self):
         """
         Ensure saving + loading does not cause errors
@@ -78,7 +106,11 @@ class TestLanguageModelClassifier(unittest.TestCase):
         """
         save_file_autosave = 'tests/saved-models/autosave_path'
         save_file = 'tests/saved-models/test-save-load'
-        model = LanguageModelClassifier(verbose=False, autosave_path=save_file_autosave)
+        model = LanguageModelClassifier(
+            hparams=self.default_hparams(),
+            verbose=False,
+            autosave_path=save_file_autosave
+        )
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text, train_sample.Target)
@@ -95,7 +127,11 @@ class TestLanguageModelClassifier(unittest.TestCase):
         Ensure featurization is still possible after fit
         """
         save_file_autosave = 'tests/saved-models/autosave_path'
-        model = LanguageModelClassifier(verbose=False, autosave_path=save_file_autosave)
+        model = LanguageModelClassifier(
+            hparams=self.default_hparams(),
+            verbose=False,
+            autosave_path=save_file_autosave
+        )
         train_sample = self.dataset.sample(n=self.n_sample)
         features = model.featurize(train_sample.Text)
         self.assertEqual(features.shape, (self.n_sample, self.n_hidden))
@@ -104,8 +140,15 @@ class TestLanguageModelClassifier(unittest.TestCase):
         self.assertEqual(features.shape, (self.n_sample, self.n_hidden))
 
     def test_reasonable_predictions(self):
+        """
+        Ensure model converges to a reasonable solution for a trivial problem
+        """
         save_file_autosave = 'tests/saved-models/autosave_path'
-        model = LanguageModelClassifier(verbose=False, autosave_path=save_file_autosave)
+        model = LanguageModelClassifier(
+            hparams=self.default_hparams(),
+            verbose=False,
+            autosave_path=save_file_autosave
+        )
         n_per_class = self.n_sample // 2
         trX = ['cat'] * n_per_class + ['finance']  * n_per_class
         trY = copy(trX)
@@ -116,10 +159,11 @@ class TestLanguageModelClassifier(unittest.TestCase):
         self.assertEqual(accuracy_score(teY, predY), 1.00)
 
     def test_validation(self):
-        hparams = get_default_hparams()
-        hparams.val_interval = 10
-        hparams.val_size = 0.5
-        model = LanguageModelClassifier(verbose=False, hparams=hparams)
+        """
+        Ensure valdiation settings do not result in an error
+        """
+        hparams = self.default_hparams(val_interval=10, val_size=0.5)
+        model = LanguageModelClassifier(hparams=hparams, verbose=False)
         train_sample = self.dataset.sample(n=20)
         model.fit(train_sample.Text, train_sample.Target)
 
