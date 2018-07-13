@@ -13,7 +13,7 @@ class LanguageModelSequence(LanguageModelBase):
 
     def _text_to_ids_with_labels(self, *Xs):
 
-        encoder_out = self.encoder.encode_input_sequence_labeling(*Xs, max_length=self.hparams.max_length)
+        encoder_out = self.encoder.encode_sequence_labeling(*Xs, max_length=self.hparams.max_length)
         tokens, mask = self._array_format(encoder_out.token_ids)
         padded_labels = []
         for sequence in encoder_out.labels:
