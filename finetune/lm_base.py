@@ -134,10 +134,10 @@ class LanguageModelBase(object, metaclass=ABCMeta):
         self.target_dim = len(self.label_encoder.target_dim)
         self._build_model(n_updates_total=n_updates_total, target_dim=self.target_dim)
 
-        dataset = shuffle(train_x, train_mask, Y, random_state=np.random)
-        x_tr, x_va, m_tr, m_va, y_tr, y_va = train_test_split(*dataset, test_size=self.hparams.val_size,
-                                                              random_state=31415)
+        dataset = (train_x, train_mask, Y)
 
+        x_tr, x_va, m_tr, m_va, y_tr, y_va = train_test_split(*dataset, test_size=self.hparams.val_size,
+                                                              random_state=self.hparams.seed)
         dataset = (x_tr, m_tr, y_tr)
         val_dataset = (x_va, m_va, y_va)
 
