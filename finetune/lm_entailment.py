@@ -15,7 +15,7 @@ class LanguageModelEntailment(LanguageModelBase):
         max_length = max_length or self.hparams.max_length
         assert len(Xs) == 2, "This implementation assumes 2 Xs"
 
-        question_answer_pairs = self.encoder.encode_for_entailment(*Xs, max_length=max_length)
+        question_answer_pairs = self.encoder.encode_for_entailment(*Xs, max_length=max_length, verbose=self.verbose)
 
         tokens, mask = self._array_format(question_answer_pairs)
         return tokens, mask
