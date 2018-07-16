@@ -1,8 +1,8 @@
 import numpy as np
-from finetune.lm_base import LanguageModelBase
+from finetune.base import BaseModel
 
 
-class LanguageModelGeneralAPI(LanguageModelBase):
+class Model(BaseModel):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

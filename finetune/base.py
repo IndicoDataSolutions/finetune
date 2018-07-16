@@ -34,7 +34,7 @@ DROPOUT_ON = 1
 DROPOUT_OFF = 0
 
 
-class LanguageModelBase(object, metaclass=ABCMeta):
+class BaseModel(object, metaclass=ABCMeta):
     """
     A sklearn-style class for finetuning a Transformer language model on a classification task.
 
@@ -174,13 +174,13 @@ class LanguageModelBase(object, metaclass=ABCMeta):
 
                         val_cost = outputs.get(self.clf_loss, 0)
                         sum_val_loss += val_cost
-                    
+                        avg_val_loss = avg_val_loss * self.hparams.rolling_avg_decay + val_cost * (
+                                1 - self.hparams.rolling_avg_decay)
                     val_window.append(sum_val_loss)
                     val_window.pop(0)
 
                     if np.mean(val_window) <= best_val_loss:
                         best_val_loss = np.mean(val_window)
-                        _LOGGER.info("Autosaving new best model...")
                         self.save(self.autosave_path)
                 
                 outputs = self._eval(self.clf_loss, self.train_op, feed_dict={

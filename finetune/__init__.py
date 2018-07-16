@@ -1,3 +1,3 @@
-from finetune.lm_entailment import LanguageModelEntailment
-from finetune.lm_multipurpose import LanguageModelGeneralAPI
-from finetune.lm_classifier import LanguageModelClassifier
+from finetune.entailment import Entailment
+from finetune.multipurpose import Model
+from finetune.classifier import Classifier

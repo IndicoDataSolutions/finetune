@@ -4,14 +4,14 @@ import tensorflow as tf
 def get_default_hparams():
     return tf.contrib.training.HParams(
         # TRAINING SETTINGS
-        batch_size=4,
+        batch_size=2,
         visible_gpus=None,
         n_epochs=3,
         seed=42,
 
         # MODEL DEFINITION + INITIALIZATION
         weight_stddev=0.02,
-        max_length=512,
+        max_length=256,
         n_heads=12,
         n_layer=12,
         act_fn="gelu",

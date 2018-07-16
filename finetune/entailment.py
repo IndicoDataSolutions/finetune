@@ -2,11 +2,11 @@ import json
 
 from sklearn.model_selection import train_test_split
 
-from finetune.lm_base import LanguageModelBase
+from finetune.base import BaseModel
 from finetune.target_encoders import OrdinalClassificationEncoder
 
 
-class LanguageModelEntailment(LanguageModelBase):
+class Entailment(BaseModel):
 
     def get_target_encoder(self):
         return OrdinalClassificationEncoder()

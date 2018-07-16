@@ -1,6 +1,0 @@
-finetune:
-  build:
-    image: finetune
-    dockerfile_path: .codeship/Dockerfile
-  cached: true
-  default_cache_branch: "master"

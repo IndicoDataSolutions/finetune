@@ -1,7 +1,7 @@
-from finetune.lm_base import LanguageModelBase
+from finetune.base import BaseModel
 
 
-class LanguageModelClassifier(LanguageModelBase):
+class Classifier(BaseModel):
 
     def featurize(self, X, max_length=None):
         """
