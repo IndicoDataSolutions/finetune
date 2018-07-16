@@ -1,5 +1,4 @@
-Finetune
-========
+<img src="https://i.imgur.com/kYL058E.png" height="150px">
 
 Finetune is a python library designed to make finetuning pre-trained language models
 for custom natural language processing tasks easier.
