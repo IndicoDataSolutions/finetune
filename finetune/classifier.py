@@ -1,7 +1,7 @@
-from finetune.lm_base import LanguageModelBase
+from finetune.base import BaseModel
 
 
-class LanguageModelClassifier(LanguageModelBase):
+class Classifier(BaseModel):
 
     def featurize(self, X, max_length=None):
         """
@@ -36,7 +36,7 @@ class LanguageModelClassifier(LanguageModelBase):
         """
         return self._predict_proba(X, max_length=max_length)
 
-    def finetune(self, X, Y, batch_size=None):
+    def finetune(self, X, Y=None, batch_size=None):
         """
         :param X: list or array of text.
         :param Y: integer or string-valued class labels.

@@ -15,13 +15,13 @@ import numpy as np
 import enso
 from enso.download import generic_download
 from sklearn.metrics import accuracy_score
-from finetune import LanguageModelClassifier
+from finetune import Classifier
 from finetune.config import get_hparams
 
 SST_FILENAME = "SST-binary.csv"
 
 
-class TestLanguageModelClassifier(unittest.TestCase):
+class TestClassifier(unittest.TestCase):
 
     n_sample = 20
     n_hidden = 768
@@ -61,6 +61,38 @@ class TestLanguageModelClassifier(unittest.TestCase):
             n_epochs=1,
             **kwargs
         )
+        
+    def test_fit_lm_only(self):
+        """
+        Ensure LM only training does not error out
+        """
+        save_file_autosave = 'tests/saved-models/autosave_path'
+        model = Classifier(
+            hparams=self.default_hparams(),
+            verbose=False,
+            autosave_path=save_file_autosave
+        )
+        train_sample = self.dataset.sample(n=self.n_sample)
+        valid_sample = self.dataset.sample(n=self.n_sample)
+
+        # Ensure model can still be fit with text + targets
+        model.fit(train_sample.Text, train_sample.Target)
+
+        predictions = model.predict(valid_sample.Text)
+        for prediction in predictions:
+            self.assertIsInstance(prediction, (np.int, np.int64))
+
+        probabilities = model.predict_proba(valid_sample.Text)
+        for proba in probabilities:
+            self.assertIsInstance(proba, dict)
+
+    def default_hparams(self, **kwargs):
+        return get_hparams(
+            batch_size=2,
+            max_length=128,
+            n_epochs=1,
+            **kwargs
+        )
 
     def test_fit_predict(self):
         """
@@ -68,7 +100,7 @@ class TestLanguageModelClassifier(unittest.TestCase):
         Ensure model returns predictions of the right type
         """
         save_file_autosave = 'tests/saved-models/autosave_path'
-        model = LanguageModelClassifier(
+        model = Classifier(
             hparams=self.default_hparams(), 
             verbose=False,
             autosave_path=save_file_autosave
@@ -90,7 +122,7 @@ class TestLanguageModelClassifier(unittest.TestCase):
         Ensure training is possible with batch size of 1
         """
         save_file_autosave = 'tests/saved-models/autosave_path'
-        model = LanguageModelClassifier(
+        model = Classifier(
             hparams=self.default_hparams(),
             verbose=False,
             autosave_path=save_file_autosave
@@ -106,7 +138,7 @@ class TestLanguageModelClassifier(unittest.TestCase):
         """
         save_file_autosave = 'tests/saved-models/autosave_path'
         save_file = 'tests/saved-models/test-save-load'
-        model = LanguageModelClassifier(
+        model = Classifier(
             hparams=self.default_hparams(),
             verbose=False,
             autosave_path=save_file_autosave
@@ -116,7 +148,7 @@ class TestLanguageModelClassifier(unittest.TestCase):
         model.fit(train_sample.Text, train_sample.Target)
         predictions = model.predict(valid_sample.Text)
         model.save(save_file)
-        model = LanguageModelClassifier.load(save_file)
+        model = Classifier.load(save_file)
         new_predictions = model.predict(valid_sample.Text)
         for i, prediction in enumerate(predictions):
             self.assertEqual(prediction, new_predictions[i])
@@ -127,7 +159,7 @@ class TestLanguageModelClassifier(unittest.TestCase):
         Ensure featurization is still possible after fit
         """
         save_file_autosave = 'tests/saved-models/autosave_path'
-        model = LanguageModelClassifier(
+        model = Classifier(
             hparams=self.default_hparams(),
             verbose=False,
             autosave_path=save_file_autosave
@@ -144,7 +176,7 @@ class TestLanguageModelClassifier(unittest.TestCase):
         Ensure model converges to a reasonable solution for a trivial problem
         """
         save_file_autosave = 'tests/saved-models/autosave_path'
-        model = LanguageModelClassifier(
+        model = Classifier(
             hparams=self.default_hparams(),
             verbose=False,
             autosave_path=save_file_autosave
@@ -163,6 +195,6 @@ class TestLanguageModelClassifier(unittest.TestCase):
         Ensure valdiation settings do not result in an error
         """
         hparams = self.default_hparams(val_interval=10, val_size=0.5)
-        model = LanguageModelClassifier(hparams=hparams, verbose=False)
+        model = Classifier(hparams=hparams, verbose=False)
         train_sample = self.dataset.sample(n=20)
         model.fit(train_sample.Text, train_sample.Target)

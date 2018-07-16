@@ -2,11 +2,11 @@ import json
 
 from sklearn.model_selection import train_test_split
 
-from finetune.lm_base import LanguageModelBase
+from finetune.base import BaseModel
 from finetune.target_encoders import OrdinalClassificationEncoder
 
 
-class LanguageModelEntailment(LanguageModelBase):
+class Entailment(BaseModel):
 
     def get_target_encoder(self):
         return OrdinalClassificationEncoder()
@@ -20,7 +20,7 @@ class LanguageModelEntailment(LanguageModelBase):
         tokens, mask = self._array_format(question_answer_pairs)
         return tokens, mask
 
-    def finetune(self, X_1, X_2, Y, batch_size=None):
+    def finetune(self, X_1, X_2, Y=None, batch_size=None):
         """
         :param X_1: list or array of text to embed as the queries.
         :param X_2: list or array of text to embed as the answers.

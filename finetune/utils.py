@@ -7,6 +7,23 @@ import tensorflow as tf
 from tensorflow.python.framework import function
 from tensorflow.python.client import device_lib
 from tqdm import tqdm
+from sklearn.utils import shuffle
+
+
+def shuffle_data(*args):
+    """
+    Thin passthrough fn to sklearn.utils.shuffle, but allows for passing through None values
+    """
+    shuffled = shuffle(arg for arg in args if arg is not None)
+    results = []
+    idx = 0
+    for arg in args:
+        if arg is None:
+            results.append(arg)
+        else:
+            results.append(shuffled[idx])
+            idx += 1
+    return tuple(results) 
 
 
 def format_gpu_string(num):
@@ -108,12 +125,8 @@ def iter_data(*datas, n_batch=128, truncate=False, verbose=False, max_batches=fl
         n = (n // n_batch) * n_batch
     n = min(n, max_batches * n_batch)
     n_batches = 0
-    if verbose:
-        f = sys.stderr
-    else:
-        f = open(os.devnull, 'w')
     
-    for i in  tqdm(range(0, n, n_batch), total=n // n_batch, file=f, ncols=80, leave=False, disable=(not verbose)):
+    for i in tqdm(range(0, n, n_batch), total=n // n_batch, ncols=80, leave=False, disable=(not verbose)):
         if n_batches >= max_batches: raise StopIteration
         if len(datas) == 1:
             yield datas[0][i:i + n_batch]

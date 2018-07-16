@@ -1,3 +1,0 @@
-- service: finetune
-  encrypted_dockercfg_path: ".dockercfg.encrypted"
-  command: nosetests

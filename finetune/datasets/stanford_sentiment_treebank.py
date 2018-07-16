@@ -9,7 +9,7 @@ import enso
 from enso.download import generic_download
 from sklearn.model_selection import train_test_split
 
-from finetune import LanguageModelClassifier
+from finetune import Classifier
 from finetune.config import get_hparams
 from finetune.datasets import Dataset
 
@@ -20,8 +20,8 @@ ENSO_PATH = os.path.join(enso.config.DATA_DIRECTORY, 'Classify', 'SST-binary.csv
 
 class StanfordSentimentTreebank(Dataset):
 
-    def __init__(self, filename=None):
-        super().__init__(filename=(filename or ENSO_PATH))
+    def __init__(self, filename=None, **kwargs):
+        super().__init__(filename=(filename or ENSO_PATH), **kwargs)
 
     def download(self):
         """
@@ -42,7 +42,7 @@ class StanfordSentimentTreebank(Dataset):
 
 if __name__ == "__main__":
     # Train and evaluate on SST
-    dataset = StanfordSentimentTreebank().dataframe(nrows=1500)
+    dataset = StanfordSentimentTreebank(nrows=1500)
     save_file_autosave = tempfile.mkdtemp()
     hparams = get_hparams(val_size=100, val_interval=5000)
     model = LanguageModelClassifier(hparams=hparams, verbose=True)
