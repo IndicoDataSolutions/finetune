@@ -1,11 +1,11 @@
 import numpy as np
 
-from finetune.lm_base import LanguageModelBase, SEQUENCE_LABELING
+from finetune.base import BaseModel, SEQUENCE_LABELING
 from finetune.target_encoders import SequenceLabelingEncoder
 from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_sequence
 
 
-class LanguageModelSequence(LanguageModelBase):
+class SequenceLabeler(BaseModel):
 
     def __init__(self, autosave_path, verbose=True):
         super().__init__(autosave_path=autosave_path, verbose=verbose)
@@ -79,7 +79,7 @@ class LanguageModelSequence(LanguageModelBase):
                     # start new subsequence
                     doc_output.append([text[start_of_token:position], label])
                 else:
-                    # continue appending to current subsequence
+                    # continue appending to current subsequencef
                     doc_output[-1][0] += text[start_of_token:position]
 
                 start_of_token = position

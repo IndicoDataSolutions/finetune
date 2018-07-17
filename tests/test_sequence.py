@@ -14,13 +14,13 @@ import numpy as np
 import enso
 from sklearn.metrics import accuracy_score
 import requests
-from finetune import LanguageModelSequence
+from finetune import SequenceLabeler
 
 from bs4 import BeautifulSoup as bs
 from bs4.element import Tag
 
 
-class TestLanguageModelSequenceLabel(unittest.TestCase):
+class TestSequenceLabeler(unittest.TestCase):
 
     n_sample = 100
     n_hidden = 768
@@ -85,7 +85,7 @@ class TestLanguageModelSequenceLabel(unittest.TestCase):
         
         tf.reset_default_graph()
 
-        self.model = LanguageModelSequence(verbose=False, autosave_path=self.save_file_autosave)
+        self.model = SequenceLabeler(verbose=False, autosave_path=self.save_file_autosave)
 
     def test_fit_predict(self):
         """
@@ -95,5 +95,5 @@ class TestLanguageModelSequenceLabel(unittest.TestCase):
         self.model.fit(self.texts, self.labels)
         predictions = self.model.predict(self.texts)
         self.model.save(self.save_file_autosave)
-        model = LanguageModelSequence.load(self.save_file_autosave)
+        model = SequenceLabeler.load(self.save_file_autosave)
         model.predict(self.texts)

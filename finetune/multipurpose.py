@@ -1,8 +1,8 @@
 import numpy as np
-from finetune.base import BaseModel
 
-from finetune.lm_base import LanguageModelBase, CLASSIFICATION, REGRESSION, SEQUENCE_LABELING
+from finetune.base import BaseModel, CLASSIFICATION, REGRESSION, SEQUENCE_LABELING
 from finetune.errors import InvalidTargetType
+
 
 class Model(BaseModel):
 
