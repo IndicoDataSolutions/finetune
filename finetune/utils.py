@@ -10,6 +10,8 @@ from tensorflow.contrib.crf import viterbi_decode
 from tqdm import tqdm
 from sklearn.utils import shuffle
 
+from finetune import config
+
 
 def shuffle_data(*args):
     """
@@ -208,16 +210,17 @@ def sequence_decode(logits, transition_matrix):
     return tf.py_func(_sequence_decode, [logits, transition_matrix], [tf.int32, tf.float32])
         
 
-def finetune_to_indico_sequence(data, none_value):
-    dataset = []
-    for datum in data:
-        datum = datum[0]
-        single_entry = ["", []]
+def finetune_to_indico_sequence(data, labels, none_value=config.PAD_TOKEN):
+    texts = []
+    annotations = []
+    for doc, label_seq in zip(data, labels):
+        doc_text = ""
+        doc_annotations = []
         char_loc = 0
-        for sub_str, label in datum:
-            single_entry[0] += sub_str
+        for sub_str, label in zip(doc, label_seq):
+            doc_text += sub_str
             if label != none_value:
-                single_entry[1].append(
+                doc_annotations.append(
                     {
                         "start": char_loc,
                         "end": char_loc + len(sub_str),
@@ -225,23 +228,34 @@ def finetune_to_indico_sequence(data, none_value):
                     }
                 )
             char_loc += len(sub_str)
-        dataset.append(single_entry)
-    return dataset
+        texts.append(doc_text)
+        annotations.append(doc_annotations)
+    return texts, annotations
 
+def indico_to_finetune_sequence(texts, labels=None, none_value=config.PAD_TOKEN):
+    all_subseqs = []
+    all_labels = []
 
-def indico_to_finetune_sequence(data, none_value):
-    dataset = []
-    for text, tags in data:
+    # placeholder for inference time
+    if labels is None:
+        labels = [[]] * len(texts)
+
+    for text, label_seq in zip(texts, labels):
         last_loc = 0
-        new_data = []
-        for annotation in tags:
+        doc_subseqs = []
+        doc_labels = []
+        for annotation in label_seq:
             start = annotation["start"]
             end = annotation["end"]
             label = annotation["label"]
             if start != last_loc:
-                new_data.append([text[last_loc:start], none_value])
-            new_data.append([text[start: end], label])
+                doc_subseqs.append(text[last_loc:start])
+                doc_labels.append(none_value)
+            doc_subseqs.append(text[start: end])
+            doc_labels.append(label)
             last_loc = end
-        new_data.append([text[last_loc:], none_value])
-        dataset.append([new_data])
-    return dataset
+        doc_subseqs.append(text[last_loc:])
+        doc_labels.append(none_value)
+        all_subseqs.append(doc_subseqs)
+        all_labels.append(doc_labels)
+    return all_subseqs, all_labels

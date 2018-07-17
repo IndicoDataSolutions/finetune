@@ -35,13 +35,15 @@ class SequenceLabeler(BaseModel):
 
     def finetune(self, X, Y, batch_size=None):
         """
-        :param X: An array of text snippets. Format: [batch_size, snippets_per_sequence]
-        :param Y: An array of labeled text snippets. Format: [batch_size, snippets_per_sequence]
+        :param X: A list of text snippets. Format: [batch_size]
+        :param Y: A list of lists of annotations. Format: [batch_size, n_annotations], where each annotation is of the form:
+            {'start': char_idx, 'end': char_idx, 'label': 'label'}
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
         :param val_size: Float fraction or int number that represents the size of the validation set.
         :param val_interval: The interval for which validation is performed, measured in number of steps.
         """
+        X, Y = indico_to_finetune_sequence(X, Y, none_value="<PAD>")
         self.target_type = SEQUENCE_LABELING
         return self._finetune(X, Y, batch_size=batch_size)
 
@@ -54,35 +56,36 @@ class SequenceLabeler(BaseModel):
                            Providing more than `max_length` tokens as input will result in truncation.
         :returns: list of class labels.
         """
+        X, _ = indico_to_finetune_sequence(X)
         x_pred, m_pred, _, token_positions = self._text_to_ids_with_labels(X)
         labels = self._predict(x_pred, m_pred, max_length=max_length)
-        output = []
-
+        all_subseqs = []
+        all_labels = []
         for text, label_seq, position_seq in zip(X, labels, token_positions):
-            start_of_token = float("inf")
-            doc_output = []
+            start_of_token = 0
+            doc_subseqs = []
+            doc_labels = []
             for label, position in zip(label_seq, position_seq):
                 if position == -1:
                     # indicates padding / special tokens
                     continue  
 
-                if position < start_of_token:
-                    start_of_token = 0
-                    doc_output.append([])
-
                 # if there are no current subsequence 
                 # or the current subsequence has the wrong label
-                if not doc_output[-1] or label != doc_output[-1][1]:
+                if not doc_subseqs or label != doc_labels[-1]:
                     # start new subsequence
-                    doc_output.append([text[start_of_token:position], label])
+                    doc_subseqs.append(text[start_of_token:position])
+                    doc_labels.append(label)
                 else:
                     # continue appending to current subsequencef
-                    doc_output[-1][0] += text[start_of_token:position]
+                    doc_subseqs[-1] += text[start_of_token:position]
 
                 start_of_token = position
-            output.append(doc_output)
+            all_subseqs.append(doc_subseqs)
+            all_labels.append(doc_labels)
 
-        return output
+        doc_texts, doc_annotations = finetune_to_indico_sequence(all_subseqs, all_labels)
+        return doc_annotations
 
     def predict_proba(self, Xs, max_length=None):
         """

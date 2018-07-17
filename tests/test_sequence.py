@@ -14,10 +14,11 @@ import numpy as np
 import enso
 from sklearn.metrics import accuracy_score
 import requests
-from finetune import SequenceLabeler
-
 from bs4 import BeautifulSoup as bs
 from bs4.element import Tag
+
+from finetune import SequenceLabeler
+from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_sequence
 
 
 class TestSequenceLabeler(unittest.TestCase):
@@ -44,32 +45,33 @@ class TestSequenceLabeler(unittest.TestCase):
             with open(cls.dataset_path, "wb") as fp:
                 fp.write(r.content)
         
-        if not os.path.exists(cls.processed_path):
+        # if not os.path.exists(cls.processed_path):
 
-            with codecs.open(cls.dataset_path, "r", "utf-8") as infile:
-                soup = bs(infile, "html5lib")
+        with codecs.open(cls.dataset_path, "r", "utf-8") as infile:
+            soup = bs(infile, "html5lib")
 
-            docs = []
-            docs_labels = []
-            for elem in soup.find_all("document"):
-                texts = []
-                labels = []
+        docs = []
+        docs_labels = []
+        for elem in soup.find_all("document"):
+            texts = []
+            labels = []
 
-                # Loop through each child of the element under "textwithnamedentities"
-                for c in elem.find("textwithnamedentities").children:
-                    if type(c) == Tag:
-                        if c.name == "namedentityintext":
-                            label = "Named Entity"  # part of a named entity
-                        else:
-                            label = "None"  # irrelevant word
-                        texts.append(c.text)
-                        labels.append(label)
+            # Loop through each child of the element under "textwithnamedentities"
+            for c in elem.find("textwithnamedentities").children:
+                if type(c) == Tag:
+                    if c.name == "namedentityintext":
+                        label = "Named Entity"  # part of a named entity
+                    else:
+                        label = "None"  # irrelevant word
+                    texts.append(c.text)
+                    labels.append(label)
 
-                docs.append(texts)
-                docs_labels.append(labels)
+            docs.append(texts)
+            docs_labels.append(labels)
 
-            with open(cls.processed_path, 'wt') as fp:
-                json.dump((docs, docs_labels), fp)
+        
+        with open(cls.processed_path, 'wt') as fp:
+            json.dump((docs, docs_labels), fp)
 
 
     @classmethod
@@ -92,8 +94,9 @@ class TestSequenceLabeler(unittest.TestCase):
         Ensure model training does not error out
         Ensure model returns predictions
         """
-        self.model.fit(self.texts, self.labels)
-        predictions = self.model.predict(self.texts)
+        texts, annotations = finetune_to_indico_sequence(self.texts, self.labels)
+        self.model.fit(texts, annotations)
+        predictions = self.model.predict(texts)
         self.model.save(self.save_file_autosave)
         model = SequenceLabeler.load(self.save_file_autosave)
         model.predict(self.texts)
