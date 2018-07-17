@@ -13,6 +13,7 @@ import tensorflow as tf
 import numpy as np
 import enso
 from sklearn.metrics import accuracy_score
+from sklearn.model_selection import train_test_split
 import requests
 from bs4 import BeautifulSoup as bs
 from bs4.element import Tag
@@ -62,7 +63,7 @@ class TestSequenceLabeler(unittest.TestCase):
                     if c.name == "namedentityintext":
                         label = "Named Entity"  # part of a named entity
                     else:
-                        label = "None"  # irrelevant word
+                        label = "<PAD>"  # irrelevant word
                     texts.append(c.text)
                     labels.append(label)
 
@@ -95,8 +96,7 @@ class TestSequenceLabeler(unittest.TestCase):
         Ensure model returns predictions
         """
         texts, annotations = finetune_to_indico_sequence(self.texts, self.labels)
-        self.model.fit(texts, annotations)
-        predictions = self.model.predict(texts)
+        train_texts, test_texts, train_annotations, test_annotations = train_test_split(texts, annotations)
+        self.model.fit(train_texts, train_annotations)
+        predictions = self.model.predict(test_texts)
         self.model.save(self.save_file_autosave)
-        model = SequenceLabeler.load(self.save_file_autosave)
-        model.predict(self.texts)

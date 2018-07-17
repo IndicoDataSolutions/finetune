@@ -51,12 +51,11 @@ class SequenceLabeler(BaseModel):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
-        :param Xs: An iterable of lists or array of text, shape [batch]
+        :param X: A list / array of text, shape [batch]
         :param max_length: the number of tokens to be included in the document representation.
                            Providing more than `max_length` tokens as input will result in truncation.
         :returns: list of class labels.
         """
-        X, _ = indico_to_finetune_sequence(X)
         x_pred, m_pred, _, token_positions = self._text_to_ids_with_labels(X)
         labels = self._predict(x_pred, m_pred, max_length=max_length)
         all_subseqs = []

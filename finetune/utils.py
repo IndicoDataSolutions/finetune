@@ -232,6 +232,7 @@ def finetune_to_indico_sequence(data, labels, none_value=config.PAD_TOKEN):
         annotations.append(doc_annotations)
     return texts, annotations
 
+
 def indico_to_finetune_sequence(texts, labels=None, none_value=config.PAD_TOKEN):
     all_subseqs = []
     all_labels = []
