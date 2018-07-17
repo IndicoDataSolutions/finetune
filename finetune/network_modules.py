@@ -58,7 +58,7 @@ def language_model(*, X, M, embed_weights, hidden, hparams, reuse=None):
         }
 
 
-def classifier(hidden, targets, n_classes, dropout_placeholder, hparams, train=False, reuse=None):
+def classifier(hidden, targets, n_classes, dropout_placeholder, hparams, train=False, reuse=None, **kwargs):
     with tf.variable_scope('model', reuse=reuse):
         hidden = dropout(hidden, hparams.clf_p_drop, train, dropout_placeholder)
         clf_logits = mlp(hidden, n_classes, hparams)
@@ -69,7 +69,7 @@ def classifier(hidden, targets, n_classes, dropout_placeholder, hparams, train=F
         }
 
 
-def regressor(hidden, targets, n_outputs, dropout_placeholder, hparams, train=False, reuse=None):
+def regressor(hidden, targets, n_outputs, dropout_placeholder, hparams, train=False, reuse=None, **kwargs):
     with tf.variable_scope('model', reuse=reuse):
         hidden = dropout(hidden, hparams.clf_p_drop, train, dropout_placeholder)
         outputs = mlp(hidden, n_outputs, hparams)
@@ -80,7 +80,7 @@ def regressor(hidden, targets, n_outputs, dropout_placeholder, hparams, train=Fa
         }
 
 
-def sequence_labeler(hidden, targets, n_outputs, dropout_placeholder, hparams, train=False, reuse=None):
+def sequence_labeler(hidden, targets, n_outputs, dropout_placeholder, hparams, train=False, reuse=None, **kwargs):
     with tf.variable_scope('model/clf', reuse=reuse):
         nx = shape_list(hidden)[-1]
         a = attn(hidden, 'seq_label_attn', nx, hparams.seq_num_heads, hparams.seq_dropout, hparams.seq_dropout, dropout_placeholder, train=train, scale=False, mask=False)
@@ -89,7 +89,7 @@ def sequence_labeler(hidden, targets, n_outputs, dropout_placeholder, hparams, t
         logits = tf.reshape(flat_logits, tf.concat([tf.shape(hidden)[:2], [n_outputs]], 0))
         # TODO (BEN): ADD: correct way to find lengths. - Same method in decoding. Cheating for now.
         with tf.device(None):
-            log_likelihood, transition_params = tf.contrib.crf.crf_log_likelihood(logits, targets, 256 * tf.ones(tf.shape(targets)[0]))
+            log_likelihood, transition_params = tf.contrib.crf.crf_log_likelihood(logits, targets, kwargs.get('max_length') * tf.ones(tf.shape(targets)[0]))
         return {
             'logits': logits,
             'losses': -log_likelihood,

@@ -88,16 +88,16 @@ class BaseModel(object, metaclass=ABCMeta):
         seq_array = self._array_format(token_idxs)
         return seq_array.token_ids, seq_array.mask
 
-    def target_model(self, featurizer_state, targets, n_outputs, train=False, reuse=None):
+    def target_model(self, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
         if self.target_type == CLASSIFICATION:
             return classifier(featurizer_state['features'], targets, n_outputs, self.do_dropout, hparams=self.hparams,
-                              train=train, reuse=reuse)
+                              train=train, reuse=reuse, **kwargs)
         elif self.target_type == REGRESSION:
             return regressor(featurizer_state['features'], targets, n_outputs, self.do_dropout, hparams=self.hparams,
-                             train=train, reuse=reuse)
+                             train=train, reuse=reuse, **kwargs)
         elif self.target_type == SEQUENCE_LABELING:
             return sequence_labeler(featurizer_state['sequence_features'], targets, n_outputs, self.do_dropout, hparams=self.hparams,
-                                    train=train, reuse=reuse)
+                                    train=train, reuse=reuse, **kwargs)
         else:
             raise InvalidTargetType(self.target_type)
 
@@ -395,7 +395,8 @@ class BaseModel(object, metaclass=ABCMeta):
                         targets=Y,
                         n_outputs=target_dim,
                         train=train,
-                        reuse=do_reuse
+                        reuse=do_reuse,
+                        max_length=self.hparams.max_length
                     )
 
                     train_loss += (1 - lm_loss_coef) * tf.reduce_mean(target_model_state['losses'])
@@ -418,7 +419,7 @@ class BaseModel(object, metaclass=ABCMeta):
             
             self.predict_op, self.predict_proba_op = self.predict_ops(
                 self.logits,
-                predict_params=target_model_state.get("predict_params", {})
+                **target_model_state.get("predict_params", {})
             )
             self._compile_train_op(
                 params=params,
