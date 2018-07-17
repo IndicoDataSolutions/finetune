@@ -89,11 +89,10 @@ def sequence_labeler(hidden, targets, n_outputs, dropout_placeholder, hparams, t
         logits = tf.reshape(flat_logits, tf.concat([tf.shape(hidden)[:2], [n_outputs]], 0))
         # TODO (BEN): ADD: correct way to find lengths. - Same method in decoding. Cheating for now.
         with tf.device(None):
-            log_likelihood, transition_params = tf.contrib.crf.crf_log_likelihood(logits, targets, 512 * tf.ones(tf.shape(targets)[0]))
-        loss = tf.reduce_mean(-log_likelihood)
+            log_likelihood, transition_params = tf.contrib.crf.crf_log_likelihood(logits, targets, 256 * tf.ones(tf.shape(targets)[0]))
         return {
             'logits': logits,
-            'losses': loss,
+            'losses': -log_likelihood,
             'predict_params': {
                 'transition_matrix': transition_params
             }

@@ -4,14 +4,14 @@ import warnings
 import logging
 import pickle
 import json
-
+import tempfile
 from abc import ABCMeta, abstractmethod
-import tensorflow as tf
-import numpy as np
-
+from collections import namedtuple, defaultdict
+from functools import partial
 import tempfile
 
-from functools import partial
+import numpy as np
+import tensorflow as tf
 from sklearn.utils import shuffle
 
 from finetune.download import download_data_if_required
@@ -19,12 +19,12 @@ from finetune.encoding import TextEncoder
 from finetune.optimizers import AdamWeightDecay, schedules
 from sklearn.model_selection import train_test_split
 from finetune.config import get_default_hparams
-
 from finetune.target_encoders import OneHotLabelEncoder, RegressionEncoder, SequenceLabelingEncoder
 from finetune.network_modules import featurizer, language_model, classifier, regressor, sequence_labeler
 from finetune.utils import find_trainable_variables, get_available_gpus, shape_list, assign_to_gpu, average_grads, \
-    iter_data, soft_split, sequence_predict
+    iter_data, soft_split, sequence_decode
 from finetune.errors import InvalidTargetType
+from finetune.config import PAD_TOKEN
 
 SHAPES_PATH = os.path.join(os.path.dirname(__file__), 'model', 'params_shapes.json')
 PARAM_PATH = os.path.join(os.path.dirname(__file__), 'model', 'params_{}.npy')
@@ -37,6 +37,8 @@ DROPOUT_OFF = 0
 CLASSIFICATION = 'classification'
 REGRESSION = 'regression'
 SEQUENCE_LABELING = 'sequence-labeling'
+
+SequenceArray = namedtuple("SequenceArray", ['token_ids', 'mask', 'labels'])
 
 
 class BaseModel(object, metaclass=ABCMeta):
@@ -82,9 +84,9 @@ class BaseModel(object, metaclass=ABCMeta):
     def _text_to_ids(self, *Xs, max_length=None):
         max_length = max_length or self.hparams.max_length
         assert len(Xs) == 1, "This implementation assumes a single Xs"
-        token_idxs = self.encoder.encode_for_classification(Xs[0], max_length=max_length, verbose=self.verbose)
-        tokens, mask = self._array_format(token_idxs)
-        return tokens, mask
+        token_idxs = self.encoder.encode_for_classification(Xs[0], max_length=max_length)
+        seq_array = self._array_format(token_idxs)
+        return seq_array.token_ids, seq_array.mask
 
     def target_model(self, featurizer_state, targets, n_outputs, train=False, reuse=None):
         if self.target_type == CLASSIFICATION:
@@ -99,10 +101,11 @@ class BaseModel(object, metaclass=ABCMeta):
         else:
             raise InvalidTargetType(self.target_type)
 
-    def predict_ops(self, logits):
+    def predict_ops(self, logits, **kwargs):
         if self.target_type == CLASSIFICATION:
             return tf.argmax(logits, -1), tf.nn.softmax(logits, -1)
-
+        elif self.target_type == SEQUENCE_LABELING:
+            return sequence_decode(logits, kwargs.get("transition_matrix"))
         return logits, logits
 
     def get_target_encoder(self):
@@ -287,7 +290,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self._build_model(n_updates_total=0, target_dim=self.target_dim, train=False)
         yield from iter_data(infer_x, infer_mask, n_batch=n_batch_train, verbose=self.verbose)
 
-    def _array_format(self, token_idxs):
+    def _array_format(self, token_idxs, labels=None):
         """
         Returns numpy array of token idxs and corresponding mask
         Returned `x` array contains two channels:
@@ -298,14 +301,21 @@ class BaseModel(object, metaclass=ABCMeta):
         seq_lengths = [len(x) for x in token_idxs]
         x = np.zeros((n, self.hparams.max_length, 2), dtype=np.int32)
         mask = np.zeros((n, self.hparams.max_length), dtype=np.float32)
+        labels_arr = np.full((n, self.hparams.max_length), PAD_TOKEN, dtype='object') if labels else None
         for i, seq_length in enumerate(seq_lengths):
             # BPE embedding
             x[i, :seq_length, 0] = token_idxs[i]
             # masking: value of 1 means "consider this in cross-entropy LM loss"
             mask[i, 1:seq_length] = 1
+            if labels:
+                labels_arr[i, :seq_length] = labels[i]
         # positional_embeddings
         x[:, :, 1] = np.arange(self.encoder.vocab_size, self.encoder.vocab_size + self.hparams.max_length)
-        return x, mask
+        return SequenceArray(
+            token_ids=x,
+            mask=mask,
+            labels=labels_arr
+        )
 
     def _compile_train_op(self, *, params, grads, n_updates_total):
         grads = average_grads(grads)
@@ -337,8 +347,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self.target_dim = target_dim
         self._define_placeholders()
 
-        features_aggregator = []
-        losses_aggregator = []
+        aggregator = defaultdict(list)
 
         train_loss_tower = 0
         gpus = get_available_gpus(self.hparams)
@@ -377,8 +386,8 @@ class BaseModel(object, metaclass=ABCMeta):
 
                 train_loss = lm_loss_coef * tf.reduce_mean(language_model_state['losses'])
 
-                features_aggregator.append(featurizer_state['features'])
-                losses_aggregator.append([language_model_state['losses']])
+                aggregator['features'].append(featurizer_state['features'])
+                aggregator['lm_losses'].append(language_model_state['losses'])
 
                 if target_dim is not None:
                     target_model_state = self.target_model(
@@ -388,38 +397,38 @@ class BaseModel(object, metaclass=ABCMeta):
                         train=train,
                         reuse=do_reuse
                     )
-                    train_loss += tf.reduce_mean(target_model_state['losses'])
-                    losses_aggregator[-1].extend([
-                        target_model_state['logits'],
-                        target_model_state['losses']
-                    ])
 
-                params = find_trainable_variables("model")
-                grads = tf.gradients(train_loss, params)
-                grads = list(zip(grads, params))
-                gpu_grads.append(grads)
+                    train_loss += (1 - lm_loss_coef) * tf.reduce_mean(target_model_state['losses'])
+                    train_loss_tower += train_loss
 
-                train_loss_tower += train_loss
+                    params = find_trainable_variables("model")
+                    grads = tf.gradients(train_loss, params)
+                    grads = list(zip(grads, params))
+                    gpu_grads.append(grads)
+                    aggregator['logits'].append(target_model_state['logits'])
+                    aggregator['clf_losses'].append(target_model_state['losses'])
 
-        self.features = tf.concat(features_aggregator, 0)
 
-        if target_dim is None:
+        self.features = tf.concat(aggregator['features'], 0)
+        self.lm_losses = tf.concat(aggregator['lm_losses'], 0)
+
+        if target_dim is not None:
             self.predict_params = target_model_state.get("predict_params", {})
-            self.lm_losses = [tf.concat(op, 0) for op in zip(*losses_aggregator)]
-        else:
-            self.lm_losses, self.logits, self.clf_losses = [tf.concat(op, 0) for op in zip(*losses_aggregator)]
-            self.predict_op, self.predict_proba_op = self.predict_ops(self.logits)
+            self.logits = tf.concat(aggregator['logits'], 0)
+            self.clf_losses = tf.concat(aggregator['clf_losses'], 0)
+            
+            self.predict_op, self.predict_proba_op = self.predict_ops(self.logits, **target_model_state['predict_params'])
+            self._compile_train_op(
+                params=params,
+                grads=gpu_grads,
+                n_updates_total=n_updates_total
+            )
             self.clf_loss = tf.reduce_mean(self.clf_losses)
+            self.lm_loss = tf.reduce_mean(self.lm_losses)
             self.summaries.append(tf.summary.scalar('TargetModelLoss', self.clf_loss))
-
-        self._compile_train_op(
-            params=params,
-            grads=gpu_grads,
-            n_updates_total=n_updates_total
-        )
-        self.summaries.append(tf.summary.scalar('LanguageModelLoss', tf.reduce_mean(self.lm_losses)))
-        self.summaries.append(tf.summary.scalar('TotalLoss', train_loss_tower / n_splits))
-        self.summaries = tf.summary.merge(self.summaries)
+            self.summaries.append(tf.summary.scalar('LanguageModelLoss', self.lm_loss))
+            self.summaries.append(tf.summary.scalar('TotalLoss', train_loss_tower / n_splits))
+            self.summaries = tf.summary.merge(self.summaries)
 
     def _build_model(self, n_updates_total, target_dim, train=True):
         """

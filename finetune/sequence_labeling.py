@@ -2,40 +2,32 @@ import numpy as np
 
 from finetune.lm_base import LanguageModelBase, SEQUENCE_LABELING
 from finetune.target_encoders import SequenceLabelingEncoder
-from finetune.utils import sequence_predict
+from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_sequence
 
 
 class LanguageModelSequence(LanguageModelBase):
 
-    def __init__(self, autosave_path, verbose=True, label_pad_target="<PAD>"):
+    def __init__(self, autosave_path, verbose=True):
         super().__init__(autosave_path=autosave_path, verbose=verbose)
-        self.label_pad_target = label_pad_target
 
-    def _text_to_ids_with_labels(self, *Xs):
+    def _text_to_ids_with_labels(self, X, Y=None):
+        encoder_out = self.encoder.encode_sequence_labeling(X, Y, max_length=self.hparams.max_length)
+        seq_array = self._array_format(encoder_out.token_ids, labels=encoder_out.labels)
+        return seq_array.token_ids, seq_array.mask, seq_array.labels, encoder_out.char_locs
 
-        encoder_out = self.encoder.encode_sequence_labeling(*Xs, max_length=self.hparams.max_length)
-        tokens, mask = self._array_format(encoder_out.token_ids)
-        padded_labels = []
-        for sequence in encoder_out.labels:
-            padded_labels.append(sequence + (self.hparams.max_length - len(sequence)) * [self.label_pad_target])
-        return tokens, mask, padded_labels, encoder_out.char_locs
-
-    def _finetune(self, *Xs, Y, batch_size=None):
+    def _finetune(self, X, Y, batch_size=None):
         """
         X: List / array of text
         Y: Class labels
         val_size: Float fraction or int number that represents the size of the validation set.
         val_interval: The interval for which validation is performed, measured in number of steps.
         """
-        train_x, train_mask, sequence_labels, _ = self._text_to_ids_with_labels(*Xs)
+        train_x, train_mask, sequence_labels, _ = self._text_to_ids_with_labels(X, Y)
         return self._training_loop(train_x, train_mask, sequence_labels,
                                    batch_size=batch_size or self.hparams.batch_size)
 
     def get_target_encoder(self):
         return SequenceLabelingEncoder()
-
-    def predict_ops(self, logits):
-        return sequence_predict(logits, self.predict_params)
 
     def _text_to_ids(self, *Xs, max_length=None):
         """
@@ -44,51 +36,55 @@ class LanguageModelSequence(LanguageModelBase):
         """
         return Xs
 
-    def finetune(self, XYs, batch_size=None):
+    def finetune(self, X, Y, batch_size=None):
         """
-        :param XYs: An array of labeled text snippets. Format: [batch_size, sequences_per_data, snippets_per_sequence, 2]
-            where the final dimension is of the format [text_snippet, label]
+        :param X: An array of text snippets. Format: [batch_size, snippets_per_sequence]
+        :param Y: An array of labeled text snippets. Format: [batch_size, snippets_per_sequence]
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
         :param val_size: Float fraction or int number that represents the size of the validation set.
         :param val_interval: The interval for which validation is performed, measured in number of steps.
         """
         self.target_type = SEQUENCE_LABELING
-        return self._finetune(*list(zip(*XYs)), Y=None, batch_size=batch_size)
+        return self._finetune(X, Y, batch_size=batch_size)
 
-    def predict(self, Xs, max_length=None):
+    def predict(self, X, max_length=None):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
-        :param Xs: An iterable of lists or array of text, shape [batch, tokens]
+        :param Xs: An iterable of lists or array of text, shape [batch]
         :param max_length: the number of tokens to be included in the document representation.
                            Providing more than `max_length` tokens as input will result in truncation.
         :returns: list of class labels.
         """
-        sequence_major = list(zip(*Xs))
-        x_pred, m_pred, _, tok_pos = self._text_to_ids_with_labels(*sequence_major)
-        sparse_predictions = self._predict(x_pred, m_pred, max_length=max_length)
+        x_pred, m_pred, _, token_positions = self._text_to_ids_with_labels(X)
+        labels = self._predict(x_pred, m_pred, max_length=max_length)
         output = []
 
-        for texts, labels, token_position in zip(Xs, sparse_predictions, tok_pos):
-            current_sequence = -1
-            output_for_item = []
+        for text, label_seq, position_seq in zip(X, labels, token_positions):
             start_of_token = float("inf")
-            for lab, pos in zip(labels, token_position):
-                if pos == -1:
-                    continue  # Put in earlier to identify padding and meta tokens
-                if pos < start_of_token:
-                    # Next sequence
+            doc_output = []
+            for label, position in zip(label_seq, position_seq):
+                if position == -1:
+                    # indicates padding / special tokens
+                    continue  
+
+                if position < start_of_token:
                     start_of_token = 0
-                    output_for_item.append([])
-                    current_sequence += 1
-                    text = texts[current_sequence]
-                if output_for_item[-1] and lab == output_for_item[-1][-1][1]:
-                    output_for_item[-1][-1][0] += text[start_of_token: pos]
+                    doc_output.append([])
+
+                # if there are no current subsequence 
+                # or the current subsequence has the wrong label
+                if not doc_output[-1] or label != doc_output[-1][1]:
+                    # start new subsequence
+                    doc_output.append([text[start_of_token:position], label])
                 else:
-                    output_for_item[-1].append([text[start_of_token: pos], lab])
-                start_of_token = pos
-            output.append(output_for_item)
+                    # continue appending to current subsequence
+                    doc_output[-1][0] += text[start_of_token:position]
+
+                start_of_token = position
+            output.append(doc_output)
+
         return output
 
     def predict_proba(self, Xs, max_length=None):

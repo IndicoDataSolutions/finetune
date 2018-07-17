@@ -17,8 +17,8 @@ class Entailment(BaseModel):
 
         question_answer_pairs = self.encoder.encode_for_entailment(*Xs, max_length=max_length, verbose=self.verbose)
 
-        tokens, mask = self._array_format(question_answer_pairs)
-        return tokens, mask
+        seq_array = self._array_format(question_answer_pairs)
+        return seq_array.token_ids, seq_array.mask
 
     def finetune(self, X_1, X_2, Y=None, batch_size=None):
         """

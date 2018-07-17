@@ -6,19 +6,17 @@ import json
 import os
 import warnings
 import functools
-
-import numpy as np
-
 from collections import namedtuple
 
 import ftfy
 import spacy
+import numpy as np
 from tqdm import tqdm
+
+from finetune.config import PAD_TOKEN
 
 ENCODER_PATH = os.path.join(os.path.dirname(__file__), 'model/encoder_bpe_40000.json')
 BPE_PATH = os.path.join(os.path.dirname(__file__), 'model/vocab_40000.bpe')
-
-PAD_LABEL = "<PAD>"
 
 EncoderOutput = namedtuple("EncoderOutput", ["token_ids", "labels", "char_locs"])
 LabeledSequence = namedtuple("LabeledSequence", ["token_ids", "labels", "char_locs"])
@@ -134,7 +132,7 @@ class TextEncoder(object):
         self.cache[token] = word
         return word
 
-    def _encode(self, texts, verbose=True):
+    def _encode(self, texts, labels=None, verbose=True):
         """
         Convert a batch of raw text to a batch of byte-pair encoded token indices.
         """
@@ -142,14 +140,15 @@ class TextEncoder(object):
         batch_label_idxs = []
         batch_character_locs = []
         label = None
-
-        for text in tqdm(texts, ncols=80, leave=False, disable=(not verbose)):
+        for i, text in tqdm(enumerate(texts), ncols=80, leave=False, disable=(not verbose)):
+            if labels:
+                label = labels[i]
             raw_text = text.lower()
-            text = self.nlp(text_standardize(text))
+            tokens = self.nlp(text_standardize(text))
             subtoken_idxs = []
             tok_pos = []
             token_start = 0
-            for token in text:
+            for token in tokens:
                 bpe_toks = self.bpe(token.text).split()
                 subtoken_idxs.extend([
                     self.encoder.get(t, self.UNK_IDX)
@@ -163,10 +162,28 @@ class TextEncoder(object):
                 tok_pos.extend(subtoken_positions)
             batch_token_idxs.append(subtoken_idxs)
             batch_character_locs.append(tok_pos)
-            if label is not None:
+            if labels is not None:
                 batch_label_idxs.append([label] * len(subtoken_idxs))
 
         return EncoderOutput(batch_token_idxs, batch_label_idxs, batch_character_locs)
+
+    def trim(self, seqs, max_length, start=None, end=None):
+        # account for start + end tokens
+        if not start:
+            start = self.start
+        if not end:
+            end = self.clf_token
+        adjusted_max_length = max_length - 2
+
+        if any([len(seq) > adjusted_max_length for seq in seqs]):
+            warnings.warn("Document is longer than max length allowed, trimming document to {} tokens.".format(
+                max_length
+            ))
+        seqs = [
+            [start] + seq[:adjusted_max_length] + [end]
+            for seq in seqs
+        ]
+        return seqs
 
     def encode_for_classification(self, texts, max_length, verbose=True):
         """
@@ -174,17 +191,7 @@ class TextEncoder(object):
         and add appropriate special tokens to match expected model input
         """
         batch_token_idxs = self._encode(texts, verbose=verbose).token_ids
-        # account for start + end tokens
-        adjusted_max_length = max_length - 2
-        if any([len(token_idxs) > adjusted_max_length for token_idxs in batch_token_idxs]):
-            warnings.warn("Document is longer than max length allowed, trimming document to {} tokens.".format(
-                max_length
-            ))
-        batch_token_idxs = [
-            [self.start] + token_idxs[:adjusted_max_length] + [self.clf_token]
-            for token_idxs in batch_token_idxs
-        ]
-        return batch_token_idxs
+        return self.trim(batch_token_idxs, max_length=max_length)
 
     def encode_for_comparison(self, texts, max_length, verbose=True):
         pass
@@ -221,7 +228,7 @@ class TextEncoder(object):
         :param start: Override the default start token.
         :param delimiter: Override the default delimiter token.
         :param end: Override the default classify token
-        :return: Formatted outputs of the form. [batch, num_tokens'] where num_tokens' <= max_length
+        :return: Formatted outputs of the form. [batch, num_tokens] where num_tokens' <= max_length
         """
         start = start or special_tokens or self.start
         delimiter = delimiter or special_tokens or self.delimiter
@@ -249,30 +256,45 @@ class TextEncoder(object):
             outputs.append(joined)
         return outputs
 
-    def encode_sequence_labeling(self, *Xs, max_length, verbose=True):
-        # Xs = [n_inputs, n_batch, n_items_in_seq, 2]
+    def encode_sequence_labeling(self, X, Y=None, max_length=None, verbose=True):
+        # X: [n_batch, seq_len]
+        # Y: [n_batch, seq_len]
         tokens = []
-        labels_out = []
-        positions_out = []
-        for input in Xs:
-            tokens_for_input = []
-            input_labels = []
-            for batch in input:
-                encoded = self._encode(batch)
-                positions_out.append(encoded.char_locs)
+        labels = []
+        positions = []
 
-                tokens_single = flatten(encoded.token_ids)
-                labels_single = flatten(encoded.labels)
+        for i, x in enumerate(X):
+            targets = None if Y is None else Y[i] 
+            encoded = self._encode(x, labels=targets)
+            positions.append(flatten(encoded.char_locs))
+            tokens.append(flatten(encoded.token_ids))
+            labels.append(flatten(encoded.labels))
 
-                tokens_for_input.append(tokens_single)
-                input_labels.append(labels_single)
-            tokens.append(tokens_for_input)
-            labels_out.append(input_labels)
+        tokens = self._cut_and_concat(
+            encoded=[tokens],
+            max_length=max_length,
+            verbose=verbose
+        )
 
-        formatted_tokens = self._cut_and_concat(encoded=tokens, max_length=max_length, verbose=verbose)
-        formatted_labels = self._cut_and_concat(encoded=labels_out, max_length=max_length, verbose=verbose,
-                                                special_tokens=PAD_LABEL)
-        formatted_locations = self._cut_and_concat(encoded=positions_out, max_length=max_length, verbose=verbose,
-                                                   special_tokens=-1)
+        locations = self._cut_and_concat(
+            encoded=[positions],
+            max_length=max_length,
+            verbose=verbose,
+            special_tokens=-1
+        )
 
-        return LabeledSequence(token_ids=formatted_tokens, labels=formatted_labels, char_locs=formatted_locations)
+        if Y is None:
+            labels = None
+        else:
+            labels = self._cut_and_concat(
+                encoded=[labels],
+                max_length=max_length,
+                verbose=verbose,
+                special_tokens=PAD_TOKEN
+            )
+
+        return LabeledSequence(
+            token_ids=tokens,
+            char_locs=locations,
+            labels=labels
+        )
