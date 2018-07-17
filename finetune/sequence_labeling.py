@@ -7,9 +7,6 @@ from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_seque
 
 class SequenceLabeler(BaseModel):
 
-    def __init__(self, autosave_path, verbose=True):
-        super().__init__(autosave_path=autosave_path, verbose=verbose)
-
     def _text_to_ids_with_labels(self, X, Y=None):
         encoder_out = self.encoder.encode_sequence_labeling(X, Y, max_length=self.hparams.max_length)
         seq_array = self._array_format(encoder_out.token_ids, labels=encoder_out.labels)

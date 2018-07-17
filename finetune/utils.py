@@ -242,5 +242,6 @@ def indico_to_finetune_sequence(data, none_value):
                 new_data.append([text[last_loc:start], none_value])
             new_data.append([text[start: end], label])
             last_loc = end
+        new_data.append([text[last_loc:], none_value])
         dataset.append([new_data])
     return dataset
