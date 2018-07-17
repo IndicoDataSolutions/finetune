@@ -413,11 +413,13 @@ class BaseModel(object, metaclass=ABCMeta):
         self.lm_losses = tf.concat(aggregator['lm_losses'], 0)
 
         if target_dim is not None:
-            self.predict_params = target_model_state.get("predict_params", {})
             self.logits = tf.concat(aggregator['logits'], 0)
             self.clf_losses = tf.concat(aggregator['clf_losses'], 0)
             
-            self.predict_op, self.predict_proba_op = self.predict_ops(self.logits, **target_model_state['predict_params'])
+            self.predict_op, self.predict_proba_op = self.predict_ops(
+                self.logits,
+                predict_params=target_model_state.get("predict_params", {})
+            )
             self._compile_train_op(
                 params=params,
                 grads=gpu_grads,
