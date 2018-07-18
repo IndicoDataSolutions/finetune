@@ -66,12 +66,7 @@ class TestClassifier(unittest.TestCase):
         """
         Ensure LM only training does not error out
         """
-        save_file_autosave = 'tests/saved-models/autosave_path'
-        model = Classifier(
-            hparams=self.default_hparams(),
-            verbose=False,
-            autosave_path=save_file_autosave
-        )
+        model = Classifier(hparams=self.default_hparams(), verbose=False)
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
 
@@ -99,12 +94,7 @@ class TestClassifier(unittest.TestCase):
         Ensure model training does not error out
         Ensure model returns predictions of the right type
         """
-        save_file_autosave = 'tests/saved-models/autosave_path'
-        model = Classifier(
-            hparams=self.default_hparams(), 
-            verbose=False,
-            autosave_path=save_file_autosave
-        )
+        model = Classifier(hparams=self.default_hparams(), verbose=False)
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text, train_sample.Target)
@@ -121,12 +111,7 @@ class TestClassifier(unittest.TestCase):
         """
         Ensure training is possible with batch size of 1
         """
-        save_file_autosave = 'tests/saved-models/autosave_path'
-        model = Classifier(
-            hparams=self.default_hparams(),
-            verbose=False,
-            autosave_path=save_file_autosave
-        )
+        model = Classifier(hparams=self.default_hparams(), verbose=False)
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text, train_sample.Target)
@@ -136,13 +121,8 @@ class TestClassifier(unittest.TestCase):
         Ensure saving + loading does not cause errors
         Ensure saving + loading does not change predictions
         """
-        save_file_autosave = 'tests/saved-models/autosave_path'
         save_file = 'tests/saved-models/test-save-load'
-        model = Classifier(
-            hparams=self.default_hparams(),
-            verbose=False,
-            autosave_path=save_file_autosave
-        )
+        model = Classifier(hparams=self.default_hparams(), verbose=False)
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text, train_sample.Target)
@@ -158,12 +138,7 @@ class TestClassifier(unittest.TestCase):
         Ensure featurization returns an array of the right shape
         Ensure featurization is still possible after fit
         """
-        save_file_autosave = 'tests/saved-models/autosave_path'
-        model = Classifier(
-            hparams=self.default_hparams(),
-            verbose=False,
-            autosave_path=save_file_autosave
-        )
+        model = Classifier(hparams=self.default_hparams(), verbose=False)
         train_sample = self.dataset.sample(n=self.n_sample)
         features = model.featurize(train_sample.Text)
         self.assertEqual(features.shape, (self.n_sample, self.n_hidden))
@@ -175,13 +150,8 @@ class TestClassifier(unittest.TestCase):
         """
         Ensure model converges to a reasonable solution for a trivial problem
         """
-        save_file_autosave = 'tests/saved-models/autosave_path'
-        model = Classifier(
-            hparams=self.default_hparams(),
-            verbose=False,
-            autosave_path=save_file_autosave
-        )
-        n_per_class = self.n_sample // 2
+        model = Classifier(hparams=self.default_hparams(), verbose=False)
+        n_per_class = (self.n_sample * 5)
         trX = ['cat'] * n_per_class + ['finance']  * n_per_class
         trY = copy(trX)
         teX = ['feline'] * n_per_class + ['investment'] * n_per_class

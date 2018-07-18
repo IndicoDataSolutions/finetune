@@ -49,11 +49,9 @@ class TestModel(unittest.TestCase):
         cls._download_sst()
 
     def setUp(self):
-        save_file_autosave = 'tests/saved-models/autosave_path'
         self.save_file = 'tests/saved-models/test-save-load'
         hparams = get_hparams(batch_size=2, max_length=256)
-        self.model = Model(hparams=hparams, verbose=False, autosave_path=save_file_autosave)
-
+        self.model = Model(hparams=hparams, verbose=False)
         self.dataset = pd.read_csv(self.dataset_path)
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)

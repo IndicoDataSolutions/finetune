@@ -81,7 +81,6 @@ class TestSequenceLabeler(unittest.TestCase):
         cls._download_reuters()
 
     def setUp(self):
-        self.save_file_autosave = 'tests/saved-models/autosave_path'
         self.save_file = 'tests/saved-models/test-save-load'
 
         with open(self.processed_path, 'rt') as fp:
@@ -90,7 +89,7 @@ class TestSequenceLabeler(unittest.TestCase):
         tf.reset_default_graph()
 
         hparams = get_hparams(batch_size=2, max_length=256)
-        self.model = SequenceLabeler(hparams=hparams, verbose=False, autosave_path=self.save_file_autosave)
+        self.model = SequenceLabeler(hparams=hparams, verbose=False)
 
     def test_fit_predict(self):
         """
@@ -101,4 +100,6 @@ class TestSequenceLabeler(unittest.TestCase):
         train_texts, test_texts, train_annotations, test_annotations = train_test_split(texts, annotations)
         self.model.fit(train_texts, train_annotations)
         predictions = self.model.predict(test_texts)
-        self.model.save(self.save_file_autosave)
+        self.model.save(self.save_file)
+        model = SequenceLabeler.load(self.save_file)
+        predictions = model.predict(test_texts)

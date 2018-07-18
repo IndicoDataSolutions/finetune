@@ -13,6 +13,14 @@ from sklearn.utils import shuffle
 from finetune import config
 
 
+def concat_or_stack(tensors, axis=0):
+    try:
+        return tf.concat(tensors, axis=axis)
+    except ValueError:
+        # tensors are scalars
+        return tf.stack(tensors, axis=axis)
+
+
 def shuffle_data(*args):
     """
     Thin passthrough fn to sklearn.utils.shuffle, but allows for passing through None values

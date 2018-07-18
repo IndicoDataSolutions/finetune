@@ -47,7 +47,13 @@ def get_default_hparams():
         # Sequence Labeling
         seq_num_heads=16,
         seq_dropout=0.3,
-        pad_token="<PAD>"
+        pad_token="<PAD>",
+
+        # Early stopping
+        save_best_model=False,
+
+        # Tensorboard
+        tensorboard_folder='.tensorboard'
     )
 
 

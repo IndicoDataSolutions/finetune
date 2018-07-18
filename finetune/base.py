@@ -22,7 +22,7 @@ from finetune.config import get_default_hparams
 from finetune.target_encoders import OneHotLabelEncoder, RegressionEncoder, SequenceLabelingEncoder
 from finetune.network_modules import featurizer, language_model, classifier, regressor, sequence_labeler
 from finetune.utils import find_trainable_variables, get_available_gpus, shape_list, assign_to_gpu, average_grads, \
-    iter_data, soft_split, sequence_decode
+    iter_data, soft_split, sequence_decode, concat_or_stack
 from finetune.errors import InvalidTargetType
 from finetune.config import PAD_TOKEN
 
@@ -52,7 +52,6 @@ class BaseModel(object, metaclass=ABCMeta):
     def __init__(self, hparams=None, autosave_path=None, verbose=True):
         self.hparams = hparams or get_default_hparams()
         self.autosave_path = autosave_path or tempfile.mkdtemp()
-        _LOGGER.info("Writing intermediate checkpoints to {}".format(self.autosave_path))
         self.label_encoder = None
         self._initialize()
         self.target_dim = None
@@ -208,8 +207,9 @@ class BaseModel(object, metaclass=ABCMeta):
 
                     if np.mean(val_window) <= best_val_loss:
                         best_val_loss = np.mean(val_window)
-                        self.save(self.autosave_path)
-                
+                        if self.hparams.save_best_model:
+                            self.save(self.autosave_path)
+                1
                 outputs = self._eval(self.clf_loss, self.train_op, feed_dict={
                     self.X: xmb,
                     self.M: mmb,
@@ -425,12 +425,12 @@ class BaseModel(object, metaclass=ABCMeta):
                     aggregator['clf_losses'].append(target_model_state['losses'])
 
 
-        self.features = tf.concat(aggregator['features'], 0)
-        self.lm_losses = tf.concat(aggregator['lm_losses'], 0)
+        self.features = tf.concat(aggregator['features'], axis=0)
+        self.lm_losses = tf.concat(aggregator['lm_losses'], axis=0)
 
         if target_dim is not None:
-            self.logits = tf.concat(aggregator['logits'], 0)
-            self.clf_losses = tf.concat(aggregator['clf_losses'], 0)
+            self.logits = tf.concat(aggregator['logits'], axis=0)
+            self.clf_losses = concat_or_stack(aggregator['clf_losses'])
             
             self.predict_op, self.predict_proba_op = self.predict_ops(
                 self.logits,
@@ -464,8 +464,10 @@ class BaseModel(object, metaclass=ABCMeta):
             self._load_base_model()
 
         if train:
-            self.train_writer = tf.summary.FileWriter(self.autosave_path + '/train', self.sess.graph)
-            self.valid_writer = tf.summary.FileWriter(self.autosave_path + '/valid', self.sess.graph)
+            if not os.path.exists(self.hparams.tensorboard_folder):
+                os.mkdir(self.hparams.tensorboard_folder)
+            self.train_writer = tf.summary.FileWriter(self.hparams.tensorboard_folder + '/train', self.sess.graph)
+            self.valid_writer = tf.summary.FileWriter(self.hparams.tensorboard_folder + '/valid', self.sess.graph)
         self.is_built = True
 
     def _initialize_session(self):
@@ -539,7 +541,9 @@ class BaseModel(object, metaclass=ABCMeta):
             Does not serialize state of Adam optimizer.
             Should not be used to save / restore a training model.
         """
-
+        if path is None:
+            return
+        
         # Setting self._load_from_file indicates that we should load the saved model from
         # disk at next training / inference. It is set temporarily so that the serialized
         # model includes this information.
