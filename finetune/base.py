@@ -267,7 +267,7 @@ class BaseModel(object, metaclass=ABCMeta):
                         self.do_dropout: DROPOUT_OFF
                     }
                 )
-                proba = output.get(self.predict_proba_op)
+                probas = output.get(self.predict_proba_op)
                 classes = self.label_encoder.target_dim
                 predictions.extend([
                     dict(zip(classes, proba)) for proba in probas

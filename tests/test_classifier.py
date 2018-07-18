@@ -192,7 +192,7 @@ class TestClassifier(unittest.TestCase):
 
     def test_validation(self):
         """
-        Ensure valdiation settings do not result in an error
+        Ensure validation settings do not result in an error
         """
         hparams = self.default_hparams(val_interval=10, val_size=0.5)
         model = Classifier(hparams=hparams, verbose=False)
