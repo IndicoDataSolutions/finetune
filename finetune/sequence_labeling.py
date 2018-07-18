@@ -9,7 +9,7 @@ class SequenceLabeler(BaseModel):
 
     def _text_to_ids_with_labels(self, X, Y=None):
         # X: list of list of text snippets.  Each snippet represents a segment of text with a consistent label
-        encoder_out = self.encoder.encode_sequence_labeling(X, Y, max_length=self.hparams.max_length)
+        encoder_out = self.encoder.encode_sequence_labeling(X, Y, max_length=self.config.max_length)
         seq_array = self._array_format(encoder_out.token_ids, labels=encoder_out.labels)
         return seq_array.token_ids, seq_array.mask, seq_array.labels, encoder_out.char_locs
 
@@ -22,7 +22,7 @@ class SequenceLabeler(BaseModel):
         """
         train_x, train_mask, sequence_labels, _ = self._text_to_ids_with_labels(X, Y)
         return self._training_loop(train_x, train_mask, sequence_labels,
-                                   batch_size=batch_size or self.hparams.batch_size)
+                                   batch_size=batch_size or self.config.batch_size)
 
     def get_target_encoder(self):
         return SequenceLabelingEncoder()

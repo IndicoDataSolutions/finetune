@@ -49,10 +49,23 @@ python3 setup.py develop
 python3 -m spacy download en
 ```
 
+In order to run `finetune` on your host, you'll need a working copy of CUDA >= 8.0, libcudnn >= 6 and the corresponding nvidia-driver version.
+
 You can optionally run the provided test suite to ensure installation completed successfully.
 
 ```bash
 pip3 install nose
 nosetests
 ```
+
+Docker
+=======
+
+If you'd prefer you can also run `finetune` in a docker container.
+
+```
+./docker/build_docker.sh
+./docker/start_docker.sh
+```
+
 

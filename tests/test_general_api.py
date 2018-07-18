@@ -14,7 +14,7 @@ import enso
 from enso.download import generic_download
 
 from finetune import Model
-from finetune.config import get_hparams
+from finetune.config import get_config
 from finetune.base import CLASSIFICATION, REGRESSION
 
 SST_FILENAME = "SST-binary.csv"
@@ -50,8 +50,8 @@ class TestModel(unittest.TestCase):
 
     def setUp(self):
         self.save_file = 'tests/saved-models/test-save-load'
-        hparams = get_hparams(batch_size=2, max_length=256)
-        self.model = Model(hparams=hparams, verbose=False)
+        config = get_config(batch_size=2, max_length=256, verbose=False)
+        self.model = Model(config=config)
         self.dataset = pd.read_csv(self.dataset_path)
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)

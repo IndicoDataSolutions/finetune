@@ -1,7 +1,7 @@
 import tensorflow as tf
 
 
-def get_default_hparams():
+def get_default_config():
     return tf.contrib.training.HParams(
         # TRAINING SETTINGS
         batch_size=2,
@@ -38,6 +38,7 @@ def get_default_hparams():
 
         # Logging
         summarize_grads=False,
+        verbose=True,
 
         # Validation
         val_size=0.05,
@@ -51,23 +52,24 @@ def get_default_hparams():
 
         # Early stopping
         save_best_model=False,
+        autosave_path=None,
 
         # Tensorboard
         tensorboard_folder='.tensorboard'
     )
 
 
-def get_hparams(**kwargs):
-    hparams = get_default_hparams()
+def get_config(**kwargs):
+    config = get_default_config()
     for k, v in kwargs.items():
-        setattr(hparams, k, v)
-    return hparams
+        setattr(config, k, v)
+    return config
 
 
-def cpu_hparams():
-    hparam = get_default_hparams()
-    hparam.visibleGpus = []
-    return hparam
+def cpu_config():
+    config = get_default_config()
+    config.visibleGpus = []
+    return config
 
 
 PAD_TOKEN = '<PAD>'
