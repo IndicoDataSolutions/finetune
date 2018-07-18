@@ -19,7 +19,6 @@ from bs4 import BeautifulSoup as bs
 from bs4.element import Tag
 
 from finetune import SequenceLabeler
-from finetune.config import get_config
 from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_sequence
 
 
@@ -88,8 +87,7 @@ class TestSequenceLabeler(unittest.TestCase):
         
         tf.reset_default_graph()
 
-        config = get_config(batch_size=2, max_length=256, verbose=False)
-        self.model = SequenceLabeler(config=config)
+        self.model = SequenceLabeler(batch_size=2, max_length=256, verbose=False)
 
     def test_fit_predict(self):
         """

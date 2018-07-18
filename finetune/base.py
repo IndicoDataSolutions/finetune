@@ -50,9 +50,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
     def __init__(self, config=None, **kwargs):
         self.config = config or get_default_config()
-        for k, v in kwargs.items():
-            if k in self.config:
-                setattr(self.config, k, v)
+        self.config.override_from_dict(kwargs)
         self.label_encoder = None
         self._initialize()
         self.target_dim = None

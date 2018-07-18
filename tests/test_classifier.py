@@ -67,7 +67,7 @@ class TestClassifier(unittest.TestCase):
         """
         Ensure LM only training does not error out
         """
-        model = Classifier(config=self.default_config())
+        model = Classifier()
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
 
