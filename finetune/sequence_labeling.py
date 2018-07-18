@@ -8,6 +8,7 @@ from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_seque
 class SequenceLabeler(BaseModel):
 
     def _text_to_ids_with_labels(self, X, Y=None):
+        # X: list of list of text snippets.  Each snippet represents a segment of text with a consistent label
         encoder_out = self.encoder.encode_sequence_labeling(X, Y, max_length=self.hparams.max_length)
         seq_array = self._array_format(encoder_out.token_ids, labels=encoder_out.labels)
         return seq_array.token_ids, seq_array.mask, seq_array.labels, encoder_out.char_locs
@@ -56,7 +57,8 @@ class SequenceLabeler(BaseModel):
                            Providing more than `max_length` tokens as input will result in truncation.
         :returns: list of class labels.
         """
-        x_pred, m_pred, _, token_positions = self._text_to_ids_with_labels(X)
+        doc_subseqs, _ = indico_to_finetune_sequence(X)
+        x_pred, m_pred, _, token_positions = self._text_to_ids_with_labels(doc_subseqs)
         labels = self._predict(x_pred, m_pred, max_length=max_length)
         all_subseqs = []
         all_labels = []
@@ -82,7 +84,6 @@ class SequenceLabeler(BaseModel):
                 start_of_token = position
             all_subseqs.append(doc_subseqs)
             all_labels.append(doc_labels)
-
         doc_texts, doc_annotations = finetune_to_indico_sequence(all_subseqs, all_labels)
         return doc_annotations
 

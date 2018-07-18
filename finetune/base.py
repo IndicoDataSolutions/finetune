@@ -237,7 +237,14 @@ class BaseModel(object, metaclass=ABCMeta):
             warnings.filterwarnings("ignore")
             max_length = max_length or self.hparams.max_length
             for xmb, mmb in self._infer_prep(*Xs, max_length=max_length):
-                class_idx = self.sess.run(self.predict_op, {self.X: xmb, self.M: mmb})
+                output = self._eval(self.predict_op, 
+                    feed_dict={
+                        self.X: xmb,
+                        self.M: mmb,
+                        self.do_dropout: DROPOUT_OFF
+                    }    
+                )
+                class_idx = output.get(self.predict_op)
                 class_labels = self.label_encoder.inverse_transform(class_idx)
                 predictions.append(class_labels)
         return np.concatenate(predictions).tolist()
@@ -252,7 +259,15 @@ class BaseModel(object, metaclass=ABCMeta):
             warnings.filterwarnings("ignore")
             max_length = max_length or self.hparams.max_length
             for xmb, mmb in self._infer_prep(*Xs, max_length=max_length):
-                probas = self.sess.run(self.predict_proba_op, {self.X: xmb, self.M: mmb})
+                output = self._eval(
+                    self.predict_proba_op, 
+                    feed_dict={
+                        self.X: xmb,
+                        self.M: mmb,
+                        self.do_dropout: DROPOUT_OFF
+                    }
+                )
+                proba = output.get(self.predict_proba_op)
                 classes = self.label_encoder.target_dim
                 predictions.extend([
                     dict(zip(classes, proba)) for proba in probas

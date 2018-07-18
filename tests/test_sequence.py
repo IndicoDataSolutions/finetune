@@ -19,6 +19,7 @@ from bs4 import BeautifulSoup as bs
 from bs4.element import Tag
 
 from finetune import SequenceLabeler
+from finetune.config import get_hparams
 from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_sequence
 
 
