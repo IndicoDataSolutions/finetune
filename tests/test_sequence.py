@@ -88,7 +88,8 @@ class TestSequenceLabeler(unittest.TestCase):
         
         tf.reset_default_graph()
 
-        self.model = SequenceLabeler(verbose=False, autosave_path=self.save_file_autosave)
+        hparams = get_hparams(batch_size=2, max_length=256)
+        self.model = SequenceLabeler(hparams=hparams, verbose=False, autosave_path=self.save_file_autosave)
 
     def test_fit_predict(self):
         """
