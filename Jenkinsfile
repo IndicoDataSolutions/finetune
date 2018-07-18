@@ -24,15 +24,14 @@ pipeline {
         }
       }
     }
-    stage('Remove container') {
-      steps {
-        sh 'docker rm -f finetune'
-      }
-    }
+
   }
   post { 
     always { 
-      cleanWs()
+      steps {
+        cleanWs()
+        sh 'docker rm -f finetune'
+      }
     }
   }
 }
