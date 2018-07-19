@@ -15,13 +15,7 @@ pipeline {
     }
     stage('Test') {
       steps {
-        sh 'docker exec finetune nosetests -sv --nologcapture --with-xunit'
-      }
-
-      post {
-        always {
-          junit "**/nosetests.xml"
-        }
+        sh 'docker exec finetune pytest'
       }
     }
 
