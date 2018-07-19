@@ -4,11 +4,9 @@ import warnings
 import logging
 import pickle
 import json
-import tempfile
 from abc import ABCMeta, abstractmethod
 from collections import namedtuple, defaultdict
 from functools import partial
-import tempfile
 
 import numpy as np
 import tensorflow as tf
