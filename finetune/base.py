@@ -441,7 +441,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self.Y = tf.stop_gradient(tf.placeholder(tf.float32, [None, self.target_dim or 1])) # classification targets
         self.do_dropout = tf.placeholder(tf.float32)  # 1 for do dropout and 0 to not do dropout
 
-    def model_language(self, max_length=None, seed_text=''):
+    def generate_text(self, max_length=None, seed_text=''):
         """
         Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
         Temperature parameter for decoding is set in the config.
