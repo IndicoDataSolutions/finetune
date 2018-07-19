@@ -8,7 +8,7 @@ import finetune
 
 
 def download_data_if_required():
-    base_url = "https://raw.githubusercontent.com/IndicoDataSolutions/finetune/master/model/"
+    base_url = "https://raw.githubusercontent.com/IndicoDataSolutions/finetune/master/finetune/model/"
 
     file_list = [
         "encoder_bpe_40000.json",
