@@ -470,10 +470,11 @@ class BaseModel(object, metaclass=ABCMeta):
             self._load_base_model()
 
         if train:
-            if not os.path.exists(self.config.tensorboard_folder):
-                os.mkdir(self.config.tensorboard_folder)
-            self.train_writer = tf.summary.FileWriter(self.config.tensorboard_folder + '/train', self.sess.graph)
-            self.valid_writer = tf.summary.FileWriter(self.config.tensorboard_folder + '/valid', self.sess.graph)
+            if self.config.tensorboard_folder is not None:
+                if not os.path.exists(self.config.tensorboard_folder):
+                    os.mkdir(self.config.tensorboard_folder)
+                self.train_writer = tf.summary.FileWriter(self.config.tensorboard_folder + '/train', self.sess.graph)
+                self.valid_writer = tf.summary.FileWriter(self.config.tensorboard_folder + '/valid', self.sess.graph)
         self.is_built = True
 
     def _initialize_session(self):
