@@ -5,6 +5,8 @@ import logging
 import pickle
 import json
 
+import tqdm
+
 from abc import ABCMeta, abstractmethod
 import tensorflow as tf
 import numpy as np
@@ -148,10 +150,10 @@ class BaseModel(object, metaclass=ABCMeta):
         best_val_loss = float("inf")
         val_window = [float("inf")] * self.hparams.val_window_size
         for i in range(self.hparams.n_epochs):
-            for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=self.verbose):
+            for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=self.verbose, tqdm_desc="Training, Epoch: {}". format(i)):
                 global_step += 1
                 if global_step % self.hparams.val_interval == 0:
-
+                    tqdm.tqdm.write("Train loss is :{}, Val loss is :{}".format(avg_train_loss, avg_val_loss))
                     outputs = self._eval(
                         self.summaries,
                         feed_dict={
@@ -165,7 +167,7 @@ class BaseModel(object, metaclass=ABCMeta):
                     self.train_writer.add_summary(outputs.get(self.summaries), global_step)
 
                     sum_val_loss = 0
-                    for xval, mval, yval in iter_data(*val_dataset, n_batch=n_batch_train, verbose=self.verbose):
+                    for xval, mval, yval in iter_data(*val_dataset, n_batch=n_batch_train, verbose=self.verbose, tqdm_desc="Validation"):
                         outputs = self._eval(self.clf_loss, self.summaries, feed_dict={
                             self.X: xval, self.M: mval, self.Y: yval,
                             self.do_dropout: DROPOUT_OFF
@@ -190,6 +192,8 @@ class BaseModel(object, metaclass=ABCMeta):
                     self.do_dropout: DROPOUT_ON
                 })
                 cost = outputs.get(self.clf_loss, 0)
+                avg_train_loss = avg_train_loss * self.hparams.rolling_avg_decay + cost * (
+                        1 - self.hparams.rolling_avg_decay)
 
         return self
 
