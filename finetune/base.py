@@ -187,7 +187,8 @@ class BaseModel(object, metaclass=ABCMeta):
                         }
                     )
 
-                    self.train_writer.add_summary(outputs.get(self.summaries), global_step)
+                    if self.train_writer is not None:
+                        self.train_writer.add_summary(outputs.get(self.summaries), global_step)
 
                     sum_val_loss = 0
                     for xval, mval, yval in iter_data(*val_dataset, n_batch=n_batch_train, verbose=self.config.verbose):
@@ -201,7 +202,9 @@ class BaseModel(object, metaclass=ABCMeta):
                                 self.do_dropout: DROPOUT_OFF
                             }
                         )
-                        self.valid_writer.add_summary(outputs.get(self.summaries), global_step)
+                        
+                        if self.valid_writer is not None:
+                            self.valid_writer.add_summary(outputs.get(self.summaries), global_step)
 
                         val_cost = outputs.get(self.clf_loss, 0)
                         sum_val_loss += val_cost

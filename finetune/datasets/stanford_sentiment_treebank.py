@@ -6,11 +6,11 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 import enso
-from enso.download import generic_download
+
 from sklearn.model_selection import train_test_split
 
 from finetune import Classifier
-from finetune.datasets import Dataset
+from finetune.datasets import Dataset, generic_download
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -42,7 +42,7 @@ class StanfordSentimentTreebank(Dataset):
 if __name__ == "__main__":
     # Train and evaluate on SST
     dataset = StanfordSentimentTreebank(nrows=1500).dataframe
-    model = LanguageModelClassifier(val_size=100, val_interval=5000, verbose=True)
+    model = Classifier(verbose=True)
     trainX, testX, trainY, testY = train_test_split(dataset.Text, dataset.Target, test_size=0.3, random_state=42)
     model.fit(trainX, trainY)
     accuracy = np.mean(model.predict(testX) == testY)

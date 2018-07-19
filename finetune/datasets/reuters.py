@@ -72,4 +72,4 @@ if __name__ == "__main__":
     predictions = model.predict(testX)
     n_sample = 10
     for i in range(n_sample):
-        print(testX[i], predictions[i])
+        print(testX.values[i], predictions[i])
