@@ -232,7 +232,8 @@ def finetune_to_indico_sequence(data, labels, none_value=config.PAD_TOKEN):
                     {
                         "start": char_loc,
                         "end": char_loc + len(sub_str),
-                        "label": label
+                        "label": label,
+                        "text": sub_str
                     }
                 )
             char_loc += len(sub_str)
