@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pandas as pd
 import numpy as np
-import enso
 
 from sklearn.model_selection import train_test_split
 
@@ -24,7 +23,7 @@ class StanfordSentimentTreebank(Dataset):
 
     def download(self):
         """
-        Download Stanford Sentiment Treebank to enso `data` directory
+        Download Stanford Sentiment Treebank to data directory
         """
         path = Path(self.filename)
         if path.exists():
