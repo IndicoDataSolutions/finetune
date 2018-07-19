@@ -4,11 +4,9 @@ import warnings
 import logging
 import pickle
 import json
-import tempfile
 from abc import ABCMeta, abstractmethod
 from collections import namedtuple, defaultdict
 from functools import partial
-import tempfile
 
 import numpy as np
 import tensorflow as tf
@@ -101,9 +99,12 @@ class BaseModel(object, metaclass=ABCMeta):
     def predict_ops(self, logits, **kwargs):
         if self.target_type == CLASSIFICATION:
             return tf.argmax(logits, -1), tf.nn.softmax(logits, -1)
+        elif self.target_type == REGRESSION:
+            return logits, logits
         elif self.target_type == SEQUENCE_LABELING:
             return sequence_decode(logits, kwargs.get("transition_matrix"))
-        return logits, logits
+        else:
+            raise InvalidTargetType(self.target_type)
 
     def get_target_encoder(self):
         if self.target_type == CLASSIFICATION:
@@ -186,7 +187,8 @@ class BaseModel(object, metaclass=ABCMeta):
                         }
                     )
 
-                    self.train_writer.add_summary(outputs.get(self.summaries), global_step)
+                    if self.train_writer is not None:
+                        self.train_writer.add_summary(outputs.get(self.summaries), global_step)
 
                     sum_val_loss = 0
                     for xval, mval, yval in iter_data(*val_dataset, n_batch=n_batch_train, verbose=self.config.verbose):
@@ -200,7 +202,9 @@ class BaseModel(object, metaclass=ABCMeta):
                                 self.do_dropout: DROPOUT_OFF
                             }
                         )
-                        self.valid_writer.add_summary(outputs.get(self.summaries), global_step)
+                        
+                        if self.valid_writer is not None:
+                            self.valid_writer.add_summary(outputs.get(self.summaries), global_step)
 
                         val_cost = outputs.get(self.clf_loss, 0)
                         sum_val_loss += val_cost
@@ -215,14 +219,13 @@ class BaseModel(object, metaclass=ABCMeta):
                         best_val_loss = np.mean(val_window)
                         if self.config.save_best_model:
                             self.save(self.config.autosave_path)
-                1
-                outputs = self._eval(self.clf_loss, self.train_op, feed_dict={
+               
+                self.sess.run(self.train_op, feed_dict={
                     self.X: xmb,
                     self.M: mmb,
                     self.Y: ymb,
                     self.do_dropout: DROPOUT_ON
                 })
-                cost = outputs.get(self.clf_loss, 0)
 
         return self
 
@@ -470,10 +473,11 @@ class BaseModel(object, metaclass=ABCMeta):
             self._load_base_model()
 
         if train:
-            if not os.path.exists(self.config.tensorboard_folder):
-                os.mkdir(self.config.tensorboard_folder)
-            self.train_writer = tf.summary.FileWriter(self.config.tensorboard_folder + '/train', self.sess.graph)
-            self.valid_writer = tf.summary.FileWriter(self.config.tensorboard_folder + '/valid', self.sess.graph)
+            if self.config.tensorboard_folder is not None:
+                if not os.path.exists(self.config.tensorboard_folder):
+                    os.mkdir(self.config.tensorboard_folder)
+                self.train_writer = tf.summary.FileWriter(self.config.tensorboard_folder + '/train', self.sess.graph)
+                self.valid_writer = tf.summary.FileWriter(self.config.tensorboard_folder + '/valid', self.sess.graph)
         self.is_built = True
 
     def _initialize_session(self):

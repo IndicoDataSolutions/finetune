@@ -54,8 +54,8 @@ In order to run `finetune` on your host, you'll need a working copy of CUDA >= 8
 You can optionally run the provided test suite to ensure installation completed successfully.
 
 ```bash
-pip3 install nose
-nosetests --sv -nologcapture
+pip3 install pytest
+pytest
 ```
 
 Docker

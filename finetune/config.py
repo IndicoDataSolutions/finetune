@@ -55,14 +55,13 @@ def get_default_config():
         autosave_path=None,
 
         # Tensorboard
-        tensorboard_folder='.tensorboard'
+        tensorboard_folder=None
     )
 
 
 def get_config(**kwargs):
     config = get_default_config()
-    for k, v in kwargs.items():
-        setattr(config, k, v)
+    config.override_from_dict(kwargs)
     return config
 
 
