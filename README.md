@@ -31,6 +31,9 @@ model = Classifier.load('./saved-model')
 predictions = model.predict(testX)
 ```
 
+Documentation
+=============
+Documentation and an API Reference for `finetune` is available at [finetune.indico.io](https://finetune.indico.io).
 
 Installation
 ============
