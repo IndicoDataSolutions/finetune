@@ -289,6 +289,7 @@ def finetune_to_indico_sequence(raw_texts, data, labels, none_value=config.PAD_T
         doc_text = ""
         doc_annotations = []
         char_loc = 0
+<<<<<<< HEAD
         for sub_str, label in zip(doc_seq, label_seq):
             stripped_text = sub_str.strip()
             doc_location = raw_text.find(stripped_text, char_loc)
@@ -299,6 +300,19 @@ def finetune_to_indico_sequence(raw_texts, data, labels, none_value=config.PAD_T
                         "end": doc_location + len(stripped_text),
                         "label": label,
                         "text": stripped_text
+=======
+        
+        for sub_str, label in zip(doc, label_seq):
+            doc_text += sub_str
+            text = sub_str.strip()
+            if label != none_value:
+                doc_annotations.append(
+                    {
+                        "start": char_loc,
+                        "end": char_loc + len(text),
+                        "label": label,
+                        "text": text
+>>>>>>> 230a50e... FIX: off by one error
                     }
                 )
             char_loc = doc_location + len(stripped_text)
@@ -352,7 +366,7 @@ def indico_to_finetune_sequence(texts, labels=None, none_value=config.PAD_TOKEN)
             if start != last_loc:
                 doc_subseqs.append(text[last_loc:start])
                 doc_labels.append(none_value)
-            doc_subseqs.append(text[start: end])
+            doc_subseqs.append(text[start:end])
             doc_labels.append(label)
             last_loc = end
         doc_subseqs.append(text[last_loc:])

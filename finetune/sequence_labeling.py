@@ -74,7 +74,7 @@ class SequenceLabeler(BaseModel):
                 # or the current subsequence has the wrong label
                 if not doc_subseqs or label != doc_labels[-1]:
                     # start new subsequence
-                    doc_subseqs.append(text[start_of_token:position].strip())
+                    doc_subseqs.append(text[start_of_token:position])
                     doc_labels.append(label)
                 else:
                     # continue appending to current subsequence
