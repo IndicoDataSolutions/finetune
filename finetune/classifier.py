@@ -1,8 +1,7 @@
-from finetune.config import BATCH_SIZE
-from finetune.lm_base import LanguageModelBase
+from finetune.base import BaseModel
 
 
-class LanguageModelClassifier(LanguageModelBase):
+class Classifier(BaseModel):
 
     def featurize(self, X, max_length=None):
         """
@@ -37,14 +36,12 @@ class LanguageModelClassifier(LanguageModelBase):
         """
         return self._predict_proba(X, max_length=max_length)
 
-    def finetune(self, X, Y, batch_size=BATCH_SIZE, val_size=0.05, val_interval=150):
+    def finetune(self, X, Y=None, batch_size=None):
         """
         :param X: list or array of text.
         :param Y: integer or string-valued class labels.
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
-        :param val_size: Float fraction or int number that represents the size of the validation set.
-        :param val_interval: The interval for which validation is performed, measured in number of steps.
         """
         self.is_classification = True
-        return self._finetune(X, Y=Y, batch_size=batch_size, val_size=val_size, val_interval=val_interval)
+        return self._finetune(X, Y=Y, batch_size=batch_size)

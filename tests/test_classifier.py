@@ -4,8 +4,10 @@ import logging
 import shutil
 from copy import copy
 from pathlib import Path
+import warnings
 
-# required for tensorflow logging control
+# prevent excessive warning logs 
+warnings.filterwarnings('ignore')
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 import tensorflow as tf
@@ -17,13 +19,16 @@ from sklearn.metrics import accuracy_score
 from unittest.mock import MagicMock
 
 from finetune import config
-from finetune import LanguageModelClassifier
+from finetune import Classifier
+
+from finetune import Classifier
+from finetune.config import get_hparams
 
 SST_FILENAME = "SST-binary.csv"
 
 
-class TestLanguageModelClassifier(unittest.TestCase):
-    n_sample = 100
+class TestClassifier(unittest.TestCase):
+    n_sample = 20
     n_hidden = 768
     dataset_path = os.path.join(
         enso.config.DATA_DIRECTORY, 'Classify', 'SST-binary.csv'
@@ -52,11 +57,56 @@ class TestLanguageModelClassifier(unittest.TestCase):
 
     def setUp(self):
         self.dataset = pd.read_csv(self.dataset_path, nrows=self.n_sample * 3)
-        os.mkdir("tests/saved-models")
+        try:
+            os.mkdir("tests/saved-models")
+        except FileExistsError:
+            warnings.warn("tests/saved-models still exists, it is possible that some test is not cleaning up properly.")
+            pass
+
         tf.reset_default_graph()
 
     def tearDown(self):
         shutil.rmtree("tests/saved-models/")
+
+    def default_hparams(self, **kwargs):
+        return get_hparams(
+            batch_size=2,
+            max_length=128,
+            n_epochs=1,
+            **kwargs
+        )
+
+    def test_fit_lm_only(self):
+        """
+        Ensure LM only training does not error out
+        """
+        save_file_autosave = 'tests/saved-models/autosave_path'
+        model = Classifier(
+            hparams=self.default_hparams(),
+            verbose=False,
+            autosave_path=save_file_autosave
+        )
+        train_sample = self.dataset.sample(n=self.n_sample)
+        valid_sample = self.dataset.sample(n=self.n_sample)
+
+        # Ensure model can still be fit with text + targets
+        model.fit(train_sample.Text, train_sample.Target)
+
+        predictions = model.predict(valid_sample.Text)
+        for prediction in predictions:
+            self.assertIsInstance(prediction, (np.int, np.int64))
+
+        probabilities = model.predict_proba(valid_sample.Text)
+        for proba in probabilities:
+            self.assertIsInstance(proba, dict)
+
+    def default_hparams(self, **kwargs):
+        return get_hparams(
+            batch_size=2,
+            max_length=128,
+            n_epochs=1,
+            **kwargs
+        )
 
     def test_fit_predict(self):
         """
@@ -64,7 +114,11 @@ class TestLanguageModelClassifier(unittest.TestCase):
         Ensure model returns predictions of the right type
         """
         save_file_autosave = 'tests/saved-models/autosave_path'
-        model = LanguageModelClassifier(verbose=False, autosave_path=save_file_autosave)
+        model = Classifier(
+            hparams=self.default_hparams(),
+            verbose=False,
+            autosave_path=save_file_autosave
+        )
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text, train_sample.Target)
@@ -77,6 +131,20 @@ class TestLanguageModelClassifier(unittest.TestCase):
         for proba in probabilities:
             self.assertIsInstance(proba, dict)
 
+    def test_fit_predict_batch_size_1(self):
+        """
+        Ensure training is possible with batch size of 1
+        """
+        save_file_autosave = 'tests/saved-models/autosave_path'
+        model = Classifier(
+            hparams=self.default_hparams(),
+            verbose=False,
+            autosave_path=save_file_autosave
+        )
+        train_sample = self.dataset.sample(n=self.n_sample)
+        valid_sample = self.dataset.sample(n=self.n_sample)
+        model.fit(train_sample.Text, train_sample.Target)
+
     def test_save_load(self):
         """
         Ensure saving + loading does not cause errors
@@ -84,13 +152,17 @@ class TestLanguageModelClassifier(unittest.TestCase):
         """
         save_file_autosave = 'tests/saved-models/autosave_path'
         save_file = 'tests/saved-models/test-save-load'
-        model = LanguageModelClassifier(verbose=False, autosave_path=save_file_autosave)
+        model = Classifier(
+            hparams=self.default_hparams(),
+            verbose=False,
+            autosave_path=save_file_autosave
+        )
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text, train_sample.Target)
         predictions = model.predict(valid_sample.Text)
         model.save(save_file)
-        model = LanguageModelClassifier.load(save_file)
+        model = Classifier.load(save_file)
         new_predictions = model.predict(valid_sample.Text)
         for i, prediction in enumerate(predictions):
             self.assertEqual(prediction, new_predictions[i])
@@ -101,7 +173,11 @@ class TestLanguageModelClassifier(unittest.TestCase):
         Ensure featurization is still possible after fit
         """
         save_file_autosave = 'tests/saved-models/autosave_path'
-        model = LanguageModelClassifier(verbose=False, autosave_path=save_file_autosave)
+        model = Classifier(
+            hparams=self.default_hparams(),
+            verbose=False,
+            autosave_path=save_file_autosave
+        )
         train_sample = self.dataset.sample(n=self.n_sample)
         features = model.featurize(train_sample.Text)
         self.assertEqual(features.shape, (self.n_sample, self.n_hidden))
@@ -110,8 +186,15 @@ class TestLanguageModelClassifier(unittest.TestCase):
         self.assertEqual(features.shape, (self.n_sample, self.n_hidden))
 
     def test_reasonable_predictions(self):
+        """
+        Ensure model converges to a reasonable solution for a trivial problem
+        """
         save_file_autosave = 'tests/saved-models/autosave_path'
-        model = LanguageModelClassifier(verbose=False, autosave_path=save_file_autosave)
+        model = Classifier(
+            hparams=self.default_hparams(),
+            verbose=False,
+            autosave_path=save_file_autosave
+        )
         n_per_class = self.n_sample // 2
         trX = ['cat'] * n_per_class + ['finance'] * n_per_class
         trY = copy(trX)
@@ -127,10 +210,10 @@ class TestLanguageModelClassifier(unittest.TestCase):
         Ensure saving + loading does not change predictions
         """
         save_file_autosave = 'tests/saved-models/autosave_path'
-        model = LanguageModelClassifier(verbose=False, autosave_path=save_file_autosave)
-        lm_out = model.lm_predict(5)
+        model = Classifier(verbose=False, autosave_path=save_file_autosave)
+        lm_out = model.model_language(5)
         self.assertEqual(type(lm_out), str)
-        lm_out_2 = model.lm_predict(seed_text="Indico RULE")
+        lm_out_2 = model.model_language(seed_text="Indico RULE")
         self.assertEqual(type(lm_out_2), str)
         self.assertIn('_start_Indico RULE'.lower(), lm_out_2)
 
@@ -141,20 +224,20 @@ class TestLanguageModelClassifier(unittest.TestCase):
         """
         save_file_autosave = 'tests/saved-models/autosave_path'
         save_file = 'tests/saved-models/test-save-load'
-        model = LanguageModelClassifier(verbose=False, autosave_path=save_file_autosave)
+        model = Classifier(verbose=False, autosave_path=save_file_autosave)
         train_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text, train_sample.Target)
-        lm_out = model.lm_predict(5)
+        lm_out = model.model_language(5)
         self.assertEqual(type(lm_out), str)
         model.save(save_file)
-        model = LanguageModelClassifier.load(save_file)
-        lm_out_2 = model.lm_predict(seed_text="Indico RULE")
+        model = Classifier.load(save_file)
+        lm_out_2 = model.model_language(seed_text="Indico RULE")
         self.assertEqual(type(lm_out_2), str)
         self.assertIn('_start_Indico RULE'.lower(), lm_out_2)
 
     def test_early_termination_lm(self):
         save_file_autosave = 'tests/saved-models/autosave_path'
-        model = LanguageModelClassifier(verbose=False, autosave_path=save_file_autosave)
+        model = Classifier(verbose=False, autosave_path=save_file_autosave)
 
         # A dirty mock to make all model inferences output a hundred _classify_ tokens
         def mock_load_base_model(*args, **kwargs):
@@ -162,5 +245,14 @@ class TestLanguageModelClassifier(unittest.TestCase):
             model.sess.run = MagicMock(return_value=100 * [model.encoder['_classify_']])
 
         model._load_base_model = mock_load_base_model
-        lm_out = model.lm_predict()
+        lm_out = model.model_language()
         self.assertEqual(lm_out, '_start__classify_')
+
+    def test_validation(self):
+        """
+        Ensure valdiation settings do not result in an error
+        """
+        hparams = self.default_hparams(val_interval=10, val_size=0.5)
+        model = Classifier(hparams=hparams, verbose=False)
+        train_sample = self.dataset.sample(n=20)
+        model.fit(train_sample.Text, train_sample.Target)

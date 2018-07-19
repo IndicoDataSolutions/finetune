@@ -1,31 +1,25 @@
 import numpy as np
 import tensorflow as tf
 
-from finetune.utils import get_ema_vars, convert_gradient_to_tensor, shape_list, assign_to_gpu, average_grads, make_path
+from finetune.utils import convert_gradient_to_tensor, shape_list, assign_to_gpu, average_grads, make_path
 from finetune.activations import act_fns
 
 
-def _norm(x, g=None, b=None, e=1e-5, axis=[1]):
-    u = tf.reduce_mean(x, axis=axis, keepdims=True)
-    s = tf.reduce_mean(tf.square(x-u), axis=axis, keepdims=True)
-    x = (x - u) * tf.rsqrt(s + e)
-    if g is not None and b is not None:
-        x = x*g + b
-    return x
-
-
-def norm(x, scope, axis=[-1]):
+def norm(x, scope, axis=[-1], e=1e-5):
     with tf.variable_scope(scope):
         n_state = shape_list(x)[-1]
         g = tf.get_variable("g", [n_state], initializer=tf.constant_initializer(1))
         b = tf.get_variable("b", [n_state], initializer=tf.constant_initializer(0))
-        g, b = get_ema_vars(g, b)
-        return _norm(x, g, b, axis=axis)
+        u = tf.reduce_mean(x, axis=axis, keepdims=True)
+        s = tf.reduce_mean(tf.square(x - u), axis=axis, keepdims=True)
+        x = (x - u) * tf.rsqrt(s + e)
+        x = x * g + b
+        return x
 
 
-def dropout(x, pdrop, train):
+def dropout(x, pdrop, train, dropout_placeholder):
     if train and pdrop > 0:
-        x = tf.nn.dropout(x, 1-pdrop)
+        x = tf.nn.dropout(x, 1 - (pdrop * dropout_placeholder))
     return x
 
 
@@ -37,7 +31,7 @@ def mask_attn_weights(w):
     return w
 
 
-def _attn(q, k, v, attn_pdrop, train=False, scale=False):
+def _attn(q, k, v, attn_pdrop, dropout_placeholder, train=False, scale=False):
     w = tf.matmul(q, k)
 
     if scale:
@@ -47,7 +41,7 @@ def _attn(q, k, v, attn_pdrop, train=False, scale=False):
     w = mask_attn_weights(w)
     w = tf.nn.softmax(w)
 
-    w = dropout(w, attn_pdrop, train)
+    w = dropout(w, attn_pdrop, train, dropout_placeholder)
 
     a = tf.matmul(w, v)
     return a
@@ -89,7 +83,7 @@ def conv1d(x, scope, nf, rf, w_init=tf.random_normal_initializer(stddev=0.02), b
         return c
 
 
-def attn(x, scope, n_state, n_head, resid_pdrop, attn_pdrop, train=False, scale=False):
+def attn(x, scope, n_state, n_head, resid_pdrop, attn_pdrop, dropout_placeholder, train=False, scale=False):
     assert n_state % n_head == 0
     with tf.variable_scope(scope):
         c = conv1d(x, 'c_attn', n_state * 3, 1, train=train)
@@ -97,29 +91,29 @@ def attn(x, scope, n_state, n_head, resid_pdrop, attn_pdrop, train=False, scale=
         q = split_heads(q, n_head)
         k = split_heads(k, n_head, k=True)
         v = split_heads(v, n_head)
-        a = _attn(q, k, v, attn_pdrop=attn_pdrop, train=train, scale=scale)
+        a = _attn(q, k, v, attn_pdrop=attn_pdrop, dropout_placeholder=dropout_placeholder, train=train, scale=scale)
         a = merge_heads(a)
         a = conv1d(a, 'c_proj', n_state, 1, train=train)
-        a = dropout(a, resid_pdrop, train)
+        a = dropout(a, resid_pdrop, train, dropout_placeholder)
         return a
 
 
-def mlp(x, scope, n_state, act_fn, resid_pdrop, train=False):
+def mlp(x, scope, n_state, act_fn, resid_pdrop, dropout_placeholder, train=False):
     with tf.variable_scope(scope):
         nx = shape_list(x)[-1]
         act = act_fns[act_fn]
         h = act(conv1d(x, 'c_fc', n_state, 1, train=train))
         h2 = conv1d(h, 'c_proj', nx, 1, train=train)
-        h2 = dropout(h2, resid_pdrop, train)
+        h2 = dropout(h2, resid_pdrop, train, dropout_placeholder)
         return h2
 
 
-def block(x, n_head, act_fn, resid_pdrop, attn_pdrop, scope, train=False, scale=False):
+def block(x, n_head, act_fn, resid_pdrop, attn_pdrop, scope, dropout_placeholder, train=False, scale=False):
     with tf.variable_scope(scope):
         nx = shape_list(x)[-1]
-        a = attn(x, 'attn', nx, n_head, resid_pdrop, attn_pdrop, train=train, scale=scale)
+        a = attn(x, 'attn', nx, n_head, resid_pdrop, attn_pdrop, dropout_placeholder, train=train, scale=scale)
         n = norm(x + a, 'ln_1')
-        m = mlp(n, 'mlp', nx * 4, act_fn, resid_pdrop, train=train)
+        m = mlp(n, 'mlp', nx * 4, act_fn, resid_pdrop, dropout_placeholder, train=train)
         h = norm(n + m, 'ln_2')
         return h
 

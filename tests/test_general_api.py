@@ -1,9 +1,10 @@
 import os
 import unittest
-
+import warnings
 from pathlib import Path
 
-# required for tensorflow logging control
+# prevent excessive warning logs 
+warnings.filterwarnings('ignore')
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 import tensorflow as tf
@@ -11,13 +12,14 @@ import pandas as pd
 import enso
 from enso.download import generic_download
 
-from finetune import LanguageModelGeneralAPI
+from finetune import Model
+from finetune.config import get_hparams
 import numpy as np
 
 SST_FILENAME = "SST-binary.csv"
 
 
-class TestLanguageModelClassifier(unittest.TestCase):
+class TestModel(unittest.TestCase):
     n_sample = 100
     n_hidden = 768
     dataset_path = os.path.join(
@@ -48,7 +50,8 @@ class TestLanguageModelClassifier(unittest.TestCase):
     def setUp(self):
         save_file_autosave = 'tests/saved-models/autosave_path'
         self.save_file = 'tests/saved-models/test-save-load'
-        self.model = LanguageModelGeneralAPI(verbose=False, autosave_path=save_file_autosave)
+        hparams = get_hparams(batch_size=2, max_length=256)
+        self.model = Model(hparams=hparams, verbose=False, autosave_path=save_file_autosave)
 
         self.dataset = pd.read_csv(self.dataset_path)
         train_sample = self.dataset.sample(n=self.n_sample)
@@ -68,7 +71,7 @@ class TestLanguageModelClassifier(unittest.TestCase):
         self.assertTrue(self.model.is_classification)
         predictions = self.model.predict(self.text_data_valid)
         self.model.save(self.save_file)
-        model = LanguageModelGeneralAPI.load(self.save_file)
+        model = Model.load(self.save_file)
         new_predictions = model.predict(self.text_data_valid)
         for new_pred, old_pred in zip(new_predictions, predictions):
             self.assertEqual(new_pred, old_pred)
@@ -79,12 +82,11 @@ class TestLanguageModelClassifier(unittest.TestCase):
         Ensure saving + loading does not cause errors                                                                                                                               
         Ensure saving + loading does not change predictions                                                                                                                         
         """
-
         self.model.fit(self.text_data_train, [np.random.random() for _ in self.train_targets])
         self.assertTrue(not self.model.is_classification)
         predictions = self.model.predict(self.text_data_valid)
         self.model.save(self.save_file)
-        model = LanguageModelGeneralAPI.load(self.save_file)
+        model = Model.load(self.save_file)
         new_predictions = model.predict(self.text_data_valid)
         for new_pred, old_pred in zip(new_predictions, predictions):
             self.assertEqual(new_pred, old_pred)

@@ -13,10 +13,10 @@ REQUIREMENTS = [
     "tqdm>=4.0.0",
     "numpy>=1.13.0",
     "scikit-learn>=0.18.0",
-    "joblib>=0.11",
     "ftfy>=4.4.0",
     "spacy>=2.0.0",
     "msgpack-numpy>=0.4.1",
+    "h5py>=2.8.0"
 ]
 
 setup(

@@ -7,23 +7,38 @@ import tensorflow as tf
 from tensorflow.python.framework import function
 from tensorflow.python.client import device_lib
 from tqdm import tqdm
+from sklearn.utils import shuffle
 
-from finetune import config
+
+def shuffle_data(*args):
+    """
+    Thin passthrough fn to sklearn.utils.shuffle, but allows for passing through None values
+    """
+    shuffled = shuffle(arg for arg in args if arg is not None)
+    results = []
+    idx = 0
+    for arg in args:
+        if arg is None:
+            results.append(arg)
+        else:
+            results.append(shuffled[idx])
+            idx += 1
+    return tuple(results) 
 
 
 def format_gpu_string(num):
     return '/device:GPU:{}'.format(num)
 
 
-def get_available_gpus():
-    if config.VISIBLE_GPUS is not None:
-        return config.VISIBLE_GPUS
+def get_available_gpus(hparams):
+    if hparams.visible_gpus is not None:
+        return hparams.visible_gpus
     local_device_protos = device_lib.list_local_devices()
-    config.VISIBLE_GPUS = [
+    hparams.visible_gpus = [
         int(x.name.split(':')[-1]) for x in local_device_protos
         if x.device_type == 'GPU'
     ]
-    return config.VISIBLE_GPUS
+    return hparams.visible_gpus
 
 
 def shape_list(x):
@@ -74,7 +89,7 @@ def find_trainable_variables(key, exclude=None):
     if exclude is not None:
         trainable_variables = [
             var for var in trainable_variables
-            if exclude not in var.name
+            if not exclude in var.name 
         ]
     return trainable_variables
 
@@ -87,10 +102,10 @@ def soft_split(*xs, n_splits=None):
         raise ValueError("n_splits must be a valid integer.")
 
     x = xs[0]
-    current_batch_size = tf.shape(x)[0]
+    current_batch_size = shape_list(x)[0]
     n_per = tf.to_int32(tf.ceil(current_batch_size / n_splits))
     for i in range(n_splits):
-        start = i * n_per
+        start = tf.minimum(i * n_per, current_batch_size)
         end = tf.minimum((i + 1) * n_per, current_batch_size)
         i_range = tf.range(start, end)
         yield [tf.gather(x, i_range) for x in xs]
@@ -110,11 +125,8 @@ def iter_data(*datas, n_batch=128, truncate=False, verbose=False, max_batches=fl
         n = (n // n_batch) * n_batch
     n = min(n, max_batches * n_batch)
     n_batches = 0
-    if verbose:
-        f = sys.stderr
-    else:
-        f = open(os.devnull, 'w')
-    for i in tqdm(range(0, n, n_batch), total=n // n_batch, file=f, ncols=80, leave=False):
+    
+    for i in tqdm(range(0, n, n_batch), total=n // n_batch, ncols=80, leave=False, disable=(not verbose)):
         if n_batches >= max_batches: raise StopIteration
         if len(datas) == 1:
             yield datas[0][i:i + n_batch]
@@ -122,26 +134,7 @@ def iter_data(*datas, n_batch=128, truncate=False, verbose=False, max_batches=fl
             yield (d[i:i + n_batch] for d in datas)
         n_batches += 1
 
-
-def get_ema_if_exists(v, gvs):
-    name = v.name.split(':')[0]
-    ema_name = name + '/ExponentialMovingAverage:0'
-    ema_v = [v for v in gvs if v.name == ema_name]
-    if len(ema_v) == 0:
-        ema_v = [v]
-    return ema_v[0]
-
-
-def get_ema_vars(*vs):
-    if tf.get_variable_scope().reuse:
-        gvs = tf.global_variables()
-        vs = [get_ema_if_exists(v, gvs) for v in vs]
-    if len(vs) == 1:
-        return vs[0]
-    else:
-        return vs
-
-
+        
 @function.Defun(
     python_grad_func=lambda x, dy: tf.convert_to_tensor(dy),
     shape_func=lambda op: [op.inputs[0].get_shape()])

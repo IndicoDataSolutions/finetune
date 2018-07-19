@@ -10,8 +10,6 @@ import ftfy
 import spacy
 from tqdm import tqdm
 
-from finetune.config import MAX_LENGTH
-
 ENCODER_PATH = os.path.join(os.path.dirname(__file__), 'model/encoder_bpe_40000.json')
 BPE_PATH = os.path.join(os.path.dirname(__file__), 'model/vocab_40000.bpe')
 
@@ -129,10 +127,7 @@ class TextEncoder(object):
         """
         batch_token_idxs = []
 
-        if verbose:
-            texts = tqdm(texts, ncols=80, leave=False)
-
-        for text in texts:
+        for text in tqdm(texts, ncols=80, leave=False, disable=(not verbose)):
             text = self.nlp(text_standardize(text))
             token_idxs = []
             for token in text:
@@ -150,7 +145,7 @@ class TextEncoder(object):
 
         return "".join([self.decoder.get(word_idx, '<unk>') for word_idx in ids]).replace("</w>", " ")
 
-    def encode_for_classification(self, texts, max_length=MAX_LENGTH, verbose=True):
+    def encode_for_classification(self, texts, max_length, verbose=True):
         """
         Convert a batch of raw text to btye-pair encoded token indices,
         and add appropriate special tokens to match expected model input
@@ -168,12 +163,12 @@ class TextEncoder(object):
         ]
         return batch_token_idxs
 
-    def encode_for_comparison(self, texts, max_length=MAX_LENGTH, verbose=True):
+    def encode_for_comparison(self, texts, max_length, verbose=True):
         pass
 
-    def encode_for_entailment(self, question, answer, max_length=MAX_LENGTH, verbose=True):
-        question_ids = self.encode(question)
-        answer_ids = self.encode(answer)
+    def encode_for_entailment(self, question, answer, max_length, verbose=True):
+        question_ids = self.encode(question, verbose=verbose)
+        answer_ids = self.encode(answer, verbose=verbose)
         adjusted_max_length = max_length - 3
 
         half_max_len = adjusted_max_length // 2  # Initial allocation for question
@@ -188,8 +183,8 @@ class TextEncoder(object):
             question_answer_pairs.append([self.start] + qid[:q_adj] + [self.delimiter] + aid[:a_adj] + [self.clf_token])
         return question_answer_pairs
 
-    def encode_multi_input(self, *Xs, max_length=MAX_LENGTH, verbose=True):
-        encoded = [self.encode(x) for x in Xs]
+    def encode_multi_input(self, *Xs, max_length, verbose=True):
+        encoded = [self.encode(x, verbose=verbose) for x in Xs]
         num_samples = len(encoded)
         adjusted_max_length = max_length - num_samples - 1
         allocated_max_len = adjusted_max_length // num_samples
