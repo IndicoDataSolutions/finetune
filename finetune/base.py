@@ -101,9 +101,12 @@ class BaseModel(object, metaclass=ABCMeta):
     def predict_ops(self, logits, **kwargs):
         if self.target_type == CLASSIFICATION:
             return tf.argmax(logits, -1), tf.nn.softmax(logits, -1)
+        elif self.target_type == REGRESSION:
+            return logits, logits
         elif self.target_type == SEQUENCE_LABELING:
             return sequence_decode(logits, kwargs.get("transition_matrix"))
-        return logits, logits
+        else:
+            raise InvalidTargetType(self.target_type)
 
     def get_target_encoder(self):
         if self.target_type == CLASSIFICATION:
@@ -215,14 +218,13 @@ class BaseModel(object, metaclass=ABCMeta):
                         best_val_loss = np.mean(val_window)
                         if self.config.save_best_model:
                             self.save(self.config.autosave_path)
-                1
-                outputs = self._eval(self.clf_loss, self.train_op, feed_dict={
+               
+                self.sess.run(self.train_op, feed_dict={
                     self.X: xmb,
                     self.M: mmb,
                     self.Y: ymb,
                     self.do_dropout: DROPOUT_ON
                 })
-                cost = outputs.get(self.clf_loss, 0)
 
         return self
 

@@ -195,22 +195,6 @@ class TextEncoder(object):
     def encode_for_comparison(self, texts, max_length, verbose=True):
         pass
 
-    def encode_for_entailment(self, question, answer, max_length, verbose=True):
-        question_ids = self.encode(question, verbose=verbose)
-        answer_ids = self.encode(answer, verbose=verbose)
-        adjusted_max_length = max_length - 3
-
-        half_max_len = adjusted_max_length // 2  # Initial allocation for question
-        question_answer_pairs = []
-        for qid, aid in zip(question_ids, answer_ids):
-            q = len(qid)
-            a = len(aid)
-            spare = max(0, half_max_len - min(q, a))
-            q_adj = min(q, half_max_len + spare)
-            a_adj = min(a, half_max_len + spare)
-
-            question_answer_pairs.append([self.start] + qid[:q_adj] + [self.delimiter] + aid[:a_adj] + [self.clf_token])
-
     def encode_multi_input(self, *Xs, max_length, verbose=True):
         encoded = [self._encode(x).token_ids for x in Xs]
         return self._cut_and_concat(encoded=encoded, max_length=max_length, verbose=verbose)

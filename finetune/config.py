@@ -61,8 +61,7 @@ def get_default_config():
 
 def get_config(**kwargs):
     config = get_default_config()
-    for k, v in kwargs.items():
-        setattr(config, k, v)
+    config.override_from_dict(kwargs)
     return config
 
 

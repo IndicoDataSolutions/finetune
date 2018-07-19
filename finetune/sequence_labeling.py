@@ -1,5 +1,3 @@
-import numpy as np
-
 from finetune.base import BaseModel, SEQUENCE_LABELING
 from finetune.target_encoders import SequenceLabelingEncoder
 from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_sequence
