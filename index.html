@@ -185,14 +185,15 @@ python3 setup.py develop
 </div>
 <div class="section" id="finetune-quickstart-guide">
 <h1>Finetune Quickstart Guide<a class="headerlink" href="#finetune-quickstart-guide" title="Permalink to this headline">¶</a></h1>
-<p>Finetuning the base language model is as easy as calling <a class="reference internal" href="#finetune.LanguageModelClassifier.fit" title="finetune.LanguageModelClassifier.fit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">LanguageModelClassifier.fit()</span></code></a>:</p>
+<p>Finetuning the base language model is as easy as calling <code class="xref py py-meth docutils literal notranslate"><span class="pre">LanguageModelClassifier.fit()</span></code>:</p>
 <div class="highlight-python3 notranslate"><div class="highlight"><pre><span></span><span class="n">model</span> <span class="o">=</span> <span class="n">LanguageModelClassifier</span><span class="p">()</span>   <span class="c1"># load base model</span>
 <span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">trainX</span><span class="p">,</span> <span class="n">trainY</span><span class="p">)</span>           <span class="c1"># finetune base model on custom data</span>
 <span class="n">predictions</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">testX</span><span class="p">)</span>  <span class="c1"># predict on unseen examples</span>
+<span class="c1"># [{&#39;class_1&#39;: 0.23, &#39;class_2&#39;: 0.54, &#39;class_3&#39;: 0.13}, ...]</span>
 <span class="n">model</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>                    <span class="c1"># serialize the model to disk</span>
 </pre></div>
 </div>
-<p>Easily reload saved models from disk by using <a class="reference internal" href="#finetune.LanguageModelClassifier.load" title="finetune.LanguageModelClassifier.load"><code class="xref py py-meth docutils literal notranslate"><span class="pre">LanguageModelClassifier.load()</span></code></a>:</p>
+<p>Easily reload saved models from disk by using <code class="xref py py-meth docutils literal notranslate"><span class="pre">LanguageModelClassifier.load()</span></code>:</p>
 <div class="highlight-python3 notranslate"><div class="highlight"><pre><span></span><span class="n">model</span> <span class="o">=</span> <span class="n">LanguageModelClassifier</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
 <span class="n">predictions</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">testX</span><span class="p">)</span>
 </pre></div>
@@ -201,11 +202,11 @@ python3 setup.py develop
 <div class="section" id="finetune-api-reference">
 <h1>Finetune API Reference<a class="headerlink" href="#finetune-api-reference" title="Permalink to this headline">¶</a></h1>
 <dl class="class">
-<dt id="finetune.LanguageModelClassifier">
-<em class="property">class </em><code class="descclassname">finetune.</code><code class="descname">LanguageModelClassifier</code><span class="sig-paren">(</span><em>autosave_path=None</em>, <em>max_length=512</em>, <em>verbose=True</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModelClassifier" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.Classifier">
+<em class="property">class </em><code class="descclassname">finetune.</code><code class="descname">Classifier</code><span class="sig-paren">(</span><em>config=None</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Classifier" title="Permalink to this definition">¶</a></dt>
 <dd><dl class="method">
-<dt id="finetune.LanguageModelClassifier.featurize">
-<code class="descname">featurize</code><span class="sig-paren">(</span><em>X</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModelClassifier.featurize" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.Classifier.featurize">
+<code class="descname">featurize</code><span class="sig-paren">(</span><em>X</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Classifier.featurize" title="Permalink to this definition">¶</a></dt>
 <dd><p>Embeds inputs in learned feature space. Can be called before or after calling <a class="reference internal" href="#module-finetune" title="finetune"><code class="xref py py-meth docutils literal notranslate"><span class="pre">finetune()</span></code></a>.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -226,8 +227,8 @@ Providing more than <cite>max_length</cite> tokens as input will result in trunc
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.LanguageModelClassifier.finetune">
-<code class="descname">finetune</code><span class="sig-paren">(</span><em>X</em>, <em>Y</em>, <em>batch_size=4</em>, <em>val_size=0.05</em>, <em>val_interval=150</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModelClassifier.finetune" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.Classifier.finetune">
+<code class="descname">finetune</code><span class="sig-paren">(</span><em>X</em>, <em>Y=None</em>, <em>batch_size=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Classifier.finetune" title="Permalink to this definition">¶</a></dt>
 <dd><table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -237,8 +238,6 @@ Providing more than <cite>max_length</cite> tokens as input will result in trunc
 <li><strong>Y</strong> – integer or string-valued class labels.</li>
 <li><strong>batch_size</strong> – integer number of examples per batch. When N_GPUS &gt; 1, this number
 corresponds to the number of training examples provided to each GPU.</li>
-<li><strong>val_size</strong> – Float fraction or int number that represents the size of the validation set.</li>
-<li><strong>val_interval</strong> – The interval for which validation is performed, measured in number of steps.</li>
 </ul>
 </td>
 </tr>
@@ -247,28 +246,28 @@ corresponds to the number of training examples provided to each GPU.</li>
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.LanguageModelClassifier.fit">
-<code class="descname">fit</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModelClassifier.fit" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.Classifier.fit">
+<code class="descname">fit</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Classifier.fit" title="Permalink to this definition">¶</a></dt>
 <dd><p>An alias for finetune.</p>
 </dd></dl>
 
 <dl class="classmethod">
-<dt id="finetune.LanguageModelClassifier.load">
-<em class="property">classmethod </em><code class="descname">load</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModelClassifier.load" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.Classifier.load">
+<em class="property">classmethod </em><code class="descname">load</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Classifier.load" title="Permalink to this definition">¶</a></dt>
 <dd><p>Load a saved fine-tuned model from disk.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>path</strong> – string path name to load model from.  Same value as previously provided to <a class="reference internal" href="#finetune.LanguageModelClassifier.save" title="finetune.LanguageModelClassifier.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a>.</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>path</strong> – string path name to load model from.  Same value as previously provided to <a class="reference internal" href="#finetune.Classifier.save" title="finetune.Classifier.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a>.</td>
 </tr>
 </tbody>
 </table>
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.LanguageModelClassifier.predict">
-<code class="descname">predict</code><span class="sig-paren">(</span><em>X</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModelClassifier.predict" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.Classifier.predict">
+<code class="descname">predict</code><span class="sig-paren">(</span><em>X</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Classifier.predict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces a list of most likely class labels as determined by the fine-tuned model.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -289,8 +288,8 @@ Providing more than <cite>max_length</cite> tokens as input will result in trunc
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.LanguageModelClassifier.predict_proba">
-<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>X</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModelClassifier.predict_proba" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.Classifier.predict_proba">
+<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>X</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Classifier.predict_proba" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces a probability distribution over classes for each example in X.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -311,8 +310,8 @@ Providing more than <cite>max_length</cite> tokens as input will result in trunc
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.LanguageModelClassifier.save">
-<code class="descname">save</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModelClassifier.save" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.Classifier.save">
+<code class="descname">save</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Classifier.save" title="Permalink to this definition">¶</a></dt>
 <dd><dl class="docutils">
 <dt>Save in two steps:</dt>
 <dd><ul class="first last simple">
@@ -327,19 +326,19 @@ Should not be used to save / restore a training model.</dd>
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.LanguageModelClassifier.transform">
-<code class="descname">transform</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModelClassifier.transform" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.Classifier.transform">
+<code class="descname">transform</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Classifier.transform" title="Permalink to this definition">¶</a></dt>
 <dd><p>An alias for <cite>featurize</cite>.</p>
 </dd></dl>
 
 </dd></dl>
 
 <dl class="class">
-<dt id="finetune.LanguageModelEntailment">
-<em class="property">class </em><code class="descclassname">finetune.</code><code class="descname">LanguageModelEntailment</code><span class="sig-paren">(</span><em>autosave_path=None</em>, <em>max_length=512</em>, <em>verbose=True</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModelEntailment" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.Entailment">
+<em class="property">class </em><code class="descclassname">finetune.</code><code class="descname">Entailment</code><span class="sig-paren">(</span><em>config=None</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Entailment" title="Permalink to this definition">¶</a></dt>
 <dd><dl class="method">
-<dt id="finetune.LanguageModelEntailment.featurize">
-<code class="descname">featurize</code><span class="sig-paren">(</span><em>X_1</em>, <em>X_2</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModelEntailment.featurize" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.Entailment.featurize">
+<code class="descname">featurize</code><span class="sig-paren">(</span><em>X_1</em>, <em>X_2</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Entailment.featurize" title="Permalink to this definition">¶</a></dt>
 <dd><p>Embeds inputs in learned feature space. Can be called before or after calling <a class="reference internal" href="#module-finetune" title="finetune"><code class="xref py py-meth docutils literal notranslate"><span class="pre">finetune()</span></code></a>.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -361,8 +360,8 @@ Providing more than <cite>max_length</cite> tokens as input will result in trunc
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.LanguageModelEntailment.finetune">
-<code class="descname">finetune</code><span class="sig-paren">(</span><em>X_1</em>, <em>X_2</em>, <em>Y</em>, <em>batch_size=4</em>, <em>val_size=0.05</em>, <em>val_interval=150</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModelEntailment.finetune" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.Entailment.finetune">
+<code class="descname">finetune</code><span class="sig-paren">(</span><em>X_1</em>, <em>X_2</em>, <em>Y=None</em>, <em>batch_size=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Entailment.finetune" title="Permalink to this definition">¶</a></dt>
 <dd><table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -373,8 +372,6 @@ Providing more than <cite>max_length</cite> tokens as input will result in trunc
 <li><strong>Y</strong> – integer or string-valued class labels. It is necessary for the items of Y to be sortable.</li>
 <li><strong>batch_size</strong> – integer number of examples per batch. When N_GPUS &gt; 1, this number
 corresponds to the number of training examples provided to each GPU.</li>
-<li><strong>val_size</strong> – Float fraction or int number that represents the size of the validation set.</li>
-<li><strong>val_interval</strong> – The interval for which validation is performed, measured in number of steps.</li>
 </ul>
 </td>
 </tr>
@@ -383,28 +380,28 @@ corresponds to the number of training examples provided to each GPU.</li>
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.LanguageModelEntailment.fit">
-<code class="descname">fit</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModelEntailment.fit" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.Entailment.fit">
+<code class="descname">fit</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Entailment.fit" title="Permalink to this definition">¶</a></dt>
 <dd><p>An alias for finetune.</p>
 </dd></dl>
 
 <dl class="classmethod">
-<dt id="finetune.LanguageModelEntailment.load">
-<em class="property">classmethod </em><code class="descname">load</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModelEntailment.load" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.Entailment.load">
+<em class="property">classmethod </em><code class="descname">load</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Entailment.load" title="Permalink to this definition">¶</a></dt>
 <dd><p>Load a saved fine-tuned model from disk.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>path</strong> – string path name to load model from.  Same value as previously provided to <a class="reference internal" href="#finetune.LanguageModelEntailment.save" title="finetune.LanguageModelEntailment.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a>.</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>path</strong> – string path name to load model from.  Same value as previously provided to <a class="reference internal" href="#finetune.Entailment.save" title="finetune.Entailment.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a>.</td>
 </tr>
 </tbody>
 </table>
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.LanguageModelEntailment.predict">
-<code class="descname">predict</code><span class="sig-paren">(</span><em>X_1</em>, <em>X_2</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModelEntailment.predict" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.Entailment.predict">
+<code class="descname">predict</code><span class="sig-paren">(</span><em>X_1</em>, <em>X_2</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Entailment.predict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces X_2 list of most likely class labels as determined by the fine-tuned model.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -426,8 +423,8 @@ Providing more than <cite>max_length</cite> tokens as input will result in trunc
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.LanguageModelEntailment.predict_proba">
-<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>X_1</em>, <em>X_2</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModelEntailment.predict_proba" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.Entailment.predict_proba">
+<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>X_1</em>, <em>X_2</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Entailment.predict_proba" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces X_2 probability distribution over classes for each example in X.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -449,8 +446,8 @@ Providing more than <cite>max_length</cite> tokens as input will result in trunc
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.LanguageModelEntailment.save">
-<code class="descname">save</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModelEntailment.save" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.Entailment.save">
+<code class="descname">save</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Entailment.save" title="Permalink to this definition">¶</a></dt>
 <dd><dl class="docutils">
 <dt>Save in two steps:</dt>
 <dd><ul class="first last simple">
@@ -465,19 +462,19 @@ Should not be used to save / restore a training model.</dd>
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.LanguageModelEntailment.transform">
-<code class="descname">transform</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModelEntailment.transform" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.Entailment.transform">
+<code class="descname">transform</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Entailment.transform" title="Permalink to this definition">¶</a></dt>
 <dd><p>An alias for <cite>featurize</cite>.</p>
 </dd></dl>
 
 </dd></dl>
 
 <dl class="class">
-<dt id="finetune.LanguageModelGeneralAPI">
-<em class="property">class </em><code class="descclassname">finetune.</code><code class="descname">LanguageModelGeneralAPI</code><span class="sig-paren">(</span><em>autosave_path</em>, <em>max_length=512</em>, <em>verbose=True</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModelGeneralAPI" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.Model">
+<em class="property">class </em><code class="descclassname">finetune.</code><code class="descname">Model</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Model" title="Permalink to this definition">¶</a></dt>
 <dd><dl class="method">
-<dt id="finetune.LanguageModelGeneralAPI.featurize">
-<code class="descname">featurize</code><span class="sig-paren">(</span><em>Xs</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModelGeneralAPI.featurize" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.Model.featurize">
+<code class="descname">featurize</code><span class="sig-paren">(</span><em>Xs</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Model.featurize" title="Permalink to this definition">¶</a></dt>
 <dd><p>Embeds inputs in learned feature space. Can be called before or after calling <a class="reference internal" href="#module-finetune" title="finetune"><code class="xref py py-meth docutils literal notranslate"><span class="pre">finetune()</span></code></a>.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -498,8 +495,8 @@ Providing more than <cite>max_length</cite> tokens as input will result in trunc
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.LanguageModelGeneralAPI.finetune">
-<code class="descname">finetune</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>batch_size=4</em>, <em>val_size=0.05</em>, <em>val_interval=150</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModelGeneralAPI.finetune" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.Model.finetune">
+<code class="descname">finetune</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>batch_size=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Model.finetune" title="Permalink to this definition">¶</a></dt>
 <dd><table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -509,8 +506,6 @@ Providing more than <cite>max_length</cite> tokens as input will result in trunc
 <li><strong>Y</strong> – integer or string-valued class labels. It is necessary for the items of Y to be sortable.</li>
 <li><strong>batch_size</strong> – integer number of examples per batch. When N_GPUS &gt; 1, this number
 corresponds to the number of training examples provided to each GPU.</li>
-<li><strong>val_size</strong> – Float fraction or int number that represents the size of the validation set.</li>
-<li><strong>val_interval</strong> – The interval for which validation is performed, measured in number of steps.</li>
 </ul>
 </td>
 </tr>
@@ -519,28 +514,28 @@ corresponds to the number of training examples provided to each GPU.</li>
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.LanguageModelGeneralAPI.fit">
-<code class="descname">fit</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModelGeneralAPI.fit" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.Model.fit">
+<code class="descname">fit</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Model.fit" title="Permalink to this definition">¶</a></dt>
 <dd><p>An alias for finetune.</p>
 </dd></dl>
 
 <dl class="classmethod">
-<dt id="finetune.LanguageModelGeneralAPI.load">
-<em class="property">classmethod </em><code class="descname">load</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModelGeneralAPI.load" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.Model.load">
+<em class="property">classmethod </em><code class="descname">load</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Model.load" title="Permalink to this definition">¶</a></dt>
 <dd><p>Load a saved fine-tuned model from disk.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>path</strong> – string path name to load model from.  Same value as previously provided to <a class="reference internal" href="#finetune.LanguageModelGeneralAPI.save" title="finetune.LanguageModelGeneralAPI.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a>.</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>path</strong> – string path name to load model from.  Same value as previously provided to <a class="reference internal" href="#finetune.Model.save" title="finetune.Model.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a>.</td>
 </tr>
 </tbody>
 </table>
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.LanguageModelGeneralAPI.predict">
-<code class="descname">predict</code><span class="sig-paren">(</span><em>Xs</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModelGeneralAPI.predict" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.Model.predict">
+<code class="descname">predict</code><span class="sig-paren">(</span><em>Xs</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Model.predict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces a list of most likely class labels as determined by the fine-tuned model.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -561,8 +556,8 @@ Providing more than <cite>max_length</cite> tokens as input will result in trunc
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.LanguageModelGeneralAPI.predict_proba">
-<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>Xs</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModelGeneralAPI.predict_proba" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.Model.predict_proba">
+<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>Xs</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Model.predict_proba" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces a probability distribution over classes for each example in X.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -583,8 +578,8 @@ Providing more than <cite>max_length</cite> tokens as input will result in trunc
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.LanguageModelGeneralAPI.save">
-<code class="descname">save</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModelGeneralAPI.save" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.Model.save">
+<code class="descname">save</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Model.save" title="Permalink to this definition">¶</a></dt>
 <dd><dl class="docutils">
 <dt>Save in two steps:</dt>
 <dd><ul class="first last simple">
@@ -599,8 +594,143 @@ Should not be used to save / restore a training model.</dd>
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.LanguageModelGeneralAPI.transform">
-<code class="descname">transform</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModelGeneralAPI.transform" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.Model.transform">
+<code class="descname">transform</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Model.transform" title="Permalink to this definition">¶</a></dt>
+<dd><p>An alias for <cite>featurize</cite>.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="finetune.SequenceLabeler">
+<em class="property">class </em><code class="descclassname">finetune.</code><code class="descname">SequenceLabeler</code><span class="sig-paren">(</span><em>config=None</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.SequenceLabeler" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="method">
+<dt id="finetune.SequenceLabeler.featurize">
+<code class="descname">featurize</code><span class="sig-paren">(</span><em>Xs</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.SequenceLabeler.featurize" title="Permalink to this definition">¶</a></dt>
+<dd><p>Embeds inputs in learned feature space. Can be called before or after calling <a class="reference internal" href="#module-finetune" title="finetune"><code class="xref py py-meth docutils literal notranslate"><span class="pre">finetune()</span></code></a>.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>Xs</strong> – An iterable of lists or array of text, shape [batch, n_inputs, tokens]</li>
+<li><strong>max_length</strong> – the number of tokens to be included in the document representation.
+Providing more than <cite>max_length</cite> tokens as input will result in truncation.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">np.array of features of shape (n_examples, embedding_size).</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.SequenceLabeler.finetune">
+<code class="descname">finetune</code><span class="sig-paren">(</span><em>X</em>, <em>Y</em>, <em>batch_size=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.SequenceLabeler.finetune" title="Permalink to this definition">¶</a></dt>
+<dd><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>X</strong> – A list of text snippets. Format: [batch_size]</li>
+<li><strong>Y</strong> – A list of lists of annotations. Format: [batch_size, n_annotations], where each annotation is of the form:
+{‘start’: char_idx, ‘end’: char_idx, ‘label’: ‘label’}</li>
+<li><strong>batch_size</strong> – integer number of examples per batch. When N_GPUS &gt; 1, this number
+corresponds to the number of training examples provided to each GPU.</li>
+<li><strong>val_size</strong> – Float fraction or int number that represents the size of the validation set.</li>
+<li><strong>val_interval</strong> – The interval for which validation is performed, measured in number of steps.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.SequenceLabeler.fit">
+<code class="descname">fit</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.SequenceLabeler.fit" title="Permalink to this definition">¶</a></dt>
+<dd><p>An alias for finetune.</p>
+</dd></dl>
+
+<dl class="classmethod">
+<dt id="finetune.SequenceLabeler.load">
+<em class="property">classmethod </em><code class="descname">load</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.SequenceLabeler.load" title="Permalink to this definition">¶</a></dt>
+<dd><p>Load a saved fine-tuned model from disk.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>path</strong> – string path name to load model from.  Same value as previously provided to <a class="reference internal" href="#finetune.SequenceLabeler.save" title="finetune.SequenceLabeler.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a>.</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.SequenceLabeler.predict">
+<code class="descname">predict</code><span class="sig-paren">(</span><em>X</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.SequenceLabeler.predict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Produces a list of most likely class labels as determined by the fine-tuned model.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>X</strong> – A list / array of text, shape [batch]</li>
+<li><strong>max_length</strong> – the number of tokens to be included in the document representation.
+Providing more than <cite>max_length</cite> tokens as input will result in truncation.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">list of class labels.</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.SequenceLabeler.predict_proba">
+<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>Xs</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.SequenceLabeler.predict_proba" title="Permalink to this definition">¶</a></dt>
+<dd><p>Produces a probability distribution over classes for each example in X.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>Xs</strong> – An iterable of lists or array of text, shape [batch, n_inputs, tokens]</li>
+<li><strong>max_length</strong> – the number of tokens to be included in the document representation.
+Providing more than <cite>max_length</cite> tokens as input will result in truncation.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.SequenceLabeler.save">
+<code class="descname">save</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.SequenceLabeler.save" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="docutils">
+<dt>Save in two steps:</dt>
+<dd><ul class="first last simple">
+<li>Serialize tf graph to disk using tf.Saver</li>
+<li>Serialize python model using pickle</li>
+</ul>
+</dd>
+<dt>Note:</dt>
+<dd>Does not serialize state of Adam optimizer.
+Should not be used to save / restore a training model.</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.SequenceLabeler.transform">
+<code class="descname">transform</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.SequenceLabeler.transform" title="Permalink to this definition">¶</a></dt>
 <dd><p>An alias for <cite>featurize</cite>.</p>
 </dd></dl>
 
