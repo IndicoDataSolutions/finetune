@@ -64,6 +64,7 @@ class SequenceLabeler(BaseModel):
             start_of_token = 0
             doc_subseqs = []
             doc_labels = []
+
             for label, position in zip(label_seq, position_seq):
                 if position == -1:
                     # indicates padding / special tokens
@@ -73,12 +74,12 @@ class SequenceLabeler(BaseModel):
                 # or the current subsequence has the wrong label
                 if not doc_subseqs or label != doc_labels[-1]:
                     # start new subsequence
-                    doc_subseqs.append(text[start_of_token:position])
+                    doc_subseqs.append(text[start_of_token:position].strip())
                     doc_labels.append(label)
                 else:
-                    # continue appending to current subsequencef
+                    # continue appending to current subsequence
                     doc_subseqs[-1] += text[start_of_token:position]
-
+                
                 start_of_token = position
             all_subseqs.append(doc_subseqs)
             all_labels.append(doc_labels)

@@ -41,7 +41,7 @@ class StanfordSentimentTreebank(Dataset):
 
 if __name__ == "__main__":
     # Train and evaluate on SST
-    dataset = StanfordSentimentTreebank(nrows=1500).dataframe
+    dataset = StanfordSentimentTreebank(nrows=1000).dataframe
     model = Classifier(verbose=True)
     trainX, testX, trainY, testY = train_test_split(dataset.Text, dataset.Target, test_size=0.3, random_state=42)
     model.fit(trainX, trainY)
