@@ -256,7 +256,7 @@ def sequence_decode(logits, transition_matrix):
     return tf.py_func(_sequence_decode, [logits, transition_matrix], [tf.int32, tf.float32])
         
 
-def finetune_to_indico_sequence(raw_texts, data, labels, none_value=config.PAD_TOKEN):
+def finetune_to_indico_sequence(raw_texts, subseqs, labels, none_value=config.PAD_TOKEN):
     """
     Maps from the labeled substring format into the 'indico' format. This is the exact inverse operation to
     :meth indico_to_finetune_sequence:.
