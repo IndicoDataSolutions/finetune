@@ -18,7 +18,9 @@ RUN apt-get update && mkdir /Finetune
 ADD requirements.txt /Finetune/requirements.txt
 RUN pip3 install -r /Finetune/requirements.txt && \
     python3 -m spacy download en
-RUN python3 setup.py develop
 
 WORKDIR /Finetune
+ADD . /Finetune
+RUN python3 setup.py develop
+
 CMD ["sleep","infinity"]
