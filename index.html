@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Finetune documentation &mdash; finetune 0.1.0 documentation</title>
+  <title>Finetune Quickstart Guide &mdash; finetune 0.1.0 documentation</title>
   
 
   
@@ -90,9 +90,10 @@
             
               <!-- Local TOC -->
               <div class="local-toc"><ul>
-<li><a class="reference internal" href="#">Finetune documentation</a></li>
+<li><a class="reference internal" href="#">Finetune Quickstart Guide</a></li>
 <li><a class="reference internal" href="#installation">Installation</a></li>
-<li><a class="reference internal" href="#finetune-quickstart-guide">Finetune Quickstart Guide</a></li>
+<li><a class="reference internal" href="#docker">Docker</a></li>
+<li><a class="reference internal" href="#code-examples">Code Examples</a></li>
 <li><a class="reference internal" href="#finetune-api-reference">Finetune API Reference</a></li>
 </ul>
 </div>
@@ -138,7 +139,7 @@
     
       <li><a href="#">Docs</a> &raquo;</li>
         
-      <li>Finetune documentation</li>
+      <li>Finetune Quickstart Guide</li>
     
     
       <li class="wy-breadcrumbs-aside">
@@ -157,14 +158,27 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
             
-  <div class="section" id="module-finetune">
-<span id="finetune-documentation"></span><h1>Finetune documentation<a class="headerlink" href="#module-finetune" title="Permalink to this headline">¶</a></h1>
-<p>Finetune is a python library designed to make finetuning pre-trained language models
-for custom natural language processing tasks a breeze.</p>
-<p>It ships with pre-trained model weights
-from <a class="reference external" href="https://s3-us-west-2.amazonaws.com/openai-assets/research-covers/language-unsupervised/language_understanding_paper.pdf">“Improving Language Understanding by Generative Pre-Training”</a>
+  <div class="figure">
+<img alt="https://i.imgur.com/kYL058E.png" src="https://i.imgur.com/kYL058E.png" />
+</div>
+<span class="target" id="module-finetune"></span><p><strong>Scikit-learn inspired model finetuning for natural language processing.</strong></p>
+<p><a class="reference internal" href="#module-finetune" title="finetune"><code class="xref py py-mod docutils literal notranslate"><span class="pre">finetune</span></code></a> ships with a pre-trained language model from <a class="reference external" href="https://s3-us-west-2.amazonaws.com/openai-assets/research-covers/language-unsupervised/language_understanding_paper.pdf">“Improving Language Understanding by Generative Pre-Training”</a>
 and builds off the <a class="reference external" href="https://github.com/openai/finetune-transformer-lm">OpenAI/finetune-language-model repository</a>.</p>
-<p>Source code for finetune is available <a class="reference external" href="https://github.com/IndicoDataSolutions/finetune-language-model">on github</a>.</p>
+<p>Source code for <a class="reference internal" href="#module-finetune" title="finetune"><code class="xref py py-mod docutils literal notranslate"><span class="pre">finetune</span></code></a> is available <a class="reference external" href="https://github.com/IndicoDataSolutions/finetune">on github</a>.</p>
+<div class="section" id="finetune-quickstart-guide">
+<h1>Finetune Quickstart Guide<a class="headerlink" href="#finetune-quickstart-guide" title="Permalink to this headline">¶</a></h1>
+<p>Finetuning the base language model is as easy as calling <a class="reference internal" href="#finetune.Classifier.fit" title="finetune.Classifier.fit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Classifier.fit()</span></code></a>:</p>
+<div class="highlight-python3 notranslate"><div class="highlight"><pre><span></span><span class="n">model</span> <span class="o">=</span> <span class="n">Classifier</span><span class="p">()</span>               <span class="c1"># Load base model</span>
+<span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">trainX</span><span class="p">,</span> <span class="n">trainY</span><span class="p">)</span>          <span class="c1"># Finetune base model on custom data</span>
+<span class="n">predictions</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">testX</span><span class="p">)</span> <span class="c1"># [{&#39;class_1&#39;: 0.23, &#39;class_2&#39;: 0.54, ..}, ..]</span>
+<span class="n">model</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>                   <span class="c1"># Serialize the model to disk</span>
+</pre></div>
+</div>
+<p>Reload saved models from disk by using <a class="reference internal" href="#finetune.Classifier.load" title="finetune.Classifier.load"><code class="xref py py-meth docutils literal notranslate"><span class="pre">Classifier.load()</span></code></a>:</p>
+<div class="highlight-python3 notranslate"><div class="highlight"><pre><span></span><span class="n">model</span> <span class="o">=</span> <span class="n">Classifier</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+<span class="n">predictions</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">testX</span><span class="p">)</span>
+</pre></div>
+</div>
 </div>
 <div class="section" id="installation">
 <h1>Installation<a class="headerlink" href="#installation" title="Permalink to this headline">¶</a></h1>
@@ -176,28 +190,27 @@ and builds off the <a class="reference external" href="https://github.com/openai
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git clone https://github.com/IndicoDataSolutions/finetune
 <span class="nb">cd</span> finetune
 python3 setup.py develop
+python3 -m spacy download en
 </pre></div>
 </div>
 <p>You can optionally run the provided test suite to ensure installation completed successfully.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>nosetests
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip3 install pytest
+pytest
 </pre></div>
 </div>
 </div>
-<div class="section" id="finetune-quickstart-guide">
-<h1>Finetune Quickstart Guide<a class="headerlink" href="#finetune-quickstart-guide" title="Permalink to this headline">¶</a></h1>
-<p>Finetuning the base language model is as easy as calling <code class="xref py py-meth docutils literal notranslate"><span class="pre">LanguageModelClassifier.fit()</span></code>:</p>
-<div class="highlight-python3 notranslate"><div class="highlight"><pre><span></span><span class="n">model</span> <span class="o">=</span> <span class="n">LanguageModelClassifier</span><span class="p">()</span>   <span class="c1"># load base model</span>
-<span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">trainX</span><span class="p">,</span> <span class="n">trainY</span><span class="p">)</span>           <span class="c1"># finetune base model on custom data</span>
-<span class="n">predictions</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">testX</span><span class="p">)</span>  <span class="c1"># predict on unseen examples</span>
-<span class="c1"># [{&#39;class_1&#39;: 0.23, &#39;class_2&#39;: 0.54, &#39;class_3&#39;: 0.13}, ...]</span>
-<span class="n">model</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>                    <span class="c1"># serialize the model to disk</span>
+<div class="section" id="docker">
+<h1>Docker<a class="headerlink" href="#docker" title="Permalink to this headline">¶</a></h1>
+<p>If you’d prefer you can also run <a class="reference internal" href="#module-finetune" title="finetune"><code class="xref py py-mod docutils literal notranslate"><span class="pre">finetune</span></code></a> in a docker container. The bash scripts provided assume you have a functional install of <a class="reference external" href="https://docs.docker.com/install">docker</a> and <a class="reference external" href="https://github.com/nvidia/nvidia-docker/wiki/Installation-(version-2.0)">nvidia-docker</a>.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>./docker/build_docker.sh      <span class="c1"># builds a docker image</span>
+./docker/start_docker.sh      <span class="c1"># starts a docker container in the background</span>
+docker <span class="nb">exec</span> -it finetune bash <span class="c1"># starts a bash session in the docker container</span>
 </pre></div>
 </div>
-<p>Easily reload saved models from disk by using <code class="xref py py-meth docutils literal notranslate"><span class="pre">LanguageModelClassifier.load()</span></code>:</p>
-<div class="highlight-python3 notranslate"><div class="highlight"><pre><span></span><span class="n">model</span> <span class="o">=</span> <span class="n">LanguageModelClassifier</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
-<span class="n">predictions</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">testX</span><span class="p">)</span>
-</pre></div>
 </div>
+<div class="section" id="code-examples">
+<h1>Code Examples<a class="headerlink" href="#code-examples" title="Permalink to this headline">¶</a></h1>
+<p>For example usage of <a class="reference internal" href="#finetune.Classifier" title="finetune.Classifier"><code class="xref py py-class docutils literal notranslate"><span class="pre">Classifier</span></code></a>, <a class="reference internal" href="#finetune.Entailment" title="finetune.Entailment"><code class="xref py py-class docutils literal notranslate"><span class="pre">Entailment</span></code></a>, and <a class="reference internal" href="#finetune.SequenceLabeler" title="finetune.SequenceLabeler"><code class="xref py py-class docutils literal notranslate"><span class="pre">SequenceLabeler</span></code></a>, see the <a class="reference external" href="https://github.com/IndicoDataSolutions/finetune/tree/master/finetune/datasets">finetune/datasets directory</a>.</p>
 </div>
 <div class="section" id="finetune-api-reference">
 <h1>Finetune API Reference<a class="headerlink" href="#finetune-api-reference" title="Permalink to this headline">¶</a></h1>
@@ -249,6 +262,28 @@ corresponds to the number of training examples provided to each GPU.</li>
 <dt id="finetune.Classifier.fit">
 <code class="descname">fit</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Classifier.fit" title="Permalink to this definition">¶</a></dt>
 <dd><p>An alias for finetune.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.Classifier.generate_text">
+<code class="descname">generate_text</code><span class="sig-paren">(</span><em>max_length=None</em>, <em>seed_text=''</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Classifier.generate_text" title="Permalink to this definition">¶</a></dt>
+<dd><p>Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
+Temperature parameter for decoding is set in the config.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>max_length</strong> – The maximum length to decode to.</li>
+<li><strong>seed_text</strong> – Defaults to the empty string. This will form the starting point to begin modelling</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">A string containing the generated text.</p>
+</td>
+</tr>
+</tbody>
+</table>
 </dd></dl>
 
 <dl class="classmethod">
@@ -312,8 +347,10 @@ Providing more than <cite>max_length</cite> tokens as input will result in trunc
 <dl class="method">
 <dt id="finetune.Classifier.save">
 <code class="descname">save</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Classifier.save" title="Permalink to this definition">¶</a></dt>
-<dd><dl class="docutils">
-<dt>Save in two steps:</dt>
+<dd><p>Saves the state of the model to disk in a location with name :param: path. The model is saved in several files
+and :param: path is used as a prefix.</p>
+<dl class="docutils">
+<dt>Save is performed in two steps:</dt>
 <dd><ul class="first last simple">
 <li>Serialize tf graph to disk using tf.Saver</li>
 <li>Serialize python model using pickle</li>
@@ -385,6 +422,28 @@ corresponds to the number of training examples provided to each GPU.</li>
 <dd><p>An alias for finetune.</p>
 </dd></dl>
 
+<dl class="method">
+<dt id="finetune.Entailment.generate_text">
+<code class="descname">generate_text</code><span class="sig-paren">(</span><em>max_length=None</em>, <em>seed_text=''</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Entailment.generate_text" title="Permalink to this definition">¶</a></dt>
+<dd><p>Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
+Temperature parameter for decoding is set in the config.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>max_length</strong> – The maximum length to decode to.</li>
+<li><strong>seed_text</strong> – Defaults to the empty string. This will form the starting point to begin modelling</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">A string containing the generated text.</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
 <dl class="classmethod">
 <dt id="finetune.Entailment.load">
 <em class="property">classmethod </em><code class="descname">load</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Entailment.load" title="Permalink to this definition">¶</a></dt>
@@ -448,8 +507,10 @@ Providing more than <cite>max_length</cite> tokens as input will result in trunc
 <dl class="method">
 <dt id="finetune.Entailment.save">
 <code class="descname">save</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Entailment.save" title="Permalink to this definition">¶</a></dt>
-<dd><dl class="docutils">
-<dt>Save in two steps:</dt>
+<dd><p>Saves the state of the model to disk in a location with name :param: path. The model is saved in several files
+and :param: path is used as a prefix.</p>
+<dl class="docutils">
+<dt>Save is performed in two steps:</dt>
 <dd><ul class="first last simple">
 <li>Serialize tf graph to disk using tf.Saver</li>
 <li>Serialize python model using pickle</li>
@@ -519,6 +580,28 @@ corresponds to the number of training examples provided to each GPU.</li>
 <dd><p>An alias for finetune.</p>
 </dd></dl>
 
+<dl class="method">
+<dt id="finetune.Model.generate_text">
+<code class="descname">generate_text</code><span class="sig-paren">(</span><em>max_length=None</em>, <em>seed_text=''</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Model.generate_text" title="Permalink to this definition">¶</a></dt>
+<dd><p>Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
+Temperature parameter for decoding is set in the config.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>max_length</strong> – The maximum length to decode to.</li>
+<li><strong>seed_text</strong> – Defaults to the empty string. This will form the starting point to begin modelling</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">A string containing the generated text.</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
 <dl class="classmethod">
 <dt id="finetune.Model.load">
 <em class="property">classmethod </em><code class="descname">load</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Model.load" title="Permalink to this definition">¶</a></dt>
@@ -580,8 +663,10 @@ Providing more than <cite>max_length</cite> tokens as input will result in trunc
 <dl class="method">
 <dt id="finetune.Model.save">
 <code class="descname">save</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Model.save" title="Permalink to this definition">¶</a></dt>
-<dd><dl class="docutils">
-<dt>Save in two steps:</dt>
+<dd><p>Saves the state of the model to disk in a location with name :param: path. The model is saved in several files
+and :param: path is used as a prefix.</p>
+<dl class="docutils">
+<dt>Save is performed in two steps:</dt>
 <dd><ul class="first last simple">
 <li>Serialize tf graph to disk using tf.Saver</li>
 <li>Serialize python model using pickle</li>
@@ -654,6 +739,28 @@ corresponds to the number of training examples provided to each GPU.</li>
 <dd><p>An alias for finetune.</p>
 </dd></dl>
 
+<dl class="method">
+<dt id="finetune.SequenceLabeler.generate_text">
+<code class="descname">generate_text</code><span class="sig-paren">(</span><em>max_length=None</em>, <em>seed_text=''</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.SequenceLabeler.generate_text" title="Permalink to this definition">¶</a></dt>
+<dd><p>Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
+Temperature parameter for decoding is set in the config.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>max_length</strong> – The maximum length to decode to.</li>
+<li><strong>seed_text</strong> – Defaults to the empty string. This will form the starting point to begin modelling</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">A string containing the generated text.</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
 <dl class="classmethod">
 <dt id="finetune.SequenceLabeler.load">
 <em class="property">classmethod </em><code class="descname">load</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.SequenceLabeler.load" title="Permalink to this definition">¶</a></dt>
@@ -679,7 +786,7 @@ corresponds to the number of training examples provided to each GPU.</li>
 <tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
 <li><strong>X</strong> – A list / array of text, shape [batch]</li>
 <li><strong>max_length</strong> – the number of tokens to be included in the document representation.
-Providing more than <cite>max_length</cite> tokens as input will result in truncation.</li>
+Providing more than <cite>max_length</cite> tokens as input will result in truncatindiion.</li>
 </ul>
 </td>
 </tr>
@@ -692,31 +799,17 @@ Providing more than <cite>max_length</cite> tokens as input will result in trunc
 
 <dl class="method">
 <dt id="finetune.SequenceLabeler.predict_proba">
-<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>Xs</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.SequenceLabeler.predict_proba" title="Permalink to this definition">¶</a></dt>
-<dd><p>Produces a probability distribution over classes for each example in X.</p>
-<table class="docutils field-list" frame="void" rules="none">
-<col class="field-name" />
-<col class="field-body" />
-<tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>Xs</strong> – An iterable of lists or array of text, shape [batch, n_inputs, tokens]</li>
-<li><strong>max_length</strong> – the number of tokens to be included in the document representation.
-Providing more than <cite>max_length</cite> tokens as input will result in truncation.</li>
-</ul>
-</td>
-</tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.</p>
-</td>
-</tr>
-</tbody>
-</table>
+<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.SequenceLabeler.predict_proba" title="Permalink to this definition">¶</a></dt>
+<dd><p>Base method for predicting, with probabilites. (when available)</p>
 </dd></dl>
 
 <dl class="method">
 <dt id="finetune.SequenceLabeler.save">
 <code class="descname">save</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.SequenceLabeler.save" title="Permalink to this definition">¶</a></dt>
-<dd><dl class="docutils">
-<dt>Save in two steps:</dt>
+<dd><p>Saves the state of the model to disk in a location with name :param: path. The model is saved in several files
+and :param: path is used as a prefix.</p>
+<dl class="docutils">
+<dt>Save is performed in two steps:</dt>
 <dd><ul class="first last simple">
 <li>Serialize tf graph to disk using tf.Saver</li>
 <li>Serialize python model using pickle</li>

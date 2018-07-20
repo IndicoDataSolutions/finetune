@@ -1,16 +1,34 @@
-Finetune documentation
-====================================
+.. figure:: https://i.imgur.com/kYL058E.png
 
 .. module:: finetune
 
-Finetune is a python library designed to make finetuning pre-trained language models
-for custom natural language processing tasks a breeze.
 
-It ships with pre-trained model weights
-from `"Improving Language Understanding by Generative Pre-Training" <https://s3-us-west-2.amazonaws.com/openai-assets/research-covers/language-unsupervised/language_understanding_paper.pdf>`_
+**Scikit-learn inspired model finetuning for natural language processing.**
+
+:mod:`finetune` ships with a pre-trained language model from `"Improving Language Understanding by Generative Pre-Training" <https://s3-us-west-2.amazonaws.com/openai-assets/research-covers/language-unsupervised/language_understanding_paper.pdf>`_
 and builds off the `OpenAI/finetune-language-model repository <https://github.com/openai/finetune-transformer-lm>`_.
 
-Source code for finetune is available `on github <https://github.com/IndicoDataSolutions/finetune-language-model>`_.
+Source code for :mod:`finetune` is available `on github <https://github.com/IndicoDataSolutions/finetune>`_.
+
+
+Finetune Quickstart Guide
+=========================
+
+Finetuning the base language model is as easy as calling :meth:`Classifier.fit`:
+
+.. code-block:: python3
+
+    model = Classifier()               # Load base model
+    model.fit(trainX, trainY)          # Finetune base model on custom data
+    predictions = model.predict(testX) # [{'class_1': 0.23, 'class_2': 0.54, ..}, ..]
+    model.save(path)                   # Serialize the model to disk
+
+Reload saved models from disk by using :meth:`Classifier.load`:
+
+.. code-block:: python3
+
+    model = Classifier.load(path)
+    predictions = model.predict(testX)
 
 
 Installation
@@ -29,33 +47,31 @@ or installed directly from source:
     git clone https://github.com/IndicoDataSolutions/finetune
     cd finetune
     python3 setup.py develop
+    python3 -m spacy download en
 
 You can optionally run the provided test suite to ensure installation completed successfully.
 
 .. code-block:: bash
 
-    nosetests
+    pip3 install pytest
+    pytest
 
 
-Finetune Quickstart Guide
-=========================
+Docker
+=======
 
-Finetuning the base language model is as easy as calling :meth:`LanguageModelClassifier.fit`:
+If you'd prefer you can also run :mod:`finetune` in a docker container. The bash scripts provided assume you have a functional install of `docker <https://docs.docker.com/install>`_ and `nvidia-docker <https://github.com/nvidia/nvidia-docker/wiki/Installation-(version-2.0)>`_.
 
-.. code-block:: python3
+.. code-block:: bash
 
-    model = LanguageModelClassifier()   # load base model
-    model.fit(trainX, trainY)           # finetune base model on custom data
-    predictions = model.predict(testX)  # predict on unseen examples
-    # [{'class_1': 0.23, 'class_2': 0.54, 'class_3': 0.13}, ...]
-    model.save(path)                    # serialize the model to disk
+    ./docker/build_docker.sh      # builds a docker image
+    ./docker/start_docker.sh      # starts a docker container in the background
+    docker exec -it finetune bash # starts a bash session in the docker container
 
-Easily reload saved models from disk by using :meth:`LanguageModelClassifier.load`:
 
-.. code-block:: python3
-
-    model = LanguageModelClassifier.load(path)
-    predictions = model.predict(testX)
+Code Examples
+=============
+For example usage of :class:`Classifier`, :class:`Entailment`, and :class:`SequenceLabeler`, see the `finetune/datasets directory <https://github.com/IndicoDataSolutions/finetune/tree/master/finetune/datasets>`_.
 
 
 Finetune API Reference
