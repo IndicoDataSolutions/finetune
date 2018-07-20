@@ -239,7 +239,7 @@ class TextEncoder(object):
             outputs.append(joined)
         return outputs
 
-    def encode_sequence_labeling(self, X, Y=None, max_length=None, verbose=True):
+    def encode_sequence_labeling(self, X, Y, max_length, verbose=True):
         # X: [n_batch, seq_len]
         # Y: [n_batch, seq_len]
         tokens = []
@@ -247,11 +247,14 @@ class TextEncoder(object):
         positions = []
 
         for i, x in enumerate(X):
-            targets = None if Y is None else Y[i] 
+            targets = None if Y is None else Y[i]
             encoded = self._encode(x, labels=targets)
             positions.append(flatten(encoded.char_locs))
             tokens.append(flatten(encoded.token_ids))
             labels.append(flatten(encoded.labels))
+            if len(tokens[-1]) > (max_length - 2):
+                warnings.warn("Text sample {} is longer than the max_length. Please segment this before Labeling. "
+                              "Fallback behaviour is simply to label the first {} tokens".format(x,max_length - 2))
 
         tokens = self._cut_and_concat(
             encoded=[tokens],
