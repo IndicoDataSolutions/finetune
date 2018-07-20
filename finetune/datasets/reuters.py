@@ -21,15 +21,14 @@ CHECKSUM = "a79cab99ed30b7932d46711ef8d662e0"
 
 class Reuters(Dataset):
 
-
     def __init__(self, filename=None, **kwargs):
         super().__init__(filename=(filename or DATA_PATH), **kwargs)
 
-    def download(self):
+    @property
+    def md5(self):
+        return CHECKSUM
 
-        path = Path(self.filename)
-        if path.exists() and hashlib.md5(open(self.filename, 'rb')).hexdigest() == CHECKSUM:
-            return
+    def download(self):
            
         url = "https://raw.githubusercontent.com/dice-group/n3-collection/master/reuters.xml"
         r = requests.get(url)
