@@ -4,6 +4,9 @@ import warnings
 import logging
 import pickle
 import json
+
+import tqdm
+
 from abc import ABCMeta, abstractmethod
 from collections import namedtuple, defaultdict
 from functools import partial
@@ -15,6 +18,8 @@ from finetune.download import download_data_if_required
 from finetune.encoding import TextEncoder
 from finetune.optimizers import AdamWeightDecay, schedules
 from sklearn.model_selection import train_test_split
+
+from finetune.utils import sample_with_temperature
 from finetune.target_encoders import OneHotLabelEncoder, RegressionEncoder, SequenceLabelingEncoder
 from finetune.network_modules import featurizer, language_model, classifier, regressor, sequence_labeler
 from finetune.utils import find_trainable_variables, get_available_gpus, assign_to_gpu, average_grads, \
@@ -65,6 +70,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self.logits = None  # classification logits
         self.clf_loss = None  # cross-entropy loss
         self.lm_losses = None  # language modeling losses
+        self.lm_predict_op = None
         self.train = None  # gradient + parameter update
         self.features = None  # hidden representation fed to classifier
         self.summaries = None  # Tensorboard summaries
@@ -105,7 +111,7 @@ class BaseModel(object, metaclass=ABCMeta):
         if self.target_type == CLASSIFICATION:
             return tf.argmax(logits, -1), tf.nn.softmax(logits, -1)
         elif self.target_type == REGRESSION:
-            return logits, tf.Constant(0)  # TODO: Find something better than constant 0 for predict proba.
+            return logits, tf.constant(0)  # TODO: Find something better than constant 0 for predict proba.
         elif self.target_type == SEQUENCE_LABELING:
             return sequence_decode(logits, kwargs.get("transition_matrix"))
         else:
@@ -177,6 +183,7 @@ class BaseModel(object, metaclass=ABCMeta):
             for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=self.config.verbose):
                 global_step += 1
                 if global_step % self.config.val_interval == 0:
+                    tqdm.tqdm.write("Train loss is :{}, Val loss is :{}".format(avg_train_loss, avg_val_loss))
 
                     outputs = self._eval(
                         self.summaries,
@@ -192,7 +199,7 @@ class BaseModel(object, metaclass=ABCMeta):
                         self.train_writer.add_summary(outputs.get(self.summaries), global_step)
 
                     sum_val_loss = 0
-                    for xval, mval, yval in iter_data(*val_dataset, n_batch=n_batch_train, verbose=self.config.verbose):
+                    for xval, mval, yval in iter_data(*val_dataset, n_batch=n_batch_train, verbose=self.config.verbose, tqdm_desc="Validation"):
                         outputs = self._eval(
                             self.clf_loss,
                             self.summaries,
@@ -206,7 +213,6 @@ class BaseModel(object, metaclass=ABCMeta):
 
                         if self.valid_writer is not None:
                             self.valid_writer.add_summary(outputs.get(self.summaries), global_step)
-
                         val_cost = outputs.get(self.clf_loss, 0)
                         sum_val_loss += val_cost
                         avg_val_loss = (
@@ -221,12 +227,20 @@ class BaseModel(object, metaclass=ABCMeta):
                         if self.config.save_best_model:
                             self.save(self.config.autosave_path)
 
-                self.sess.run(self.train_op, feed_dict={
-                    self.X: xmb,
-                    self.M: mmb,
-                    self.Y: ymb,
-                    self.do_dropout: DROPOUT_ON
-                })
+                outputs = self._eval(
+                    self.clf_loss, 
+                    self.train_op,
+                    feed_dict={
+                      self.X: xmb,
+                      self.M: mmb,
+                      self.Y: ymb,
+                      self.do_dropout: DROPOUT_ON
+                    }
+                )
+                  
+                cost = outputs.get(self.clf_loss, 0)
+                avg_train_loss = avg_train_loss * self.config.rolling_avg_decay + cost * (
+                        1 - self.config.rolling_avg_decay)
 
         return self
 
@@ -372,8 +386,8 @@ class BaseModel(object, metaclass=ABCMeta):
         self.target_dim = target_dim
         self._define_placeholders()
 
-        aggregator = defaultdict(list)
 
+        aggregator = defaultdict(list)
         train_loss_tower = 0
         gpus = get_available_gpus(self.config)
         n_splits = max(len(gpus), 1)
@@ -414,6 +428,9 @@ class BaseModel(object, metaclass=ABCMeta):
                 aggregator['features'].append(featurizer_state['features'])
                 aggregator['lm_losses'].append(language_model_state['losses'])
 
+                lm_logits = language_model_state["logits"]
+                aggregator["lm_model"].append(sample_with_temperature(lm_logits, self.config.lm_temp))
+
                 if target_dim is not None:
                     target_model_state = self._target_model(
                         featurizer_state=featurizer_state,
@@ -423,7 +440,6 @@ class BaseModel(object, metaclass=ABCMeta):
                         reuse=do_reuse,
                         max_length=self.config.max_length
                     )
-
                     train_loss += (1 - lm_loss_coef) * tf.reduce_mean(target_model_state['losses'])
                     train_loss_tower += train_loss
 
@@ -434,6 +450,7 @@ class BaseModel(object, metaclass=ABCMeta):
                     aggregator['logits'].append(target_model_state['logits'])
                     aggregator['clf_losses'].append(target_model_state['losses'])
 
+        self.lm_predict_op = tf.concat(aggregator["lm_model"], 0)
         self.features = tf.concat(aggregator['features'], axis=0)
         self.lm_losses = tf.concat(aggregator['lm_losses'], axis=0)
 
@@ -499,11 +516,33 @@ class BaseModel(object, metaclass=ABCMeta):
         # when target dim is not set, an array of [None] targets is passed as a placeholder
         self.Y = tf.stop_gradient(tf.placeholder(tf.float32, [None, self.target_dim or 1]))  # classification targets
         self.do_dropout = tf.placeholder(tf.float32)  # 1 for do dropout and 0 to not do dropout
-
         if self.target_type == SEQUENCE_LABELING:
             self.Y = tf.placeholder(tf.int32, [None, self.config.max_length])  # classification targets
         else:
             self.Y = tf.placeholder(tf.float32, [None, self.target_dim])  # classification targets
+
+    def generate_text(self, max_length=None, seed_text=''):
+        """
+        Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
+        Temperature parameter for decoding is set in the config.
+
+        :param max_length: The maximum length to decode to.
+        :param seed_text: Defaults to the empty string. This will form the starting point to begin modelling
+        :return: A string containing the generated text.
+        """
+        seed_text_tokens = self.encoder._encode([seed_text]).token_ids
+        self._build_model(n_updates_total=0, target_dim=self.target_dim, train=False)
+        string = [self.encoder['_start_']] + seed_text_tokens[0]
+        eos = self.encoder['_classify_']
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore")
+            for i in range(len(seed_text_tokens[0]), (max_length or self.config.max_length) - 1):
+                model_input = self._array_format([string])
+                class_idx = self.sess.run(self.lm_predict_op, {self.X: model_input.token_ids, self.M: model_input.mask})
+                string.append(class_idx[i])
+                if string[-1] == eos:
+                    break
+        return self.encoder.decode(string)
 
     def _load_base_model(self):
         """

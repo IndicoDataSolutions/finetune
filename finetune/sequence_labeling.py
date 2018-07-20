@@ -95,3 +95,6 @@ class SequenceLabeler(BaseModel):
         :returns: np.array of features of shape (n_examples, embedding_size).
         """
         return self._featurize(*list(zip(*Xs)), max_length=max_length)
+
+    def predict_proba(self, *args, **kwargs):
+        raise NotImplementedError

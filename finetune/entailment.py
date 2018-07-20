@@ -12,7 +12,7 @@ class Entailment(BaseModel):
         return OrdinalClassificationEncoder()
 
     def _text_to_ids(self, *Xs, max_length=None):
-        max_length = max_length or self.hparams.max_length
+        max_length = max_length or self.config.max_length
         assert len(Xs) == 2, "This implementation assumes 2 Xs"
 
         question_answer_pairs = self.encoder.encode_multi_input(*Xs, max_length=max_length, verbose=self.config.verbose)
@@ -77,7 +77,8 @@ if __name__ == "__main__":
     questions = []
     answers = []
     save_path = 'saved-models/cola'
-    model = Entailment(save_path)
+
+    model = Entailment()
 
     for item in data:
         row = data[item]

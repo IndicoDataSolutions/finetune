@@ -137,14 +137,14 @@ def remove_none(l):
     return [e for e in l if e is not None]
 
 
-def iter_data(*datas, n_batch=128, truncate=False, verbose=False, max_batches=float("inf")):
+def iter_data(*datas, n_batch=128, truncate=False, verbose=False, max_batches=float("inf"), tqdm_desc=None):
     n = len(datas[0])
     if truncate:
         n = (n // n_batch) * n_batch
     n = min(n, max_batches * n_batch)
     n_batches = 0
     
-    for i in tqdm(range(0, n, n_batch), total=n // n_batch, ncols=80, leave=False, disable=(not verbose)):
+    for i in tqdm(range(0, n, n_batch), total=n // n_batch, ncols=80, leave=False, disable=(not verbose), desc=tqdm_desc):
         if n_batches >= max_batches: raise StopIteration
         if len(datas) == 1:
             yield datas[0][i:i + n_batch]
@@ -179,6 +179,29 @@ def assign_to_gpu(gpu=0, params_device="/device:CPU:0"):
             return "/gpu:%d" % gpu
 
     return _assign
+
+
+def sample_with_temperature(logits, temperature):
+    """Either argmax or random sampling.
+    Args:
+      logits: a Tensor.
+      temperature: a float  0.0=argmax 1.0=random
+    Returns:
+      a Tensor with one fewer dimension than logits.
+    """
+    if temperature == 0.0:
+        # TF argmax doesn't handle >5 dimensions, so we reshape here.
+        logits_shape = shape_list(logits)
+        argmax = tf.argmax(tf.reshape(logits, [-1, logits_shape[-1]]), axis=1)
+        return tf.reshape(argmax, logits_shape[:-1])
+    else:
+        assert temperature > 0.0
+        reshaped_logits = (
+                tf.reshape(logits, [-1, shape_list(logits)[-1]]) / temperature)
+        choices = tf.multinomial(reshaped_logits, 1)
+        choices = tf.reshape(choices,
+                             shape_list(logits)[:logits.get_shape().ndims - 1])
+        return choices
 
 
 def average_grads(tower_grads):

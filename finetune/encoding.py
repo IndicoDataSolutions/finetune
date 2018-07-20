@@ -72,6 +72,8 @@ class TextEncoder(object):
         for token in self.special_tokens:
             self.encoder[token] = len(self.encoder)
 
+        self.decoder = {v: k for k, v in self.encoder.items()}
+
         merges = open(BPE_PATH).read().split('\n')[1:-1]
         merges = [tuple(merge.split()) for merge in merges]
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
@@ -166,6 +168,13 @@ class TextEncoder(object):
                 batch_label_idxs.append([label] * len(subtoken_idxs))
 
         return EncoderOutput(batch_token_idxs, batch_label_idxs, batch_character_locs)
+
+    def decode(self, ids):
+        """
+        Convert a batch of ids [batch_size, id] into text(ish).
+        """
+
+        return "".join([self.decoder.get(word_idx, '<unk>') for word_idx in ids]).replace("</w>", " ")
 
     def trim(self, seqs, max_length, start=None, end=None):
         # Trims a batch of individual tokens to a max length and places a start and end token at the end.
@@ -267,11 +276,14 @@ class TextEncoder(object):
         positions = []
 
         for i, x in enumerate(X):
-            targets = None if Y is None else Y[i] 
+            targets = None if Y is None else Y[i]
             encoded = self._encode(x, labels=targets)
             positions.append(_flatten(encoded.char_locs))
             tokens.append(_flatten(encoded.token_ids))
             labels.append(_flatten(encoded.labels))
+            if len(tokens[-1]) > (max_length - 2):
+                warnings.warn("Text sample {} is longer than the max_length. Please segment this before Labeling. "
+                              "Fallback behaviour is simply to label the first {} tokens".format(x, max_length - 2))
 
         tokens = self._cut_and_concat(
             encoded=[tokens],
