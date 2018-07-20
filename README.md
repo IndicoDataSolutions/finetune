@@ -1,6 +1,6 @@
 <img src="https://i.imgur.com/kYL058E.png" height="150px">
 
-**Scikit-learn inspired model finetuning for natural language processing.**
+**Scikit-learn style model finetuning for NLP**
 
 `Finetune` ships with a pre-trained language model
 from ["Improving Language Understanding by Generative Pre-Training"](https://s3-us-west-2.amazonaws.com/openai-assets/research-covers/language-unsupervised/language_understanding_paper.pdf)
