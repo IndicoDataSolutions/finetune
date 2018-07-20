@@ -94,7 +94,8 @@ class TestSequenceLabeler(unittest.TestCase):
         Ensure model training does not error out
         Ensure model returns predictions
         """
-        texts, annotations = finetune_to_indico_sequence(self.texts, self.labels)
+        raw_docs = ["".join(text) for text in self.texts]
+        texts, annotations = finetune_to_indico_sequence(raw_docs, self.texts, self.labels)
         train_texts, test_texts, train_annotations, test_annotations = train_test_split(texts, annotations)
         self.model.fit(train_texts, train_annotations)
         predictions = self.model.predict(test_texts)
