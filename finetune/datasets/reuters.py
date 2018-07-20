@@ -2,6 +2,7 @@ import os
 import requests
 import codecs
 import json
+import hashlib
 import io
 
 import pandas as pd
@@ -15,7 +16,7 @@ from finetune.utils import finetune_to_indico_sequence
 
 XML_PATH = os.path.join("Data", "Sequence", "reuters.xml")
 DATA_PATH = os.path.join("Data", "Sequence", "reuters.json")
-
+CHECKSUM = "a79cab99ed30b7932d46711ef8d662e0"
 
 class Reuters(Dataset):
 
@@ -25,8 +26,9 @@ class Reuters(Dataset):
 
     def download(self):
 
-        # if os.path.exists(self.filename):
-        #     return
+        path = Path(self.filename)
+        if path.exists() and hashlib.md5(open(self.filename, 'rb')).hexdigest() == CHECKSUM:
+            return
            
         url = "https://raw.githubusercontent.com/dice-group/n3-collection/master/reuters.xml"
         r = requests.get(url)

@@ -158,8 +158,8 @@ class TextEncoder(object):
                     for t in bpe_toks
                 ])
                 token_start = raw_text.find(token.text, token_start)
-                assert len("".join(bpe_toks).replace("</w>", "")) == len(token.text.strip())
-                subtoken_positions = np.cumsum([len(tok.replace("</w>", ' ')) for tok in bpe_toks]) + token_start
+                assert len("".join(bpe_toks).replace("</w>", "")) == len(token.text)
+                subtoken_positions = np.cumsum([len(tok.replace("</w>", '')) for tok in bpe_toks]) + token_start
                 token_start += len(token.text)
                 tok_pos.extend(subtoken_positions)
             batch_token_idxs.append(subtoken_idxs)

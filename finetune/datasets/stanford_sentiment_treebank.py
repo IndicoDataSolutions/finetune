@@ -1,5 +1,6 @@
 import os
 import tempfile
+import hashlib
 import logging
 from pathlib import Path
 
@@ -15,6 +16,8 @@ logging.basicConfig(level=logging.DEBUG)
 
 SST_FILENAME = "SST-binary.csv"
 DATA_PATH = os.path.join('Data', 'Classify', SST_FILENAME)
+CHECKSUM = "02136b7176f44ff8bec6db2665fc769a"
+
 
 class StanfordSentimentTreebank(Dataset):
 
@@ -26,7 +29,7 @@ class StanfordSentimentTreebank(Dataset):
         Download Stanford Sentiment Treebank to data directory
         """
         path = Path(self.filename)
-        if path.exists():
+        if path.exists() and hashlib.md5(open(self.filename, 'rb')).hexdigest() == CHECKSUM:
             return
 
         path.parent.mkdir(parents=True, exist_ok=True)

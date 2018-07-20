@@ -1,6 +1,7 @@
 import os
 import logging
 from pathlib import Path
+import hashlib
 
 import requests
 import pandas as pd
@@ -14,7 +15,7 @@ logging.basicConfig(level=logging.DEBUG)
 
 FILENAME = "multinli.dev.csv"
 DATA_PATH = os.path.join('Data', 'Entailment', FILENAME)
-
+CHECKSUM = "4837f671a2ee1042f3d308de5352b58e"
 
 class MultiNLI(Dataset):
 
@@ -23,10 +24,10 @@ class MultiNLI(Dataset):
 
     def download(self):
         """
-        Download Stanford Sentiment Treebank to enso `data` directory
+        Download Stanford Sentiment Treebank to data directory
         """
         path = Path(self.filename)
-        if path.exists():
+        if path.exists() and hashlib.md5(open(self.filename, 'rb')).hexdigest() == CHECKSUM:
             return
 
         path.parent.mkdir(parents=True, exist_ok=True)
