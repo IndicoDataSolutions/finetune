@@ -9,7 +9,6 @@ from pathlib import Path
 REQUIREMENTS = [
     "pandas>=0.23.1",
     "IndicoIo>=1.1.5",
-    "enso>=0.1.6",
     "tqdm>=4.0.0",
     "numpy>=1.13.0",
     "scikit-learn>=0.18.0",

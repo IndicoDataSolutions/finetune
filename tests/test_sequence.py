@@ -11,7 +11,6 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 import tensorflow as tf
 import numpy as np
-import enso
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
 import requests
@@ -27,9 +26,9 @@ class TestSequenceLabeler(unittest.TestCase):
     n_sample = 100
     n_hidden = 768
     dataset_path = os.path.join(
-        enso.config.DATA_DIRECTORY, 'Sequence', 'reuters.xml'
+        'Data', 'Sequence', 'reuters.xml'
     )
-    processed_path = os.path.join(enso.config.DATA_DIRECTORY, 'Sequence', 'reuters.json')
+    processed_path = os.path.join('Data', 'Sequence', 'reuters.json')
 
     @classmethod
     def _download_reuters(cls):
@@ -46,8 +45,6 @@ class TestSequenceLabeler(unittest.TestCase):
             with open(cls.dataset_path, "wb") as fp:
                 fp.write(r.content)
         
-        # if not os.path.exists(cls.processed_path):
-
         with codecs.open(cls.dataset_path, "r", "utf-8") as infile:
             soup = bs(infile, "html5lib")
 
@@ -94,7 +91,8 @@ class TestSequenceLabeler(unittest.TestCase):
         Ensure model training does not error out
         Ensure model returns predictions
         """
-        texts, annotations = finetune_to_indico_sequence(self.texts, self.labels)
+        raw_docs = ["".join(text) for text in self.texts]
+        texts, annotations = finetune_to_indico_sequence(raw_docs, self.texts, self.labels)
         train_texts, test_texts, train_annotations, test_annotations = train_test_split(texts, annotations)
         self.model.fit(train_texts, train_annotations)
         predictions = self.model.predict(test_texts)

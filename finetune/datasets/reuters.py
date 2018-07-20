@@ -2,6 +2,7 @@ import os
 import requests
 import codecs
 import json
+import hashlib
 import io
 
 import pandas as pd
@@ -15,7 +16,7 @@ from finetune.utils import finetune_to_indico_sequence
 
 XML_PATH = os.path.join("Data", "Sequence", "reuters.xml")
 DATA_PATH = os.path.join("Data", "Sequence", "reuters.json")
-
+CHECKSUM = "a79cab99ed30b7932d46711ef8d662e0"
 
 class Reuters(Dataset):
 
@@ -25,8 +26,9 @@ class Reuters(Dataset):
 
     def download(self):
 
-        # if os.path.exists(self.filename):
-        #     return
+        path = Path(self.filename)
+        if path.exists() and hashlib.md5(open(self.filename, 'rb')).hexdigest() == CHECKSUM:
+            return
            
         url = "https://raw.githubusercontent.com/dice-group/n3-collection/master/reuters.xml"
         r = requests.get(url)
@@ -58,13 +60,14 @@ class Reuters(Dataset):
         fd.close()
         os.remove(XML_PATH)
 
-        texts, annotations = finetune_to_indico_sequence(docs, docs_labels)
+        raw_texts = ["".join(doc) for doc in docs]
+        texts, annotations = finetune_to_indico_sequence(raw_texts, docs, docs_labels)
         df = pd.DataFrame({'texts': texts, 'annotations': [json.dumps(annotation) for annotation in annotations]})
         df.to_csv(DATA_PATH)
 
 
 if __name__ == "__main__":
-    dataset = Reuters(nrows=1500).dataframe
+    dataset = Reuters(nrows=1000).dataframe
     dataset['annotations'] = [json.loads(annotation) for annotation in dataset['annotations']]
     trainX, testX, trainY, testY = train_test_split(dataset.texts, dataset.annotations, test_size=0.3, random_state=42)
     model = SequenceLabeler(verbose=False)

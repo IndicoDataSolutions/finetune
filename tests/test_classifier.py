@@ -4,6 +4,7 @@ import logging
 import shutil
 from copy import copy
 from pathlib import Path
+from unittest.mock import MagicMock
 import warnings
 
 # prevent excessive warning logs 
@@ -13,12 +14,10 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import tensorflow as tf
 import pandas as pd
 import numpy as np
-import enso
-from enso.download import generic_download
 from sklearn.metrics import accuracy_score
-from unittest.mock import MagicMock
 
 from finetune import Classifier
+from finetune.datasets import generic_download
 from finetune.config import get_config
 
 SST_FILENAME = "SST-binary.csv"
@@ -28,13 +27,13 @@ class TestClassifier(unittest.TestCase):
     n_sample = 20
     n_hidden = 768
     dataset_path = os.path.join(
-        enso.config.DATA_DIRECTORY, 'Classify', 'SST-binary.csv'
+        'Data', 'Classify', 'SST-binary.csv'
     )
 
     @classmethod
     def _download_sst(cls):
         """
-        Download Stanford Sentiment Treebank to enso `data` directory
+        Download Stanford Sentiment Treebank to data directory
         """
         path = Path(cls.dataset_path)
         if path.exists():

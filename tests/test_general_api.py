@@ -10,12 +10,11 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import tensorflow as tf
 import pandas as pd
 import numpy as np
-import enso
-from enso.download import generic_download
 
 from finetune import Model
 from finetune.config import get_config
 from finetune.base import CLASSIFICATION, REGRESSION
+from finetune.datasets import generic_download
 
 SST_FILENAME = "SST-binary.csv"
 
@@ -24,13 +23,13 @@ class TestModel(unittest.TestCase):
     n_sample = 100
     n_hidden = 768
     dataset_path = os.path.join(
-        enso.config.DATA_DIRECTORY, 'Classify', 'SST-binary.csv'
+        'Data', 'Classify', SST_FILENAME
     )
 
     @classmethod
     def _download_sst(cls):
         """
-        Download Stanford Sentiment Treebank to enso `data` directory
+        Download Stanford Sentiment Treebank to data directory
         """
         path = Path(cls.dataset_path)
         if path.exists():

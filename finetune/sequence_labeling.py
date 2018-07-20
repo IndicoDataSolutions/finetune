@@ -64,6 +64,7 @@ class SequenceLabeler(BaseModel):
             start_of_token = 0
             doc_subseqs = []
             doc_labels = []
+
             for label, position in zip(label_seq, position_seq):
                 if position == -1:
                     # indicates padding / special tokens
@@ -76,13 +77,13 @@ class SequenceLabeler(BaseModel):
                     doc_subseqs.append(text[start_of_token:position])
                     doc_labels.append(label)
                 else:
-                    # continue appending to current subsequencef
+                    # continue appending to current subsequence
                     doc_subseqs[-1] += text[start_of_token:position]
-
+                
                 start_of_token = position
             all_subseqs.append(doc_subseqs)
             all_labels.append(doc_labels)
-        doc_texts, doc_annotations = finetune_to_indico_sequence(all_subseqs, all_labels)
+        doc_texts, doc_annotations = finetune_to_indico_sequence(raw_texts=X, subseqs=all_subseqs, labels=all_labels)
         return doc_annotations
 
     def featurize(self, Xs, max_length=None):
