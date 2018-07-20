@@ -17,6 +17,7 @@ FILENAME = "multinli.dev.csv"
 DATA_PATH = os.path.join('Data', 'Entailment', FILENAME)
 CHECKSUM = "4837f671a2ee1042f3d308de5352b58e"
 
+
 class MultiNLI(Dataset):
 
     def __init__(self, filename=None, **kwargs):
