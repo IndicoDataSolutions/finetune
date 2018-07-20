@@ -4,6 +4,9 @@ import warnings
 import logging
 import pickle
 import json
+
+import tqdm
+
 from abc import ABCMeta, abstractmethod
 from collections import namedtuple, defaultdict
 from functools import partial
@@ -176,6 +179,7 @@ class BaseModel(object, metaclass=ABCMeta):
             for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=self.config.verbose):
                 global_step += 1
                 if global_step % self.config.val_interval == 0:
+                    tqdm.tqdm.write("Train loss is :{}, Val loss is :{}".format(avg_train_loss, avg_val_loss))
 
                     outputs = self._eval(
                         self.summaries,
@@ -191,7 +195,7 @@ class BaseModel(object, metaclass=ABCMeta):
                         self.train_writer.add_summary(outputs.get(self.summaries), global_step)
 
                     sum_val_loss = 0
-                    for xval, mval, yval in iter_data(*val_dataset, n_batch=n_batch_train, verbose=self.config.verbose):
+                    for xval, mval, yval in iter_data(*val_dataset, n_batch=n_batch_train, verbose=self.config.verbose, tqdm_desc="Validation"):
                         outputs = self._eval(
                             self.clf_loss,
                             self.summaries, 
@@ -205,7 +209,6 @@ class BaseModel(object, metaclass=ABCMeta):
                         
                         if self.valid_writer is not None:
                             self.valid_writer.add_summary(outputs.get(self.summaries), global_step)
-
                         val_cost = outputs.get(self.clf_loss, 0)
                         sum_val_loss += val_cost
                         avg_val_loss = (
@@ -219,13 +222,20 @@ class BaseModel(object, metaclass=ABCMeta):
                         best_val_loss = np.mean(val_window)
                         if self.config.save_best_model:
                             self.save(self.config.autosave_path)
-               
-                self.sess.run(self.train_op, feed_dict={
-                    self.X: xmb,
-                    self.M: mmb,
-                    self.Y: ymb,
-                    self.do_dropout: DROPOUT_ON
-                })
+                outputs = self._eval(
+                    self.clf_loss, 
+                    self.train_op,
+                    feed_dict={
+                      self.X: xmb,
+                      self.M: mmb,
+                      self.Y: ymb,
+                      self.do_dropout: DROPOUT_ON
+                    }
+                )
+                  
+                cost = outputs.get(self.clf_loss, 0)
+                avg_train_loss = avg_train_loss * self.hparams.rolling_avg_decay + cost * (
+                        1 - self.hparams.rolling_avg_decay)
 
         return self
 
