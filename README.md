@@ -18,7 +18,7 @@ predictions = model.predict(testX) # [{'class_1': 0.23, 'class_2': 0.54, ..}, ..
 model.save(path)                   # Serialize the model to disk
 ```
 
-Easily reload saved models from disk by using `LanguageModelClassifier.load`:
+Reload saved models from disk by using `LanguageModelClassifier.load`:
 
 ```
 model = Classifier.load(path)
