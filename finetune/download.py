@@ -8,6 +8,7 @@ import finetune
 
 
 def download_data_if_required():
+    """ Pulls the pre-trained model weights from Github if required. """
     base_url = "https://raw.githubusercontent.com/IndicoDataSolutions/finetune/master/finetune/model/"
 
     file_list = [
@@ -27,7 +28,7 @@ def download_data_if_required():
     ]
 
     for filename in file_list:
-        folder =  os.path.join(
+        folder = os.path.join(
             os.path.dirname(finetune.__file__),
             'model'
         )
@@ -41,6 +42,7 @@ def download_data_if_required():
             fd = open(local_filepath, 'wb')
             fd.write(data)
             fd.close()
+
 
 if __name__ == "__main__":
     download_data_if_required()

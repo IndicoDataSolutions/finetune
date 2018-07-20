@@ -10,7 +10,6 @@ from functools import partial
 
 import numpy as np
 import tensorflow as tf
-from sklearn.utils import shuffle
 
 from finetune.download import download_data_if_required
 from finetune.encoding import TextEncoder
@@ -18,7 +17,7 @@ from finetune.optimizers import AdamWeightDecay, schedules
 from sklearn.model_selection import train_test_split
 from finetune.target_encoders import OneHotLabelEncoder, RegressionEncoder, SequenceLabelingEncoder
 from finetune.network_modules import featurizer, language_model, classifier, regressor, sequence_labeler
-from finetune.utils import find_trainable_variables, get_available_gpus, shape_list, assign_to_gpu, average_grads, \
+from finetune.utils import find_trainable_variables, get_available_gpus, assign_to_gpu, average_grads, \
     iter_data, soft_split, sequence_decode, concat_or_stack
 from finetune.errors import InvalidTargetType
 from finetune.config import PAD_TOKEN, get_default_config
@@ -42,8 +41,8 @@ class BaseModel(object, metaclass=ABCMeta):
     """
     A sklearn-style class for finetuning a Transformer language model on a classification task.
 
-    :param max_length: Determines the number of tokens to be included in the document representation.
-                       Providing more than `max_length` tokens to the model as input will result in truncation.
+    :param config: A config object, or None to use the default config.
+    :param **kwargs: key-value pairs of config items to override.
     """
 
     def __init__(self, config=None, **kwargs):
@@ -56,6 +55,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self.target_type = None
 
     def _initialize(self):
+        # Initializes the non-serialized bits of the class.
         self._set_random_seed(self.config.seed)
 
         download_data_if_required()
@@ -77,13 +77,16 @@ class BaseModel(object, metaclass=ABCMeta):
         self.is_trained = False  # has model been fine-tuned?
 
     def _text_to_ids(self, *Xs, max_length=None):
+        # Maps lists of text to formatted numpy arrays of token ids and loss-masks marking the lengths of the sequences.
         max_length = max_length or self.config.max_length
         assert len(Xs) == 1, "This implementation assumes a single Xs"
         token_idxs = self.encoder.encode_for_classification(Xs[0], max_length=max_length)
         seq_array = self._array_format(token_idxs)
         return seq_array.token_ids, seq_array.mask
 
-    def target_model(self, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
+    def _target_model(self, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
+        # Conditionally constructs the default model for each of the main ways in which finetune can be used.
+        # Can be overridden to use a different target model.
         if self.target_type == CLASSIFICATION:
             return classifier(featurizer_state['features'], targets, n_outputs, self.do_dropout, config=self.config,
                               train=train, reuse=reuse, **kwargs)
@@ -91,22 +94,25 @@ class BaseModel(object, metaclass=ABCMeta):
             return regressor(featurizer_state['features'], targets, n_outputs, self.do_dropout, config=self.config,
                              train=train, reuse=reuse, **kwargs)
         elif self.target_type == SEQUENCE_LABELING:
-            return sequence_labeler(featurizer_state['sequence_features'], targets, n_outputs, self.do_dropout, config=self.config,
+            return sequence_labeler(featurizer_state['sequence_features'], targets, n_outputs, self.do_dropout,
+                                    config=self.config,
                                     train=train, reuse=reuse, **kwargs)
         else:
             raise InvalidTargetType(self.target_type)
 
-    def predict_ops(self, logits, **kwargs):
+    def _predict_ops(self, logits, **kwargs):
+        # Gets the correct prediction methods for each of the main ways that the model can be used.
         if self.target_type == CLASSIFICATION:
             return tf.argmax(logits, -1), tf.nn.softmax(logits, -1)
         elif self.target_type == REGRESSION:
-            return logits, logits
+            return logits, tf.Constant(0)  # TODO: Find something better than constant 0 for predict proba.
         elif self.target_type == SEQUENCE_LABELING:
             return sequence_decode(logits, kwargs.get("transition_matrix"))
         else:
             raise InvalidTargetType(self.target_type)
 
-    def get_target_encoder(self):
+    def _get_target_encoder(self):
+        # Gets the correct target encoder for the problem.
         if self.target_type == CLASSIFICATION:
             return OneHotLabelEncoder()
         elif self.target_type == REGRESSION:
@@ -132,19 +138,14 @@ class BaseModel(object, metaclass=ABCMeta):
             for tensor, value in zip(tensors, values)
             if value is not None
         }
-    
-    def _finetune(self, *Xs, Y=None, batch_size=None):
-        """
-        X: List / array of text
-        Y: Class labels
-        """
 
+    def _finetune(self, *Xs, Y=None, batch_size=None):
         train_x, train_mask = self._text_to_ids(*Xs)
         return self._training_loop(train_x, train_mask, Y, batch_size)
 
     def _training_loop(self, train_x, train_mask, Y, batch_size=None):
         batch_size = batch_size or self.config.batch_size
-        self.label_encoder = self.get_target_encoder()
+        self.label_encoder = self._get_target_encoder()
         n_batch_train = batch_size * max(len(get_available_gpus(self.config)), 1)
         n_examples = train_x.shape[0]
         n_updates_total = (n_examples // n_batch_train) * self.config.n_epochs
@@ -194,7 +195,7 @@ class BaseModel(object, metaclass=ABCMeta):
                     for xval, mval, yval in iter_data(*val_dataset, n_batch=n_batch_train, verbose=self.config.verbose):
                         outputs = self._eval(
                             self.clf_loss,
-                            self.summaries, 
+                            self.summaries,
                             feed_dict={
                                 self.X: xval,
                                 self.M: mval,
@@ -202,15 +203,15 @@ class BaseModel(object, metaclass=ABCMeta):
                                 self.do_dropout: DROPOUT_OFF
                             }
                         )
-                        
+
                         if self.valid_writer is not None:
                             self.valid_writer.add_summary(outputs.get(self.summaries), global_step)
 
                         val_cost = outputs.get(self.clf_loss, 0)
                         sum_val_loss += val_cost
                         avg_val_loss = (
-                            avg_val_loss * self.config.rolling_avg_decay
-                            + val_cost * (1 - self.config.rolling_avg_decay)
+                                avg_val_loss * self.config.rolling_avg_decay
+                                + val_cost * (1 - self.config.rolling_avg_decay)
                         )
                     val_window.append(sum_val_loss)
                     val_window.pop(0)
@@ -219,7 +220,7 @@ class BaseModel(object, metaclass=ABCMeta):
                         best_val_loss = np.mean(val_window)
                         if self.config.save_best_model:
                             self.save(self.config.autosave_path)
-               
+
                 self.sess.run(self.train_op, feed_dict={
                     self.X: xmb,
                     self.M: mmb,
@@ -231,13 +232,10 @@ class BaseModel(object, metaclass=ABCMeta):
 
     @abstractmethod
     def finetune(self, *args, **kwargs):
-        """
-        """
+        """ The base method for finetuning the model. """
 
     def fit(self, *args, **kwargs):
-        """
-        An alias for finetune.
-        """
+        """ An alias for finetune. """
         return self.finetune(*args, **kwargs)
 
     def _predict(self, *Xs, max_length=None):
@@ -246,13 +244,13 @@ class BaseModel(object, metaclass=ABCMeta):
             warnings.filterwarnings("ignore")
             max_length = max_length or self.config.max_length
             for xmb, mmb in self._infer_prep(*Xs, max_length=max_length):
-                output = self._eval(self.predict_op, 
-                    feed_dict={
-                        self.X: xmb,
-                        self.M: mmb,
-                        self.do_dropout: DROPOUT_OFF
-                    }    
-                )
+                output = self._eval(self.predict_op,
+                                    feed_dict={
+                                        self.X: xmb,
+                                        self.M: mmb,
+                                        self.do_dropout: DROPOUT_OFF
+                                    }
+                                    )
                 class_idx = output.get(self.predict_op)
                 class_labels = self.label_encoder.inverse_transform(class_idx)
                 predictions.append(class_labels)
@@ -260,7 +258,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
     @abstractmethod
     def predict(self, *args, **kwargs):
-        """"""
+        """ The base method for predicting from the model. """
 
     def _predict_proba(self, *Xs, max_length=None):
         predictions = []
@@ -269,7 +267,7 @@ class BaseModel(object, metaclass=ABCMeta):
             max_length = max_length or self.config.max_length
             for xmb, mmb in self._infer_prep(*Xs, max_length=max_length):
                 output = self._eval(
-                    self.predict_proba_op, 
+                    self.predict_proba_op,
                     feed_dict={
                         self.X: xmb,
                         self.M: mmb,
@@ -285,7 +283,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
     @abstractmethod
     def predict_proba(self, *args, **kwargs):
-        """"""
+        """ Base method for predicting, with probabilites. (when available) """
 
     def _featurize(self, *Xs, max_length=None):
         features = []
@@ -299,7 +297,10 @@ class BaseModel(object, metaclass=ABCMeta):
 
     @abstractmethod
     def featurize(self, *args, **kwargs):
-        """"""
+        """
+        Base method to get raw features out of the model.
+        These features are the same that are fed into the target_model.
+        """
 
     def transform(self, *args, **kwargs):
         """
@@ -388,7 +389,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
             with device, scope:
                 featurizer_state = featurizer(
-                    X, 
+                    X,
                     config=self.config,
                     encoder=self.encoder,
                     dropout_placeholder=self.do_dropout,
@@ -414,7 +415,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 aggregator['lm_losses'].append(language_model_state['losses'])
 
                 if target_dim is not None:
-                    target_model_state = self.target_model(
+                    target_model_state = self._target_model(
                         featurizer_state=featurizer_state,
                         targets=Y,
                         n_outputs=target_dim,
@@ -433,15 +434,14 @@ class BaseModel(object, metaclass=ABCMeta):
                     aggregator['logits'].append(target_model_state['logits'])
                     aggregator['clf_losses'].append(target_model_state['losses'])
 
-
         self.features = tf.concat(aggregator['features'], axis=0)
         self.lm_losses = tf.concat(aggregator['lm_losses'], axis=0)
 
         if target_dim is not None:
             self.logits = tf.concat(aggregator['logits'], axis=0)
             self.clf_losses = concat_or_stack(aggregator['clf_losses'])
-            
-            self.predict_op, self.predict_proba_op = self.predict_ops(
+
+            self.predict_op, self.predict_proba_op = self._predict_ops(
                 self.logits,
                 **target_model_state.get("predict_params", {})
             )
@@ -497,7 +497,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self.X = tf.placeholder(tf.int32, [None, self.config.max_length, 2])  # token idxs (BPE embedding + positional)
         self.M = tf.placeholder(tf.float32, [None, self.config.max_length])  # sequence mask
         # when target dim is not set, an array of [None] targets is passed as a placeholder
-        self.Y = tf.stop_gradient(tf.placeholder(tf.float32, [None, self.target_dim or 1])) # classification targets
+        self.Y = tf.stop_gradient(tf.placeholder(tf.float32, [None, self.target_dim or 1]))  # classification targets
         self.do_dropout = tf.placeholder(tf.float32)  # 1 for do dropout and 0 to not do dropout
 
         if self.target_type == SEQUENCE_LABELING:
@@ -532,7 +532,7 @@ class BaseModel(object, metaclass=ABCMeta):
         Leave serialization of all tf objects to tf
         """
         required_fields = [
-            'label_encoder', 'target_dim', '_load_from_file', 'config', 'target_type', 
+            'label_encoder', 'target_dim', '_load_from_file', 'config', 'target_type',
         ]
         serialized_state = {
             k: v for k, v in self.__dict__.items()
@@ -542,7 +542,10 @@ class BaseModel(object, metaclass=ABCMeta):
 
     def save(self, path):
         """
-        Save in two steps:
+        Saves the state of the model to disk in a location with name :param: path. The model is saved in several files
+        and :param: path is used as a prefix.
+
+        Save is performed in two steps:
             - Serialize tf graph to disk using tf.Saver
             - Serialize python model using pickle
 
@@ -552,7 +555,7 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         if path is None:
             return
-        
+
         # Setting self._load_from_file indicates that we should load the saved model from
         # disk at next training / inference. It is set temporarily so that the serialized
         # model includes this information.

@@ -8,7 +8,7 @@ from finetune.target_encoders import OrdinalClassificationEncoder
 
 class Entailment(BaseModel):
 
-    def get_target_encoder(self):
+    def _get_target_encoder(self):
         return OrdinalClassificationEncoder()
 
     def _text_to_ids(self, *Xs, max_length=None):
@@ -77,7 +77,7 @@ if __name__ == "__main__":
     questions = []
     answers = []
     save_path = 'saved-models/cola'
-    model = LanguageModelEntailment(save_path)
+    model = Entailment(save_path)
 
     for item in data:
         row = data[item]
@@ -90,7 +90,7 @@ if __name__ == "__main__":
 
     model.finetune(ques_train, ans_train, scores_train)
 
-    model = LanguageModelEntailment.load(save_path)
+    model = Entailment.load(save_path)
 
     print("TRAIN EVAL")
     predictions = model.predict(ques_train, ans_train)

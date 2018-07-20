@@ -1,21 +1,31 @@
 import tensorflow as tf
 
+# CONSTANTS
+PAD_TOKEN = '<PAD>'
+
 
 def get_default_config():
+    """
+    Gets a config object containing all the default parameters for each variant of the model.
+
+    :return: Config object.
+    """
     return tf.contrib.training.HParams(
+        # MODEL DEFINITION (DO NOT CHANGE)
+        n_heads=12,
+        n_layer=12,
+        act_fn="gelu",
+        n_embed=768,
+
         # TRAINING SETTINGS
         batch_size=2,
         visible_gpus=None,
         n_epochs=3,
         seed=42,
-
-        # MODEL DEFINITION + INITIALIZATION
-        weight_stddev=0.02,
         max_length=256,
-        n_heads=12,
-        n_layer=12,
-        act_fn="gelu",
-        n_embed=768,
+
+        # INITIALIZATION
+        weight_stddev=0.02,
 
         # REGULARIZATION
         embed_p_drop=0.1,
@@ -60,6 +70,11 @@ def get_default_config():
 
 
 def get_config(**kwargs):
+    """
+    Gets a config object containing all the default parameters for each variant of the model.
+
+    :param **kwargs: Keyword arguments to override default values.
+    :return: Config object.    """
     config = get_default_config()
     config.override_from_dict(kwargs)
     return config
@@ -69,6 +84,3 @@ def cpu_config():
     config = get_default_config()
     config.visibleGpus = []
     return config
-
-
-PAD_TOKEN = '<PAD>'
