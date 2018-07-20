@@ -1,16 +1,36 @@
+import hashlib
 from io import StringIO
 import os.path
-
+from pathlib import Path
 import requests
 import pandas as pd
 
 
-class Dataset:
+def file_hash(path_obj):
+    h = hashlib.sha256()
+    with path_obj.open(mode='rb', buffering=0) as f:
+        for b in iter(lambda: f.read(128 * 1024), b''):
+            h.update(b)
+    return h.hexdigest()
 
+
+class Dataset:
     def __init__(self, filename=None, nrows=None):
         self.filename = filename
-        self.download()
+        self.maybe_download()
         self.dataframe = pd.read_csv(self.filename, nrows=nrows).dropna()
+
+    @property
+    def md5(self):
+        raise NotImplementedError
+
+    def maybe_download(self):
+        path = Path(self.filename)
+
+        if path.exists() and file_hash(path):
+            return
+        else:
+            self.download()
 
     def download(self):
         raise NotImplementedError
