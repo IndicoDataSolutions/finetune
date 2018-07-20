@@ -58,7 +58,8 @@ class Reuters(Dataset):
         fd.close()
         os.remove(XML_PATH)
 
-        texts, annotations = finetune_to_indico_sequence(docs, docs_labels)
+        raw_texts = ["".join(doc) for doc in docs]
+        texts, annotations = finetune_to_indico_sequence(raw_texts, docs, docs_labels)
         df = pd.DataFrame({'texts': texts, 'annotations': [json.dumps(annotation) for annotation in annotations]})
         df.to_csv(DATA_PATH)
 

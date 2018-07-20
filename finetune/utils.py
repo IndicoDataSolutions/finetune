@@ -256,7 +256,7 @@ def sequence_decode(logits, transition_matrix):
     return tf.py_func(_sequence_decode, [logits, transition_matrix], [tf.int32, tf.float32])
         
 
-def finetune_to_indico_sequence(data, labels, none_value=config.PAD_TOKEN):
+def finetune_to_indico_sequence(raw_texts, data, labels, none_value=config.PAD_TOKEN):
     """
     Maps from the labeled substring format into the 'indico' format. This is the exact inverse operation to
     :meth indico_to_finetune_sequence:.
@@ -285,25 +285,25 @@ def finetune_to_indico_sequence(data, labels, none_value=config.PAD_TOKEN):
     """
     texts = []
     annotations = []
-    for doc, label_seq in zip(data, labels):
+    for raw_text, doc_seq, label_seq in zip(raw_texts, subseqs, labels):
         doc_text = ""
         doc_annotations = []
         char_loc = 0
-        for sub_str, label in zip(doc, label_seq):
-            doc_text += sub_str
+        for sub_str, label in zip(doc_seq, label_seq):
+            stripped_text = sub_str.strip()
+            doc_location = raw_text.find(stripped_text, char_loc)
             if label != none_value:
                 doc_annotations.append(
                     {
-                        "start": char_loc,
-                        "end": char_loc + len(sub_str),
+                        "start": doc_location,
+                        "end": doc_location + len(stripped_text),
                         "label": label,
-                        "text": sub_str
+                        "text": stripped_text
                     }
                 )
-            char_loc += len(sub_str)
-        texts.append(doc_text)
+            char_loc = doc_location + len(stripped_text)
         annotations.append(doc_annotations)
-    return texts, annotations
+    return raw_texts, annotations
 
 
 def indico_to_finetune_sequence(texts, labels=None, none_value=config.PAD_TOKEN):
