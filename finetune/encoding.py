@@ -1,5 +1,5 @@
 """
-Convert plain text to format accepted by model (token idxs + special tokens)
+Convert plain text to format accepted by model (token idxs + special tokens).
 """
 import re
 import json
@@ -22,11 +22,11 @@ EncoderOutput = namedtuple("EncoderOutput", ["token_ids", "labels", "char_locs"]
 LabeledSequence = namedtuple("LabeledSequence", ["token_ids", "labels", "char_locs"])
 
 
-def flatten(nested_lists):
+def _flatten(nested_lists):
     return functools.reduce(lambda x, y: x + y, nested_lists, [])
 
 
-def get_pairs(word):
+def _get_pairs(word):
     """
     Return set of symbol pairs in a word.
     word is represented as tuple of symbols (symbols being variable-length strings)
@@ -39,7 +39,7 @@ def get_pairs(word):
     return pairs
 
 
-def text_standardize(text):
+def _text_standardize(text):
     """
     Fixes some issues the spacy tokenizer had on books corpus
     Also handles whitespace standardization
@@ -58,7 +58,8 @@ def text_standardize(text):
 
 class TextEncoder(object):
     """
-    Mostly a wrapper for a public python BPE tokenizer
+    A modified wrapper for a public python BPE tokenizer. The modifications allow encoding directly into the formats
+    required for finetune. Particularly with respect to formatting with multiple inputs.
     """
     UNK_IDX = 0
 
@@ -95,7 +96,7 @@ class TextEncoder(object):
         word = tuple(token[:-1]) + (token[-1] + '</w>',)
         if token in self.cache:
             return self.cache[token]
-        pairs = get_pairs(word)
+        pairs = _get_pairs(word)
 
         if not pairs:
             return token + '</w>'
@@ -127,7 +128,7 @@ class TextEncoder(object):
             if len(word) == 1:
                 break
             else:
-                pairs = get_pairs(word)
+                pairs = _get_pairs(word)
         word = ' '.join(word)
         if word == '\n  </w>':
             word = '\n</w>'
@@ -146,7 +147,7 @@ class TextEncoder(object):
             if labels:
                 label = labels[i]
             raw_text = text.lower()
-            tokens = self.nlp(text_standardize(text))
+            tokens = self.nlp(_text_standardize(text))
             subtoken_idxs = []
             tok_pos = []
             token_start = 0
@@ -176,7 +177,8 @@ class TextEncoder(object):
         return "".join([self.decoder.get(word_idx, '<unk>') for word_idx in ids]).replace("</w>", " ")
 
     def trim(self, seqs, max_length, start=None, end=None):
-        # account for start + end tokens
+        # Trims a batch of individual tokens to a max length and places a start and end token at the end.
+
         if not start:
             start = self.start
         if not end:
@@ -195,16 +197,25 @@ class TextEncoder(object):
 
     def encode_for_classification(self, texts, max_length, verbose=True):
         """
-        Convert a batch of raw text to btye-pair encoded token indices,
-        and add appropriate special tokens to match expected model input
+        Convert a batch of raw text to byte-pair encoded token indices,
+        and add appropriate special tokens to match expected model input.
+
+        :param: texts: A list of strings.
+        :param: max_length: An integer value representing the maximum number of tokens.
+        :param: verbose: Flag to set verbosity. True will output progress bar.
         """
         batch_token_idxs = self._encode(texts, verbose=verbose).token_ids
         return self.trim(batch_token_idxs, max_length=max_length)
 
-    def encode_for_comparison(self, texts, max_length, verbose=True):
-        pass
-
     def encode_multi_input(self, *Xs, max_length, verbose=True):
+        """
+        Convert a batch of raw text to byte-pair encoded token indices,
+        and add appropriate special tokens to match expected model input.
+
+        :param: Xs: A list of strings for each input.
+        :param: max_length: An integer value representing the maximum number of tokens.
+        :param: verbose: Flag to set verbosity. True will output progress bar.
+        """
         encoded = [self._encode(x).token_ids for x in Xs]
         return self._cut_and_concat(encoded=encoded, max_length=max_length, verbose=verbose)
 
@@ -248,7 +259,16 @@ class TextEncoder(object):
             outputs.append(joined)
         return outputs
 
-    def encode_sequence_labeling(self, X, Y, max_length, verbose=True):
+    def encode_sequence_labeling(self, X, Y=None, max_length=None, verbose=True):
+        """
+        Encodes the text for passing to the model, also tracks the location of each token to allow reconstruction.
+        It can also, optionally, construct a per-token labels as required for training.
+        :param X: A batch of lists of strings.
+        :param Y: A list of list of targets where the dimensions of this is the same as X.
+        :param max_length: Max length of the sequences.
+        :param verbose: Flag to set whether to output a status bar.
+        :return: A Labeled Sequence Object.
+        """
         # X: [n_batch, seq_len]
         # Y: [n_batch, seq_len]
         tokens = []
@@ -258,12 +278,12 @@ class TextEncoder(object):
         for i, x in enumerate(X):
             targets = None if Y is None else Y[i]
             encoded = self._encode(x, labels=targets)
-            positions.append(flatten(encoded.char_locs))
-            tokens.append(flatten(encoded.token_ids))
-            labels.append(flatten(encoded.labels))
+            positions.append(_flatten(encoded.char_locs))
+            tokens.append(_flatten(encoded.token_ids))
+            labels.append(_flatten(encoded.labels))
             if len(tokens[-1]) > (max_length - 2):
                 warnings.warn("Text sample {} is longer than the max_length. Please segment this before Labeling. "
-                              "Fallback behaviour is simply to label the first {} tokens".format(x,max_length - 2))
+                              "Fallback behaviour is simply to label the first {} tokens".format(x, max_length - 2))
 
         tokens = self._cut_and_concat(
             encoded=[tokens],

@@ -3,7 +3,16 @@ from finetune.utils import shape_list
 import tensorflow as tf
 
 
-def mlp(x, ny, config, w_init=None, b_init=None):
+def perceptron(x, ny, config, w_init=None, b_init=None):
+    """
+    A very standard linear Perceptron model.
+    :param x: Input tensor.
+    :param ny: Number of outputs.
+    :param config: A config object.
+    :param w_init: Weight initializer.
+    :param b_init: Bias initializer.
+    :return: The output of the perceptron model.
+    """
     w_init = w_init or tf.random_normal_initializer(stddev=config.weight_stddev)
     b_init = b_init or tf.constant_initializer(0)
     with tf.variable_scope('clf'):
@@ -14,6 +23,21 @@ def mlp(x, ny, config, w_init=None, b_init=None):
 
 
 def featurizer(X, encoder, dropout_placeholder, config, train=False, reuse=None, max_length=None):
+    """
+    The transformer element of the finetuning model. Maps from tokens ids to a dense, embedding of the sequence.
+
+    :param X: A tensor of token indexes with shape [batch_size, sequence_length, token_idx]
+    :param encoder: A TextEncoder object.
+    :param dropout_placeholder: A placeholder, 1 when dropout is on, 0 when it is off.
+    :param config: A config object, containing all parameters for the featurizer.
+    :param train: If this flag is true, dropout and losses are added to the graph.
+    :param reuse: Should reuse be set within this scope.
+    :param max_length: Maximum sequence length.
+    :return: A dict containing;
+        embed_weights: the word embedding matrix.
+        features: The output of the featurizer_final state.
+        sequence_features: The output of the featurizer at each timestep.
+    """
     max_length = max_length or config.max_length
     with tf.variable_scope('model', reuse=reuse):
         embed_weights = tf.get_variable("we", [encoder.vocab_size + max_length, config.n_embed],
@@ -41,6 +65,20 @@ def featurizer(X, encoder, dropout_placeholder, config, train=False, reuse=None,
 
 
 def language_model(*, X, M, embed_weights, hidden, config, reuse=None):
+    """
+    A language model output and loss for the language modelling objective described in the original finetune paper.
+    This language model uses weights that are tied to the input embedding.
+    :param X: The raw token ids fed to the featurizer.
+    :param M: A loss mask, with 1's where losses should be counted and 0's elsewhere.
+    :param embed_weights: The word embedding matrix, normally the one returned by the featurizer.
+    :param hidden: Output of the featurizer.
+    :param config: A config object.
+    :param reuse: A Flag passed through to the tf.variable_scope context manager.
+    :return: A dict containing:
+        logits: The un-normalised log-probabilities over each word in the vocabulary.
+        loss: The masked language modelling loss.
+
+    """
     with tf.variable_scope('model', reuse=reuse):
         # language model ignores last hidden state because we don't have a target
         lm_h = tf.reshape(hidden[:, :-1], [-1, config.n_embed])  # [batch, seq_len, embed] --> [batch * seq_len, embed]
@@ -59,9 +97,24 @@ def language_model(*, X, M, embed_weights, hidden, config, reuse=None):
 
 
 def classifier(hidden, targets, n_classes, dropout_placeholder, config, train=False, reuse=None, **kwargs):
+    """
+    A simple linear classifier.
+
+    :param hidden: The output of the featurizer. [batch_size, embed_dim]
+    :param targets: The placeholder representing the sparse target ids. [batch_size]
+    :param n_classes: A python int containing the number of classes that the model should be learning to predict over.
+    :param dropout_placeholder:
+    :param config: A config object, containing all parameters for the featurizer.
+    :param train: If this flag is true, dropout and losses are added to the graph.
+    :param reuse: Should reuse be set within this scope.
+    :param kwargs: Spare arguments.
+    :return: dict containing:
+        logits: The unnormalised log probabilities of each class.
+        losses: The loss for the classifier.
+    """
     with tf.variable_scope('model', reuse=reuse):
         hidden = dropout(hidden, config.clf_p_drop, train, dropout_placeholder)
-        clf_logits = mlp(hidden, n_classes, config)
+        clf_logits = perceptron(hidden, n_classes, config)
         clf_losses = tf.nn.softmax_cross_entropy_with_logits_v2(logits=clf_logits, labels=targets)
         return {
             'logits': clf_logits,
@@ -70,9 +123,24 @@ def classifier(hidden, targets, n_classes, dropout_placeholder, config, train=Fa
 
 
 def regressor(hidden, targets, n_outputs, dropout_placeholder, config, train=False, reuse=None, **kwargs):
+    """
+    A simple linear regressor.
+
+    :param hidden: The output of the featurizer. [batch_size, embed_dim]
+    :param targets: The placeholder representing the regression targets. [batch_size]
+    :param n_outputs: A python int containing the number of outputs that the model should be learning to predict over.
+    :param dropout_placeholder:
+    :param config: A config object, containing all parameters for the featurizer.
+    :param train: If this flag is true, dropout and losses are added to the graph.
+    :param reuse: Should reuse be set within this scope.
+    :param kwargs: Spare arguments.
+    :return: dict containing:
+        logits: The regression outputs.
+        losses: L2 Loss for the regression targets.
+    """
     with tf.variable_scope('model', reuse=reuse):
         hidden = dropout(hidden, config.clf_p_drop, train, dropout_placeholder)
-        outputs = mlp(hidden, n_outputs, config)
+        outputs = perceptron(hidden, n_outputs, config)
         loss = tf.nn.l2_loss(outputs - targets)
         return {
             'logits': outputs,
@@ -81,6 +149,26 @@ def regressor(hidden, targets, n_outputs, dropout_placeholder, config, train=Fal
 
 
 def sequence_labeler(hidden, targets, n_outputs, dropout_placeholder, config, train=False, reuse=None, **kwargs):
+    """
+    An Attention based sequence labeler model. Takes the output of the pre-trained model, applies an additional
+    randomly initialised multihead attention block, with residuals on top. The attention is not-future masked to allow
+    the model to label sequences based on context in both directions. The representations fed into this model are
+    necessarily future masked because a language modelling loss is the original objective of the featurizer.
+
+    :param hidden: The output of the featurizer. [batch_size, sequence_length, embed_dim]
+    :param targets: The placeholder representing the sequence labeling targets. [batch_size, sequence_length]
+    :param n_outputs: A python int containing the number of classes that the model should be learning to predict over.
+    :param dropout_placeholder:
+    :param config: A config object, containing all parameters for the featurizer.
+    :param train: If this flag is true, dropout and losses are added to the graph.
+    :param reuse: Should reuse be set within this scope.
+    :param kwargs: Spare arguments.
+    :return: dict containing:
+        "logits": The un-normalised log probabilities of each class being in each location. For usable predictions,
+            sampling from this distrobution is not sufficiant and a viterbi decoding method should be used.
+        "losses": The negative log likelihood for the sequence targets.
+        "predict_params": A dictionary of params to be fed to the viterbi decode function.
+    """
     with tf.variable_scope('model/clf', reuse=reuse):
         nx = shape_list(hidden)[-1]
         a = attn(hidden, 'seq_label_attn', nx, config.seq_num_heads, config.seq_dropout, config.seq_dropout, dropout_placeholder, train=train, scale=False, mask=False)

@@ -22,7 +22,7 @@ class SequenceLabeler(BaseModel):
         return self._training_loop(train_x, train_mask, sequence_labels,
                                    batch_size=batch_size or self.config.batch_size)
 
-    def get_target_encoder(self):
+    def _get_target_encoder(self):
         return SequenceLabelingEncoder()
 
     def _text_to_ids(self, *Xs, max_length=None):
@@ -52,7 +52,7 @@ class SequenceLabeler(BaseModel):
 
         :param X: A list / array of text, shape [batch]
         :param max_length: the number of tokens to be included in the document representation.
-                           Providing more than `max_length` tokens as input will result in truncation.
+                           Providing more than `max_length` tokens as input will result in truncatindiion.
         :returns: list of class labels.
         """
         doc_subseqs, _ = indico_to_finetune_sequence(X)
@@ -67,9 +67,9 @@ class SequenceLabeler(BaseModel):
             for label, position in zip(label_seq, position_seq):
                 if position == -1:
                     # indicates padding / special tokens
-                    continue  
+                    continue
 
-                # if there are no current subsequence 
+                    # if there are no current subsequence
                 # or the current subsequence has the wrong label
                 if not doc_subseqs or label != doc_labels[-1]:
                     # start new subsequence
@@ -85,17 +85,6 @@ class SequenceLabeler(BaseModel):
         doc_texts, doc_annotations = finetune_to_indico_sequence(all_subseqs, all_labels)
         return doc_annotations
 
-    def predict_proba(self, Xs, max_length=None):
-        """
-        Produces a probability distribution over classes for each example in X.
-
-        :param Xs: An iterable of lists or array of text, shape [batch, n_inputs, tokens]
-        :param max_length: the number of tokens to be included in the document representation.
-                           Providing more than `max_length` tokens as input will result in truncation.
-        :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
-        """
-        raise NotImplemented  # TODO(BEN)
-
     def featurize(self, Xs, max_length=None):
         """
         Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
@@ -106,3 +95,6 @@ class SequenceLabeler(BaseModel):
         :returns: np.array of features of shape (n_examples, embedding_size).
         """
         return self._featurize(*list(zip(*Xs)), max_length=max_length)
+
+    def predict_proba(self, *args, **kwargs):
+        raise NotImplementedError
