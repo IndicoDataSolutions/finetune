@@ -14,7 +14,7 @@ import numpy as np
 from finetune import Model
 from finetune.config import get_config
 from finetune.base import CLASSIFICATION, REGRESSION
-from finetune.download import generic_download
+from finetune.datasets import generic_download
 
 SST_FILENAME = "SST-binary.csv"
 

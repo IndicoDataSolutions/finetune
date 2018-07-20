@@ -17,7 +17,7 @@ import numpy as np
 from sklearn.metrics import accuracy_score
 
 from finetune import Classifier
-from finetune.download import generic_download
+from finetune.datasets import generic_download
 from finetune.config import get_config
 
 SST_FILENAME = "SST-binary.csv"
