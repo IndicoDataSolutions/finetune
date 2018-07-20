@@ -18,11 +18,8 @@ from enso.download import generic_download
 from sklearn.metrics import accuracy_score
 from unittest.mock import MagicMock
 
-from finetune import config
 from finetune import Classifier
-
-from finetune import Classifier
-from finetune.config import get_hparams
+from finetune.config import get_config
 
 SST_FILENAME = "SST-binary.csv"
 
@@ -68,11 +65,12 @@ class TestClassifier(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree("tests/saved-models/")
 
-    def default_hparams(self, **kwargs):
-        return get_hparams(
+    def default_config(self, **kwargs):
+        return get_config(
             batch_size=2,
             max_length=128,
             n_epochs=1,
+            verbose=False,
             **kwargs
         )
 
@@ -80,12 +78,7 @@ class TestClassifier(unittest.TestCase):
         """
         Ensure LM only training does not error out
         """
-        save_file_autosave = 'tests/saved-models/autosave_path'
-        model = Classifier(
-            hparams=self.default_hparams(),
-            verbose=False,
-            autosave_path=save_file_autosave
-        )
+        model = Classifier()
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
 
@@ -100,25 +93,13 @@ class TestClassifier(unittest.TestCase):
         for proba in probabilities:
             self.assertIsInstance(proba, dict)
 
-    def default_hparams(self, **kwargs):
-        return get_hparams(
-            batch_size=2,
-            max_length=128,
-            n_epochs=1,
-            **kwargs
-        )
-
     def test_fit_predict(self):
         """
         Ensure model training does not error out
         Ensure model returns predictions of the right type
         """
-        save_file_autosave = 'tests/saved-models/autosave_path'
-        model = Classifier(
-            hparams=self.default_hparams(),
-            verbose=False,
-            autosave_path=save_file_autosave
-        )
+
+        model = Classifier(config=self.default_config())
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text, train_sample.Target)
@@ -135,12 +116,7 @@ class TestClassifier(unittest.TestCase):
         """
         Ensure training is possible with batch size of 1
         """
-        save_file_autosave = 'tests/saved-models/autosave_path'
-        model = Classifier(
-            hparams=self.default_hparams(),
-            verbose=False,
-            autosave_path=save_file_autosave
-        )
+        model = Classifier(config=self.default_config())
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text, train_sample.Target)
@@ -150,13 +126,8 @@ class TestClassifier(unittest.TestCase):
         Ensure saving + loading does not cause errors
         Ensure saving + loading does not change predictions
         """
-        save_file_autosave = 'tests/saved-models/autosave_path'
         save_file = 'tests/saved-models/test-save-load'
-        model = Classifier(
-            hparams=self.default_hparams(),
-            verbose=False,
-            autosave_path=save_file_autosave
-        )
+        model = Classifier(config=self.default_config())
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text, train_sample.Target)
@@ -172,12 +143,7 @@ class TestClassifier(unittest.TestCase):
         Ensure featurization returns an array of the right shape
         Ensure featurization is still possible after fit
         """
-        save_file_autosave = 'tests/saved-models/autosave_path'
-        model = Classifier(
-            hparams=self.default_hparams(),
-            verbose=False,
-            autosave_path=save_file_autosave
-        )
+        model = Classifier(config=self.default_config())
         train_sample = self.dataset.sample(n=self.n_sample)
         features = model.featurize(train_sample.Text)
         self.assertEqual(features.shape, (self.n_sample, self.n_hidden))
@@ -189,13 +155,8 @@ class TestClassifier(unittest.TestCase):
         """
         Ensure model converges to a reasonable solution for a trivial problem
         """
-        save_file_autosave = 'tests/saved-models/autosave_path'
-        model = Classifier(
-            hparams=self.default_hparams(),
-            verbose=False,
-            autosave_path=save_file_autosave
-        )
-        n_per_class = self.n_sample // 2
+        model = Classifier(config=self.default_config())
+        n_per_class = (self.n_sample * 5)
         trX = ['cat'] * n_per_class + ['finance'] * n_per_class
         trY = copy(trX)
         teX = ['feline'] * n_per_class + ['investment'] * n_per_class
@@ -209,8 +170,7 @@ class TestClassifier(unittest.TestCase):
         Ensure saving + loading does not cause errors
         Ensure saving + loading does not change predictions
         """
-        save_file_autosave = 'tests/saved-models/autosave_path'
-        model = Classifier(verbose=False, autosave_path=save_file_autosave)
+        model = Classifier(verbose=False)
         lm_out = model.generate_text(5)
         self.assertEqual(type(lm_out), str)
         lm_out_2 = model.generate_text(seed_text="Indico RULE")
@@ -222,9 +182,8 @@ class TestClassifier(unittest.TestCase):
         Ensure saving + loading does not cause errors
         Ensure saving + loading does not change predictions
         """
-        save_file_autosave = 'tests/saved-models/autosave_path'
         save_file = 'tests/saved-models/test-save-load'
-        model = Classifier(verbose=False, autosave_path=save_file_autosave)
+        model = Classifier(verbose=False)
         train_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text, train_sample.Target)
         lm_out = model.generate_text(5)
@@ -236,8 +195,7 @@ class TestClassifier(unittest.TestCase):
         self.assertIn('_start_Indico RULE'.lower(), lm_out_2)
 
     def test_early_termination_lm(self):
-        save_file_autosave = 'tests/saved-models/autosave_path'
-        model = Classifier(verbose=False, autosave_path=save_file_autosave)
+        model = Classifier(verbose=False)
 
         # A dirty mock to make all model inferences output a hundred _classify_ tokens
         def mock_load_base_model(*args, **kwargs):
@@ -250,9 +208,9 @@ class TestClassifier(unittest.TestCase):
 
     def test_validation(self):
         """
-        Ensure valdiation settings do not result in an error
+        Ensure validation settings do not result in an error
         """
-        hparams = self.default_hparams(val_interval=10, val_size=0.5)
-        model = Classifier(hparams=hparams, verbose=False)
+        config = self.default_config(val_interval=10, val_size=0.5)
+        model = Classifier(config=config)
         train_sample = self.dataset.sample(n=20)
         model.fit(train_sample.Text, train_sample.Target)

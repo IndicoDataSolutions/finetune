@@ -31,14 +31,15 @@ def mask_attn_weights(w):
     return w
 
 
-def _attn(q, k, v, attn_pdrop, dropout_placeholder, train=False, scale=False):
+def _attn(q, k, v, attn_pdrop, dropout_placeholder, train=False, scale=False, mask=True):
     w = tf.matmul(q, k)
 
     if scale:
         n_state = shape_list(v)[-1]
         w = w * tf.rsqrt(tf.cast(n_state, tf.float32))
 
-    w = mask_attn_weights(w)
+    if mask:
+        w = mask_attn_weights(w)
     w = tf.nn.softmax(w)
 
     w = dropout(w, attn_pdrop, train, dropout_placeholder)
@@ -83,7 +84,7 @@ def conv1d(x, scope, nf, rf, w_init=tf.random_normal_initializer(stddev=0.02), b
         return c
 
 
-def attn(x, scope, n_state, n_head, resid_pdrop, attn_pdrop, dropout_placeholder, train=False, scale=False):
+def attn(x, scope, n_state, n_head, resid_pdrop, attn_pdrop, dropout_placeholder, train=False, scale=False, mask=True):
     assert n_state % n_head == 0
     with tf.variable_scope(scope):
         c = conv1d(x, 'c_attn', n_state * 3, 1, train=train)
@@ -91,7 +92,7 @@ def attn(x, scope, n_state, n_head, resid_pdrop, attn_pdrop, dropout_placeholder
         q = split_heads(q, n_head)
         k = split_heads(k, n_head, k=True)
         v = split_heads(v, n_head)
-        a = _attn(q, k, v, attn_pdrop=attn_pdrop, dropout_placeholder=dropout_placeholder, train=train, scale=scale)
+        a = _attn(q, k, v, attn_pdrop=attn_pdrop, dropout_placeholder=dropout_placeholder, train=train, scale=scale, mask=mask)
         a = merge_heads(a)
         a = conv1d(a, 'c_proj', n_state, 1, train=train)
         a = dropout(a, resid_pdrop, train, dropout_placeholder)

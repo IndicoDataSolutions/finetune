@@ -9,12 +9,13 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 import tensorflow as tf
 import pandas as pd
+import numpy as np
 import enso
 from enso.download import generic_download
 
 from finetune import Model
-from finetune.config import get_hparams
-import numpy as np
+from finetune.config import get_config
+from finetune.base import CLASSIFICATION, REGRESSION
 
 SST_FILENAME = "SST-binary.csv"
 
@@ -48,11 +49,9 @@ class TestModel(unittest.TestCase):
         cls._download_sst()
 
     def setUp(self):
-        save_file_autosave = 'tests/saved-models/autosave_path'
         self.save_file = 'tests/saved-models/test-save-load'
-        hparams = get_hparams(batch_size=2, max_length=256)
-        self.model = Model(hparams=hparams, verbose=False, autosave_path=save_file_autosave)
-
+        config = get_config(batch_size=2, max_length=256, verbose=False)
+        self.model = Model(config=config)
         self.dataset = pd.read_csv(self.dataset_path)
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
@@ -68,7 +67,7 @@ class TestModel(unittest.TestCase):
         Ensure saving + loading does not change predictions
         """
         self.model.fit(self.text_data_train, self.train_targets)
-        self.assertTrue(self.model.is_classification)
+        self.assertEqual(self.model.target_type, CLASSIFICATION)
         predictions = self.model.predict(self.text_data_valid)
         self.model.save(self.save_file)
         model = Model.load(self.save_file)
@@ -83,7 +82,7 @@ class TestModel(unittest.TestCase):
         Ensure saving + loading does not change predictions                                                                                                                         
         """
         self.model.fit(self.text_data_train, [np.random.random() for _ in self.train_targets])
-        self.assertTrue(not self.model.is_classification)
+        self.assertEqual(self.model.target_type, REGRESSION)
         predictions = self.model.predict(self.text_data_valid)
         self.model.save(self.save_file)
         model = Model.load(self.save_file)

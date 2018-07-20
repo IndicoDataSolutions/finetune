@@ -60,11 +60,14 @@ Easily reload saved models from disk by using :meth:`LanguageModelClassifier.loa
 
 Finetune API Reference
 ======================
-.. autoclass:: finetune.LanguageModelClassifier
+.. autoclass:: finetune.Classifier
     :inherited-members:
 
-.. autoclass:: finetune.LanguageModelEntailment
+.. autoclass:: finetune.Entailment
     :inherited-members:
 
-.. autoclass:: finetune.LanguageModelGeneralAPI
+.. autoclass:: finetune.Model
+    :inherited-members:
+
+.. autoclass:: finetune.SequenceLabeler
     :inherited-members:

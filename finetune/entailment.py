@@ -2,7 +2,7 @@ import json
 
 from sklearn.model_selection import train_test_split
 
-from finetune.base import BaseModel
+from finetune.base import BaseModel, CLASSIFICATION
 from finetune.target_encoders import OrdinalClassificationEncoder
 
 
@@ -15,10 +15,10 @@ class Entailment(BaseModel):
         max_length = max_length or self.hparams.max_length
         assert len(Xs) == 2, "This implementation assumes 2 Xs"
 
-        question_answer_pairs = self.encoder.encode_for_entailment(*Xs, max_length=max_length, verbose=self.verbose)
+        question_answer_pairs = self.encoder.encode_multi_input(*Xs, max_length=max_length, verbose=self.config.verbose)
 
-        tokens, mask = self._array_format(question_answer_pairs)
-        return tokens, mask
+        seq_array = self._array_format(question_answer_pairs)
+        return seq_array.token_ids, seq_array.mask
 
     def finetune(self, X_1, X_2, Y=None, batch_size=None):
         """
@@ -28,7 +28,7 @@ class Entailment(BaseModel):
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
         """
-        self.is_classification = True
+        self.target_type = CLASSIFICATION
         return self._finetune(X_1, X_2, Y=Y, batch_size=batch_size)
 
     def predict(self, X_1, X_2, max_length=None):
@@ -88,7 +88,7 @@ if __name__ == "__main__":
     scores_train, scores_test, ques_train, ques_test, ans_train, ans_test = train_test_split(
         scores, questions, answers, test_size=0.33, random_state=5)
 
-    #model.finetune(ques_train, ans_train, scores_train)
+    model.finetune(ques_train, ans_train, scores_train)
 
     model = LanguageModelEntailment.load(save_path)
 

@@ -6,8 +6,19 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.framework import function
 from tensorflow.python.client import device_lib
+from tensorflow.contrib.crf import viterbi_decode
 from tqdm import tqdm
 from sklearn.utils import shuffle
+
+from finetune import config
+
+
+def concat_or_stack(tensors, axis=0):
+    try:
+        return tf.concat(tensors, axis=axis)
+    except ValueError:
+        # tensors are scalars
+        return tf.stack(tensors, axis=axis)
 
 
 def shuffle_data(*args):
@@ -30,15 +41,15 @@ def format_gpu_string(num):
     return '/device:GPU:{}'.format(num)
 
 
-def get_available_gpus(hparams):
-    if hparams.visible_gpus is not None:
-        return hparams.visible_gpus
+def get_available_gpus(config):
+    if config.visible_gpus is not None:
+        return config.visible_gpus
     local_device_protos = device_lib.list_local_devices()
-    hparams.visible_gpus = [
+    config.visible_gpus = [
         int(x.name.split(':')[-1]) for x in local_device_protos
         if x.device_type == 'GPU'
     ]
-    return hparams.visible_gpus
+    return config.visible_gpus
 
 
 def shape_list(x):
@@ -134,7 +145,7 @@ def iter_data(*datas, n_batch=128, truncate=False, verbose=False, max_batches=fl
             yield (d[i:i + n_batch] for d in datas)
         n_batches += 1
 
-        
+
 @function.Defun(
     python_grad_func=lambda x, dy: tf.convert_to_tensor(dy),
     shape_func=lambda op: [op.inputs[0].get_shape()])
@@ -214,3 +225,70 @@ def average_grads(tower_grads):
         grad_and_var = (grad, v)
         average_grads.append(grad_and_var)
     return average_grads
+
+
+def sequence_decode(logits, transition_matrix):
+
+    def _sequence_decode(logits, transition_matrix):
+        predictions = []
+        scores = []
+        for logit in logits:
+            viterbi_sequence, viterbi_score = viterbi_decode(logit, transition_matrix)
+            predictions.append(viterbi_sequence)
+            scores.append(viterbi_score)
+        return np.array(predictions, dtype=np.int32), np.array(scores, dtype=np.float32)
+
+    return tf.py_func(_sequence_decode, [logits, transition_matrix], [tf.int32, tf.float32])
+        
+
+def finetune_to_indico_sequence(data, labels, none_value=config.PAD_TOKEN):
+    texts = []
+    annotations = []
+    for doc, label_seq in zip(data, labels):
+        doc_text = ""
+        doc_annotations = []
+        char_loc = 0
+        for sub_str, label in zip(doc, label_seq):
+            doc_text += sub_str
+            if label != none_value:
+                doc_annotations.append(
+                    {
+                        "start": char_loc,
+                        "end": char_loc + len(sub_str),
+                        "label": label,
+                        "text": sub_str
+                    }
+                )
+            char_loc += len(sub_str)
+        texts.append(doc_text)
+        annotations.append(doc_annotations)
+    return texts, annotations
+
+
+def indico_to_finetune_sequence(texts, labels=None, none_value=config.PAD_TOKEN):
+    all_subseqs = []
+    all_labels = []
+
+    # placeholder for inference time
+    if labels is None:
+        labels = [[]] * len(texts)
+
+    for text, label_seq in zip(texts, labels):
+        last_loc = 0
+        doc_subseqs = []
+        doc_labels = []
+        for annotation in label_seq:
+            start = annotation["start"]
+            end = annotation["end"]
+            label = annotation["label"]
+            if start != last_loc:
+                doc_subseqs.append(text[last_loc:start])
+                doc_labels.append(none_value)
+            doc_subseqs.append(text[start: end])
+            doc_labels.append(label)
+            last_loc = end
+        doc_subseqs.append(text[last_loc:])
+        doc_labels.append(none_value)
+        all_subseqs.append(doc_subseqs)
+        all_labels.append(doc_labels)
+    return all_subseqs, all_labels

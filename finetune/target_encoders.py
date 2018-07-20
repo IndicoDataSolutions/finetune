@@ -90,3 +90,28 @@ class OneHotLabelEncoder(LabelEncoder):
     @property
     def target_dim(self):
         return self.classes_
+
+
+class SequenceLabelingEncoder(LabelEncoder):
+
+    def fit_transform(self, y):
+        shape = np.shape(y)
+        flat = np.reshape(y, [-1])
+        labels = super().fit_transform(flat)
+        return np.reshape(labels, shape)
+
+    def transform(self, y):
+        shape = np.shape(y)
+        flat = np.reshape(y, [-1])
+        labels = super().transform(flat)
+        return np.reshape(labels, shape)
+
+    def inverse_transform(self, y):
+        shape = np.shape(y)
+        flat = np.reshape(y, [-1]).tolist()
+        labels = super().inverse_transform(flat)
+        return np.reshape(labels, shape)
+
+    @property
+    def target_dim(self):
+        return self.classes_

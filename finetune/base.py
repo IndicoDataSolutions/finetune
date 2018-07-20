@@ -4,26 +4,25 @@ import warnings
 import logging
 import pickle
 import json
-
 from abc import ABCMeta, abstractmethod
-import tensorflow as tf
-import numpy as np
-
-import tempfile
-
+from collections import namedtuple, defaultdict
 from functools import partial
-from sklearn.utils import shuffle
+
+import numpy as np
+import tensorflow as tf
 
 from finetune.download import download_data_if_required
 from finetune.encoding import TextEncoder
 from finetune.optimizers import AdamWeightDecay, schedules
 from sklearn.model_selection import train_test_split
-from finetune.config import get_default_hparams
 
-from finetune.target_encoders import OneHotLabelEncoder, RegressionEncoder
-from finetune.network_modules import featurizer, language_model, classifier, regressor
+from finetune.utils import sample_with_temperature
+from finetune.target_encoders import OneHotLabelEncoder, RegressionEncoder, SequenceLabelingEncoder
+from finetune.network_modules import featurizer, language_model, classifier, regressor, sequence_labeler
 from finetune.utils import find_trainable_variables, get_available_gpus, assign_to_gpu, average_grads, \
-    iter_data, soft_split, sample_with_temperature
+    iter_data, soft_split, sequence_decode, concat_or_stack
+from finetune.errors import InvalidTargetType
+from finetune.config import PAD_TOKEN, get_default_config
 
 SHAPES_PATH = os.path.join(os.path.dirname(__file__), 'model', 'params_shapes.json')
 PARAM_PATH = os.path.join(os.path.dirname(__file__), 'model', 'params_{}.npy')
@@ -32,6 +31,12 @@ _LOGGER = logging.getLogger(__name__)
 
 DROPOUT_ON = 1
 DROPOUT_OFF = 0
+
+CLASSIFICATION = 'classification'
+REGRESSION = 'regression'
+SEQUENCE_LABELING = 'sequence-labeling'
+
+SequenceArray = namedtuple("SequenceArray", ['token_ids', 'mask', 'labels'])
 
 
 class BaseModel(object, metaclass=ABCMeta):
@@ -42,19 +47,17 @@ class BaseModel(object, metaclass=ABCMeta):
                        Providing more than `max_length` tokens to the model as input will result in truncation.
     """
 
-    def __init__(self, hparams=None, autosave_path=None, verbose=True):
-        self.hparams = hparams or get_default_hparams()
-        self.autosave_path = autosave_path or tempfile.mkdtemp()
-        _LOGGER.info("Writing intermediate checkpoints to {}".format(self.autosave_path))
+    def __init__(self, config=None, **kwargs):
+        self.config = config or get_default_config()
+        self.config.override_from_dict(kwargs)
         self.label_encoder = None
         self._initialize()
         self.target_dim = None
         self._load_from_file = False
-        self.verbose = verbose
-        self.is_classification = None
+        self.target_type = None
 
     def _initialize(self):
-        self._set_random_seed(self.hparams.seed)
+        self._set_random_seed(self.config.seed)
 
         download_data_if_required()
         self.encoder = TextEncoder()
@@ -69,33 +72,51 @@ class BaseModel(object, metaclass=ABCMeta):
         self.summaries = None  # Tensorboard summaries
         self.train_writer = None
         self.valid_writer = None
+        self.predict_params = None
 
         # indicator vars
         self.is_built = False  # has tf graph been constructed?
         self.is_trained = False  # has model been fine-tuned?
 
     def _text_to_ids(self, *Xs, max_length=None):
-        max_length = max_length or self.hparams.max_length
+        max_length = max_length or self.config.max_length
         assert len(Xs) == 1, "This implementation assumes a single Xs"
-        token_idxs = self.encoder.encode_for_classification(Xs[0], max_length=max_length, verbose=self.verbose)
-        tokens, mask = self._array_format(token_idxs)
-        return tokens, mask
+        token_idxs = self.encoder.encode_for_classification(Xs[0], max_length=max_length)
+        seq_array = self._array_format(token_idxs)
+        return seq_array.token_ids, seq_array.mask
 
-    def target_model(self, hidden, targets, n_outputs, train=False, reuse=None):
-        if self.is_classification:
-            return classifier(hidden, targets, n_outputs, self.do_dropout, hparams=self.hparams, train=train, reuse=reuse)
-        return regressor(hidden, targets, n_outputs, self.do_dropout, hparams=self.hparams, train=train, reuse=reuse)
+    def target_model(self, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
+        if self.target_type == CLASSIFICATION:
+            return classifier(featurizer_state['features'], targets, n_outputs, self.do_dropout, config=self.config,
+                              train=train, reuse=reuse, **kwargs)
+        elif self.target_type == REGRESSION:
+            return regressor(featurizer_state['features'], targets, n_outputs, self.do_dropout, config=self.config,
+                             train=train, reuse=reuse, **kwargs)
+        elif self.target_type == SEQUENCE_LABELING:
+            return sequence_labeler(featurizer_state['sequence_features'], targets, n_outputs, self.do_dropout, config=self.config,
+                                    train=train, reuse=reuse, **kwargs)
+        else:
+            raise InvalidTargetType(self.target_type)
 
-    def predict_ops(self, logits):
-        if self.is_classification:
+    def predict_ops(self, logits, **kwargs):
+        if self.target_type == CLASSIFICATION:
             return tf.argmax(logits, -1), tf.nn.softmax(logits, -1)
-        return logits, logits
+        elif self.target_type == REGRESSION:
+            return logits, logits
+        elif self.target_type == SEQUENCE_LABELING:
+            return sequence_decode(logits, kwargs.get("transition_matrix"))
+        else:
+            raise InvalidTargetType(self.target_type)
 
     def get_target_encoder(self):
-        if self.is_classification:
+        if self.target_type == CLASSIFICATION:
             return OneHotLabelEncoder()
-        else:
+        elif self.target_type == REGRESSION:
             return RegressionEncoder()
+        elif self.target_type == SEQUENCE_LABELING:
+            return SequenceLabelingEncoder()
+        else:
+            raise InvalidTargetType(self.target_type)
 
     def _eval(self, *tensors, feed_dict):
         """
@@ -119,12 +140,16 @@ class BaseModel(object, metaclass=ABCMeta):
         X: List / array of text
         Y: Class labels
         """
-        batch_size = batch_size or self.hparams.batch_size
-        self.label_encoder = self.get_target_encoder()
+
         train_x, train_mask = self._text_to_ids(*Xs)
-        n_batch_train = batch_size * max(len(get_available_gpus(self.hparams)), 1)
+        return self._training_loop(train_x, train_mask, Y, batch_size)
+
+    def _training_loop(self, train_x, train_mask, Y, batch_size=None):
+        batch_size = batch_size or self.config.batch_size
+        self.label_encoder = self.get_target_encoder()
+        n_batch_train = batch_size * max(len(get_available_gpus(self.config)), 1)
         n_examples = train_x.shape[0]
-        n_updates_total = (n_examples // n_batch_train) * self.hparams.n_epochs
+        n_updates_total = (n_examples // n_batch_train) * self.config.n_epochs
 
         if Y is not None:
             Y = self.label_encoder.fit_transform(Y)
@@ -136,9 +161,10 @@ class BaseModel(object, metaclass=ABCMeta):
 
         self._build_model(n_updates_total=n_updates_total, target_dim=target_dim)
 
-        dataset = shuffle(train_x, train_mask, Y, random_state=np.random)
-        x_tr, x_va, m_tr, m_va, y_tr, y_va = train_test_split(*dataset, test_size=self.hparams.val_size, random_state=31415)
+        dataset = (train_x, train_mask, Y)
 
+        x_tr, x_va, m_tr, m_va, y_tr, y_va = train_test_split(*dataset, test_size=self.config.val_size,
+                                                              random_state=self.config.seed)
         dataset = (x_tr, m_tr, y_tr)
         val_dataset = (x_va, m_va, y_va)
 
@@ -147,11 +173,11 @@ class BaseModel(object, metaclass=ABCMeta):
         avg_val_loss = 0
         global_step = 0
         best_val_loss = float("inf")
-        val_window = [float("inf")] * self.hparams.val_window_size
-        for i in range(self.hparams.n_epochs):
-            for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=self.verbose):
+        val_window = [float("inf")] * self.config.val_window_size
+        for i in range(self.config.n_epochs):
+            for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=self.config.verbose):
                 global_step += 1
-                if global_step % self.hparams.val_interval == 0:
+                if global_step % self.config.val_interval == 0:
 
                     outputs = self._eval(
                         self.summaries,
@@ -163,34 +189,45 @@ class BaseModel(object, metaclass=ABCMeta):
                         }
                     )
 
-                    self.train_writer.add_summary(outputs.get(self.summaries), global_step)
+                    if self.train_writer is not None:
+                        self.train_writer.add_summary(outputs.get(self.summaries), global_step)
 
                     sum_val_loss = 0
-                    for xval, mval, yval in iter_data(*val_dataset, n_batch=n_batch_train, verbose=self.verbose):
-                        outputs = self._eval(self.clf_loss, self.summaries, feed_dict={
-                            self.X: xval, self.M: mval, self.Y: yval,
-                            self.do_dropout: DROPOUT_OFF
-                        })
-                        self.valid_writer.add_summary(outputs.get(self.summaries), global_step)
+                    for xval, mval, yval in iter_data(*val_dataset, n_batch=n_batch_train, verbose=self.config.verbose):
+                        outputs = self._eval(
+                            self.clf_loss,
+                            self.summaries, 
+                            feed_dict={
+                                self.X: xval,
+                                self.M: mval,
+                                self.Y: yval,
+                                self.do_dropout: DROPOUT_OFF
+                            }
+                        )
+                        
+                        if self.valid_writer is not None:
+                            self.valid_writer.add_summary(outputs.get(self.summaries), global_step)
 
                         val_cost = outputs.get(self.clf_loss, 0)
                         sum_val_loss += val_cost
-                        avg_val_loss = avg_val_loss * self.hparams.rolling_avg_decay + val_cost * (
-                                1 - self.hparams.rolling_avg_decay)
+                        avg_val_loss = (
+                            avg_val_loss * self.config.rolling_avg_decay
+                            + val_cost * (1 - self.config.rolling_avg_decay)
+                        )
                     val_window.append(sum_val_loss)
                     val_window.pop(0)
 
                     if np.mean(val_window) <= best_val_loss:
                         best_val_loss = np.mean(val_window)
-                        self.save(self.autosave_path)
-                
-                outputs = self._eval(self.clf_loss, self.train_op, feed_dict={
+                        if self.config.save_best_model:
+                            self.save(self.config.autosave_path)
+               
+                self.sess.run(self.train_op, feed_dict={
                     self.X: xmb,
                     self.M: mmb,
                     self.Y: ymb,
                     self.do_dropout: DROPOUT_ON
                 })
-                cost = outputs.get(self.clf_loss, 0)
 
         return self
 
@@ -209,9 +246,16 @@ class BaseModel(object, metaclass=ABCMeta):
         predictions = []
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
-            max_length = max_length or self.hparams.max_length
+            max_length = max_length or self.config.max_length
             for xmb, mmb in self._infer_prep(*Xs, max_length=max_length):
-                class_idx = self.sess.run(self.predict_op, {self.X: xmb, self.M: mmb})
+                output = self._eval(self.predict_op, 
+                    feed_dict={
+                        self.X: xmb,
+                        self.M: mmb,
+                        self.do_dropout: DROPOUT_OFF
+                    }    
+                )
+                class_idx = output.get(self.predict_op)
                 class_labels = self.label_encoder.inverse_transform(class_idx)
                 predictions.append(class_labels)
         return np.concatenate(predictions).tolist()
@@ -224,9 +268,17 @@ class BaseModel(object, metaclass=ABCMeta):
         predictions = []
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
-            max_length = max_length or self.hparams.max_length
+            max_length = max_length or self.config.max_length
             for xmb, mmb in self._infer_prep(*Xs, max_length=max_length):
-                probas = self.sess.run(self.predict_proba_op, {self.X: xmb, self.M: mmb})
+                output = self._eval(
+                    self.predict_proba_op, 
+                    feed_dict={
+                        self.X: xmb,
+                        self.M: mmb,
+                        self.do_dropout: DROPOUT_OFF
+                    }
+                )
+                probas = output.get(self.predict_proba_op)
                 classes = self.label_encoder.target_dim
                 predictions.extend([
                     dict(zip(classes, proba)) for proba in probas
@@ -241,7 +293,7 @@ class BaseModel(object, metaclass=ABCMeta):
         features = []
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
-            max_length = max_length or self.hparams.max_length
+            max_length = max_length or self.config.max_length
             for xmb, mmb in self._infer_prep(*Xs, max_length=max_length):
                 feature_batch = self.sess.run(self.features, {self.X: xmb, self.M: mmb})
                 features.append(feature_batch)
@@ -258,13 +310,13 @@ class BaseModel(object, metaclass=ABCMeta):
         return self.featurize(*args, **kwargs)
 
     def _infer_prep(self, *X, max_length=None):
-        max_length = max_length or self.hparams.max_length
+        max_length = max_length or self.config.max_length
         infer_x, infer_mask = self._text_to_ids(*X, max_length=max_length)
-        n_batch_train = self.hparams.batch_size * max(len(get_available_gpus(self.hparams)), 1)
+        n_batch_train = self.config.batch_size * max(len(get_available_gpus(self.config)), 1)
         self._build_model(n_updates_total=0, target_dim=self.target_dim, train=False)
-        yield from iter_data(infer_x, infer_mask, n_batch=n_batch_train, verbose=self.verbose)
+        yield from iter_data(infer_x, infer_mask, n_batch=n_batch_train, verbose=self.config.verbose)
 
-    def _array_format(self, token_idxs):
+    def _array_format(self, token_idxs, labels=None):
         """
         Returns numpy array of token idxs and corresponding mask
         Returned `x` array contains two channels:
@@ -273,36 +325,43 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         n = len(token_idxs)
         seq_lengths = [len(x) for x in token_idxs]
-        x = np.zeros((n, self.hparams.max_length, 2), dtype=np.int32)
-        mask = np.zeros((n, self.hparams.max_length), dtype=np.float32)
+        x = np.zeros((n, self.config.max_length, 2), dtype=np.int32)
+        mask = np.zeros((n, self.config.max_length), dtype=np.float32)
+        labels_arr = np.full((n, self.config.max_length), PAD_TOKEN, dtype='object') if labels else None
         for i, seq_length in enumerate(seq_lengths):
             # BPE embedding
             x[i, :seq_length, 0] = token_idxs[i]
             # masking: value of 1 means "consider this in cross-entropy LM loss"
             mask[i, 1:seq_length] = 1
+            if labels:
+                labels_arr[i, :seq_length] = labels[i]
         # positional_embeddings
-        x[:, :, 1] = np.arange(self.encoder.vocab_size, self.encoder.vocab_size + self.hparams.max_length)
-        return x, mask
+        x[:, :, 1] = np.arange(self.encoder.vocab_size, self.encoder.vocab_size + self.config.max_length)
+        return SequenceArray(
+            token_ids=x,
+            mask=mask,
+            labels=labels_arr
+        )
 
     def _compile_train_op(self, *, params, grads, n_updates_total):
         grads = average_grads(grads)
 
-        if self.hparams.summarize_grads:
+        if self.config.summarize_grads:
             self.summaries += tf.contrib.training.add_gradients_summaries(grads)
 
         grads = [grad for grad, param in grads]
         self.train_op = AdamWeightDecay(
             params=params,
             grads=grads,
-            lr=self.hparams.lr,
-            schedule=partial(schedules[self.hparams.lr_schedule], warmup=self.hparams.lr_warmup),
+            lr=self.config.lr,
+            schedule=partial(schedules[self.config.lr_schedule], warmup=self.config.lr_warmup),
             t_total=n_updates_total,
-            l2=self.hparams.l2_reg,
-            max_grad_norm=self.hparams.max_grad_norm,
-            vector_l2=self.hparams.vector_l2,
-            b1=self.hparams.b1,
-            b2=self.hparams.b2,
-            e=self.hparams.epsilon
+            l2=self.config.l2_reg,
+            max_grad_norm=self.config.max_grad_norm,
+            vector_l2=self.config.vector_l2,
+            b1=self.config.b1,
+            b2=self.config.b2,
+            e=self.config.epsilon
         )
 
     def _construct_graph(self, n_updates_total, target_dim=None, train=True):
@@ -314,12 +373,10 @@ class BaseModel(object, metaclass=ABCMeta):
         self.target_dim = target_dim
         self._define_placeholders()
 
-        features_aggregator = []
-        losses_aggregator = []
-        lm_aggregator = []
 
+        aggregator = defaultdict(list)
         train_loss_tower = 0
-        gpus = get_available_gpus(self.hparams)
+        gpus = get_available_gpus(self.config)
         n_splits = max(len(gpus), 1)
         for i, (X, M, Y) in enumerate(soft_split(self.X, self.M, self.Y, n_splits=n_splits)):
             do_reuse = True if i > 0 else tf.AUTO_REUSE
@@ -334,7 +391,7 @@ class BaseModel(object, metaclass=ABCMeta):
             with device, scope:
                 featurizer_state = featurizer(
                     X, 
-                    hparams=self.hparams,
+                    config=self.config,
                     encoder=self.encoder,
                     dropout_placeholder=self.do_dropout,
                     train=train,
@@ -343,64 +400,68 @@ class BaseModel(object, metaclass=ABCMeta):
                 language_model_state = language_model(
                     X=X,
                     M=M,
-                    hparams=self.hparams,
+                    config=self.config,
                     embed_weights=featurizer_state['embed_weights'],
                     hidden=featurizer_state['sequence_features'],
                     reuse=do_reuse
                 )
 
-                lm_loss_coef = self.hparams.lm_loss_coef
+                lm_loss_coef = self.config.lm_loss_coef
                 if target_dim is None:
                     lm_loss_coef = 1.0
 
                 train_loss = lm_loss_coef * tf.reduce_mean(language_model_state['losses'])
 
-                features_aggregator.append(featurizer_state['features'])
-                losses_aggregator.append([language_model_state['losses']])
+                aggregator['features'].append(featurizer_state['features'])
+                aggregator['lm_losses'].append(language_model_state['losses'])
 
                 lm_logits = language_model_state["logits"]
-                lm_aggregator.append(sample_with_temperature(lm_logits, self.hparams.lm_temp))
+                aggregator["lm_model"].append(sample_with_temperature(lm_logits, self.config.lm_temp))
 
                 if target_dim is not None:
                     target_model_state = self.target_model(
-                        hidden=featurizer_state['features'],
+                        featurizer_state=featurizer_state,
                         targets=Y,
                         n_outputs=target_dim,
                         train=train,
-                        reuse=do_reuse
+                        reuse=do_reuse,
+                        max_length=self.config.max_length
                     )
-                    train_loss += tf.reduce_mean(target_model_state['losses'])
-                    losses_aggregator[-1].extend([
-                        target_model_state['logits'],
-                        target_model_state['losses']
-                    ])
+                    train_loss += (1 - lm_loss_coef) * tf.reduce_mean(target_model_state['losses'])
+                    train_loss_tower += train_loss
 
-                params = find_trainable_variables("model")
-                grads = tf.gradients(train_loss, params)
-                grads = list(zip(grads, params))
-                gpu_grads.append(grads)
+                    params = find_trainable_variables("model")
+                    grads = tf.gradients(train_loss, params)
+                    grads = list(zip(grads, params))
+                    gpu_grads.append(grads)
+                    aggregator['logits'].append(target_model_state['logits'])
+                    aggregator['clf_losses'].append(target_model_state['losses'])
 
-                train_loss_tower += train_loss
 
-        self.features = tf.concat(features_aggregator, 0)
-        self.lm_predict_op = tf.concat(lm_aggregator, 0)
+        self.lm_predict_op = tf.concat(aggregator["lm_model"], 0)
 
-        if target_dim is None:
-            self.lm_losses = [tf.concat(op, 0) for op in zip(*losses_aggregator)]
-        else:
-            self.lm_losses, self.logits, self.clf_losses = [tf.concat(op, 0) for op in zip(*losses_aggregator)]
-            self.predict_op, self.predict_proba_op = self.predict_ops(self.logits)
+        self.features = tf.concat(aggregator['features'], axis=0)
+        self.lm_losses = tf.concat(aggregator['lm_losses'], axis=0)
+
+        if target_dim is not None:
+            self.logits = tf.concat(aggregator['logits'], axis=0)
+            self.clf_losses = concat_or_stack(aggregator['clf_losses'])
+            
+            self.predict_op, self.predict_proba_op = self.predict_ops(
+                self.logits,
+                **target_model_state.get("predict_params", {})
+            )
+            self._compile_train_op(
+                params=params,
+                grads=gpu_grads,
+                n_updates_total=n_updates_total
+            )
             self.clf_loss = tf.reduce_mean(self.clf_losses)
+            self.lm_loss = tf.reduce_mean(self.lm_losses)
             self.summaries.append(tf.summary.scalar('TargetModelLoss', self.clf_loss))
-
-        self._compile_train_op(
-            params=params,
-            grads=gpu_grads,
-            n_updates_total=n_updates_total
-        )
-        self.summaries.append(tf.summary.scalar('LanguageModelLoss', tf.reduce_mean(self.lm_losses)))
-        self.summaries.append(tf.summary.scalar('TotalLoss', train_loss_tower / n_splits))
-        self.summaries = tf.summary.merge(self.summaries)
+            self.summaries.append(tf.summary.scalar('LanguageModelLoss', self.lm_loss))
+            self.summaries.append(tf.summary.scalar('TotalLoss', train_loss_tower / n_splits))
+            self.summaries = tf.summary.merge(self.summaries)
 
     def _build_model(self, n_updates_total, target_dim, train=True):
         """
@@ -418,28 +479,36 @@ class BaseModel(object, metaclass=ABCMeta):
             self._load_base_model()
 
         if train:
-            self.train_writer = tf.summary.FileWriter(self.autosave_path + '/train', self.sess.graph)
-            self.valid_writer = tf.summary.FileWriter(self.autosave_path + '/valid', self.sess.graph)
+            if self.config.tensorboard_folder is not None:
+                if not os.path.exists(self.config.tensorboard_folder):
+                    os.mkdir(self.config.tensorboard_folder)
+                self.train_writer = tf.summary.FileWriter(self.config.tensorboard_folder + '/train', self.sess.graph)
+                self.valid_writer = tf.summary.FileWriter(self.config.tensorboard_folder + '/valid', self.sess.graph)
         self.is_built = True
 
     def _initialize_session(self):
-        gpus = get_available_gpus(self.hparams)
+        gpus = get_available_gpus(self.config)
         os.environ['CUDA_VISIBLE_DEVICES'] = ",".join([str(gpu) for gpu in gpus])
-        self.sess = tf.Session()
+        conf = tf.ConfigProto(allow_soft_placement=True)
+        self.sess = tf.Session(config=conf)
 
     def _set_random_seed(self, seed=None):
-        seed = seed or self.hparams.seed
+        seed = seed or self.config.seed
         random.seed(seed)
         np.random.seed(seed)
         tf.set_random_seed(seed)
 
     def _define_placeholders(self):
         # tf placeholders
-        self.X = tf.placeholder(tf.int32, [None, self.hparams.max_length, 2])  # token idxs (BPE embedding + positional)
-        self.M = tf.placeholder(tf.float32, [None, self.hparams.max_length])  # sequence mask
+        self.X = tf.placeholder(tf.int32, [None, self.config.max_length, 2])  # token idxs (BPE embedding + positional)
+        self.M = tf.placeholder(tf.float32, [None, self.config.max_length])  # sequence mask
         # when target dim is not set, an array of [None] targets is passed as a placeholder
         self.Y = tf.stop_gradient(tf.placeholder(tf.float32, [None, self.target_dim or 1])) # classification targets
         self.do_dropout = tf.placeholder(tf.float32)  # 1 for do dropout and 0 to not do dropout
+        if self.target_type == SEQUENCE_LABELING:
+            self.Y = tf.placeholder(tf.int32, [None, self.config.max_length])  # classification targets
+        else:
+            self.Y = tf.placeholder(tf.float32, [None, self.target_dim])  # classification targets
 
     def generate_text(self, max_length=None, seed_text=''):
         """
@@ -450,15 +519,15 @@ class BaseModel(object, metaclass=ABCMeta):
         :param seed_text: Defaults to the empty string. This will form the starting point to begin modelling
         :return: A string containing the generated text.
         """
-        seed_text_tokens = self.encoder.encode([seed_text])
+        seed_text_tokens = self.encoder._encode([seed_text]).token_ids
         self._build_model(n_updates_total=0, target_dim=self.target_dim, train=False)
         string = [self.encoder['_start_']] + seed_text_tokens[0]
         eos = self.encoder['_classify_']
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
-            for i in range(len(seed_text_tokens[0]), (max_length or self.hparams.max_length) - 1):
-                tokens, mask = self._array_format([string])
-                class_idx = self.sess.run(self.lm_predict_op, {self.X: tokens, self.M: mask})
+            for i in range(len(seed_text_tokens[0]), (max_length or self.config.max_length) - 1):
+                model_input = self._array_format([string])
+                class_idx = self.sess.run(self.lm_predict_op, {self.X: model_input.token_ids, self.M: model_input.mask})
                 string.append(class_idx[i])
                 if string[-1] == eos:
                     break
@@ -478,11 +547,12 @@ class BaseModel(object, metaclass=ABCMeta):
             init_params = [np.load(PARAM_PATH.format(n)) for n in range(10)]
             init_params = np.split(np.concatenate(init_params, 0), offsets)[:-1]
             init_params = [param.reshape(shape) for param, shape in zip(init_params, shapes)]
-            init_params[0] = init_params[0][:self.hparams.max_length]
+            init_params[0] = init_params[0][:self.config.max_length]
             special_embed = (np.random.randn(len(self.encoder.special_tokens),
-                                             self.hparams.n_embed) * self.hparams.weight_stddev).astype(np.float32)
+                                             self.config.n_embed) * self.config.weight_stddev).astype(np.float32)
             init_params[0] = np.concatenate([init_params[1], special_embed, init_params[0]], 0)
             del init_params[1]
+
             self.sess.run([p.assign(ip) for p, ip in zip(pretrained_params, init_params)])
 
     def __getstate__(self):
@@ -490,8 +560,7 @@ class BaseModel(object, metaclass=ABCMeta):
         Leave serialization of all tf objects to tf
         """
         required_fields = [
-            'label_encoder', 'max_length', 'target_dim', '_load_from_file', 'verbose', 'autosave_path',
-            'is_classification', "hparams"
+            'label_encoder', 'target_dim', '_load_from_file', 'config', 'target_type', 
         ]
         serialized_state = {
             k: v for k, v in self.__dict__.items()
@@ -509,7 +578,9 @@ class BaseModel(object, metaclass=ABCMeta):
             Does not serialize state of Adam optimizer.
             Should not be used to save / restore a training model.
         """
-
+        if path is None:
+            return
+        
         # Setting self._load_from_file indicates that we should load the saved model from
         # disk at next training / inference. It is set temporarily so that the serialized
         # model includes this information.
