@@ -95,6 +95,14 @@ def np_init(w):
     return partial(_np_init, w=w)
 
 
+def guarantee_initialized_variables(sess):
+    global_vars = tf.global_variables()
+    is_not_initialized = sess.run([tf.is_variable_initialized(var) for var in global_vars])
+    uninitialized_vars = [v for (v, f) in zip(global_vars, is_not_initialized) if not f]
+    if len(uninitialized_vars):
+        sess.run(tf.variables_initializer(uninitialized_vars))
+
+
 def find_trainable_variables(key, exclude=None):
     """
     Simple helper function to get trainable variables that contain a certain string in their name :param key:, whilst

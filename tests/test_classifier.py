@@ -81,6 +81,9 @@ class TestClassifier(unittest.TestCase):
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
 
+        # Ensure model can still be fit with only text
+        model.fit(train_sample.Text)
+
         # Ensure model can still be fit with text + targets
         model.fit(train_sample.Text, train_sample.Target)
 
