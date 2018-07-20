@@ -45,6 +45,9 @@ def get_default_config():
         val_interval=150,
         val_window_size=5,
 
+        # Language Modelling output.
+        lm_temp=0.2,
+
         # Sequence Labeling
         seq_num_heads=16,
         seq_dropout=0.3,

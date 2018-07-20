@@ -167,6 +167,29 @@ def assign_to_gpu(gpu=0, params_device="/device:CPU:0"):
     return _assign
 
 
+def sample_with_temperature(logits, temperature):
+    """Either argmax or random sampling.
+    Args:
+      logits: a Tensor.
+      temperature: a float  0.0=argmax 1.0=random
+    Returns:
+      a Tensor with one fewer dimension than logits.
+    """
+    if temperature == 0.0:
+        # TF argmax doesn't handle >5 dimensions, so we reshape here.
+        logits_shape = shape_list(logits)
+        argmax = tf.argmax(tf.reshape(logits, [-1, logits_shape[-1]]), axis=1)
+        return tf.reshape(argmax, logits_shape[:-1])
+    else:
+        assert temperature > 0.0
+        reshaped_logits = (
+                tf.reshape(logits, [-1, shape_list(logits)[-1]]) / temperature)
+        choices = tf.multinomial(reshaped_logits, 1)
+        choices = tf.reshape(choices,
+                             shape_list(logits)[:logits.get_shape().ndims - 1])
+        return choices
+
+
 def average_grads(tower_grads):
     def average_dense(grad_and_vars):
         if len(grad_and_vars) == 1:

@@ -1,6 +1,7 @@
 import os
 import unittest
 import logging
+import shutil
 from copy import copy
 from pathlib import Path
 import warnings
@@ -15,6 +16,8 @@ import numpy as np
 import enso
 from enso.download import generic_download
 from sklearn.metrics import accuracy_score
+from unittest.mock import MagicMock
+
 from finetune import Classifier
 from finetune.config import get_config
 
@@ -22,12 +25,12 @@ SST_FILENAME = "SST-binary.csv"
 
 
 class TestClassifier(unittest.TestCase):
-
     n_sample = 20
     n_hidden = 768
     dataset_path = os.path.join(
         enso.config.DATA_DIRECTORY, 'Classify', 'SST-binary.csv'
     )
+
     @classmethod
     def _download_sst(cls):
         """
@@ -45,14 +48,22 @@ class TestClassifier(unittest.TestCase):
             filename=SST_FILENAME
         )
 
-
     @classmethod
     def setUpClass(cls):
         cls._download_sst()
 
     def setUp(self):
-        self.dataset = pd.read_csv(self.dataset_path, nrows=self.n_sample*3)
+        self.dataset = pd.read_csv(self.dataset_path, nrows=self.n_sample * 3)
+        try:
+            os.mkdir("tests/saved-models")
+        except FileExistsError:
+            warnings.warn("tests/saved-models still exists, it is possible that some test is not cleaning up properly.")
+            pass
+
         tf.reset_default_graph()
+
+    def tearDown(self):
+        shutil.rmtree("tests/saved-models/")
 
     def default_config(self, **kwargs):
         return get_config(
@@ -62,7 +73,7 @@ class TestClassifier(unittest.TestCase):
             verbose=False,
             **kwargs
         )
-        
+
     def test_fit_lm_only(self):
         """
         Ensure LM only training does not error out
@@ -87,6 +98,7 @@ class TestClassifier(unittest.TestCase):
         Ensure model training does not error out
         Ensure model returns predictions of the right type
         """
+
         model = Classifier(config=self.default_config())
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
@@ -145,13 +157,54 @@ class TestClassifier(unittest.TestCase):
         """
         model = Classifier(config=self.default_config())
         n_per_class = (self.n_sample * 5)
-        trX = ['cat'] * n_per_class + ['finance']  * n_per_class
+        trX = ['cat'] * n_per_class + ['finance'] * n_per_class
         trY = copy(trX)
         teX = ['feline'] * n_per_class + ['investment'] * n_per_class
         teY = ['cat'] * n_per_class + ['finance'] * n_per_class
         model.fit(trX, trY)
         predY = model.predict(teX)
         self.assertEqual(accuracy_score(teY, predY), 1.00)
+
+    def test_language_model(self):
+        """
+        Ensure saving + loading does not cause errors
+        Ensure saving + loading does not change predictions
+        """
+        model = Classifier(verbose=False)
+        lm_out = model.generate_text(5)
+        self.assertEqual(type(lm_out), str)
+        lm_out_2 = model.generate_text(seed_text="Indico RULE")
+        self.assertEqual(type(lm_out_2), str)
+        self.assertIn('_start_Indico RULE'.lower(), lm_out_2)
+
+    def test_save_load_language_model(self):
+        """
+        Ensure saving + loading does not cause errors
+        Ensure saving + loading does not change predictions
+        """
+        save_file = 'tests/saved-models/test-save-load'
+        model = Classifier(verbose=False)
+        train_sample = self.dataset.sample(n=self.n_sample)
+        model.fit(train_sample.Text, train_sample.Target)
+        lm_out = model.generate_text(5)
+        self.assertEqual(type(lm_out), str)
+        model.save(save_file)
+        model = Classifier.load(save_file)
+        lm_out_2 = model.generate_text(seed_text="Indico RULE")
+        self.assertEqual(type(lm_out_2), str)
+        self.assertIn('_start_Indico RULE'.lower(), lm_out_2)
+
+    def test_early_termination_lm(self):
+        model = Classifier(verbose=False)
+
+        # A dirty mock to make all model inferences output a hundred _classify_ tokens
+        def mock_load_base_model(*args, **kwargs):
+            model.sess = MagicMock()
+            model.sess.run = MagicMock(return_value=100 * [model.encoder['_classify_']])
+
+        model._load_base_model = mock_load_base_model
+        lm_out = model.generate_text()
+        self.assertEqual(lm_out, '_start__classify_')
 
     def test_validation(self):
         """

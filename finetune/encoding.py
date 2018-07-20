@@ -71,6 +71,8 @@ class TextEncoder(object):
         for token in self.special_tokens:
             self.encoder[token] = len(self.encoder)
 
+        self.decoder = {v: k for k, v in self.encoder.items()}
+
         merges = open(BPE_PATH).read().split('\n')[1:-1]
         merges = [tuple(merge.split()) for merge in merges]
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
@@ -165,6 +167,13 @@ class TextEncoder(object):
                 batch_label_idxs.append([label] * len(subtoken_idxs))
 
         return EncoderOutput(batch_token_idxs, batch_label_idxs, batch_character_locs)
+
+    def decode(self, ids):
+        """
+        Convert a batch of ids [batch_size, id] into text(ish).
+        """
+
+        return "".join([self.decoder.get(word_idx, '<unk>') for word_idx in ids]).replace("</w>", " ")
 
     def trim(self, seqs, max_length, start=None, end=None):
         # account for start + end tokens
