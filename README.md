@@ -70,4 +70,4 @@ docker exec -it finetune bash # starts a bash session in the docker container
 
 Code Examples
 =============
-For example usage of `Classifier`, `Entailment`, and `SequenceLabeler`, see the [finetune/datasets directory](https://github.com/IndicoDataSolutions/finetune/tree/master/finetune/datasets).
+For example usage of `Classifier`, `Entailment`, and `SequenceLabeler`, see the [finetune/datasets directory](https://github.com/IndicoDataSolutions/finetune/tree/master/finetune/datasets).  For purposes of simplicity and runtime these examples use smaller versions of the published datasets.

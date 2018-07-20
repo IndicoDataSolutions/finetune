@@ -41,7 +41,7 @@ class MultiNLI(Dataset):
 
 
 if __name__ == "__main__":
-    # Train and evaluate on SST
+    # Train and evaluate on MultiNLI
     dataset = MultiNLI(nrows=1000).dataframe
     model = Entailment(verbose=True)
     trainX1, testX1, trainX2, testX2, trainY, testY = train_test_split(
