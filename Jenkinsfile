@@ -15,24 +15,17 @@ pipeline {
     }
     stage('Test') {
       steps {
-        sh 'docker exec finetune nosetests -sv --nologcapture --with-xunit'
+        sh 'docker exec finetune pytest'
       }
+    }
 
-      post {
-        always {
-          junit "**/nosetests.xml"
-        }
-      }
-    }
-    stage('Remove container') {
-      steps {
-        sh 'docker rm -f finetune'
-      }
-    }
   }
   post { 
     always { 
-      cleanWs()
+      steps {
+        cleanWs()
+        sh 'docker rm -f finetune'
+      }
     }
   }
 }
