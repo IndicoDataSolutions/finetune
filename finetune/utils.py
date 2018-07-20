@@ -96,6 +96,10 @@ def np_init(w):
 
 
 def find_trainable_variables(key, exclude=None):
+    """
+    Simple helper function to get trainable variables that contain a certain string in their name :param key:, whilst
+    excluding variables whos full name (including scope) includes a substring :param excludes:.
+    """
     trainable_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, ".*{}.*".format(key))
     if exclude is not None:
         trainable_variables = [
@@ -107,7 +111,10 @@ def find_trainable_variables(key, exclude=None):
 
 def soft_split(*xs, n_splits=None):
     """
-    Similar to tf.split but can accomodate batches that are not evenly divisible by n_splits
+    Similar to tf.split but can accommodate batches that are not evenly divisible by n_splits.
+
+    Useful for data parallelism across multiple devices, where the batch size is not necessarily divisible by the
+    number of devices or is variable between batches.
     """
     if not n_splits or not isinstance(n_splits, int):
         raise ValueError("n_splits must be a valid integer.")
@@ -150,13 +157,20 @@ def iter_data(*datas, n_batch=128, truncate=False, verbose=False, max_batches=fl
     python_grad_func=lambda x, dy: tf.convert_to_tensor(dy),
     shape_func=lambda op: [op.inputs[0].get_shape()])
 def convert_gradient_to_tensor(x):
-    """force gradient to be a dense tensor
+    """
+    force gradient to be a dense tensor
     it's often faster to do dense embedding gradient on GPU than sparse on CPU
     """
     return x
 
 
 def assign_to_gpu(gpu=0, params_device="/device:CPU:0"):
+    """
+        A device assignment function to place all variables on :param params_device: and everything else on gpu
+        number :param gpu:
+
+        Useful for data parallelism across multiple GPUs.
+    """
     def _assign(op):
         node_def = op if isinstance(op, tf.NodeDef) else op.node_def
         if node_def.op == "Variable":
@@ -205,6 +219,7 @@ def average_grads(tower_grads):
 
 
 def sequence_decode(logits, transition_matrix):
+    """ A simple py_func wrapper around the Viterbi decode allowing it to be included in the tensorflow graph. """
 
     def _sequence_decode(logits, transition_matrix):
         predictions = []
@@ -219,6 +234,32 @@ def sequence_decode(logits, transition_matrix):
         
 
 def finetune_to_indico_sequence(data, labels, none_value=config.PAD_TOKEN):
+    """
+    Maps from the labeled substring format into the 'indico' format. This is the exact inverse operation to
+    :meth indico_to_finetune_sequence:.
+
+    The indico format is as follows:
+        Raw text for X,
+        Labels as a list of dicts, with each dict in the form:
+        {
+            'start': <Character index of the start of the labeled sequence>,
+            'end': <Character index of the end of the labeled sequence>,
+            'label': <A categorical label (int or string) that represents the category of the subsequence,
+            'text': <Optionally, a field with the subsequence contained between the start and end.
+        }
+
+    The Labeled substring, or finetune internal, format is as follows.
+    Each item of the data is a list strings of the form:
+        ["The quick brown", "fox", "jumped over the lazy", ...]
+    With the corresponding labels:
+        ["PAD", "animal", "PAD", ...]
+
+    It is the :param none_value: that is used to populate the PAD labels.
+    :param data: A list of segmented text of the form list(list(str))
+    :param labels: Categorical labels for each sub-string in data.
+    :param none_value: The none value used to encode the input format.
+    :return: Texts, annoatations both in the 'indico' format.
+    """
     texts = []
     annotations = []
     for doc, label_seq in zip(data, labels):
@@ -243,6 +284,33 @@ def finetune_to_indico_sequence(data, labels, none_value=config.PAD_TOKEN):
 
 
 def indico_to_finetune_sequence(texts, labels=None, none_value=config.PAD_TOKEN):
+    """
+    Maps from the 'indico' format sequence labeling data. Into a labeled substring format. This is the exact inverse of
+    :meth finetune_to_indico_sequence:.
+
+    The indico format is as follows:
+        Raw text for X,
+        Labels as a list of dicts, with each dict in the form:
+        {
+            'start': <Character index of the start of the labeled sequence>,
+            'end': <Character index of the end of the labeled sequence>,
+            'label': <A categorical label (int or string) that represents the category of the subsequence,
+            'text': <A field containing the sub-sequence contained between the start and end.
+        }
+
+    The Labeled substring, or finetune internal, format is as follows.
+    Each item of the data is a list strings of the form:
+        ["The quick brown", "fox", "jumped over the lazy", ...]
+    With the corresponding labels:
+        ["PAD", "animal", "PAD", ...]
+
+    It is the :param none_value: that is used to populate the PAD labels.
+
+    :param texts: A list of raw text.
+    :param labels: A list of targets of the form list(list(dict))).
+    :param none_value: A categorical label to use as the none value.
+    :return: Segmented Text, Labels of the form described above.
+    """
     all_subseqs = []
     all_labels = []
 

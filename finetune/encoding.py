@@ -1,5 +1,5 @@
 """
-Convert plain text to format accepted by model (token idxs + special tokens)
+Convert plain text to format accepted by model (token idxs + special tokens).
 """
 import re
 import json
