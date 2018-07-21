@@ -4,7 +4,7 @@
 
 `Finetune` ships with a pre-trained language model
 from ["Improving Language Understanding by Generative Pre-Training"](https://s3-us-west-2.amazonaws.com/openai-assets/research-covers/language-unsupervised/language_understanding_paper.pdf)
-and builds off the [OpenAI/finetune-language-model repository](https://github.com/openai/finetune-transformer-lm).
+and builds off the [OpenAI/finetune-language-model repository](https://github.com/openai/finetune-transformer-lm). Huge thanks to Alec Radford for his hard work and quality research.
 
 Finetune Quickstart Guide
 =========================
