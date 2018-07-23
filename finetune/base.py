@@ -19,11 +19,13 @@ from finetune.encoding import TextEncoder
 from finetune.optimizers import AdamWeightDecay, schedules
 from sklearn.model_selection import train_test_split
 
-from finetune.utils import sample_with_temperature
 from finetune.target_encoders import OneHotLabelEncoder, RegressionEncoder, SequenceLabelingEncoder
 from finetune.network_modules import featurizer, language_model, classifier, regressor, sequence_labeler
-from finetune.utils import find_trainable_variables, get_available_gpus, assign_to_gpu, average_grads, \
-    iter_data, soft_split, sequence_decode, concat_or_stack
+from finetune.utils import (
+    find_trainable_variables, get_available_gpus, assign_to_gpu, average_grads,
+    iter_data, soft_split, sequence_decode, concat_or_stack,
+    guarantee_initialized_variables, sample_with_temperature
+)
 from finetune.errors import InvalidTargetType
 from finetune.config import PAD_TOKEN, get_default_config
 
@@ -77,6 +79,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self.train_writer = None
         self.valid_writer = None
         self.predict_params = None
+        self.train_op = None
 
         # indicator vars
         self.is_built = False  # has tf graph been constructed?
@@ -474,6 +477,7 @@ class BaseModel(object, metaclass=ABCMeta):
             self.summaries.append(tf.summary.scalar('TotalLoss', train_loss_tower / n_splits))
             self.summaries = tf.summary.merge(self.summaries)
 
+
     def _build_model(self, n_updates_total, target_dim, train=True):
         """
         Construct tensorflow symbolic graph.
@@ -488,6 +492,8 @@ class BaseModel(object, metaclass=ABCMeta):
             self._load_finetuned_model()
         elif not self.is_trained:
             self._load_base_model()
+
+        guarantee_initialized_variables(self.sess, keys=['model/clf', 'adam'])
 
         if train:
             if self.config.tensorboard_folder is not None:
@@ -514,12 +520,12 @@ class BaseModel(object, metaclass=ABCMeta):
         self.X = tf.placeholder(tf.int32, [None, self.config.max_length, 2])  # token idxs (BPE embedding + positional)
         self.M = tf.placeholder(tf.float32, [None, self.config.max_length])  # sequence mask
         # when target dim is not set, an array of [None] targets is passed as a placeholder
-        self.Y = tf.stop_gradient(tf.placeholder(tf.float32, [None, self.target_dim or 1]))  # classification targets
+
         self.do_dropout = tf.placeholder(tf.float32)  # 1 for do dropout and 0 to not do dropout
         if self.target_type == SEQUENCE_LABELING:
             self.Y = tf.placeholder(tf.int32, [None, self.config.max_length])  # classification targets
         else:
-            self.Y = tf.placeholder(tf.float32, [None, self.target_dim])  # classification targets
+            self.Y = tf.placeholder(tf.float32, [None, self.target_dim or 1])  # classification targets
 
     def generate_text(self, max_length=None, seed_text=''):
         """

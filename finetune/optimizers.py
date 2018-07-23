@@ -28,26 +28,29 @@ def AdamWeightDecay(params, grads, lr, schedule, t_total, b1=0.9, b2=0.999, e=1e
     """
     Adam with weight decay fix
     """
-    t = tf.Variable(0, dtype=tf.float32, trainable=False)
-    tt = t + 1
-    updates = [t.assign(tt)]
-    if max_grad_norm > 0:
-        grads, _ = tf.clip_by_global_norm(grads, max_grad_norm)
-    for p, g in zip(params, grads):
-        if p is None or g is None:
-            print("can't train", p.name, g)
-        else:
-            if isinstance(g, tf.IndexedSlices):
-                g = tf.convert_to_tensor(g)
-            m = tf.Variable(p * 0, dtype=tf.float32, trainable=False)
-            v = tf.Variable(p * 0, dtype=tf.float32, trainable=False)
-            lrt = lr * tf.sqrt(1 - b2 ** tt) / (1 - b1 ** tt)
-            lrt *= schedule(t / t_total)
-            mt = b1 * m + (1 - b1) * g
-            vt = b2 * v + (1 - b2) * g * g
-            if (len(p.get_shape()) > 1 or vector_l2) and l2 > 0:
-                pt = p - lrt * (mt / (tf.sqrt(vt) + e) + l2 * p)
+    with tf.variable_scope('adam'):
+        t = tf.Variable(0, dtype=tf.float32, trainable=False, name='t')
+        tt = t + 1
+        updates = [t.assign(tt)]
+        if max_grad_norm > 0:
+            grads, _ = tf.clip_by_global_norm(grads, max_grad_norm)
+
+        for p, g in zip(params, grads):
+            if p is None or g is None:
+                print("can't train", p.name, g)
             else:
-                pt = p - lrt * (mt / (tf.sqrt(vt) + e))
-            updates.extend([m.assign(mt), v.assign(vt), p.assign(pt)])
-    return tf.group(*updates)
+                if isinstance(g, tf.IndexedSlices):
+                    g = tf.convert_to_tensor(g)
+                prefix = p.name.split(':')[0]
+                m = tf.Variable(p * 0, dtype=tf.float32, trainable=False, name=(prefix + '_m'))
+                v = tf.Variable(p * 0, dtype=tf.float32, trainable=False, name=(prefix + '_v'))
+                lrt = lr * tf.sqrt(1 - b2 ** tt) / (1 - b1 ** tt)
+                lrt *= schedule(t / t_total)
+                mt = b1 * m + (1 - b1) * g
+                vt = b2 * v + (1 - b2) * g * g
+                if (len(p.get_shape()) > 1 or vector_l2) and l2 > 0:
+                    pt = p - lrt * (mt / (tf.sqrt(vt) + e) + l2 * p)
+                else:
+                    pt = p - lrt * (mt / (tf.sqrt(vt) + e))
+                updates.extend([m.assign(mt), v.assign(vt), p.assign(pt)])
+        return tf.group(*updates)
