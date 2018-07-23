@@ -70,7 +70,7 @@ class SequenceLabeler(BaseModel):
                     # indicates padding / special tokens
                     continue
 
-                    # if there are no current subsequence
+                # if there are no current subsequence
                 # or the current subsequence has the wrong label
                 if not doc_subseqs or label != doc_labels[-1]:
                     # start new subsequence
@@ -98,4 +98,15 @@ class SequenceLabeler(BaseModel):
         return self._featurize(*list(zip(*Xs)), max_length=max_length)
 
     def predict_proba(self, *args, **kwargs):
-        raise NotImplementedError
+        """
+        Produces a list of most likely class labels as determined by the fine-tuned model.
+
+        :param X: A list / array of text, shape [batch]
+        :param max_length: the number of tokens to be included in the document representation.
+                           Providing more than `max_length` tokens as input will result in truncatindiion.
+        :returns: list of class labels.
+        """
+        doc_subseqs, _ = indico_to_finetune_sequence(X)
+        x_pred, m_pred, _, token_positions = self._text_to_ids_with_labels(doc_subseqs)
+        probas = self._predict_proba(x_pred, m_pred, max_length=max_length)
+        print(probas)

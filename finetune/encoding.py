@@ -282,8 +282,8 @@ class TextEncoder(object):
             tokens.append(_flatten(encoded.token_ids))
             labels.append(_flatten(encoded.labels))
             if len(tokens[-1]) > (max_length - 2):
-                warnings.warn("Text sample {} is longer than the max_length. Please segment this before Labeling. "
-                              "Fallback behaviour is simply to label the first {} tokens".format(x, max_length - 2))
+                warnings.warn("Some examples are longer than the max_length. Please trim documents or increase `max_length`. "
+                              "Fallback behaviour is to use the first {} byte-pair encoded tokens".format(max_length - 2))
 
         tokens = self._cut_and_concat(
             encoded=[tokens],
