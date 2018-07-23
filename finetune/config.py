@@ -45,7 +45,7 @@ def get_default_config():
         max_grad_norm=1,
         lm_loss_coef=0.5,
         rolling_avg_decay=0.99,
-        regularise_deviation=0.0,#1e-1,
+        regularise_deviation=0.0,
 
         # Logging
         summarize_grads=False,

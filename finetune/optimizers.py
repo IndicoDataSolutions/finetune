@@ -29,6 +29,7 @@ def AdamWeightDecay(params, grads, lr, schedule, t_total, b1=0.9, b2=0.999, e=1e
     """
     Adam with weight decay fix and added weight decay to pre-trained weights.
     """
+    
     with tf.variable_scope('adam'):
         t = tf.Variable(0, dtype=tf.float32, trainable=False, name='t')
         tt = t + 1
@@ -63,3 +64,4 @@ def AdamWeightDecay(params, grads, lr, schedule, t_total, b1=0.9, b2=0.999, e=1e
 
                 updates.extend([m.assign(mt), v.assign(vt), p.assign(pt)])
         return tf.group(*updates)
+

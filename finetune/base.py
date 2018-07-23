@@ -556,21 +556,6 @@ class BaseModel(object, metaclass=ABCMeta):
                     break
         return self.encoder.decode(string)
 
-    @staticmethod
-    def _regularise_op(init_params, embedding_mask):
-        """ Returns a loss function that regularises the deviation of the model from its original trained weights. """
-
-        def _reg_op(tensor, values, mask):
-            reg_loss = tf.nn.l2_loss(tensor - values)
-            if mask is not None:
-                reg_loss *= mask
-            return tf.reduce_sum(reg_loss)
-
-        pretrained_params = find_trainable_variables("model", exclude="model/clf")
-        reg_losses = [_reg_op(p, ip, m) for p, ip, m in
-                      zip(pretrained_params, init_params, itertools.chain([embedding_mask], itertools.cycle([None])))]
-
-        return tf.reduce_sum(reg_losses)
 
     def _load_base_model(self):
         """
