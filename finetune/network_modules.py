@@ -115,7 +115,10 @@ def classifier(hidden, targets, n_classes, dropout_placeholder, config, train=Fa
     with tf.variable_scope('model', reuse=reuse):
         hidden = dropout(hidden, config.clf_p_drop, train, dropout_placeholder)
         clf_logits = perceptron(hidden, n_classes, config)
-        clf_losses = tf.nn.softmax_cross_entropy_with_logits_v2(logits=clf_logits, labels=targets)
+        clf_losses = tf.nn.softmax_cross_entropy_with_logits_v2(
+            logits=clf_logits,
+            labels=tf.stop_gradient(targets)
+        )
         return {
             'logits': clf_logits,
             'losses': clf_losses

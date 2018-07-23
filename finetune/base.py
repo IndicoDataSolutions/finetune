@@ -525,7 +525,7 @@ class BaseModel(object, metaclass=ABCMeta):
         if self.target_type == SEQUENCE_LABELING:
             self.Y = tf.placeholder(tf.int32, [None, self.config.max_length])  # classification targets
         else:
-            self.Y = tf.stop_gradient(tf.placeholder(tf.float32, [None, self.target_dim or 1]))  # classification targets
+            self.Y = tf.placeholder(tf.float32, [None, self.target_dim or 1])  # classification targets
 
     def generate_text(self, max_length=None, seed_text=''):
         """
