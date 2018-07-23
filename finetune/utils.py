@@ -95,13 +95,18 @@ def np_init(w):
     return partial(_np_init, w=w)
 
 
-def guarantee_initialized_variables(sess, key=""):
+def guarantee_initialized_variables(sess, keys=None):
     """
     Adapted from: https://stackoverflow.com/a/43601894
     """
-    trainable_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, ".*{}.*".format(key))
-    is_not_initialized = sess.run([tf.is_variable_initialized(var) for var in trainable_vars])
-    uninitialized_vars = [v for (v, f) in zip(trainable_vars, is_not_initialized) if not f]
+    if keys is None:
+        keys = [""]
+
+    matching_vars = set()
+    for key in keys:
+        matching_vars |= set(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, ".*{}.*".format(key)))
+    is_not_initialized = sess.run([tf.is_variable_initialized(var) for var in matching_vars])
+    uninitialized_vars = [v for (v, f) in zip(matching_vars, is_not_initialized) if not f]
     if len(uninitialized_vars):
         sess.run(tf.variables_initializer(uninitialized_vars))
 

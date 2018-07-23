@@ -493,7 +493,7 @@ class BaseModel(object, metaclass=ABCMeta):
         elif not self.is_trained:
             self._load_base_model()
 
-        guarantee_initialized_variables(self.sess, key='model/clf')
+        guarantee_initialized_variables(self.sess, keys=['model/clf', 'adam'])
 
         if train:
             if self.config.tensorboard_folder is not None:
