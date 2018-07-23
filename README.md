@@ -1,4 +1,4 @@
-<img src="https://i.imgur.com/kYL058E.png" height="150px">
+<img src="https://i.imgur.com/kYL058E.png" width="100%">
 
 **Scikit-learn style model finetuning for NLP**
 
