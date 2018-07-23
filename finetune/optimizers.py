@@ -1,5 +1,6 @@
 import math
 import tensorflow as tf
+from itertools import zip_longest
 
 
 def warmup_cosine(x, warmup=0.002):
@@ -24,9 +25,9 @@ schedules = {
 }
 
 
-def AdamWeightDecay(params, grads, lr, schedule, t_total, b1=0.9, b2=0.999, e=1e-8, l2=0, vector_l2=False, max_grad_norm=-1, **kwargs):
+def AdamWeightDecay(params, grads, lr, schedule, t_total, b1=0.9, b2=0.999, e=1e-8, l2=0, vector_l2=False, max_grad_norm=-1, pretrained_weights=None, global_l2=0, **kwargs):
     """
-    Adam with weight decay fix
+    Adam with weight decay fix and added weight decay to pre-trained weights.
     """
     with tf.variable_scope('adam'):
         t = tf.Variable(0, dtype=tf.float32, trainable=False, name='t')
@@ -35,8 +36,9 @@ def AdamWeightDecay(params, grads, lr, schedule, t_total, b1=0.9, b2=0.999, e=1e
         if max_grad_norm > 0:
             grads, _ = tf.clip_by_global_norm(grads, max_grad_norm)
 
-        for p, g in zip(params, grads):
-            if p is None or g is None:
+        for p, g, ptw, msk in zip_longest(params, grads, pretrained_weights["init_params"], pretrained_weights["mask"]):
+
+            if g is None:
                 print("can't train", p.name, g)
             else:
                 if isinstance(g, tf.IndexedSlices):
@@ -48,9 +50,16 @@ def AdamWeightDecay(params, grads, lr, schedule, t_total, b1=0.9, b2=0.999, e=1e
                 lrt *= schedule(t / t_total)
                 mt = b1 * m + (1 - b1) * g
                 vt = b2 * v + (1 - b2) * g * g
+
+                update_vec = mt / (tf.sqrt(vt) + e)
+
                 if (len(p.get_shape()) > 1 or vector_l2) and l2 > 0:
-                    pt = p - lrt * (mt / (tf.sqrt(vt) + e) + l2 * p)
-                else:
-                    pt = p - lrt * (mt / (tf.sqrt(vt) + e))
+                    update_vec += l2 * p
+
+                if ptw is not None and global_l2 > 0:
+                    update_vec += (global_l2 * msk) * (p - ptw)
+
+                pt = p - lrt * update_vec
+
                 updates.extend([m.assign(mt), v.assign(vt), p.assign(pt)])
         return tf.group(*updates)

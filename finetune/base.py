@@ -4,6 +4,7 @@ import warnings
 import logging
 import pickle
 import json
+import itertools
 
 import tqdm
 
@@ -359,7 +360,7 @@ class BaseModel(object, metaclass=ABCMeta):
             labels=labels_arr
         )
 
-    def _compile_train_op(self, *, params, grads, n_updates_total):
+    def _compile_train_op(self, *, params, grads, n_updates_total, initial_params):
         grads = average_grads(grads)
 
         if self.config.summarize_grads:
@@ -377,10 +378,12 @@ class BaseModel(object, metaclass=ABCMeta):
             vector_l2=self.config.vector_l2,
             b1=self.config.b1,
             b2=self.config.b2,
-            e=self.config.epsilon
+            e=self.config.epsilon,
+            pretrained_weights=initial_params,
+            global_l2=self.config.regularise_deviation
         )
 
-    def _construct_graph(self, n_updates_total, target_dim=None, train=True):
+    def _construct_graph(self, n_updates_total, target_dim=None, train=True, pre_trained_weights=None):
         gpu_grads = []
         self.summaries = []
 
@@ -468,7 +471,8 @@ class BaseModel(object, metaclass=ABCMeta):
             self._compile_train_op(
                 params=params,
                 grads=gpu_grads,
-                n_updates_total=n_updates_total
+                n_updates_total=n_updates_total,
+                initial_params=pre_trained_weights
             )
             self.clf_loss = tf.reduce_mean(self.clf_losses)
             self.lm_loss = tf.reduce_mean(self.lm_losses)
@@ -482,16 +486,18 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         Construct tensorflow symbolic graph.
         """
+        pre_trained_weights = self._load_base_model()
+
         if not self.is_trained or train != self.train or self.target_dim != target_dim:
             # reconstruct graph to include/remove dropout
             # if `train` setting has changed
-            self._construct_graph(n_updates_total, target_dim, train=train)
+            self._construct_graph(n_updates_total, target_dim, pre_trained_weights=pre_trained_weights, train=train)
 
         # Optionally load saved model
         if self._load_from_file:
             self._load_finetuned_model()
         elif not self.is_trained:
-            self._load_base_model()
+            self._init_from_pretrained(pre_trained_weights["init_params"])
 
         guarantee_initialized_variables(self.sess, keys=['model/clf', 'adam'])
 
@@ -550,13 +556,26 @@ class BaseModel(object, metaclass=ABCMeta):
                     break
         return self.encoder.decode(string)
 
+    @staticmethod
+    def _regularise_op(init_params, embedding_mask):
+        """ Returns a loss function that regularises the deviation of the model from its original trained weights. """
+
+        def _reg_op(tensor, values, mask):
+            reg_loss = tf.nn.l2_loss(tensor - values)
+            if mask is not None:
+                reg_loss *= mask
+            return tf.reduce_sum(reg_loss)
+
+        pretrained_params = find_trainable_variables("model", exclude="model/clf")
+        reg_losses = [_reg_op(p, ip, m) for p, ip, m in
+                      zip(pretrained_params, init_params, itertools.chain([embedding_mask], itertools.cycle([None])))]
+
+        return tf.reduce_sum(reg_losses)
+
     def _load_base_model(self):
         """
-        Load serialized base model parameters into tf Tensors
+        Load serialized base model parameters from file.
         """
-        pretrained_params = find_trainable_variables('model', exclude='model/clf')
-        self._initialize_session()
-        self.sess.run(tf.global_variables_initializer())
 
         with open(SHAPES_PATH) as shapes_file:
             shapes = json.load(shapes_file)
@@ -567,10 +586,21 @@ class BaseModel(object, metaclass=ABCMeta):
             init_params[0] = init_params[0][:self.config.max_length]
             special_embed = (np.random.randn(len(self.encoder.special_tokens),
                                              self.config.n_embed) * self.config.weight_stddev).astype(np.float32)
+            reg_mask = np.concatenate([np.ones_like(init_params[1]), np.zeros_like(special_embed), np.ones_like(init_params[0])], 0)
             init_params[0] = np.concatenate([init_params[1], special_embed, init_params[0]], 0)
             del init_params[1]
 
-            self.sess.run([p.assign(ip) for p, ip in zip(pretrained_params, init_params)])
+        return {
+            "init_params": init_params,
+            "mask": itertools.chain([reg_mask], itertools.repeat(1.0, len(init_params) - 1))
+        }
+
+    def _init_from_pretrained(self, init_params):
+        """ Load pre-trained weights into the tensors """
+        pretrained_params = find_trainable_variables("model", exclude="model/clf")
+        self._initialize_session()
+        self.sess.run(tf.global_variables_initializer())
+        self.sess.run([p.assign(ip) for p, ip in zip(pretrained_params, init_params)])
 
     def __getstate__(self):
         """
