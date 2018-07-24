@@ -146,7 +146,7 @@ class BaseModel(object, metaclass=ABCMeta):
             if value is not None
         }
 
-    def _finetune(self, *Xs, Y=None, batch_size=None):
+"""
         arr_encoded = self._text_to_ids(*Xs)
         return self._training_loop(arr_encoded, Y, batch_size)
 
@@ -157,23 +157,40 @@ class BaseModel(object, metaclass=ABCMeta):
         train_x, train_mask = arr_encoded.token_ids, arr_encoded.mask
         n_examples = train_x.shape[0]
         n_updates_total = (n_examples // n_batch_train) * self.config.n_epochs
+"""
+
+    def _finetune(self, *Xs, Y=None, batch_size=None):
+        self.label_encoder = self._get_target_encoder()
 
         if Y is not None:
             Y = self.label_encoder.fit_transform(Y)
-            target_dim = len(self.label_encoder.target_dim)
         else:
             # only language model will be trained, mock fake target
-            Y = [[None]] * n_examples
-            target_dim = None
+            Y = [[None]] * len(Xs[0])
 
-        self._build_model(n_updates_total=n_updates_total, target_dim=target_dim)
-
-        dataset = (train_x, train_mask, Y)
-
-        x_tr, x_va, m_tr, m_va, y_tr, y_va = train_test_split(*dataset, test_size=self.config.val_size,
+        train_xs, test_xs, train_y, test_y = train_test_split(list(zip(*Xs)), Y, test_size=self.config.val_size,
                                                               random_state=self.config.seed)
-        dataset = (x_tr, m_tr, y_tr)
-        val_dataset = (x_va, m_va, y_va)
+        train_xs = list(zip(*train_xs))
+        test_xs = list(zip(*test_xs))
+
+        array_encoded_train = self._text_to_ids(*train_xs)
+        array_encoded_val = self._text_to_ids(*test_xs)
+
+        return self._training_loop(array_encoded_train, train_y, array_encoded_val, test_y, batch_size)
+
+    def _training_loop(self, arr_encoded_train, train_y, arr_encoded_val, val_y, batch_size=None):
+        train_x, train_mask = arr_encoded_train.token_ids, arr_encoded_train.mask
+        val_x, val_mask = arr_encoded_val.token_ids, arr_encoded_val.mask
+
+        batch_size = batch_size or self.config.batch_size
+
+        n_batch_train = batch_size * max(len(get_available_gpus(self.config)), 1)
+        n_examples = train_x.shape[0]
+        n_updates_total = (n_examples // n_batch_train) * self.config.n_epochs
+
+        self._build_model(n_updates_total=n_updates_total, target_dim=len(self.label_encoder.target_dim))
+        dataset = (train_x, train_mask, train_y)
+        val_dataset = (val_x, val_mask, val_y)
 
         self.is_trained = True
         avg_train_loss = 0

@@ -2,6 +2,9 @@ from finetune.transformer import dropout, embed, block, attn, norm
 from finetune.utils import shape_list
 import tensorflow as tf
 
+def merge_leading_dims(X, target_rank):
+    shape = [-1] + X.get_shape().as_list()[1 - target_rank:]
+    return tf.reshape(X, shape)
 
 def perceptron(x, ny, config, w_init=None, b_init=None):
     """
@@ -16,7 +19,7 @@ def perceptron(x, ny, config, w_init=None, b_init=None):
     w_init = w_init or tf.random_normal_initializer(stddev=config.weight_stddev)
     b_init = b_init or tf.constant_initializer(0)
     with tf.variable_scope('clf'):
-        nx = shape_list(x)[-1]
+        nx = config.n_embed
         w = tf.get_variable("w", [nx, ny], initializer=w_init)
         b = tf.get_variable("b", [ny], initializer=b_init)
         return tf.matmul(x, w) + b
@@ -38,6 +41,9 @@ def featurizer(X, encoder, dropout_placeholder, config, train=False, reuse=None,
         features: The output of the featurizer_final state.
         sequence_features: The output of the featurizer at each timestep.
     """
+    initial_shape = [a or -1 for a in X.get_shape().as_list()]
+    X = tf.reshape(X, shape=[-1] + initial_shape[-2:])
+
     max_length = max_length or config.max_length
     with tf.variable_scope('model', reuse=reuse):
         embed_weights = tf.get_variable("we", [encoder.vocab_size + max_length, config.n_embed],
@@ -59,8 +65,8 @@ def featurizer(X, encoder, dropout_placeholder, config, train=False, reuse=None,
         clf_h = tf.reshape(clf_h, [-1, config.n_embed])  # [batch, embed]
         return {
             'embed_weights': embed_weights,
-            'features': clf_h,
-            'sequence_features': h
+            'features': tf.reshape(clf_h, shape=initial_shape[0: -2] + [config.n_embed]),
+            'sequence_features': tf.reshape(h, shape=initial_shape)
         }
 
 
@@ -79,6 +85,10 @@ def language_model(*, X, M, embed_weights, hidden, config, reuse=None):
         loss: The masked language modelling loss.
 
     """
+    X = merge_leading_dims(X, 3)
+    M = merge_leading_dims(M, 2)
+    hidden = merge_leading_dims(hidden, 3)
+
     with tf.variable_scope('model', reuse=reuse):
         # language model ignores last hidden state because we don't have a target
         lm_h = tf.reshape(hidden[:, :-1], [-1, config.n_embed])  # [batch, seq_len, embed] --> [batch * seq_len, embed]
