@@ -99,3 +99,14 @@ class TestSequenceLabeler(unittest.TestCase):
         self.model.save(self.save_file)
         model = SequenceLabeler.load(self.save_file)
         predictions = model.predict(test_texts)
+
+
+    def test_reasonable_predictions(self):
+        test_sequence = ["I am a dog. A dog that's incredibly bright. I can talk, read, and write!"]
+        path = os.path.join(os.path.dirname(__file__), "testdata.json")
+        with open(path, "rt") as fp:
+            text, labels = json.load(fp)
+        self.model.finetune(text, labels)
+        predictions = self.model.predict(test_sequence)
+        self.assertTrue(1 <= len(predictions) <= 3)
+        self.assertTrue(any(pred["text"] == "dog" for pred in predictions[0]))
