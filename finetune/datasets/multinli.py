@@ -23,14 +23,16 @@ class MultiNLI(Dataset):
     def __init__(self, filename=None, **kwargs):
         super().__init__(filename=(filename or DATA_PATH), **kwargs)
 
+
+    @property
+    def md5(self):
+        return CHECKSUM
+
     def download(self):
         """
         Download Stanford Sentiment Treebank to data directory
         """
         path = Path(self.filename)
-        if path.exists() and hashlib.md5(open(self.filename, 'rb')).hexdigest() == CHECKSUM:
-            return
-
         path.parent.mkdir(parents=True, exist_ok=True)
 
         remote_url = "https://s3.amazonaws.com/enso-data/multinli.dev.csv"
@@ -42,7 +44,7 @@ class MultiNLI(Dataset):
 
 if __name__ == "__main__":
     # Train and evaluate on MultiNLI
-    dataset = MultiNLI(nrows=10000).dataframe
+    dataset = MultiNLI(nrows=1000).dataframe
     model = Entailment(verbose=True)
     trainX1, testX1, trainX2, testX2, trainY, testY = train_test_split(
         dataset.x1, dataset.x2, dataset.target, test_size=0.3, random_state=42
