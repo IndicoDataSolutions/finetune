@@ -20,84 +20,6 @@ from bs4.element import Tag
 from finetune import SequenceLabeler
 from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_sequence
 
-text = [
-    "The dog is the doggiest dog in the world of dogs",
-    "The cat is the only cat who wears a hat",
-    "I want a rabbit said the boy who had a million chickens",
-    "The quick brown fox jumped over the lazy ferret"
-]
-
-labels = [
-    [
-        {
-            "start": 4,
-            "end": 7,
-            "label": "ANIMAL",
-            "text": "dog"
-        },
-        {
-            "start": 15,
-            "end": 23,
-            "label": "ANIMAL",
-            "text": "doggiest"
-        },
-        {
-            "start": 24,
-            "end": 27,
-            "label": "ANIMAL",
-            "text": "dog"
-        },
-        {
-            "start": 44,
-            "end": 48,
-            "label": "ANIMAL",
-            "text": "dogs"
-        }
-    ],
-    [
-        {
-            "start": 4,
-            "end": 7,
-            "label": "ANIMAL",
-            "text": "cat"
-        },
-        {
-            "start": 20,
-            "end": 23,
-            "label": "ANIMAL",
-            "text": "cat"
-        }
-    ],
-    [
-        {
-            "start": 9,
-            "end": 15,
-            "label": "ANIMAL",
-            "text": "rabbit"
-        },
-        {
-            "start": 47,
-            "end": 55,
-            "label": "ANIMAL",
-            "text": "chickens"
-        }
-    ],
-    [
-        {
-            "start": 16,
-            "end": 19,
-            "label": "ANIMAL",
-            "text": "fox"
-        },
-        {
-            "start": 41,
-            "end": 47,
-            "label": "ANIMAL",
-            "text": "ferret"
-        }
-    ]
-]
-
 
 class TestSequenceLabeler(unittest.TestCase):
 
@@ -181,6 +103,9 @@ class TestSequenceLabeler(unittest.TestCase):
 
     def test_reasonable_predictions(self):
         test_sequence = ["I am a dog. A dog that's incredibly bright. I can talk, read, and write!"]
+        path = os.path.join(os.path.dirname(__file__), "testdata.json")
+        with open(path, "rt") as fp:
+            text, labels = json.load(fp)
         self.model.finetune(text, labels)
         predictions = self.model.predict(test_sequence)
         self.assertTrue(1 <= len(predictions) <= 3)
