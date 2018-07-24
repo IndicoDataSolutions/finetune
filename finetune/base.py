@@ -27,6 +27,7 @@ from finetune.utils import (
     guarantee_initialized_variables, sample_with_temperature
 )
 from finetune.errors import InvalidTargetType
+from finetune.encoder import EncodedOutput, ArrayEncodedOutput
 from finetune.config import PAD_TOKEN, get_default_config
 
 SHAPES_PATH = os.path.join(os.path.dirname(__file__), 'model', 'params_shapes.json')
@@ -40,8 +41,6 @@ DROPOUT_OFF = 0
 CLASSIFICATION = 'classification'
 REGRESSION = 'regression'
 SEQUENCE_LABELING = 'sequence-labeling'
-
-SequenceArray = namedtuple("SequenceArray", ['token_ids', 'mask', 'labels'])
 
 
 class BaseModel(object, metaclass=ABCMeta):
@@ -90,8 +89,7 @@ class BaseModel(object, metaclass=ABCMeta):
         max_length = max_length or self.config.max_length
         assert len(Xs) == 1, "This implementation assumes a single Xs"
         token_idxs = self.encoder.encode_for_classification(Xs[0], max_length=max_length)
-        seq_array = self._array_format(token_idxs)
-        return seq_array.token_ids, seq_array.mask
+        return self._array_format(token_idxs)
 
     def _target_model(self, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
         # Conditionally constructs the default model for each of the main ways in which finetune can be used.
@@ -262,12 +260,12 @@ class BaseModel(object, metaclass=ABCMeta):
             max_length = max_length or self.config.max_length
             for xmb, mmb in self._infer_prep(*Xs, max_length=max_length):
                 output = self._eval(self.predict_op,
-                                    feed_dict={
-                                        self.X: xmb,
-                                        self.M: mmb,
-                                        self.do_dropout: DROPOUT_OFF
-                                    }
-                                    )
+                    feed_dict={
+                        self.X: xmb,
+                        self.M: mmb,
+                        self.do_dropout: DROPOUT_OFF
+                    }
+                )
                 class_idx = output.get(self.predict_op)
                 class_labels = self.label_encoder.inverse_transform(class_idx)
                 predictions.append(class_labels)
@@ -293,9 +291,22 @@ class BaseModel(object, metaclass=ABCMeta):
                 )
                 probas = output.get(self.predict_proba_op)
                 classes = self.label_encoder.target_dim
-                predictions.extend([
-                    dict(zip(classes, proba)) for proba in probas
-                ])
+                if len(probas.shape) == 2:
+                    # sequence predictions
+                    predictions.extend([
+                        dict(zip(classes, proba.tolist())) 
+                        for proba in probas
+                    ]) 
+                elif len(probas.shape) == 3:
+                    # sequence predictions
+                    predictions.extend([
+                        dict(zip(classes, proba_t.tolist())) 
+                        for proba_seq in probas
+                        for proba_t in proba_seq
+                    ])
+                else:
+                    raise AssertionError("`probas` has invalid shape: {}".format(probas.shape))
+
         return predictions
 
     @abstractmethod
@@ -332,29 +343,30 @@ class BaseModel(object, metaclass=ABCMeta):
         self._build_model(n_updates_total=0, target_dim=self.target_dim, train=False)
         yield from iter_data(infer_x, infer_mask, n_batch=n_batch_train, verbose=self.config.verbose)
 
-    def _array_format(self, token_idxs, labels=None):
+    def _array_format(self, encoded_output):
         """
         Returns numpy array of token idxs and corresponding mask
         Returned `x` array contains two channels:
             0: byte-pair encoding embedding
             1: positional embedding
         """
-        n = len(token_idxs)
-        seq_lengths = [len(x) for x in token_idxs]
+        n = len(encoded_output.token_idxs)
+        seq_lengths = [len(x) for x in encoded_output.token_idxs]
         x = np.zeros((n, self.config.max_length, 2), dtype=np.int32)
         mask = np.zeros((n, self.config.max_length), dtype=np.float32)
         labels_arr = np.full((n, self.config.max_length), PAD_TOKEN, dtype='object') if labels else None
         for i, seq_length in enumerate(seq_lengths):
             # BPE embedding
-            x[i, :seq_length, 0] = token_idxs[i]
+            x[i, :seq_length, 0] = encoded_output.token_idxs[i]
             # masking: value of 1 means "consider this in cross-entropy LM loss"
             mask[i, 1:seq_length] = 1
             if labels:
-                labels_arr[i, :seq_length] = labels[i]
+                labels_arr[i, :seq_length] = encoded_output.labels[i]
         # positional_embeddings
         x[:, :, 1] = np.arange(self.encoder.vocab_size, self.encoder.vocab_size + self.config.max_length)
-        return SequenceArray(
+        return ArrayEncodedOutput(
             token_ids=x,
+            tokens=encoded_output.tokens,
             mask=mask,
             labels=labels_arr
         )

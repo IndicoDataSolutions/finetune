@@ -121,7 +121,7 @@ def viterbi_decode(score, transition_params):
     viterbi.reverse()
 
     viterbi_score = np.max(trellis[-1])
-    return viterbi, np_softmax(trellis)
+    return viterbi, np_softmax(trellis, axis=-1)
 
 
 def guarantee_initialized_variables(sess, keys=None):
@@ -290,14 +290,13 @@ def sequence_decode(logits, transition_matrix):
     """ A simple py_func wrapper around the Viterbi decode allowing it to be included in the tensorflow graph. """
 
     def _sequence_decode(logits, transition_matrix):
-        predictions = []
-        logits = []
+        all_predictions = []
+        all_logits = []
         for logit in logits:
             viterbi_sequence, viterbi_logits = viterbi_decode(logit, transition_matrix)
-            print(viterbi_sequence)
-            predictions.append(viterbi_sequence)
-            logits.append(viterbi_logits)
-        return np.array(predictions, dtype=np.int32), np.array(logits, dtype=np.float32)
+            all_predictions.append(viterbi_sequence)
+            all_logits.append(viterbi_logits)
+        return np.array(all_predictions, dtype=np.int32), np.array(all_logits, dtype=np.float32)
 
     return tf.py_func(_sequence_decode, [logits, transition_matrix], [tf.int32, tf.float32])
         

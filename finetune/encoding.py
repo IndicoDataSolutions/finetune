@@ -18,8 +18,21 @@ from finetune.config import PAD_TOKEN
 ENCODER_PATH = os.path.join(os.path.dirname(__file__), 'model/encoder_bpe_40000.json')
 BPE_PATH = os.path.join(os.path.dirname(__file__), 'model/vocab_40000.bpe')
 
-EncoderOutput = namedtuple("EncoderOutput", ["token_ids", "labels", "char_locs"])
-LabeledSequence = namedtuple("LabeledSequence", ["token_ids", "labels", "char_locs"])
+EncoderOutput = namedtuple("EncodedOutput", [
+    "token_ids", # list of list of subtoken ids (ints)
+    "tokens",    # list of list of subtokens (strs)
+    "labels",    # list of list of labels 
+    "char_locs"  # list of list of character locations (ints)
+])
+EncoderOutput.__new__.__defaults__ = (None,) * len(EncoderOutput.fields)
+ArrayEncodedOutput = namedtuple("ArrayEncodedOutput", [
+    "token_ids", # int array shape (batch, seq_length)
+    "mask",      # int array shape (batch, seq_length)
+    "labels",    # object array shape (batch, seq_length)
+    "char_locs"  # list of list of char_locs (int) passed through from `EncoderOutput`
+    "tokens",    # list of list of subtokens (str) passed through from `EncoderOutput`
+])
+ArrayEncoderOutput.__new__.__defaults__ = (None,) * len(ArrayEncoderOutput.fields)
 
 
 def _flatten(nested_lists):
@@ -139,6 +152,7 @@ class TextEncoder(object):
         """
         Convert a batch of raw text to a batch of byte-pair encoded token indices.
         """
+        batch_tokens = []
         batch_token_idxs = []
         batch_label_idxs = []
         batch_character_locs = []
@@ -162,12 +176,18 @@ class TextEncoder(object):
                 subtoken_positions = np.cumsum([len(tok.replace("</w>", '')) for tok in bpe_toks]) + token_start
                 token_start += len(token.text)
                 tok_pos.extend(subtoken_positions)
+            batch_tokens.append(bpe_toks)
             batch_token_idxs.append(subtoken_idxs)
             batch_character_locs.append(tok_pos)
             if labels is not None:
                 batch_label_idxs.append([label] * len(subtoken_idxs))
 
-        return EncoderOutput(batch_token_idxs, batch_label_idxs, batch_character_locs)
+        return EncoderOutput(
+            token_ids=batch_token_idxs,
+            tokens=batch_tokens,
+            labels=batch_label_idxs,
+            char_locs=batch_character_locs
+        )
 
     def decode(self, ids):
         """
@@ -271,6 +291,7 @@ class TextEncoder(object):
         """
         # X: [n_batch, seq_len]
         # Y: [n_batch, seq_len]
+        token_ids = []
         tokens = []
         labels = []
         positions = []
@@ -279,7 +300,8 @@ class TextEncoder(object):
             targets = None if Y is None else Y[i]
             encoded = self._encode(x, labels=targets)
             positions.append(_flatten(encoded.char_locs))
-            tokens.append(_flatten(encoded.token_ids))
+            tokens.append(_flatten(encoded.tokens))
+            token_ids.append(_flatten(encoded.token_ids))
             labels.append(_flatten(encoded.labels))
             if len(tokens[-1]) > (max_length - 2):
                 warnings.warn("Some examples are longer than the max_length. Please trim documents or increase `max_length`. "
@@ -287,6 +309,12 @@ class TextEncoder(object):
 
         tokens = self._cut_and_concat(
             encoded=[tokens],
+            max_length=max_length,
+            verbose=verbose
+        )
+
+        token_ids = self._cut_and_concat(
+            encoded=[token_ids],
             max_length=max_length,
             verbose=verbose
         )
@@ -308,8 +336,9 @@ class TextEncoder(object):
                 special_tokens=PAD_TOKEN
             )
 
-        return LabeledSequence(
-            token_ids=tokens,
-            char_locs=locations,
-            labels=labels
+        return EncodedOutput(
+            token_ids=token_ids,
+            tokens=tokens,
+            labels=labels,
+            char_locs=locations
         )

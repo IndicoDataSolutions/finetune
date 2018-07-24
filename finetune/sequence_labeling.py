@@ -1,4 +1,5 @@
 from finetune.base import BaseModel, SEQUENCE_LABELING
+from finetune.encoder import EncodedOutput, ArrayEncodedOutput
 from finetune.target_encoders import SequenceLabelingEncoder
 from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_sequence
 
@@ -8,8 +9,7 @@ class SequenceLabeler(BaseModel):
     def _text_to_ids_with_labels(self, X, Y=None):
         # X: list of list of text snippets.  Each snippet represents a segment of text with a consistent label
         encoder_out = self.encoder.encode_sequence_labeling(X, Y, max_length=self.config.max_length)
-        seq_array = self._array_format(encoder_out.token_ids, labels=encoder_out.labels)
-        return seq_array.token_ids, seq_array.mask, seq_array.labels, encoder_out.char_locs
+        return self._array_format(encoder_out)
 
     def _finetune(self, X, Y, batch_size=None):
         """
@@ -97,7 +97,7 @@ class SequenceLabeler(BaseModel):
         """
         return self._featurize(*list(zip(*Xs)), max_length=max_length)
 
-    def predict_proba(self, *args, **kwargs):
+    def predict_proba(self, X, max_length=None):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
@@ -108,5 +108,9 @@ class SequenceLabeler(BaseModel):
         """
         doc_subseqs, _ = indico_to_finetune_sequence(X)
         x_pred, m_pred, _, token_positions = self._text_to_ids_with_labels(doc_subseqs)
-        probas = self._predict_proba(x_pred, m_pred, max_length=max_length)
-        print(probas)
+        batch_probas = self._predict_proba(x_pred, m_pred, max_length=max_length)
+        batch_tokens = self.encoder._encode(X, verbose=False).tokens
+        result = []
+        for token_seq, proba_seq in zip(batch_tokens, batch_probas):
+            result.append(list(zip(token_seq, proba_seq)))
+        return result
