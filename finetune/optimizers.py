@@ -25,7 +25,7 @@ schedules = {
 }
 
 
-def AdamWeightDecay(params, grads, lr, schedule, t_total, b1=0.9, b2=0.999, e=1e-8, l2=0, vector_l2=False, max_grad_norm=-1, pretrained_weights=None, global_l2=0, **kwargs):
+def AdamWeightDecay(params, grads, lr, schedule, t_total, b1=0.9, b2=0.999, e=1e-8, l2=0, vector_l2=False, max_grad_norm=-1, pretrained_weights=None, deviation_regularization=0, **kwargs):
     """
     Adam with weight decay fix and added weight decay to pre-trained weights.
     """
@@ -57,11 +57,10 @@ def AdamWeightDecay(params, grads, lr, schedule, t_total, b1=0.9, b2=0.999, e=1e
                 if (len(p.get_shape()) > 1 or vector_l2) and l2 > 0:
                     update_vec += l2 * p
 
-                if ptw is not None and global_l2 > 0:
-                    update_vec += (global_l2 * msk) * (p - ptw)
+                if ptw is not None and deviation_regularization > 0:
+                    update_vec += deviation_regularization * (msk * (p - ptw) + (1 - msk) * p)
 
                 pt = p - lrt * update_vec
 
                 updates.extend([m.assign(mt), v.assign(vt), p.assign(pt)])
         return tf.group(*updates)
-

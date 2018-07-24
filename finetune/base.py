@@ -380,7 +380,7 @@ class BaseModel(object, metaclass=ABCMeta):
             b2=self.config.b2,
             e=self.config.epsilon,
             pretrained_weights=initial_params,
-            global_l2=self.config.regularise_deviation
+            deviation_regularization=self.config.regularize_deviation
         )
 
     def _construct_graph(self, n_updates_total, target_dim=None, train=True, pre_trained_weights=None):
