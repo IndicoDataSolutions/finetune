@@ -1,3 +1,5 @@
+import tensorflow as tf
+
 from finetune.base import BaseModel
 from finetune.target_encoders import RegressionEncoder
 from finetune.network_modules import regressor
@@ -41,7 +43,7 @@ class Regressor(BaseModel):
     def finetune(self, X, Y=None, batch_size=None):
         """
         :param X: list or array of text.
-        :param Y: integer or string-valued class labels.
+        :param Y: floating point targets
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
         """
@@ -66,4 +68,4 @@ class Regressor(BaseModel):
         return logits
 
     def _predict_proba_op(self, logits, **kwargs):
-        raise NotImplementedError
+        return tf.no_op()
