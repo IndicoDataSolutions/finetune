@@ -10,10 +10,7 @@ from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_seque
 
 class SequenceLabeler(BaseModel):
 
-    def _get_target_encoder(self):
-        return SequenceLabelingEncoder()
-
-    def finetune(self, X, Y, batch_size=None):
+    def finetune(self, X, Y=None, batch_size=None):
         """
         :param X: A list of text snippets. Format: [batch_size]
         :param Y: A list of lists of annotations. Format: [batch_size, n_annotations], where each annotation is of the form:
@@ -26,6 +23,8 @@ class SequenceLabeler(BaseModel):
         if len(Xs) > 1 and Y is None:
             Y = Xs[-1]
             Xs = Xs[:-1]
+        
+        fit_language_model_only = (Y is None)
         X, Y = indico_to_finetune_sequence(X, Y, none_value="<PAD>")
         self.label_encoder = self._get_target_encoder()
         train_x, val_x, train_y, val_y = train_test_split(
@@ -35,8 +34,8 @@ class SequenceLabeler(BaseModel):
         array_encoded_train = self._text_to_ids(train_x, Y=train_y)
         array_encoded_val = self._text_to_ids(val_x, Y=val_y)
 
-        train_y = self.label_encoder.fit_transform(array_encoded_train.labels)
-        val_y = self.label_encoder.transform(array_encoded_val.labels)
+        train_y = None if fit_language_model_only else self.label_encoder.fit_transform(array_encoded_train.labels)
+        val_y = None if fit_language_model_only else self.label_encoder.transform(array_encoded_val.labels)
         return self._training_loop(
             arr_encoded_train=array_encoded_train, train_y=train_y,
             arr_encoded_val=array_encoded_val, val_y=test_y, batch_size=batch_size

@@ -139,14 +139,15 @@ class BaseModel(object, metaclass=ABCMeta):
         if len(Xs) > 1 and Y is None:
             Y = Xs[-1]
             Xs = Xs[:-1]
-            
+
         # back to sequence dim first
         if Y is not None:
             self.label_encoder = self._target_encoder()
             Y = self.label_encoder.fit_transform(Y)
         else:
             # only language model will be trained, mock fake target
-            Y = [[None]] * len(Xs[0])
+            Y = [[]] * n_examples
+            target_dim = None
 
         # make the data batch dim first.
         Xs_t = list_transpose(Xs)
@@ -184,36 +185,33 @@ class BaseModel(object, metaclass=ABCMeta):
         val_window = [float("inf")] * self.config.val_window_size
         for i in range(self.config.n_epochs):
             for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=self.config.verbose):
+                
+                feed_dict = {
+                    self.X: xmb,
+                    self.M: mmb,
+                }
+                if target_dim: 
+                    feed_dict[self.Y] = ymb
+
                 global_step += 1
                 if global_step % self.config.val_interval == 0:
                     tqdm.tqdm.write("Train loss is :{}, Val loss is :{}".format(avg_train_loss, avg_val_loss))
-
-                    outputs = self._eval(
-                        self.summaries,
-                        feed_dict={
-                            self.X: xmb,
-                            self.M: mmb,
-                            self.Y: ymb,
-                            self.do_dropout: DROPOUT_OFF
-                        }
-                    )
-
+                    feed_dict[self.do_dropout] = DROPOUT_OFF
+                    outputs = self._eval(self.summaries, feed_dict=feed_dict)
                     if self.train_writer is not None:
                         self.train_writer.add_summary(outputs.get(self.summaries), global_step)
 
                     sum_val_loss = 0
-                    for xval, mval, yval in iter_data(*val_dataset, n_batch=n_batch_train, verbose=self.config.verbose,
-                                                      tqdm_desc="Validation"):
-                        outputs = self._eval(
-                            self.target_loss,
-                            self.summaries,
-                            feed_dict={
-                                self.X: xval,
-                                self.M: mval,
-                                self.Y: yval,
-                                self.do_dropout: DROPOUT_OFF
-                            }
-                        )
+                    for xval, mval, yval in iter_data(*val_dataset, n_batch=n_batch_train, verbose=self.config.verbose, tqdm_desc="Validation"):
+                        feed_dict = {
+                            self.X: xval,
+                            self.M: mval,
+                            self.do_dropout: DROPOUT_OFF
+                        }
+                        if target_dim: 
+                            feed_dict[self.Y] = yval
+
+                        outputs = self._eval(self.target_loss, self.summaries, feed_dict=feed_dict)
 
                         if self.valid_writer is not None:
                             self.valid_writer.add_summary(outputs.get(self.summaries), global_step)
@@ -231,16 +229,8 @@ class BaseModel(object, metaclass=ABCMeta):
                         if self.config.save_best_model:
                             self.save(self.config.autosave_path)
 
-                outputs = self._eval(
-                    self.target_loss, 
-                    self.train_op,
-                    feed_dict={
-                        self.X: xmb,
-                        self.M: mmb,
-                        self.Y: ymb,
-                        self.do_dropout: DROPOUT_ON
-                    }
-                )
+                feed_dict[self.do_dropout] = DROPOUT_ON
+                outputs = self._eval(self.target_loss, self.train_op, feed_dict=feed_dict)
                   
                 cost = outputs.get(self.target_loss, 0)
                 avg_train_loss = avg_train_loss * self.config.rolling_avg_decay + cost * (
@@ -400,8 +390,11 @@ class BaseModel(object, metaclass=ABCMeta):
 
         # store whether or not graph was previously compiled with dropout
         self.train = train
-        self.target_dim = target_dim
         self._define_placeholders()
+<<<<<<< HEAD
+=======
+        self.target_dim = target_dim
+>>>>>>> 0615b9c... FIX: SequenceLabeler fit LM only
 
         aggregator = defaultdict(list)
         train_loss_tower = 0
@@ -459,16 +452,24 @@ class BaseModel(object, metaclass=ABCMeta):
                     train_loss += (1 - lm_loss_coef) * tf.reduce_mean(target_model_state['losses'])
                     train_loss_tower += train_loss
 
-                    params = find_trainable_variables("model")
-                    grads = tf.gradients(train_loss, params)
-                    grads = list(zip(grads, params))
-                    gpu_grads.append(grads)
                     aggregator['logits'].append(target_model_state['logits'])
                     aggregator['target_losses'].append(target_model_state['losses'])
+
+                params = find_trainable_variables("model")
+                grads = tf.gradients(train_loss, params)
+                grads = list(zip(grads, params))
+                gpu_grads.append(grads)
 
         self.lm_predict_op = tf.concat(aggregator["lm_model"], 0)
         self.features = tf.concat(aggregator['features'], axis=0)
         self.lm_losses = tf.concat(aggregator['lm_losses'], axis=0)
+
+        self._compile_train_op(
+            params=params,
+            grads=gpu_grads,
+            n_updates_total=n_updates_total,
+            initial_params=pre_trained_weights
+        )
 
         if target_dim is not None:
             self.logits = tf.concat(aggregator['logits'], axis=0)
@@ -479,12 +480,6 @@ class BaseModel(object, metaclass=ABCMeta):
             )
             self.predict_proba_op = self._predict_proba_op(
                 self.logits, **target_model_state.get("predict_params", {})
-            )
-            self._compile_train_op(
-                params=params,
-                grads=gpu_grads,
-                n_updates_total=n_updates_total,
-                initial_params=pre_trained_weights
             )
             self.target_loss = tf.reduce_mean(self.target_losses)
             self.lm_loss = tf.reduce_mean(self.lm_losses)
