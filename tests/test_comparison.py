@@ -52,34 +52,29 @@ class TestComparison(unittest.TestCase):
 
     def test_reasonable_predictions(self):
         model = Comparison(config=self.default_config(), n_epochs=3)
-        animals = ["The cat says Meow.",
-                   "The chicken says sqwark.",
-                   "The fish says bloop.",
-                   "The dog says Woof.",
-                   "The frog says \"ribbet\"."]
 
-        prince_philip_quotes = ["When a man opens a car door for his wife, it's either a new car or a new wife.",
-                                "All money nowadays seems to be produced with a natural homing instinct for the Treasury",
-                                "Ah you’re the one who wrote the letter. So you can write then? Ha, ha! Well done",
-                                "You were playing your instruments? Or do you have tape recorders under your seats?",
-                                "Oh! You are the people ruining the rivers and the environment"]
+        similar = [
+            ["What is the meaning of life?", "What does life mean?"],
+            ["Why did the chicken cross the road", "Why did the chicken walk across the road"],
+            ["What was the cause of the economic crisis?", "What caused the economic crash?"],
+            ["Whats the name of the current Queen of England", "What is the current Queen of England's name?"],
+            ["Is fish good for your brain?", "Ive heard fish is good for your brain, is this true?"],
+            ["Why is it so hard to come up with similar questions?", "What is the reason that it is so hard to come up with similar questions?"]
+        ]
 
-        same = []
-        different = []
-        n = min(len(animals), len(prince_philip_quotes))
-        for j in range(n):
-            for i in range(n):
-                different.append([animals[i], prince_philip_quotes[j]])
-                different.append([prince_philip_quotes[i], animals[j]])
-                if i == j:
-                    pass
-                same.append([animals[i], animals[j]])
-                same.append([prince_philip_quotes[i], prince_philip_quotes[j]])
+        different = [
+            ["What is the air speed velocity of an unlaiden swallow?", "How many miles from Plymouth UK, to Boston"],
+            ["Why is Plymouth in Boston called Plymouth", "Why is it so dificult to come up with fake questions?"],
+            ["Does america love fake news or does fake news love america?", "What came first the chicken or the egg?"],
+            ["Why does this test keep failing?", "What is madison doing right now?"],
+            ["How long untill Artificial Intelligence kills all of humankind?", "Am I a good person?"],
+            ["How long would it take me to walk from the moon to the sun", "Is this enough questions to get some results?"]
+        ]
 
-        targets = np.array(["S"] * len(same) + ["D"] * len(different))
-        data = same + different
+        targets = np.array(["S"] * len(similar) + ["D"] * len(different))
+        data = similar + different
 
-        x_tr, x_te, t_tr, t_te = train_test_split(data, targets, train_size=0.03)
+        x_tr, x_te, t_tr, t_te = train_test_split(data, targets, train_size=0.3)
 
         model.finetune(*list_transpose(x_tr), t_tr)
         accuracy = np.mean(model.predict(*list_transpose(x_te)) == t_te)

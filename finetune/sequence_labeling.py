@@ -2,6 +2,7 @@ from finetune.base import BaseModel, SEQUENCE_LABELING
 from finetune.encoding import EncodedOutput, ArrayEncodedOutput
 from finetune.target_encoders import SequenceLabelingEncoder
 from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_sequence
+from sklearn.model_selection import train_test_split
 
 
 class SequenceLabeler(BaseModel):
@@ -18,12 +19,18 @@ class SequenceLabeler(BaseModel):
         val_size: Float fraction or int number that represents the size of the validation set.
         val_interval: The interval for which validation is performed, measured in number of steps.
         """
-        arr_encoded = self._text_to_ids_with_labels(X, Y=Y)
-        return self._training_loop(
-            arr_encoded,
-            Y=arr_encoded.labels,
-            batch_size=batch_size or self.config.batch_size
-        )
+        self.label_encoder = self._get_target_encoder()
+        train_x, test_x, train_y, test_y = train_test_split(X, Y, test_size=self.config.val_size,
+                                                            random_state=self.config.seed)
+
+        array_encoded_train = self._text_to_ids_with_labels(train_x, Y=train_y)
+        array_encoded_val = self._text_to_ids_with_labels(test_x, Y=test_y)
+
+        train_y = self.label_encoder.fit_transform(array_encoded_train.labels)
+        test_y = self.label_encoder.transform(array_encoded_val.labels)
+
+        return self._training_loop(arr_encoded_train=array_encoded_train, train_y=train_y,
+                                   arr_encoded_val=array_encoded_val, val_y=test_y, batch_size=batch_size)
 
     def _get_target_encoder(self):
         return SequenceLabelingEncoder()
@@ -75,7 +82,7 @@ class SequenceLabeler(BaseModel):
                 else:
                     # continue appending to current subsequence
                     doc_subseqs[-1] += text[start_of_token:position]
-                
+
                 start_of_token = position
             all_subseqs.append(doc_subseqs)
             all_labels.append(doc_labels)
