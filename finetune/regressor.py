@@ -1,11 +1,9 @@
-import tensorflow as tf
-
 from finetune.base import BaseModel
-from finetune.target_encoders import OneHotLabelEncoder
-from finetune.network_modules import classifier
+from finetune.target_encoders import RegressionEncoder
+from finetune.network_modules import regressor
 
 
-class Classifier(BaseModel):
+class Regressor(BaseModel):
 
     def featurize(self, X, max_length=None):
         """
@@ -16,7 +14,7 @@ class Classifier(BaseModel):
                            Providing more than `max_length` tokens as input will result in truncation.
         :returns: np.array of features of shape (n_examples, embedding_size).
         """
-        return super().featurize(X, max_length=max_length)
+        return self._featurize(X, max_length=max_length)
 
     def predict(self, X, max_length=None):
         """
@@ -27,7 +25,7 @@ class Classifier(BaseModel):
                            Providing more than `max_length` tokens as input will result in truncation.
         :returns: list of class labels.
         """
-        return super().predict(X, max_length=max_length)
+        super().predict(X, max_length=max_length)
 
     def predict_proba(self, X, max_length=None):
         """
@@ -38,7 +36,7 @@ class Classifier(BaseModel):
                            Providing more than `max_length` tokens as input will result in truncation.
         :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
         """
-        return super().predict_proba(X, max_length=max_length)
+        raise AttributeError("`Regressor` model does not support `predict_proba`.")
 
     def finetune(self, X, Y=None, batch_size=None):
         """
@@ -50,22 +48,22 @@ class Classifier(BaseModel):
         return super().finetune(X, Y=Y, batch_size=batch_size)
 
     def _target_encoder(self):
-        return OneHotLabelEncoder()
+        return RegressionEncoder()
 
     def _target_model(self, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
-        return classifier(
-            hidden=featurizer_state['features'], 
+        return regressor(
+            hidden=featurizer_state['features'],
             targets=targets, 
-            n_targets=n_outputs, 
-            dropout_placeholder=self.do_dropout, 
+            n_targets=n_outputs,
+            dropout_placeholder=self.do_dropout,
             config=self.config,
-            train=train,
-            reuse=reuse,
+            train=train, 
+            reuse=reuse, 
             **kwargs
         )
 
     def _predict_op(self, logits, **kwargs):
-        return tf.argmax(logits, -1)
+        return logits
 
     def _predict_proba_op(self, logits, **kwargs):
-        return tf.nn.softmax(logits, -1)
+        raise NotImplementedError

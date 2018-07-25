@@ -1,69 +1,81 @@
 import json
 
+import tensorflow as tf
 from sklearn.model_selection import train_test_split
 
-from finetune.base import BaseModel, CLASSIFICATION
-from finetune.target_encoders import OrdinalClassificationEncoder
+from finetune.base import BaseModel
+from finetune.target_encoders import OneHotLabelEncoder
+from finetune.network_modules import classifier
 
 
 class Entailment(BaseModel):
 
-    def _get_target_encoder(self):
-        return OrdinalClassificationEncoder()
-
-    def _text_to_ids(self, *Xs, max_length=None):
-        max_length = max_length or self.config.max_length
-        assert len(Xs) == 2, "This implementation assumes 2 Xs"
-
-        encoded_output = self.encoder.encode_multi_input(*Xs, max_length=max_length, verbose=self.config.verbose)
-        return self._array_format(encoded_output)
-
-    def finetune(self, X_1, X_2, Y=None, batch_size=None):
+    def finetune(self, X1, X2, Y=None, batch_size=None):
         """
-        :param X_1: list or array of text to embed as the queries.
-        :param X_2: list or array of text to embed as the answers.
+        :param X1: list or array of text to embed as the queries.
+        :param X2: list or array of text to embed as the answers.
         :param Y: integer or string-valued class labels. It is necessary for the items of Y to be sortable.
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
         """
-        self.target_type = CLASSIFICATION
-        return self._finetune(X_1, X_2, Y=Y, batch_size=batch_size)
+        return super().finetune(X1, X2, Y=Y, batch_size=batch_size)
 
-    def predict(self, X_1, X_2, max_length=None):
+    def predict(self, X1, X2, max_length=None):
         """
-        Produces X_2 list of most likely class labels as determined by the fine-tuned model.
+        Produces X2 list of most likely class labels as determined by the fine-tuned model.
 
-        :param X_1: list or array of text to embed as the queries.
-        :param X_2: list or array of text to embed as the answers.
+        :param X1: list or array of text to embed as the queries.
+        :param X2: list or array of text to embed as the answers.
         :param max_length: the number of tokens to be included in the document representation.
                            Providing more than `max_length` tokens as input will result in truncation.
         :returns: list of class labels.
         """
-        return self.label_encoder.inverse_transform(self._predict_proba(X_1, X_2, max_length=max_length))
+        return super().predict(X1, X2, max_length=max_length)
 
-    def predict_proba(self, X_1, X_2, max_length=None):
+    def predict_proba(self, X1, X2, max_length=None):
         """
-        Produces X_2 probability distribution over classes for each example in X.
+        Produces X2 probability distribution over classes for each example in X.
 
-        :param X_1: list or array of text to embed as the queries.
-        :param X_2: list or array of text to embed as the answers.
+        :param X1: list or array of text to embed as the queries.
+        :param X2: list or array of text to embed as the answers.
         :param max_length: the number of tokens to be included in the document representation.
                            Providing more than `max_length` tokens as input will result in truncation.
-        :returns: list of dictionaries.  Each dictionary maps from X_2 class label to its assigned class probability.
+        :returns: list of dictionaries.  Each dictionary maps from X2 class label to its assigned class probability.
         """
-        return self._predict_proba(X_1, X_2, max_length=max_length)
+        return super().predict_proba(X1, X2, max_length=max_length)
 
-    def featurize(self, X_1, X_2, max_length=None):
+    def featurize(self, X1, X2, max_length=None):
         """
         Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
 
-        :param X_1: list or array of text to embed as the queries.
-        :param X_2: list or array of text to embed as the answers.
+        :param X1: list or array of text to embed as the queries.
+        :param X2: list or array of text to embed as the answers.
         :param max_length: the number of tokens to be included in the document representation.
                            Providing more than `max_length` tokens as input will result in truncation.
         :returns: np.array of features of shape (n_examples, embedding_size).
         """
-        return self._featurize(X_1, X_2, max_length=max_length)
+        return super().featurize(X1, X2, max_length=max_length)
+
+    def _target_encoder(self):
+        return OneHotLabelEncoder()
+
+    def _target_model(self, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
+        return classifier(
+            hidden=featurizer_state['features'], 
+            targets=targets, 
+            n_targets=n_outputs, 
+            dropout_placeholder=self.do_dropout, 
+            config=self.config,
+            train=train,
+            reuse=reuse,
+            **kwargs
+        )
+
+    def _predict_op(self, logits, **kwargs):
+        return tf.argmax(logits, -1)
+
+    def _predict_proba_op(self, logits, **kwargs):
+        return tf.nn.softmax(logits, -1)
 
 
 if __name__ == "__main__":

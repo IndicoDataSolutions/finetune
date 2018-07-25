@@ -19,14 +19,13 @@ from finetune.download import download_data_if_required
 from finetune.optimizers import AdamWeightDecay, schedules
 from sklearn.model_selection import train_test_split
 
-from finetune.target_encoders import OneHotLabelEncoder, RegressionEncoder, SequenceLabelingEncoder
+from finetune.target_encoders import OneHotLabelEncoder, SequenceLabelingEncoder
 from finetune.network_modules import featurizer, language_model, classifier, regressor, sequence_labeler
 from finetune.utils import (
     find_trainable_variables, get_available_gpus, assign_to_gpu, average_grads,
     iter_data, soft_split, sequence_decode, concat_or_stack,
     guarantee_initialized_variables, sample_with_temperature, list_transpose
 )
-from finetune.errors import InvalidTargetType
 from finetune.encoding import TextEncoder, EncodedOutput, ArrayEncodedOutput
 from finetune.config import PAD_TOKEN, get_default_config
 
@@ -37,10 +36,6 @@ _LOGGER = logging.getLogger(__name__)
 
 DROPOUT_ON = 1
 DROPOUT_OFF = 0
-
-CLASSIFICATION = 'classification'
-REGRESSION = 'regression'
-SEQUENCE_LABELING = 'sequence-labeling'
 
 
 class BaseModel(object, metaclass=ABCMeta):
@@ -58,7 +53,6 @@ class BaseModel(object, metaclass=ABCMeta):
         self._initialize()
         self.target_dim = None
         self._load_from_file = False
-        self.target_type = None
 
     def _initialize(self):
         # Initializes the non-serialized bits of the class.
@@ -69,7 +63,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         # symbolic ops
         self.logits = None  # classification logits
-        self.clf_loss = None  # cross-entropy loss
+        self.target_loss = None  # cross-entropy loss
         self.lm_losses = None  # language modeling losses
         self.lm_predict_op = None
         self.train = None  # gradient + parameter update
@@ -79,55 +73,37 @@ class BaseModel(object, metaclass=ABCMeta):
         self.valid_writer = None
         self.predict_params = None
         self.train_op = None
+        self.predict_op = None
+        self.predict_proba_op = None
 
         # indicator vars
         self.is_built = False  # has tf graph been constructed?
         self.is_trained = False  # has model been fine-tuned?
 
-    def _text_to_ids(self, *Xs, max_length=None):
+    def _text_to_ids(self, *Xs, Y=None, max_length=None):
         # Maps lists of text to formatted numpy arrays of token ids and loss-masks marking the lengths of the sequences.
         max_length = max_length or self.config.max_length
-        assert len(Xs) == 1, "This implementation assumes a single Xs"
-        encoder_out = self.encoder.encode_for_classification(Xs[0], max_length=max_length)
+        encoder_out = self.encoder.encode_multi_input(*Xs, Y=None, max_length=max_length)
         return self._array_format(encoder_out)
 
+    @abstractmethod
+    def _predict_op(self, logits, **kwargs):
+        raise NotImplementedError
+
+    @abstractmethod
+    def _predict_proba_op(self, logits, **kwargs):
+        raise NotImplementedError
+
+    @abstractmethod
     def _target_model(self, *, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
         # Conditionally constructs the default model for each of the main ways in which finetune can be used.
         # Can be overridden to use a different target model.
-        if self.target_type == CLASSIFICATION:
-            return classifier(featurizer_state['features'], targets, n_outputs, self.do_dropout, config=self.config,
-                              train=train, reuse=reuse, **kwargs)
-        elif self.target_type == REGRESSION:
-            return regressor(featurizer_state['features'], targets, n_outputs, self.do_dropout, config=self.config,
-                             train=train, reuse=reuse, **kwargs)
-        elif self.target_type == SEQUENCE_LABELING:
-            return sequence_labeler(featurizer_state['sequence_features'], targets, n_outputs, self.do_dropout,
-                                    config=self.config,
-                                    train=train, reuse=reuse, **kwargs)
-        else:
-            raise InvalidTargetType(self.target_type)
-
-    def _predict_ops(self, logits, **kwargs):
-        # Gets the correct prediction methods for each of the main ways that the model can be used.
-        if self.target_type == CLASSIFICATION:
-            return tf.argmax(logits, -1), tf.nn.softmax(logits, -1)
-        elif self.target_type == REGRESSION:
-            return logits, tf.constant(0)  # TODO: Find something better than constant 0 for predict proba.
-        elif self.target_type == SEQUENCE_LABELING:
-            return sequence_decode(logits, kwargs.get("transition_matrix"))
-        else:
-            raise InvalidTargetType(self.target_type)
-
-    def _get_target_encoder(self):
+        raise NotImplementedError
+    
+    @abstractmethod
+    def _target_encoder(self):
         # Gets the correct target encoder for the problem.
-        if self.target_type == CLASSIFICATION:
-            return OneHotLabelEncoder()
-        elif self.target_type == REGRESSION:
-            return RegressionEncoder()
-        elif self.target_type == SEQUENCE_LABELING:
-            return SequenceLabelingEncoder()
-        else:
-            raise InvalidTargetType(self.target_type)
+        raise NotImplementedError
 
     def _eval(self, *tensors, feed_dict):
         """
@@ -146,10 +122,11 @@ class BaseModel(object, metaclass=ABCMeta):
             if value is not None
         }
 
-    def _finetune(self, *Xs, Y=None, batch_size=None):
+    def finetune(self, *Xs, Y=None, batch_size=None):
         self.label_encoder = self._get_target_encoder()
 
         if Y is not None:
+            self.label_encoder = self._target_encoder()
             Y = self.label_encoder.fit_transform(Y)
         else:
             # only language model will be trained, mock fake target
@@ -209,7 +186,7 @@ class BaseModel(object, metaclass=ABCMeta):
                     for xval, mval, yval in iter_data(*val_dataset, n_batch=n_batch_train, verbose=self.config.verbose,
                                                       tqdm_desc="Validation"):
                         outputs = self._eval(
-                            self.clf_loss,
+                            self.target_loss,
                             self.summaries,
                             feed_dict={
                                 self.X: xval,
@@ -221,7 +198,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
                         if self.valid_writer is not None:
                             self.valid_writer.add_summary(outputs.get(self.summaries), global_step)
-                        val_cost = outputs.get(self.clf_loss, 0)
+                        val_cost = outputs.get(self.target_loss, 0)
                         sum_val_loss += val_cost
                         avg_val_loss = (
                                 avg_val_loss * self.config.rolling_avg_decay
@@ -236,7 +213,7 @@ class BaseModel(object, metaclass=ABCMeta):
                             self.save(self.config.autosave_path)
 
                 outputs = self._eval(
-                    self.clf_loss,
+                    self.target_loss, 
                     self.train_op,
                     feed_dict={
                         self.X: xmb,
@@ -245,16 +222,12 @@ class BaseModel(object, metaclass=ABCMeta):
                         self.do_dropout: DROPOUT_ON
                     }
                 )
-
-                cost = outputs.get(self.clf_loss, 0)
+                  
+                cost = outputs.get(self.target_loss, 0)
                 avg_train_loss = avg_train_loss * self.config.rolling_avg_decay + cost * (
                         1 - self.config.rolling_avg_decay)
 
         return self
-
-    @abstractmethod
-    def finetune(self, *args, **kwargs):
-        """ The base method for finetuning the model. """
 
     def fit(self, *args, **kwargs):
         """ An alias for finetune. """
@@ -273,16 +246,17 @@ class BaseModel(object, metaclass=ABCMeta):
                         self.do_dropout: DROPOUT_OFF
                     }
                 )
-                class_idx = output.get(self.predict_op)
-                class_labels = self.label_encoder.inverse_transform(class_idx)
-                predictions.append(class_labels)
+                prediction = output.get(self.predict_op)
+                predictions.append(self.label_encoder.inverse_transform(prediction))
         return np.concatenate(predictions).tolist()
 
-    @abstractmethod
-    def predict(self, *args, **kwargs):
-        """ The base method for predicting from the model. """
+    def predict(self, *Xs, max_length=None):
+        return self._predict(*Xs, max_length=max_length)
 
     def _predict_proba(self, *Xs, max_length=None):
+        """
+        Produce raw numeric outputs for proba predictions
+        """
         predictions = []
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
@@ -297,31 +271,22 @@ class BaseModel(object, metaclass=ABCMeta):
                     }
                 )
                 probas = output.get(self.predict_proba_op)
-                classes = self.label_encoder.target_labels
-                if self.target_type == CLASSIFICATION:
-                    # sequence predictions
-                    predictions.extend([
-                        dict(zip(classes, proba.tolist())) 
-                        for proba in probas
-                    ]) 
-                elif self.target_type == SEQUENCE_LABELING:
-                    # sequence predictions
-                    predictions.extend([
-                        [
-                            dict(zip(classes, proba_t.tolist())) 
-                            for proba_t in proba_seq
-                        ] for proba_seq in probas
-                    ])
-                else:
-                    raise AssertionError(
-                        "Target type `{}` does not support the predict_proba method".format(self.target_type)
-                    )
-
+                predictions.extend(probas)
         return predictions
 
-    @abstractmethod
     def predict_proba(self, *args, **kwargs):
-        """ Base method for predicting, with probabilites. (when available) """
+        """
+        The base method for predicting from the model.
+        """
+        raw_probas = self._predict_proba(*args, **kwargs)
+        classes = self.label_encoder.classes_
+
+        formatted_predictions = []
+        for probas in raw_probas:
+            formatted_predictions.append(
+                dict(zip(classes, probas))
+            )
+        return formatted_predictions
 
     def _featurize(self, *Xs, max_length=None):
         features = []
@@ -343,6 +308,7 @@ class BaseModel(object, metaclass=ABCMeta):
         Base method to get raw features out of the model.
         These features are the same that are fed into the target_model.
         """
+        return self._featurize(*args, **kwargs)
 
     def transform(self, *args, **kwargs):
         """
@@ -479,7 +445,7 @@ class BaseModel(object, metaclass=ABCMeta):
                     grads = list(zip(grads, params))
                     gpu_grads.append(grads)
                     aggregator['logits'].append(target_model_state['logits'])
-                    aggregator['clf_losses'].append(target_model_state['losses'])
+                    aggregator['target_losses'].append(target_model_state['losses'])
 
         self.lm_predict_op = tf.concat(aggregator["lm_model"], 0)
         self.features = tf.concat(aggregator['features'], axis=0)
@@ -487,11 +453,13 @@ class BaseModel(object, metaclass=ABCMeta):
 
         if target_dim is not None:
             self.logits = tf.concat(aggregator['logits'], axis=0)
-            self.clf_losses = concat_or_stack(aggregator['clf_losses'])
+            self.target_losses = concat_or_stack(aggregator['target_losses'])
 
-            self.predict_op, self.predict_proba_op = self._predict_ops(
-                self.logits,
-                **target_model_state.get("predict_params", {})
+            self.predict_op = self._predict_op(
+                self.logits, **target_model_state.get("predict_params", {})
+            )
+            self.predict_proba_op = self._predict_proba_op(
+                self.logits, **target_model_state.get("predict_params", {})
             )
             self._compile_train_op(
                 params=params,
@@ -499,9 +467,9 @@ class BaseModel(object, metaclass=ABCMeta):
                 n_updates_total=n_updates_total,
                 initial_params=pre_trained_weights
             )
-            self.clf_loss = tf.reduce_mean(self.clf_losses)
+            self.target_loss = tf.reduce_mean(self.target_losses)
             self.lm_loss = tf.reduce_mean(self.lm_losses)
-            self.summaries.append(tf.summary.scalar('TargetModelLoss', self.clf_loss))
+            self.summaries.append(tf.summary.scalar('TargetModelLoss', self.target_loss))
             self.summaries.append(tf.summary.scalar('LanguageModelLoss', self.lm_loss))
             self.summaries.append(tf.summary.scalar('TotalLoss', train_loss_tower / n_splits))
             self.summaries = tf.summary.merge(self.summaries)
@@ -545,6 +513,9 @@ class BaseModel(object, metaclass=ABCMeta):
         np.random.seed(seed)
         tf.set_random_seed(seed)
 
+    def _target_placeholder(self):
+        return tf.placeholder(tf.float32, [None, self.target_dim or 1])  # classification targets
+    
     def _define_placeholders(self):
         # tf placeholders
         self.X = tf.placeholder(tf.int32, [None, self.config.max_length, 2])  # token idxs (BPE embedding + positional)
@@ -552,10 +523,7 @@ class BaseModel(object, metaclass=ABCMeta):
         # when target dim is not set, an array of [None] targets is passed as a placeholder
 
         self.do_dropout = tf.placeholder(tf.float32)  # 1 for do dropout and 0 to not do dropout
-        if self.target_type == SEQUENCE_LABELING:
-            self.Y = tf.placeholder(tf.int32, [None, self.config.max_length])  # classification targets
-        else:
-            self.Y = tf.placeholder(tf.float32, [None, self.target_dim or 1])  # classification targets
+        self.Y = self._target_placeholder()
 
     def generate_text(self,  seed_text='', max_length=None):
         """
@@ -584,7 +552,6 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         Load serialized base model parameters from file.
         """
-
         with open(SHAPES_PATH) as shapes_file:
             shapes = json.load(shapes_file)
             offsets = np.cumsum([np.prod(shape) for shape in shapes])
