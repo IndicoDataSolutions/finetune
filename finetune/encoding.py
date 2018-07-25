@@ -14,25 +14,26 @@ import numpy as np
 from tqdm import tqdm
 
 from finetune.config import PAD_TOKEN
+from finetune.utils import datatype
 
 ENCODER_PATH = os.path.join(os.path.dirname(__file__), 'model/encoder_bpe_40000.json')
 BPE_PATH = os.path.join(os.path.dirname(__file__), 'model/vocab_40000.bpe')
 
-EncoderOutput = namedtuple("EncodedOutput", [
+EncodedOutput = datatype("EncodedOutput", [
     "token_ids", # list of list of subtoken ids (ints)
     "tokens",    # list of list of subtokens (strs)
     "labels",    # list of list of labels 
     "char_locs"  # list of list of character locations (ints)
 ])
-EncoderOutput.__new__.__defaults__ = (None,) * len(EncoderOutput.fields)
-ArrayEncodedOutput = namedtuple("ArrayEncodedOutput", [
+EncodedOutput.__new__.__defaults__ = (None,) * len(EncodedOutput._fields)
+ArrayEncodedOutput = datatype("ArrayEncodedOutput", [
     "token_ids", # int array shape (batch, seq_length)
-    "mask",      # int array shape (batch, seq_length)
-    "labels",    # object array shape (batch, seq_length)
-    "char_locs"  # list of list of char_locs (int) passed through from `EncoderOutput`
     "tokens",    # list of list of subtokens (str) passed through from `EncoderOutput`
+    "labels",    # object array shape (batch, seq_length)
+    "char_locs", # list of list of char_locs (int) passed through from `EncoderOutput`
+    "mask",      # int array shape (batch, seq_length)
 ])
-ArrayEncoderOutput.__new__.__defaults__ = (None,) * len(ArrayEncoderOutput.fields)
+ArrayEncodedOutput.__new__.__defaults__ = (None,) * len(ArrayEncodedOutput._fields)
 
 
 def _flatten(nested_lists):
@@ -158,15 +159,18 @@ class TextEncoder(object):
         batch_character_locs = []
         label = None
         for i, text in tqdm(enumerate(texts), ncols=80, leave=False, disable=(not verbose)):
-            if labels:
+            if labels is not None:
                 label = labels[i]
             raw_text = text.lower()
             tokens = self.nlp(_text_standardize(text))
+            subtokens = []
             subtoken_idxs = []
             tok_pos = []
             token_start = 0
+
             for token in tokens:
                 bpe_toks = self.bpe(token.text).split()
+                subtokens.extend(bpe_toks)
                 subtoken_idxs.extend([
                     self.encoder.get(t, self.UNK_IDX)
                     for t in bpe_toks
@@ -176,13 +180,13 @@ class TextEncoder(object):
                 subtoken_positions = np.cumsum([len(tok.replace("</w>", '')) for tok in bpe_toks]) + token_start
                 token_start += len(token.text)
                 tok_pos.extend(subtoken_positions)
-            batch_tokens.append(bpe_toks)
+            batch_tokens.append(subtokens)
             batch_token_idxs.append(subtoken_idxs)
             batch_character_locs.append(tok_pos)
             if labels is not None:
                 batch_label_idxs.append([label] * len(subtoken_idxs))
 
-        return EncoderOutput(
+        return EncodedOutput(
             token_ids=batch_token_idxs,
             tokens=batch_tokens,
             labels=batch_label_idxs,
@@ -196,25 +200,6 @@ class TextEncoder(object):
 
         return "".join([self.decoder.get(word_idx, '<unk>') for word_idx in ids]).replace("</w>", " ")
 
-    def trim(self, seqs, max_length, start=None, end=None):
-        # Trims a batch of individual tokens to a max length and places a start and end token at the end.
-
-        if not start:
-            start = self.start
-        if not end:
-            end = self.clf_token
-        adjusted_max_length = max_length - 2
-
-        if any([len(seq) > adjusted_max_length for seq in seqs]):
-            warnings.warn("Document is longer than max length allowed, trimming document to {} tokens.".format(
-                max_length
-            ))
-        seqs = [
-            [start] + seq[:adjusted_max_length] + [end]
-            for seq in seqs
-        ]
-        return seqs
-
     def encode_for_classification(self, texts, max_length, verbose=True):
         """
         Convert a batch of raw text to byte-pair encoded token indices,
@@ -224,20 +209,18 @@ class TextEncoder(object):
         :param: max_length: An integer value representing the maximum number of tokens.
         :param: verbose: Flag to set verbosity. True will output progress bar.
         """
-        encoded_output = self._encode(texts, verbose=verbose).token_ids
-        return self.trim(batch_token_idxs, max_length=max_length)
+        return self.encode_multi_input([[text] for text in texts], max_length=max_length, verbose=True)
 
-    def encode_multi_input(self, *Xs, max_length, verbose=True):
+    def encode_sequence_labeling(self, X, Y, max_length, verbose=True):
         """
         Convert a batch of raw text to byte-pair encoded token indices,
         and add appropriate special tokens to match expected model input.
 
-        :param: Xs: A list of strings for each input.
+        :param: Xs: List (batch) of lists (doc) of lists (subseqs)
         :param: max_length: An integer value representing the maximum number of tokens.
         :param: verbose: Flag to set verbosity. True will output progress bar.
         """
-        encoded = [self._encode(x).token_ids for x in Xs]
-        return self._cut_and_concat(encoded=encoded, max_length=max_length, verbose=verbose)
+        return self.encode_multi_input(X, Y=Y, max_length=max_length, verbose=True)
 
     def _cut_and_concat(self, *, encoded, max_length, verbose, special_tokens=None, start=None, delimiter=None,
                         end=None):
@@ -266,6 +249,9 @@ class TextEncoder(object):
             if spare >= 0:
                 cut_len = None
             else:
+                warnings.warn("Document is longer than max length allowed, trimming document to {} tokens.".format(
+                    max_length
+                ))
                 empty_tokens = sum(max(overflow, 0) for overflow in overflows)
                 num_over = [min(overflow, 0) for overflow in overflows].count(0)
                 if num_over == 0:
@@ -279,7 +265,7 @@ class TextEncoder(object):
             outputs.append(joined)
         return outputs
 
-    def encode_sequence_labeling(self, Xs, Y=None, max_length=None, verbose=True):
+    def encode_multi_input(self, *Xs, Y=None, max_length=None, verbose=True):
         """
         Encodes the text for passing to the model, also tracks the location of each token to allow reconstruction.
         It can also, optionally, construct a per-token labels as required for training.
@@ -308,7 +294,7 @@ class TextEncoder(object):
             # for each example in that field
             for i, x in enumerate(X):
                 targets = None if Y is None else Y[i]
-                encoded = [self._encode(x, labels=targets)
+                encoded = self._encode(x, labels=targets)
                 token_ids.append(_flatten(encoded.token_ids))
                 tokens.append(_flatten(encoded.tokens))
                 positions.append(_flatten(encoded.char_locs))

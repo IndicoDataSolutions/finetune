@@ -1,6 +1,7 @@
 import os
 import sys
 from functools import partial
+import collections
 
 import numpy as np
 import tensorflow as tf
@@ -11,6 +12,18 @@ from tqdm import tqdm
 from sklearn.utils import shuffle
 
 from finetune import config
+
+
+def datatype(typename, field_names):
+    """
+    i.e. a named tuple that accepts **kwargs
+    """
+    base = collections.namedtuple('Base', field_names)
+    return type(typename, (base,), {
+        '__slots__': (),
+        '__new__': lambda cls, *args, **kwargs: base.__new__(cls, *args, **{
+            key: value for key, value in kwargs.items()
+            if key in base._fields})})
 
 
 def concat_or_stack(tensors, axis=0):

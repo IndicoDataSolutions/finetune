@@ -1,5 +1,5 @@
 from finetune.base import BaseModel, SEQUENCE_LABELING
-from finetune.encoder import EncodedOutput, ArrayEncodedOutput
+from finetune.encoding import EncodedOutput, ArrayEncodedOutput
 from finetune.target_encoders import SequenceLabelingEncoder
 from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_sequence
 
@@ -8,7 +8,7 @@ class SequenceLabeler(BaseModel):
 
     def _text_to_ids_with_labels(self, X, Y=None):
         # X: list of list of text snippets.  Each snippet represents a segment of text with a consistent label
-        encoder_out = self.encoder.encode_sequence_labeling(X, Y, max_length=self.config.max_length)
+        encoder_out = self.encoder.encode_sequence_labeling(X, Y=Y, max_length=self.config.max_length)
         return self._array_format(encoder_out)
 
     def _finetune(self, X, Y, batch_size=None):
@@ -18,19 +18,15 @@ class SequenceLabeler(BaseModel):
         val_size: Float fraction or int number that represents the size of the validation set.
         val_interval: The interval for which validation is performed, measured in number of steps.
         """
-        train_x, train_mask, sequence_labels, _ = self._text_to_ids_with_labels(X, Y)
-        return self._training_loop(train_x, train_mask, sequence_labels,
-                                   batch_size=batch_size or self.config.batch_size)
+        arr_encoded = self._text_to_ids_with_labels(X, Y=Y)
+        return self._training_loop(
+            arr_encoded,
+            Y=arr_encoded.labels,
+            batch_size=batch_size or self.config.batch_size
+        )
 
     def _get_target_encoder(self):
         return SequenceLabelingEncoder()
-
-    def _text_to_ids(self, *Xs, max_length=None):
-        """
-        For sequence labeling this is a NOOP. See LanguageModelSequence._text_to_ids* for specific train and predict
-        implementations.
-        """
-        return Xs
 
     def finetune(self, X, Y, batch_size=None):
         """
@@ -56,11 +52,11 @@ class SequenceLabeler(BaseModel):
         :returns: list of class labels.
         """
         doc_subseqs, _ = indico_to_finetune_sequence(X)
-        x_pred, m_pred, _, token_positions = self._text_to_ids_with_labels(doc_subseqs)
-        labels = self._predict(x_pred, m_pred, max_length=max_length)
+        arr_encoded = self._text_to_ids_with_labels(doc_subseqs)
+        labels = self._predict(X, max_length=max_length)
         all_subseqs = []
         all_labels = []
-        for text, label_seq, position_seq in zip(X, labels, token_positions):
+        for text, label_seq, position_seq in zip(X, labels, arr_encoded.char_locs):
             start_of_token = 0
             doc_subseqs = []
             doc_labels = []
@@ -107,10 +103,9 @@ class SequenceLabeler(BaseModel):
         :returns: list of class labels.
         """
         doc_subseqs, _ = indico_to_finetune_sequence(X)
-        x_pred, m_pred, _, token_positions = self._text_to_ids_with_labels(doc_subseqs)
-        batch_probas = self._predict_proba(x_pred, m_pred, max_length=max_length)
-        batch_tokens = self.encoder._encode(X, verbose=False).tokens
+        arr_encoded = self._text_to_ids_with_labels(doc_subseqs)
+        batch_probas = self._predict_proba(X, max_length=max_length)
         result = []
-        for token_seq, proba_seq in zip(batch_tokens, batch_probas):
+        for token_seq, proba_seq in zip(arr_encoded.tokens, batch_probas):
             result.append(list(zip(token_seq, proba_seq)))
         return result

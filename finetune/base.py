@@ -15,7 +15,6 @@ import numpy as np
 import tensorflow as tf
 
 from finetune.download import download_data_if_required
-from finetune.encoding import TextEncoder
 from finetune.optimizers import AdamWeightDecay, schedules
 from sklearn.model_selection import train_test_split
 
@@ -27,7 +26,7 @@ from finetune.utils import (
     guarantee_initialized_variables, sample_with_temperature
 )
 from finetune.errors import InvalidTargetType
-from finetune.encoder import EncodedOutput, ArrayEncodedOutput
+from finetune.encoding import TextEncoder, EncodedOutput, ArrayEncodedOutput
 from finetune.config import PAD_TOKEN, get_default_config
 
 SHAPES_PATH = os.path.join(os.path.dirname(__file__), 'model', 'params_shapes.json')
@@ -88,8 +87,8 @@ class BaseModel(object, metaclass=ABCMeta):
         # Maps lists of text to formatted numpy arrays of token ids and loss-masks marking the lengths of the sequences.
         max_length = max_length or self.config.max_length
         assert len(Xs) == 1, "This implementation assumes a single Xs"
-        token_idxs = self.encoder.encode_for_classification(Xs[0], max_length=max_length)
-        return self._array_format(token_idxs)
+        encoder_out = self.encoder.encode_for_classification(Xs[0], max_length=max_length)
+        return self._array_format(encoder_out)
 
     def _target_model(self, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
         # Conditionally constructs the default model for each of the main ways in which finetune can be used.
@@ -147,13 +146,14 @@ class BaseModel(object, metaclass=ABCMeta):
         }
 
     def _finetune(self, *Xs, Y=None, batch_size=None):
-        train_x, train_mask = self._text_to_ids(*Xs)
-        return self._training_loop(train_x, train_mask, Y, batch_size)
+        arr_encoded = self._text_to_ids(*Xs)
+        return self._training_loop(arr_encoded, Y, batch_size)
 
-    def _training_loop(self, train_x, train_mask, Y, batch_size=None):
+    def _training_loop(self, arr_encoded, Y, batch_size=None):
         batch_size = batch_size or self.config.batch_size
         self.label_encoder = self._get_target_encoder()
         n_batch_train = batch_size * max(len(get_available_gpus(self.config)), 1)
+        train_x, train_mask = arr_encoded.token_ids, arr_encoded.mask
         n_examples = train_x.shape[0]
         n_updates_total = (n_examples // n_batch_train) * self.config.n_epochs
 
@@ -300,9 +300,10 @@ class BaseModel(object, metaclass=ABCMeta):
                 elif len(probas.shape) == 3:
                     # sequence predictions
                     predictions.extend([
-                        dict(zip(classes, proba_t.tolist())) 
-                        for proba_seq in probas
-                        for proba_t in proba_seq
+                        [
+                            dict(zip(classes, proba_t.tolist())) 
+                            for proba_t in proba_seq
+                        ] for proba_seq in probas
                     ])
                 else:
                     raise AssertionError("`probas` has invalid shape: {}".format(probas.shape))
@@ -319,7 +320,11 @@ class BaseModel(object, metaclass=ABCMeta):
             warnings.filterwarnings("ignore")
             max_length = max_length or self.config.max_length
             for xmb, mmb in self._infer_prep(*Xs, max_length=max_length):
-                feature_batch = self.sess.run(self.features, {self.X: xmb, self.M: mmb})
+                feature_batch = self.sess.run(self.features, {
+                    self.X: xmb,
+                    self.M: mmb,
+                    self.do_dropout: DROPOUT_OFF
+                })
                 features.append(feature_batch)
         return np.concatenate(features)
 
@@ -338,10 +343,10 @@ class BaseModel(object, metaclass=ABCMeta):
 
     def _infer_prep(self, *X, max_length=None):
         max_length = max_length or self.config.max_length
-        infer_x, infer_mask = self._text_to_ids(*X, max_length=max_length)
+        arr_encoded = self._text_to_ids(*X, max_length=max_length)
         n_batch_train = self.config.batch_size * max(len(get_available_gpus(self.config)), 1)
         self._build_model(n_updates_total=0, target_dim=self.target_dim, train=False)
-        yield from iter_data(infer_x, infer_mask, n_batch=n_batch_train, verbose=self.config.verbose)
+        yield from iter_data(arr_encoded.token_ids, arr_encoded.mask, n_batch=n_batch_train, verbose=self.config.verbose)
 
     def _array_format(self, encoded_output):
         """
@@ -350,25 +355,26 @@ class BaseModel(object, metaclass=ABCMeta):
             0: byte-pair encoding embedding
             1: positional embedding
         """
-        n = len(encoded_output.token_idxs)
-        seq_lengths = [len(x) for x in encoded_output.token_idxs]
+        n = len(encoded_output.token_ids)
+        seq_lengths = [len(x) for x in encoded_output.token_ids]
         x = np.zeros((n, self.config.max_length, 2), dtype=np.int32)
         mask = np.zeros((n, self.config.max_length), dtype=np.float32)
-        labels_arr = np.full((n, self.config.max_length), PAD_TOKEN, dtype='object') if labels else None
+        labels_arr = np.full((n, self.config.max_length), PAD_TOKEN, dtype='object') if encoded_output.labels else None
         for i, seq_length in enumerate(seq_lengths):
             # BPE embedding
-            x[i, :seq_length, 0] = encoded_output.token_idxs[i]
+            x[i, :seq_length, 0] = encoded_output.token_ids[i]
             # masking: value of 1 means "consider this in cross-entropy LM loss"
             mask[i, 1:seq_length] = 1
-            if labels:
+            if encoded_output.labels:
                 labels_arr[i, :seq_length] = encoded_output.labels[i]
         # positional_embeddings
         x[:, :, 1] = np.arange(self.encoder.vocab_size, self.encoder.vocab_size + self.config.max_length)
         return ArrayEncodedOutput(
             token_ids=x,
             tokens=encoded_output.tokens,
-            mask=mask,
-            labels=labels_arr
+            labels=labels_arr,
+            char_locs=encoded_output.char_locs,
+            mask=mask
         )
 
     def _compile_train_op(self, *, params, grads, n_updates_total):
@@ -539,7 +545,7 @@ class BaseModel(object, metaclass=ABCMeta):
         else:
             self.Y = tf.placeholder(tf.float32, [None, self.target_dim or 1])  # classification targets
 
-    def generate_text(self, max_length=None, seed_text=''):
+    def generate_text(self,  seed_text='', max_length=None):
         """
         Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
         Temperature parameter for decoding is set in the config.
@@ -548,17 +554,17 @@ class BaseModel(object, metaclass=ABCMeta):
         :param seed_text: Defaults to the empty string. This will form the starting point to begin modelling
         :return: A string containing the generated text.
         """
-        seed_text_tokens = self.encoder._encode([seed_text]).token_ids
+        encoded = self.encoder._encode([seed_text])
         self._build_model(n_updates_total=0, target_dim=self.target_dim, train=False)
-        string = [self.encoder['_start_']] + seed_text_tokens[0]
-        eos = self.encoder['_classify_']
+        string = [self.encoder['_start_']] + encoded.token_ids[0]
+        EOS = self.encoder['_classify_']
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
-            for i in range(len(seed_text_tokens[0]), (max_length or self.config.max_length) - 1):
-                model_input = self._array_format([string])
-                class_idx = self.sess.run(self.lm_predict_op, {self.X: model_input.token_ids, self.M: model_input.mask})
+            for i in range(len(encoded.token_ids), (max_length or self.config.max_length) - 1):
+                arr_encoded = self._array_format(encoded)
+                class_idx = self.sess.run(self.lm_predict_op, {self.X: arr_encoded.token_ids, self.M: arr_encoded.mask})
                 string.append(class_idx[i])
-                if string[-1] == eos:
+                if string[-1] == EOS:
                     break
         return self.encoder.decode(string)
 
