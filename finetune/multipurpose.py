@@ -11,9 +11,8 @@ class Model(BaseModel):
 
     def _text_to_ids(self, *Xs, max_length=None):
         max_length = max_length or self.config.max_length
-        question_answer_pairs = self.encoder.encode_multi_input(*Xs, max_length=max_length, verbose=self.config.verbose)
-        seq_array = self._array_format(question_answer_pairs)
-        return seq_array.token_ids, seq_array.mask
+        encoded_output = self.encoder.encode_multi_input(*Xs, max_length=max_length, verbose=self.config.verbose)
+        return self._array_format(encoded_output)
 
     def finetune(self, Xs, Y, batch_size=None):
         """

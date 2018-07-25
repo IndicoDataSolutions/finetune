@@ -173,9 +173,9 @@ class TestClassifier(unittest.TestCase):
         Ensure saving + loading does not change predictions
         """
         model = Classifier(verbose=False)
-        lm_out = model.generate_text(5)
+        lm_out = model.generate_text("", max_length=5)
         self.assertEqual(type(lm_out), str)
-        lm_out_2 = model.generate_text(seed_text="Indico RULE")
+        lm_out_2 = model.generate_text("Indico RULE")
         self.assertEqual(type(lm_out_2), str)
         self.assertIn('_start_Indico RULE'.lower(), lm_out_2)
 
@@ -188,11 +188,11 @@ class TestClassifier(unittest.TestCase):
         model = Classifier(verbose=False)
         train_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text, train_sample.Target)
-        lm_out = model.generate_text(5)
+        lm_out = model.generate_text("", 5)
         self.assertEqual(type(lm_out), str)
         model.save(save_file)
         model = Classifier.load(save_file)
-        lm_out_2 = model.generate_text(seed_text="Indico RULE")
+        lm_out_2 = model.generate_text("Indico RULE")
         self.assertEqual(type(lm_out_2), str)
         self.assertIn('_start_Indico RULE'.lower(), lm_out_2)
 
