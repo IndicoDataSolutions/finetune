@@ -14,19 +14,18 @@ import numpy as np
 from tqdm import tqdm
 
 from finetune.config import PAD_TOKEN
-from finetune.utils import datatype
 
 ENCODER_PATH = os.path.join(os.path.dirname(__file__), 'model/encoder_bpe_40000.json')
 BPE_PATH = os.path.join(os.path.dirname(__file__), 'model/vocab_40000.bpe')
 
-EncodedOutput = datatype("EncodedOutput", [
+EncodedOutput = namedtuple("EncodedOutput", [
     "token_ids", # list of list of subtoken ids (ints)
     "tokens",    # list of list of subtokens (strs)
     "labels",    # list of list of labels 
     "char_locs"  # list of list of character locations (ints)
 ])
 EncodedOutput.__new__.__defaults__ = (None,) * len(EncodedOutput._fields)
-ArrayEncodedOutput = datatype("ArrayEncodedOutput", [
+ArrayEncodedOutput = namedtuple("ArrayEncodedOutput", [
     "token_ids", # int array shape (batch, seq_length)
     "tokens",    # list of list of subtokens (str) passed through from `EncoderOutput`
     "labels",    # object array shape (batch, seq_length)

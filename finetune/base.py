@@ -291,13 +291,13 @@ class BaseModel(object, metaclass=ABCMeta):
                 )
                 probas = output.get(self.predict_proba_op)
                 classes = self.label_encoder.target_dim
-                if len(probas.shape) == 2:
+                if self.target_type == ANNOTATION:
                     # sequence predictions
                     predictions.extend([
                         dict(zip(classes, proba.tolist())) 
                         for proba in probas
                     ]) 
-                elif len(probas.shape) == 3:
+                elif self.target_type == CLASSIFICATION:
                     # sequence predictions
                     predictions.extend([
                         [
@@ -306,7 +306,9 @@ class BaseModel(object, metaclass=ABCMeta):
                         ] for proba_seq in probas
                     ])
                 else:
-                    raise AssertionError("`probas` has invalid shape: {}".format(probas.shape))
+                    raise AssertionError(
+                        "Target type `{}` does not support the predict_proba method".format(self.target_type))
+                    )
 
         return predictions
 
