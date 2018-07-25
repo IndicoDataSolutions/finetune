@@ -35,7 +35,7 @@ def shuffle_data(*args):
         else:
             results.append(shuffled[idx])
             idx += 1
-    return tuple(results) 
+    return tuple(results)
 
 
 def format_gpu_string(num):
@@ -150,7 +150,7 @@ def find_trainable_variables(key, exclude=None):
     if exclude is not None:
         trainable_variables = [
             var for var in trainable_variables
-            if not exclude in var.name 
+            if not exclude in var.name
         ]
     return trainable_variables
 
@@ -183,14 +183,19 @@ def remove_none(l):
     return [e for e in l if e is not None]
 
 
+def list_transpose(l):
+    return [list(i) for i in zip(*l)]
+
+
 def iter_data(*datas, n_batch=128, truncate=False, verbose=False, max_batches=float("inf"), tqdm_desc=None):
     n = len(datas[0])
     if truncate:
         n = (n // n_batch) * n_batch
     n = min(n, max_batches * n_batch)
     n_batches = 0
-    
-    for i in tqdm(range(0, n, n_batch), total=n // n_batch, ncols=80, leave=False, disable=(not verbose), desc=tqdm_desc):
+
+    for i in tqdm(range(0, n, n_batch), total=n // n_batch, ncols=80, leave=False, disable=(not verbose),
+                  desc=tqdm_desc):
         if n_batches >= max_batches: raise StopIteration
         if len(datas) == 1:
             yield datas[0][i:i + n_batch]
@@ -217,6 +222,7 @@ def assign_to_gpu(gpu=0, params_device="/device:CPU:0"):
 
         Useful for data parallelism across multiple GPUs.
     """
+
     def _assign(op):
         node_def = op if isinstance(op, tf.NodeDef) else op.node_def
         if node_def.op == "Variable":
@@ -300,7 +306,7 @@ def sequence_decode(logits, transition_matrix):
         return np.array(all_predictions, dtype=np.int32), np.array(all_logits, dtype=np.float32)
 
     return tf.py_func(_sequence_decode, [logits, transition_matrix], [tf.int32, tf.float32])
-        
+
 
 def finetune_to_indico_sequence(raw_texts, subseqs, labels, none_value=config.PAD_TOKEN):
     """

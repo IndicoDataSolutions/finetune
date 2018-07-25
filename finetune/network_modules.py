@@ -66,7 +66,7 @@ def featurizer(X, encoder, dropout_placeholder, config, train=False, reuse=None,
         return {
             'embed_weights': embed_weights,
             'features': tf.reshape(clf_h, shape=initial_shape[0: -2] + [config.n_embed]),
-            'sequence_features': tf.reshape(h, shape=initial_shape)
+            'sequence_features': tf.reshape(h, shape=initial_shape[:-1] + [config.n_embed])
         }
 
 
@@ -183,7 +183,7 @@ def sequence_labeler(hidden, targets, n_outputs, dropout_placeholder, config, tr
         "predict_params": A dictionary of params to be fed to the viterbi decode function.
     """
     with tf.variable_scope('model/clf', reuse=reuse):
-        nx = shape_list(hidden)[-1]
+        nx = config.n_embed
         a = attn(hidden, 'seq_label_attn', nx, config.seq_num_heads, config.seq_dropout, config.seq_dropout, dropout_placeholder, train=train, scale=False, mask=False)
         n = norm(hidden + a, 'seq_label_residual')
         flat_logits = tf.layers.dense(n, n_outputs)

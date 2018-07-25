@@ -11,7 +11,8 @@ def file_hash(path_obj):
     with path_obj.open(mode='rb', buffering=0) as f:
         for b in iter(lambda: f.read(128 * 1024), b''):
             h.update(b)
-    return h.hexdigest()
+    print("MD5: {}".format(h.hexdigest()))
+    return str(h.hexdigest())
 
 
 class Dataset:
@@ -26,8 +27,7 @@ class Dataset:
 
     def maybe_download(self):
         path = Path(self.filename)
-
-        if path.exists() and file_hash(path):
+        if path.exists() and file_hash(path) == self.md5:
             return
         else:
             self.download()
@@ -60,3 +60,22 @@ def generic_download(url, text_column, target_column, filename, save=True, task_
         new_df.to_csv(save_path, index=False)
 
     return new_df
+
+
+def comparison_download(url, text_column1, text_column2, target_column, filename, save=True, task_type='Similarity', data_directory='Data'):
+
+    save_path = os.path.join(data_directory, task_type, filename)
+
+    response = requests.get(url)
+    _file = StringIO(response.text.replace('\r', '\n'))
+    df = pd.read_csv(_file, sep="\t")
+    df = df.dropna(subset=[text_column1, text_column2, target_column])
+
+    new_df = pd.DataFrame(columns=['Text1', 'Text2', 'Target'])
+    new_df['Text1'], new_df['Text2'], new_df['Target'] = df[text_column1], df[text_column2], df[target_column]
+
+    if save:
+        new_df.to_csv(save_path, index=False)
+
+    return new_df
+
