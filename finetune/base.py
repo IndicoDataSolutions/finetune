@@ -297,7 +297,7 @@ class BaseModel(object, metaclass=ABCMeta):
                     }
                 )
                 probas = output.get(self.predict_proba_op)
-                classes = self.label_encoder.target_dim
+                classes = self.label_encoder.target_labels
                 if self.target_type == CLASSIFICATION:
                     # sequence predictions
                     predictions.extend([

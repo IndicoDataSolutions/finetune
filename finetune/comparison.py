@@ -2,6 +2,7 @@ import numpy as np
 
 from finetune.base import BaseModel, CLASSIFICATION, REGRESSION, SEQUENCE_LABELING
 from finetune.errors import InvalidTargetType
+from finetune.encoding import ArrayEncodedOutput
 import tensorflow as tf
 
 
@@ -11,15 +12,22 @@ class Comparison(BaseModel):
         super().__init__(*args, **kwargs)
 
     def _text_to_ids(self, X_1, X_2, max_length=None):
+        X_1 = [[x] for x in X_1]
+        X_2 = [[x] for x in X_2]
         max_length = max_length or self.config.max_length
         forward_pairs = self.encoder.encode_multi_input(X_1, X_2, max_length=max_length, verbose=self.config.verbose)
         backward_pairs = self.encoder.encode_multi_input(X_2, X_1, max_length=max_length, verbose=self.config.verbose)
+        print(forward_pairs.tokens)
+        print(backward_pairs.tokens)
         seq_array_fw = self._array_format(forward_pairs)
         seq_array_bw = self._array_format(backward_pairs)
         token_ids = np.stack([seq_array_fw.token_ids, seq_array_bw.token_ids], 1)
         mask = np.stack([seq_array_fw.mask, seq_array_bw.mask], 1)
+        encoded_output = seq_array_fw._asdict()
+        encoded_output["token_ids"] = token_ids
+        encoded_output["mask"] = mask
 
-        return token_ids, mask
+        return ArrayEncodedOutput(**encoded_output)
 
     def finetune(self, X_1, X_2, Y, batch_size=None):
         """

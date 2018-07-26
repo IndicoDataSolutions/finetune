@@ -291,7 +291,9 @@ class TextEncoder(object):
             labels = []
             
             # for each example in that field
+
             for i, x in enumerate(X):
+                assert type(x) == list, "This should be a list of strings, if its not, you've done something wrong..."
                 targets = None if Y is None else Y[i]
                 encoded = self._encode(x, labels=targets)
                 token_ids.append(_flatten(encoded.token_ids))
