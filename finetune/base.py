@@ -308,7 +308,7 @@ class BaseModel(object, metaclass=ABCMeta):
                     ])
                 else:
                     raise AssertionError(
-                        "Target type `{}` does not support the predict_proba method".format(self.target_type))
+                        "Target type `{}` does not support the predict_proba method".format(self.target_type)
                     )
 
         return predictions
