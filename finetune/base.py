@@ -292,13 +292,13 @@ class BaseModel(object, metaclass=ABCMeta):
                 )
                 probas = output.get(self.predict_proba_op)
                 classes = self.label_encoder.target_dim
-                if self.target_type == ANNOTATION:
+                if self.target_type == CLASSIFICATION:
                     # sequence predictions
                     predictions.extend([
                         dict(zip(classes, proba.tolist())) 
                         for proba in probas
                     ]) 
-                elif self.target_type == CLASSIFICATION:
+                elif self.target_type == SEQUENCE_LABELING:
                     # sequence predictions
                     predictions.extend([
                         [
@@ -575,7 +575,6 @@ class BaseModel(object, metaclass=ABCMeta):
                 if string[-1] == EOS:
                     break
         return self.encoder.decode(string)
-
 
     def _load_base_model(self):
         """
