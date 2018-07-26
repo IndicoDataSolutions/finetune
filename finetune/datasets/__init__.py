@@ -11,7 +11,6 @@ def file_hash(path_obj):
     with path_obj.open(mode='rb', buffering=0) as f:
         for b in iter(lambda: f.read(128 * 1024), b''):
             h.update(b)
-    print("MD5: {}".format(h.hexdigest()))
     return str(h.hexdigest())
 
 

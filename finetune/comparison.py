@@ -23,7 +23,8 @@ class Comparison(BaseModel):
 
     def finetune(self, X_1, X_2, Y, batch_size=None):
         """
-        :param Xs: An iterable of lists or array of text, shape [batch, n_inputs, tokens]
+        :param X_1: An iterable of lists or array of text, shape [batch, n_inputs, tokens]
+        :param X_2: An iterable of lists or array of text, shape [batch, n_inputs, tokens]
         :param Y: integer or string-valued class labels. It is necessary for the items of Y to be sortable.
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
@@ -55,7 +56,9 @@ class Comparison(BaseModel):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
-        :param Xs: An iterable of lists or array of text, shape [batch, n_inputs, tokens]
+
+        :param X_1: An iterable of lists or array of text, shape [batch, n_inputs, tokens]
+        :param X_2: An iterable of lists or array of text, shape [batch, n_inputs, tokens]
         :param max_length: the number of tokens to be included in the document representation.
                            Providing more than `max_length` tokens as input will result in truncation.
         :returns: list of class labels.
@@ -66,7 +69,9 @@ class Comparison(BaseModel):
         """
         Produces a probability distribution over classes for each example in X.
 
-        :param Xs: An iterable of lists or array of text, shape [batch, n_inputs, tokens]
+
+        :param X_1: An iterable of lists or array of text, shape [batch, n_inputs, tokens]
+        :param X_2: An iterable of lists or array of text, shape [batch, n_inputs, tokens]
         :param max_length: the number of tokens to be included in the document representation.
                            Providing more than `max_length` tokens as input will result in truncation.
         :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
@@ -77,7 +82,8 @@ class Comparison(BaseModel):
         """
         Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
 
-        :param Xs: An iterable of lists or array of text, shape [batch, n_inputs, tokens]
+        :param X_1: An iterable of lists or array of text, shape [batch, n_inputs, tokens]
+        :param X_2: An iterable of lists or array of text, shape [batch, n_inputs, tokens]
         :param max_length: the number of tokens to be included in the document representation.
                            Providing more than `max_length` tokens as input will result in truncation.
         :returns: np.array of features of shape (n_examples, embedding_size).
