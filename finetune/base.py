@@ -391,10 +391,7 @@ class BaseModel(object, metaclass=ABCMeta):
         # store whether or not graph was previously compiled with dropout
         self.train = train
         self._define_placeholders()
-<<<<<<< HEAD
-=======
         self.target_dim = target_dim
->>>>>>> 0615b9c... FIX: SequenceLabeler fit LM only
 
         aggregator = defaultdict(list)
         train_loss_tower = 0
@@ -486,7 +483,8 @@ class BaseModel(object, metaclass=ABCMeta):
             self.summaries.append(tf.summary.scalar('TargetModelLoss', self.target_loss))
             self.summaries.append(tf.summary.scalar('LanguageModelLoss', self.lm_loss))
             self.summaries.append(tf.summary.scalar('TotalLoss', train_loss_tower / n_splits))
-            self.summaries = tf.summary.merge(self.summaries)
+        
+        self.summaries = tf.summary.merge(self.summaries) if self.summaries else tf.no_op()
 
     def _build_model(self, n_updates_total, target_dim, train=True):
         """
