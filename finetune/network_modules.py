@@ -62,6 +62,8 @@ def featurizer(X, encoder, dropout_placeholder, config, train=False, reuse=None,
         pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
         clf_h = tf.gather(clf_h, tf.range(shape_list(X)[0], dtype=tf.int32) * max_length + pool_idx)
 
+
+
         clf_h = tf.reshape(clf_h, shape=initial_shape[0: -2] + [config.n_embed])
         seq_feats = tf.reshape(h, shape=initial_shape[:-1] + [config.n_embed])
 

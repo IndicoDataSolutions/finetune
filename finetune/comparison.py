@@ -17,8 +17,6 @@ class Comparison(BaseModel):
         max_length = max_length or self.config.max_length
         forward_pairs = self.encoder.encode_multi_input(X_1, X_2, max_length=max_length, verbose=self.config.verbose)
         backward_pairs = self.encoder.encode_multi_input(X_2, X_1, max_length=max_length, verbose=self.config.verbose)
-        print(forward_pairs.tokens)
-        print(backward_pairs.tokens)
         seq_array_fw = self._array_format(forward_pairs)
         seq_array_bw = self._array_format(backward_pairs)
         token_ids = np.stack([seq_array_fw.token_ids, seq_array_bw.token_ids], 1)
