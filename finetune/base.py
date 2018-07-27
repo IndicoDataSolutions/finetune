@@ -140,8 +140,8 @@ class BaseModel(object, metaclass=ABCMeta):
             Y = Xs[-1]
             Xs = Xs[:-1]
         fit_language_model_only = (Y is None)
-        arr_encoded = self._text_to_ids(*Xs, Y=Y)
-        labels = None if fit_language_model_only else arr_encoded.labels
+        arr_encoded = self._text_to_ids(*Xs)
+        labels = None if fit_language_model_only else Y
         return self._training_loop(
             arr_encoded,
             Y=labels,
@@ -155,7 +155,7 @@ class BaseModel(object, metaclass=ABCMeta):
             target_dim = self.label_encoder.target_dim
         else:
             # only language model will be trained, mock fake target
-            Y = [[]] * len(Xs[0])
+            Y = np.asarray([[]] * len(arr_encoded.token_ids))
             target_dim = None
 
         idxs = list(range(len(arr_encoded.token_ids)))
