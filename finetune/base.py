@@ -368,7 +368,7 @@ class BaseModel(object, metaclass=ABCMeta):
         seq_lengths = [len(x) for x in encoded_output.token_ids]
         x = np.zeros((n, self.config.max_length, 2), dtype=np.int32)
         mask = np.zeros((n, self.config.max_length), dtype=np.float32)
-        labels_arr = np.full((n, self.config.max_length), PAD_TOKEN, dtype='object') if encoded_output.labels else None
+        labels_arr = np.full((n, self.config.max_length), PAD_TOKEN, dtype='object') if encoded_output.labels is not None else None
         for i, seq_length in enumerate(seq_lengths):
             # BPE embedding
             x[i, :seq_length, 0] = encoded_output.token_ids[i]
