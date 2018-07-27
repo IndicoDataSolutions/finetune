@@ -157,7 +157,7 @@ class TextEncoder(object):
         batch_label_idxs = []
         batch_character_locs = []
         label = None
-        for i, text in tqdm(enumerate(texts), ncols=80, leave=False, disable=(not verbose)):
+        for i, text in enumerate(texts):
             if labels is not None:
                 label = labels[i]
             raw_text = text.lower()
@@ -292,7 +292,7 @@ class TextEncoder(object):
             
             # for each example in that field
 
-            for i, x in enumerate(X):
+            for i, x in tqdm(enumerate(X), disable=not verbose):
                 assert type(x) == list, "This should be a list of strings, if its not, you've done something wrong..."
                 targets = None if Y is None else Y[i]
                 encoded = self._encode(x, labels=targets)
