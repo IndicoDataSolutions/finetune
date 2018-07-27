@@ -1,10 +1,7 @@
 import os
-import tempfile
-import hashlib
 import logging
 from pathlib import Path
 
-import pandas as pd
 import numpy as np
 
 from sklearn.model_selection import train_test_split
@@ -23,10 +20,6 @@ class StanfordSentimentTreebank(Dataset):
 
     def __init__(self, filename=None, **kwargs):
         super().__init__(filename=(filename or DATA_PATH), **kwargs)
-
-    @property
-    def md5(self):
-        return CHECKSUM
 
     def download(self):
         """

@@ -11,6 +11,7 @@ class Model(BaseModel):
 
     def _text_to_ids(self, *Xs, max_length=None):
         max_length = max_length or self.config.max_length
+        Xs = [[[x] for x in X] for X in Xs]
         encoded_output = self.encoder.encode_multi_input(*Xs, max_length=max_length, verbose=self.config.verbose)
         return self._array_format(encoded_output)
 

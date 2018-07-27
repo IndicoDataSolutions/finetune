@@ -111,7 +111,8 @@ class TestSequenceLabeler(unittest.TestCase):
         path = os.path.join(os.path.dirname(__file__), "testdata.json")
         with open(path, "rt") as fp:
             text, labels = json.load(fp)
-        self.model.finetune(text, labels)
+        self.model.finetune(text * 10, labels * 10)
         predictions = self.model.predict(test_sequence)
-        self.assertTrue(1 <= len(predictions) <= 3)
+        print(predictions)
+        self.assertTrue(1 <= len(predictions[0]) <= 3)
         self.assertTrue(any(pred["text"] == "dog" for pred in predictions[0]))

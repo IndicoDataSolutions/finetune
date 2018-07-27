@@ -24,7 +24,7 @@ from finetune.network_modules import featurizer, language_model, classifier, reg
 from finetune.utils import (
     find_trainable_variables, get_available_gpus, assign_to_gpu, average_grads,
     iter_data, soft_split, sequence_decode, concat_or_stack,
-    guarantee_initialized_variables, sample_with_temperature
+    guarantee_initialized_variables, sample_with_temperature, list_transpose
 )
 from finetune.errors import InvalidTargetType
 from finetune.encoding import TextEncoder, EncodedOutput, ArrayEncodedOutput
@@ -91,7 +91,7 @@ class BaseModel(object, metaclass=ABCMeta):
         encoder_out = self.encoder.encode_for_classification(Xs[0], max_length=max_length)
         return self._array_format(encoder_out)
 
-    def _target_model(self, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
+    def _target_model(self, *, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
         # Conditionally constructs the default model for each of the main ways in which finetune can be used.
         # Can be overridden to use a different target model.
         if self.target_type == CLASSIFICATION:
@@ -147,33 +147,38 @@ class BaseModel(object, metaclass=ABCMeta):
         }
 
     def _finetune(self, *Xs, Y=None, batch_size=None):
-        arr_encoded = self._text_to_ids(*Xs)
-        return self._training_loop(arr_encoded, Y, batch_size)
-
-    def _training_loop(self, arr_encoded, Y, batch_size=None):
-        batch_size = batch_size or self.config.batch_size
         self.label_encoder = self._get_target_encoder()
-        n_batch_train = batch_size * max(len(get_available_gpus(self.config)), 1)
-        train_x, train_mask = arr_encoded.token_ids, arr_encoded.mask
-        n_examples = train_x.shape[0]
-        n_updates_total = (n_examples // n_batch_train) * self.config.n_epochs
 
         if Y is not None:
             Y = self.label_encoder.fit_transform(Y)
-            target_dim = len(self.label_encoder.target_dim)
         else:
             # only language model will be trained, mock fake target
-            Y = [[None]] * n_examples
-            target_dim = None
+            Y = [[None]] * len(Xs[0])
 
-        self._build_model(n_updates_total=n_updates_total, target_dim=target_dim)
+        Xs_t = list_transpose(Xs)  # make the data batch dim first.
+        train_xs_t, test_xs_t, train_y, test_y = train_test_split(Xs_t, Y, test_size=self.config.val_size,
+                                                                  random_state=self.config.seed)
+        train_xs = list_transpose(train_xs_t)  # back to sequence dim first
+        test_xs = list_transpose(test_xs_t)
 
-        dataset = (train_x, train_mask, Y)
+        array_encoded_train = self._text_to_ids(*train_xs)
+        array_encoded_val = self._text_to_ids(*test_xs)
 
-        x_tr, x_va, m_tr, m_va, y_tr, y_va = train_test_split(*dataset, test_size=self.config.val_size,
-                                                              random_state=self.config.seed)
-        dataset = (x_tr, m_tr, y_tr)
-        val_dataset = (x_va, m_va, y_va)
+        return self._training_loop(array_encoded_train, train_y, array_encoded_val, test_y, batch_size)
+
+    def _training_loop(self, arr_encoded_train, train_y, arr_encoded_val, val_y, batch_size=None):
+        train_x, train_mask = arr_encoded_train.token_ids, arr_encoded_train.mask
+        val_x, val_mask = arr_encoded_val.token_ids, arr_encoded_val.mask
+
+        batch_size = batch_size or self.config.batch_size
+
+        n_batch_train = batch_size * max(len(get_available_gpus(self.config)), 1)
+        n_examples = train_x.shape[0]
+        n_updates_total = (n_examples // n_batch_train) * self.config.n_epochs
+
+        self._build_model(n_updates_total=n_updates_total, target_dim=self.label_encoder.target_dim)
+        dataset = (train_x, train_mask, train_y)
+        val_dataset = (val_x, val_mask, val_y)
 
         self.is_trained = True
         avg_train_loss = 0
@@ -201,7 +206,8 @@ class BaseModel(object, metaclass=ABCMeta):
                         self.train_writer.add_summary(outputs.get(self.summaries), global_step)
 
                     sum_val_loss = 0
-                    for xval, mval, yval in iter_data(*val_dataset, n_batch=n_batch_train, verbose=self.config.verbose, tqdm_desc="Validation"):
+                    for xval, mval, yval in iter_data(*val_dataset, n_batch=n_batch_train, verbose=self.config.verbose,
+                                                      tqdm_desc="Validation"):
                         outputs = self._eval(
                             self.clf_loss,
                             self.summaries,
@@ -230,16 +236,16 @@ class BaseModel(object, metaclass=ABCMeta):
                             self.save(self.config.autosave_path)
 
                 outputs = self._eval(
-                    self.clf_loss, 
+                    self.clf_loss,
                     self.train_op,
                     feed_dict={
-                      self.X: xmb,
-                      self.M: mmb,
-                      self.Y: ymb,
-                      self.do_dropout: DROPOUT_ON
+                        self.X: xmb,
+                        self.M: mmb,
+                        self.Y: ymb,
+                        self.do_dropout: DROPOUT_ON
                     }
                 )
-                  
+
                 cost = outputs.get(self.clf_loss, 0)
                 avg_train_loss = avg_train_loss * self.config.rolling_avg_decay + cost * (
                         1 - self.config.rolling_avg_decay)
@@ -291,7 +297,7 @@ class BaseModel(object, metaclass=ABCMeta):
                     }
                 )
                 probas = output.get(self.predict_proba_op)
-                classes = self.label_encoder.target_dim
+                classes = self.label_encoder.target_labels
                 if self.target_type == CLASSIFICATION:
                     # sequence predictions
                     predictions.extend([
@@ -412,7 +418,6 @@ class BaseModel(object, metaclass=ABCMeta):
         self.target_dim = target_dim
         self._define_placeholders()
 
-
         aggregator = defaultdict(list)
         train_loss_tower = 0
         gpus = get_available_gpus(self.config)
@@ -500,7 +505,6 @@ class BaseModel(object, metaclass=ABCMeta):
             self.summaries.append(tf.summary.scalar('LanguageModelLoss', self.lm_loss))
             self.summaries.append(tf.summary.scalar('TotalLoss', train_loss_tower / n_splits))
             self.summaries = tf.summary.merge(self.summaries)
-
 
     def _build_model(self, n_updates_total, target_dim, train=True):
         """

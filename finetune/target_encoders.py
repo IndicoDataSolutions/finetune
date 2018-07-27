@@ -1,8 +1,18 @@
 import numpy as np
 from sklearn.preprocessing import LabelEncoder
+from abc import ABCMeta
 
 
-class OrdinalClassificationEncoder:
+class BaseEncoder(metaclass=ABCMeta):
+    @property
+    def target_labels(self):
+        return getattr(self, 'classes_', None)
+
+    @property
+    def target_dim(self):
+        return len(self.target_labels) if self.target_labels is not None else None
+
+class OrdinalClassificationEncoder(BaseEncoder):
     def __init__(self, min_val=0.0, max_val=1.0):
         self.min_val = min_val
         self.max_val = max_val
@@ -34,12 +44,10 @@ class OrdinalClassificationEncoder:
         self.fit(y)
         return self.transform(y)
 
-    @property
-    def target_dim(self):
-        return self.classes_
 
 
-class RegressionEncoder:
+
+class RegressionEncoder(BaseEncoder):
     def __init__(self):
         self.num_outputs = None
 
@@ -58,7 +66,7 @@ class RegressionEncoder:
 
     def fit_transform(self, x):
         output = self.transform(x)
-        self.num_outputs = np.arange(output.shape[1])
+        self.num_outputs = output.shape[1]
         return output
 
     def inverse_transform(self, y):
@@ -71,8 +79,11 @@ class RegressionEncoder:
     def target_dim(self):
         return self.num_outputs
 
+    @property
+    def target_labels(self):
+        raise ValueError
 
-class OneHotLabelEncoder(LabelEncoder):
+class OneHotLabelEncoder(LabelEncoder, BaseEncoder):
 
     def _make_one_hot(self, labels):
         output = np.zeros([len(labels), len(self.classes_)], dtype=np.float)
@@ -87,12 +98,8 @@ class OneHotLabelEncoder(LabelEncoder):
         labels = super().transform(y)
         return self._make_one_hot(labels)
 
-    @property
-    def target_dim(self):
-        return self.classes_
 
-
-class SequenceLabelingEncoder(LabelEncoder):
+class SequenceLabelingEncoder(LabelEncoder, BaseEncoder):
 
     def fit_transform(self, y):
         shape = np.shape(y)
@@ -112,6 +119,3 @@ class SequenceLabelingEncoder(LabelEncoder):
         labels = super().inverse_transform(flat)
         return np.reshape(labels, shape)
 
-    @property
-    def target_dim(self):
-        return self.classes_
