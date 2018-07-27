@@ -113,6 +113,5 @@ class TestSequenceLabeler(unittest.TestCase):
             text, labels = json.load(fp)
         self.model.finetune(text * 10, labels * 10)
         predictions = self.model.predict(test_sequence)
-        print(predictions)
         self.assertTrue(1 <= len(predictions[0]) <= 3)
         self.assertTrue(any(pred["text"] == "dog" for pred in predictions[0]))

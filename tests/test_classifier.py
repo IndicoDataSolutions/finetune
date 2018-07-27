@@ -197,7 +197,6 @@ class TestClassifier(unittest.TestCase):
         self.assertEqual(type(lm_out_2), str)
         self.assertIn('_start_Indico RULE'.lower(), lm_out_2)
 
-<<<<<<< HEAD
     def test_early_termination_lm(self):
         model = Classifier(verbose=False)
 
@@ -210,8 +209,6 @@ class TestClassifier(unittest.TestCase):
         lm_out = model.generate_text()
         self.assertEqual(lm_out, '_start__classify_')
 
-=======
->>>>>>> c1e6ea5... WIP: refactor target_type logic and subclasses
     def test_validation(self):
         """
         Ensure validation settings do not result in an error

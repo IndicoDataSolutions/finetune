@@ -1,6 +1,7 @@
 import os
 import unittest
 import warnings
+import random
 
 # prevent excessive warning logs 
 warnings.filterwarnings('ignore')
@@ -11,7 +12,6 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 
 from finetune import Comparison
-from finetune.config import get_config
 from finetune.utils import list_transpose
 import random
 
@@ -26,13 +26,14 @@ class TestComparison(unittest.TestCase):
     )
 
     def default_config(self, **kwargs):
-        return get_config(
+        d = dict(
             batch_size=2,
             max_length=128,
             n_epochs=1,
             verbose=False,
-            **kwargs
         )
+        d.update(kwargs)
+        return d
 
     def setUp(self):
         tf.reset_default_graph()
@@ -43,15 +44,16 @@ class TestComparison(unittest.TestCase):
         Ensure model returns predictions of the right type
         """
 
-        model = Comparison(config=self.default_config())
-        model.fit(["Indico is the best"] * 10, ["Indico is the bestestestest"] * 10, np.array([0] * 10))
+        model = Comparison(**self.default_config())
+        n_samples = 10
+        model.fit(["Indico is the best"] * n_samples, ["Indico is the bestestestest"] * n_samples, ['yes'] * n_samples)
 
         predictions = model.predict(["Is indico the best?"], ["Indico is the bestestestest"])
         for prediction in predictions:
-            self.assertIsInstance(prediction, (np.int, np.int64))
+            self.assertIsInstance(prediction, (str, bytes))
 
     def test_reasonable_predictions(self):
-        model = Comparison(config=self.default_config(), n_epochs=3)
+        model = Comparison(**self.default_config(n_epochs=5))
 
         similar = [
             ["What is the meaning of life?", "What does life mean?"],
@@ -60,23 +62,23 @@ class TestComparison(unittest.TestCase):
             ["Whats the name of the current Queen of England", "What is the current Queen of England's name?"],
             ["Is fish good for your brain?", "Ive heard fish is good for your brain, is this true?"],
             ["Why is it so hard to come up with similar questions?", "What is the reason that it is so hard to come up with similar questions?"]
-        ]
+        ] 
 
         different = [
             ["What is the air speed velocity of an unlaiden swallow?", "How many miles from Plymouth UK, to Boston"],
             ["Why is Plymouth in Boston called Plymouth", "Why is it so dificult to come up with fake questions?"],
             ["Does america love fake news or does fake news love america?", "What came first the chicken or the egg?"],
             ["Why does this test keep failing?", "What is madison doing right now?"],
-            ["How long untill Artificial Intelligence kills all of humankind?", "Am I a good person?"],
+            ["How long until Artificial Intelligence kills all of humankind?", "Am I a good person?"],
             ["How long would it take me to walk from the moon to the sun", "Is this enough questions to get some results?"]
         ]
 
-        targets = np.array(["S"] * len(similar) + ["D"] * len(different))
+        targets = np.asarray(["S"] * len(similar) + ["D"] * len(different))
         data = similar + different
 
         x_tr, x_te, t_tr, t_te = train_test_split(data, targets, train_size=0.3)
-
         model.finetune(*list_transpose(x_tr), t_tr)
-        accuracy = np.mean(model.predict(*list_transpose(x_te)) == t_te)
-        print("Accuracy = {}".format(accuracy))
-        self.assertGreater(accuracy, max(np.mean(targets == "S"), np.mean(targets == "D")))
+        predictions = model.predict(*list_transpose(x_te))
+        accuracy = np.mean([pred == true for pred, true in zip(predictions, t_te)])
+        naive_baseline = max(np.mean(targets == "S"), np.mean(targets == "D"))
+        self.assertGreater(accuracy, naive_baseline)

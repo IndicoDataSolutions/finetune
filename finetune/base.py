@@ -139,43 +139,36 @@ class BaseModel(object, metaclass=ABCMeta):
         if len(Xs) > 1 and Y is None:
             Y = Xs[-1]
             Xs = Xs[:-1]
+        fit_language_model_only = (Y is None)
+        arr_encoded = self._text_to_ids(*Xs, Y=Y)
+        labels = None if fit_language_model_only else arr_encoded.labels
+        return self._training_loop(
+            arr_encoded,
+            Y=labels,
+            batch_size=batch_size, 
+        )
 
-        # back to sequence dim first
+    def _training_loop(self, arr_encoded, Y=None, batch_size=None):
         if Y is not None:
             self.label_encoder = self._target_encoder()
             Y = self.label_encoder.fit_transform(Y)
+            target_dim = self.label_encoder.target_dim
         else:
             # only language model will be trained, mock fake target
-            Y = [[]] * n_examples
+            Y = [[]] * len(Xs[0])
             target_dim = None
 
-        # make the data batch dim first.
-        Xs_t = list_transpose(Xs)
-        train_xs_t, test_xs_t, train_y, test_y = train_test_split(
-            Xs_t, Y, test_size=self.config.val_size, random_state=self.config.seed
-        )
-        # back to sequence dim first
-        train_xs = list_transpose(train_xs_t)  
-        test_xs = list_transpose(test_xs_t)
-
-        array_encoded_train = self._text_to_ids(*train_xs)
-        array_encoded_val = self._text_to_ids(*test_xs)
-
-        return self._training_loop(array_encoded_train, train_y, array_encoded_val, test_y, batch_size)
-
-    def _training_loop(self, arr_encoded_train, train_y, arr_encoded_val, val_y, batch_size=None):
-        train_x, train_mask = arr_encoded_train.token_ids, arr_encoded_train.mask
-        val_x, val_mask = arr_encoded_val.token_ids, arr_encoded_val.mask
+        idxs = list(range(len(arr_encoded.token_ids)))
+        train_idxs, val_idxs = train_test_split(idxs)
 
         batch_size = batch_size or self.config.batch_size
-
         n_batch_train = batch_size * max(len(get_available_gpus(self.config)), 1)
-        n_examples = train_x.shape[0]
+        n_examples = len(train_idxs)
         n_updates_total = (n_examples // n_batch_train) * self.config.n_epochs
 
-        self._build_model(n_updates_total=n_updates_total, target_dim=self.label_encoder.target_dim)
-        dataset = (train_x, train_mask, train_y)
-        val_dataset = (val_x, val_mask, val_y)
+        self._build_model(n_updates_total=n_updates_total, target_dim=target_dim)
+        dataset = (arr_encoded.token_ids[train_idxs], arr_encoded.mask[train_idxs], Y[train_idxs])
+        val_dataset = (arr_encoded.token_ids[val_idxs], arr_encoded.mask[val_idxs], Y[val_idxs])
 
         self.is_trained = True
         avg_train_loss = 0
@@ -183,6 +176,7 @@ class BaseModel(object, metaclass=ABCMeta):
         global_step = 0
         best_val_loss = float("inf")
         val_window = [float("inf")] * self.config.val_window_size
+
         for i in range(self.config.n_epochs):
             for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=self.config.verbose):
                 
@@ -256,7 +250,8 @@ class BaseModel(object, metaclass=ABCMeta):
                     }
                 )
                 prediction = output.get(self.predict_op)
-                predictions.append(self.label_encoder.inverse_transform(prediction))
+                formatted_predictions = self.label_encoder.inverse_transform(prediction)
+                predictions.append(formatted_predictions)
         return np.concatenate(predictions).tolist()
 
     def predict(self, *Xs, max_length=None):
@@ -325,9 +320,9 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         return self.featurize(*args, **kwargs)
 
-    def _infer_prep(self, *X, max_length=None):
+    def _infer_prep(self, *Xs, max_length=None):
         max_length = max_length or self.config.max_length
-        arr_encoded = self._text_to_ids(*X, max_length=max_length)
+        arr_encoded = self._text_to_ids(*Xs, max_length=max_length)
         n_batch_train = self.config.batch_size * max(len(get_available_gpus(self.config)), 1)
         self._build_model(n_updates_total=0, target_dim=self.target_dim, train=False)
         yield from iter_data(arr_encoded.token_ids, arr_encoded.mask, n_batch=n_batch_train, verbose=self.config.verbose)
@@ -390,8 +385,8 @@ class BaseModel(object, metaclass=ABCMeta):
 
         # store whether or not graph was previously compiled with dropout
         self.train = train
-        self._define_placeholders()
         self.target_dim = target_dim
+        self._define_placeholders()
 
         aggregator = defaultdict(list)
         train_loss_tower = 0

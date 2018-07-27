@@ -14,32 +14,17 @@ class SequenceLabeler(BaseModel):
         """
         :param X: A list of text snippets. Format: [batch_size]
         :param Y: A list of lists of annotations. Format: [batch_size, n_annotations], where each annotation is of the form:
-            {'start': char_idx, 'end': char_idx, 'label': 'label'}
+            {'start': 0, 'end': 5, 'label': 'class', 'text': 'sample text'}
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
         :param val_size: Float fraction or int number that represents the size of the validation set.
         :param val_interval: The interval for which validation is performed, measured in number of steps.
         """
-        if len(Xs) > 1 and Y is None:
-            Y = Xs[-1]
-            Xs = Xs[:-1]
-        
         fit_language_model_only = (Y is None)
         X, Y = indico_to_finetune_sequence(X, Y, none_value="<PAD>")
-        self.label_encoder = self._get_target_encoder()
-        train_x, val_x, train_y, val_y = train_test_split(
-            X, Y, test_size=self.config.val_size, random_state=self.config.seed
-        )
-
-        array_encoded_train = self._text_to_ids(train_x, Y=train_y)
-        array_encoded_val = self._text_to_ids(val_x, Y=val_y)
-
-        train_y = None if fit_language_model_only else self.label_encoder.fit_transform(array_encoded_train.labels)
-        val_y = None if fit_language_model_only else self.label_encoder.transform(array_encoded_val.labels)
-        return self._training_loop(
-            arr_encoded_train=array_encoded_train, train_y=train_y,
-            arr_encoded_val=array_encoded_val, val_y=test_y, batch_size=batch_size
-        )
+        arr_encoded = self._text_to_ids(X, Y=Y)
+        labels = None if fit_language_model_only else arr_encoded.labels
+        return self._training_loop(arr_encoded, Y=labels, batch_size=batch_size)
 
     def predict(self, X, max_length=None):
         """
