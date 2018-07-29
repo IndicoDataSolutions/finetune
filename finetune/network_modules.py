@@ -116,7 +116,7 @@ def classifier(hidden, targets, n_classes, dropout_placeholder, config, train=Fa
 
     :param hidden: The output of the featurizer. [batch_size, embed_dim]
     :param targets: The placeholder representing the sparse target ids. [batch_size, 2]
-    :param n_classes: the length of one-hot representation. 2
+    :param n_classes: the length of transformed representation. 2
     :param dropout_placeholder:
     :param config: A config object, containing all parameters for the featurizer.
     :param train: If this flag is true, dropout and losses are added to the graph.
