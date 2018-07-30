@@ -30,6 +30,7 @@ class TestComparison(unittest.TestCase):
             batch_size=2,
             max_length=128,
             n_epochs=1,
+            val_size=0.1,
             verbose=False,
         )
         d.update(kwargs)
@@ -37,6 +38,8 @@ class TestComparison(unittest.TestCase):
 
     def setUp(self):
         tf.reset_default_graph()
+        random.seed(42)
+        np.random.seed(42)
 
     def test_fit_predict(self):
         """
@@ -53,32 +56,28 @@ class TestComparison(unittest.TestCase):
             self.assertIsInstance(prediction, (str, bytes))
 
     def test_reasonable_predictions(self):
-        model = Comparison(**self.default_config(n_epochs=5))
+        model = Comparison(**self.default_config(n_epochs=3))
 
-        similar = [
-            ["What is the meaning of life?", "What does life mean?"],
-            ["Why did the chicken cross the road", "Why did the chicken walk across the road"],
-            ["What was the cause of the economic crisis?", "What caused the economic crash?"],
-            ["Whats the name of the current Queen of England", "What is the current Queen of England's name?"],
-            ["Is fish good for your brain?", "Ive heard fish is good for your brain, is this true?"],
-            ["Why is it so hard to come up with similar questions?", "What is the reason that it is so hard to come up with similar questions?"]
-        ] 
+        # fake dataset generation
+        animals = ["dog", "cat", "horse", "cow", "pig", "sheep", "goat", "chicken", "guinea pig", "donkey", "turkey", "duck", "camel", "goose", "llama", "rabbit", "fox"]
+        numbers = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen"]
 
-        different = [
-            ["What is the air speed velocity of an unlaiden swallow?", "How many miles from Plymouth UK, to Boston"],
-            ["Why is Plymouth in Boston called Plymouth", "Why is it so dificult to come up with fake questions?"],
-            ["Does america love fake news or does fake news love america?", "What came first the chicken or the egg?"],
-            ["Why does this test keep failing?", "What is madison doing right now?"],
-            ["How long until Artificial Intelligence kills all of humankind?", "Am I a good person?"],
-            ["How long would it take me to walk from the moon to the sun", "Is this enough questions to get some results?"]
-        ]
-
-        targets = np.asarray(["S"] * len(similar) + ["D"] * len(different))
+        n_per = 50
+        similar = []
+        different = []
+        for dataset in [animals, numbers]:
+            for i in range(n_per // 2):
+                similar.append([random.choice(dataset), random.choice(dataset)])
+        for i in range(n_per):
+            different.append([random.choice(animals), random.choice(numbers)])
+        
+        targets = np.asarray(["similar"] * len(similar) + ["different"] * len(different))
         data = similar + different
 
-        x_tr, x_te, t_tr, t_te = train_test_split(data, targets, train_size=0.3)
+        x_tr, x_te, t_tr, t_te = train_test_split(data, targets, test_size=0.3)
         model.finetune(*list_transpose(x_tr), t_tr)
+
         predictions = model.predict(*list_transpose(x_te))
         accuracy = np.mean([pred == true for pred, true in zip(predictions, t_te)])
-        naive_baseline = max(np.mean(targets == "S"), np.mean(targets == "D"))
+        naive_baseline = max(np.mean(targets == "similar"), np.mean(targets == "different"))
         self.assertGreater(accuracy, naive_baseline)

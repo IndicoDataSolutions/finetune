@@ -109,13 +109,12 @@ class BaseModel(object, metaclass=ABCMeta):
 
     @abstractmethod
     def _target_model(self, *, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
-        # Conditionally constructs the default model for each of the main ways in which finetune can be used.
-        # Can be overridden to use a different target model.
+        # Overridden by subclass to attach a target model onto the shared base featurizer.
         raise NotImplementedError
     
     @abstractmethod
     def _target_encoder(self):
-        # Gets the correct target encoder for the problem.
+        # Overridden by subclass to produce the right target encoding for a given target model.
         raise NotImplementedError
 
     def _eval(self, *tensors, feed_dict):
@@ -149,28 +148,33 @@ class BaseModel(object, metaclass=ABCMeta):
         )
 
     def _training_loop(self, arr_encoded, Y=None, batch_size=None):
-        if Y is not None:
-            self.label_encoder = self._target_encoder()
-            Y = self.label_encoder.fit_transform(Y)
-            target_dim = self.label_encoder.target_dim
-        else:
-            # only language model will be trained, mock fake target
-            Y = np.asarray([[]] * len(arr_encoded.token_ids))
-            target_dim = None
+        self.label_encoder = self._target_encoder()
 
         idxs = list(range(len(arr_encoded.token_ids)))
-        train_idxs, val_idxs = train_test_split(idxs)
+        train_idxs, val_idxs = train_test_split(idxs, test_size=self.config.val_size)
 
+        if Y is None:
+            # only language model will be trained, mock fake target of right length
+            train_Y = np.asarray([[]] * len(train_idxs))
+            val_Y = np.asarray([[]] * len(val_idxs))
+            target_dim = None
+        else:
+            Y = np.asarray(Y)
+            train_Y = self.label_encoder.fit_transform(Y[train_idxs])
+            val_Y = self.label_encoder.transform(Y[val_idxs])
+            target_dim = self.label_encoder.target_dim
+        
         batch_size = batch_size or self.config.batch_size
         n_batch_train = batch_size * max(len(get_available_gpus(self.config)), 1)
         n_examples = len(train_idxs)
         n_updates_total = (n_examples // n_batch_train) * self.config.n_epochs
 
-        self._build_model(n_updates_total=n_updates_total, target_dim=target_dim)
-        dataset = (arr_encoded.token_ids[train_idxs], arr_encoded.mask[train_idxs], Y[train_idxs])
-        val_dataset = (arr_encoded.token_ids[val_idxs], arr_encoded.mask[val_idxs], Y[val_idxs])
+        train_dataset = (arr_encoded.token_ids[train_idxs], arr_encoded.mask[train_idxs], train_Y)
+        val_dataset = (arr_encoded.token_ids[val_idxs], arr_encoded.mask[val_idxs], val_Y)
 
+        self._build_model(n_updates_total=n_updates_total, target_dim=target_dim)
         self.is_trained = True
+
         avg_train_loss = 0
         avg_val_loss = 0
         global_step = 0
@@ -178,7 +182,7 @@ class BaseModel(object, metaclass=ABCMeta):
         val_window = [float("inf")] * self.config.val_window_size
 
         for i in range(self.config.n_epochs):
-            for xmb, mmb, ymb in iter_data(*dataset, n_batch=n_batch_train, verbose=self.config.verbose):
+            for (xmb, mmb, ymb) in iter_data(*train_dataset, n_batch=n_batch_train, verbose=self.config.verbose):
                 
                 feed_dict = {
                     self.X: xmb,
@@ -348,6 +352,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 labels_arr[i, :seq_length] = encoded_output.labels[i]
         # positional_embeddings
         x[:, :, 1] = np.arange(self.encoder.vocab_size, self.encoder.vocab_size + self.config.max_length)
+
         return ArrayEncodedOutput(
             token_ids=x,
             tokens=encoded_output.tokens,
