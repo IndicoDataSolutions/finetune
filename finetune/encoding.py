@@ -199,28 +199,6 @@ class TextEncoder(object):
 
         return "".join([self.decoder.get(word_idx, '<unk>') for word_idx in ids]).replace("</w>", " ")
 
-    def encode_for_classification(self, texts, max_length, verbose=True):
-        """
-        Convert a batch of raw text to byte-pair encoded token indices,
-        and add appropriate special tokens to match expected model input.
-
-        :param: texts: A list of strings.
-        :param: max_length: An integer value representing the maximum number of tokens.
-        :param: verbose: Flag to set verbosity. True will output progress bar.
-        """
-        return self.encode_multi_input([[text] for text in texts], max_length=max_length, verbose=True)
-
-    def encode_sequence_labeling(self, X, Y, max_length, verbose=True):
-        """
-        Convert a batch of raw text to byte-pair encoded token indices,
-        and add appropriate special tokens to match expected model input.
-
-        :param: Xs: List (batch) of lists (doc) of lists (subseqs)
-        :param: max_length: An integer value representing the maximum number of tokens.
-        :param: verbose: Flag to set verbosity. True will output progress bar.
-        """
-        return self.encode_multi_input(X, Y=Y, max_length=max_length, verbose=True)
-
     def _cut_and_concat(self, *, encoded, max_length, verbose, special_tokens=None, start=None, delimiter=None,
                         end=None):
         """

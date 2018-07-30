@@ -71,7 +71,7 @@ If you'd prefer you can also run :mod:`finetune` in a docker container. The bash
 
 Code Examples
 =============
-For example usage of :class:`Classifier`, :class:`Entailment`, and :class:`SequenceLabeler`, see the `finetune/datasets directory <https://github.com/IndicoDataSolutions/finetune/tree/master/finetune/datasets>`_.
+For example usage of :class:`Classifier`, :class:`MultifieldClassifier`, and :class:`SequenceLabeler`, see the `finetune/datasets directory <https://github.com/IndicoDataSolutions/finetune/tree/master/finetune/datasets>`_.
 
 
 Finetune API Reference
@@ -79,10 +79,13 @@ Finetune API Reference
 .. autoclass:: finetune.Classifier
     :inherited-members:
 
-.. autoclass:: finetune.Entailment
+.. autoclass:: finetune.Regressor
     :inherited-members:
 
-.. autoclass:: finetune.Model
+.. autoclass:: finetune.MultifieldClassifier
+    :inherited-members:
+
+.. autoclass:: finetune.MultifieldRegressor
     :inherited-members:
 
 .. autoclass:: finetune.SequenceLabeler

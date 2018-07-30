@@ -110,13 +110,13 @@ def language_model(*, X, M, embed_weights, hidden, config, reuse=None):
         }
 
 
-def classifier(hidden, targets, n_classes, dropout_placeholder, config, train=False, reuse=None, **kwargs):
+def classifier(hidden, targets, n_targets, dropout_placeholder, config, train=False, reuse=None, **kwargs):
     """
     A simple linear classifier.
 
     :param hidden: The output of the featurizer. [batch_size, embed_dim]
     :param targets: The placeholder representing the sparse target ids. [batch_size]
-    :param n_classes: A python int containing the number of classes that the model should be learning to predict over.
+    :param n_targets: A python int containing the number of classes that the model should be learning to predict over.
     :param dropout_placeholder:
     :param config: A config object, containing all parameters for the featurizer.
     :param train: If this flag is true, dropout and losses are added to the graph.
@@ -128,7 +128,7 @@ def classifier(hidden, targets, n_classes, dropout_placeholder, config, train=Fa
     """
     with tf.variable_scope('model', reuse=reuse):
         hidden = dropout(hidden, config.clf_p_drop, train, dropout_placeholder)
-        clf_logits = perceptron(hidden, n_classes, config)
+        clf_logits = perceptron(hidden, n_targets, config)
         clf_losses = tf.nn.softmax_cross_entropy_with_logits_v2(
             logits=clf_logits,
             labels=tf.stop_gradient(targets)
@@ -139,13 +139,13 @@ def classifier(hidden, targets, n_classes, dropout_placeholder, config, train=Fa
         }
 
 
-def regressor(hidden, targets, n_outputs, dropout_placeholder, config, train=False, reuse=None, **kwargs):
+def regressor(hidden, targets, n_targets, dropout_placeholder, config, train=False, reuse=None, **kwargs):
     """
     A simple linear regressor.
 
     :param hidden: The output of the featurizer. [batch_size, embed_dim]
     :param targets: The placeholder representing the regression targets. [batch_size]
-    :param n_outputs: A python int containing the number of outputs that the model should be learning to predict over.
+    :param n_targets: A python int containing the number of outputs that the model should be learning to predict over.
     :param dropout_placeholder:
     :param config: A config object, containing all parameters for the featurizer.
     :param train: If this flag is true, dropout and losses are added to the graph.
@@ -157,7 +157,7 @@ def regressor(hidden, targets, n_outputs, dropout_placeholder, config, train=Fal
     """
     with tf.variable_scope('model', reuse=reuse):
         hidden = dropout(hidden, config.clf_p_drop, train, dropout_placeholder)
-        outputs = perceptron(hidden, n_outputs, config)
+        outputs = perceptron(hidden, n_targets, config)
         loss = tf.nn.l2_loss(outputs - targets)
         return {
             'logits': outputs,
@@ -165,7 +165,7 @@ def regressor(hidden, targets, n_outputs, dropout_placeholder, config, train=Fal
         }
 
 
-def sequence_labeler(hidden, targets, n_outputs, dropout_placeholder, config, train=False, reuse=None, **kwargs):
+def sequence_labeler(hidden, targets, n_targets, dropout_placeholder, config, train=False, reuse=None, **kwargs):
     """
     An Attention based sequence labeler model. Takes the output of the pre-trained model, applies an additional
     randomly initialised multihead attention block, with residuals on top. The attention is not-future masked to allow
@@ -174,7 +174,7 @@ def sequence_labeler(hidden, targets, n_outputs, dropout_placeholder, config, tr
 
     :param hidden: The output of the featurizer. [batch_size, sequence_length, embed_dim]
     :param targets: The placeholder representing the sequence labeling targets. [batch_size, sequence_length]
-    :param n_outputs: A python int containing the number of classes that the model should be learning to predict over.
+    :param n_targets: A python int containing the number of classes that the model should be learning to predict over.
     :param dropout_placeholder:
     :param config: A config object, containing all parameters for the featurizer.
     :param train: If this flag is true, dropout and losses are added to the graph.
@@ -190,8 +190,8 @@ def sequence_labeler(hidden, targets, n_outputs, dropout_placeholder, config, tr
         nx = config.n_embed
         a = attn(hidden, 'seq_label_attn', nx, config.seq_num_heads, config.seq_dropout, config.seq_dropout, dropout_placeholder, train=train, scale=False, mask=False)
         n = norm(hidden + a, 'seq_label_residual')
-        flat_logits = tf.layers.dense(n, n_outputs)
-        logits = tf.reshape(flat_logits, tf.concat([tf.shape(hidden)[:2], [n_outputs]], 0))
+        flat_logits = tf.layers.dense(n, n_targets)
+        logits = tf.reshape(flat_logits, tf.concat([tf.shape(hidden)[:2], [n_targets]], 0))
         # TODO (BEN): ADD: correct way to find lengths. - Same method in decoding. Cheating for now.
         with tf.device(None):
             log_likelihood, transition_params = tf.contrib.crf.crf_log_likelihood(logits, targets, kwargs.get('max_length') * tf.ones(tf.shape(targets)[0]))

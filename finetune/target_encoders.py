@@ -12,6 +12,7 @@ class BaseEncoder(metaclass=ABCMeta):
     def target_dim(self):
         return len(self.target_labels) if self.target_labels is not None else None
 
+
 class OrdinalClassificationEncoder(BaseEncoder):
     def __init__(self, min_val=0.0, max_val=1.0):
         self.min_val = min_val
@@ -43,8 +44,6 @@ class OrdinalClassificationEncoder(BaseEncoder):
     def fit_transform(self, y):
         self.fit(y)
         return self.transform(y)
-
-
 
 
 class RegressionEncoder(BaseEncoder):
@@ -82,6 +81,7 @@ class RegressionEncoder(BaseEncoder):
     @property
     def target_labels(self):
         raise ValueError
+
 
 class OneHotLabelEncoder(LabelEncoder, BaseEncoder):
 

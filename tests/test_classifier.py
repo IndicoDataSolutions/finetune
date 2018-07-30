@@ -2,6 +2,7 @@ import os
 import unittest
 import logging
 import shutil
+import string
 from copy import copy
 from pathlib import Path
 from unittest.mock import MagicMock

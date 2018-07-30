@@ -1,6 +1,6 @@
-from finetune.entailment import Entailment
-from finetune.multipurpose import Model
+from finetune.multifield import MultifieldClassifier, MultifieldRegressor
 from finetune.classifier import Classifier
+from finetune.regressor import Regressor
 from finetune.sequence_labeling import SequenceLabeler
 from finetune.comparison import Comparison
 
