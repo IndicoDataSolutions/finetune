@@ -5,4 +5,4 @@ from finetune.sequence_labeling import SequenceLabeler
 from finetune.comparison import Comparison
 
 
-__version__, VERSION, version = ("0.2.0",) * 3
+__version__, VERSION, version = ("0.3.0",) * 3
