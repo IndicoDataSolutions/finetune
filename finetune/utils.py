@@ -11,6 +11,7 @@ from tensorflow.contrib.crf import viterbi_decode
 from tqdm import tqdm
 from sklearn.utils import shuffle
 
+from finetune.encoding import NLP
 from finetune import config
 
 
@@ -308,7 +309,7 @@ def sequence_decode(logits, transition_matrix):
     return tf.py_func(_sequence_decode, [logits, transition_matrix], [tf.int32, tf.float32])
 
 
-def finetune_to_indico_sequence(raw_texts, subseqs, labels, none_value=config.PAD_TOKEN):
+def finetune_to_indico_sequence(raw_texts, subseqs, labels, none_value=config.PAD_TOKEN, subtoken_predictions=False):
     """
     Maps from the labeled substring format into the 'indico' format. This is the exact inverse operation to
     :meth indico_to_finetune_sequence:.
@@ -338,22 +339,40 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, none_value=config.PA
     texts = []
     annotations = []
     for raw_text, doc_seq, label_seq in zip(raw_texts, subseqs, labels):
+        tokens = NLP(raw_text)
+        token_starts = [token.idx for token in tokens]
+        token_ends = [token.idx + len(token.text) for token in tokens]
+        n_tokens = len(tokens)
+
         doc_text = ""
         doc_annotations = []
-        char_loc = 0
+        annotation_staart = 0
+        annotation_end = 0
+        start_idx = 0
+        end_idx = 0
         for sub_str, label in zip(doc_seq, label_seq):
             stripped_text = sub_str.strip()
-            doc_location = raw_text.find(stripped_text, char_loc)
+            annotation_start = raw_text.find(stripped_text, annotation_end)
+            annotation_end = annotation_end + len(stripped_text)
+
+            if not subtoken_predictions:
+                # round to nearest token
+                while start_idx < n_tokens and annotation_start <= token_starts[start_idx]:
+                    start_idx += 1
+                annotation_start = token_starts[start_idx - 1]
+                while  end_idx < (n_tokens - 1) and annotation_end > token_ends[end_idx]:
+                    end_idx += 1
+                annotation_end = token_ends[end_idx]
+            
             if label != none_value:
                 doc_annotations.append(
                     {
-                        "start": doc_location,
-                        "end": doc_location + len(stripped_text),
+                        "start": annotation_start,
+                        "end": annotation_end,
                         "label": label,
                         "text": stripped_text
                     }
                 )
-            char_loc = doc_location + len(stripped_text)
         annotations.append(doc_annotations)
     return raw_texts, annotations
 

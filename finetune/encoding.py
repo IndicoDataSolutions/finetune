@@ -15,6 +15,8 @@ from tqdm import tqdm
 
 from finetune.config import PAD_TOKEN
 
+
+NLP = spacy.load('en', disable=['parser', 'tagger', 'ner', 'textcat'])
 ENCODER_PATH = os.path.join(os.path.dirname(__file__), 'model/encoder_bpe_40000.json')
 BPE_PATH = os.path.join(os.path.dirname(__file__), 'model/vocab_40000.bpe')
 
@@ -77,7 +79,7 @@ class TextEncoder(object):
     UNK_IDX = 0
 
     def __init__(self):
-        self.nlp = spacy.load('en', disable=['parser', 'tagger', 'ner', 'textcat'])
+        self.nlp = NLP
         self.encoder = json.load(open(ENCODER_PATH))
         self.decoder = {v: k for k, v in self.encoder.items()}
 

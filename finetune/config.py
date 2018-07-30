@@ -63,6 +63,7 @@ def get_default_config():
         seq_num_heads=16,
         seq_dropout=0.3,
         pad_token="<PAD>",
+        subtoken_predictions=False,
 
         # Early stopping
         save_best_model=False,
