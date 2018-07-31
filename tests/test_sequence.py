@@ -105,7 +105,6 @@ class TestSequenceLabeler(unittest.TestCase):
         model = SequenceLabeler.load(self.save_file)
         predictions = model.predict(test_texts)
 
-
     def test_reasonable_predictions(self):
         test_sequence = ["I am a dog. A dog that's incredibly bright. I can talk, read, and write!"]
         path = os.path.join(os.path.dirname(__file__), "testdata.json")

@@ -25,6 +25,17 @@ model = Classifier.load(path)
 predictions = model.predict(testX)
 ```
 
+If you have large amounts of unlabeled training data and only a small amount of labeled training data,
+you can finetune in two steps for best performance.
+
+```python3
+model = Classifier()               # Load base model
+model.fit(unlabeledX)              # Finetune base model on unlabeled training data
+model.fit(trainX, trainY)          # Continue finetuning with a smaller amount of labeled data
+predictions = model.predict(testX) # [{'class_1': 0.23, 'class_2': 0.54, ..}, ..]
+model.save(path)                   # Serialize the model to disk
+```
+
 Documentation
 =============
 Full documentation and an API Reference for `finetune` is available at [finetune.indico.io](https://finetune.indico.io).
@@ -41,10 +52,10 @@ pip3 install finetune
 or installed directly from source:
 
 ```bash
-git clone https://github.com/IndicoDataSolutions/finetune
-cd finetune
-python3 setup.py develop
-python3 -m spacy download en
+git clone https://github.com/IndicoDataSolutions/finetune && cd finetune
+python3 setup.py develop              # symlinks the git directory to your python path
+pip3 install tensorflow-gpu --upgrade # or tensorflow-cpu
+python3 -m spacy download en          # download spacy tokenizer
 ```
 
 In order to run `finetune` on your host, you'll need a working copy of CUDA >= 8.0, libcudnn >= 6, tensorflow-gpu >= 1.6 and up to date nvidia-driver versions.
@@ -63,11 +74,22 @@ Docker
 If you'd prefer you can also run `finetune` in a docker container. The bash scripts provided assume you have a functional install of [docker](https://docs.docker.com/install/) and [nvidia-docker](https://github.com/nvidia/nvidia-docker/wiki/Installation-(version-2.0)).
 
 ```
+git clone https://github.com/IndicoDataSolutions/finetune && cd finetune
 ./docker/build_docker.sh      # builds a docker image
-./docker/start_docker.sh      # starts a docker container in the background
+./docker/start_docker.sh      # starts a docker container in the background, forwards $PWD to /finetune
 docker exec -it finetune bash # starts a bash session in the docker container
 ```
 
-Code Examples
-=============
-For example usage of `Classifier`, `Entailment`, and `SequenceLabeler`, see the [finetune/datasets directory](https://github.com/IndicoDataSolutions/finetune/tree/master/finetune/datasets).  For purposes of simplicity and runtime these examples use smaller versions of the published datasets.
+
+Model Types
+============
+`finetune` ships with a half dozen different classes for finetuning the base language model on different task types.
+
+- `Classifier`
+- `Regressor`
+- `SequenceLabeler`
+- `MultifieldClassifier`
+- `MultifieldRegressor`
+
+For example usage of each of these model types, see the [finetune/datasets directory](https://github.com/IndicoDataSolutions/finetune/tree/master/finetune/datasets).
+For purposes of simplicity and runtime these examples use smaller versions of the published datasets.
