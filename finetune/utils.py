@@ -346,7 +346,7 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, none_value=config.PA
 
         doc_text = ""
         doc_annotations = []
-        annotation_staart = 0
+        annotation_start = 0
         annotation_end = 0
         start_idx = 0
         end_idx = 0
@@ -357,22 +357,24 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, none_value=config.PA
 
             if not subtoken_predictions:
                 # round to nearest token
-                while start_idx < n_tokens and annotation_start <= token_starts[start_idx]:
+                while start_idx < n_tokens and annotation_start >= token_starts[start_idx]:
                     start_idx += 1
                 annotation_start = token_starts[start_idx - 1]
-                while  end_idx < (n_tokens - 1) and annotation_end > token_ends[end_idx]:
+                while end_idx < (n_tokens - 1) and annotation_end > token_ends[end_idx]:
                     end_idx += 1
                 annotation_end = token_ends[end_idx]
             
+            text = raw_text[annotation_start:annotation_end]
             if label != none_value:
                 doc_annotations.append(
                     {
                         "start": annotation_start,
                         "end": annotation_end,
                         "label": label,
-                        "text": stripped_text
+                        "text": text
                     }
                 )
+            
         annotations.append(doc_annotations)
     return raw_texts, annotations
 

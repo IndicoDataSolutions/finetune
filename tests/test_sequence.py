@@ -93,7 +93,7 @@ class TestSequenceLabeler(unittest.TestCase):
         """
         raw_docs = ["".join(text) for text in self.texts]
         texts, annotations = finetune_to_indico_sequence(raw_docs, self.texts, self.labels)
-        train_texts, test_texts, train_annotations, test_annotations = train_test_split(texts, annotations)
+        train_texts, test_texts, train_annotations, test_annotations = train_test_split(texts, annotations, test_size=0.1)
         self.model.fit(train_texts, train_annotations)
         predictions = self.model.predict(test_texts)
         probas = self.model.predict_proba(test_texts)
