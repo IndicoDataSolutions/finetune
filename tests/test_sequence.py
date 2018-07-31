@@ -84,7 +84,7 @@ class TestSequenceLabeler(unittest.TestCase):
         
         tf.reset_default_graph()
 
-        self.model = SequenceLabeler(batch_size=2, max_length=256, verbose=False)
+        self.model = SequenceLabeler(batch_size=2, max_length=256, lm_loss_coef=0.0, verbose=False)
 
     def test_fit_predict(self):
         """
@@ -93,7 +93,7 @@ class TestSequenceLabeler(unittest.TestCase):
         """
         raw_docs = ["".join(text) for text in self.texts]
         texts, annotations = finetune_to_indico_sequence(raw_docs, self.texts, self.labels)
-        train_texts, test_texts, train_annotations, test_annotations = train_test_split(texts, annotations)
+        train_texts, test_texts, train_annotations, test_annotations = train_test_split(texts, annotations, test_size=0.1)
         self.model.fit(train_texts, train_annotations)
         predictions = self.model.predict(test_texts)
         probas = self.model.predict_proba(test_texts)
@@ -112,6 +112,12 @@ class TestSequenceLabeler(unittest.TestCase):
         with open(path, "rt") as fp:
             text, labels = json.load(fp)
         self.model.finetune(text * 10, labels * 10)
+        
+        predictions = self.model.predict(test_sequence)
+        self.assertTrue(1 <= len(predictions[0]) <= 3)
+        self.assertTrue(any(pred["text"] == "dog" for pred in predictions[0]))
+
+        self.model.config.subtoken_predictions = True
         predictions = self.model.predict(test_sequence)
         self.assertTrue(1 <= len(predictions[0]) <= 3)
         self.assertTrue(any(pred["text"] == "dog" for pred in predictions[0]))

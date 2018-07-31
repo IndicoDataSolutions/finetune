@@ -36,11 +36,13 @@ class SequenceLabeler(BaseModel):
         :returns: list of class labels.
         """
         doc_subseqs, _ = indico_to_finetune_sequence(X)
+
         arr_encoded = self._text_to_ids(doc_subseqs)
         labels = self._predict(doc_subseqs, max_length=max_length)
         all_subseqs = []
         all_labels = []
         for text, label_seq, position_seq in zip(X, labels, arr_encoded.char_locs):
+            
             start_of_token = 0
             doc_subseqs = []
             doc_labels = []
@@ -63,7 +65,14 @@ class SequenceLabeler(BaseModel):
                 start_of_token = position
             all_subseqs.append(doc_subseqs)
             all_labels.append(doc_labels)
-        doc_texts, doc_annotations = finetune_to_indico_sequence(raw_texts=X, subseqs=all_subseqs, labels=all_labels)
+
+        doc_texts, doc_annotations = finetune_to_indico_sequence(
+            raw_texts=X,
+            subseqs=all_subseqs,
+            labels=all_labels,
+            subtoken_predictions=self.config.subtoken_predictions
+        )
+
         return doc_annotations
 
     def featurize(self, X, max_length=None):
