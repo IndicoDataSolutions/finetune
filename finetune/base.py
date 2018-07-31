@@ -352,7 +352,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 labels_arr[i, :seq_length] = encoded_output.labels[i]
         # positional_embeddings
         x[:, :, 1] = np.arange(self.encoder.vocab_size, self.encoder.vocab_size + self.config.max_length)
-        
+
         return ArrayEncodedOutput(
             token_ids=x,
             tokens=encoded_output.tokens,

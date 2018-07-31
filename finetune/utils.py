@@ -353,7 +353,7 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, none_value=config.PA
         for sub_str, label in zip(doc_seq, label_seq):
             stripped_text = sub_str.strip()
             annotation_start = raw_text.find(stripped_text, annotation_end)
-            annotation_end = annotation_end + len(stripped_text)
+            annotation_end = annotation_start + len(stripped_text)
 
             if not subtoken_predictions:
                 # round to nearest token
@@ -374,7 +374,6 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, none_value=config.PA
                         "text": text
                     }
                 )
-            
         annotations.append(doc_annotations)
     return raw_texts, annotations
 

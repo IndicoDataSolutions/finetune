@@ -43,7 +43,7 @@ def get_default_config():
         lr=6.25e-5,
         lr_warmup=0.002,
         max_grad_norm=1,
-        lm_loss_coef=0.5,
+        lm_loss_coef=0.0,
         rolling_avg_decay=0.99,
         regularize_deviation=0.0,
 

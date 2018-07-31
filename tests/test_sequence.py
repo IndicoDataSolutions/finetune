@@ -84,7 +84,7 @@ class TestSequenceLabeler(unittest.TestCase):
         
         tf.reset_default_graph()
 
-        self.model = SequenceLabeler(batch_size=2, max_length=256, verbose=False)
+        self.model = SequenceLabeler(batch_size=2, max_length=256, lm_loss_coef=0.0, verbose=False)
 
     def test_fit_predict(self):
         """
@@ -112,6 +112,12 @@ class TestSequenceLabeler(unittest.TestCase):
         with open(path, "rt") as fp:
             text, labels = json.load(fp)
         self.model.finetune(text * 10, labels * 10)
+        
+        predictions = self.model.predict(test_sequence)
+        self.assertTrue(1 <= len(predictions[0]) <= 3)
+        self.assertTrue(any(pred["text"] == "dog" for pred in predictions[0]))
+
+        self.model.config.subtoken_predictions = True
         predictions = self.model.predict(test_sequence)
         self.assertTrue(1 <= len(predictions[0]) <= 3)
         self.assertTrue(any(pred["text"] == "dog" for pred in predictions[0]))
