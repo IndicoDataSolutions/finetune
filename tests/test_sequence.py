@@ -19,6 +19,7 @@ from bs4.element import Tag
 
 from finetune import SequenceLabeler
 from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_sequence
+from finetune.metrics import sequence_labeling_precision, sequence_labeling_recall
 
 
 class TestSequenceLabeler(unittest.TestCase):
@@ -97,6 +98,8 @@ class TestSequenceLabeler(unittest.TestCase):
         self.model.fit(train_texts, train_annotations)
         predictions = self.model.predict(test_texts)
         probas = self.model.predict_proba(test_texts)
+        precision = sequence_labeling_precision(test_annotations, predictions)
+        recall = sequence_labeling_recall(test_annotations, predictions)
         self.assertIsInstance(probas, list)
         self.assertIsInstance(probas[0], list)
         self.assertIsInstance(probas[0][0], tuple)
@@ -111,7 +114,7 @@ class TestSequenceLabeler(unittest.TestCase):
 
         # test ValueError raised when raw text is passed along with character idxs and doesn't match
         with self.assertRaises(ValueError):
-            self.model.fit(["Text about a dog.", {"start": 0, "end": 5, "text": "cat", "label": "dog"}])
+            self.model.fit(["Text about a dog."], [[{"start": 0, "end": 5, "text": "cat", "label": "dog"}]])
 
         with open(path, "rt") as fp:
             text, labels = json.load(fp)
