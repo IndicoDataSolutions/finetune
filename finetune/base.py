@@ -24,7 +24,7 @@ from finetune.network_modules import featurizer, language_model, classifier, reg
 from finetune.utils import (
     find_trainable_variables, get_available_gpus, assign_to_gpu, average_grads,
     iter_data, soft_split, concat_or_stack, list_transpose,
-    guarantee_initialized_variables, sample_with_temperature, reshape
+    guarantee_initialized_variables, sample_with_temperature, interpolate_pos_embed
 )
 from finetune.encoding import TextEncoder, EncodedOutput, ArrayEncodedOutput
 from finetune.config import PAD_TOKEN, get_default_config
@@ -575,7 +575,7 @@ class BaseModel(object, metaclass=ABCMeta):
             init_params = [np.load(PARAM_PATH.format(n)) for n in range(10)]
             init_params = np.split(np.concatenate(init_params, 0), offsets)[:-1]
             init_params = [param.reshape(shape) for param, shape in zip(init_params, shapes)]
-            init_params[0] = reshape(init_params[0], self.config.max_length)
+            init_params[0] = interpolate_pos_embed(init_params[0], self.config.max_length)
             special_embed = (np.random.randn(len(self.encoder.special_tokens),
                                              self.config.n_embed) * self.config.weight_stddev).astype(np.float32)
             reg_mask = np.concatenate(

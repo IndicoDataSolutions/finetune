@@ -17,7 +17,7 @@ from sklearn.utils import shuffle
 from finetune import config
 
 
-def reshape(positional_embed, new_len):
+def interpolate_pos_embed(positional_embed, new_len):
     xx = np.linspace(0, 512, new_len)
     newKernel = interpolate.RectBivariateSpline(np.arange(positional_embed.shape[0]),
                                                 np.arange(positional_embed.shape[1]), positional_embed)
