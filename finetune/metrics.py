@@ -76,7 +76,10 @@ def seq_recall(true, predicted, count_fn):
     for cls_, counts in class_counts.items():
         FN = len(counts['false_negatives'])
         TP = len(counts['correct'])
-        results[cls_] =  TP / float(FN + TP)
+        try:
+            results[cls_] =  TP / float(FN + TP)
+        except ZeroDivisionError: 
+            results[cls_] = 0.
     return results
 
 
@@ -86,7 +89,10 @@ def seq_precision(true, predicted, count_fn):
     for cls_, counts in class_counts.items():
         FP = len(counts['false_positives'])
         TP = len(counts['correct'])
-        results[cls_] = TP / float(FP + TP)
+        try:
+            results[cls_] = TP / float(FP + TP)
+        except ZeroDivisionError:
+            results[cls_] = 0.
     return results
     
 
@@ -131,7 +137,7 @@ def sequence_labeling_overlaps(true, predicted):
     for i, (true_annotations, predicted_annotations) in enumerate(zip(true, predicted)):
         # add doc idx to make verification easier
         for annotations in [true_annotations, predicted_annotations]:
-            for i, annotation in enumerate(annotations):
+            for annotation in annotations:
                 annotation['doc_idx'] = i
         
         for true_annotation in true_annotations:
@@ -153,7 +159,8 @@ def sequence_labeling_overlaps(true, predicted):
                     break
             else:
                 d[pred_annotation['label']]['false_positives'].append(pred_annotation)
-        return d
+    
+    return d
 
 
 def sequence_labeling_overlap_precision(true, predicted):
@@ -168,4 +175,3 @@ def sequence_labeling_overlap_recall(true, predicted):
     Sequence overlap recall
     """
     return seq_recall(true, predicted, count_fn=sequence_labeling_overlaps)
-
