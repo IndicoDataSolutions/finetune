@@ -22,7 +22,7 @@ def get_default_config():
         visible_gpus=None,
         n_epochs=3,
         seed=42,
-        max_length=2024,
+        max_length=128,
         low_memory_mode=True,
 
         # INITIALIZATION
@@ -33,7 +33,7 @@ def get_default_config():
         attn_p_drop=0.1,
         resid_p_drop=0.1,
         clf_p_drop=0.1,
-        l2_reg=0.0,
+        l2_reg=0.01,
         vector_l2=True,
 
         # LOSS + OPTIMIZATION
@@ -46,7 +46,7 @@ def get_default_config():
         max_grad_norm=1,
         lm_loss_coef=0.5,
         rolling_avg_decay=0.99,
-        regularize_deviation=0.01,
+        regularize_deviation=0.0,
 
         # Logging
         summarize_grads=False,
