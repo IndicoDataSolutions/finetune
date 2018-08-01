@@ -1,12 +1,8 @@
 from finetune.transformer import dropout, embed, block, attn, norm
-from finetune.utils import shape_list, recompute_grad
+from finetune.utils import shape_list, recompute_grad, merge_leading_dims
 import functools
 import tensorflow as tf
 
-
-def merge_leading_dims(X, target_rank):
-    shape = [-1] + X.get_shape().as_list()[1 - target_rank:]
-    return tf.reshape(X, shape)
 
 
 def perceptron(x, ny, config, w_init=None, b_init=None):
@@ -145,6 +141,27 @@ def classifier(hidden, targets, n_targets, dropout_placeholder, config, train=Fa
             'logits': clf_logits,
             'losses': clf_losses
         }
+
+def multi_choice_question(hidden, targets, n_targets, dropout_placeholder, config, train=False, reuse=None, **kwargs):
+    with tf.variable_scope("model", reuse=reuse):
+        initial_shape = shape_list(hidden)
+        hidden = dropout(hidden, config.clf_p_drop, train, dropout_placeholder)
+
+        # some model
+        clf_out = perceptron(merge_leading_dims(hidden, 2), n_targets, config)
+
+        clf_logits = tf.reshape(clf_out, shape=initial_shape[0] + [n_targets])
+        clf_losses = tf.nn.softmax_cross_entropy_with_logits_v2(
+            logits=clf_logits,
+            labels=tf.stop_gradient(targets)
+        )
+        return {
+            'logits': clf_logits,
+            'losses': clf_losses
+        }
+
+
+
 
 
 def regressor(hidden, targets, n_targets, dropout_placeholder, config, train=False, reuse=None, **kwargs):

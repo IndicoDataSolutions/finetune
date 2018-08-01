@@ -17,6 +17,11 @@ from sklearn.utils import shuffle
 from finetune import config
 
 
+def merge_leading_dims(X, target_rank):
+    shape = [-1] + X.get_shape().as_list()[1 - target_rank:]
+    return tf.reshape(X, shape)
+
+
 def interpolate_pos_embed(positional_embed, new_len):
     xx = np.linspace(0, 512, new_len)
     newKernel = interpolate.RectBivariateSpline(np.arange(positional_embed.shape[0]),
@@ -446,7 +451,9 @@ def fn_with_custom_grad(grad_fn, use_global_vars=False):
         def wrapped(*args):
             return _fn_with_custom_grad(
                 fn, args, grad_fn, use_global_vars=use_global_vars)
+
         return wrapped
+
     return dec
 
 
