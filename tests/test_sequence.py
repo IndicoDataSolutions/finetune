@@ -19,8 +19,10 @@ from bs4.element import Tag
 
 from finetune import SequenceLabeler
 from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_sequence
-from finetune.metrics import sequence_labeling_precision, sequence_labeling_recall
-
+from finetune.metrics import (
+    sequence_labeling_token_precision, sequence_labeling_token_recall,
+    sequence_labeling_overlap_precision, sequence_labeling_overlap_recall
+)
 
 class TestSequenceLabeler(unittest.TestCase):
 
@@ -98,12 +100,18 @@ class TestSequenceLabeler(unittest.TestCase):
         self.model.fit(train_texts, train_annotations)
         predictions = self.model.predict(test_texts)
         probas = self.model.predict_proba(test_texts)
-        precision = sequence_labeling_precision(test_annotations, predictions)
-        recall = sequence_labeling_recall(test_annotations, predictions)
         self.assertIsInstance(probas, list)
         self.assertIsInstance(probas[0], list)
         self.assertIsInstance(probas[0][0], tuple)
         self.assertIsInstance(probas[0][0][1], dict)
+        token_precision = sequence_labeling_token_precision(test_annotations, predictions)
+        token_recall = sequence_labeling_token_recall(test_annotations, predictions)
+        overlap_precision = sequence_labeling_overlap_precision(test_annotations, predictions)
+        overlap_recall = sequence_labeling_overlap_recall(test_annotations, predictions)
+        self.assertIn('Named Entity', token_precision)
+        self.assertIn('Named Entity', token_recall)
+        self.assertIn('Named Entity', overlap_precision)
+        self.assertIn('Named Entity', overlap_recall)
         self.model.save(self.save_file)
         model = SequenceLabeler.load(self.save_file)
         predictions = model.predict(test_texts)
