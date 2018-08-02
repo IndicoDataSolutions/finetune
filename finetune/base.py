@@ -411,7 +411,14 @@ class BaseModel(object, metaclass=ABCMeta):
             do_reuse = True if i > 0 else tf.AUTO_REUSE
 
             if gpus:
-                device = tf.device(assign_to_gpu(gpus[i], params_device=gpus[0]))
+                if (n_splits > 1):
+                    # multi-GPU setup, using CPU as param server is most efficient 
+                    # unless system has direct GPU connections
+                    device_assignment = assign_to_gpu(gpus[i])
+                else:
+                    # single GPU, no need to use a different GPU as a parameter server
+                    device_assignment = assign_to_gpu(gpus[i], params_device=gpus[0])
+                device = tf.device(device_assignment)
             else:
                 device = tf.device('cpu')
 

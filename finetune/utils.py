@@ -4,7 +4,6 @@ from functools import partial
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.framework import function
-from tensorflow.python.client import device_lib
 from tensorflow.contrib.crf import viterbi_decode
 from tqdm import tqdm
 from scipy import interpolate
@@ -52,17 +51,6 @@ def shuffle_data(*args):
 
 def format_gpu_string(num):
     return '/device:GPU:{}'.format(num)
-
-
-def get_available_gpus(config):
-    if config.visible_gpus is not None:
-        return config.visible_gpus
-    local_device_protos = device_lib.list_local_devices()
-    config.visible_gpus = [
-        int(x.name.split(':')[-1]) for x in local_device_protos
-        if x.device_type == 'GPU'
-    ]
-    return config.visible_gpus
 
 
 def shape_list(x):
