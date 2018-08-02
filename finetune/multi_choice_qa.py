@@ -9,6 +9,9 @@ from finetune.network_modules import multi_choice_question
 
 
 class QandA(BaseModel):
+    """
+    Multi choice question finetune model.
+    """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -16,7 +19,7 @@ class QandA(BaseModel):
 
     def _text_to_ids(self, question, answers, Y=None, max_length=None):
         """
-        Format comparison examples as a list of IDs
+        Format multi question examples as a list of IDs
         """
         arrays = [super(QandA, self)._text_to_ids(question, ans) for ans in answers]
         kwargs = arrays[0]._asdict()
@@ -27,8 +30,9 @@ class QandA(BaseModel):
 
     def finetune(self, question, correct_answer, other_answers, batch_size=None, fit_lm_only=False):
         """
-        :param X1: List or array of text, shape [batch]
-        :param X2: List or array of text, shape [batch]
+        :param question: List or array of text, shape [batch]
+        :param correct_answer: List or array of correct answers [batch]
+        :param answers: List or array of text, shape [n_answers - 1 , batch]
         :param Y: integer or string-valued class labels. It is necessary for the items of Y to be sortable.
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
@@ -70,8 +74,8 @@ class QandA(BaseModel):
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
 
-        :param X1: List or array of text, shape [batch]
-        :param X2: List or array of text, shape [batch]
+        :param question: List or array of text, shape [batch]
+        :param answers: List or array of text, shape [n_answers, batch]
         :param max_length: the number of byte-pair encoded tokens to be included in the document representation.
                            Providing more than `max_length` tokens as input will result in truncation.
         :returns: list of class labels.
@@ -84,8 +88,8 @@ class QandA(BaseModel):
         Produces a probability distribution over classes for each example in X.
 
 
-        :param X1: List or array of text, shape [batch]
-        :param X2: List or array of text, shape [batch]
+        :param question: List or array of text, shape [batch]
+        :param answers: List or array of text, shape [n_answers, batch]
         :param max_length: the number of byte-pair encoded tokens to be included in the document representation.
                            Providing more than `max_length` tokens as input will result in truncation.
         :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
@@ -103,8 +107,8 @@ class QandA(BaseModel):
         """
         Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
 
-        :param X1: List or array of text, shape [batch]
-        :param X2: List or array of text, shape [batch]
+        :param question: List or array of text, shape [batch]
+        :param answers: List or array of text, shape [n_answers, batch]
         :param max_length: the number of byte-pair encoded tokens to be included in the document representation.
                            Providing more than `max_length` tokens as input will result in truncation.
         :returns: np.array of features of shape (n_examples, embedding_size).
