@@ -422,8 +422,8 @@ def indico_to_finetune_sequence(texts, labels=None, none_value=config.PAD_TOKEN)
             if start != last_loc:
                 doc_subseqs.append(text[last_loc:start])
                 doc_labels.append(none_value)
-
-            if annotation['text'] and text[start:end] != annotation['text']:
+            
+            if annotation.get('text') and  text[start:end] != annotation['text']:
                 raise ValueError(
                     "Annotation text does not match text specified by `start` and `end` indexes. "
                     "Text provided: `{}`.  Text extracted: `{}`.".format(
