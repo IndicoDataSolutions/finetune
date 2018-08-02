@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 
-from finetune.utils import convert_gradient_to_tensor, shape_list, recompute_grad
+from finetune.utils import convert_gradient_to_tensor, shape_list
 from finetune.activations import act_fns
 
 

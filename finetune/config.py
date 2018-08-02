@@ -55,8 +55,8 @@ def get_default_config():
         verbose=True,
 
         # Validation
-        val_size=0.0005,
-        val_interval=4500,
+        val_size=0.05,
+        val_interval=150,
         val_window_size=5,
 
         # Language Modelling output.

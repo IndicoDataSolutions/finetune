@@ -1,5 +1,6 @@
 from finetune.transformer import dropout, embed, block, attn, norm
-from finetune.utils import shape_list, recompute_grad, merge_leading_dims
+from finetune.utils import shape_list, merge_leading_dims
+from finetune.recompute_grads import recompute_grad
 import functools
 import tensorflow as tf
 
