@@ -54,7 +54,7 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         
         self.config = config or get_default_config()
-        self.config.override_from_dict(kwargs)
+        self.config.update(kwargs)
         self.label_encoder = None
         self._initialize()
         self.target_dim = None
@@ -199,7 +199,6 @@ class BaseModel(object, metaclass=ABCMeta):
 
                 global_step += 1
                 if global_step % self.config.val_interval == 0:
-                    tqdm.tqdm.write("Train loss: {}\t Validation loss: {}".format(avg_train_loss, avg_val_loss))
                     feed_dict[self.do_dropout] = DROPOUT_OFF
                     outputs = self._eval(self.summaries, feed_dict=feed_dict)
                     if self.train_writer is not None:
@@ -236,6 +235,8 @@ class BaseModel(object, metaclass=ABCMeta):
                         best_val_loss = np.mean(val_window)
                         if self.config.save_best_model:
                             self.save(self.config.autosave_path)
+                    
+                    tqdm.tqdm.write("Train loss: {}\t Validation loss: {}".format(avg_train_loss, avg_val_loss))
 
                 feed_dict[self.do_dropout] = DROPOUT_ON
                 outputs = self._eval(self.target_loss, self.train_op, feed_dict=feed_dict)
@@ -410,18 +411,15 @@ class BaseModel(object, metaclass=ABCMeta):
         train_loss_tower = 0
         gpus = self.config.visible_gpus
         n_splits = max(len(gpus), 1)
+
+        # multi-GPU setup, using CPU as param server is most efficient unless system has direct GPU connections
+        # single GPU, no need to use a different GPU as a parameter server
+        params_device = 'cpu' if len(gpus) != 1 else gpus[0]
         for i, (X, M, Y) in enumerate(soft_split(self.X, self.M, self.Y, n_splits=n_splits)):
             do_reuse = True if i > 0 else tf.AUTO_REUSE
 
             if gpus:
-                if (n_splits > 1):
-                    # multi-GPU setup, using CPU as param server is most efficient 
-                    # unless system has direct GPU connections
-                    device_assignment = assign_to_gpu(gpus[i])
-                else:
-                    # single GPU, no need to use a different GPU as a parameter server
-                    device_assignment = assign_to_gpu(gpus[i], params_device=gpus[0])
-                device = tf.device(device_assignment)
+                device = tf.device(assign_to_gpu(gpus[i], params_device=params_device))
             else:
                 device = tf.device('cpu')
 
@@ -477,34 +475,35 @@ class BaseModel(object, metaclass=ABCMeta):
                 grads = list(zip(grads, params))
                 gpu_grads.append(grads)
 
-        self.lm_predict_op = tf.concat(aggregator["lm_model"], 0)
-        self.features = tf.concat(aggregator['features'], axis=0)
-        self.lm_losses = tf.concat(aggregator['lm_losses'], axis=0)
+        with tf.device(params_device):
+            self.lm_predict_op = tf.concat(aggregator["lm_model"], 0)
+            self.features = tf.concat(aggregator['features'], axis=0)
+            self.lm_losses = tf.concat(aggregator['lm_losses'], axis=0)
 
-        self._compile_train_op(
-            params=params,
-            grads=gpu_grads,
-            n_updates_total=n_updates_total,
-            initial_params=pre_trained_weights
-        )
-
-        if target_dim is not None:
-            self.logits = tf.concat(aggregator['logits'], axis=0)
-            self.target_losses = concat_or_stack(aggregator['target_losses'])
-
-            self.predict_op = self._predict_op(
-                self.logits, **target_model_state.get("predict_params", {})
+            self._compile_train_op(
+                params=params,
+                grads=gpu_grads,
+                n_updates_total=n_updates_total,
+                initial_params=pre_trained_weights
             )
-            self.predict_proba_op = self._predict_proba_op(
-                self.logits, **target_model_state.get("predict_params", {})
-            )
-            self.target_loss = tf.reduce_mean(self.target_losses)
-            self.lm_loss = tf.reduce_mean(self.lm_losses)
-            self.summaries.append(tf.summary.scalar('TargetModelLoss', self.target_loss))
-            self.summaries.append(tf.summary.scalar('LanguageModelLoss', self.lm_loss))
-            self.summaries.append(tf.summary.scalar('TotalLoss', train_loss_tower / n_splits))
-        
-        self.summaries = tf.summary.merge(self.summaries) if self.summaries else tf.no_op()
+
+            if target_dim is not None:
+                self.logits = tf.concat(aggregator['logits'], axis=0)
+                self.target_losses = concat_or_stack(aggregator['target_losses'])
+
+                self.predict_op = self._predict_op(
+                    self.logits, **target_model_state.get("predict_params", {})
+                )
+                self.predict_proba_op = self._predict_proba_op(
+                    self.logits, **target_model_state.get("predict_params", {})
+                )
+                self.target_loss = tf.reduce_mean(self.target_losses)
+                self.lm_loss = tf.reduce_mean(self.lm_losses)
+                self.summaries.append(tf.summary.scalar('TargetModelLoss', self.target_loss))
+                self.summaries.append(tf.summary.scalar('LanguageModelLoss', self.lm_loss))
+                self.summaries.append(tf.summary.scalar('TotalLoss', train_loss_tower / n_splits))
+            
+            self.summaries = tf.summary.merge(self.summaries) if self.summaries else tf.no_op()
 
     def _build_model(self, n_updates_total, target_dim, train=True):
         """

@@ -19,13 +19,23 @@ def all_gpus():
     ]
 
 
+class Settings(dict):
+    __getattr__ = dict.__getitem__
+    __setattr__ = dict.__setitem__
+    __delattr__ = dict.__delitem__
+
+    def __init__(self, **kwargs):
+        for key, value in kwargs.items():
+            self[key] = value
+
+
 def get_default_config():
     """
     Gets a config object containing all the default parameters for each variant of the model.
 
     :return: Config object.
     """
-    return tf.contrib.training.HParams(
+    return Settings(
         # MODEL DEFINITION (DO NOT CHANGE)
         n_heads=12,
         n_layer=12,
@@ -96,7 +106,7 @@ def get_config(**kwargs):
     :param **kwargs: Keyword arguments to override default values.
     :return: Config object.    """
     config = get_default_config()
-    config.override_from_dict(kwargs)
+    config.update(kwargs)
     return config
 
 
