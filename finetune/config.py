@@ -20,7 +20,12 @@ def all_gpus():
 
 
 class Settings(dict):
-    __getattr__ = dict.__getitem__
+    
+    def __getattr__(self, attr):
+        if attr.startswith('__'):
+            raise AttributeError
+        return self.get(attr, None)
+
     __setattr__ = dict.__setitem__
     __delattr__ = dict.__delitem__
 

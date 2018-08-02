@@ -20,14 +20,14 @@ from finetune.download import download_data_if_required
 from finetune.optimizers import AdamWeightDecay, schedules
 from sklearn.model_selection import train_test_split
 
-from finetune.target_encoders import OneHotLabelEncoder, SequenceLabelingEncoder
-from finetune.network_modules import featurizer, language_model, classifier, regressor, sequence_labeler
+from finetune.network_modules import featurizer, language_model
 from finetune.utils import (
     find_trainable_variables, assign_to_gpu, average_grads,
-    iter_data, soft_split, concat_or_stack, list_transpose,
-    guarantee_initialized_variables, sample_with_temperature, interpolate_pos_embed
+    iter_data, soft_split, concat_or_stack, interpolate_pos_embed,
+    guarantee_initialized_variables, sample_with_temperature,
+    optimistic_restore_vars
 )
-from finetune.encoding import TextEncoder, EncodedOutput, ArrayEncodedOutput
+from finetune.encoding import TextEncoder, ArrayEncodedOutput
 from finetune.config import PAD_TOKEN, get_default_config
 
 SHAPES_PATH = os.path.join(os.path.dirname(__file__), 'model', 'params_shapes.json')
@@ -521,13 +521,14 @@ class BaseModel(object, metaclass=ABCMeta):
             # if `train` setting has changed
             self._construct_graph(n_updates_total, target_dim, pre_trained_weights=pre_trained_weights, train=train)
 
+        self._initialize_session()
+        guarantee_initialized_variables(self.sess, keys=['model/clf', 'adam'])
+
         # Optionally load saved model
         if self._load_from_file:
             self._load_finetuned_model()
         elif not self.is_trained:
             self._init_from_pretrained(pre_trained_weights["init_params"])
-
-        guarantee_initialized_variables(self.sess, keys=['model/clf', 'adam'])
 
         if train:
             if self.config.tensorboard_folder is not None:
@@ -619,7 +620,6 @@ class BaseModel(object, metaclass=ABCMeta):
     def _init_from_pretrained(self, init_params):
         """ Load pre-trained weights into the tensors """
         pretrained_params = find_trainable_variables("model", exclude="model/clf")
-        self._initialize_session()
         self.sess.run(tf.global_variables_initializer())
         self.sess.run([p.assign(ip) for p, ip in zip(pretrained_params, init_params)])
 
@@ -684,8 +684,9 @@ class BaseModel(object, metaclass=ABCMeta):
         return model
 
     def _load_finetuned_model(self):
-        self._initialize_session()
-        saver = tf.train.Saver(tf.trainable_variables())
+        ckpt = tf.train.get_checkpoint_state(self._load_from_file)
+        checkpoint_vars = optimistic_restore_vars(ckpt.model_checkpoint_path)
+        saver = tf.train.Saver(var_list=checkpoint_vars)
         saver.restore(self.sess, os.path.join(self._load_from_file, SAVE_PREFIX))
         self._load_from_file = False
         self.is_trained = True

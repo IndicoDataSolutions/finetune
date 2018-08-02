@@ -62,14 +62,13 @@ def featurizer(X, encoder, dropout_placeholder, config, train=False, reuse=None,
                     block_fn = recompute_grad(block_fn, use_entire_scope=True)
                 h = block_fn(h)
 
-            # Use hidden state at classifier token as input to final proj. + softmax
-            clf_h = tf.reshape(h, [-1, config.n_embed])  # [batch * seq_len, embed]
-            clf_token = encoder['_classify_']
-            pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
-            clf_h = tf.gather(clf_h, tf.range(shape_list(X)[0], dtype=tf.int32) * max_length + pool_idx)
-
-            clf_h = tf.reshape(clf_h, shape=initial_shape[0: -2] + [config.n_embed])
-            seq_feats = tf.reshape(h, shape=initial_shape[:-1] + [config.n_embed])
+        # Use hidden state at classifier token as input to final proj. + softmax
+        clf_h = tf.reshape(h, [-1, config.n_embed])  # [batch * seq_len, embed]
+        clf_token = encoder['_classify_']
+        pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
+        clf_h = tf.gather(clf_h, tf.range(shape_list(X)[0], dtype=tf.int32) * max_length + pool_idx)
+        clf_h = tf.reshape(clf_h, shape=initial_shape[0: -2] + [config.n_embed])
+        seq_feats = tf.reshape(h, shape=initial_shape[:-1] + [config.n_embed])
 
         return {
             'embed_weights': embed_weights,
