@@ -77,7 +77,7 @@ def get_default_config():
 
         # debugging
         log_device_placement=False,
-        soft_device_placement=False,
+        soft_device_placement=True,
     )
 
 
