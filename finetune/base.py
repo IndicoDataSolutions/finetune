@@ -649,7 +649,6 @@ class BaseModel(object, metaclass=ABCMeta):
                 raise ValueError("Invalid save location: {}.  A file already exists at this location.".format(path))
         else:
             path_obj.mkdir(parents=True)
-            os.mkdir(path)
         
         saver.save(self.sess, os.path.join(path, SAVE_PREFIX))
         pickle.dump(self, open(
