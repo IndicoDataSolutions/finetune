@@ -1,11 +1,13 @@
 import tensorflow as tf
 
-from finetune.base import BaseModel
-from finetune.target_encoders import OneHotLabelEncoder
-from finetune.network_modules import classifier
+from finetune.base import BaseModel, DROPOUT_OFF
+from finetune.target_encoders import MultilabelClassificationEncoder
+from finetune.network_modules import multi_classifier
+
+import warnings
 
 
-class MulticlassClassifier(BaseModel):
+class MultiLabelClassifier(BaseModel):
     """ 
     Classifies a single document into 1 of N categories.
     For a full list of configuration options, see :mod:`finetune.config`.
@@ -50,21 +52,21 @@ class MulticlassClassifier(BaseModel):
     def finetune(self, X, Y=None, batch_size=None):
         """
         :param X: list or array of text.
-        :param Y: integer or string-valued class labels.
+        :param Y: A list of lists containing labels for the corresponding X
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
         """
         return super().finetune(X, Y=Y, batch_size=batch_size)
 
     def _target_encoder(self):
-        return OneHotLabelEncoder()
+        return MultilabelClassificationEncoder()
 
     def _target_model(self, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
-        return classifier(
-            hidden=featurizer_state['features'], 
-            targets=targets, 
-            n_targets=n_outputs, 
-            dropout_placeholder=self.do_dropout, 
+        return multi_classifier(
+            hidden=featurizer_state['features'],
+            targets=targets,
+            n_targets=n_outputs,
+            dropout_placeholder=self.do_dropout,
             config=self.config,
             train=train,
             reuse=reuse,
@@ -72,7 +74,26 @@ class MulticlassClassifier(BaseModel):
         )
 
     def _predict_op(self, logits, **kwargs):
-        return tf.argmax(logits, -1)
+        threshold = self.config.multi_label_threshold
+        return tf.cast(tf.nn.sigmoid(logits) > threshold, tf.int32)
 
     def _predict_proba_op(self, logits, **kwargs):
-        return tf.nn.softmax(logits, -1)
+        return tf.nn.sigmoid(logits)
+
+    def _predict(self, *Xs, max_length=None):
+        predictions = []
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore")
+            max_length = max_length or self.config.max_length
+            for xmb, mmb in self._infer_prep(*Xs, max_length=max_length):
+                output = self._eval(self.predict_op,
+                                    feed_dict={
+                                        self.X: xmb,
+                                        self.M: mmb,
+                                        self.do_dropout: DROPOUT_OFF
+                                    }
+                                    )
+                prediction = output.get(self.predict_op)
+                formatted_predictions = self.label_encoder.inverse_transform(prediction)
+                predictions.extend(formatted_predictions)
+        return predictions
