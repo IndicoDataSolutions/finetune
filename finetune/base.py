@@ -25,7 +25,7 @@ from finetune.network_modules import featurizer, language_model, classifier, reg
 from finetune.utils import (
     find_trainable_variables, get_available_gpus, assign_to_gpu, average_grads,
     iter_data, soft_split, concat_or_stack, list_transpose,
-    guarantee_initialized_variables, sample_with_temperature
+    guarantee_initialized_variables, sample_with_temperature, interpolate_pos_embed
 )
 from finetune.encoding import TextEncoder, EncodedOutput, ArrayEncodedOutput
 from finetune.config import PAD_TOKEN, get_default_config
@@ -59,6 +59,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self._initialize()
         self.target_dim = None
         self._load_from_file = False
+        self.noop = tf.no_op()
 
     def _initialize(self):
         # Initializes the non-serialized bits of the class.
@@ -117,7 +118,7 @@ class BaseModel(object, metaclass=ABCMeta):
     def _target_model(self, *, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
         # Overridden by subclass to attach a target model onto the shared base featurizer.
         raise NotImplementedError
-    
+
     @abstractmethod
     def _target_encoder(self):
         # Overridden by subclass to produce the right target encoding for a given target model.
@@ -130,7 +131,7 @@ class BaseModel(object, metaclass=ABCMeta):
         If any result value is None, that result is excluded from the results `dict`.
         """
         tensors = [
-            tensor if tensor is not None else tf.no_op()
+            tensor if tensor is not None else self.noop
             for tensor in tensors
         ]
         values = self.sess.run(tensors, feed_dict=feed_dict)
@@ -150,7 +151,7 @@ class BaseModel(object, metaclass=ABCMeta):
         return self._training_loop(
             arr_encoded,
             Y=labels,
-            batch_size=batch_size, 
+            batch_size=batch_size,
         )
 
     def _training_loop(self, arr_encoded, Y=None, batch_size=None):
@@ -169,7 +170,7 @@ class BaseModel(object, metaclass=ABCMeta):
             train_Y = self.label_encoder.fit_transform(Y[train_idxs])
             val_Y = self.label_encoder.transform(Y[val_idxs])
             target_dim = self.label_encoder.target_dim
-        
+
         batch_size = batch_size or self.config.batch_size
         n_batch_train = batch_size * max(len(get_available_gpus(self.config)), 1)
         n_examples = len(train_idxs)
@@ -189,12 +190,12 @@ class BaseModel(object, metaclass=ABCMeta):
 
         for i in range(self.config.n_epochs):
             for (xmb, mmb, ymb) in iter_data(*train_dataset, n_batch=n_batch_train, verbose=self.config.verbose):
-                
+
                 feed_dict = {
                     self.X: xmb,
                     self.M: mmb,
                 }
-                if target_dim: 
+                if target_dim:
                     feed_dict[self.Y] = ymb
 
                 global_step += 1
@@ -206,13 +207,14 @@ class BaseModel(object, metaclass=ABCMeta):
                         self.train_writer.add_summary(outputs.get(self.summaries), global_step)
 
                     sum_val_loss = 0
-                    for xval, mval, yval in iter_data(*val_dataset, n_batch=n_batch_train, verbose=self.config.verbose, tqdm_desc="Validation"):
+                    for xval, mval, yval in iter_data(*val_dataset, n_batch=n_batch_train, verbose=self.config.verbose,
+                                                      tqdm_desc="Validation"):
                         feed_dict = {
                             self.X: xval,
                             self.M: mval,
                             self.do_dropout: DROPOUT_OFF
                         }
-                        if target_dim: 
+                        if target_dim:
                             feed_dict[self.Y] = yval
 
                         outputs = self._eval(self.target_loss, self.summaries, feed_dict=feed_dict)
@@ -235,7 +237,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
                 feed_dict[self.do_dropout] = DROPOUT_ON
                 outputs = self._eval(self.target_loss, self.train_op, feed_dict=feed_dict)
-                  
+
                 cost = outputs.get(self.target_loss, 0)
                 avg_train_loss = avg_train_loss * self.config.rolling_avg_decay + cost * (
                         1 - self.config.rolling_avg_decay)
@@ -335,7 +337,8 @@ class BaseModel(object, metaclass=ABCMeta):
         arr_encoded = self._text_to_ids(*Xs, max_length=max_length)
         n_batch_train = self.config.batch_size * max(len(get_available_gpus(self.config)), 1)
         self._build_model(n_updates_total=0, target_dim=self.target_dim, train=False)
-        yield from iter_data(arr_encoded.token_ids, arr_encoded.mask, n_batch=n_batch_train, verbose=self.config.verbose)
+        yield from iter_data(arr_encoded.token_ids, arr_encoded.mask, n_batch=n_batch_train,
+                             verbose=self.config.verbose)
 
     def _array_format(self, encoded_output):
         """
@@ -348,7 +351,8 @@ class BaseModel(object, metaclass=ABCMeta):
         seq_lengths = [len(x) for x in encoded_output.token_ids]
         x = np.zeros((n, self.config.max_length, 2), dtype=np.int32)
         mask = np.zeros((n, self.config.max_length), dtype=np.float32)
-        labels_arr = np.full((n, self.config.max_length), PAD_TOKEN, dtype='object') if encoded_output.labels is not None else None
+        labels_arr = np.full((n, self.config.max_length), PAD_TOKEN,
+                             dtype='object') if encoded_output.labels is not None else None
         for i, seq_length in enumerate(seq_lengths):
             # BPE embedding
             x[i, :seq_length, 0] = encoded_output.token_ids[i]
@@ -467,12 +471,13 @@ class BaseModel(object, metaclass=ABCMeta):
         self.features = tf.concat(aggregator['features'], axis=0)
         self.lm_losses = tf.concat(aggregator['lm_losses'], axis=0)
 
-        self._compile_train_op(
-            params=params,
-            grads=gpu_grads,
-            n_updates_total=n_updates_total,
-            initial_params=pre_trained_weights
-        )
+        if train:
+            self._compile_train_op(
+                params=params,
+                grads=gpu_grads,
+                n_updates_total=n_updates_total,
+                initial_params=pre_trained_weights
+            )
 
         if target_dim is not None:
             self.logits = tf.concat(aggregator['logits'], axis=0)
@@ -489,7 +494,7 @@ class BaseModel(object, metaclass=ABCMeta):
             self.summaries.append(tf.summary.scalar('TargetModelLoss', self.target_loss))
             self.summaries.append(tf.summary.scalar('LanguageModelLoss', self.lm_loss))
             self.summaries.append(tf.summary.scalar('TotalLoss', train_loss_tower / n_splits))
-        
+
         self.summaries = tf.summary.merge(self.summaries) if self.summaries else tf.no_op()
 
     def _build_model(self, n_updates_total, target_dim, train=True):
@@ -522,7 +527,8 @@ class BaseModel(object, metaclass=ABCMeta):
     def _initialize_session(self):
         gpus = get_available_gpus(self.config)
         os.environ['CUDA_VISIBLE_DEVICES'] = ",".join([str(gpu) for gpu in gpus])
-        conf = tf.ConfigProto(allow_soft_placement=True)
+        conf = tf.ConfigProto(allow_soft_placement=self.config.soft_device_placement,
+                              log_device_placement=self.config.log_device_placement)
         self.sess = tf.Session(config=conf)
 
     def _set_random_seed(self, seed=None):
@@ -533,7 +539,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
     def _target_placeholder(self):
         return tf.placeholder(tf.float32, [None, self.target_dim or 1])  # classification targets
-    
+
     def _define_placeholders(self):
         # tf placeholders
         self.X = tf.placeholder(tf.int32, [None, self.config.max_length, 2])  # token idxs (BPE embedding + positional)
@@ -543,7 +549,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self.do_dropout = tf.placeholder(tf.float32)  # 1 for do dropout and 0 to not do dropout
         self.Y = self._target_placeholder()
 
-    def generate_text(self,  seed_text='', max_length=None):
+    def generate_text(self, seed_text='', max_length=None):
         """
         Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
         Temperature parameter for decoding is set in the config.
@@ -576,10 +582,19 @@ class BaseModel(object, metaclass=ABCMeta):
             init_params = [np.load(PARAM_PATH.format(n)) for n in range(10)]
             init_params = np.split(np.concatenate(init_params, 0), offsets)[:-1]
             init_params = [param.reshape(shape) for param, shape in zip(init_params, shapes)]
-            init_params[0] = init_params[0][:self.config.max_length]
+
+            if self.config.interpolate_pos_embed:
+                init_params[0] = interpolate_pos_embed(init_params[0], self.config.max_length)
+            elif self.config.max_length > 512:
+                raise ValueError("Max Length cannot be greater than 512 if interploate_pos_embed is turned off")
+            else:
+                init_params[0] = init_params[0][:self.config.max_length]
+
             special_embed = (np.random.randn(len(self.encoder.special_tokens),
                                              self.config.n_embed) * self.config.weight_stddev).astype(np.float32)
-            reg_mask = np.concatenate([np.ones_like(init_params[1]), np.zeros_like(special_embed), np.ones_like(init_params[0])], 0)
+            reg_mask = np.concatenate(
+                [np.ones_like(init_params[1]), np.zeros_like(special_embed), np.ones_like(init_params[0])], 0)
+
             init_params[0] = np.concatenate([init_params[1], special_embed, init_params[0]], 0)
             del init_params[1]
 

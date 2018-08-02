@@ -1,10 +1,10 @@
 from finetune.transformer import dropout, embed, block, attn, norm
-from finetune.utils import shape_list
+from finetune.utils import shape_list, merge_leading_dims
+from finetune.recompute_grads import recompute_grad
+import functools
 import tensorflow as tf
 
-def merge_leading_dims(X, target_rank):
-    shape = [-1] + X.get_shape().as_list()[1 - target_rank:]
-    return tf.reshape(X, shape)
+
 
 def perceptron(x, ny, config, w_init=None, b_init=None):
     """
@@ -54,18 +54,23 @@ def featurizer(X, encoder, dropout_placeholder, config, train=False, reuse=None,
 
         h = embed(X, embed_weights)
         for layer in range(config.n_layer):
-            h = block(h, config.n_heads, config.act_fn, config.resid_p_drop, config.attn_p_drop, 'h%d' % layer,
-                      dropout_placeholder, train=train, scale=True)
-        # Use hidden state at classifier token as input to final proj. + softmax
-        clf_h = tf.reshape(h, [-1, config.n_embed])  # [batch * seq_len, embed]
-        clf_token = encoder['_classify_']
-        pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
-        clf_h = tf.gather(clf_h, tf.range(shape_list(X)[0], dtype=tf.int32) * max_length + pool_idx)
+            with tf.variable_scope('h%d_' % layer):
+                block_fn = functools.partial(block, n_head=config.n_heads, act_fn=config.act_fn,
+                                             resid_pdrop=config.resid_p_drop, attn_pdrop=config.attn_p_drop,
+                                             scope='h%d' % layer, dropout_placeholder=dropout_placeholder,
+                                             train=train, scale=True)
+                if config.low_memory_mode and train:
+                    block_fn = recompute_grad(block_fn, use_entire_scope=True)
+                h = block_fn(h)
 
+            # Use hidden state at classifier token as input to final proj. + softmax
+            clf_h = tf.reshape(h, [-1, config.n_embed])  # [batch * seq_len, embed]
+            clf_token = encoder['_classify_']
+            pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
+            clf_h = tf.gather(clf_h, tf.range(shape_list(X)[0], dtype=tf.int32) * max_length + pool_idx)
 
-
-        clf_h = tf.reshape(clf_h, shape=initial_shape[0: -2] + [config.n_embed])
-        seq_feats = tf.reshape(h, shape=initial_shape[:-1] + [config.n_embed])
+            clf_h = tf.reshape(clf_h, shape=initial_shape[0: -2] + [config.n_embed])
+            seq_feats = tf.reshape(h, shape=initial_shape[:-1] + [config.n_embed])
 
         return {
             'embed_weights': embed_weights,
@@ -138,6 +143,27 @@ def classifier(hidden, targets, n_targets, dropout_placeholder, config, train=Fa
             'losses': clf_losses
         }
 
+def multi_choice_question(hidden, targets, n_targets, dropout_placeholder, config, train=False, reuse=None, **kwargs):
+    with tf.variable_scope("model", reuse=reuse):
+        initial_shape = shape_list(hidden)
+        hidden = dropout(hidden, config.clf_p_drop, train, dropout_placeholder)
+
+        # some model
+        clf_out = perceptron(merge_leading_dims(hidden, 2), n_targets, config)
+
+        clf_logits = tf.reshape(clf_out, shape=initial_shape[0] + [n_targets])
+        clf_losses = tf.nn.softmax_cross_entropy_with_logits_v2(
+            logits=clf_logits,
+            labels=tf.stop_gradient(targets)
+        )
+        return {
+            'logits': clf_logits,
+            'losses': clf_losses
+        }
+
+
+
+
 
 def regressor(hidden, targets, n_targets, dropout_placeholder, config, train=False, reuse=None, **kwargs):
     """
@@ -188,13 +214,21 @@ def sequence_labeler(hidden, targets, n_targets, dropout_placeholder, config, tr
     """
     with tf.variable_scope('model/clf', reuse=reuse):
         nx = config.n_embed
-        a = attn(hidden, 'seq_label_attn', nx, config.seq_num_heads, config.seq_dropout, config.seq_dropout, dropout_placeholder, train=train, scale=False, mask=False)
+        a = attn(hidden, 'seq_label_attn', nx, config.seq_num_heads, config.seq_dropout, config.seq_dropout,
+                 dropout_placeholder, train=train, scale=False, mask=False)
         n = norm(hidden + a, 'seq_label_residual')
         flat_logits = tf.layers.dense(n, n_targets)
         logits = tf.reshape(flat_logits, tf.concat([tf.shape(hidden)[:2], [n_targets]], 0))
         # TODO (BEN): ADD: correct way to find lengths. - Same method in decoding. Cheating for now.
-        with tf.device(None):
-            log_likelihood, transition_params = tf.contrib.crf.crf_log_likelihood(logits, targets, kwargs.get('max_length') * tf.ones(tf.shape(targets)[0]))
+        transition_params = tf.get_variable("Transition_matrix", shape=[n_targets, n_targets])
+
+        if train:
+            log_likelihood, _ = tf.contrib.crf.crf_log_likelihood(logits, targets, kwargs.get('max_length') * tf.ones(
+                                                                  tf.shape(targets)[0]),
+                                                                  transition_params=transition_params)
+        else:
+            log_likelihood = tf.constant(0.)
+
         return {
             'logits': logits,
             'losses': -log_likelihood,

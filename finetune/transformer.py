@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 
-from finetune.utils import convert_gradient_to_tensor, shape_list, assign_to_gpu, average_grads, make_path
+from finetune.utils import convert_gradient_to_tensor, shape_list
 from finetune.activations import act_fns
 
 
@@ -27,7 +27,7 @@ def mask_attn_weights(w):
     n = shape_list(w)[-1]
     b = tf.matrix_band_part(tf.ones([n, n]), -1, 0)
     b = tf.reshape(b, [1, 1, n, n])
-    w = w * b + -1e9 * (1-b)
+    w = w * b + -1e9 * (1 - b)
     return w
 
 
@@ -72,15 +72,16 @@ def merge_heads(x):
     return merge_states(tf.transpose(x, [0, 2, 1, 3]))
 
 
-def conv1d(x, scope, nf, rf, w_init=tf.random_normal_initializer(stddev=0.02), b_init=tf.constant_initializer(0), pad='VALID', train=False):
+def conv1d(x, scope, nf, rf, w_init=tf.random_normal_initializer(stddev=0.02), b_init=tf.constant_initializer(0),
+           pad='VALID', train=False):
     with tf.variable_scope(scope):
         nx = shape_list(x)[-1]
         w = tf.get_variable("w", [rf, nx, nf], initializer=w_init)
         b = tf.get_variable("b", [nf], initializer=b_init)
-        if rf == 1: # faster 1x1 conv
-            c = tf.reshape(tf.matmul(tf.reshape(x, [-1, nx]), tf.reshape(w, [-1, nf]))+b, shape_list(x)[:-1]+[nf])
-        else: # was used to train LM
-            c = tf.nn.conv1d(x, w, stride=1, padding=pad)+b
+        if rf == 1:  # faster 1x1 conv
+            c = tf.reshape(tf.matmul(tf.reshape(x, [-1, nx]), tf.reshape(w, [-1, nf])) + b, shape_list(x)[:-1] + [nf])
+        else:  # was used to train LM
+            c = tf.nn.conv1d(x, w, stride=1, padding=pad) + b
         return c
 
 
@@ -92,7 +93,8 @@ def attn(x, scope, n_state, n_head, resid_pdrop, attn_pdrop, dropout_placeholder
         q = split_heads(q, n_head)
         k = split_heads(k, n_head, k=True)
         v = split_heads(v, n_head)
-        a = _attn(q, k, v, attn_pdrop=attn_pdrop, dropout_placeholder=dropout_placeholder, train=train, scale=scale, mask=mask)
+        a = _attn(q, k, v, attn_pdrop=attn_pdrop, dropout_placeholder=dropout_placeholder, train=train, scale=scale,
+                  mask=mask)
         a = merge_heads(a)
         a = conv1d(a, 'c_proj', n_state, 1, train=train)
         a = dropout(a, resid_pdrop, train, dropout_placeholder)
@@ -122,5 +124,6 @@ def block(x, n_head, act_fn, resid_pdrop, attn_pdrop, scope, dropout_placeholder
 def embed(X, we):
     we = convert_gradient_to_tensor(we)
     e = tf.gather(we, X)
+    #    h = add_timing_signal_1d(e[:, :, 0])
     h = tf.reduce_sum(e, 2)
     return h

@@ -22,17 +22,20 @@ def get_default_config():
         visible_gpus=None,
         n_epochs=3,
         seed=42,
-        max_length=256,
-
+        max_length=512,
         # INITIALIZATION
         weight_stddev=0.02,
+
+        # LONG SEQUENCE
+        low_memory_mode=False,
+        interpolate_pos_embed=True,
 
         # REGULARIZATION
         embed_p_drop=0.1,
         attn_p_drop=0.1,
         resid_p_drop=0.1,
         clf_p_drop=0.1,
-        l2_reg=0.01,
+        l2_reg=0.0,
         vector_l2=True,
 
         # LOSS + OPTIMIZATION
@@ -71,6 +74,10 @@ def get_default_config():
 
         # Tensorboard
         tensorboard_folder=None,
+
+        # debugging
+        log_device_placement=False,
+        soft_device_placement=True,
     )
 
 
