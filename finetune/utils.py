@@ -336,24 +336,31 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, none_value=config.PA
 
         doc_text = ""
         doc_annotations = set([])
-        annotation_start = 0
-        annotation_end = 0
+        raw_annotation_start = 0
+        raw_annotation_end = 0
         start_idx = 0
         end_idx = 0
         for sub_str, label in zip(doc_seq, label_seq):
             stripped_text = sub_str.strip()
-            annotation_start = raw_text.find(stripped_text, annotation_end)
-            annotation_end = annotation_start + len(stripped_text)
 
-            if not subtoken_predictions:
-                # round to nearest token
-                while start_idx < n_tokens and annotation_start >= token_starts[start_idx]:
-                    start_idx += 1
-                annotation_start = token_starts[start_idx - 1]
-                while end_idx < (n_tokens - 1) and annotation_end > token_ends[end_idx]:
-                    end_idx += 1
-                annotation_end = token_ends[end_idx]
+            raw_annotation_start = raw_text.find(stripped_text, raw_annotation_end)
+            raw_annotation_end = raw_annotation_start + len(stripped_text)
+
+            annotation_start = raw_annotation_start
+            annotation_end = raw_annotation_end
             
+            # if we don't want to allow subtoken predictions, adjust start and end to match
+            # the start and ends of the nearest full tokens
+            if not subtoken_predictions:
+                if label != none_value:
+                    # round to nearest token
+                    while start_idx < n_tokens and annotation_start >= token_starts[start_idx]:
+                        start_idx += 1
+                    annotation_start = token_starts[start_idx - 1]
+                    while end_idx < (n_tokens - 1) and annotation_end > token_ends[end_idx]:
+                        end_idx += 1
+                    annotation_end = token_ends[end_idx]
+                    
             text = raw_text[annotation_start:annotation_end]
             if label != none_value:
                 doc_annotations.add(

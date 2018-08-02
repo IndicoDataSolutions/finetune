@@ -59,6 +59,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self._initialize()
         self.target_dim = None
         self._load_from_file = False
+        self.noop = tf.no_op()
 
     def _initialize(self):
         # Initializes the non-serialized bits of the class.
@@ -130,7 +131,7 @@ class BaseModel(object, metaclass=ABCMeta):
         If any result value is None, that result is excluded from the results `dict`.
         """
         tensors = [
-            tensor if tensor is not None else tf.no_op()
+            tensor if tensor is not None else self.noop
             for tensor in tensors
         ]
         values = self.sess.run(tensors, feed_dict=feed_dict)
@@ -503,7 +504,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 self.summaries.append(tf.summary.scalar('LanguageModelLoss', self.lm_loss))
                 self.summaries.append(tf.summary.scalar('TotalLoss', train_loss_tower / n_splits))
             
-            self.summaries = tf.summary.merge(self.summaries) if self.summaries else tf.no_op()
+            self.summaries = tf.summary.merge(self.summaries) if self.summaries else self.noop
 
     def _build_model(self, n_updates_total, target_dim, train=True):
         """
