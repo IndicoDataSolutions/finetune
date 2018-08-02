@@ -102,5 +102,5 @@ def get_config(**kwargs):
 
 def cpu_config():
     config = get_default_config()
-    config.visibleGpus = []
+    config.visible_gpus = []
     return config

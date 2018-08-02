@@ -23,7 +23,7 @@ from sklearn.model_selection import train_test_split
 from finetune.target_encoders import OneHotLabelEncoder, SequenceLabelingEncoder
 from finetune.network_modules import featurizer, language_model, classifier, regressor, sequence_labeler
 from finetune.utils import (
-    find_trainable_variables, get_available_gpus, assign_to_gpu, average_grads,
+    find_trainable_variables, assign_to_gpu, average_grads,
     iter_data, soft_split, concat_or_stack, list_transpose,
     guarantee_initialized_variables, sample_with_temperature
 )
@@ -171,7 +171,7 @@ class BaseModel(object, metaclass=ABCMeta):
             target_dim = self.label_encoder.target_dim
         
         batch_size = batch_size or self.config.batch_size
-        n_batch_train = batch_size * max(len(get_available_gpus(self.config)), 1)
+        n_batch_train = batch_size * max(len(self.config.visible_gpus), 1)
         n_examples = len(train_idxs)
         n_updates_total = (n_examples // n_batch_train) * self.config.n_epochs
 
@@ -181,8 +181,8 @@ class BaseModel(object, metaclass=ABCMeta):
         self._build_model(n_updates_total=n_updates_total, target_dim=target_dim)
         self.is_trained = True
 
-        avg_train_loss = 0
-        avg_val_loss = 0
+        avg_train_loss = None
+        avg_val_loss = None
         global_step = 0
         best_val_loss = float("inf")
         val_window = [float("inf")] * self.config.val_window_size
@@ -199,7 +199,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
                 global_step += 1
                 if global_step % self.config.val_interval == 0:
-                    tqdm.tqdm.write("Train loss is :{}, Val loss is :{}".format(avg_train_loss, avg_val_loss))
+                    tqdm.tqdm.write("Train loss: {}\t Validation loss: {}".format(avg_train_loss, avg_val_loss))
                     feed_dict[self.do_dropout] = DROPOUT_OFF
                     outputs = self._eval(self.summaries, feed_dict=feed_dict)
                     if self.train_writer is not None:
@@ -221,10 +221,14 @@ class BaseModel(object, metaclass=ABCMeta):
                             self.valid_writer.add_summary(outputs.get(self.summaries), global_step)
                         val_cost = outputs.get(self.target_loss, 0)
                         sum_val_loss += val_cost
-                        avg_val_loss = (
-                                avg_val_loss * self.config.rolling_avg_decay
-                                + val_cost * (1 - self.config.rolling_avg_decay)
-                        )
+
+                        if avg_val_loss is None:
+                            avg_val_loss = val_cost
+                        else:
+                            avg_val_loss = (
+                                    avg_val_loss * self.config.rolling_avg_decay
+                                    + val_cost * (1 - self.config.rolling_avg_decay)
+                            )
                     val_window.append(sum_val_loss)
                     val_window.pop(0)
 
@@ -237,8 +241,11 @@ class BaseModel(object, metaclass=ABCMeta):
                 outputs = self._eval(self.target_loss, self.train_op, feed_dict=feed_dict)
                   
                 cost = outputs.get(self.target_loss, 0)
-                avg_train_loss = avg_train_loss * self.config.rolling_avg_decay + cost * (
-                        1 - self.config.rolling_avg_decay)
+                if avg_train_loss is None:
+                    avg_train_loss = cost
+                else:
+                    avg_train_loss = avg_train_loss * self.config.rolling_avg_decay + cost * (
+                            1 - self.config.rolling_avg_decay)
 
         return self
 
@@ -333,7 +340,7 @@ class BaseModel(object, metaclass=ABCMeta):
     def _infer_prep(self, *Xs, max_length=None):
         max_length = max_length or self.config.max_length
         arr_encoded = self._text_to_ids(*Xs, max_length=max_length)
-        n_batch_train = self.config.batch_size * max(len(get_available_gpus(self.config)), 1)
+        n_batch_train = self.config.batch_size * max(len(self.config.visible_gpus), 1)
         self._build_model(n_updates_total=0, target_dim=self.target_dim, train=False)
         yield from iter_data(arr_encoded.token_ids, arr_encoded.mask, n_batch=n_batch_train, verbose=self.config.verbose)
 
@@ -401,7 +408,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         aggregator = defaultdict(list)
         train_loss_tower = 0
-        gpus = get_available_gpus(self.config)
+        gpus = self.config.visible_gpus
         n_splits = max(len(gpus), 1)
         for i, (X, M, Y) in enumerate(soft_split(self.X, self.M, self.Y, n_splits=n_splits)):
             do_reuse = True if i > 0 else tf.AUTO_REUSE
@@ -527,7 +534,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self.is_built = True
 
     def _initialize_session(self):
-        gpus = get_available_gpus(self.config)
+        gpus = self.config.visible_gpus
         os.environ['CUDA_VISIBLE_DEVICES'] = ",".join([str(gpu) for gpu in gpus])
         conf = tf.ConfigProto(allow_soft_placement=True)
         self.sess = tf.Session(config=conf)
@@ -642,6 +649,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 raise ValueError("Invalid save location: {}.  A file already exists at this location.".format(path))
         else:
             path_obj.mkdir(parents=True)
+            os.mkdir(path)
         
         saver.save(self.sess, os.path.join(path, SAVE_PREFIX))
         pickle.dump(self, open(
