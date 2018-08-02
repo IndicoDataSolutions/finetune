@@ -46,7 +46,7 @@ def get_default_config():
         lr=6.25e-5,
         lr_warmup=0.002,
         max_grad_norm=1,
-        lm_loss_coef=0.5,
+        lm_loss_coef=0.0,
         rolling_avg_decay=0.99,
         regularize_deviation=0.0,
 
@@ -66,6 +66,7 @@ def get_default_config():
         seq_num_heads=16,
         seq_dropout=0.3,
         pad_token="<PAD>",
+        subtoken_predictions=False,
 
         # Early stopping
         save_best_model=False,
@@ -76,7 +77,7 @@ def get_default_config():
 
         # debugging
         log_device_placement=False,
-        soft_device_placement=True,
+        soft_device_placement=False,
     )
 
 
