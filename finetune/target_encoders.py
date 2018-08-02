@@ -1,5 +1,5 @@
 import numpy as np
-from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import LabelEncoder, MultiLabelBinarizer
 from abc import ABCMeta
 
 
@@ -119,3 +119,6 @@ class SequenceLabelingEncoder(LabelEncoder, BaseEncoder):
         labels = super().inverse_transform(flat)
         return np.reshape(labels, shape)
 
+
+class MultilabelClassificationEncoder(MultiLabelBinarizer, BaseEncoder):
+    """"""
