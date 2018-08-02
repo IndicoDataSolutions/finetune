@@ -5,7 +5,6 @@ import functools
 import tensorflow as tf
 
 
-
 def perceptron(x, ny, config, w_init=None, b_init=None):
     """
     A very standard linear Perceptron model.
@@ -143,6 +142,7 @@ def classifier(hidden, targets, n_targets, dropout_placeholder, config, train=Fa
             'losses': clf_losses
         }
 
+
 def multi_choice_question(hidden, targets, n_targets, dropout_placeholder, config, train=False, reuse=None, **kwargs):
     with tf.variable_scope("model", reuse=reuse):
         initial_shape = shape_list(hidden)
@@ -162,7 +162,33 @@ def multi_choice_question(hidden, targets, n_targets, dropout_placeholder, confi
         }
 
 
+def multi_classifier(hidden, targets, n_targets, dropout_placeholder, config, train=False, reuse=None, **kwargs):
+    """
+    A simple linear classifier.
 
+    :param hidden: The output of the featurizer. [batch_size, embed_dim]
+    :param targets: The placeholder representing the sparse targets [batch_size, n_targets]
+    :param n_targets: A python int containing the number of classes that the model should be learning to predict over.
+    :param dropout_placeholder:
+    :param config: A config object, containing all parameters for the featurizer.
+    :param train: If this flag is true, dropout and losses are added to the graph.
+    :param reuse: Should reuse be set within this scope.
+    :param kwargs: Spare arguments.
+    :return: dict containing:
+        logits: The unnormalised log probabilities of each class.
+        losses: The loss for the classifier.
+    """
+    with tf.variable_scope('model', reuse=reuse):
+        hidden = dropout(hidden, config.clf_p_drop, train, dropout_placeholder)
+        clf_logits = perceptron(hidden, n_targets, config)
+        clf_losses = tf.nn.sigmoid_cross_entropy_with_logits(
+            logits=clf_logits,
+            labels=tf.stop_gradient(targets)
+        )
+        return {
+            'logits': clf_logits,
+            'losses': clf_losses
+        }
 
 
 def regressor(hidden, targets, n_targets, dropout_placeholder, config, train=False, reuse=None, **kwargs):
@@ -224,7 +250,7 @@ def sequence_labeler(hidden, targets, n_targets, dropout_placeholder, config, tr
 
         if train:
             log_likelihood, _ = tf.contrib.crf.crf_log_likelihood(logits, targets, kwargs.get('max_length') * tf.ones(
-                                                                  tf.shape(targets)[0]),
+                tf.shape(targets)[0]),
                                                                   transition_params=transition_params)
         else:
             log_likelihood = tf.constant(0.)
