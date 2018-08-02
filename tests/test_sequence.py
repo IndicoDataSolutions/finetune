@@ -19,7 +19,10 @@ from bs4.element import Tag
 
 from finetune import SequenceLabeler
 from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_sequence
-
+from finetune.metrics import (
+    sequence_labeling_token_precision, sequence_labeling_token_recall,
+    sequence_labeling_overlap_precision, sequence_labeling_overlap_recall
+)
 
 class TestSequenceLabeler(unittest.TestCase):
 
@@ -84,7 +87,7 @@ class TestSequenceLabeler(unittest.TestCase):
         
         tf.reset_default_graph()
 
-        self.model = SequenceLabeler(batch_size=2, max_length=256, verbose=False)
+        self.model = SequenceLabeler(batch_size=2, max_length=256, lm_loss_coef=0.0, verbose=False)
 
     def test_fit_predict(self):
         """
@@ -93,7 +96,7 @@ class TestSequenceLabeler(unittest.TestCase):
         """
         raw_docs = ["".join(text) for text in self.texts]
         texts, annotations = finetune_to_indico_sequence(raw_docs, self.texts, self.labels)
-        train_texts, test_texts, train_annotations, test_annotations = train_test_split(texts, annotations)
+        train_texts, test_texts, train_annotations, test_annotations = train_test_split(texts, annotations, test_size=0.1)
         self.model.fit(train_texts, train_annotations)
         predictions = self.model.predict(test_texts)
         probas = self.model.predict_proba(test_texts)
@@ -101,17 +104,35 @@ class TestSequenceLabeler(unittest.TestCase):
         self.assertIsInstance(probas[0], list)
         self.assertIsInstance(probas[0][0], tuple)
         self.assertIsInstance(probas[0][0][1], dict)
+        token_precision = sequence_labeling_token_precision(test_annotations, predictions)
+        token_recall = sequence_labeling_token_recall(test_annotations, predictions)
+        overlap_precision = sequence_labeling_overlap_precision(test_annotations, predictions)
+        overlap_recall = sequence_labeling_overlap_recall(test_annotations, predictions)
+        self.assertIn('Named Entity', token_precision)
+        self.assertIn('Named Entity', token_recall)
+        self.assertIn('Named Entity', overlap_precision)
+        self.assertIn('Named Entity', overlap_recall)
         self.model.save(self.save_file)
         model = SequenceLabeler.load(self.save_file)
         predictions = model.predict(test_texts)
 
-
     def test_reasonable_predictions(self):
         test_sequence = ["I am a dog. A dog that's incredibly bright. I can talk, read, and write!"]
         path = os.path.join(os.path.dirname(__file__), "testdata.json")
+
+        # test ValueError raised when raw text is passed along with character idxs and doesn't match
+        with self.assertRaises(ValueError):
+            self.model.fit(["Text about a dog."], [[{"start": 0, "end": 5, "text": "cat", "label": "dog"}]])
+
         with open(path, "rt") as fp:
             text, labels = json.load(fp)
         self.model.finetune(text * 10, labels * 10)
+        
+        predictions = self.model.predict(test_sequence)
+        self.assertTrue(1 <= len(predictions[0]) <= 3)
+        self.assertTrue(any(pred["text"] == "dog" for pred in predictions[0]))
+
+        self.model.config.subtoken_predictions = True
         predictions = self.model.predict(test_sequence)
         self.assertTrue(1 <= len(predictions[0]) <= 3)
         self.assertTrue(any(pred["text"] == "dog" for pred in predictions[0]))
