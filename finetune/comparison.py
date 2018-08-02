@@ -23,7 +23,7 @@ class Comparison(Classifier):
         kwargs['mask'] = np.stack([arr_forward.mask, arr_backward.mask], 1)
         return ArrayEncodedOutput(**kwargs)
 
-    def finetune(self, X1, X2, Y, batch_size=None):
+    def finetune(self, X1, X2, Y=None, batch_size=None):
         """
         :param X1: List or array of text, shape [batch]
         :param X2: List or array of text, shape [batch]

@@ -53,14 +53,14 @@ def featurizer(X, encoder, dropout_placeholder, config, train=False, reuse=None,
 
         h = embed(X, embed_weights)
         for layer in range(config.n_layer):
-
-            block_fn = functools.partial(block, n_head=config.n_heads, act_fn=config.act_fn,
-                                         resid_pdrop=config.resid_p_drop, attn_pdrop=config.attn_p_drop,
-                                         scope='h%d' % layer, dropout_placeholder=dropout_placeholder,
-                                         train=train, scale=True)
-            if config.low_memory_mode and train:
-                block_fn = recompute_grad(block_fn)
-            h = block_fn(h)
+            with tf.variable_scope('h%d_' % layer):
+                block_fn = functools.partial(block, n_head=config.n_heads, act_fn=config.act_fn,
+                                             resid_pdrop=config.resid_p_drop, attn_pdrop=config.attn_p_drop,
+                                             scope='h%d' % layer, dropout_placeholder=dropout_placeholder,
+                                             train=train, scale=True)
+                if config.low_memory_mode and train:
+                    block_fn = recompute_grad(block_fn, use_entire_scope=True)
+                h = block_fn(h)
 
             # Use hidden state at classifier token as input to final proj. + softmax
             clf_h = tf.reshape(h, [-1, config.n_embed])  # [batch * seq_len, embed]

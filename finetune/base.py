@@ -53,6 +53,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self._initialize()
         self.target_dim = None
         self._load_from_file = False
+        self.noop = tf.no_op()
 
     def _initialize(self):
         # Initializes the non-serialized bits of the class.
@@ -124,7 +125,7 @@ class BaseModel(object, metaclass=ABCMeta):
         If any result value is None, that result is excluded from the results `dict`.
         """
         tensors = [
-            tensor if tensor is not None else tf.no_op()
+            tensor if tensor is not None else self.noop
             for tensor in tensors
         ]
         values = self.sess.run(tensors, feed_dict=feed_dict)
@@ -248,12 +249,12 @@ class BaseModel(object, metaclass=ABCMeta):
             max_length = max_length or self.config.max_length
             for xmb, mmb in self._infer_prep(*Xs, max_length=max_length):
                 output = self._eval(self.predict_op,
-                                    feed_dict={
-                                        self.X: xmb,
-                                        self.M: mmb,
-                                        self.do_dropout: DROPOUT_OFF
-                                    }
-                                    )
+                    feed_dict={
+                        self.X: xmb,
+                        self.M: mmb,
+                        self.do_dropout: DROPOUT_OFF
+                    }
+                )
                 prediction = output.get(self.predict_op)
                 formatted_predictions = self.label_encoder.inverse_transform(prediction)
                 predictions.append(formatted_predictions)
@@ -522,6 +523,7 @@ class BaseModel(object, metaclass=ABCMeta):
         os.environ['CUDA_VISIBLE_DEVICES'] = ",".join([str(gpu) for gpu in gpus])
         conf = tf.ConfigProto(allow_soft_placement=self.config.soft_device_placement,
                               log_device_placement=self.config.log_device_placement)
+        conf.gpu_options.allow_growth = True
         self.sess = tf.Session(config=conf)
 
     def _set_random_seed(self, seed=None):

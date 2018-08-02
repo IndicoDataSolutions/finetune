@@ -431,7 +431,7 @@ def indico_to_finetune_sequence(texts, labels=None, none_value=config.PAD_TOKEN)
 
 # The following functions relating to the recomputation of gradients was taken and modified from tensor2tensor.
 
-def fn_with_custom_grad(grad_fn, use_global_vars=False):
+def fn_with_custom_grad(grad_fn, use_global_vars=False, use_entire_scope=False):
     """Decorator to create a subgraph with a custom gradient function.
     The subgraph created by the decorated function is NOT put in a Defun and so
     does not suffer from the limitations of the Defun (all subgraph ops on the
@@ -450,14 +450,14 @@ def fn_with_custom_grad(grad_fn, use_global_vars=False):
         @functools.wraps(fn)
         def wrapped(*args):
             return _fn_with_custom_grad(
-                fn, args, grad_fn, use_global_vars=use_global_vars)
+                fn, args, grad_fn, use_global_vars=use_global_vars, use_entire_scope=use_entire_scope)
 
         return wrapped
 
     return dec
 
 
-def _fn_with_custom_grad(fn, inputs, grad_fn, use_global_vars=False):
+def _fn_with_custom_grad(fn, inputs, grad_fn, use_global_vars=False, use_entire_scope=False):
     """Create a subgraph with a custom gradient.
     Args:
       fn: function that takes inputs as arguments and produces 1 or more Tensors.
@@ -478,8 +478,10 @@ def _fn_with_custom_grad(fn, inputs, grad_fn, use_global_vars=False):
     len_before_vars = len(get_vars_fn())
     inputs = list(inputs)
     outputs = fn(*inputs)
-
-    train_vars = get_vars_fn()[len_before_vars:]
+    if use_entire_scope:
+        train_vars = get_vars_fn()
+    else:
+        train_vars = get_vars_fn()[len_before_vars:]
 
     if grad_fn is None:
         return outputs
@@ -525,7 +527,7 @@ def _fn_with_custom_grad(fn, inputs, grad_fn, use_global_vars=False):
     return id_out
 
 
-def recompute_grad(fn):
+def recompute_grad(fn, use_entire_scope):
     """Decorator that recomputes the function on the backwards pass.
     Args:
       fn: a function that takes Tensors (all as positional arguments) and returns
@@ -534,11 +536,12 @@ def recompute_grad(fn):
       A wrapped fn that is identical to fn when called, but its activations will
       be discarded and recomputed on the backwards pass (i.e. on a call to
       tf.gradients).
+      :param use_entire_scope:
     """
 
     @functools.wraps(fn)
     def wrapped(*args):
-        return _recompute_grad(fn, args)
+        return _recompute_grad(fn, args, use_entire_scope=use_entire_scope)
 
     return wrapped
 
@@ -562,7 +565,7 @@ def underlying_variable_ref(t):
         return None
 
 
-def _recompute_grad(fn, args):
+def _recompute_grad(fn, args, use_entire_scope):
     """See recompute_grad."""
 
     cached_vs = []
@@ -586,7 +589,7 @@ def _recompute_grad(fn, args):
         grad_vars = grads[len(inputs):]
         return grad_inputs, grad_vars
 
-    @fn_with_custom_grad(grad_fn)
+    @fn_with_custom_grad(grad_fn, use_entire_scope=use_entire_scope)
     def fn_with_recompute(*args):
         cached_vs.append(tf.get_variable_scope())
         cached_arg_scope.append(tf.contrib.framework.current_arg_scope())
