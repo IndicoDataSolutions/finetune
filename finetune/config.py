@@ -70,7 +70,7 @@ def get_default_config():
         autosave_path=None,
 
         # Tensorboard
-        tensorboard_folder=None
+        tensorboard_folder=None,
     )
 
 

@@ -19,7 +19,10 @@ from bs4.element import Tag
 
 from finetune import SequenceLabeler
 from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_sequence
-
+from finetune.metrics import (
+    sequence_labeling_token_precision, sequence_labeling_token_recall,
+    sequence_labeling_overlap_precision, sequence_labeling_overlap_recall
+)
 
 class TestSequenceLabeler(unittest.TestCase):
 
@@ -101,14 +104,26 @@ class TestSequenceLabeler(unittest.TestCase):
         self.assertIsInstance(probas[0], list)
         self.assertIsInstance(probas[0][0], tuple)
         self.assertIsInstance(probas[0][0][1], dict)
+        token_precision = sequence_labeling_token_precision(test_annotations, predictions)
+        token_recall = sequence_labeling_token_recall(test_annotations, predictions)
+        overlap_precision = sequence_labeling_overlap_precision(test_annotations, predictions)
+        overlap_recall = sequence_labeling_overlap_recall(test_annotations, predictions)
+        self.assertIn('Named Entity', token_precision)
+        self.assertIn('Named Entity', token_recall)
+        self.assertIn('Named Entity', overlap_precision)
+        self.assertIn('Named Entity', overlap_recall)
         self.model.save(self.save_file)
         model = SequenceLabeler.load(self.save_file)
         predictions = model.predict(test_texts)
 
-
     def test_reasonable_predictions(self):
         test_sequence = ["I am a dog. A dog that's incredibly bright. I can talk, read, and write!"]
         path = os.path.join(os.path.dirname(__file__), "testdata.json")
+
+        # test ValueError raised when raw text is passed along with character idxs and doesn't match
+        with self.assertRaises(ValueError):
+            self.model.fit(["Text about a dog."], [[{"start": 0, "end": 5, "text": "cat", "label": "dog"}]])
+
         with open(path, "rt") as fp:
             text, labels = json.load(fp)
         self.model.finetune(text * 10, labels * 10)

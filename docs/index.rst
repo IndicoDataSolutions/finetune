@@ -76,6 +76,7 @@ For example usage of provided models, see the `finetune/datasets directory <http
 
 Finetune API Reference
 ======================
+
 .. autoclass:: finetune.Classifier
     :inherited-members:
 

@@ -345,7 +345,7 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, none_value=config.PA
         n_tokens = len(tokens)
 
         doc_text = ""
-        doc_annotations = []
+        doc_annotations = set([])
         annotation_start = 0
         annotation_end = 0
         start_idx = 0
@@ -366,14 +366,15 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, none_value=config.PA
             
             text = raw_text[annotation_start:annotation_end]
             if label != none_value:
-                doc_annotations.append(
-                    {
-                        "start": annotation_start,
-                        "end": annotation_end,
-                        "label": label,
-                        "text": text
-                    }
+                doc_annotations.add(
+                    (
+                        ("start", annotation_start),
+                        ("end", annotation_end),
+                        ("label", label),
+                        ("text",  text)
+                    )
                 )
+        doc_annotations = sorted([dict(items) for items in doc_annotations], key=lambda x: x['start'])
         annotations.append(doc_annotations)
     return raw_texts, annotations
 
@@ -424,6 +425,15 @@ def indico_to_finetune_sequence(texts, labels=None, none_value=config.PAD_TOKEN)
             if start != last_loc:
                 doc_subseqs.append(text[last_loc:start])
                 doc_labels.append(none_value)
+            
+            if annotation['text'] and  text[start:end] != annotation['text']:
+                raise ValueError(
+                    "Annotation text does not match text specified by `start` and `end` indexes. "
+                    "Text provided: `{}`.  Text extracted: `{}`.".format(
+                        annotation['text'],
+                        text[start:end]
+                    )
+                )
             doc_subseqs.append(text[start:end])
             doc_labels.append(label)
             last_loc = end
