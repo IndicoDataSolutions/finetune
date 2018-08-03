@@ -190,8 +190,13 @@ class BaseModel(object, metaclass=ABCMeta):
         val_window = [float("inf")] * self.config.val_window_size
 
         for i in range(self.config.n_epochs):
-            for (xmb, mmb, ymb) in iter_data(*train_dataset, n_batch=n_batch_train, verbose=self.config.verbose):
-
+            iterator = iter_data(
+                *train_dataset, 
+                n_batch=n_batch_train, 
+                tqdm_desc="Epoch {}".format(i),
+                verbose=self.config.verbose
+            )
+            for (xmb, mmb, ymb) in iterator:
                 feed_dict = {
                     self.X: xmb,
                     self.M: mmb,
