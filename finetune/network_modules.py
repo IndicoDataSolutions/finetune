@@ -144,7 +144,6 @@ def classifier(hidden, targets, n_targets, dropout_placeholder, config, train=Fa
 
 def multi_choice_question(hidden, targets, n_targets, dropout_placeholder, config, train=False, reuse=None, **kwargs):
     with tf.variable_scope("model", reuse=reuse):
-        initial_shape = shape_list(hidden)
         hidden = dropout(hidden, config.clf_p_drop, train, dropout_placeholder)
 
         # some model

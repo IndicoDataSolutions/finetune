@@ -6,9 +6,10 @@ from finetune.target_encoders import IDEncoder
 import tensorflow as tf
 
 from finetune.network_modules import multi_choice_question
+from finetune.utils import list_transpose
 
 
-class QandA(BaseModel):
+class MultipleChoice(BaseModel):
     """
     Multi choice question finetune model.
     """
@@ -21,7 +22,7 @@ class QandA(BaseModel):
         """
         Format multi question examples as a list of IDs
         """
-        arrays = [super(QandA, self)._text_to_ids(question, ans) for ans in answers]
+        arrays = [super(MultipleChoice, self)._text_to_ids(question, ans) for ans in answers]
         kwargs = arrays[0]._asdict()
         kwargs['tokens'] = [arr.tokens for arr in arrays]
         kwargs['token_ids'] = np.stack([arr.token_ids for arr in arrays], 1)
@@ -32,12 +33,14 @@ class QandA(BaseModel):
         """
         :param question: List or array of text, shape [batch]
         :param correct_answer: List or array of correct answers [batch]
-        :param incorrect_answers: List or array of text, shape [n_answers - 1 , batch]
+        :param incorrect_answers: List or array of text, shape [batch, n_answers]
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
         """
+        incorrect_answers = list_transpose(incorrect_answers)
         self.num_answers = len(incorrect_answers) + 1
         arr_encoded = self._text_to_ids(question, [correct_answer] + incorrect_answers)
+        print(arr_encoded.token_ids.shape)
         labels = None if fit_lm_only else np.zeros(len(question), dtype=np.int)
         return self._training_loop(arr_encoded, Y=labels, batch_size=batch_size)
 
@@ -79,6 +82,7 @@ class QandA(BaseModel):
                            Providing more than `max_length` tokens as input will result in truncation.
         :returns: list of class labels.
         """
+        answers = list_transpose(answers)
         raw_ids = BaseModel.predict(self, question, answers, max_length=max_length)
         return [ans[i] for ans, i in zip(zip(*answers), raw_ids)]
 
@@ -93,6 +97,7 @@ class QandA(BaseModel):
                            Providing more than `max_length` tokens as input will result in truncation.
         :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
         """
+        answers = list_transpose(answers)
         raw_probas = self._predict_proba(question, answers, max_length)
 
         formatted_predictions = []

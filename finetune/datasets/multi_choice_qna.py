@@ -5,7 +5,7 @@ import random
 import requests
 from pathlib import Path
 import finetune
-from finetune import QandA
+from finetune import MultipleChoice
 from sklearn.model_selection import train_test_split
 import numpy as np
 
@@ -92,7 +92,7 @@ if __name__ == "__main__":
 
     data = get_dataset()
 
-    model = QandA(verbose=True, n_epochs=1)
+    model = MultipleChoice(verbose=True, n_epochs=1)
     train_data, test_data = train_test_split(data, test_size=0.3, random_state=42)
 
     train_qs = []
@@ -115,10 +115,10 @@ if __name__ == "__main__":
         test_qs.append(item["content"])
         test_ans_all.append(answers)
 
-    model.fit(train_qs, train_ans_correct, list(zip(*train_ans_incorrect)))
-    print(list(zip(model.predict(test_qs, list(zip(*test_ans_all))), test_qs)))
+    model.fit(train_qs, train_ans_correct, train_ans_incorrect)
+    print(list(zip(model.predict(test_qs, test_ans_all), test_qs)))
 
-    accuracy = np.mean([p == t for p, t in zip(model.predict(test_qs, list(zip(*test_ans_all))), test_ans_correct)])
+    accuracy = np.mean([p == t for p, t in zip(model.predict(test_qs, test_ans_all), test_ans_correct)])
 
     print('Test Accuracy: {:0.2f}'.format(accuracy))
 
