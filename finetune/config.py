@@ -68,6 +68,9 @@ def get_default_config():
         pad_token="<PAD>",
         subtoken_predictions=False,
 
+        # Multilabel
+        multi_label_threshold=0.5,
+
         # Early stopping
         save_best_model=False,
         autosave_path=None,
