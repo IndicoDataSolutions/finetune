@@ -123,7 +123,7 @@ class SequenceLabeler(BaseModel):
         """
         return Xs
 
-    def _target_placeholder(self):
+    def _target_placeholder(self, target_dim=None):
         return tf.placeholder(tf.int32, [None, self.config.max_length])  # classification targets
 
     def _target_encoder(self):

@@ -17,7 +17,7 @@ def perceptron(x, ny, config, w_init=None, b_init=None):
     """
     w_init = w_init or tf.random_normal_initializer(stddev=config.weight_stddev)
     b_init = b_init or tf.constant_initializer(0)
-    with tf.variable_scope('clf'):
+    with tf.variable_scope('perceptron'):
         nx = config.n_embed
         w = tf.get_variable("w", [nx, ny], initializer=w_init)
         b = tf.get_variable("b", [ny], initializer=b_init)
@@ -44,7 +44,7 @@ def featurizer(X, encoder, dropout_placeholder, config, train=False, reuse=None,
     X = tf.reshape(X, shape=[-1] + initial_shape[-2:])
 
     max_length = max_length or config.max_length
-    with tf.variable_scope('model', reuse=reuse):
+    with tf.variable_scope('model/featurizer', reuse=reuse):
         embed_weights = tf.get_variable("we", [encoder.vocab_size + max_length, config.n_embed],
                                         initializer=tf.random_normal_initializer(stddev=config.weight_stddev))
         embed_weights = dropout(embed_weights, config.embed_p_drop, train, dropout_placeholder)
@@ -62,14 +62,13 @@ def featurizer(X, encoder, dropout_placeholder, config, train=False, reuse=None,
                     block_fn = recompute_grad(block_fn, use_entire_scope=True)
                 h = block_fn(h)
 
-            # Use hidden state at classifier token as input to final proj. + softmax
-            clf_h = tf.reshape(h, [-1, config.n_embed])  # [batch * seq_len, embed]
-            clf_token = encoder['_classify_']
-            pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
-            clf_h = tf.gather(clf_h, tf.range(shape_list(X)[0], dtype=tf.int32) * max_length + pool_idx)
-
-            clf_h = tf.reshape(clf_h, shape=initial_shape[0: -2] + [config.n_embed])
-            seq_feats = tf.reshape(h, shape=initial_shape[:-1] + [config.n_embed])
+        # Use hidden state at classifier token as input to final proj. + softmax
+        clf_h = tf.reshape(h, [-1, config.n_embed])  # [batch * seq_len, embed]
+        clf_token = encoder['_classify_']
+        pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
+        clf_h = tf.gather(clf_h, tf.range(shape_list(X)[0], dtype=tf.int32) * max_length + pool_idx)
+        clf_h = tf.reshape(clf_h, shape=initial_shape[0: -2] + [config.n_embed])
+        seq_feats = tf.reshape(h, shape=initial_shape[:-1] + [config.n_embed])
 
         return {
             'embed_weights': embed_weights,
@@ -97,7 +96,7 @@ def language_model(*, X, M, embed_weights, hidden, config, reuse=None):
     M = merge_leading_dims(M, 2)
     hidden = merge_leading_dims(hidden, 3)
 
-    with tf.variable_scope('model', reuse=reuse):
+    with tf.variable_scope('model/language-model', reuse=reuse):
         # language model ignores last hidden state because we don't have a target
         lm_h = tf.reshape(hidden[:, :-1], [-1, config.n_embed])  # [batch, seq_len, embed] --> [batch * seq_len, embed]
         lm_logits = tf.matmul(lm_h, embed_weights, transpose_b=True)  # tied weights
@@ -130,7 +129,7 @@ def classifier(hidden, targets, n_targets, dropout_placeholder, config, train=Fa
         logits: The unnormalised log probabilities of each class.
         losses: The loss for the classifier.
     """
-    with tf.variable_scope('model', reuse=reuse):
+    with tf.variable_scope('classifier', reuse=reuse):
         hidden = dropout(hidden, config.clf_p_drop, train, dropout_placeholder)
         clf_logits = perceptron(hidden, n_targets, config)
         clf_losses = tf.nn.softmax_cross_entropy_with_logits_v2(
@@ -207,7 +206,7 @@ def regressor(hidden, targets, n_targets, dropout_placeholder, config, train=Fal
         logits: The regression outputs.
         losses: L2 Loss for the regression targets.
     """
-    with tf.variable_scope('model', reuse=reuse):
+    with tf.variable_scope('regressor', reuse=reuse):
         hidden = dropout(hidden, config.clf_p_drop, train, dropout_placeholder)
         outputs = perceptron(hidden, n_targets, config)
         loss = tf.nn.l2_loss(outputs - targets)
@@ -238,7 +237,7 @@ def sequence_labeler(hidden, targets, n_targets, dropout_placeholder, config, tr
         "losses": The negative log likelihood for the sequence targets.
         "predict_params": A dictionary of params to be fed to the viterbi decode function.
     """
-    with tf.variable_scope('model/clf', reuse=reuse):
+    with tf.variable_scope('sequence-labeler', reuse=reuse):
         nx = config.n_embed
         a = attn(hidden, 'seq_label_attn', nx, config.seq_num_heads, config.seq_dropout, config.seq_dropout,
                  dropout_placeholder, train=train, scale=False, mask=False)

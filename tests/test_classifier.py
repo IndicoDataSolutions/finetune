@@ -85,9 +85,13 @@ class TestClassifier(unittest.TestCase):
         # Ensure model can still be fit with only text
         model.fit(train_sample.Text)
 
+        # Save and reload check
+        save_file = 'tests/saved-models/test-save-load'
+        model.save(save_file)
+        model = Classifier.load(save_file)
+
         # Ensure model can still be fit with text + targets
         model.fit(train_sample.Text, train_sample.Target)
-
         predictions = model.predict(valid_sample.Text)
         for prediction in predictions:
             self.assertIsInstance(prediction, (np.int, np.int64))

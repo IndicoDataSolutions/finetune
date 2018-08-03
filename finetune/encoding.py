@@ -7,6 +7,7 @@ import os
 import warnings
 import functools
 from collections import namedtuple
+import codecs
 
 import ftfy
 import spacy
@@ -15,10 +16,9 @@ from tqdm import tqdm
 
 from finetune.config import PAD_TOKEN
 
-
-NLP = spacy.load('en', disable=['parser', 'tagger', 'ner', 'textcat'])
 ENCODER_PATH = os.path.join(os.path.dirname(__file__), 'model/encoder_bpe_40000.json')
 BPE_PATH = os.path.join(os.path.dirname(__file__), 'model/vocab_40000.bpe')
+NLP = spacy.load('en', disable=['parser', 'tagger', 'ner', 'textcat'])
 
 EncodedOutput = namedtuple("EncodedOutput", [
     "token_ids", # list of list of subtoken ids (ints)
@@ -89,7 +89,7 @@ class TextEncoder(object):
 
         self.decoder = {v: k for k, v in self.encoder.items()}
 
-        merges = open(BPE_PATH).read().split('\n')[1:-1]
+        merges = codecs.open(BPE_PATH, encoding='utf8').read().split('\n')[1:-1]
         merges = [tuple(merge.split()) for merge in merges]
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
@@ -222,7 +222,7 @@ class TextEncoder(object):
         adjusted_max_length = max_length - num_samples - 1
         allocated_max_len = adjusted_max_length // num_samples
         outputs = []
-        for single_datum in tqdm(zip(*encoded), disable=not verbose):
+        for single_datum in zip(*encoded):
             overflows = [allocated_max_len - len(sequence) for sequence in single_datum]
             spare = sum(overflows)
             if spare >= 0:
@@ -272,7 +272,7 @@ class TextEncoder(object):
             
             # for each example in that field
 
-            for i, x in tqdm(enumerate(X), disable=not verbose):
+            for i, x in enumerate(X):
                 assert type(x) == list, "This should be a list of strings, if its not, you've done something wrong..."
                 targets = None if Y is None else Y[i]
                 encoded = self._encode(x, labels=targets)

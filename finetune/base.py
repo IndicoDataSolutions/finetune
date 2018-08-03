@@ -20,14 +20,13 @@ from finetune.download import download_data_if_required
 from finetune.optimizers import AdamWeightDecay, schedules
 from sklearn.model_selection import train_test_split
 
-from finetune.target_encoders import OneHotLabelEncoder, SequenceLabelingEncoder
-from finetune.network_modules import featurizer, language_model, classifier, regressor, sequence_labeler
+from finetune.network_modules import featurizer, language_model
 from finetune.utils import (
-    find_trainable_variables, get_available_gpus, assign_to_gpu, average_grads,
-    iter_data, soft_split, concat_or_stack, list_transpose,
-    guarantee_initialized_variables, sample_with_temperature, interpolate_pos_embed
+    find_trainable_variables, assign_to_gpu, average_grads, interpolate_pos_embed,
+    iter_data, soft_split, concat_or_stack,
+    guarantee_initialized_variables, sample_with_temperature
 )
-from finetune.encoding import TextEncoder, EncodedOutput, ArrayEncodedOutput
+from finetune.encoding import TextEncoder, ArrayEncodedOutput
 from finetune.config import PAD_TOKEN, get_default_config
 
 SHAPES_PATH = os.path.join(os.path.dirname(__file__), 'model', 'params_shapes.json')
@@ -54,12 +53,11 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         
         self.config = config or get_default_config()
-        self.config.override_from_dict(kwargs)
+        self.config.update(kwargs)
         self.label_encoder = None
         self._initialize()
         self.target_dim = None
         self._load_from_file = False
-        self.noop = tf.no_op()
 
     def _initialize(self):
         # Initializes the non-serialized bits of the class.
@@ -82,10 +80,13 @@ class BaseModel(object, metaclass=ABCMeta):
         self.train_op = None
         self.predict_op = None
         self.predict_proba_op = None
+        self.sess = None
+        self.noop = tf.no_op()
 
         # indicator vars
         self.is_built = False  # has tf graph been constructed?
         self.is_trained = False  # has model been fine-tuned?
+        
 
     def _format_for_encoding(self, *Xs):
         """
@@ -172,7 +173,7 @@ class BaseModel(object, metaclass=ABCMeta):
             target_dim = self.label_encoder.target_dim
 
         batch_size = batch_size or self.config.batch_size
-        n_batch_train = batch_size * max(len(get_available_gpus(self.config)), 1)
+        n_batch_train = batch_size * max(len(self.config.visible_gpus), 1)
         n_examples = len(train_idxs)
         n_updates_total = (n_examples // n_batch_train) * self.config.n_epochs
 
@@ -182,8 +183,8 @@ class BaseModel(object, metaclass=ABCMeta):
         self._build_model(n_updates_total=n_updates_total, target_dim=target_dim)
         self.is_trained = True
 
-        avg_train_loss = 0
-        avg_val_loss = 0
+        avg_train_loss = None
+        avg_val_loss = None
         global_step = 0
         best_val_loss = float("inf")
         val_window = [float("inf")] * self.config.val_window_size
@@ -200,7 +201,6 @@ class BaseModel(object, metaclass=ABCMeta):
 
                 global_step += 1
                 if global_step % self.config.val_interval == 0:
-                    tqdm.tqdm.write("Train loss is :{}, Val loss is :{}".format(avg_train_loss, avg_val_loss))
                     feed_dict[self.do_dropout] = DROPOUT_OFF
                     outputs = self._eval(self.summaries, feed_dict=feed_dict)
                     if self.train_writer is not None:
@@ -223,10 +223,14 @@ class BaseModel(object, metaclass=ABCMeta):
                             self.valid_writer.add_summary(outputs.get(self.summaries), global_step)
                         val_cost = outputs.get(self.target_loss, 0)
                         sum_val_loss += val_cost
-                        avg_val_loss = (
-                                avg_val_loss * self.config.rolling_avg_decay
-                                + val_cost * (1 - self.config.rolling_avg_decay)
-                        )
+
+                        if avg_val_loss is None:
+                            avg_val_loss = val_cost
+                        else:
+                            avg_val_loss = (
+                                    avg_val_loss * self.config.rolling_avg_decay
+                                    + val_cost * (1 - self.config.rolling_avg_decay)
+                            )
                     val_window.append(sum_val_loss)
                     val_window.pop(0)
 
@@ -234,13 +238,18 @@ class BaseModel(object, metaclass=ABCMeta):
                         best_val_loss = np.mean(val_window)
                         if self.config.save_best_model:
                             self.save(self.config.autosave_path)
+                    
+                    tqdm.tqdm.write("Train loss: {}\t Validation loss: {}".format(avg_train_loss, avg_val_loss))
 
                 feed_dict[self.do_dropout] = DROPOUT_ON
                 outputs = self._eval(self.target_loss, self.train_op, feed_dict=feed_dict)
 
                 cost = outputs.get(self.target_loss, 0)
-                avg_train_loss = avg_train_loss * self.config.rolling_avg_decay + cost * (
-                        1 - self.config.rolling_avg_decay)
+                if avg_train_loss is None:
+                    avg_train_loss = cost
+                else:
+                    avg_train_loss = avg_train_loss * self.config.rolling_avg_decay + cost * (
+                            1 - self.config.rolling_avg_decay)
 
         return self
 
@@ -335,7 +344,7 @@ class BaseModel(object, metaclass=ABCMeta):
     def _infer_prep(self, *Xs, max_length=None):
         max_length = max_length or self.config.max_length
         arr_encoded = self._text_to_ids(*Xs, max_length=max_length)
-        n_batch_train = self.config.batch_size * max(len(get_available_gpus(self.config)), 1)
+        n_batch_train = self.config.batch_size * max(len(self.config.visible_gpus), 1)
         self._build_model(n_updates_total=0, target_dim=self.target_dim, train=False)
         yield from iter_data(arr_encoded.token_ids, arr_encoded.mask, n_batch=n_batch_train,
                              verbose=self.config.verbose)
@@ -400,18 +409,21 @@ class BaseModel(object, metaclass=ABCMeta):
 
         # store whether or not graph was previously compiled with dropout
         self.train = train
-        self.target_dim = target_dim
-        self._define_placeholders()
+        self._define_placeholders(target_dim=target_dim)
 
         aggregator = defaultdict(list)
         train_loss_tower = 0
-        gpus = get_available_gpus(self.config)
+        gpus = self.config.visible_gpus
         n_splits = max(len(gpus), 1)
+
+        # multi-GPU setup, using CPU as param server is most efficient unless system has direct GPU connections
+        # single GPU, no need to use a different GPU as a parameter server
+        params_device = 'cpu' if len(gpus) != 1 else gpus[0]
         for i, (X, M, Y) in enumerate(soft_split(self.X, self.M, self.Y, n_splits=n_splits)):
             do_reuse = True if i > 0 else tf.AUTO_REUSE
 
             if gpus:
-                device = tf.device(assign_to_gpu(gpus[i], params_device=gpus[0]))
+                device = tf.device(assign_to_gpu(gpus[i], params_device=params_device))
             else:
                 device = tf.device('cpu')
 
@@ -448,14 +460,15 @@ class BaseModel(object, metaclass=ABCMeta):
                 aggregator["lm_model"].append(sample_with_temperature(lm_logits, self.config.lm_temp))
 
                 if target_dim is not None:
-                    target_model_state = self._target_model(
-                        featurizer_state=featurizer_state,
-                        targets=Y,
-                        n_outputs=target_dim,
-                        train=train,
-                        reuse=do_reuse,
-                        max_length=self.config.max_length
-                    )
+                    with tf.variable_scope('model/target'):
+                        target_model_state = self._target_model(
+                            featurizer_state=featurizer_state,
+                            targets=Y,
+                            n_outputs=target_dim,
+                            train=train,
+                            reuse=do_reuse,
+                            max_length=self.config.max_length
+                        )
                     train_loss += (1 - lm_loss_coef) * tf.reduce_mean(target_model_state['losses'])
                     train_loss_tower += train_loss
 
@@ -467,46 +480,49 @@ class BaseModel(object, metaclass=ABCMeta):
                 grads = list(zip(grads, params))
                 gpu_grads.append(grads)
 
-        self.lm_predict_op = tf.concat(aggregator["lm_model"], 0)
-        self.features = tf.concat(aggregator['features'], axis=0)
-        self.lm_losses = tf.concat(aggregator['lm_losses'], axis=0)
+        with tf.device(params_device):
+            self.lm_predict_op = tf.concat(aggregator["lm_model"], 0)
+            self.features = tf.concat(aggregator['features'], axis=0)
+            self.lm_losses = tf.concat(aggregator['lm_losses'], axis=0)
 
-        if train:
-            self._compile_train_op(
-                params=params,
-                grads=gpu_grads,
-                n_updates_total=n_updates_total,
-                initial_params=pre_trained_weights
-            )
+            if train:
+                self._compile_train_op(
+                    params=params,
+                    grads=gpu_grads,
+                    n_updates_total=n_updates_total,
+                    initial_params=pre_trained_weights
+                )
 
-        if target_dim is not None:
-            self.logits = tf.concat(aggregator['logits'], axis=0)
-            self.target_losses = concat_or_stack(aggregator['target_losses'])
+            if target_dim is not None:
+                self.logits = tf.concat(aggregator['logits'], axis=0)
+                self.target_losses = concat_or_stack(aggregator['target_losses'])
 
-            self.predict_op = self._predict_op(
-                self.logits, **target_model_state.get("predict_params", {})
-            )
-            self.predict_proba_op = self._predict_proba_op(
-                self.logits, **target_model_state.get("predict_params", {})
-            )
-            self.target_loss = tf.reduce_mean(self.target_losses)
-            self.lm_loss = tf.reduce_mean(self.lm_losses)
-            self.summaries.append(tf.summary.scalar('TargetModelLoss', self.target_loss))
-            self.summaries.append(tf.summary.scalar('LanguageModelLoss', self.lm_loss))
-            self.summaries.append(tf.summary.scalar('TotalLoss', train_loss_tower / n_splits))
-
-        self.summaries = tf.summary.merge(self.summaries) if self.summaries else tf.no_op()
+                self.predict_op = self._predict_op(
+                    self.logits, **target_model_state.get("predict_params", {})
+                )
+                self.predict_proba_op = self._predict_proba_op(
+                    self.logits, **target_model_state.get("predict_params", {})
+                )
+                self.target_loss = tf.reduce_mean(self.target_losses)
+                self.lm_loss = tf.reduce_mean(self.lm_losses)
+                self.summaries.append(tf.summary.scalar('TargetModelLoss', self.target_loss))
+                self.summaries.append(tf.summary.scalar('LanguageModelLoss', self.lm_loss))
+                self.summaries.append(tf.summary.scalar('TotalLoss', train_loss_tower / n_splits))
+            
+            self.summaries = tf.summary.merge(self.summaries) if self.summaries else self.noop
 
     def _build_model(self, n_updates_total, target_dim, train=True):
         """
         Construct tensorflow symbolic graph.
         """
-        pre_trained_weights = self._load_base_model()
 
+        pre_trained_weights = self._load_base_model()
         if not self.is_trained or train != self.train or self.target_dim != target_dim:
             # reconstruct graph to include/remove dropout
             # if `train` setting has changed
             self._construct_graph(n_updates_total, target_dim, pre_trained_weights=pre_trained_weights, train=train)
+
+        self._initialize_session()
 
         # Optionally load saved model
         if self._load_from_file:
@@ -514,7 +530,11 @@ class BaseModel(object, metaclass=ABCMeta):
         elif not self.is_trained:
             self._init_from_pretrained(pre_trained_weights["init_params"])
 
-        guarantee_initialized_variables(self.sess, keys=['model/clf', 'adam'])
+        # Must be set after loading saved models -- we used the stored value of target_dim to 
+        # infer what portions of the graph to attempt to load from the checkpoint
+        self.target_dim = target_dim
+
+        guarantee_initialized_variables(self.sess, keys=['model/target', 'adam'])
 
         if train:
             if self.config.tensorboard_folder is not None:
@@ -525,11 +545,12 @@ class BaseModel(object, metaclass=ABCMeta):
         self.is_built = True
 
     def _initialize_session(self):
-        gpus = get_available_gpus(self.config)
-        os.environ['CUDA_VISIBLE_DEVICES'] = ",".join([str(gpu) for gpu in gpus])
-        conf = tf.ConfigProto(allow_soft_placement=self.config.soft_device_placement,
-                              log_device_placement=self.config.log_device_placement)
-        self.sess = tf.Session(config=conf)
+        if self.sess is None:
+            gpus = self.config.visible_gpus
+            os.environ['CUDA_VISIBLE_DEVICES'] = ",".join([str(gpu) for gpu in gpus])
+            conf = tf.ConfigProto(allow_soft_placement=self.config.soft_device_placement,
+                                  log_device_placement=self.config.log_device_placement)
+            self.sess = tf.Session(config=conf)
 
     def _set_random_seed(self, seed=None):
         seed = seed or self.config.seed
@@ -540,7 +561,7 @@ class BaseModel(object, metaclass=ABCMeta):
     def _target_placeholder(self):
         return tf.placeholder(tf.float32, [None, self.target_dim or 1])  # classification targets
 
-    def _define_placeholders(self):
+    def _define_placeholders(self, target_dim=None):
         # tf placeholders
         self.X = tf.placeholder(tf.int32, [None, self.config.max_length, 2])  # token idxs (BPE embedding + positional)
         self.M = tf.placeholder(tf.float32, [None, self.config.max_length])  # sequence mask
@@ -606,7 +627,6 @@ class BaseModel(object, metaclass=ABCMeta):
     def _init_from_pretrained(self, init_params):
         """ Load pre-trained weights into the tensors """
         pretrained_params = find_trainable_variables("model", exclude="model/clf")
-        self._initialize_session()
         self.sess.run(tf.global_variables_initializer())
         self.sess.run([p.assign(ip) for p, ip in zip(pretrained_params, init_params)])
 
@@ -671,8 +691,10 @@ class BaseModel(object, metaclass=ABCMeta):
         return model
 
     def _load_finetuned_model(self):
-        self._initialize_session()
-        saver = tf.train.Saver(tf.trainable_variables())
+        var_list = find_trainable_variables('model', exclude='model/target')
+        if self.target_dim is not None:
+            var_list.extend(find_trainable_variables('model/target'))
+        saver = tf.train.Saver(var_list=var_list)
         saver.restore(self.sess, os.path.join(self._load_from_file, SAVE_PREFIX))
         self._load_from_file = False
         self.is_trained = True

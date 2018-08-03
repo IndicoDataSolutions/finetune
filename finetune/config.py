@@ -1,7 +1,37 @@
 import tensorflow as tf
+from tensorflow.python.client import device_lib
+from functools import lru_cache
 
 # CONSTANTS
 PAD_TOKEN = '<PAD>'
+
+
+
+@lru_cache()
+def all_gpus():
+    """
+    Get integer ids of all available GPUs
+    """
+    local_device_protos = device_lib.list_local_devices()
+    return [
+        int(x.name.split(':')[-1]) for x in local_device_protos
+        if x.device_type == 'GPU'
+    ]
+
+
+class Settings(dict):
+    
+    def __getattr__(self, attr):
+        if attr.startswith('__'):
+            raise AttributeError
+        return self.get(attr, None)
+
+    __setattr__ = dict.__setitem__
+    __delattr__ = dict.__delitem__
+
+    def __init__(self, **kwargs):
+        for key, value in kwargs.items():
+            self[key] = value
 
 
 def get_default_config():
@@ -10,7 +40,7 @@ def get_default_config():
 
     :return: Config object.
     """
-    return tf.contrib.training.HParams(
+    return Settings(
         # MODEL DEFINITION (DO NOT CHANGE)
         n_heads=12,
         n_layer=12,
@@ -19,7 +49,7 @@ def get_default_config():
 
         # TRAINING SETTINGS
         batch_size=2,
-        visible_gpus=None,
+        visible_gpus=all_gpus(),
         n_epochs=3,
         seed=42,
         max_length=512,
@@ -91,11 +121,11 @@ def get_config(**kwargs):
     :param **kwargs: Keyword arguments to override default values.
     :return: Config object.    """
     config = get_default_config()
-    config.override_from_dict(kwargs)
+    config.update(kwargs)
     return config
 
 
 def cpu_config():
     config = get_default_config()
-    config.visibleGpus = []
+    config.visible_gpus = []
     return config

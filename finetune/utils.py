@@ -4,7 +4,6 @@ from functools import partial
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.framework import function
-from tensorflow.python.client import device_lib
 from tensorflow.contrib.crf import viterbi_decode
 from tqdm import tqdm
 from scipy import interpolate
@@ -52,17 +51,6 @@ def shuffle_data(*args):
 
 def format_gpu_string(num):
     return '/device:GPU:{}'.format(num)
-
-
-def get_available_gpus(config):
-    if config.visible_gpus is not None:
-        return config.visible_gpus
-    local_device_protos = device_lib.list_local_devices()
-    config.visible_gpus = [
-        int(x.name.split(':')[-1]) for x in local_device_protos
-        if x.device_type == 'GPU'
-    ]
-    return config.visible_gpus
 
 
 def shape_list(x):
@@ -205,8 +193,10 @@ def iter_data(*datas, n_batch=128, truncate=False, verbose=False, max_batches=fl
     n = min(n, max_batches * n_batch)
     n_batches = 0
 
-    for i in tqdm(range(0, n, n_batch), total=n // n_batch, ncols=80, leave=False, disable=(not verbose),
-                  desc=tqdm_desc):
+    for i in tqdm(
+            range(0, n, n_batch), total=n // n_batch, ncols=80, leave=False, disable=(not verbose),
+            desc=tqdm_desc
+        ):
         if n_batches >= max_batches: raise StopIteration
         if len(datas) == 1:
             yield datas[0][i:i + n_batch]
@@ -354,23 +344,30 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, none_value=config.PA
         n_tokens = len(tokens)
 
         doc_annotations = set([])
-        annotation_end = 0
+        raw_annotation_end = 0
         start_idx = 0
         end_idx = 0
         for sub_str, label in zip(doc_seq, label_seq):
             stripped_text = sub_str.strip()
-            annotation_start = raw_text.find(stripped_text, annotation_end)
-            annotation_end = annotation_start + len(stripped_text)
 
+            raw_annotation_start = raw_text.find(stripped_text, raw_annotation_end)
+            raw_annotation_end = raw_annotation_start + len(stripped_text)
+
+            annotation_start = raw_annotation_start
+            annotation_end = raw_annotation_end
+            
+            # if we don't want to allow subtoken predictions, adjust start and end to match
+            # the start and ends of the nearest full tokens
             if not subtoken_predictions:
-                # round to nearest token
-                while start_idx < n_tokens and annotation_start >= token_starts[start_idx]:
-                    start_idx += 1
-                annotation_start = token_starts[start_idx - 1]
-                while end_idx < (n_tokens - 1) and annotation_end > token_ends[end_idx]:
-                    end_idx += 1
-                annotation_end = token_ends[end_idx]
-
+                if label != none_value:
+                    # round to nearest token
+                    while start_idx < n_tokens and annotation_start >= token_starts[start_idx]:
+                        start_idx += 1
+                    annotation_start = token_starts[start_idx - 1]
+                    while end_idx < (n_tokens - 1) and annotation_end > token_ends[end_idx]:
+                        end_idx += 1
+                    annotation_end = token_ends[end_idx]
+                    
             text = raw_text[annotation_start:annotation_end]
             if label != none_value:
                 doc_annotations.add(
@@ -432,8 +429,8 @@ def indico_to_finetune_sequence(texts, labels=None, none_value=config.PAD_TOKEN)
             if start != last_loc:
                 doc_subseqs.append(text[last_loc:start])
                 doc_labels.append(none_value)
-
-            if annotation['text'] and text[start:end] != annotation['text']:
+            
+            if annotation.get('text') and  text[start:end] != annotation['text']:
                 raise ValueError(
                     "Annotation text does not match text specified by `start` and `end` indexes. "
                     "Text provided: `{}`.  Text extracted: `{}`.".format(
