@@ -7,6 +7,7 @@ import os
 import warnings
 import functools
 from collections import namedtuple
+import codecs
 
 import ftfy
 import spacy

@@ -44,8 +44,8 @@ class Comparison(Classifier):
         labels = None if fit_language_model_only else Y
         return self._training_loop(arr_encoded, Y=labels, batch_size=batch_size)
 
-    def _define_placeholders(self):
-        super()._define_placeholders()
+    def _define_placeholders(self, target_dim=None):
+        super()._define_placeholders(target_dim=target_dim)
         self.X = tf.placeholder(tf.int32, [None, 2, self.config.max_length, 2])
         self.M = tf.placeholder(tf.float32, [None, 2, self.config.max_length])  # sequence mask
 

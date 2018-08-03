@@ -23,9 +23,14 @@ from sklearn.model_selection import train_test_split
 from finetune.network_modules import featurizer, language_model
 from finetune.utils import (
     find_trainable_variables, assign_to_gpu, average_grads,
+<<<<<<< HEAD
     iter_data, soft_split, concat_or_stack, interpolate_pos_embed,
     guarantee_initialized_variables, sample_with_temperature,
     optimistic_restore_vars
+=======
+    iter_data, soft_split, concat_or_stack, list_transpose,
+    guarantee_initialized_variables, sample_with_temperature
+>>>>>>> 6e81d66... FIX: don't use checkpoint vars to infer what vars need to be loaded
 )
 from finetune.encoding import TextEncoder, ArrayEncodedOutput
 from finetune.config import PAD_TOKEN, get_default_config
@@ -409,8 +414,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         # store whether or not graph was previously compiled with dropout
         self.train = train
-        self.target_dim = target_dim
-        self._define_placeholders()
+        self._define_placeholders(target_dim=target_dim)
 
         aggregator = defaultdict(list)
         train_loss_tower = 0
@@ -525,13 +529,17 @@ class BaseModel(object, metaclass=ABCMeta):
 
         self._initialize_session()
 
-        guarantee_initialized_variables(self.sess, keys=['model/clf', 'adam'])
-
         # Optionally load saved model
         if self._load_from_file:
             self._load_finetuned_model()
         elif not self.is_trained:
             self._init_from_pretrained(pre_trained_weights["init_params"])
+
+        # Must be set after loading saved models -- we used the stored value of target_dim to 
+        # infer what portions of the graph to attempt to load from the checkpoint
+        self.target_dim = target_dim
+
+        guarantee_initialized_variables(self.sess, keys=['model/target', 'adam'])
 
         if train:
             if self.config.tensorboard_folder is not None:
@@ -558,7 +566,7 @@ class BaseModel(object, metaclass=ABCMeta):
     def _target_placeholder(self):
         return tf.placeholder(tf.float32, [None, self.target_dim or 1])  # classification targets
 
-    def _define_placeholders(self):
+    def _define_placeholders(self, target_dim=None):
         # tf placeholders
         self.X = tf.placeholder(tf.int32, [None, self.config.max_length, 2])  # token idxs (BPE embedding + positional)
         self.M = tf.placeholder(tf.float32, [None, self.config.max_length])  # sequence mask
@@ -688,9 +696,10 @@ class BaseModel(object, metaclass=ABCMeta):
         return model
 
     def _load_finetuned_model(self):
-        ckpt = tf.train.get_checkpoint_state(self._load_from_file)
-        checkpoint_vars = optimistic_restore_vars(ckpt.model_checkpoint_path)
-        saver = tf.train.Saver(var_list=checkpoint_vars)
+        var_list = find_trainable_variables('model', exclude='model/target')
+        if self.target_dim is not None:
+            var_list.extend(find_trainable_variables('model/target'))
+        saver = tf.train.Saver(var_list=var_list)
         saver.restore(self.sess, os.path.join(self._load_from_file, SAVE_PREFIX))
         self._load_from_file = False
         self.is_trained = True
