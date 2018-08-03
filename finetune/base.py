@@ -22,15 +22,9 @@ from sklearn.model_selection import train_test_split
 
 from finetune.network_modules import featurizer, language_model
 from finetune.utils import (
-    find_trainable_variables, assign_to_gpu, average_grads,
-<<<<<<< HEAD
-    iter_data, soft_split, concat_or_stack, interpolate_pos_embed,
-    guarantee_initialized_variables, sample_with_temperature,
-    optimistic_restore_vars
-=======
-    iter_data, soft_split, concat_or_stack, list_transpose,
+    find_trainable_variables, assign_to_gpu, average_grads, interpolate_pos_embed,
+    iter_data, soft_split, concat_or_stack,
     guarantee_initialized_variables, sample_with_temperature
->>>>>>> 6e81d66... FIX: don't use checkpoint vars to infer what vars need to be loaded
 )
 from finetune.encoding import TextEncoder, ArrayEncodedOutput
 from finetune.config import PAD_TOKEN, get_default_config
