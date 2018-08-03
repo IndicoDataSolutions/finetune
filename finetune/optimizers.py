@@ -30,8 +30,8 @@ def AdamWeightDecay(params, grads, lr, schedule, t_total, b1=0.9, b2=0.999, e=1e
     Adam with weight decay fix and added weight decay to pre-trained weights.
     """
     
-    with tf.variable_scope('adam'):
-        t = tf.Variable(0, dtype=tf.float32, trainable=False, name='t')
+    with tf.variable_scope('adam', reuse=tf.AUTO_REUSE):
+        t = tf.get_variable("t", shape=1, initializer=tf.zeros_initializer() , dtype=tf.float32, trainable=False)
         tt = t + 1
         updates = [t.assign(tt)]
         if max_grad_norm > 0:
@@ -45,8 +45,10 @@ def AdamWeightDecay(params, grads, lr, schedule, t_total, b1=0.9, b2=0.999, e=1e
                 if isinstance(g, tf.IndexedSlices):
                     g = tf.convert_to_tensor(g)
                 prefix = p.name.split(':')[0]
-                m = tf.Variable(p * 0, dtype=tf.float32, trainable=False, name=(prefix + '_m'))
-                v = tf.Variable(p * 0, dtype=tf.float32, trainable=False, name=(prefix + '_v'))
+                m = tf.get_variable(prefix + "_m", shape=p.get_shape(), dtype=tf.float32, initializer=tf.zeros_initializer(), trainable=False)
+                v = tf.get_variable(prefix + "_v", shape=p.get_shape(), dtype=tf.float32,
+                                    initializer=tf.zeros_initializer(), trainable=False)
+
                 lrt = lr * tf.sqrt(1 - b2 ** tt) / (1 - b1 ** tt)
                 lrt *= schedule(t / t_total)
                 mt = b1 * m + (1 - b1) * g

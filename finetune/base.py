@@ -82,6 +82,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self.train_op = None
         self.predict_op = None
         self.predict_proba_op = None
+        self.sess = None
 
         # indicator vars
         self.is_built = False  # has tf graph been constructed?
@@ -514,8 +515,8 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         Construct tensorflow symbolic graph.
         """
-        pre_trained_weights = self._load_base_model()
 
+        pre_trained_weights = self._load_base_model()
         if not self.is_trained or train != self.train or self.target_dim != target_dim:
             # reconstruct graph to include/remove dropout
             # if `train` setting has changed
@@ -539,11 +540,12 @@ class BaseModel(object, metaclass=ABCMeta):
         self.is_built = True
 
     def _initialize_session(self):
-        gpus = self.config.visible_gpus
-        os.environ['CUDA_VISIBLE_DEVICES'] = ",".join([str(gpu) for gpu in gpus])
-        conf = tf.ConfigProto(allow_soft_placement=self.config.soft_device_placement,
-                              log_device_placement=self.config.log_device_placement)
-        self.sess = tf.Session(config=conf)
+        if self.sess is None:
+            gpus = self.config.visible_gpus
+            os.environ['CUDA_VISIBLE_DEVICES'] = ",".join([str(gpu) for gpu in gpus])
+            conf = tf.ConfigProto(allow_soft_placement=self.config.soft_device_placement,
+                                  log_device_placement=self.config.log_device_placement)
+            self.sess = tf.Session(config=conf)
 
     def _set_random_seed(self, seed=None):
         seed = seed or self.config.seed
