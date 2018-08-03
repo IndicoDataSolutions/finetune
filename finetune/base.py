@@ -64,7 +64,6 @@ class BaseModel(object, metaclass=ABCMeta):
         self._initialize()
         self.target_dim = None
         self._load_from_file = False
-        self.noop = tf.no_op()
 
     def _initialize(self):
         # Initializes the non-serialized bits of the class.
@@ -88,10 +87,12 @@ class BaseModel(object, metaclass=ABCMeta):
         self.predict_op = None
         self.predict_proba_op = None
         self.sess = None
+        self.noop = tf.no_op()
 
         # indicator vars
         self.is_built = False  # has tf graph been constructed?
         self.is_trained = False  # has model been fine-tuned?
+        
 
     def _format_for_encoding(self, *Xs):
         """
