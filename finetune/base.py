@@ -189,7 +189,7 @@ class BaseModel(object, metaclass=ABCMeta):
         best_val_loss = float("inf")
         val_window = [float("inf")] * self.config.val_window_size
 
-        for i in range(self.config.n_epochs):
+        for i in tqdm.tqdm(range(self.config.n_epochs), desc="Epoch", disable=not self.config.verbose):
             for (xmb, mmb, ymb) in iter_data(*train_dataset, n_batch=n_batch_train, verbose=self.config.verbose):
 
                 feed_dict = {
