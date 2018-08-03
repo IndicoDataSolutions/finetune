@@ -558,8 +558,8 @@ class BaseModel(object, metaclass=ABCMeta):
         np.random.seed(seed)
         tf.set_random_seed(seed)
 
-    def _target_placeholder(self):
-        return tf.placeholder(tf.float32, [None, self.target_dim or 1])  # classification targets
+    def _target_placeholder(self, target_dim=None):
+        return tf.placeholder(tf.float32, [None, target_dim or 1])  # classification targets
 
     def _define_placeholders(self, target_dim=None):
         # tf placeholders
@@ -568,7 +568,7 @@ class BaseModel(object, metaclass=ABCMeta):
         # when target dim is not set, an array of [None] targets is passed as a placeholder
 
         self.do_dropout = tf.placeholder(tf.float32)  # 1 for do dropout and 0 to not do dropout
-        self.Y = self._target_placeholder()
+        self.Y = self._target_placeholder(target_dim=target_dim)
 
     def generate_text(self, seed_text='', max_length=None):
         """
