@@ -88,7 +88,7 @@ class TextEncoder(object):
 
         self.decoder = {v: k for k, v in self.encoder.items()}
 
-        merges = open(BPE_PATH).read().split('\n')[1:-1]
+        merges = codecs.open(BPE_PATH, encoding='utf8').read().split('\n')[1:-1]
         merges = [tuple(merge.split()) for merge in merges]
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}

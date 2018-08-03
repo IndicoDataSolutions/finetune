@@ -461,14 +461,15 @@ class BaseModel(object, metaclass=ABCMeta):
                 aggregator["lm_model"].append(sample_with_temperature(lm_logits, self.config.lm_temp))
 
                 if target_dim is not None:
-                    target_model_state = self._target_model(
-                        featurizer_state=featurizer_state,
-                        targets=Y,
-                        n_outputs=target_dim,
-                        train=train,
-                        reuse=do_reuse,
-                        max_length=self.config.max_length
-                    )
+                    with tf.variable_scope('model/target'):
+                        target_model_state = self._target_model(
+                            featurizer_state=featurizer_state,
+                            targets=Y,
+                            n_outputs=target_dim,
+                            train=train,
+                            reuse=do_reuse,
+                            max_length=self.config.max_length
+                        )
                     train_loss += (1 - lm_loss_coef) * tf.reduce_mean(target_model_state['losses'])
                     train_loss_tower += train_loss
 
@@ -523,6 +524,7 @@ class BaseModel(object, metaclass=ABCMeta):
             self._construct_graph(n_updates_total, target_dim, pre_trained_weights=pre_trained_weights, train=train)
 
         self._initialize_session()
+
         guarantee_initialized_variables(self.sess, keys=['model/clf', 'adam'])
 
         # Optionally load saved model
