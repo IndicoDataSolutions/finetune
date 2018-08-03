@@ -13,13 +13,25 @@ logging.basicConfig(level=logging.DEBUG)
 
 SST_FILENAME = "mcdonalds_yelp.csv"
 DATA_PATH = os.path.join('Data', 'Classify', SST_FILENAME)
-CHECKSUM = "02136b7176f44ff8bec6db2665fc769a"
+CHECKSUM = ""
+
+from sklearn.metrics import classification_report
+
+
+def target_transform(x):
+    a = x.split("\n")
+    if "na" in a:
+        a.remove("na")
+    return a
 
 
 class MCDonaldsSentiment(Dataset):
 
     def __init__(self, filename=None, **kwargs):
         super().__init__(filename=(filename or DATA_PATH), **kwargs)
+
+    def md5(self):
+        return CHECKSUM
 
     def download(self):
         """
@@ -32,16 +44,20 @@ class MCDonaldsSentiment(Dataset):
             text_column="review",
             target_column="policies_violated",
             filename=SST_FILENAME,
-            target_transformation=lambda x: x.split("\n")
+            target_transformation=target_transform
         )
 
 
 if __name__ == "__main__":
     # Train and evaluate on SST
-    dataset = MCDonaldsSentiment(nrows=1000).dataframe
+    dataset = MCDonaldsSentiment().dataframe
     print(dataset.Target)
     model = MultiLabelClassifier(verbose=True, n_epochs=2)
     trainX, testX, trainY, testY = train_test_split(dataset.Text, dataset.Target, test_size=0.3, random_state=42)
     model.fit(trainX, trainY)
-    accuracy = np.mean(model.predict(testX) == testY)
-    print('Test Accuracy: {:0.2f}'.format(accuracy))
+    for threshold in np.linspace(0, 1, 5):
+        print("Threshold = {}".format(threshold))
+        print(classification_report(
+            model.label_encoder.transform(testY),
+            model.label_encoder.transform(model.predict(testX, threshold=threshold))
+        ))
