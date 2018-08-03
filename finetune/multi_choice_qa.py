@@ -28,17 +28,16 @@ class QandA(BaseModel):
         kwargs['mask'] = np.stack([arr.mask for arr in arrays], 1)
         return ArrayEncodedOutput(**kwargs)
 
-    def finetune(self, question, correct_answer, other_answers, batch_size=None, fit_lm_only=False):
+    def finetune(self, question, correct_answer, incorrect_answers, batch_size=None, fit_lm_only=False):
         """
         :param question: List or array of text, shape [batch]
         :param correct_answer: List or array of correct answers [batch]
-        :param answers: List or array of text, shape [n_answers - 1 , batch]
-        :param Y: integer or string-valued class labels. It is necessary for the items of Y to be sortable.
+        :param incorrect_answers: List or array of text, shape [n_answers - 1 , batch]
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
         """
-        self.num_answers = len(other_answers) + 1
-        arr_encoded = self._text_to_ids(question, [correct_answer] + other_answers)
+        self.num_answers = len(incorrect_answers) + 1
+        arr_encoded = self._text_to_ids(question, [correct_answer] + incorrect_answers)
         labels = None if fit_lm_only else np.zeros(len(question), dtype=np.int)
         return self._training_loop(arr_encoded, Y=labels, batch_size=batch_size)
 

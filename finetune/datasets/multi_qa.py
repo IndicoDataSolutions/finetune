@@ -87,6 +87,9 @@ def get_dataset(nrows=None):
 
 
 if __name__ == "__main__":
+    print("DISCLAIMER: THIS DATASET IS NOT WELL SUITED TO THIS MODEL AND DOES NOT ACHIEVE RESULTS MUCH BETTER THAN "
+          "RANDOM CHANCE. IT IS HERE FOR API DEMO PURPOSES DUE TO LICENCES OF AVAILABLE DATASETS.")
+
     data = get_dataset()
 
     model = QandA(verbose=True, n_epochs=1)
