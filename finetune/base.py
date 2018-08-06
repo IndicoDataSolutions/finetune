@@ -238,7 +238,7 @@ class BaseModel(object, metaclass=ABCMeta):
                         best_val_loss = np.mean(val_window)
                         if self.config.save_best_model:
                             self.save(self.config.autosave_path)
-                    
+
                     tqdm.tqdm.write("Train loss: {}\t Validation loss: {}".format(avg_train_loss, avg_val_loss))
 
                 feed_dict[self.do_dropout] = DROPOUT_ON
@@ -442,7 +442,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 if target_dim is None:
                     lm_loss_coef = 1.0
 
-                if (train and lm_loss_coef >= 0) or self.require_lm:
+                if (train and lm_loss_coef > 0) or self.require_lm:
 
                     language_model_state = language_model(
                         X=X,
@@ -484,9 +484,13 @@ class BaseModel(object, metaclass=ABCMeta):
                 gpu_grads.append(grads)
 
         with tf.device(params_device):
-            self.lm_predict_op = tf.concat(aggregator["lm_model"], 0)
             self.features = tf.concat(aggregator['features'], axis=0)
-            self.lm_losses = tf.concat(aggregator['lm_losses'], axis=0)
+
+            if len(aggregator["lm_losses"]) != 0:
+                self.lm_predict_op = tf.concat(aggregator["lm_model"], 0)
+                self.lm_losses = tf.concat(aggregator['lm_losses'], axis=0)
+                self.lm_loss = tf.reduce_mean(self.lm_losses)
+                self.summaries.append(tf.summary.scalar('LanguageModelLoss', self.lm_loss))
 
             if train:
                 self._compile_train_op(
@@ -507,11 +511,10 @@ class BaseModel(object, metaclass=ABCMeta):
                     self.logits, **target_model_state.get("predict_params", {})
                 )
                 self.target_loss = tf.reduce_mean(self.target_losses)
-                self.lm_loss = tf.reduce_mean(self.lm_losses)
+
                 self.summaries.append(tf.summary.scalar('TargetModelLoss', self.target_loss))
-                self.summaries.append(tf.summary.scalar('LanguageModelLoss', self.lm_loss))
                 self.summaries.append(tf.summary.scalar('TotalLoss', train_loss_tower / n_splits))
-            
+
             self.summaries = tf.summary.merge(self.summaries) if self.summaries else self.noop
 
     def _build_model(self, n_updates_total, target_dim, train=True):
