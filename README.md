@@ -52,7 +52,7 @@ pip3 install finetune
 or installed directly from source:
 
 ```bash
-git clone https://github.com/IndicoDataSolutions/finetune && cd finetune
+git clone -b master https://github.com/IndicoDataSolutions/finetune && cd finetune
 python3 setup.py develop              # symlinks the git directory to your python path
 pip3 install tensorflow-gpu --upgrade # or tensorflow-cpu
 python3 -m spacy download en          # download spacy tokenizer
