@@ -49,11 +49,23 @@ class TestComparison(unittest.TestCase):
 
         model = Comparison(**self.default_config())
         n_samples = 10
-        model.fit(["Indico is the best"] * n_samples, ["Indico is the bestestestest"] * n_samples, ['yes'] * n_samples)
+        model.fit(
+            ["Transformers was a terrible movie but a great model"] * n_samples, 
+            ["Transformers are a great model but a terrible movie"] * n_samples, 
+            ['yes'] * n_samples
+        )
 
-        predictions = model.predict(["Is indico the best?"], ["Indico is the bestestestest"])
+        test_data = (            
+            ["Transformers was a terrible movie but a great model"],
+            ["Transformers are a great model but a terrible movie"]
+        )
+        predictions = model.predict(*test_data)
         for prediction in predictions:
             self.assertIsInstance(prediction, (str, bytes))
+        
+        probabilities = model.predict_proba(*test_data)
+        for proba in probabilities:
+            self.assertIsInstance(proba, dict)
 
     def test_reasonable_predictions(self):
         model = Comparison(**self.default_config(n_epochs=3))

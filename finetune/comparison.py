@@ -50,8 +50,8 @@ class Comparison(Classifier):
         self.M = tf.placeholder(tf.float32, [None, 2, self.config.max_length])  # sequence mask
 
     def _target_model(self, *, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
-        featurizer_state["sequence_features"] = tf.reduce_sum(featurizer_state["sequence_features"], 1)
-        featurizer_state["features"] = tf.reduce_sum(featurizer_state["features"], 1)
+        featurizer_state["sequence_features"] = tf.abs(tf.reduce_sum(featurizer_state["sequence_features"], 1))
+        featurizer_state["features"] = tf.abs(tf.reduce_sum(featurizer_state["features"], 1))
         return super()._target_model(featurizer_state=featurizer_state, targets=targets, n_outputs=n_outputs, train=train, reuse=reuse, **kwargs)
 
     def predict(self, X1, X2, max_length=None):
@@ -78,7 +78,7 @@ class Comparison(Classifier):
                            Providing more than `max_length` tokens as input will result in truncation.
         :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
         """
-        return BaseModel.predict(self, X1, X2, max_length=max_length)
+        return BaseModel.predict_proba(self, X1, X2, max_length=max_length)
 
     def featurize(self, X1, X2, max_length=None):
         """
