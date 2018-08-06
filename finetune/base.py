@@ -631,7 +631,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
     def _init_from_pretrained(self, init_params):
         """ Load pre-trained weights into the tensors """
-        pretrained_params = find_trainable_variables("model", exclude="model/clf")
+        pretrained_params = find_trainable_variables("model", exclude="model/target")
         self.sess.run(tf.global_variables_initializer())
         self.sess.run([p.assign(ip) for p, ip in zip(pretrained_params, init_params)])
 
