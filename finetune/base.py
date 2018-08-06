@@ -419,6 +419,15 @@ class BaseModel(object, metaclass=ABCMeta):
         # multi-GPU setup, using CPU as param server is most efficient unless system has direct GPU connections
         # single GPU, no need to use a different GPU as a parameter server
         params_device = 'cpu' if len(gpus) != 1 else gpus[0]
+
+        # decide on setting for language model loss coefficient
+        # if the language model loss does not contribute to overall loss,
+        # remove the language model computation from the graph
+        lm_loss_coef = self.config.lm_loss_coef
+        if target_dim is None:
+            lm_loss_coef = 1.0
+        compile_lm = (train and lm_loss_coef > 0) or self.require_lm
+
         for i, (X, M, Y) in enumerate(soft_split(self.X, self.M, self.Y, n_splits=n_splits)):
             do_reuse = True if i > 0 else tf.AUTO_REUSE
 
@@ -438,12 +447,8 @@ class BaseModel(object, metaclass=ABCMeta):
                     train=train,
                     reuse=do_reuse
                 )
-                lm_loss_coef = self.config.lm_loss_coef
-                if target_dim is None:
-                    lm_loss_coef = 1.0
 
-                if (train and lm_loss_coef > 0) or self.require_lm:
-
+                if compile_lm:
                     language_model_state = language_model(
                         X=X,
                         M=M,
@@ -486,7 +491,7 @@ class BaseModel(object, metaclass=ABCMeta):
         with tf.device(params_device):
             self.features = tf.concat(aggregator['features'], axis=0)
 
-            if len(aggregator["lm_losses"]) != 0:
+            if compile_lm:
                 self.lm_predict_op = tf.concat(aggregator["lm_model"], 0)
                 self.lm_losses = tf.concat(aggregator['lm_losses'], axis=0)
                 self.lm_loss = tf.reduce_mean(self.lm_losses)
