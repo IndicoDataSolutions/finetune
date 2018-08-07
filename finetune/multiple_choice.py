@@ -29,19 +29,38 @@ class MultipleChoice(BaseModel):
         kwargs['mask'] = np.stack([arr.mask for arr in arrays], 1)
         return ArrayEncodedOutput(**kwargs)
 
-    def finetune(self, question, correct_answer, incorrect_answers, batch_size=None, fit_lm_only=False):
+    def finetune(self, question, correct_answer, answers, batch_size=None, fit_lm_only=False):
         """
         :param question: List or array of text, shape [batch]
-        :param correct_answer: List or array of correct answers [batch]
-        :param incorrect_answers: List or array of text, shape [batch, n_answers]
+        :param correct_answer: List or array of correct answers [batch] either in the format of an idx to the correct
+                answer or a string of the correct answer.
+        :param answers: List or array of text, shape [batch, n_answers], must contain the correct answer for each entry.
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
         """
-        incorrect_answers = list_transpose(incorrect_answers)
-        self.num_answers = len(incorrect_answers) + 1
-        arr_encoded = self._text_to_ids(question, [correct_answer] + incorrect_answers)
+        answer_idx = []
+        if not len(correct_answer) == len(answers) == len(question):
+            raise ValueError("Answers, questions and corrext_answer are not all the same length, {},{},{}".format(len(question), len(correct_answer), len(answers)))
+        for correct, others in zip(correct_answer, answers):
+            if isinstance(correct, int):
+                if 0 > correct > len(others):
+                    raise ValueError(
+                        "Correct answer is of type int but is invalid with value {} for answers of len {}".format(
+                            correct, len(others)))
+                answer_idx.append(correct)
+            else:
+                try:
+                    ans_idx = others.index(correct)
+                    answer_idx.append(ans_idx)
+                except ValueError:
+                    raise ValueError(
+                        "Correct answer {} is not contained in possible answers {}".format(correct, others))
+
+        answers = list_transpose(answers)
+        self.num_answers = len(answers)
+        arr_encoded = self._text_to_ids(question, answers)
         print(arr_encoded.token_ids.shape)
-        labels = None if fit_lm_only else np.zeros(len(question), dtype=np.int)
+        labels = None if fit_lm_only else answer_idx
         return self._training_loop(arr_encoded, Y=labels, batch_size=batch_size)
 
     def _define_placeholders(self):

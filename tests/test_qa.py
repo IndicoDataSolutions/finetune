@@ -25,19 +25,18 @@ class TestQuestionAnswer(unittest.TestCase):
             "Boat, car, chicken, train, what is the odd one out?",
             "Walk, run, william, jump, what is the odd one out?"
         ]
-        correct_answers = ["orange", "Chicken", "Penguin", "Tiger", "Coffee", "train", "william"]
 
-        incorrect_answers = [
-            ["Dog", "fish", "cat"],
-            ["Stocks", "Futures", "Money"],
-            ["England", "US", "Finland"],
-            ["Orange", "Yellow", "Purple"],
-            ["Computer", "Cellphone", "Telephone"],
-            ["Boat", "car", "train"],
-            ["Walk", "run", "jump"],
+        answers = [
+            ["orange", "Dog", "fish", "cat"],
+            ["Chicken", "Stocks", "Futures", "Money"],
+            ["Penguin", "England", "US", "Finland"],
+            ["Tiger", "Orange", "Yellow", "Purple"],
+            ["Coffee", "Computer", "Cellphone", "Telephone"],
+            ["train", "Boat", "car", "train"],
+            ["william", "Walk", "run", "jump"],
         ]
 
-        model.finetune(questions, correct_answers, incorrect_answers)
+        model.finetune(questions, [0]*7, answers)
 
         self.assertEqual(["yellow"], model.predict(["Dog, mouse, fish, yellow, what is the odd one out?"],
                                                    [["Dog", "mouse", "fish", "yellow"]]))

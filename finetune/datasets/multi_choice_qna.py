@@ -101,7 +101,7 @@ if __name__ == "__main__":
     for item in train_data:
         answers = item["answers"]
         correct_ans_idx = item["correct_answer"]
-        train_ans_correct.append(answers.pop(correct_ans_idx))
+        train_ans_correct.append(answers[correct_ans_idx])
         train_qs.append(item["content"])
         train_ans_incorrect.append(answers)
 
