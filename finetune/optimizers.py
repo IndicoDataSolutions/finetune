@@ -22,6 +22,7 @@ schedules = {
     'warmup_cosine': warmup_cosine,
     'warmup_constant': warmup_constant,
     'warmup_linear': warmup_linear,
+    'none': lambda x, *args, **kwargs: x,
 }
 
 

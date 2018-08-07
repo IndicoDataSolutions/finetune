@@ -15,7 +15,7 @@ from finetune import MultipleChoice
 class TestQuestionAnswer(unittest.TestCase):
 
     def test_reasonable_predictions(self):
-        model = MultipleChoice(n_epochs=100, val_size=0, max_length=256)
+        model = MultipleChoice(n_epochs=80, val_size=0, max_length=256, batch_size=3, lr=2e-5, lr_schedule="none")
         questions = [
             "Dog, cat, fish, orange, what is the odd one out?",
             "Stocks, Futures, Money, Chicken, what is the odd one out?",
@@ -36,7 +36,7 @@ class TestQuestionAnswer(unittest.TestCase):
             ["william", "Walk", "run", "jump"],
         ]
 
-        model.finetune(questions, [0]*7, answers)
+        model.finetune(questions, ["orange", "Chicken", "Penguin", "Tiger", "Coffee", "train", "william"], answers)
 
-        self.assertEqual(["yellow"], model.predict(["Dog, mouse, fish, yellow, what is the odd one out?"],
-                                                   [["Dog", "mouse", "fish", "yellow"]]))
+        self.assertEqual(["yellow"], model.predict(["Dog, cat, fish, yellow, what is the odd one out?"],
+                                                   [["yellow", "Dog", "fish", "cat"]]))

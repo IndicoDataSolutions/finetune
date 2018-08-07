@@ -145,18 +145,19 @@ def classifier(hidden, targets, n_targets, dropout_placeholder, config, train=Fa
 def multi_choice_question(hidden, targets, n_targets, dropout_placeholder, config, train=False, reuse=None, **kwargs):
     with tf.variable_scope("model", reuse=reuse):
         hidden = dropout(hidden, config.clf_p_drop, train, dropout_placeholder)
-
+        hidden = tf.unstack(hidden, num=n_targets, axis=1)
+        hidden = tf.concat(hidden, axis=0)
         # some model
-        clf_out = perceptron(merge_leading_dims(hidden, 2), 1, config)
-
-        clf_logits = tf.reshape(clf_out, shape=[-1, n_targets])
+        clf_out = perceptron(hidden, 1, config)
+        clf_out = tf.split(clf_out, n_targets, axis=0)
+        clf_out = tf.concat(clf_out, 1)
 
         clf_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
-            logits=clf_logits,
+            logits=clf_out,
             labels=tf.stop_gradient(targets)
         )
         return {
-            'logits': clf_logits,
+            'logits': clf_out,
             'losses': clf_losses
         }
 

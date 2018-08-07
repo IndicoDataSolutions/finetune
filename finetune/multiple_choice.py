@@ -59,11 +59,10 @@ class MultipleChoice(BaseModel):
         answers = list_transpose(answers)
         self.num_answers = len(answers)
         arr_encoded = self._text_to_ids(question, answers)
-        print(arr_encoded.token_ids.shape)
         labels = None if fit_lm_only else answer_idx
         return self._training_loop(arr_encoded, Y=labels, batch_size=batch_size)
 
-    def _define_placeholders(self):
+    def _define_placeholders(self, *args, **kwargs):
         super()._define_placeholders()
         self.X = tf.placeholder(tf.int32, [None, self.num_answers, self.config.max_length, 2])
         self.M = tf.placeholder(tf.float32, [None, self.num_answers, self.config.max_length])  # sequence mask
