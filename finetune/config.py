@@ -19,6 +19,18 @@ def all_gpus():
     ]
 
 
+class Ranged:
+    def __init__(self, default, itterator=None):
+        pass
+
+    def __new__(self, default, itterator=None):
+        class Ranged_(type(default)):
+            def get_itterator(self):
+                return itterator
+
+        return Ranged_(default)
+
+
 class Settings(dict):
     
     def __getattr__(self, attr):
@@ -50,7 +62,7 @@ def get_default_config():
         # TRAINING SETTINGS
         batch_size=2,
         visible_gpus=all_gpus(),
-        n_epochs=3,
+        n_epochs=Ranged(3, [1, 2, 3, 4]),
         seed=42,
         max_length=512,
         # INITIALIZATION
@@ -73,7 +85,7 @@ def get_default_config():
         b2=0.999,
         epsilon=1e-8,
         lr_schedule='warmup_linear',
-        lr=6.25e-5,
+        lr=Ranged(6.25e-5, [6.25e-4, 6.25e-5, 6.25e-6]),
         lr_warmup=0.002,
         max_grad_norm=1,
         lm_loss_coef=0.0,

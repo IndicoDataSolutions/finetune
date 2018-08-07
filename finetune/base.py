@@ -12,6 +12,7 @@ import tqdm
 from abc import ABCMeta, abstractmethod
 from collections import namedtuple, defaultdict
 from functools import partial
+from copy import deepcopy
 
 import numpy as np
 import tensorflow as tf
@@ -24,10 +25,10 @@ from finetune.network_modules import featurizer, language_model
 from finetune.utils import (
     find_trainable_variables, assign_to_gpu, average_grads, interpolate_pos_embed,
     iter_data, soft_split, concat_or_stack,
-    guarantee_initialized_variables, sample_with_temperature
+    guarantee_initialized_variables, sample_with_temperature, list_transpose
 )
 from finetune.encoding import TextEncoder, ArrayEncodedOutput
-from finetune.config import PAD_TOKEN, get_default_config
+from finetune.config import PAD_TOKEN, get_default_config, Ranged
 
 SHAPES_PATH = os.path.join(os.path.dirname(__file__), 'model', 'params_shapes.json')
 PARAM_PATH = os.path.join(os.path.dirname(__file__), 'model', 'params_{}.npy')
@@ -725,3 +726,33 @@ class BaseModel(object, metaclass=ABCMeta):
     def __del__(self):
         if self.sess is not None:
             self.sess.close()
+
+    @classmethod
+    def finetune_grid_search(cls, config, Xs, Y, eval_fn, test_size, probs=False, return_all=False):
+        trainXs, testXs, trainY, testY = train_test_split(list_transpose(Xs), Y, test_size=test_size)
+        trainXs = list_transpose(trainXs)
+        testXs = list_transpose(testXs)
+        ranged_keys = []
+        ranged_itterators = []
+        for key, item in config.items():
+            if hasattr(item, "get_itterator"):
+                ranged_keys.append(key)
+                ranged_itterators.append(item.get_itterator())
+        grid_gen = itertools.product(*ranged_itterators)
+        results = []
+        for grid_item in grid_gen:
+            tf.reset_default_graph()
+            config_ = deepcopy(config)
+            config_.update(dict(zip(ranged_keys, grid_item)))
+            instance = cls(config=config_)
+            instance.finetune(*trainXs, trainY)
+            if probs:
+                res = instance.predict_proba(*testXs)
+            else:
+                res = instance.predict(*testXs)
+            results.append((config, eval_fn(res, testY)))
+            del instance
+        if return_all:
+            return results
+
+        return max(results, key=lambda x: x[1])[0]
