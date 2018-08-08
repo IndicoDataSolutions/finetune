@@ -44,7 +44,7 @@ class QuoraDuplicate(Dataset):
 if __name__ == "__main__":
     # Train and evaluate on SST
     dataset = QuoraDuplicate(nrows=5000).dataframe
-    model = Comparison(verbose=True, n_epochs=3)
+    model = Comparison(verbose=True, n_epochs=1)
     trainX1, testX1, trainX2, testX2, trainY, testY = train_test_split(dataset.Text1, dataset.Text2, dataset.Target, test_size=0.3, random_state=42)
     model.fit(trainX1, trainX2, trainY)
     accuracy = np.mean(model.predict(testX1, testX2) == testY)
