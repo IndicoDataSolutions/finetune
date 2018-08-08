@@ -745,12 +745,12 @@ class BaseModel(object, metaclass=ABCMeta):
             config_ = deepcopy(config)
             config_.update(dict(zip(ranged_keys, grid_item)))
             instance = cls(config=config_)
-            instance.finetune(*trainXs, trainY)
+            instance.finetune(*trainXs, Y=trainY)
             if probs:
                 res = instance.predict_proba(*testXs)
             else:
                 res = instance.predict(*testXs)
-            results.append((config, eval_fn(res, testY)))
+            results.append((config_, eval_fn(res, testY)))
             del instance
         if return_all:
             return results

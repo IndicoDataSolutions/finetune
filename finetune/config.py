@@ -77,7 +77,7 @@ def get_default_config():
         attn_p_drop=0.1,
         resid_p_drop=0.1,
         clf_p_drop=0.1,
-        l2_reg=0.0,
+        l2_reg=Ranged(0.0, [0.0, 0.1, 0.2]),
         vector_l2=True,
 
         # LOSS + OPTIMIZATION

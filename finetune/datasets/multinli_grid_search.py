@@ -46,10 +46,18 @@ class MultiNLI(Dataset):
 if __name__ == "__main__":
     # Train and evaluate on MultiNLI
     dataset = MultiNLI(nrows=1000).dataframe
-    model = MultifieldClassifier(verbose=True)
     trainX1, testX1, trainX2, testX2, trainY, testY = train_test_split(
         dataset.x1, dataset.x2, dataset.target, test_size=0.3, random_state=42
     )
-    res = model.finetune_grid_search(get_default_config(), [dataset.x1, dataset.x2], dataset.target, lambda y1, y2: np.mean(np.asarray(y1) == np.asarray(y2)), 0.1)
-
-    print(res)
+    base_conf = get_default_config()
+    base_conf.update(
+        trainable_layers=[True] * 2,
+        trainable_old_embeddings=False,
+        trainable_new_embeddings=False,
+        init_embeddings_from_file="embeddings.npy")
+    res = MultifieldClassifier.finetune_grid_search(base_conf, [dataset.x1, dataset.x2], dataset.target,
+                                                    lambda y1, y2: np.mean(np.asarray(y1) == np.asarray(y2)), 0.1)
+    model = MultifieldClassifier(res)
+    model.fit(trainX1, trainX2, Y=trainY)
+    acc = np.mean(np.asarray(model.predict(testX1, testX2)) == np.asarray(testY))
+    print('Test Accuracy: {:0.2f} with config {}'.format(acc, res))
