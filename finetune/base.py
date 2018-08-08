@@ -142,10 +142,24 @@ class BaseModel(object, metaclass=ABCMeta):
             if value is not None
         }
 
+    def _infer_positional_arguments(self, *Xs, Y=None, min_unique_ratio=0.3):
+        if len(Xs) <= 1 or Y is not None:
+            return Xs, Y
+
+        _Xs, _Y = Xs[:-1], Xs[-1]
+
+        # if _Y is an input rather than a target, it must be a text field
+        if len(_Y) and isinstance(_Y[0], (str, bytes)):
+            n_unique = np.unique(_Y)
+
+            # and must be largely unique
+            if n_unique / len(_Y) > min_unique_ratio:
+                _Xs, _Y = Xs, None
+
+        return _Xs, _Y
+
     def finetune(self, *Xs, Y=None, batch_size=None):
-        if len(Xs) > 1 and Y is None:
-            Y = Xs[-1]
-            Xs = Xs[:-1]
+        Xs, Y = self._infer_positional_arguments(*Xs, Y=Y)    
         fit_language_model_only = (Y is None)
         arr_encoded = self._text_to_ids(*Xs)
         labels = None if fit_language_model_only else Y
