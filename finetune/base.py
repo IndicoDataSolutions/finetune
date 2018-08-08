@@ -142,19 +142,23 @@ class BaseModel(object, metaclass=ABCMeta):
             if value is not None
         }
 
-    def _infer_positional_arguments(self, *Xs, Y=None, min_unique_ratio=0.3):
+    def _infer_positional_arguments(self, *Xs, Y=None, min_unique_ratio=0.33):
         if len(Xs) <= 1 or Y is not None:
-            return Xs, Y
+            return Xs, np.asarray(Y)
 
-        _Xs, _Y = Xs[:-1], Xs[-1]
+        _Xs, _Y = Xs[:-1], np.asarray(Xs[-1])
 
-        # if _Y is an input rather than a target, it must be a text field
+        # in order for _Y to be an input, it must be a text field
         if len(_Y) and isinstance(_Y[0], (str, bytes)):
-            n_unique = np.unique(_Y)
+            n_unique = len(np.unique(_Y))
 
             # and must be largely unique
             if n_unique / len(_Y) > min_unique_ratio:
                 _Xs, _Y = Xs, None
+                warnings.warn(
+                    "Last positional argument was inferred to be a text input for use in an unsupervised {}.fit() call. "
+                    "If this was not your intention, please pass Y as an explicit keyword argument.".format(self.__class__.__name__)
+                )
 
         return _Xs, _Y
 
