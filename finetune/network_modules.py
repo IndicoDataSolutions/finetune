@@ -118,7 +118,7 @@ def classifier(hidden, targets, n_targets, dropout_placeholder, config, train=Fa
     A simple linear classifier.
 
     :param hidden: The output of the featurizer. [batch_size, embed_dim]
-    :param targets: The placeholder representing the sparse target ids. [batch_size]
+    :param targets: One hot encoded target ids. [batch_size, n_classes]
     :param n_targets: A python int containing the number of classes that the model should be learning to predict over.
     :param dropout_placeholder:
     :param config: A config object, containing all parameters for the featurizer.

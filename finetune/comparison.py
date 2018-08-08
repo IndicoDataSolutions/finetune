@@ -85,7 +85,7 @@ class Comparison(Classifier):
                            Providing more than `max_length` tokens as input will result in truncation.
         :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
         """
-        return BaseModel.predict(self, X1, X2, max_length=max_length)
+        return BaseModel.predict_proba(self, X1, X2, max_length=max_length)
 
     def featurize(self, X1, X2, max_length=None):
         """

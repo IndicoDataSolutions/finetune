@@ -190,8 +190,13 @@ class BaseModel(object, metaclass=ABCMeta):
         val_window = [float("inf")] * self.config.val_window_size
 
         for i in range(self.config.n_epochs):
-            for (xmb, mmb, ymb) in iter_data(*train_dataset, n_batch=n_batch_train, verbose=self.config.verbose):
-
+            iterator = iter_data(
+                *train_dataset, 
+                n_batch=n_batch_train, 
+                tqdm_desc="Epoch {}".format(i),
+                verbose=self.config.verbose
+            )
+            for (xmb, mmb, ymb) in iterator:
                 feed_dict = {
                     self.X: xmb,
                     self.M: mmb,
@@ -626,7 +631,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
     def _init_from_pretrained(self, init_params):
         """ Load pre-trained weights into the tensors """
-        pretrained_params = find_trainable_variables("model", exclude="model/clf")
+        pretrained_params = find_trainable_variables("model", exclude="model/target")
         self.sess.run(tf.global_variables_initializer())
         self.sess.run([p.assign(ip) for p, ip in zip(pretrained_params, init_params)])
 
