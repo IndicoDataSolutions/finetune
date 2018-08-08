@@ -101,6 +101,9 @@ def get_default_config():
         # Multilabel
         multi_label_threshold=0.5,
 
+        # Comparison
+        reduction_op = "abs_sum",
+
         # Early stopping
         save_best_model=False,
         autosave_path=None,
