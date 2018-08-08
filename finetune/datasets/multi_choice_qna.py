@@ -97,13 +97,13 @@ if __name__ == "__main__":
 
     train_qs = []
     train_ans_correct = []
-    train_ans_incorrect = []
+    train_ans = []
     for item in train_data:
         answers = item["answers"]
         correct_ans_idx = item["correct_answer"]
         train_ans_correct.append(answers[correct_ans_idx])
         train_qs.append(item["content"])
-        train_ans_incorrect.append(answers)
+        train_ans.append(answers)
 
     test_qs = []
     test_ans_all = []
@@ -115,7 +115,7 @@ if __name__ == "__main__":
         test_qs.append(item["content"])
         test_ans_all.append(answers)
 
-    model.fit(train_qs, train_ans_correct, train_ans_incorrect)
+    model.fit(train_qs, train_ans, train_ans_correct)
     print(list(zip(model.predict(test_qs, test_ans_all), test_qs)))
 
     accuracy = np.mean([p == t for p, t in zip(model.predict(test_qs, test_ans_all), test_ans_correct)])

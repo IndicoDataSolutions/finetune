@@ -37,7 +37,7 @@ class TestQuestionAnswer(unittest.TestCase):
             ["william", "Walk", "run", "jump"],
         ]
 
-        model.finetune(questions, ["orange", "Chicken", "Penguin", "Tiger", "Coffee", "train", "william"], answers)
+        model.finetune(questions, answers, ["orange", "Chicken", "Penguin", "Tiger", "Coffee", "train", "william"])
 
         self.assertEqual(["yellow"], model.predict(["Dog, cat, fish, yellow, what is the odd one out?"],
                                                    [["yellow", "Dog", "fish", "cat"]]))

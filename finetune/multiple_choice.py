@@ -29,7 +29,7 @@ class MultipleChoice(BaseModel):
         kwargs['mask'] = np.stack([arr.mask for arr in arrays], 1)
         return ArrayEncodedOutput(**kwargs)
 
-    def finetune(self, question, correct_answer, answers, batch_size=None, fit_lm_only=False):
+    def finetune(self, question, answers, correct_answer, batch_size=None, fit_lm_only=False):
         """
         :param question: List or array of text, shape [batch]
         :param correct_answer: List or array of correct answers [batch] either in the format of an idx to the correct
