@@ -86,12 +86,12 @@ class MultiLabelClassifier(BaseModel):
     def _predict_proba_op(self, logits, **kwargs):
         return tf.nn.sigmoid(logits)
 
-    def _predict(self, *Xs,threshold, max_length=None):
+    def _predict(self, Xs, threshold, max_length=None):
         predictions = []
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
             max_length = max_length or self.config.max_length
-            for xmb, mmb in self._infer_prep(*Xs, max_length=max_length):
+            for xmb, mmb in self._infer_prep(Xs, max_length=max_length):
                 output = self._eval(
                     self.predict_op,
                     feed_dict={

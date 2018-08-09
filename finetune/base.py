@@ -88,7 +88,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self.is_trained = False  # has model been fine-tuned?
         self.require_lm = False
 
-    def _format_for_encoding(self, *Xs):
+    def _format_for_encoding(self, Xs):
         """
         Most subclasses take in inputs as:
             List (batch) of list (docs)
@@ -100,11 +100,16 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         return [[[x] for x in X] for X in Xs]
 
-    def _text_to_ids(self, *Xs, Y=None, max_length=None):
+    def _text_to_ids(self, Xs, Y=None, max_length=None):
         # Maps lists of text to formatted numpy arrays of token ids and loss-masks marking the lengths of the sequences.
         max_length = max_length or self.config.max_length
-        Xs = self._format_for_encoding(*Xs)
-        encoder_out = self.encoder.encode_multi_input(*Xs, Y=Y, max_length=max_length)
+
+        # If 1d array of text is passed, coerce into multifield format
+        if len(Xs) and isinstance(Xs[0], (bytes, str)):
+            Xs = [[x] for x in Xs]
+    
+        Xs = self._format_for_encoding(Xs)
+        encoder_out = self.encoder.encode_multi_input(Xs, Y=Y, max_length=max_length)
         return self._array_format(encoder_out)
 
     @abstractmethod
@@ -142,16 +147,11 @@ class BaseModel(object, metaclass=ABCMeta):
             if value is not None
         }
 
-    def finetune(self, *Xs, Y=None, batch_size=None):
-        if len(Xs) > 1 and Y is None:
-            Y = Xs[-1]
-            Xs = Xs[:-1]
-        fit_language_model_only = (Y is None)
-        arr_encoded = self._text_to_ids(*Xs)
-        labels = None if fit_language_model_only else Y
+    def finetune(self, Xs, Y=None, batch_size=None):
+        arr_encoded = self._text_to_ids(Xs)
         return self._training_loop(
             arr_encoded,
-            Y=labels,
+            Y=Y,
             batch_size=batch_size,
         )
 
@@ -262,12 +262,12 @@ class BaseModel(object, metaclass=ABCMeta):
         """ An alias for finetune. """
         return self.finetune(*args, **kwargs)
 
-    def _predict(self, *Xs, max_length=None):
+    def _predict(self, Xs, max_length=None):
         predictions = []
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
             max_length = max_length or self.config.max_length
-            for xmb, mmb in self._infer_prep(*Xs, max_length=max_length):
+            for xmb, mmb in self._infer_prep(Xs, max_length=max_length):
                 output = self._eval(self.predict_op,
                     feed_dict={
                         self.X: xmb,
@@ -280,10 +280,10 @@ class BaseModel(object, metaclass=ABCMeta):
                 predictions.append(formatted_predictions)
         return np.concatenate(predictions).tolist()
 
-    def predict(self, *Xs, max_length=None):
-        return self._predict(*Xs, max_length=max_length)
+    def predict(self, Xs, max_length=None):
+        return self._predict(Xs, max_length=max_length)
 
-    def _predict_proba(self, *Xs, max_length=None):
+    def _predict_proba(self, Xs, max_length=None):
         """
         Produce raw numeric outputs for proba predictions
         """
@@ -291,7 +291,7 @@ class BaseModel(object, metaclass=ABCMeta):
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
             max_length = max_length or self.config.max_length
-            for xmb, mmb in self._infer_prep(*Xs, max_length=max_length):
+            for xmb, mmb in self._infer_prep(Xs, max_length=max_length):
                 output = self._eval(
                     self.predict_proba_op,
                     feed_dict={
@@ -318,12 +318,12 @@ class BaseModel(object, metaclass=ABCMeta):
             )
         return formatted_predictions
 
-    def _featurize(self, *Xs, max_length=None):
+    def _featurize(self, Xs, max_length=None):
         features = []
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
             max_length = max_length or self.config.max_length
-            for xmb, mmb in self._infer_prep(*Xs, max_length=max_length):
+            for xmb, mmb in self._infer_prep(Xs, max_length=max_length):
                 feature_batch = self.sess.run(self.features, {
                     self.X: xmb,
                     self.M: mmb,
@@ -346,9 +346,9 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         return self.featurize(*args, **kwargs)
 
-    def _infer_prep(self, *Xs, max_length=None):
+    def _infer_prep(self, Xs, max_length=None):
         max_length = max_length or self.config.max_length
-        arr_encoded = self._text_to_ids(*Xs, max_length=max_length)
+        arr_encoded = self._text_to_ids(Xs, max_length=max_length)
         n_batch_train = self.config.batch_size * max(len(self.config.visible_gpus), 1)
         self._build_model(n_updates_total=0, target_dim=self.target_dim, train=False)
         yield from iter_data(arr_encoded.token_ids, arr_encoded.mask, n_batch=n_batch_train,
