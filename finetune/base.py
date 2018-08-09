@@ -680,7 +680,7 @@ class BaseModel(object, metaclass=ABCMeta):
         # model includes this information.
         path = os.path.abspath(path)
         self._load_from_file = path
-        saver = tf.train.Saver(tf.trainable_variables())
+        saver = tf.train.Saver(tf.trainable_variables() + [var for var in tf.global_variables() if "adam" in var])
         path_obj = Path(path)
         if path_obj.exists():
             if not path_obj.is_dir():
@@ -711,6 +711,7 @@ class BaseModel(object, metaclass=ABCMeta):
         var_list = find_trainable_variables('model', exclude='model/target')
         if self.target_dim is not None:
             var_list.extend(find_trainable_variables('model/target'))
+        var_list.extend([var for var in tf.global_variables() if "adam" in var.name])
         saver = tf.train.Saver(var_list=var_list)
         saver.restore(self.sess, os.path.join(self._load_from_file, SAVE_PREFIX))
         self._load_from_file = False
