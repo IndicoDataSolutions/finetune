@@ -729,7 +729,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
     @classmethod
     def finetune_grid_search(cls, config, Xs, Y, eval_fn, test_size, probs=False, return_all=False):
-        trainXs, testXs, trainY, testY = train_test_split(list_transpose(Xs), Y, test_size=test_size)
+        trainXs, testXs, trainY, testY = train_test_split(list_transpose(Xs), Y, test_size=test_size, shuffle=True)
         trainXs = list_transpose(trainXs)
         testXs = list_transpose(testXs)
         ranged_keys = []
@@ -752,7 +752,33 @@ class BaseModel(object, metaclass=ABCMeta):
                 res = instance.predict(*testXs)
             results.append((config_, eval_fn(res, testY)))
             del instance
+
         if return_all:
             return results
 
         return max(results, key=lambda x: x[1])[0]
+
+
+    @classmethod
+    def finetune_grid_search_cv(cls, config, Xs, Y, eval_fn, test_size, n_splits, probs=False, return_all=False):
+        results = []
+        for _ in range(n_splits):
+            res = cls.finetune_grid_search(config, Xs, Y, eval_fn, test_size, probs, return_all=True)
+            results.append(res)
+        results = list(zip(*results))
+        aggregated_results = []
+        for configuration in results:
+            config_common = None
+            sum_res = 0
+            n_res = 0
+            for config, result in configuration:
+                config_common = config_common or config
+                assert config == config_common
+                n_res += 1
+                sum_res += result
+            aggregated_results.append((config_common, sum_res/n_res))
+
+        if return_all:
+            return aggregated_results
+
+        return max(aggregated_results, key=lambda x: x[1])[0]
