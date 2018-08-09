@@ -9,7 +9,7 @@ from pathlib import Path
 
 import tqdm
 
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta, abstractmethod, abstractclassmethod
 from collections import namedtuple, defaultdict
 from functools import partial
 from copy import deepcopy
@@ -28,7 +28,7 @@ from finetune.utils import (
     guarantee_initialized_variables, sample_with_temperature, list_transpose
 )
 from finetune.encoding import TextEncoder, ArrayEncodedOutput
-from finetune.config import PAD_TOKEN, get_default_config, Ranged
+from finetune.config import PAD_TOKEN, get_default_config, GridSearchable
 
 SHAPES_PATH = os.path.join(os.path.dirname(__file__), 'model', 'params_shapes.json')
 PARAM_PATH = os.path.join(os.path.dirname(__file__), 'model', 'params_{}.npy')
@@ -343,6 +343,12 @@ class BaseModel(object, metaclass=ABCMeta):
         These features are the same that are fed into the target_model.
         """
         return self._featurize(*args, **kwargs)
+
+    @classmethod
+    @abstractmethod
+    def get_eval_fn(cls):
+        """"""
+
 
     def transform(self, *args, **kwargs):
         """
@@ -728,7 +734,11 @@ class BaseModel(object, metaclass=ABCMeta):
             self.sess.close()
 
     @classmethod
-    def finetune_grid_search(cls, config, Xs, Y, eval_fn, test_size, probs=False, return_all=False):
+    def finetune_grid_search(cls, Xs, Y, *, test_size, config=None, eval_fn=None, probs=False, return_all=False):
+        if isinstance(Xs[0], str):
+        config = config or get_default_config()
+        eval_fn = eval_fn or cls.get_eval_fn()
+
         trainXs, testXs, trainY, testY = train_test_split(list_transpose(Xs), Y, test_size=test_size, shuffle=True)
         trainXs = list_transpose(trainXs)
         testXs = list_transpose(testXs)
@@ -760,10 +770,11 @@ class BaseModel(object, metaclass=ABCMeta):
 
 
     @classmethod
-    def finetune_grid_search_cv(cls, config, Xs, Y, eval_fn, test_size, n_splits, probs=False, return_all=False):
+    def finetune_grid_search_cv(cls, Xs, Y, *, n_splits, test_size, config=None, eval_fn=None, probs=False, return_all=False):
         results = []
         for _ in range(n_splits):
-            res = cls.finetune_grid_search(config, Xs, Y, eval_fn, test_size, probs, return_all=True)
+            res = cls.finetune_grid_search(Xs, Y, test_size=test_size, probs=probs, eval_fn=eval_fn, config=config,
+                                           return_all=True)
             results.append(res)
         results = list(zip(*results))
         aggregated_results = []

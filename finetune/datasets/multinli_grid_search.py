@@ -55,8 +55,10 @@ if __name__ == "__main__":
         trainable_old_embeddings=False,
         trainable_new_embeddings=False,
         init_embeddings_from_file="embeddings.npy")
-    res = MultifieldClassifier.finetune_grid_search(base_conf, [dataset.x1, dataset.x2], dataset.target,
-                                                    lambda y1, y2: np.mean(np.asarray(y1) == np.asarray(y2)), 0.1)
+    res = MultifieldClassifier.finetune_grid_search([dataset.x1, dataset.x2], dataset.target, config=base_conf,
+                                                    eval_fn=lambda y1, y2: np.mean(np.asarray(y1) == np.asarray(y2)),
+                                                    test_size=0.1)
+
     model = MultifieldClassifier(res)
     model.fit(trainX1, trainX2, Y=trainY)
     acc = np.mean(np.asarray(model.predict(testX1, testX2)) == np.asarray(testY))
