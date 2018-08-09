@@ -715,3 +715,7 @@ class BaseModel(object, metaclass=ABCMeta):
         saver.restore(self.sess, os.path.join(self._load_from_file, SAVE_PREFIX))
         self._load_from_file = False
         self.is_trained = True
+
+    def __del__(self):
+        if self.sess is not None:
+            self.sess.close()
