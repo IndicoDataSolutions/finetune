@@ -240,8 +240,12 @@ def sequence_labeler(hidden, targets, n_targets, dropout_placeholder, config, tr
     """
     with tf.variable_scope('sequence-labeler', reuse=reuse):
         nx = config.n_embed
-        a = attn(hidden, 'seq_label_attn', nx, config.seq_num_heads, config.seq_dropout, config.seq_dropout,
-                 dropout_placeholder, train=train, scale=False, mask=False)
+        with tf.variable_scope('seq_lab_attn'):
+            attn_fn = functools.partial(attn, scope="seq_label_attn", n_state=nx, n_head=config.seq_num_heads, resid_pdrop=config.resid_p_drop, attn_pdrop=config.attn_p_drop, dropout_placeholder=dropout_placeholder, train=train, scale=False, mask=False)
+            if config.low_memory_mode and train:
+                attn_fn = recompute_grad(attn_fn, use_entire_scope=True)
+            a = attn_fn(hidden)
+            
         n = norm(hidden + a, 'seq_label_residual')
         flat_logits = tf.layers.dense(n, n_targets)
         logits = tf.reshape(flat_logits, tf.concat([tf.shape(hidden)[:2], [n_targets]], 0))
