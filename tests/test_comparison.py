@@ -31,6 +31,7 @@ class TestComparison(unittest.TestCase):
             max_length=128,
             n_epochs=1,
             val_size=0.1,
+            l2_reg=0.,
             verbose=False,
         )
         d.update(kwargs)

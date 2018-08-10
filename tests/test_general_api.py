@@ -63,7 +63,13 @@ class TestModel(unittest.TestCase):
         Ensure saving + loading does not change predictions
         """
         self.model = MultifieldClassifier()
+
+        # test unsupervised fit
+        self.model.fit(*self.text_data_train)
+
+        # test supervised fit
         self.model.fit(*self.text_data_train, self.train_targets)
+        
         predictions = self.model.predict(*self.text_data_valid)
         self.model.save(self.save_file)
         model = MultifieldRegressor.load(self.save_file)
