@@ -159,6 +159,7 @@ class TextEncoder(object):
         batch_label_idxs = []
         batch_character_locs = []
         label = None
+        
         for i, text in enumerate(texts):
             if labels is not None:
                 label = labels[i]

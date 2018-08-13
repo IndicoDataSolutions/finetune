@@ -25,7 +25,6 @@ class Comparison(Classifier):
         
         pairs: Array of text, shape [batch, 2]
         """
-        print("MAX LENGTH", max_length)
         arr_forward = super()._text_to_ids(pairs, Y=Y, max_length=max_length)
         reversed_pairs = [pair[::-1] for pair in pairs]
         arr_backward = super()._text_to_ids(reversed_pairs, Y=Y, max_length=max_length)
@@ -43,7 +42,6 @@ class Comparison(Classifier):
                            corresponds to the number of training examples provided to each GPU.
         """
         arr_encoded = self._text_to_ids(pairs)
-        print(arr_encoded, Y, batch_size)
         return self._training_loop(arr_encoded, Y=Y, batch_size=batch_size)
 
     def _define_placeholders(self, target_dim=None):

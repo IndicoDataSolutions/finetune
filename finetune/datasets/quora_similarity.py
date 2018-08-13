@@ -46,7 +46,7 @@ if __name__ == "__main__":
     dataset = QuoraDuplicate(nrows=5000).dataframe
     model = Comparison(verbose=True, n_epochs=1)
     trainX1, testX1, trainX2, testX2, trainY, testY = train_test_split(dataset.Text1, dataset.Text2, dataset.Target, test_size=0.3, random_state=42)
-    model.fit(trainX1, trainX2, trainY)
-    accuracy = np.mean(model.predict(testX1, testX2) == testY)
+    model.fit(list(zip(trainX1, trainX2)), trainY)
+    accuracy = np.mean(model.predict(list(zip(testX1, testX2))) == testY)
     class_balance = np.mean(testY)
     print('Test Accuracy: {:0.2f} for a {:0.2f} class balance'.format(accuracy, class_balance))

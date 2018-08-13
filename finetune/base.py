@@ -15,11 +15,11 @@ from functools import partial
 
 import numpy as np
 import tensorflow as tf
+from sklearn.model_selection import train_test_split
+import pandas as pd
 
 from finetune.download import download_data_if_required
 from finetune.optimizers import AdamWeightDecay, schedules
-from sklearn.model_selection import train_test_split
-
 from finetune.network_modules import featurizer, language_model
 from finetune.utils import (
     find_trainable_variables, assign_to_gpu, average_grads, interpolate_pos_embed,
@@ -103,6 +103,9 @@ class BaseModel(object, metaclass=ABCMeta):
     def _text_to_ids(self, Xs, Y=None, max_length=None):
         # Maps lists of text to formatted numpy arrays of token ids and loss-masks marking the lengths of the sequences.
         max_length = max_length or self.config.max_length
+
+        if isinstance(Xs, pd.Series):
+            Xs = Xs.values
 
         # If 1d array of text is passed, coerce into multifield format
         if len(Xs) and isinstance(Xs[0], (bytes, str)):

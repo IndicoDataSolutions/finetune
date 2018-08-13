@@ -28,11 +28,11 @@ class SequenceLabeler(BaseModel):
         :param val_size: Float fraction or int number that represents the size of the validation set.
         :param val_interval: The interval for which validation is performed, measured in number of steps.
         """
-        fit_language_model_only = (Y is None)
+        fit_target_model = (Y is not None)
         X, Y = indico_to_finetune_sequence(X, Y, none_value="<PAD>")
         arr_encoded = self._text_to_ids(X, Y=Y)
-        labels = None if fit_language_model_only else arr_encoded.labels
-        return self._training_loop(arr_encoded, Y=labels, batch_size=batch_size)
+        targets = arr_encoded.labels if fit_target_model else None
+        return self._training_loop(arr_encoded, Y=targets, batch_size=batch_size)
 
     def predict(self, X, max_length=None):
         """
@@ -117,11 +117,11 @@ class SequenceLabeler(BaseModel):
             result.append(seq_result)
         return result
 
-    def _format_for_encoding(self, *Xs):
+    def _format_for_encoding(self, Xs):
         """
-        No op -- the default input format is the same format used by SequenceLabeler
+        Pad out each example to make it clear there is only a single field
         """
-        return Xs
+        return [[X] for X in Xs]
 
     def _target_placeholder(self, target_dim=None):
         return tf.placeholder(tf.int32, [None, self.config.max_length])  # classification targets
