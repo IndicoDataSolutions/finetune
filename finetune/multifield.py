@@ -1,6 +1,7 @@
 import json
 
 import tensorflow as tf
+import numpy as np
 from sklearn.model_selection import train_test_split
 
 from finetune.classifier import Classifier
@@ -61,6 +62,9 @@ class MultifieldClassifier(Classifier):
         :returns: np.array of features of shape (n_examples, embedding_size).
         """
         return BaseModel.featurize(self, Xs, max_length=max_length)
+
+    def get_eval_fn(cls):
+        return lambda labels, targets: np.mean(np.asarray(labels) == np.asarray(targets))
 
     def _target_encoder(self):
         return OneHotLabelEncoder()

@@ -1,6 +1,7 @@
 import tensorflow as tf
 from tensorflow.python.client import device_lib
 from functools import lru_cache
+from collections import namedtuple
 
 # CONSTANTS
 PAD_TOKEN = '<PAD>'
@@ -19,17 +20,25 @@ def all_gpus():
     ]
 
 
+PickleableGridSearch = namedtuple("PickleableGridSearch", "base itterator")
+
+
 class GridSearchable:
-    def __init__(self, default, itterator=None):
+    def __init__(self, default, iterator=None):
         pass
 
-    def __new__(self, default, itterator=None):
+    def __new__(self, default, iterator=None):
         class GridSearchable_(type(default)):
-            def get_itterator(self):
-                return itterator
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.picklable = PickleableGridSearch(default, iterator)
+
+            def get_iterator(self):
+                return iterator
+
+        GridSearchable_.default = default
 
         return GridSearchable_(default)
-
 
 class Settings(dict):
     
@@ -44,6 +53,23 @@ class Settings(dict):
     def __init__(self, **kwargs):
         for key, value in kwargs.items():
             self[key] = value
+
+    def __getstate__(self):
+        temp_settings = {}
+        for key, item in self.items():
+            if hasattr(item, "get_iterator"):
+                temp_settings[key] = PickleableGridSearch(item.default, item.get_iterator())
+            else:
+                temp_settings[key] = item
+        return temp_settings
+
+    def __setstate__(self, state):
+        for key, item in state.items():
+            if isinstance(key, PickleableGridSearch):
+                self[key] = GridSearchable(*item)
+            self[key] = item
+        return self
+
 
 
 def get_default_config():

@@ -45,17 +45,12 @@ class MultiNLI(Dataset):
 
 if __name__ == "__main__":
     # Train and evaluate on MultiNLI
-    dataset = MultiNLI(nrows=1000).dataframe
+    dataset = MultiNLI(nrows=10).dataframe
     trainX1, testX1, trainX2, testX2, trainY, testY = train_test_split(
         dataset.x1, dataset.x2, dataset.target, test_size=0.3, random_state=42
     )
     base_conf = get_default_config()
-    base_conf.update(
-        trainable_layers=[True] * 2,
-        trainable_old_embeddings=False,
-        trainable_new_embeddings=False,
-        init_embeddings_from_file="embeddings.npy")
-    res = MultifieldClassifier.finetune_grid_search([dataset.x1, dataset.x2], dataset.target, config=base_conf,
+    res = MultifieldClassifier.finetune_grid_search_cv([dataset.x1, dataset.x2], dataset.target, n_splits=2, config=base_conf,
                                                     eval_fn=lambda y1, y2: np.mean(np.asarray(y1) == np.asarray(y2)),
                                                     test_size=0.1)
 

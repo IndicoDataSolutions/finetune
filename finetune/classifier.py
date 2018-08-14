@@ -1,4 +1,5 @@
 import tensorflow as tf
+import numpy as np
 
 from finetune.base import BaseModel
 from finetune.target_encoders import OneHotLabelEncoder
@@ -55,6 +56,9 @@ class Classifier(BaseModel):
                            corresponds to the number of training examples provided to each GPU.
         """
         return super().finetune(X, Y=Y, batch_size=batch_size)
+
+    def get_eval_fn(cls):
+        return lambda labels, targets: np.mean(np.asarray(labels) == np.asarray(targets))
 
     def _target_encoder(self):
         return OneHotLabelEncoder()
