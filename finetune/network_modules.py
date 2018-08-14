@@ -240,12 +240,20 @@ def sequence_labeler(hidden, targets, n_targets, dropout_placeholder, config, tr
     """
     with tf.variable_scope('sequence-labeler', reuse=reuse):
         nx = config.n_embed
-        a = attn(hidden, 'seq_label_attn', nx, config.seq_num_heads, config.seq_dropout, config.seq_dropout,
-                 dropout_placeholder, train=train, scale=False, mask=False)
-        n = norm(hidden + a, 'seq_label_residual')
-        flat_logits = tf.layers.dense(n, n_targets)
-        logits = tf.reshape(flat_logits, tf.concat([tf.shape(hidden)[:2], [n_targets]], 0))
-        # TODO (BEN): ADD: correct way to find lengths. - Same method in decoding. Cheating for now.
+        def seq_lab_internal(hidden):
+            attn_fn = functools.partial(attn, scope="seq_label_attn", n_state=nx, n_head=config.seq_num_heads,
+                                            resid_pdrop=config.resid_p_drop, attn_pdrop=config.attn_p_drop,
+                                            dropout_placeholder=dropout_placeholder, train=train, scale=False, mask=False)
+            n = norm(attn_fn(hidden) + hidden, 'seq_label_residual')
+            flat_logits = tf.layers.dense(n, n_targets)
+            logits = tf.reshape(flat_logits, tf.concat([tf.shape(hidden)[:2], [n_targets]], 0))
+            return logits
+
+        with tf.variable_scope('seq_lab_attn'):
+            if config.low_memory_mode and train:
+                seq_lab_internal = recompute_grad(seq_lab_internal, use_entire_scope=True)
+            logits = seq_lab_internal(hidden)
+
         transition_params = tf.get_variable("Transition_matrix", shape=[n_targets, n_targets])
 
         if train:
