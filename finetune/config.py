@@ -127,7 +127,10 @@ def get_default_config():
         soft_device_placement=True,
 
         # Save options
-        save_adam_vars=True
+        save_adam_vars=True,
+       
+        # Dealing with long sequences
+        chunk_long_sequences=False,
     )
 
 

@@ -24,7 +24,7 @@ EncodedOutput = namedtuple("EncodedOutput", [
     "token_ids", # list of list of subtoken ids (ints)
     "tokens",    # list of list of subtokens (strs)
     "labels",    # list of list of labels 
-    "char_locs"  # list of list of character locations (ints)
+    "char_locs", # list of list of character locations (ints)
 ])
 EncodedOutput.__new__.__defaults__ = (None,) * len(EncodedOutput._fields)
 ArrayEncodedOutput = namedtuple("ArrayEncodedOutput", [
@@ -192,7 +192,7 @@ class TextEncoder(object):
             token_ids=batch_token_idxs,
             tokens=batch_tokens,
             labels=batch_label_idxs,
-            char_locs=batch_character_locs
+            char_locs=batch_character_locs,
         )
 
     def decode(self, ids):
@@ -332,5 +332,5 @@ class TextEncoder(object):
             token_ids=token_ids,
             tokens=tokens,
             labels=labels,
-            char_locs=locations
+            char_locs=locations,
         )

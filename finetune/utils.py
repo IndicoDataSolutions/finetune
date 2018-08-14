@@ -1,6 +1,7 @@
 import os
 from functools import partial
 
+import pandas as pd
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.framework import function
