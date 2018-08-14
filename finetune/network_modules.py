@@ -121,6 +121,14 @@ def language_model(*, X, M, embed_weights, hidden, config, reuse=None):
         }
 
 
+def _apply_class_weight(losses, targets, class_weights=None):
+    if class_weights is not None:
+        # loss multiplier applied based on true class
+        weights = tf.reduce_sum(class_weights * tf.to_float(targets), axis=1)
+        losses *= weights
+    return losses
+
+
 def classifier(hidden, targets, n_targets, dropout_placeholder, config, train=False, reuse=None, **kwargs):
     """
     A simple linear classifier.
@@ -144,6 +152,9 @@ def classifier(hidden, targets, n_targets, dropout_placeholder, config, train=Fa
             logits=clf_logits,
             labels=tf.stop_gradient(targets)
         )
+
+        clf_losses = _apply_class_weight(clf_losses, targets, kwargs.get('class_weights'))
+
         return {
             'logits': clf_logits,
             'losses': clf_losses
@@ -164,6 +175,9 @@ def multi_choice_question(hidden, targets, n_targets, dropout_placeholder, confi
             logits=clf_out,
             labels=tf.stop_gradient(targets)
         )
+
+        clf_losses = _apply_class_weight(clf_losses, targets, kwargs.get('class_weights'))
+
         return {
             'logits': clf_out,
             'losses': clf_losses
@@ -193,6 +207,7 @@ def multi_classifier(hidden, targets, n_targets, dropout_placeholder, config, tr
             logits=clf_logits,
             labels=tf.stop_gradient(targets)
         )
+        clf_losses = _apply_class_weight(clf_losses, targets, kwargs.get('class_weights'))
         return {
             'logits': clf_logits,
             'losses': clf_losses
@@ -265,11 +280,21 @@ def sequence_labeler(hidden, targets, n_targets, dropout_placeholder, config, tr
         transition_params = tf.get_variable("Transition_matrix", shape=[n_targets, n_targets])
 
         if train:
-            log_likelihood, _ = tf.contrib.crf.crf_log_likelihood(logits, targets, kwargs.get('max_length') * tf.ones(
-                tf.shape(targets)[0]),
-                                                                  transition_params=transition_params)
+            log_likelihood, _ = tf.contrib.crf.crf_log_likelihood(
+                logits, 
+                targets,
+                kwargs.get('max_length') * tf.ones(tf.shape(targets)[0]),
+                transition_params=transition_params
+            )
         else:
             log_likelihood = tf.constant(0.)
+
+        class_weights = kwargs.get('class_weights')
+        if class_weights is not None:
+            flat_loss = tf.reshape(log_likelihood, [-1, n_targets])
+            flat_targets = tf.reshape(targets, [-1])
+            one_hot_targets = tf.one_hot(flat_targets, depth=n_targets)
+            log_likelihood = _apply_class_weight(flat_loss, one_hot_targets, class_weights)
 
         return {
             'logits': logits,
