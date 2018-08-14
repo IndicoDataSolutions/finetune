@@ -545,7 +545,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         # Optionally load saved model
         if self._load_from_file:
-            self._load_finetuned_model()
+            self._load_finetuned_model(target_dim)
         elif not self.is_trained:
             self._init_from_pretrained(pre_trained_weights["init_params"])
 
@@ -683,7 +683,8 @@ class BaseModel(object, metaclass=ABCMeta):
         # model includes this information.
         path = os.path.abspath(path)
         self._load_from_file = path
-        saver = tf.train.Saver(tf.trainable_variables())
+        adam_vars = [var for var in tf.global_variables() if "adam" in var.name] if self.config.save_adam_vars else []
+        saver = tf.train.Saver(tf.trainable_variables() + adam_vars)
         path_obj = Path(path)
         if path_obj.exists():
             if not path_obj.is_dir():
@@ -710,10 +711,12 @@ class BaseModel(object, metaclass=ABCMeta):
         tf.reset_default_graph()
         return model
 
-    def _load_finetuned_model(self):
+    def _load_finetuned_model(self, target_dim):
         var_list = find_trainable_variables('model', exclude='model/target')
         if self.target_dim is not None:
             var_list.extend(find_trainable_variables('model/target'))
+        if self.config.save_adam_vars and target_dim == self.target_dim:
+            var_list.extend([var for var in tf.global_variables() if "adam" in var.name])
         saver = tf.train.Saver(var_list=var_list)
         saver.restore(self.sess, os.path.join(self._load_from_file, SAVE_PREFIX))
         self._load_from_file = False
