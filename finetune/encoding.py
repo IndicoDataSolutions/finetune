@@ -334,3 +334,32 @@ class TextEncoder(object):
             labels=labels,
             char_locs=locations
         )
+
+
+def chunked(X, chunk_size, step_size):
+    """
+    Inputs: 
+        X: array of text
+        max_length: int, max number of token handled in memory at any given time
+        token_overlap: int, how many tokens of overlap between windows
+
+    Return values:
+        X_windowed: subsections to predict on
+        starts: whether on not a subsection is the start of a document
+    """
+    encoder = TextEncoder()
+    X_windowed = []
+    starts = []
+    for doc in X:
+        encoded = encoder._encode(X) 
+        char_locs = _flatten(encoded.char_locs)
+        char_locs.append(None) 
+        doc_length = len(char_locs)
+        for i, chunk_start in enumerate(range(0, doc_length, step_size)):
+            chunk_end = min(doc_length - 1, chunk_start + chunk_size)
+            chunk_start_char_loc = char_locs[chunk_start]
+            chunk_end_char_loc = char_locs[chunk_end]
+            chunk = doc[chunk_start_char_loc:chunk_end_char_loc]
+            X_windowed.append(chunk)
+            starts.append(i == 0)
+    return X_windowed, starts

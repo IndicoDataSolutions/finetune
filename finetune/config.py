@@ -114,7 +114,11 @@ def get_default_config():
         soft_device_placement=True,
 
         # Dealing with class imbalance 
-        class_weights=None
+        class_weights=None,
+
+        # Predicting long sequences
+        token_overlap=256,
+        windowed_prediction=True
     )
 
 
