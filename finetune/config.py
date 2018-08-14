@@ -113,8 +113,8 @@ def get_default_config():
         log_device_placement=False,
         soft_device_placement=True,
 
-        # Dealing with class imbalance 
-        class_weights=None
+        # Dealing with long sequences 
+        windowed_prediction=True
     )
 
 

@@ -475,14 +475,6 @@ class BaseModel(object, metaclass=ABCMeta):
                 aggregator['features'].append(featurizer_state['features'])
 
                 if target_dim is not None:
-
-                    if self.config.class_weights:
-                        class_weight_arr = np.ones(target_dim, dtype=np.float32)
-                        for class_name, class_weight in self.config.class_weights.items():
-                            idx = LabelEncoder.transform(self.label_encoder, [class_name])[0]
-                            class_weight_arr[idx] = class_weight
-                        class_weights = tf.convert_to_tensor(class_weight_arr)
-
                     with tf.variable_scope('model/target'):
                         config = {
                             'featurizer_state': featurizer_state,
@@ -492,8 +484,6 @@ class BaseModel(object, metaclass=ABCMeta):
                             'reuse': do_reuse,
                             'max_length': self.config.max_length
                         }
-                        if self.config.class_weights:
-                            config['class_weights'] = class_weights
                         target_model_state = self._target_model(**config)
                     train_loss += (1 - lm_loss_coef) * tf.reduce_mean(target_model_state['losses'])
                     train_loss_tower += train_loss

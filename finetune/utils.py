@@ -419,12 +419,31 @@ def indico_to_finetune_sequence(texts, labels=None, none_value=config.PAD_TOKEN)
         labels = [[]] * len(texts)
 
     for text, label_seq in zip(texts, labels):
+        
+        tokens = NLP(text)
+        token_starts = [token.idx for token in tokens]
+        token_ends = [token.idx + len(token.text) for token in tokens]
+        n_tokens = len(tokens)
+
         last_loc = 0
         doc_subseqs = []
         doc_labels = []
+        
+        start_idx = 0
+        end_idx = 0
+
         for annotation in label_seq:
             start = annotation["start"]
             end = annotation["end"]
+
+            # round to nearest spacy token
+            while start_idx < n_tokens and start >= token_starts[start_idx]:
+                start_idx += 1
+            start = token_starts[start_idx - 1]
+            while end_idx < (n_tokens - 1) and end > token_ends[end_idx]:
+                end_idx += 1
+            end = token_ends[end_idx]
+
             label = annotation["label"]
             if start != last_loc:
                 doc_subseqs.append(text[last_loc:start])
@@ -441,6 +460,7 @@ def indico_to_finetune_sequence(texts, labels=None, none_value=config.PAD_TOKEN)
             doc_subseqs.append(text[start:end])
             doc_labels.append(label)
             last_loc = end
+            
         doc_subseqs.append(text[last_loc:])
         doc_labels.append(none_value)
         all_subseqs.append(doc_subseqs)

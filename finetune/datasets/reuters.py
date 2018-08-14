@@ -70,7 +70,7 @@ if __name__ == "__main__":
     dataset = Reuters(nrows=1000).dataframe
     dataset['annotations'] = [json.loads(annotation) for annotation in dataset['annotations']]
     trainX, testX, trainY, testY = train_test_split(dataset.texts, dataset.annotations, test_size=0.3, random_state=42)
-    model = SequenceLabeler(verbose=False)
+    model = SequenceLabeler(verbose=False, max_length=128)
     model.fit(trainX, trainY)
     predictions = model.predict(testX)
     n_sample = 10

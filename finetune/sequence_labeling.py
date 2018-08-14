@@ -1,8 +1,9 @@
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
+import pandas as pd
 
 from finetune.base import BaseModel
-from finetune.encoding import EncodedOutput, ArrayEncodedOutput
+from finetune.encoding import EncodedOutput, ArrayEncodedOutput, chunked
 from finetune.target_encoders import SequenceLabelingEncoder
 from finetune.network_modules import sequence_labeler
 from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_sequence, sequence_decode
@@ -40,39 +41,70 @@ class SequenceLabeler(BaseModel):
 
         :param X: A list / array of text, shape [batch]
         :param max_length: the number of tokens to be included in the document representation.
-                           Providing more than `max_length` tokens as input will result in truncatindiion.
+                           Providing more than `max_length` tokens as input will result in truncation.
         :returns: list of class labels.
         """
-        doc_subseqs, _ = indico_to_finetune_sequence(X)
 
+        if isinstance(X, pd.Series):
+            X = X.values
+
+        max_length = max_length or self.config.max_length
+        chunk_size = max_length - 2
+        step_size = chunk_size // 2 
+
+        if self.config.windowed_prediction:
+            chunked_X, start_arr = chunked(X, chunk_size=chunk_size, step_size=step_size)
+        else:
+            chunked_X, start_arr = X, [True] * len(X)
+        
+        doc_subseqs, _ = indico_to_finetune_sequence(chunked_X)
         arr_encoded = self._text_to_ids(doc_subseqs)
         labels = self._predict(doc_subseqs, max_length=max_length)
         all_subseqs = []
         all_labels = []
-        for text, label_seq, position_seq in zip(X, labels, arr_encoded.char_locs):
+
+        doc_idx = -1
+        for i, (text, label_seq, position_seq) in enumerate(zip(chunked_X, labels, arr_encoded.char_locs)):
+            if start_arr[i]:
+                # predict on a full window 
+                offset = 0
+                doc_idx += 1
+                doc_subseqs = []
+                doc_labels = []
+            else:
+                # the predictions on the first half of the window have already been made, only consider the second half
+                text, label_seq, position_seq = text[step_size:], label_seq[step_size:], position_seq[step_size:]
             
             start_of_token = 0
-            doc_subseqs = []
-            doc_labels = []
 
             for label, position in zip(label_seq, position_seq):
                 if position == -1:
                     # indicates padding / special tokens
                     continue
 
+                seq_start = start_of_token + offset
+                seq_end = position + offset
+
                 # if there are no current subsequence
                 # or the current subsequence has the wrong label
                 if not doc_subseqs or label != doc_labels[-1]:
                     # start new subsequence
-                    doc_subseqs.append(text[start_of_token:position])
+                    doc_subseqs.append(X[doc_idx][seq_start:seq_end])
                     doc_labels.append(label)
                 else:
                     # continue appending to current subsequence
-                    doc_subseqs[-1] += text[start_of_token:position]
+                    doc_subseqs[-1] += X[doc_idx][seq_start:seq_end]
 
                 start_of_token = position
-            all_subseqs.append(doc_subseqs)
-            all_labels.append(doc_labels)
+            
+            if i + 1 >= len(start_arr) or start_arr[i + 1]:
+                # end of document
+                all_subseqs.append(doc_subseqs)
+                all_labels.append(doc_labels)
+            
+            # if we need to evaluate another window on this document, update the offset
+            elif len(arr_encoded.char_locs[i]) > step_size:
+                offset = arr_encoded.char_locs[i][step_size] + offset
 
         _, doc_annotations = finetune_to_indico_sequence(
             raw_texts=X,
@@ -103,6 +135,10 @@ class SequenceLabeler(BaseModel):
                            Providing more than `max_length` tokens as input will result in truncatindiion.
         :returns: list of class labels.
         """
+
+        if isinstance(X, pd.Series):
+            X = X.values
+            
         doc_subseqs, _ = indico_to_finetune_sequence(X)
         arr_encoded = self._text_to_ids(doc_subseqs)
         batch_probas = self._predict_proba(doc_subseqs, max_length=max_length)
