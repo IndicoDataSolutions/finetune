@@ -6,16 +6,15 @@ import pickle
 import json
 import itertools
 from pathlib import Path
-
-import tqdm
-
 from abc import ABCMeta, abstractmethod
 from collections import namedtuple, defaultdict
 from functools import partial
 
+import tqdm
 import numpy as np
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
 import pandas as pd
 
 from finetune.download import download_data_if_required
@@ -476,15 +475,26 @@ class BaseModel(object, metaclass=ABCMeta):
                 aggregator['features'].append(featurizer_state['features'])
 
                 if target_dim is not None:
+
+                    if self.config.class_weights:
+                        class_weight_arr = np.ones(target_dim, dtype=np.float32)
+                        for class_name, class_weight in self.config.class_weights.items():
+                            idx = LabelEncoder.transform(self.label_encoder, [class_name])[0]
+                            class_weight_arr[idx] = class_weight
+                        class_weights = tf.convert_to_tensor(class_weight_arr)
+
                     with tf.variable_scope('model/target'):
-                        target_model_state = self._target_model(
-                            featurizer_state=featurizer_state,
-                            targets=Y,
-                            n_outputs=target_dim,
-                            train=train,
-                            reuse=do_reuse,
-                            max_length=self.config.max_length
-                        )
+                        config = {
+                            'featurizer_state': featurizer_state,
+                            'targets': Y,
+                            'n_outputs': target_dim,
+                            'train': train,
+                            'reuse': do_reuse,
+                            'max_length': self.config.max_length
+                        }
+                        if self.config.class_weights:
+                            config['class_weights'] = class_weights
+                        target_model_state = self._target_model(**config)
                     train_loss += (1 - lm_loss_coef) * tf.reduce_mean(target_model_state['losses'])
                     train_loss_tower += train_loss
 

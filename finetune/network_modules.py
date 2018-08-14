@@ -136,6 +136,13 @@ def classifier(hidden, targets, n_targets, dropout_placeholder, config, train=Fa
             logits=clf_logits,
             labels=tf.stop_gradient(targets)
         )
+
+        class_weights = kwargs.get('class_weights')
+        if class_weights is not None:
+            # loss multiplier applied based on true class
+            weights = tf.reduce_sum(class_weights * targets, axis=1)
+            clf_losses *= weights
+
         return {
             'logits': clf_logits,
             'losses': clf_losses
