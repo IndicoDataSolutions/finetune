@@ -73,6 +73,3 @@ if __name__ == "__main__":
     model = SequenceLabeler(verbose=False)
     model.fit(trainX, trainY)
     predictions = model.predict(testX)
-    n_sample = 10
-    for i in range(n_sample):
-        print(testX.values[i], predictions[i])

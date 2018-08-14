@@ -53,6 +53,7 @@ def get_default_config():
         n_epochs=3,
         seed=42,
         max_length=512,
+
         # INITIALIZATION
         weight_stddev=0.02,
 
@@ -111,6 +112,13 @@ def get_default_config():
         # debugging
         log_device_placement=False,
         soft_device_placement=True,
+
+        # Dealing with class imbalance 
+        class_weights=None,
+
+        # Predicting long sequences
+        token_overlap=256,
+        windowed_prediction=True
     )
 
 

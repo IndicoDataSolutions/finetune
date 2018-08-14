@@ -136,6 +136,7 @@ def classifier(hidden, targets, n_targets, dropout_placeholder, config, train=Fa
             logits=clf_logits,
             labels=tf.stop_gradient(targets)
         )
+
         return {
             'logits': clf_logits,
             'losses': clf_losses
