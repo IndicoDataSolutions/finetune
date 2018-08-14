@@ -7,7 +7,6 @@ from collections import namedtuple
 PAD_TOKEN = '<PAD>'
 
 
-
 @lru_cache()
 def all_gpus():
     """
@@ -20,9 +19,9 @@ def all_gpus():
     ]
 
 
-PickleableGridSearch = namedtuple("PickleableGridSearch", "base itterator")
+GridSearchable = namedtuple("PickleableGridSearch", "base itterator")
 
-
+"""
 class GridSearchable:
     def __init__(self, default, iterator=None):
         pass
@@ -30,7 +29,7 @@ class GridSearchable:
     def __new__(self, default, iterator=None):
         class GridSearchable_(type(default)):
             def __init__(self, *args, **kwargs):
-                super().__init__(*args, **kwargs)
+                super().__init__()
                 self.picklable = PickleableGridSearch(default, iterator)
 
             def get_iterator(self):
@@ -39,37 +38,28 @@ class GridSearchable:
         GridSearchable_.default = default
 
         return GridSearchable_(default)
+"""
 
 class Settings(dict):
-    
+
+    def get_grid_searchable(self):
+
+
     def __getattr__(self, attr):
         if attr.startswith('__'):
             raise AttributeError
-        return self.get(attr, None)
+        val = self.get(attr, None)
+        if isinstance(val, GridSearchable):
+            return val.base
 
     __setattr__ = dict.__setitem__
     __delattr__ = dict.__delitem__
 
     def __init__(self, **kwargs):
         for key, value in kwargs.items():
+            if isinstance(value, GridSearchable):
+                
             self[key] = value
-
-    def __getstate__(self):
-        temp_settings = {}
-        for key, item in self.items():
-            if hasattr(item, "get_iterator"):
-                temp_settings[key] = PickleableGridSearch(item.default, item.get_iterator())
-            else:
-                temp_settings[key] = item
-        return temp_settings
-
-    def __setstate__(self, state):
-        for key, item in state.items():
-            if isinstance(key, PickleableGridSearch):
-                self[key] = GridSearchable(*item)
-            self[key] = item
-        return self
-
 
 
 def get_default_config():
