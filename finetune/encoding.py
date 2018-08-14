@@ -351,15 +351,35 @@ def chunked(X, chunk_size, step_size):
     X_windowed = []
     starts = []
     for doc in X:
+        
+        tokens = NLP(doc)
+        token_starts = [token.idx for token in tokens]
+        token_ends = [token.idx + len(token.text) for token in tokens]
+        n_tokens = len(tokens)
+        
+        start_idx = 0
+        end_idx = 0
+
         encoded = encoder._encode(X) 
         char_locs = [0]  
         char_locs += _flatten(encoded.char_locs)
         doc_length = len(char_locs)
-        for i, chunk_start in enumerate(range(0, doc_length, step_size)):
+
+        chunk_start = 0
+        while True:
             chunk_end = min(doc_length - 1, chunk_start + chunk_size)
             chunk_start_char_loc = char_locs[chunk_start]
             chunk_end_char_loc = char_locs[chunk_end]
+
+            while start_idx < n_tokens and chunk_start_char_loc >= token_starts[start_idx]:
+                start_idx += 1
+            chunk_start_char_loc = token_starts[start_idx - 1]
+            while end_idx < (n_tokens - 1) and chunk_end_char_loc > token_ends[end_idx]:
+                end_idx += 1
+            chunk_end_char_loc = token_ends[end_idx - 1]
+
             chunk = doc[chunk_start_char_loc:chunk_end_char_loc]
             X_windowed.append(chunk)
             starts.append(i == 0)
+            chunk_start = end_idx - 1
     return X_windowed, starts

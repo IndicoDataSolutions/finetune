@@ -114,7 +114,7 @@ def get_default_config():
         soft_device_placement=True,
 
         # Dealing with long sequences 
-        windowed_prediction=True
+        chunk_long_sequences=True
     )
 
 

@@ -19,7 +19,7 @@ class SequenceLabeler(BaseModel):
     :param **kwargs: key-value pairs of config items to override.
     """
         
-    def finetune(self, X, Y=None, batch_size=None):
+    def finetune(self, X, Y=None, batch_size=None, max_length=None):
         """
         :param X: A list of text snippets. Format: [batch_size]
         :param Y: A list of lists of annotations. Format: [batch_size, n_annotations], where each annotation is of the form:
@@ -30,7 +30,50 @@ class SequenceLabeler(BaseModel):
         :param val_interval: The interval for which validation is performed, measured in number of steps.
         """
         fit_target_model = (Y is not None)
-        X, Y = indico_to_finetune_sequence(X, Y, none_value="<PAD>")
+
+        if isinstance(X, pd.Series):
+            X = X.values
+
+        if isinstance(Y, pd.Series):
+            Y = Y.values
+
+        max_length = max_length or self.config.max_length
+        chunk_size = max_length - 2
+        step_size = chunk_size // 2
+
+        if self.config.chunk_long_sequences:
+            chunked_X, start_arr = chunked(X, chunk_size=chunk_size, step_size=step_size)
+
+            doc_idx = -1
+            chunk_start = 0
+            offset_Y = []
+            for i, (chunk, is_start) in enumerate(zip(chunked_X, start_arr)):
+                if is_start:
+                    doc_idx += 1
+                    batch_Y = []
+                    chunk_start = 0
+                else:
+                    print(Y[doc_idx], chunk)
+                    chunk_start = X[doc_idx].index(chunk, chunk_start)
+                    print("OFFSET CHUNK START", chunk_start)
+                
+                chunk_end = chunk_start + len(chunk)
+
+                for annotation in Y[doc_idx]:
+                    if chunk_start <= annotation['start'] < chunk_end:
+                        annotation['start'] -= chunk_start
+                        annotation['end'] -= chunk_start
+                        print(annotation, chunk[annotation['start']:annotation['end']])
+                        batch_Y.append(annotation)
+        
+                if i + 1 >= len(start_arr) or start_arr[i + 1]:
+                    # end of document
+                    offset_Y.append(batch_Y)
+                
+        else:
+            chunked_X, start_arr, offset_Y = X, [True] * len(X), Y
+            
+        X, Y = indico_to_finetune_sequence(chunked_X, offset_Y, none_value="<PAD>")
         arr_encoded = self._text_to_ids(X, Y=Y)
         targets = arr_encoded.labels if fit_target_model else None
         return self._training_loop(arr_encoded, Y=targets, batch_size=batch_size)
@@ -52,7 +95,7 @@ class SequenceLabeler(BaseModel):
         chunk_size = max_length - 2
         step_size = chunk_size // 2 
 
-        if self.config.windowed_prediction:
+        if self.config.chunk_long_sequences:
             chunked_X, start_arr = chunked(X, chunk_size=chunk_size, step_size=step_size)
         else:
             chunked_X, start_arr = X, [True] * len(X)
@@ -63,17 +106,14 @@ class SequenceLabeler(BaseModel):
         all_subseqs = []
         all_labels = []
 
-        doc_idx = -1
         for i, (text, label_seq, position_seq) in enumerate(zip(chunked_X, labels, arr_encoded.char_locs)):
             if start_arr[i]:
                 # predict on a full window 
-                offset = 0
-                doc_idx += 1
                 doc_subseqs = []
                 doc_labels = []
             else:
                 # the predictions on the first half of the window have already been made, only consider the second half
-                text, label_seq, position_seq = text[step_size:], label_seq[step_size:], position_seq[step_size:]
+                label_seq, position_seq = label_seq[step_size:], position_seq[step_size:]
             
             start_of_token = 0
 
@@ -82,18 +122,19 @@ class SequenceLabeler(BaseModel):
                     # indicates padding / special tokens
                     continue
 
-                seq_start = start_of_token + offset
-                seq_end = position + offset
+                subseq_text = text[start_of_token:position]
+                if not subseq_text.strip():
+                    continue
 
                 # if there are no current subsequence
                 # or the current subsequence has the wrong label
                 if not doc_subseqs or label != doc_labels[-1]:
                     # start new subsequence
-                    doc_subseqs.append(X[doc_idx][seq_start:seq_end])
+                    doc_subseqs.append(subseq_text)
                     doc_labels.append(label)
                 else:
                     # continue appending to current subsequence
-                    doc_subseqs[-1] += X[doc_idx][seq_start:seq_end]
+                    doc_subseqs[-1] += subseq_text
 
                 start_of_token = position
             
@@ -102,10 +143,6 @@ class SequenceLabeler(BaseModel):
                 all_subseqs.append(doc_subseqs)
                 all_labels.append(doc_labels)
             
-            # if we need to evaluate another window on this document, update the offset
-            elif len(arr_encoded.char_locs[i]) > step_size:
-                offset = arr_encoded.char_locs[i][step_size] + offset
-
         _, doc_annotations = finetune_to_indico_sequence(
             raw_texts=X,
             subseqs=all_subseqs,
@@ -138,19 +175,32 @@ class SequenceLabeler(BaseModel):
 
         if isinstance(X, pd.Series):
             X = X.values
+
+        max_length = max_length or self.config.max_length
+        chunk_size = max_length - 2
+        step_size = chunk_size // 2 
+
+        if self.config.chunk_long_sequences:
+            chunked_X, start_arr = chunked(X, chunk_size=chunk_size, step_size=step_size)
+        else:
+            chunked_X, start_arr = X, [True] * len(X)
             
-        doc_subseqs, _ = indico_to_finetune_sequence(X)
+        doc_subseqs, _ = indico_to_finetune_sequence(chunked_X)
         arr_encoded = self._text_to_ids(doc_subseqs)
         batch_probas = self._predict_proba(doc_subseqs, max_length=max_length)
         result = []
-        for token_seq, proba_seq in zip(arr_encoded.tokens, batch_probas):
-            seq_result = []
+        for i, (token_seq, proba_seq) in enumerate(zip(arr_encoded.tokens, batch_probas)):
+            if start_arr[i]:
+                seq_result = []
+            
             for token, proba_t in zip(token_seq, proba_seq):
                 seq_result.append((
                     token,
                     dict(zip(self.label_encoder.classes_, proba_t))
                 ))
-            result.append(seq_result)
+
+            if i + 1 >= len(start_arr) or start_arr[i + 1]:
+                result.append(seq_result)
         return result
 
     def _format_for_encoding(self, Xs):

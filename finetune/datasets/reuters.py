@@ -72,6 +72,10 @@ if __name__ == "__main__":
     trainX, testX, trainY, testY = train_test_split(dataset.texts, dataset.annotations, test_size=0.3, random_state=42)
     model = SequenceLabeler(verbose=False, max_length=128)
     model.fit(trainX, trainY)
+    model.save("./reuters")
+    # model = SequenceLabeler.load("./reuters")
+    # model.config.max_length = 64
+    print("Building graph ")
     predictions = model.predict(testX)
     n_sample = 10
     for i in range(n_sample):
