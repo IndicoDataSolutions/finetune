@@ -20,47 +20,47 @@ class MultifieldClassifier(Classifier):
     :param \**kwargs: key-value pairs of config items to override.
     """
         
-    def finetune(self, *Xs, Y=None, batch_size=None):
+    def finetune(self, Xs, Y=None, batch_size=None):
         """
-        :param \*Xs: lists of text inputs
+        :param \*Xs: lists of text inputs, shape [batch, n_fields]
         :param Y: integer or string-valued class labels. It is necessary for the items of Y to be sortable.
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
         """
-        return BaseModel.finetune(self, *Xs, Y=Y, batch_size=batch_size)
+        return BaseModel.finetune(self, Xs, Y=Y, batch_size=batch_size)
 
-    def predict(self, *Xs, max_length=None):
+    def predict(self, Xs, max_length=None):
         """
-        Produces X2 list of most likely class labels as determined by the fine-tuned model.
+        Produces list of most likely class labels as determined by the fine-tuned model.
 
-        :param \*Xs:  lists of text inputs
+        :param \*Xs: lists of text inputs, shape [batch, n_fields]
         :param max_length: the number of tokens to be included in the document representation.
                            Providing more than `max_length` tokens as input will result in truncation.
         :returns: list of class labels.
         """
-        return BaseModel.predict(self, *Xs, max_length=max_length)
+        return BaseModel.predict(self, Xs, max_length=max_length)
 
-    def predict_proba(self, *Xs, max_length=None):
+    def predict_proba(self, Xs, max_length=None):
         """
-        Produces X2 probability distribution over classes for each example in X.
+        Produces probability distribution over classes for each example in X.
 
-        :param \*Xs:  lists of text inputs
+        :param \*Xs: lists of text inputs, shape [batch, n_fields]
         :param max_length: the number of tokens to be included in the document representation.
                            Providing more than `max_length` tokens as input will result in truncation.
         :returns: list of dictionaries.  Each dictionary maps from X2 class label to its assigned class probability.
         """
-        return BaseModel.predict_proba(self, *Xs, max_length=max_length)
+        return BaseModel.predict_proba(self, Xs, max_length=max_length)
 
-    def featurize(self, *Xs, max_length=None):
+    def featurize(self, Xs, max_length=None):
         """
         Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
 
-        :param \*Xs:  lists of text inputs
+        :param \*Xs: lists of text inputs, shape [batch, n_fields]
         :param max_length: the number of tokens to be included in the document representation.
                            Providing more than `max_length` tokens as input will result in truncation.
         :returns: np.array of features of shape (n_examples, embedding_size).
         """
-        return BaseModel.featurize(self, *Xs, max_length=max_length)
+        return BaseModel.featurize(self, Xs, max_length=max_length)
 
     def _target_encoder(self):
         return OneHotLabelEncoder()
@@ -95,47 +95,47 @@ class MultifieldRegressor(Regressor):
     :param \**kwargs: key-value pairs of config items to override.
     """
         
-    def finetune(self, *Xs, Y=None, batch_size=None):
+    def finetune(self, Xs, Y=None, batch_size=None):
         """
-        :param \*Xs: lists of text inputs
+        :param \*Xs: lists of text inputs, shape [batch, n_fields]
         :param Y: floating point targets
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
         """
-        return BaseModel.finetune(self, *Xs, Y=Y, batch_size=batch_size)
+        return BaseModel.finetune(self, Xs, Y=Y, batch_size=batch_size)
 
-    def predict(self, *Xs, max_length=None):
+    def predict(self, Xs, max_length=None):
         """
-        Produces X2 list of most likely class labels as determined by the fine-tuned model.
+        Produces list of most likely class labels as determined by the fine-tuned model.
 
-        :param \*Xs:  lists of text inputs
+        :param \*Xs: lists of text inputs, shape [batch, n_fields]
         :param max_length: the number of tokens to be included in the document representation.
                            Providing more than `max_length` tokens as input will result in truncation.
         :returns: list of class labels.
         """
-        return BaseModel.predict(self, *Xs, max_length=max_length)
+        return BaseModel.predict(self, Xs, max_length=max_length)
 
-    def predict_proba(self, *Xs, max_length=None):
+    def predict_proba(self, Xs, max_length=None):
         """
-        Produces X2 probability distribution over classes for each example in X.
+        Produces probability distribution over classes for each example in X.
 
-        :param \*Xs:  lists of text inputs
+        :param \*Xs: lists of text inputs, shape [batch, n_fields]
         :param max_length: the number of tokens to be included in the document representation.
                            Providing more than `max_length` tokens as input will result in truncation.
         :returns: list of dictionaries.  Each dictionary maps from X2 class label to its assigned class probability.
         """
-        return BaseModel.predict_proba(self, *Xs, max_length=max_length)
+        return BaseModel.predict_proba(self, Xs, max_length=max_length)
 
-    def featurize(self, *Xs, max_length=None):
+    def featurize(self, Xs, max_length=None):
         """
         Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
 
-        :param \*Xs:  lists of text inputs
+        :param \*Xs: lists of text inputs, shape [batch, n_fields]
         :param max_length: the number of tokens to be included in the document representation.
                            Providing more than `max_length` tokens as input will result in truncation.
         :returns: np.array of features of shape (n_examples, embedding_size).
         """
-        return BaseModel.featurize(self, *Xs, max_length=max_length)
+        return BaseModel.featurize(self, Xs, max_length=max_length)
 
     def _target_encoder(self):
         return RegressionEncoder()
@@ -158,6 +158,7 @@ class MultifieldRegressor(Regressor):
     def _predict_proba_op(self, logits, **kwargs):
         return tf.no_op()
 
+
 if __name__ == "__main__":
 
     with open("data/questions.json", "rt") as fp:
@@ -169,22 +170,22 @@ if __name__ == "__main__":
     save_path = 'saved-models/cola'
 
     model = MultifieldClassifier()
+    xs = []
 
     for item in data:
         row = data[item]
         scores.append(row["score"])
-        questions.append(row["question"])
-        answers.append(row["answers"][0]["answer"])
+        xs.append([row["question"], row["answers"][0]["answer"]])
 
-    scores_train, scores_test, ques_train, ques_test, ans_train, ans_test = train_test_split(
-        scores, questions, answers, test_size=0.33, random_state=5)
+    scores_train, scores_test, xs_train, xs_test = train_test_split(
+        scores, xs, test_size=0.33, random_state=5)
 
-    model.finetune(ques_train, ans_train, scores_train)
+    model.finetune(xs_train, scores_train)
 
     model = MultifieldClassifier.load(save_path)
 
     print("TRAIN EVAL")
-    predictions = model.predict(ques_train, ans_train)
+    predictions = model.predict(xs_train)
     print(predictions)
 
     from scipy.stats import spearmanr
@@ -192,6 +193,6 @@ if __name__ == "__main__":
     print(spearmanr(predictions, scores_train))
 
     print("TEST EVAL")
-    predictions = model.predict(ques_test, ans_test)
+    predictions = model.predict(xs_test)
     print(predictions)
     print(spearmanr(predictions, scores_test))

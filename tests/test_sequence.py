@@ -154,6 +154,7 @@ class TestSequenceLabeler(unittest.TestCase):
 
         with open(path, "rt") as fp:
             text, labels = json.load(fp)
+
         self.model.finetune(text * 10, labels * 10)
         
         predictions = self.model.predict(test_sequence)

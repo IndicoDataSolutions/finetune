@@ -6,6 +6,7 @@ from pathlib import Path
 import codecs
 import json
 
+import tensorflow as tf
 # required for tensorflow logging control
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
@@ -13,6 +14,10 @@ from finetune import MultipleChoice
 
 
 class TestQuestionAnswer(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        tf.reset_default_graph()
 
     def test_reasonable_predictions(self):
         model = MultipleChoice(n_epochs=80, val_size=0, max_length=128, batch_size=3, lr=2e-5, lr_schedule="none",

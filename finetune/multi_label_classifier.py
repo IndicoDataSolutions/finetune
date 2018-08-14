@@ -20,7 +20,6 @@ class MultiLabelClassifier(BaseModel):
         super().__init__(*args, **kwargs)
         self.threshold_placeholder = None
 
-
     def featurize(self, X, max_length=None):
         """
         Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
@@ -42,7 +41,7 @@ class MultiLabelClassifier(BaseModel):
         :returns: list of class labels.
         """
         threshold = threshold or self.config.multi_label_threshold
-        return self._predict(X,threshold=threshold, max_length=max_length)
+        return self._predict(X, threshold=threshold, max_length=max_length)
 
     def predict_proba(self, X, max_length=None):
         """
@@ -86,12 +85,12 @@ class MultiLabelClassifier(BaseModel):
     def _predict_proba_op(self, logits, **kwargs):
         return tf.nn.sigmoid(logits)
 
-    def _predict(self, *Xs,threshold, max_length=None):
+    def _predict(self, X, threshold, max_length=None):
         predictions = []
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
             max_length = max_length or self.config.max_length
-            for xmb, mmb in self._infer_prep(*Xs, max_length=max_length):
+            for xmb, mmb in self._infer_prep(X, max_length=max_length):
                 output = self._eval(
                     self.predict_op,
                     feed_dict={

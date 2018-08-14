@@ -30,6 +30,8 @@ class TestComparison(unittest.TestCase):
             batch_size=2,
             max_length=128,
             n_epochs=1,
+            l2_reg=0,
+            lm_coef=0.,
             val_size=0.1,
             verbose=False,
         )
@@ -50,25 +52,22 @@ class TestComparison(unittest.TestCase):
         model = Comparison(**self.default_config())
         n_samples = 10
         model.fit(
-            ["Transformers was a terrible movie but a great model"] * n_samples, 
-            ["Transformers are a great model but a terrible movie"] * n_samples, 
+            [["Transformers was a terrible movie but a great model", "Transformers are a great model but a terrible movie"]] * n_samples, 
             ['yes'] * n_samples
         )
 
-        test_data = (            
-            ["Transformers was a terrible movie but a great model"],
-            ["Transformers are a great model but a terrible movie"]
-        )
-        predictions = model.predict(*test_data)
+        test_data = [["Transformers was a terrible movie but a great model", "Transformers are a great model but a terrible movie"]]
+        
+        predictions = model.predict(test_data)
         for prediction in predictions:
             self.assertIsInstance(prediction, (str, bytes))
         
-        probabilities = model.predict_proba(*test_data)
+        probabilities = model.predict_proba(test_data)
         for proba in probabilities:
             self.assertIsInstance(proba, dict)
 
     def test_reasonable_predictions(self):
-        model = Comparison(**self.default_config(n_epochs=3))
+        model = Comparison(**self.default_config(n_epochs=5))
 
         # fake dataset generation
         animals = ["dog", "cat", "horse", "cow", "pig", "sheep", "goat", "chicken", "guinea pig", "donkey", "turkey", "duck", "camel", "goose", "llama", "rabbit", "fox"]
@@ -87,9 +86,9 @@ class TestComparison(unittest.TestCase):
         data = similar + different
 
         x_tr, x_te, t_tr, t_te = train_test_split(data, targets, test_size=0.3)
-        model.finetune(*list_transpose(x_tr), t_tr)
+        model.finetune(x_tr, t_tr)
 
-        predictions = model.predict(*list_transpose(x_te))
+        predictions = model.predict(x_te)
         accuracy = np.mean([pred == true for pred, true in zip(predictions, t_te)])
         naive_baseline = max(np.mean(targets == "similar"), np.mean(targets == "different"))
         self.assertGreater(accuracy, naive_baseline)
