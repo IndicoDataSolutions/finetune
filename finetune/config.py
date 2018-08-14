@@ -111,6 +111,9 @@ def get_default_config():
         # debugging
         log_device_placement=False,
         soft_device_placement=True,
+
+        # Save options
+        save_adam_vars=True
     )
 
 
