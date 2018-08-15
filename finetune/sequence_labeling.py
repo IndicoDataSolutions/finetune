@@ -57,6 +57,7 @@ class SequenceLabeler(BaseModel):
 
         doc_idx = -1
         
+        
         for chunk_idx, (label_seq, position_seq) in enumerate(zip(labels, arr_encoded.char_locs)):
             start_of_doc = arr_encoded.token_ids[chunk_idx][0][0] == self.encoder.start
             if start_of_doc:
@@ -64,11 +65,10 @@ class SequenceLabeler(BaseModel):
                 doc_subseqs = []
                 doc_labels = []
                 doc_idx += 1
+                start_of_token = 0
             else:
                 # we've already predicted on the first half of this seq as part of the prev. chunk
                 label_seq, position_seq = label_seq[step_size:], position_seq[step_size:]
-
-            start_of_token = 0
 
             for label, position in zip(label_seq, position_seq):
                 if position == -1:

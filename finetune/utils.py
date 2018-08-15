@@ -1,5 +1,6 @@
 import os
 from functools import partial
+import warnings
 
 import pandas as pd
 import numpy as np
@@ -352,6 +353,10 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, none_value=config.PA
             stripped_text = sub_str.strip()
 
             raw_annotation_start = raw_text.find(stripped_text, raw_annotation_end)
+            if raw_annotation_start == -1:
+                warnings.warn("Failed to find predicted sequence in text: {}.".format(stripped_text))
+                continue
+
             raw_annotation_end = raw_annotation_start + len(stripped_text)
 
             annotation_start = raw_annotation_start
@@ -430,8 +435,16 @@ def indico_to_finetune_sequence(texts, labels=None, none_value=config.PAD_TOKEN)
             if start != last_loc:
                 doc_subseqs.append(text[last_loc:start])
                 doc_labels.append(none_value)
+
+            if start == end:
+                # degenerate label
+                continue
             
-            if annotation.get('text') and  text[start:end] != annotation['text']:
+            doc_subseqs.append(text[start:end])
+            doc_labels.append(label)
+            last_loc = end
+
+            if annotation.get('text') and text[start:end] != annotation['text']:
                 raise ValueError(
                     "Annotation text does not match text specified by `start` and `end` indexes. "
                     "Text provided: `{}`.  Text extracted: `{}`.".format(
@@ -439,9 +452,7 @@ def indico_to_finetune_sequence(texts, labels=None, none_value=config.PAD_TOKEN)
                         text[start:end]
                     )
                 )
-            doc_subseqs.append(text[start:end])
-            doc_labels.append(label)
-            last_loc = end
+
         doc_subseqs.append(text[last_loc:])
         doc_labels.append(none_value)
         all_subseqs.append(doc_subseqs)
