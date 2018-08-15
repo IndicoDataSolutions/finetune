@@ -743,12 +743,9 @@ class BaseModel(object, metaclass=ABCMeta):
         trainXs, testXs, trainY, testY = train_test_split(list_transpose(Xs), Y, test_size=test_size, shuffle=True)
         trainXs = list_transpose(trainXs)
         testXs = list_transpose(testXs)
-        ranged_keys = []
-        ranged_iterators = []
-        for key, item in config.items():
-            if hasattr(item, "get_iterator"):
-                ranged_keys.append(key)
-                ranged_iterators.append(item.get_itterator())
+        gs = config.get_grid_searchable()
+        ranged_keys = gs.keys()
+        ranged_iterators = gs.values()
         grid_gen = itertools.product(*ranged_iterators)
         results = []
         for grid_item in grid_gen:

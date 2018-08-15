@@ -18,48 +18,34 @@ def all_gpus():
         if x.device_type == 'GPU'
     ]
 
-
-GridSearchable = namedtuple("PickleableGridSearch", "base itterator")
-
-"""
-class GridSearchable:
-    def __init__(self, default, iterator=None):
-        pass
-
-    def __new__(self, default, iterator=None):
-        class GridSearchable_(type(default)):
-            def __init__(self, *args, **kwargs):
-                super().__init__()
-                self.picklable = PickleableGridSearch(default, iterator)
-
-            def get_iterator(self):
-                return iterator
-
-        GridSearchable_.default = default
-
-        return GridSearchable_(default)
-"""
+GridSearchable = namedtuple("GridSearchable", "default iterator")
 
 class Settings(dict):
 
     def get_grid_searchable(self):
+        return self.grid_searchable
 
+    def __init__(self, **kwargs):
+        super().__init__()
+        self.grid_searchable = {}
+        for key, value in kwargs.items():
+            self[key] = value
 
     def __getattr__(self, attr):
         if attr.startswith('__'):
             raise AttributeError
-        val = self.get(attr, None)
-        if isinstance(val, GridSearchable):
-            return val.base
+        return self.get(attr, None)
 
-    __setattr__ = dict.__setitem__
+    def __setitem__(self, key, value):
+        if isinstance(value, GridSearchable):
+            self.grid_searchable[key] = value.iterator
+            value = value.default
+        return super().__setitem__(key, value)
+
+    def __setattr__(self, k, v):
+        return self.__setitem__(k, v)
+
     __delattr__ = dict.__delitem__
-
-    def __init__(self, **kwargs):
-        for key, value in kwargs.items():
-            if isinstance(value, GridSearchable):
-                
-            self[key] = value
 
 
 def get_default_config():
