@@ -1,10 +1,10 @@
 import tensorflow as tf
 from tensorflow.python.client import device_lib
 from functools import lru_cache
+from collections import namedtuple
 
 # CONSTANTS
 PAD_TOKEN = '<PAD>'
-
 
 
 @lru_cache()
@@ -18,20 +18,34 @@ def all_gpus():
         if x.device_type == 'GPU'
     ]
 
+GridSearchable = namedtuple("GridSearchable", "default iterator")
 
 class Settings(dict):
-    
+
+    def get_grid_searchable(self):
+        return self.grid_searchable
+
+    def __init__(self, **kwargs):
+        super().__init__()
+        self.grid_searchable = {}
+        for key, value in kwargs.items():
+            self[key] = value
+
     def __getattr__(self, attr):
         if attr.startswith('__'):
             raise AttributeError
         return self.get(attr, None)
 
-    __setattr__ = dict.__setitem__
-    __delattr__ = dict.__delitem__
+    def __setitem__(self, key, value):
+        if isinstance(value, GridSearchable):
+            self.grid_searchable[key] = value.iterator
+            value = value.default
+        return super().__setitem__(key, value)
 
-    def __init__(self, **kwargs):
-        for key, value in kwargs.items():
-            self[key] = value
+    def __setattr__(self, k, v):
+        return self.__setitem__(k, v)
+
+    __delattr__ = dict.__delitem__
 
 
 def get_default_config():
@@ -50,7 +64,7 @@ def get_default_config():
         # TRAINING SETTINGS
         batch_size=2,
         visible_gpus=all_gpus(),
-        n_epochs=3,
+        n_epochs=GridSearchable(3, [1, 2, 3, 4]),
         seed=42,
         max_length=512,
         # INITIALIZATION
@@ -65,7 +79,7 @@ def get_default_config():
         attn_p_drop=0.1,
         resid_p_drop=0.1,
         clf_p_drop=0.1,
-        l2_reg=0.0,
+        l2_reg=GridSearchable(0.0, [0.0, 0.1, 0.2]),
         vector_l2=True,
 
         # LOSS + OPTIMIZATION
@@ -73,7 +87,7 @@ def get_default_config():
         b2=0.999,
         epsilon=1e-8,
         lr_schedule='warmup_linear',
-        lr=6.25e-5,
+        lr=GridSearchable(6.25e-5, [6.25e-4, 6.25e-5, 6.25e-6]),
         lr_warmup=0.002,
         max_grad_norm=1,
         lm_loss_coef=0.0,
