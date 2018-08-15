@@ -744,11 +744,7 @@ class BaseModel(object, metaclass=ABCMeta):
         saver.restore(self.sess, os.path.join(self._load_from_file, SAVE_PREFIX))
         self._load_from_file = False
         self.is_trained = True
-
-    def __del__(self):
-        if self.sess is not None:
-            self.sess.close()
-
+   
     @classmethod
     def finetune_grid_search(cls, Xs, Y, *, test_size, config=None, eval_fn=None, probs=False, return_all=False):
         if isinstance(Xs[0], str):
@@ -806,3 +802,10 @@ class BaseModel(object, metaclass=ABCMeta):
             return aggregated_results
 
         return max(aggregated_results, key=lambda x: x[1])[0]
+
+    def __del__(self):
+        try:
+            if self.sess is not None:
+                self.sess.close()
+        except AttributeError:
+            pass
