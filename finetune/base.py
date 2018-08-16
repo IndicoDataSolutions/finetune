@@ -5,15 +5,14 @@ import logging
 import pickle
 import json
 import itertools
+import sys
 from pathlib import Path
-
-import tqdm
-
 from abc import ABCMeta, abstractmethod, abstractclassmethod
 from collections import namedtuple, defaultdict
 from functools import partial
 from copy import deepcopy
 
+import tqdm
 import numpy as np
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
@@ -27,7 +26,7 @@ from finetune.utils import (
     iter_data, soft_split, concat_or_stack,
     guarantee_initialized_variables, sample_with_temperature, list_transpose
 )
-from finetune.encoding import TextEncoder, ArrayEncodedOutput
+from finetune.encoding import TextEncoder, ArrayEncodedOutput, EncodedOutput
 from finetune.config import PAD_TOKEN, get_default_config, GridSearchable
 
 SHAPES_PATH = os.path.join(os.path.dirname(__file__), 'model', 'params_shapes.json')
@@ -106,16 +105,35 @@ class BaseModel(object, metaclass=ABCMeta):
         # Maps lists of text to formatted numpy arrays of token ids and loss-masks marking the lengths of the sequences.
         max_length = max_length or self.config.max_length
 
-        if isinstance(Xs, pd.Series):
-            Xs = Xs.values
-
         # If 1d array of text is passed, coerce into multifield format
         if len(Xs) and isinstance(Xs[0], (bytes, str)):
             Xs = [[x] for x in Xs]
     
         Xs = self._format_for_encoding(Xs)
-        encoder_out = self.encoder.encode_multi_input(Xs, Y=Y, max_length=max_length)
-        return self._array_format(encoder_out)
+        
+        if self.config.chunk_long_sequences and len(Xs[0]) == 1:
+            # can only chunk single sequence inputs
+            chunk_size = max_length - 2 
+            step_size = chunk_size // 3
+            encoded = self.encoder.encode_multi_input(Xs, Y=Y, max_length=sys.maxsize)
+            
+            d = defaultdict(list)
+            for idx in range(len(encoded.token_ids)):
+                starts = list(range(0, len(encoded.token_ids[idx]), step_size))
+                for start in starts:
+                    end = start + chunk_size
+
+                    for field in EncodedOutput._fields:
+                        field_value = getattr(encoded, field)
+                        if field_value is not None:
+                            d[field].append(field_value[idx][start:end])
+
+            encoder_out = EncodedOutput(**d)
+            return self._array_format(encoder_out)
+        else:
+            encoder_out = self.encoder.encode_multi_input(Xs, Y=Y, max_length=max_length)
+            return self._array_format(encoder_out)
+        
 
     @abstractmethod
     def _predict_op(self, logits, **kwargs):
@@ -391,7 +409,7 @@ class BaseModel(object, metaclass=ABCMeta):
             tokens=encoded_output.tokens,
             labels=labels_arr,
             char_locs=encoded_output.char_locs,
-            mask=mask
+            mask=mask,
         )
 
     def _compile_train_op(self, *, params, grads, n_updates_total, initial_params):
@@ -727,11 +745,7 @@ class BaseModel(object, metaclass=ABCMeta):
         saver.restore(self.sess, os.path.join(self._load_from_file, SAVE_PREFIX))
         self._load_from_file = False
         self.is_trained = True
-
-    def __del__(self):
-        if self.sess is not None:
-            self.sess.close()
-
+   
     @classmethod
     def finetune_grid_search(cls, Xs, Y, *, test_size, config=None, eval_fn=None, probs=False, return_all=False):
         if isinstance(Xs[0], str):
@@ -789,3 +803,10 @@ class BaseModel(object, metaclass=ABCMeta):
             return aggregated_results
 
         return max(aggregated_results, key=lambda x: x[1])[0]
+
+    def __del__(self):
+        try:
+            if self.sess is not None:
+                self.sess.close()
+        except AttributeError:
+            pass

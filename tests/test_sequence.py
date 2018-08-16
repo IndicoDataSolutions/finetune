@@ -165,3 +165,25 @@ class TestSequenceLabeler(unittest.TestCase):
         predictions = self.model.predict(test_sequence)
         self.assertTrue(1 <= len(predictions[0]) <= 3)
         self.assertTrue(any(pred["text"] == "dog" for pred in predictions[0]))
+
+    def test_chunk_long_sequences(self):
+        test_sequence = ["I am a dog. A dog that's incredibly bright. I can talk, read, and write!" * 10]
+        path = os.path.join(os.path.dirname(__file__), "testdata.json")
+
+        # test ValueError raised when raw text is passed along with character idxs and doesn't match
+        self.model.config.chunk_long_sequences = True
+        self.model.config.max_length = 18
+        with self.assertRaises(ValueError):
+            self.model.fit(["Text about a dog."], [[{"start": 0, "end": 5, "text": "cat", "label": "dog"}]])
+
+        with open(path, "rt") as fp:
+            text, labels = json.load(fp)
+
+        self.model.finetune(text * 10, labels * 10)
+        
+        predictions = self.model.predict(test_sequence)
+        print(test_sequence)
+        print(predictions)
+        print(len(predictions))
+        self.assertEqual(len(predictions[0]), 20)
+        self.assertTrue(any(pred["text"] == "dog" for pred in predictions[0]))
