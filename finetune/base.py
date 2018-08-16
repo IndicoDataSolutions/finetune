@@ -264,7 +264,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
                     if np.mean(val_window) <= best_val_loss:
                         best_val_loss = np.mean(val_window)
-                        if self.config.save_best_model:
+                        if self.config.autosave_path is not None:
                             self.save(self.config.autosave_path)
 
                     tqdm.tqdm.write("Train loss: {}\t Validation loss: {}".format(avg_train_loss, avg_val_loss))
