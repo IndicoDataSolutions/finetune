@@ -48,7 +48,7 @@ class SequenceLabeler(BaseModel):
 
         max_length = max_length or self.config.max_length
         chunk_size = max_length - 2
-        step_size = chunk_size // 2
+        step_size = chunk_size // 3
         
         arr_encoded = self._text_to_ids(doc_subseqs)
         labels = self._predict(doc_subseqs, max_length=max_length)
@@ -60,15 +60,31 @@ class SequenceLabeler(BaseModel):
         
         for chunk_idx, (label_seq, position_seq) in enumerate(zip(labels, arr_encoded.char_locs)):
             start_of_doc = arr_encoded.token_ids[chunk_idx][0][0] == self.encoder.start
+            end_of_doc = (
+                chunk_idx + 1 >= len(arr_encoded.char_locs) or 
+                arr_encoded.token_ids[chunk_idx + 1][0][0] == self.encoder.start
+            )
+
+            """
+            Chunk idx for prediction.  Dividers at `step_size` increments.
+            [  1  |  1  |  2  |  3  |  3  ]
+            """
             if start_of_doc:
                 # if this is the first chunk in a document, start accumulating from scratch
                 doc_subseqs = []
                 doc_labels = []
                 doc_idx += 1
                 start_of_token = 0
+                if not end_of_doc:
+                    # predict only on first two thirds
+                    label_seq, position_seq = label_seq[:step_size*2], position_seq[:step_size*2]
             else:
-                # we've already predicted on the first half of this seq as part of the prev. chunk
-                label_seq, position_seq = label_seq[step_size:], position_seq[step_size:]
+                if end_of_doc:
+                    # predict on the rest of sequence
+                    label_seq, position_seq = label_seq[step_size:], position_seq[step_size:]
+                else:
+                    # predict only on middle third
+                    label_seq, position_seq = label_seq[step_size:step_size*2], position_seq[step_size:step_size*2]
 
             for label, position in zip(label_seq, position_seq):
                 if position == -1:
@@ -87,10 +103,6 @@ class SequenceLabeler(BaseModel):
 
                 start_of_token = position
 
-            end_of_doc = (
-                chunk_idx + 1 >= len(arr_encoded.char_locs) or 
-                arr_encoded.token_ids[chunk_idx + 1][0][0] == self.encoder.start
-            )
             if end_of_doc:
                 # last chunk in a document
                 all_subseqs.append(doc_subseqs)
@@ -131,16 +143,25 @@ class SequenceLabeler(BaseModel):
         
         max_length = max_length or self.config.max_length
         chunk_size = max_length - 2
-        step_size = chunk_size // 2
+        step_size = chunk_size // 3
 
         result = []
         for chunk_idx, (token_seq, proba_seq) in enumerate(zip(arr_encoded.tokens, batch_probas)):
             start_of_doc = (arr_encoded.token_ids[chunk_idx][0][0] == self.encoder.start)
+            end_of_doc = (
+                chunk_idx + 1 >= len(arr_encoded.char_locs) or 
+                arr_encoded.token_ids[chunk_idx + 1][0][0] == self.encoder.start
+            )
             if start_of_doc:
                 seq_result = []
+                if not end_of_doc:
+                    token_seq, proba_seq = token_seq[:step_size*2], proba_seq[:step_size*2] 
             else:
-                # we've already predicted on the first half of this seq as part of the prev. chunk
-                token_seq, proba_seq = token_seq[step_size:], proba_seq[step_size:]
+                if end_of_doc:
+                    token_seq, proba_seq = token_seq[step_size:], proba_seq[step_size:]
+                else:
+                    # we've already predicted on the first half of this seq as part of the prev. chunk
+                    token_seq, proba_seq = token_seq[step_size:step_size*2], proba_seq[step_size:step_size*2]
 
             for token, proba_t in zip(token_seq, proba_seq):
                 seq_result.append((
@@ -149,10 +170,7 @@ class SequenceLabeler(BaseModel):
                 ))
 
             
-            end_of_doc = (
-                chunk_idx + 1 >= len(arr_encoded.char_locs) or 
-                arr_encoded.token_ids[chunk_idx + 1][0][0] == self.encoder.start
-            )
+
             if end_of_doc:
                 result.append(seq_result)
             

@@ -67,6 +67,7 @@ def get_default_config():
         n_epochs=GridSearchable(3, [1, 2, 3, 4]),
         seed=42,
         max_length=512,
+
         # INITIALIZATION
         weight_stddev=0.02,
 
@@ -94,42 +95,42 @@ def get_default_config():
         rolling_avg_decay=0.99,
         regularize_deviation=0.0,
 
-        # Logging
+        # LOGGING
         summarize_grads=False,
         verbose=True,
 
-        # Validation
+        # VALIDATION
         val_size=0.05,
         val_interval=150,
         val_window_size=5,
 
-        # Language Modelling output.
+        # TEXT GENERATION
         lm_temp=0.2,
 
-        # Sequence Labeling
+        # SEQUENCE LABELING
         seq_num_heads=16,
         seq_dropout=0.3,
         pad_token="<PAD>",
         subtoken_predictions=False,
 
-        # Multilabel
+        # MULTILABEL
         multi_label_threshold=0.5,
 
-        # Early stopping
+        # EARLY STOPPING
         save_best_model=False,
         autosave_path=None,
 
-        # Tensorboard
+        # TENSORBOARD
         tensorboard_folder=None,
 
-        # debugging
+        # DEBUGGING
         log_device_placement=False,
         soft_device_placement=True,
 
-        # Save options
+        # SAVE OPTIONS
         save_adam_vars=True,
        
-        # Dealing with long sequences
+        # LONG SEQUENCES
         chunk_long_sequences=False,
     )
 
