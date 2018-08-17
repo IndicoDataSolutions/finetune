@@ -120,7 +120,7 @@ def get_default_config():
         attn_p_drop=0.1,
         resid_p_drop=0.1,
         clf_p_drop=0.1,
-        l2_reg=GridSearchable(0.1, [0.0, 0.1, 0.01]),
+        l2_reg=GridSearchable(0.01, [0.0, 0.1, 0.01, 0.001]),
         vector_l2=False,
         regularize_deviation=False,
         b1=0.9, 
