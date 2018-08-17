@@ -53,6 +53,8 @@ def featurizer(X, encoder, dropout_placeholder, config, train=False, reuse=None,
 
         h = embed(X, embed_weights)
         for layer in range(config.n_layer):
+            if (layer - config.n_layer) == config.num_layers_trained and config.num_layers_trained != 12:
+                h = tf.stop_gradient(h)
             with tf.variable_scope('h%d_' % layer):
                 block_fn = functools.partial(block, n_head=config.n_heads, act_fn=config.act_fn,
                                              resid_pdrop=config.resid_p_drop, attn_pdrop=config.attn_p_drop,
