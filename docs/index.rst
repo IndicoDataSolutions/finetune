@@ -89,8 +89,18 @@ Finetune API Reference
 .. autoclass:: finetune.MultifieldRegressor
     :inherited-members:
 
+.. autoclass:: finetune.MultiLabelClassifier
+    :inherited-members:
+
 .. autoclass:: finetune.SequenceLabeler
     :inherited-members:
 
 .. autoclass:: finetune.Comparison
     :inherited-members:
+
+
+Finetune Model Configuration Options
+====================================
+
+.. autoclass:: finetune.config.Settings
+    :members:

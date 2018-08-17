@@ -12,6 +12,8 @@ from finetune.utils import list_transpose
 class MultipleChoice(BaseModel):
     """
     Multi choice question finetune model.
+    
+    :param config: A :py:class:`finetune.config.Settings` object or None (for default config).
     """
 
     def __init__(self, *args, **kwargs):
