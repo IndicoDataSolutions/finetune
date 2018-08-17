@@ -748,6 +748,23 @@ class BaseModel(object, metaclass=ABCMeta):
    
     @classmethod
     def finetune_grid_search(cls, Xs, Y, *, test_size, config=None, eval_fn=None, probs=False, return_all=False):
+        """
+        Performs grid search over config items defined using "GridSearchable" objects and returns either full results or
+        the config object that relates to the best results. The default config contains grid searchable objects for the
+        most important parameters to search over.
+
+        :param Xs: Input text. Either [num_samples] or [sequence, num_samples] for single or multi input models respectively.
+        :param Y: Targets, A list of targets, [num_samples] that correspond to each sample in Xs.
+        :param test_size: Int or float. If an int is given this number of samples is used to validate, if a float is
+         given then that fraction of samples is used.
+        :param config: A config object, or None to use the default config.
+        :param eval_fn: An eval function that takes 2 batches of outputs and returns a float, with a max value being desired.
+        :param probs: If true, eval_fn is passed probability outputs from predict_proba, otherwise the output of predict is used.
+        :param return_all: If True, all results are returned, if False, only the best config is returned.
+        :return: default is to return the best config object. If return_all is true, it returns a list of tuples of the
+            form [(config, eval_fn output), ... ]
+
+        """
         if isinstance(Xs[0], str):
             Xs = [Xs]
         config = config or get_default_config()
@@ -781,6 +798,25 @@ class BaseModel(object, metaclass=ABCMeta):
 
     @classmethod
     def finetune_grid_search_cv(cls, Xs, Y, *, n_splits, test_size, config=None, eval_fn=None, probs=False, return_all=False):
+        """
+        Performs cross validated grid search over config items defined using "GridSearchable" objects and returns either full results or
+        the config object that relates to the best results. The default config contains grid searchable objects for the
+        most important parameters to search over.
+
+        It should be noted that the cv splits are not guaranteed unique, but each split is given to each set of hparams.
+
+        :param Xs: Input text. Either [num_samples] or [sequence, num_samples] for single or multi input models respectively.
+        :param Y: Targets, A list of targets, [num_samples] that correspond to each sample in Xs.
+        :param n_splits: Number of CV splits to do.
+        :param test_size: Int or float. If an int is given this number of samples is used to validate, if a float is
+         given then that fraction of samples is used.
+        :param config: A config object, or None to use the default config.
+        :param eval_fn: An eval function that takes 2 batches of outputs and returns a float, with a max value being desired.
+        :param probs: If true, eval_fn is passed probability outputs from predict_proba, otherwise the output of predict is used.
+        :param return_all: If True, all results are returned, if False, only the best config is returned.
+        :return: default is to return the best config object. If return_all is true, it returns a list of tuples of the
+            form [(config, eval_fn output), ... ]
+        """
         results = []
         for _ in range(n_splits):
             res = cls.finetune_grid_search(Xs, Y, test_size=test_size, probs=probs, eval_fn=eval_fn, config=config,
