@@ -31,6 +31,7 @@ from finetune.config import PAD_TOKEN, get_default_config, GridSearchable
 
 SHAPES_PATH = os.path.join(os.path.dirname(__file__), 'model', 'params_shapes.json')
 PARAM_PATH = os.path.join(os.path.dirname(__file__), 'model', 'params_{}.npy')
+SPECIAL_TOKEN_PATH = os.path.join(os.path.dirname(__file__), "model", "special_tokens.npy")
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -655,8 +656,12 @@ class BaseModel(object, metaclass=ABCMeta):
             else:
                 init_params[0] = init_params[0][:self.config.max_length]
 
-            special_embed = (np.random.randn(len(self.encoder.special_tokens),
-                                             self.config.n_embed) * self.config.weight_stddev).astype(np.float32)
+            if self.config.train_embeddings:
+                special_embed = (np.random.randn(len(self.encoder.special_tokens),
+                                                 self.config.n_embed) * self.config.weight_stddev).astype(np.float32)
+            else:
+                special_embed = np.load(SPECIAL_TOKEN_PATH)
+
             reg_mask = np.concatenate(
                 [np.ones_like(init_params[1]), np.zeros_like(special_embed), np.ones_like(init_params[0])], 0)
 

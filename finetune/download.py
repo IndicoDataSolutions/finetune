@@ -25,6 +25,7 @@ def download_data_if_required():
         "params_9.npy",
         "params_shapes.json",
         "vocab_40000.bpe",
+        "special_tokens.npy"
     ]
 
     for filename in file_list:
