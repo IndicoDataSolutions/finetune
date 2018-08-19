@@ -11,7 +11,7 @@ import tensorflow as tf
 import pandas as pd
 import numpy as np
 
-from finetune import MultifieldClassifier, MultifieldRegressor
+from finetune import MultifieldClassifier, MultifieldRegressor, Regressor
 from finetune.config import get_config
 from finetune.datasets import generic_download
 
@@ -85,3 +85,13 @@ class TestModel(unittest.TestCase):
         new_predictions = model.predict(*self.text_data_valid)
         for new_pred, old_pred in zip(new_predictions, predictions):
             self.assertEqual(new_pred, old_pred)
+
+    def test_regressor(self):
+        n_samples = 20
+        x_test = np.array(['the quick fox jumped over the lazy brown dog'] * n_samples)
+        y_test = np.random.random(n_samples)
+        model_test = Regressor(n_epochs=1)
+        model_test.fit(x_test, y_test)
+        preds = model_test.predict(x_test)
+        self.assertIsInstance(preds, list)
+        self.assertIsInstance(preds[0], float)
