@@ -56,6 +56,10 @@ class BaseModel(object, metaclass=ABCMeta):
 
         self.config = config or get_default_config()
         self.config.update(kwargs)
+
+        if self.config.num_layers_trained != self.config.n_layer and self.config.train_embeddings:
+            raise ValueError("If you are only finetuning a subset of the layers, you cannot finetune embeddings.")
+
         self.label_encoder = None
         self._initialize()
         self.target_dim = None
