@@ -47,7 +47,12 @@ class TestModel(unittest.TestCase):
         cls._download_sst()
 
     def setUp(self):
-        self.save_file = 'tests/saved-models/test-save-load'
+        try:
+            os.mkdir("tests/saved-models")
+        except FileExistsError:
+            warnings.warn("tests/saved-models still exists, it is possible that some test is not cleaning up properly.")
+            pass
+        self.save_file = 'tests/saved-models/test-save-load.jl'
         self.dataset = pd.read_csv(self.dataset_path)
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
@@ -84,4 +89,4 @@ class TestModel(unittest.TestCase):
         model = MultifieldRegressor.load(self.save_file)
         new_predictions = model.predict(self.text_data_valid)
         for new_pred, old_pred in zip(new_predictions, predictions):
-            self.assertEqual(new_pred, old_pred)
+            self.assertAlmostEqual(new_pred, old_pred, places=2)

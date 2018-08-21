@@ -2,13 +2,10 @@ import os
 import random
 import warnings
 import logging
-import pickle
-import json
 import itertools
 import sys
-from pathlib import Path
-from abc import ABCMeta, abstractmethod, abstractclassmethod
-from collections import namedtuple, defaultdict
+from abc import ABCMeta, abstractmethod
+from collections import defaultdict
 from functools import partial
 from copy import deepcopy
 
@@ -16,23 +13,18 @@ import tqdm
 import numpy as np
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
-import pandas as pd
 
 from finetune.download import download_data_if_required
 from finetune.optimizers import AdamWeightDecay, schedules
 from finetune.network_modules import featurizer, language_model
 from finetune.utils import (
     find_trainable_variables, assign_to_gpu, average_grads, interpolate_pos_embed,
-    iter_data, soft_split, concat_or_stack,
-    guarantee_initialized_variables, sample_with_temperature, list_transpose
+    iter_data, soft_split, concat_or_stack, sample_with_temperature, list_transpose
 )
 from finetune.encoding import TextEncoder, ArrayEncodedOutput, EncodedOutput
-from finetune.config import PAD_TOKEN, get_default_config, GridSearchable
+from finetune.config import PAD_TOKEN, get_default_config
 from finetune.saver import Saver
 
-SHAPES_PATH = os.path.join(os.path.dirname(__file__), 'model', 'params_shapes.json')
-PARAM_PATH = os.path.join(os.path.dirname(__file__), 'model', 'params_{}.npy')
-SPECIAL_TOKEN_PATH = os.path.join(os.path.dirname(__file__), "model", "special_tokens.npy")
 JL_BASE = os.path.join(os.path.dirname(__file__), "model", "Base_model.jl")
 
 _LOGGER = logging.getLogger(__name__)
@@ -99,7 +91,6 @@ class BaseModel(object, metaclass=ABCMeta):
         def process_embeddings(name, value):
             if "/we:0" not in name:
                 return value
-            print("I GOT THIS FAR")
             vocab_size = self.encoder.vocab_size
             word_embeddings = value[:vocab_size - len(self.encoder.special_tokens)]
             special_embed = value[len(word_embeddings): vocab_size]
@@ -111,6 +102,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 raise ValueError("Max Length cannot be greater than {} if interploate_pos_embed is turned off".format(len(positional_embed)))
             else:
                 positional_embed = positional_embed[:self.config.max_length]
+
             return np.concatenate((word_embeddings, special_embed, positional_embed), axis=0)
 
         self.saver = Saver(

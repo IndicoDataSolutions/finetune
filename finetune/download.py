@@ -9,26 +9,16 @@ import finetune
 
 def download_data_if_required():
     """ Pulls the pre-trained model weights from Github if required. """
-    base_url = "https://raw.githubusercontent.com/IndicoDataSolutions/finetune/master/finetune/model/"
+    github_base_url = "https://raw.githubusercontent.com/IndicoDataSolutions/finetune/master/finetune/model/"
+    s3_base_url = "https://s3.amazonaws.com/bendropbox/"
 
     file_list = [
-        "encoder_bpe_40000.json",
-        "params_0.npy",
-        "params_1.npy",
-        "params_2.npy",
-        "params_3.npy",
-        "params_4.npy",
-        "params_5.npy",
-        "params_6.npy",
-        "params_7.npy",
-        "params_8.npy",
-        "params_9.npy",
-        "params_shapes.json",
-        "vocab_40000.bpe",
-        "special_tokens.npy"
+        (github_base_url, "encoder_bpe_40000.json"),
+        (github_base_url, "vocab_40000.bpe"),
+        (s3_base_url, "Base_model.jl")
     ]
 
-    for filename in file_list:
+    for root_url, filename in file_list:
         folder = os.path.join(
             os.path.dirname(finetune.__file__),
             'model'
@@ -39,7 +29,7 @@ def download_data_if_required():
         local_filepath = os.path.join(folder, filename)
 
         if not Path(local_filepath).exists():
-            data = requests.get(base_url + filename).content
+            data = requests.get(root_url + filename).content
             fd = open(local_filepath, 'wb')
             fd.write(data)
             fd.close()

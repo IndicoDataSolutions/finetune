@@ -47,7 +47,10 @@ def featurizer(X, encoder, dropout_placeholder, config, train=False, reuse=None,
     with tf.variable_scope('model/featurizer', reuse=reuse):
         embed_weights = tf.get_variable("we", [encoder.vocab_size + max_length, config.n_embed],
                                         initializer=tf.random_normal_initializer(stddev=config.weight_stddev))
-        embed_weights = dropout(embed_weights, config.embed_p_drop, train, dropout_placeholder)
+        if config.train_embeddings:
+            embed_weights = dropout(embed_weights, config.embed_p_drop, train, dropout_placeholder)
+        else:
+            embed_weights = tf.stop_gradient(embed_weights)
 
         X = tf.reshape(X, [-1, max_length, 2])
 
@@ -55,12 +58,15 @@ def featurizer(X, encoder, dropout_placeholder, config, train=False, reuse=None,
         for layer in range(config.n_layer):
             if (layer - config.n_layer) == config.num_layers_trained and config.num_layers_trained != 12:
                 h = tf.stop_gradient(h)
+                train_layer = False
+            else:
+                train_layer = train
             with tf.variable_scope('h%d_' % layer):
                 block_fn = functools.partial(block, n_head=config.n_heads, act_fn=config.act_fn,
                                              resid_pdrop=config.resid_p_drop, attn_pdrop=config.attn_p_drop,
                                              scope='h%d' % layer, dropout_placeholder=dropout_placeholder,
-                                             train=train, scale=True)
-                if config.low_memory_mode and train:
+                                             train=train_layer, scale=True)
+                if config.low_memory_mode and train_layer:
                     block_fn = recompute_grad(block_fn, use_entire_scope=True)
                 h = block_fn(h)
 

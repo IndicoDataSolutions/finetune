@@ -86,7 +86,7 @@ class Settings(dict):
     def __getattr__(self, attr):
         if attr.startswith('__'):
             raise AttributeError
-        return self.get(attr, None)
+        return self[attr]
 
     def __setitem__(self, key, value):
         if isinstance(value, GridSearchable):
@@ -146,7 +146,7 @@ def get_default_config():
         tensorboard_folder=None,
         log_device_placement=False,
         soft_device_placement=True,
-        save_adam_vars=True,
+        save_adam_vars=False,
         num_layers_trained=12,
         train_embeddings=True,
 
