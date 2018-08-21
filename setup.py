@@ -16,7 +16,9 @@ REQUIREMENTS = [
     "ftfy>=4.4.0",
     "spacy>=2.0.0",
     "msgpack-numpy==0.4.1",
-    "h5py>=2.8.0"
+    "h5py>=2.8.0",
+    "joblib>=0.12.0",
+    "bs4>=0.0.1",
 ]
 
 setup(
