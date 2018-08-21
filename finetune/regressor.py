@@ -36,7 +36,7 @@ class Regressor(BaseModel):
                            Providing more than `max_length` tokens as input will result in truncation.
         :returns: list of class labels.
         """
-        super().predict(X, max_length=max_length)
+        return super().predict(X, max_length=max_length)
 
     def predict_proba(self, X, max_length=None):
         """

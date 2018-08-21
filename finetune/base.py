@@ -252,6 +252,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 global_step += 1
                 if global_step % self.config.val_interval == 0:
                     feed_dict[self.do_dropout] = DROPOUT_OFF
+
                     outputs = self._eval(self.summaries, feed_dict=feed_dict)
                     if self.train_writer is not None:
                         self.train_writer.add_summary(outputs.get(self.summaries), global_step)
@@ -268,9 +269,9 @@ class BaseModel(object, metaclass=ABCMeta):
                             feed_dict[self.Y] = yval
 
                         outputs = self._eval(self.target_loss, self.summaries, feed_dict=feed_dict)
-
                         if self.valid_writer is not None:
                             self.valid_writer.add_summary(outputs.get(self.summaries), global_step)
+
                         val_cost = outputs.get(self.target_loss, 0)
                         sum_val_loss += val_cost
 
