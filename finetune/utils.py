@@ -329,11 +329,12 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
         token_ends = [token.idx + len(token.text) for token in tokens]
         n_tokens = len(tokens)
 
-        doc_annotations = set([])
+        doc_annotations = []
+        annotation_ranges = {}
         raw_annotation_end = 0
         start_idx = 0
         end_idx = 0
-        for sub_str, label, prob_seq in zip(doc_seq, label_seq, prob_seq or [None] * len(doc_seq)):
+        for sub_str, label, confidences in zip(doc_seq, label_seq, prob_seq or [None] * len(doc_seq)):
             stripped_text = sub_str.strip()
 
             raw_annotation_start = raw_text.find(stripped_text, raw_annotation_end)
@@ -359,16 +360,22 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
                     annotation_end = token_ends[end_idx]
                     
             text = raw_text[annotation_start:annotation_end]
+            
             if label != none_value:
-                annotation = [
-                    ("start", annotation_start),
-                    ("end", annotation_end),
-                    ("label", label),
-                    ("text", text)
-                ]
-                if prob_seq is not None:
-                    annotation.append(("confidence", prob_seq))
-                doc_annotations.add(tuple(annotation))
+                annotation = {
+                    "start": annotation_start,
+                    "end": annotation_end,
+                    "label": label,
+                    "text": text
+                }
+                if confidences is not None:
+                    annotation["confidence"] = confidences
+
+                # prevent duplicate annotation edge case
+                if (annotation_start, annotation_end) not in annotation_ranges:
+                    annotation_ranges.add((annotation_start, annotation_end))
+                    doc_annotations.append(annotation)
+                    
         doc_annotations = sorted([dict(items) for items in doc_annotations], key=lambda x: x['start'])
         annotations.append(doc_annotations)
     return raw_texts, annotations
