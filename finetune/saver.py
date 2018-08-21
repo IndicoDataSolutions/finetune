@@ -26,14 +26,15 @@ class Saver:
         self.save_dtype = save_dtype
 
     def save(self, finetune_obj, path, mkdir=True):
-        dir = os.path.dirname(path)
-        if not os.path.exists(dir) and mkdir:
-            os.mkdir(dir)
+        folder = os.path.dirname(path)
+        if not os.path.exists(folder) and mkdir:
+            os.mkdir(folder)
         if self.fallback_filename is None:
             fallback = dict()
         else:
             fallback = joblib.load(self.fallback_filename)
         included, excluded = self.find_trainable_variables()
+
         if not all(var.name in fallback for var in excluded):
             warnings.warn("Attempting to do a partial save where variables are excluded that do not have a "
                           "corresponding default.")
@@ -68,7 +69,6 @@ class Saver:
         """
         :param sess:
         :param expect_new_variables:
-        :param variable_transforms: a list of functions with signature, var_name, var_value and return a new var_value. applied in order.
         :return:
         """
         variables_fb = joblib.load(self.fallback_filename)
@@ -87,21 +87,24 @@ class Saver:
                 if saved_var_name == var.name:
                     var_init = (var, saved_var)
                     break
+            
             if var_init is None and expect_new_variables:
                 warnings.warn(
                     "Var {} is not found in any checkpoint. Because expect_new_variables is True. The default initializer for this variable is used.".format(
                         var.name))
                 init_vals.append(tf.initialize_variables([var]))
+            
             elif var_init is None and not expect_new_variables:
                 warnings.warn(
                     "Var {} is not found in any checkpoint. Because expect_new_variables is True. This variable will remain uninitialized".format(
                         var.name))
+            
             else:
                 var, saved_var = var_init
-
                 for func in self.variable_transforms:
                     saved_var = func(var.name, saved_var)
                 init_vals.append(var.assign(saved_var))
+        
         sess.run(init_vals)
         self.variables = None # not an explicit del but should set reference count to 0 unless being used for deviation regularisation
 

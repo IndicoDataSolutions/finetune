@@ -91,19 +91,20 @@ class BaseModel(object, metaclass=ABCMeta):
         def process_embeddings(name, value):
             if "/we:0" not in name:
                 return value
+
             vocab_size = self.encoder.vocab_size
             word_embeddings = value[:vocab_size - len(self.encoder.special_tokens)]
             special_embed = value[len(word_embeddings): vocab_size]
             positional_embed = value[vocab_size:]
-
-            if self.config.interpolate_pos_embed:
+            if self.config.interpolate_pos_embed and self.config.max_length != len(positional_embed):
                 positional_embed = interpolate_pos_embed(positional_embed, self.config.max_length)
             elif self.config.max_length > len(positional_embed):
                 raise ValueError("Max Length cannot be greater than {} if interploate_pos_embed is turned off".format(len(positional_embed)))
             else:
                 positional_embed = positional_embed[:self.config.max_length]
 
-            return np.concatenate((word_embeddings, special_embed, positional_embed), axis=0)
+            embeddings = np.concatenate((word_embeddings, special_embed, positional_embed), axis=0)
+            return embeddings
 
         self.saver = Saver(
             fallback_filename=JL_BASE,
