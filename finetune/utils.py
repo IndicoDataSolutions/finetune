@@ -383,7 +383,7 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
                     ("text", text)
                 ]
                 if prob_seq is not None:
-                    annotation.append(("proba", prob_seq))
+                    annotation.append(("confidence", prob_seq))
                 doc_annotations.add(tuple(annotation))
         doc_annotations = sorted([dict(items) for items in doc_annotations], key=lambda x: x['start'])
         annotations.append(doc_annotations)
