@@ -758,7 +758,7 @@ class BaseModel(object, metaclass=ABCMeta):
         :param test_size: Int or float. If an int is given this number of samples is used to validate, if a float is
          given then that fraction of samples is used.
         :param config: A config object, or None to use the default config.
-        :param eval_fn: An eval function that takes 2 batches of outputs and returns a float, with a max value being desired.
+        :param eval_fn: An eval function that takes 2 inputs (prediction, truth) and returns a float, with a max value being desired.
         :param probs: If true, eval_fn is passed probability outputs from predict_proba, otherwise the output of predict is used.
         :param return_all: If True, all results are returned, if False, only the best config is returned.
         :return: default is to return the best config object. If return_all is true, it returns a list of tuples of the
@@ -809,9 +809,10 @@ class BaseModel(object, metaclass=ABCMeta):
         :param Y: Targets, A list of targets, [num_samples] that correspond to each sample in Xs.
         :param n_splits: Number of CV splits to do.
         :param test_size: Int or float. If an int is given this number of samples is used to validate, if a float is
-         given then that fraction of samples is used.
+            given then that fraction of samples is used.
         :param config: A config object, or None to use the default config.
-        :param eval_fn: An eval function that takes 2 batches of outputs and returns a float, with a max value being desired.
+        :param eval_fn: An eval function that takes 2 batches of outputs and returns a float, with a max value being
+            desired. An arithmetic mean must make sense for this metric.
         :param probs: If true, eval_fn is passed probability outputs from predict_proba, otherwise the output of predict is used.
         :param return_all: If True, all results are returned, if False, only the best config is returned.
         :return: default is to return the best config object. If return_all is true, it returns a list of tuples of the
