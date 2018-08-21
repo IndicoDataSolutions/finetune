@@ -2,13 +2,10 @@ import os
 import random
 import warnings
 import logging
-import pickle
-import json
 import itertools
 import sys
-from pathlib import Path
-from abc import ABCMeta, abstractmethod, abstractclassmethod
-from collections import namedtuple, defaultdict
+from abc import ABCMeta, abstractmethod
+from collections import defaultdict
 from functools import partial
 from copy import deepcopy
 
@@ -16,21 +13,19 @@ import tqdm
 import numpy as np
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
-import pandas as pd
 
 from finetune.download import download_data_if_required
 from finetune.optimizers import AdamWeightDecay, schedules
 from finetune.network_modules import featurizer, language_model
 from finetune.utils import (
     find_trainable_variables, assign_to_gpu, average_grads, interpolate_pos_embed,
-    iter_data, soft_split, concat_or_stack,
-    guarantee_initialized_variables, sample_with_temperature, list_transpose
+    iter_data, soft_split, concat_or_stack, sample_with_temperature, list_transpose
 )
 from finetune.encoding import TextEncoder, ArrayEncodedOutput, EncodedOutput
-from finetune.config import PAD_TOKEN, get_default_config, GridSearchable
+from finetune.config import PAD_TOKEN, get_default_config
+from finetune.saver import Saver
 
-SHAPES_PATH = os.path.join(os.path.dirname(__file__), 'model', 'params_shapes.json')
-PARAM_PATH = os.path.join(os.path.dirname(__file__), 'model', 'params_{}.npy')
+JL_BASE = os.path.join(os.path.dirname(__file__), "model", "Base_model.jl")
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -55,6 +50,10 @@ class BaseModel(object, metaclass=ABCMeta):
 
         self.config = config or get_default_config()
         self.config.update(kwargs)
+
+        if self.config.num_layers_trained != self.config.n_layer and self.config.train_embeddings:
+            raise ValueError("If you are only finetuning a subset of the layers, you cannot finetune embeddings.")
+
         self.label_encoder = None
         self._initialize()
         self.target_dim = None
@@ -88,6 +87,29 @@ class BaseModel(object, metaclass=ABCMeta):
         self.is_built = False  # has tf graph been constructed?
         self.is_trained = False  # has model been fine-tuned?
         self.require_lm = False
+
+        def process_embeddings(name, value):
+            if "/we:0" not in name:
+                return value
+            vocab_size = self.encoder.vocab_size
+            word_embeddings = value[:vocab_size - len(self.encoder.special_tokens)]
+            special_embed = value[len(word_embeddings): vocab_size]
+            positional_embed = value[vocab_size:]
+
+            if self.config.interpolate_pos_embed:
+                positional_embed = interpolate_pos_embed(positional_embed, self.config.max_length)
+            elif self.config.max_length > len(positional_embed):
+                raise ValueError("Max Length cannot be greater than {} if interploate_pos_embed is turned off".format(len(positional_embed)))
+            else:
+                positional_embed = positional_embed[:self.config.max_length]
+
+            return np.concatenate((word_embeddings, special_embed, positional_embed), axis=0)
+
+        self.saver = Saver(
+            fallback_filename=JL_BASE,
+            exclude_matches=None if self.config.save_adam_vars else "adam",
+            variable_transforms=[process_embeddings]
+        )
 
     def _format_for_encoding(self, Xs):
         """
@@ -413,7 +435,7 @@ class BaseModel(object, metaclass=ABCMeta):
             mask=mask,
         )
 
-    def _compile_train_op(self, *, params, grads, n_updates_total, initial_params):
+    def _compile_train_op(self, *, params, grads, n_updates_total):
         grads = average_grads(grads)
 
         if self.config.summarize_grads:
@@ -432,11 +454,11 @@ class BaseModel(object, metaclass=ABCMeta):
             b1=self.config.b1,
             b2=self.config.b2,
             e=self.config.epsilon,
-            pretrained_weights=initial_params,
+            pretrained_weights=self.saver.get_pretrained_weights(),
             deviation_regularization=self.config.regularize_deviation
         )
 
-    def _construct_graph(self, n_updates_total, target_dim=None, train=True, pre_trained_weights=None):
+    def _construct_graph(self, n_updates_total, target_dim=None, train=True):
         gpu_grads = []
         self.summaries = []
 
@@ -534,8 +556,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 self._compile_train_op(
                     params=params,
                     grads=gpu_grads,
-                    n_updates_total=n_updates_total,
-                    initial_params=pre_trained_weights
+                    n_updates_total=n_updates_total
                 )
 
             if target_dim is not None:
@@ -559,27 +580,15 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         Construct tensorflow symbolic graph.
         """
-
-        pre_trained_weights = self._load_base_model()
         if not self.is_trained or train != self.train or self.target_dim != target_dim:
             # reconstruct graph to include/remove dropout
             # if `train` setting has changed
-            self._construct_graph(n_updates_total, target_dim, pre_trained_weights=pre_trained_weights, train=train)
+            self._construct_graph(n_updates_total, target_dim, train=train)
 
         self._initialize_session()
+        self.saver.initialize(self.sess)
 
-        # Optionally load saved model
-        if self._load_from_file:
-            self._load_finetuned_model(target_dim)
-        elif not self.is_trained:
-            self._init_from_pretrained(pre_trained_weights["init_params"])
-
-        # Must be set after loading saved models -- we used the stored value of target_dim to 
-        # infer what portions of the graph to attempt to load from the checkpoint
         self.target_dim = target_dim
-
-        guarantee_initialized_variables(self.sess, keys=['model/target', 'adam'])
-
         if train:
             if self.config.tensorboard_folder is not None:
                 if not os.path.exists(self.config.tensorboard_folder):
@@ -638,43 +647,6 @@ class BaseModel(object, metaclass=ABCMeta):
                     break
         return self.encoder.decode(string)
 
-    def _load_base_model(self):
-        """
-        Load serialized base model parameters from file.
-        """
-        with open(SHAPES_PATH) as shapes_file:
-            shapes = json.load(shapes_file)
-            offsets = np.cumsum([np.prod(shape) for shape in shapes])
-            init_params = [np.load(PARAM_PATH.format(n)) for n in range(10)]
-            init_params = np.split(np.concatenate(init_params, 0), offsets)[:-1]
-            init_params = [param.reshape(shape) for param, shape in zip(init_params, shapes)]
-
-            if self.config.interpolate_pos_embed:
-                init_params[0] = interpolate_pos_embed(init_params[0], self.config.max_length)
-            elif self.config.max_length > 512:
-                raise ValueError("Max Length cannot be greater than 512 if interploate_pos_embed is turned off")
-            else:
-                init_params[0] = init_params[0][:self.config.max_length]
-
-            special_embed = (np.random.randn(len(self.encoder.special_tokens),
-                                             self.config.n_embed) * self.config.weight_stddev).astype(np.float32)
-            reg_mask = np.concatenate(
-                [np.ones_like(init_params[1]), np.zeros_like(special_embed), np.ones_like(init_params[0])], 0)
-
-            init_params[0] = np.concatenate([init_params[1], special_embed, init_params[0]], 0)
-            del init_params[1]
-
-        return {
-            "init_params": init_params,
-            "mask": itertools.chain([reg_mask], itertools.repeat(1.0, len(init_params) - 1))
-        }
-
-    def _init_from_pretrained(self, init_params):
-        """ Load pre-trained weights into the tensors """
-        pretrained_params = find_trainable_variables("model", exclude="model/target")
-        self.sess.run(tf.global_variables_initializer())
-        self.sess.run([p.assign(ip) for p, ip in zip(pretrained_params, init_params)])
-
     def __getstate__(self):
         """
         Leave serialization of all tf objects to tf
@@ -703,24 +675,8 @@ class BaseModel(object, metaclass=ABCMeta):
         if path is None:
             return
 
-        # Setting self._load_from_file indicates that we should load the saved model from
-        # disk at next training / inference. It is set temporarily so that the serialized
-        # model includes this information.
         path = os.path.abspath(path)
-        self._load_from_file = path
-        adam_vars = [var for var in tf.global_variables() if "adam" in var.name] if self.config.save_adam_vars else []
-        saver = tf.train.Saver(tf.trainable_variables() + adam_vars)
-        path_obj = Path(path)
-        if path_obj.exists():
-            if not path_obj.is_dir():
-                raise ValueError("Invalid save location: {}.  A file already exists at this location.".format(path))
-        else:
-            path_obj.mkdir(parents=True)
-
-        saver.save(self.sess, os.path.join(path, SAVE_PREFIX))
-        pickle.dump(self, open(
-            os.path.join(self._load_from_file, '{}.pkl'.format(SAVE_PREFIX)), 'wb')
-        )
+        self.saver.save(self, path)
         self._load_from_file = False
 
     @classmethod
@@ -730,22 +686,12 @@ class BaseModel(object, metaclass=ABCMeta):
 
         :param path: string path name to load model from.  Same value as previously provided to :meth:`save`. Must be a folder.
         """
-        pickle_path = os.path.join(path, '{}.pkl'.format(SAVE_PREFIX))
-        model = pickle.load(open(pickle_path, 'rb'))
+        saver = Saver(JL_BASE)
+        model = saver.load(path)
         model._initialize()
+        model.saver.variables = saver.variables
         tf.reset_default_graph()
         return model
-
-    def _load_finetuned_model(self, target_dim):
-        var_list = find_trainable_variables('model', exclude='model/target')
-        if self.target_dim is not None:
-            var_list.extend(find_trainable_variables('model/target'))
-        if self.config.save_adam_vars and target_dim == self.target_dim:
-            var_list.extend([var for var in tf.global_variables() if "adam" in var.name])
-        saver = tf.train.Saver(var_list=var_list)
-        saver.restore(self.sess, os.path.join(self._load_from_file, SAVE_PREFIX))
-        self._load_from_file = False
-        self.is_trained = True
    
     @classmethod
     def finetune_grid_search(cls, Xs, Y, *, test_size, config=None, eval_fn=None, probs=False, return_all=False):
