@@ -233,7 +233,7 @@ class TextEncoder(object):
                     max_length
                 ))
                 empty_tokens = sum(max(overflow, 0) for overflow in overflows)
-                num_over = [min(overflow, 0) for overflow in overflows].count(0)
+                num_over = [max(overflow, 0) for overflow in overflows].count(0)
                 if num_over == 0:
                     cut_len = allocated_max_len
                 else:
