@@ -311,7 +311,7 @@ def sequence_decode(logits, transition_matrix):
     return tf.py_func(_sequence_decode, [logits, transition_matrix], [tf.int32, tf.float32])
 
 
-def finetune_to_indico_sequence(raw_texts, subseqs, labels, none_value=config.PAD_TOKEN, subtoken_predictions=False):
+def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_value=config.PAD_TOKEN, subtoken_predictions=False):
     """
     Maps from the labeled substring format into the 'indico' format. This is the exact inverse operation to
     :meth indico_to_finetune_sequence:.
@@ -339,7 +339,7 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, none_value=config.PA
     :return: Texts, annoatations both in the 'indico' format.
     """
     annotations = []
-    for raw_text, doc_seq, label_seq in zip(raw_texts, subseqs, labels):
+    for raw_text, doc_seq, label_seq, prob_seq in zip(raw_texts, subseqs, labels, probs or [None] * len(raw_texts)):
         tokens = NLP(raw_text)
         token_starts = [token.idx for token in tokens]
         token_ends = [token.idx + len(token.text) for token in tokens]
@@ -349,7 +349,7 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, none_value=config.PA
         raw_annotation_end = 0
         start_idx = 0
         end_idx = 0
-        for sub_str, label in zip(doc_seq, label_seq):
+        for sub_str, label, prob_seq in zip(doc_seq, label_seq, prob_seq or [None] * len(doc_seq)):
             stripped_text = sub_str.strip()
 
             raw_annotation_start = raw_text.find(stripped_text, raw_annotation_end)
@@ -376,14 +376,15 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, none_value=config.PA
                     
             text = raw_text[annotation_start:annotation_end]
             if label != none_value:
-                doc_annotations.add(
-                    (
-                        ("start", annotation_start),
-                        ("end", annotation_end),
-                        ("label", label),
-                        ("text", text)
-                    )
-                )
+                annotation = [
+                    ("start", annotation_start),
+                    ("end", annotation_end),
+                    ("label", label),
+                    ("text", text)
+                ]
+                if prob_seq is not None:
+                    annotation.append(("confidence", prob_seq))
+                doc_annotations.add(tuple(annotation))
         doc_annotations = sorted([dict(items) for items in doc_annotations], key=lambda x: x['start'])
         annotations.append(doc_annotations)
     return raw_texts, annotations
