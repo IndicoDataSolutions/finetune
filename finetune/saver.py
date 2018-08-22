@@ -89,9 +89,6 @@ class Saver:
                     break
             
             if var_init is None and expect_new_variables:
-                warnings.warn(
-                    "Var {} is not found in any checkpoint. Because expect_new_variables is True. The default initializer for this variable is used.".format(
-                        var.name))
                 init_vals.append(tf.initialize_variables([var]))
             
             elif var_init is None and not expect_new_variables:

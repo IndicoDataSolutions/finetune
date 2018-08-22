@@ -74,7 +74,16 @@ class TestModel(unittest.TestCase):
         model = MultifieldRegressor.load(self.save_file)
         new_predictions = model.predict(self.text_data_valid)
         for new_pred, old_pred in zip(new_predictions, predictions):
-            self.assertEqual(new_pred, old_pred)
+            self.assertEqual(new_pred, old_pred)\
+
+    def test_fields_too_long(self):
+        """
+        Smoke test for problems with multifield
+        """
+        self.model = MultifieldClassifier()
+        n_examples = 10
+        self.model.fit([["text " * 100] * 10] * n_examples, ["target"] * n_examples)
+        self.model.fit([["text", "text", "text", "text " * 300, "text " * 300]] * n_examples, ["target"] * n_examples)
 
     def test_multifield_regression(self):
         """                                                                                                                                                                         

@@ -120,21 +120,26 @@ class SequenceLabeler(BaseModel):
                     # start new subsequence
                     doc_subseqs.append(X[doc_idx][start_of_token:position])
                     doc_labels.append(label)
-                    doc_probs.append(tuple(proba))
-                    prob_accum = 1
+                    doc_probs.append([proba])
                 else:
                     # continue appending to current subsequence
                     doc_subseqs[-1] += X[doc_idx][start_of_token:position]
-                    doc_probs[-1] = tuple([((p_o * prob_accum) + p_n)/(prob_accum + 1) for p_o, p_n in zip(doc_probs[-1], proba)])
-                    prob_accum += 1
+                    doc_probs[-1].append(proba)
 
                 start_of_token = position
 
             if end_of_doc:
                 # last chunk in a document
+
+                prob_dicts = []
+                for prob_seq in doc_probs:
+                    # format probabilities as dictionary
+                    probs = np.mean(np.vstack(prob_seq), axis=0)
+                    prob_dicts.append(dict(zip(self.label_encoder.classes_, probs)))
+                
                 all_subseqs.append(doc_subseqs)
                 all_labels.append(doc_labels)
-                all_probs.append(doc_probs)
+                all_probs.append(prob_dicts)
 
         _, doc_annotations = finetune_to_indico_sequence(
             raw_texts=X,
