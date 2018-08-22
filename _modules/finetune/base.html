@@ -1,0 +1,1017 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>finetune.base &mdash; finetune 0.1.0 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  
+  
+    <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  
+
+  
+
+  
+        <link rel="index" title="Index"
+              href="../../genindex.html"/>
+        <link rel="search" title="Search" href="../../search.html"/>
+    <link rel="top" title="finetune 0.1.0 documentation" href="../../index.html"/>
+        <link rel="up" title="Module code" href="../index.html"/> 
+
+  
+  <script src="../../_static/js/modernizr.min.js"></script>
+
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+   
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search">
+          
+
+          
+            <a href="../../index.html" class="icon icon-home"> finetune
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0.1
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <!-- Local TOC -->
+              <div class="local-toc"></div>
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">finetune</a>
+        
+      </nav>
+
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="../index.html">Module code</a> &raquo;</li>
+        
+      <li>finetune.base</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <h1>Source code for finetune.base</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">random</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">itertools</span>
+<span class="kn">import</span> <span class="nn">sys</span>
+<span class="kn">from</span> <span class="nn">abc</span> <span class="k">import</span> <span class="n">ABCMeta</span><span class="p">,</span> <span class="n">abstractmethod</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="k">import</span> <span class="n">defaultdict</span>
+<span class="kn">from</span> <span class="nn">functools</span> <span class="k">import</span> <span class="n">partial</span>
+<span class="kn">from</span> <span class="nn">copy</span> <span class="k">import</span> <span class="n">deepcopy</span>
+
+<span class="kn">import</span> <span class="nn">tqdm</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">tensorflow</span> <span class="k">as</span> <span class="nn">tf</span>
+<span class="kn">from</span> <span class="nn">sklearn.model_selection</span> <span class="k">import</span> <span class="n">train_test_split</span>
+
+<span class="kn">from</span> <span class="nn">finetune.download</span> <span class="k">import</span> <span class="n">download_data_if_required</span>
+<span class="kn">from</span> <span class="nn">finetune.optimizers</span> <span class="k">import</span> <span class="n">AdamWeightDecay</span><span class="p">,</span> <span class="n">schedules</span>
+<span class="kn">from</span> <span class="nn">finetune.network_modules</span> <span class="k">import</span> <span class="n">featurizer</span><span class="p">,</span> <span class="n">language_model</span>
+<span class="kn">from</span> <span class="nn">finetune.utils</span> <span class="k">import</span> <span class="p">(</span>
+    <span class="n">find_trainable_variables</span><span class="p">,</span> <span class="n">assign_to_gpu</span><span class="p">,</span> <span class="n">average_grads</span><span class="p">,</span> <span class="n">interpolate_pos_embed</span><span class="p">,</span>
+    <span class="n">iter_data</span><span class="p">,</span> <span class="n">soft_split</span><span class="p">,</span> <span class="n">concat_or_stack</span><span class="p">,</span> <span class="n">sample_with_temperature</span><span class="p">,</span> <span class="n">list_transpose</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">finetune.encoding</span> <span class="k">import</span> <span class="n">TextEncoder</span><span class="p">,</span> <span class="n">ArrayEncodedOutput</span><span class="p">,</span> <span class="n">EncodedOutput</span>
+<span class="kn">from</span> <span class="nn">finetune.config</span> <span class="k">import</span> <span class="n">PAD_TOKEN</span><span class="p">,</span> <span class="n">get_default_config</span>
+<span class="kn">from</span> <span class="nn">finetune.saver</span> <span class="k">import</span> <span class="n">Saver</span>
+
+<span class="n">JL_BASE</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="vm">__file__</span><span class="p">),</span> <span class="s2">&quot;model&quot;</span><span class="p">,</span> <span class="s2">&quot;Base_model.jl&quot;</span><span class="p">)</span>
+
+<span class="n">_LOGGER</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+<span class="n">DROPOUT_ON</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="n">DROPOUT_OFF</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="n">SAVE_PREFIX</span> <span class="o">=</span> <span class="s1">&#39;model&#39;</span>
+
+
+<span class="k">class</span> <span class="nc">BaseModel</span><span class="p">(</span><span class="nb">object</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">ABCMeta</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    A sklearn-style class for finetuning a Transformer language model on a classification task.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; </span>
+<span class="sd">        For a full list of configuration options, see `finetune.config`.</span>
+<span class="sd">        </span>
+<span class="sd">        :param config: A config object generated by `finetune.config.get_config` or None (for default config).</span>
+<span class="sd">        :param **kwargs: key-value pairs of config items to override.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">tf</span><span class="o">.</span><span class="n">reset_default_graph</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="o">=</span> <span class="n">config</span> <span class="ow">or</span> <span class="n">get_default_config</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">num_layers_trained</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">n_layer</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">train_embeddings</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;If you are only finetuning a subset of the layers, you cannot finetune embeddings.&quot;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">label_encoder</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_initialize</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">target_dim</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_load_from_file</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="k">def</span> <span class="nf">_initialize</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># Initializes the non-serialized bits of the class.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_set_random_seed</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">seed</span><span class="p">)</span>
+
+        <span class="n">download_data_if_required</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span> <span class="o">=</span> <span class="n">TextEncoder</span><span class="p">()</span>
+
+        <span class="c1"># symbolic ops</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logits</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># classification logits</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">target_loss</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># cross-entropy loss</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lm_losses</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># language modeling losses</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lm_predict_op</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">train</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># gradient + parameter update</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">features</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># hidden representation fed to classifier</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">summaries</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Tensorboard summaries</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">train_writer</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">valid_writer</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">predict_params</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">train_op</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">predict_op</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">predict_proba_op</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sess</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">noop</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">no_op</span><span class="p">()</span>
+
+        <span class="c1"># indicator vars</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">is_built</span> <span class="o">=</span> <span class="kc">False</span>  <span class="c1"># has tf graph been constructed?</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">is_trained</span> <span class="o">=</span> <span class="kc">False</span>  <span class="c1"># has model been fine-tuned?</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">require_lm</span> <span class="o">=</span> <span class="kc">False</span>
+
+        <span class="k">def</span> <span class="nf">process_embeddings</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+            <span class="k">if</span> <span class="s2">&quot;/we:0&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">name</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">value</span>
+
+            <span class="n">vocab_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="o">.</span><span class="n">vocab_size</span>
+            <span class="n">word_embeddings</span> <span class="o">=</span> <span class="n">value</span><span class="p">[:</span><span class="n">vocab_size</span> <span class="o">-</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="o">.</span><span class="n">special_tokens</span><span class="p">)]</span>
+            <span class="n">special_embed</span> <span class="o">=</span> <span class="n">value</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">word_embeddings</span><span class="p">):</span> <span class="n">vocab_size</span><span class="p">]</span>
+            <span class="n">positional_embed</span> <span class="o">=</span> <span class="n">value</span><span class="p">[</span><span class="n">vocab_size</span><span class="p">:]</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">interpolate_pos_embed</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">positional_embed</span><span class="p">):</span>
+                <span class="n">positional_embed</span> <span class="o">=</span> <span class="n">interpolate_pos_embed</span><span class="p">(</span><span class="n">positional_embed</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span> <span class="o">&gt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">positional_embed</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Max Length cannot be greater than </span><span class="si">{}</span><span class="s2"> if interploate_pos_embed is turned off&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">positional_embed</span><span class="p">)))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">positional_embed</span> <span class="o">=</span> <span class="n">positional_embed</span><span class="p">[:</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span><span class="p">]</span>
+
+            <span class="n">embeddings</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">((</span><span class="n">word_embeddings</span><span class="p">,</span> <span class="n">special_embed</span><span class="p">,</span> <span class="n">positional_embed</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">embeddings</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">saver</span> <span class="o">=</span> <span class="n">Saver</span><span class="p">(</span>
+            <span class="n">fallback_filename</span><span class="o">=</span><span class="n">JL_BASE</span><span class="p">,</span>
+            <span class="n">exclude_matches</span><span class="o">=</span><span class="kc">None</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">save_adam_vars</span> <span class="k">else</span> <span class="s2">&quot;adam&quot;</span><span class="p">,</span>
+            <span class="n">variable_transforms</span><span class="o">=</span><span class="p">[</span><span class="n">process_embeddings</span><span class="p">]</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_format_for_encoding</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Most subclasses take in inputs as:</span>
+<span class="sd">            List (batch) of list (docs)</span>
+<span class="sd">        </span>
+<span class="sd">        Encode_multi_input expect the following format:</span>
+<span class="sd">            List (batch) of list (docs) of list (subseqs) of text</span>
+<span class="sd">        </span>
+<span class="sd">        This method is responsible for standardizing inputs to the above format</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">[[[</span><span class="n">x</span><span class="p">]</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">X</span><span class="p">]</span> <span class="k">for</span> <span class="n">X</span> <span class="ow">in</span> <span class="n">Xs</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">_text_to_ids</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">max_length</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="c1"># Maps lists of text to formatted numpy arrays of token ids and loss-masks marking the lengths of the sequences.</span>
+        <span class="n">max_length</span> <span class="o">=</span> <span class="n">max_length</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span>
+
+        <span class="c1"># If 1d array of text is passed, coerce into multifield format</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">Xs</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">Xs</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="p">(</span><span class="nb">bytes</span><span class="p">,</span> <span class="nb">str</span><span class="p">)):</span>
+            <span class="n">Xs</span> <span class="o">=</span> <span class="p">[[</span><span class="n">x</span><span class="p">]</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">Xs</span><span class="p">]</span>
+    
+        <span class="n">Xs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_format_for_encoding</span><span class="p">(</span><span class="n">Xs</span><span class="p">)</span>
+        
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">chunk_long_sequences</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">Xs</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="c1"># can only chunk single sequence inputs</span>
+            <span class="n">chunk_size</span> <span class="o">=</span> <span class="n">max_length</span> <span class="o">-</span> <span class="mi">2</span> 
+            <span class="n">step_size</span> <span class="o">=</span> <span class="n">chunk_size</span> <span class="o">//</span> <span class="mi">3</span>
+            <span class="n">encoded</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="o">.</span><span class="n">encode_multi_input</span><span class="p">(</span><span class="n">Xs</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="n">Y</span><span class="p">,</span> <span class="n">max_length</span><span class="o">=</span><span class="n">sys</span><span class="o">.</span><span class="n">maxsize</span><span class="p">)</span>
+            
+            <span class="n">d</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">encoded</span><span class="o">.</span><span class="n">token_ids</span><span class="p">)):</span>
+                <span class="n">starts</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">encoded</span><span class="o">.</span><span class="n">token_ids</span><span class="p">[</span><span class="n">idx</span><span class="p">]),</span> <span class="n">step_size</span><span class="p">))</span>
+                <span class="k">for</span> <span class="n">start</span> <span class="ow">in</span> <span class="n">starts</span><span class="p">:</span>
+                    <span class="n">end</span> <span class="o">=</span> <span class="n">start</span> <span class="o">+</span> <span class="n">chunk_size</span>
+
+                    <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">EncodedOutput</span><span class="o">.</span><span class="n">_fields</span><span class="p">:</span>
+                        <span class="n">field_value</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">encoded</span><span class="p">,</span> <span class="n">field</span><span class="p">)</span>
+                        <span class="k">if</span> <span class="n">field_value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                            <span class="n">d</span><span class="p">[</span><span class="n">field</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">field_value</span><span class="p">[</span><span class="n">idx</span><span class="p">][</span><span class="n">start</span><span class="p">:</span><span class="n">end</span><span class="p">])</span>
+
+            <span class="n">encoder_out</span> <span class="o">=</span> <span class="n">EncodedOutput</span><span class="p">(</span><span class="o">**</span><span class="n">d</span><span class="p">)</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_array_format</span><span class="p">(</span><span class="n">encoder_out</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">encoder_out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="o">.</span><span class="n">encode_multi_input</span><span class="p">(</span><span class="n">Xs</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="n">Y</span><span class="p">,</span> <span class="n">max_length</span><span class="o">=</span><span class="n">max_length</span><span class="p">)</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_array_format</span><span class="p">(</span><span class="n">encoder_out</span><span class="p">)</span>
+        
+
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span> <span class="nf">_predict_op</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">logits</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span> <span class="nf">_predict_proba_op</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">logits</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span> <span class="nf">_target_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">featurizer_state</span><span class="p">,</span> <span class="n">targets</span><span class="p">,</span> <span class="n">n_outputs</span><span class="p">,</span> <span class="n">train</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">reuse</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="c1"># Overridden by subclass to attach a target model onto the shared base featurizer.</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span> <span class="nf">_target_encoder</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># Overridden by subclass to produce the right target encoding for a given target model.</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+    <span class="k">def</span> <span class="nf">_eval</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">tensors</span><span class="p">,</span> <span class="n">feed_dict</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Evaluate the value of each of the provided tensors.</span>
+<span class="sd">        Returns a `dict` that maps from tensor to result value.  </span>
+<span class="sd">        If any result value is None, that result is excluded from the results `dict`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">tensors</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">tensor</span> <span class="k">if</span> <span class="n">tensor</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">noop</span>
+            <span class="k">for</span> <span class="n">tensor</span> <span class="ow">in</span> <span class="n">tensors</span>
+        <span class="p">]</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sess</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">tensors</span><span class="p">,</span> <span class="n">feed_dict</span><span class="o">=</span><span class="n">feed_dict</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="n">tensor</span><span class="p">:</span> <span class="n">value</span>
+            <span class="k">for</span> <span class="n">tensor</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">tensors</span><span class="p">,</span> <span class="n">values</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="p">}</span>
+
+    <span class="k">def</span> <span class="nf">finetune</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="n">arr_encoded</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_text_to_ids</span><span class="p">(</span><span class="n">Xs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_training_loop</span><span class="p">(</span>
+            <span class="n">arr_encoded</span><span class="p">,</span>
+            <span class="n">Y</span><span class="o">=</span><span class="n">Y</span><span class="p">,</span>
+            <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_training_loop</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">arr_encoded</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">label_encoder</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_target_encoder</span><span class="p">()</span>
+
+        <span class="n">idxs</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">arr_encoded</span><span class="o">.</span><span class="n">token_ids</span><span class="p">)))</span>
+        <span class="n">train_idxs</span><span class="p">,</span> <span class="n">val_idxs</span> <span class="o">=</span> <span class="n">train_test_split</span><span class="p">(</span><span class="n">idxs</span><span class="p">,</span> <span class="n">test_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">val_size</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">Y</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># only language model will be trained, mock fake target of right length</span>
+            <span class="n">train_Y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">([[]]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">train_idxs</span><span class="p">))</span>
+            <span class="n">val_Y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">([[]]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">val_idxs</span><span class="p">))</span>
+            <span class="n">target_dim</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">Y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">Y</span><span class="p">)</span>
+            <span class="n">train_Y</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">label_encoder</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">Y</span><span class="p">[</span><span class="n">train_idxs</span><span class="p">])</span>
+            <span class="n">val_Y</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">label_encoder</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">Y</span><span class="p">[</span><span class="n">val_idxs</span><span class="p">])</span>
+            <span class="n">target_dim</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">label_encoder</span><span class="o">.</span><span class="n">target_dim</span>
+
+        <span class="n">batch_size</span> <span class="o">=</span> <span class="n">batch_size</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">batch_size</span>
+        <span class="n">n_batch_train</span> <span class="o">=</span> <span class="n">batch_size</span> <span class="o">*</span> <span class="nb">max</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">visible_gpus</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">n_examples</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">train_idxs</span><span class="p">)</span>
+        <span class="n">n_updates_total</span> <span class="o">=</span> <span class="p">(</span><span class="n">n_examples</span> <span class="o">//</span> <span class="n">n_batch_train</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">n_epochs</span>
+
+        <span class="n">train_dataset</span> <span class="o">=</span> <span class="p">(</span><span class="n">arr_encoded</span><span class="o">.</span><span class="n">token_ids</span><span class="p">[</span><span class="n">train_idxs</span><span class="p">],</span> <span class="n">arr_encoded</span><span class="o">.</span><span class="n">mask</span><span class="p">[</span><span class="n">train_idxs</span><span class="p">],</span> <span class="n">train_Y</span><span class="p">)</span>
+        <span class="n">val_dataset</span> <span class="o">=</span> <span class="p">(</span><span class="n">arr_encoded</span><span class="o">.</span><span class="n">token_ids</span><span class="p">[</span><span class="n">val_idxs</span><span class="p">],</span> <span class="n">arr_encoded</span><span class="o">.</span><span class="n">mask</span><span class="p">[</span><span class="n">val_idxs</span><span class="p">],</span> <span class="n">val_Y</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_build_model</span><span class="p">(</span><span class="n">n_updates_total</span><span class="o">=</span><span class="n">n_updates_total</span><span class="p">,</span> <span class="n">target_dim</span><span class="o">=</span><span class="n">target_dim</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">is_trained</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="n">avg_train_loss</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">avg_val_loss</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">global_step</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">best_val_loss</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;inf&quot;</span><span class="p">)</span>
+        <span class="n">val_window</span> <span class="o">=</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="s2">&quot;inf&quot;</span><span class="p">)]</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">val_window_size</span>
+
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">n_epochs</span><span class="p">):</span>
+            <span class="n">iterator</span> <span class="o">=</span> <span class="n">iter_data</span><span class="p">(</span>
+                <span class="o">*</span><span class="n">train_dataset</span><span class="p">,</span> 
+                <span class="n">n_batch</span><span class="o">=</span><span class="n">n_batch_train</span><span class="p">,</span> 
+                <span class="n">tqdm_desc</span><span class="o">=</span><span class="s2">&quot;Epoch </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">),</span>
+                <span class="n">verbose</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">verbose</span>
+            <span class="p">)</span>
+            <span class="k">for</span> <span class="p">(</span><span class="n">xmb</span><span class="p">,</span> <span class="n">mmb</span><span class="p">,</span> <span class="n">ymb</span><span class="p">)</span> <span class="ow">in</span> <span class="n">iterator</span><span class="p">:</span>
+                <span class="n">feed_dict</span> <span class="o">=</span> <span class="p">{</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">X</span><span class="p">:</span> <span class="n">xmb</span><span class="p">,</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">M</span><span class="p">:</span> <span class="n">mmb</span><span class="p">,</span>
+                <span class="p">}</span>
+                <span class="k">if</span> <span class="n">target_dim</span><span class="p">:</span>
+                    <span class="n">feed_dict</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">Y</span><span class="p">]</span> <span class="o">=</span> <span class="n">ymb</span>
+
+                <span class="n">global_step</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="k">if</span> <span class="n">global_step</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">val_interval</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">feed_dict</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">do_dropout</span><span class="p">]</span> <span class="o">=</span> <span class="n">DROPOUT_OFF</span>
+
+                    <span class="n">outputs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_eval</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">summaries</span><span class="p">,</span> <span class="n">feed_dict</span><span class="o">=</span><span class="n">feed_dict</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">train_writer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">train_writer</span><span class="o">.</span><span class="n">add_summary</span><span class="p">(</span><span class="n">outputs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">summaries</span><span class="p">),</span> <span class="n">global_step</span><span class="p">)</span>
+
+                    <span class="n">sum_val_loss</span> <span class="o">=</span> <span class="mi">0</span>
+                    <span class="k">for</span> <span class="n">xval</span><span class="p">,</span> <span class="n">mval</span><span class="p">,</span> <span class="n">yval</span> <span class="ow">in</span> <span class="n">iter_data</span><span class="p">(</span><span class="o">*</span><span class="n">val_dataset</span><span class="p">,</span> <span class="n">n_batch</span><span class="o">=</span><span class="n">n_batch_train</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">verbose</span><span class="p">,</span>
+                                                      <span class="n">tqdm_desc</span><span class="o">=</span><span class="s2">&quot;Validation&quot;</span><span class="p">):</span>
+                        <span class="n">feed_dict</span> <span class="o">=</span> <span class="p">{</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">X</span><span class="p">:</span> <span class="n">xval</span><span class="p">,</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">M</span><span class="p">:</span> <span class="n">mval</span><span class="p">,</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">do_dropout</span><span class="p">:</span> <span class="n">DROPOUT_OFF</span>
+                        <span class="p">}</span>
+                        <span class="k">if</span> <span class="n">target_dim</span><span class="p">:</span>
+                            <span class="n">feed_dict</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">Y</span><span class="p">]</span> <span class="o">=</span> <span class="n">yval</span>
+
+                        <span class="n">outputs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_eval</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">target_loss</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">summaries</span><span class="p">,</span> <span class="n">feed_dict</span><span class="o">=</span><span class="n">feed_dict</span><span class="p">)</span>
+                        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">valid_writer</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">valid_writer</span><span class="o">.</span><span class="n">add_summary</span><span class="p">(</span><span class="n">outputs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">summaries</span><span class="p">),</span> <span class="n">global_step</span><span class="p">)</span>
+
+                        <span class="n">val_cost</span> <span class="o">=</span> <span class="n">outputs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">target_loss</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+                        <span class="n">sum_val_loss</span> <span class="o">+=</span> <span class="n">val_cost</span>
+
+                        <span class="k">if</span> <span class="n">avg_val_loss</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                            <span class="n">avg_val_loss</span> <span class="o">=</span> <span class="n">val_cost</span>
+                        <span class="k">else</span><span class="p">:</span>
+                            <span class="n">avg_val_loss</span> <span class="o">=</span> <span class="p">(</span>
+                                    <span class="n">avg_val_loss</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">rolling_avg_decay</span>
+                                    <span class="o">+</span> <span class="n">val_cost</span> <span class="o">*</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">rolling_avg_decay</span><span class="p">)</span>
+                            <span class="p">)</span>
+                    <span class="n">val_window</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">sum_val_loss</span><span class="p">)</span>
+                    <span class="n">val_window</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+                    <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">val_window</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="n">best_val_loss</span><span class="p">:</span>
+                        <span class="n">best_val_loss</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">val_window</span><span class="p">)</span>
+                        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">autosave_path</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">autosave_path</span><span class="p">)</span>
+
+                    <span class="n">tqdm</span><span class="o">.</span><span class="n">tqdm</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;Train loss: </span><span class="si">{}</span><span class="se">\t</span><span class="s2"> Validation loss: </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">avg_train_loss</span><span class="p">,</span> <span class="n">avg_val_loss</span><span class="p">))</span>
+
+                <span class="n">feed_dict</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">do_dropout</span><span class="p">]</span> <span class="o">=</span> <span class="n">DROPOUT_ON</span>
+                <span class="n">outputs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_eval</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">target_loss</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">train_op</span><span class="p">,</span> <span class="n">feed_dict</span><span class="o">=</span><span class="n">feed_dict</span><span class="p">)</span>
+
+                <span class="n">cost</span> <span class="o">=</span> <span class="n">outputs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">target_loss</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">avg_train_loss</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">avg_train_loss</span> <span class="o">=</span> <span class="n">cost</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">avg_train_loss</span> <span class="o">=</span> <span class="n">avg_train_loss</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">rolling_avg_decay</span> <span class="o">+</span> <span class="n">cost</span> <span class="o">*</span> <span class="p">(</span>
+                            <span class="mi">1</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">rolling_avg_decay</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="k">def</span> <span class="nf">fit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot; An alias for finetune. &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">finetune</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">,</span> <span class="n">max_length</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="n">predictions</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">with</span> <span class="n">warnings</span><span class="o">.</span><span class="n">catch_warnings</span><span class="p">():</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">filterwarnings</span><span class="p">(</span><span class="s2">&quot;ignore&quot;</span><span class="p">)</span>
+            <span class="n">max_length</span> <span class="o">=</span> <span class="n">max_length</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span>
+            <span class="k">for</span> <span class="n">xmb</span><span class="p">,</span> <span class="n">mmb</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_infer_prep</span><span class="p">(</span><span class="n">Xs</span><span class="p">,</span> <span class="n">max_length</span><span class="o">=</span><span class="n">max_length</span><span class="p">):</span>
+                <span class="n">output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_eval</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">predict_op</span><span class="p">,</span>
+                    <span class="n">feed_dict</span><span class="o">=</span><span class="p">{</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">X</span><span class="p">:</span> <span class="n">xmb</span><span class="p">,</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">M</span><span class="p">:</span> <span class="n">mmb</span><span class="p">,</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">do_dropout</span><span class="p">:</span> <span class="n">DROPOUT_OFF</span>
+                    <span class="p">}</span>
+                <span class="p">)</span>
+                <span class="n">prediction</span> <span class="o">=</span> <span class="n">output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">predict_op</span><span class="p">)</span>
+                <span class="n">formatted_predictions</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">label_encoder</span><span class="o">.</span><span class="n">inverse_transform</span><span class="p">(</span><span class="n">prediction</span><span class="p">)</span>
+                <span class="n">predictions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">formatted_predictions</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">predictions</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">,</span> <span class="n">max_length</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_predict</span><span class="p">(</span><span class="n">Xs</span><span class="p">,</span> <span class="n">max_length</span><span class="o">=</span><span class="n">max_length</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_predict_proba</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">,</span> <span class="n">max_length</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Produce raw numeric outputs for proba predictions</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">predictions</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">with</span> <span class="n">warnings</span><span class="o">.</span><span class="n">catch_warnings</span><span class="p">():</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">filterwarnings</span><span class="p">(</span><span class="s2">&quot;ignore&quot;</span><span class="p">)</span>
+            <span class="n">max_length</span> <span class="o">=</span> <span class="n">max_length</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span>
+            <span class="k">for</span> <span class="n">xmb</span><span class="p">,</span> <span class="n">mmb</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_infer_prep</span><span class="p">(</span><span class="n">Xs</span><span class="p">,</span> <span class="n">max_length</span><span class="o">=</span><span class="n">max_length</span><span class="p">):</span>
+                <span class="n">output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_eval</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">predict_proba_op</span><span class="p">,</span>
+                    <span class="n">feed_dict</span><span class="o">=</span><span class="p">{</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">X</span><span class="p">:</span> <span class="n">xmb</span><span class="p">,</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">M</span><span class="p">:</span> <span class="n">mmb</span><span class="p">,</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">do_dropout</span><span class="p">:</span> <span class="n">DROPOUT_OFF</span>
+                    <span class="p">}</span>
+                <span class="p">)</span>
+                <span class="n">probas</span> <span class="o">=</span> <span class="n">output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">predict_proba_op</span><span class="p">)</span>
+                <span class="n">predictions</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">probas</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">predictions</span>
+
+    <span class="k">def</span> <span class="nf">predict_proba</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        The base method for predicting from the model.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">raw_probas</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_predict_proba</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">classes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">label_encoder</span><span class="o">.</span><span class="n">classes_</span>
+
+        <span class="n">formatted_predictions</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">probas</span> <span class="ow">in</span> <span class="n">raw_probas</span><span class="p">:</span>
+            <span class="n">formatted_predictions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="nb">dict</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">classes</span><span class="p">,</span> <span class="n">probas</span><span class="p">))</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">formatted_predictions</span>
+
+    <span class="k">def</span> <span class="nf">_featurize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">,</span> <span class="n">max_length</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="n">features</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">with</span> <span class="n">warnings</span><span class="o">.</span><span class="n">catch_warnings</span><span class="p">():</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">filterwarnings</span><span class="p">(</span><span class="s2">&quot;ignore&quot;</span><span class="p">)</span>
+            <span class="n">max_length</span> <span class="o">=</span> <span class="n">max_length</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span>
+            <span class="k">for</span> <span class="n">xmb</span><span class="p">,</span> <span class="n">mmb</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_infer_prep</span><span class="p">(</span><span class="n">Xs</span><span class="p">,</span> <span class="n">max_length</span><span class="o">=</span><span class="n">max_length</span><span class="p">):</span>
+                <span class="n">feature_batch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sess</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">features</span><span class="p">,</span> <span class="p">{</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">X</span><span class="p">:</span> <span class="n">xmb</span><span class="p">,</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">M</span><span class="p">:</span> <span class="n">mmb</span><span class="p">,</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">do_dropout</span><span class="p">:</span> <span class="n">DROPOUT_OFF</span>
+                <span class="p">})</span>
+                <span class="n">features</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">feature_batch</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">features</span><span class="p">)</span>
+
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span> <span class="nf">featurize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Base method to get raw features out of the model.</span>
+<span class="sd">        These features are the same that are fed into the target_model.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_featurize</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">get_eval_fn</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;No default eval function is given, please pass an explicit eval fn to grid_search&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        An alias for `featurize`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">featurize</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_infer_prep</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">,</span> <span class="n">max_length</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="n">max_length</span> <span class="o">=</span> <span class="n">max_length</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span>
+        <span class="n">arr_encoded</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_text_to_ids</span><span class="p">(</span><span class="n">Xs</span><span class="p">,</span> <span class="n">max_length</span><span class="o">=</span><span class="n">max_length</span><span class="p">)</span>
+        <span class="n">n_batch_train</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">*</span> <span class="nb">max</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">visible_gpus</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_build_model</span><span class="p">(</span><span class="n">n_updates_total</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">target_dim</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">target_dim</span><span class="p">,</span> <span class="n">train</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="k">yield from</span> <span class="n">iter_data</span><span class="p">(</span><span class="n">arr_encoded</span><span class="o">.</span><span class="n">token_ids</span><span class="p">,</span> <span class="n">arr_encoded</span><span class="o">.</span><span class="n">mask</span><span class="p">,</span> <span class="n">n_batch</span><span class="o">=</span><span class="n">n_batch_train</span><span class="p">,</span>
+                             <span class="n">verbose</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">verbose</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_array_format</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">encoded_output</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns numpy array of token idxs and corresponding mask</span>
+<span class="sd">        Returned `x` array contains two channels:</span>
+<span class="sd">            0: byte-pair encoding embedding</span>
+<span class="sd">            1: positional embedding</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">encoded_output</span><span class="o">.</span><span class="n">token_ids</span><span class="p">)</span>
+        <span class="n">seq_lengths</span> <span class="o">=</span> <span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">encoded_output</span><span class="o">.</span><span class="n">token_ids</span><span class="p">]</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">n</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+        <span class="n">mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">n</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+        <span class="n">labels_arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="n">n</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span><span class="p">),</span> <span class="n">PAD_TOKEN</span><span class="p">,</span>
+                             <span class="n">dtype</span><span class="o">=</span><span class="s1">&#39;object&#39;</span><span class="p">)</span> <span class="k">if</span> <span class="n">encoded_output</span><span class="o">.</span><span class="n">labels</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">seq_length</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">seq_lengths</span><span class="p">):</span>
+            <span class="c1"># BPE embedding</span>
+            <span class="n">x</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:</span><span class="n">seq_length</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">encoded_output</span><span class="o">.</span><span class="n">token_ids</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="c1"># masking: value of 1 means &quot;consider this in cross-entropy LM loss&quot;</span>
+            <span class="n">mask</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="mi">1</span><span class="p">:</span><span class="n">seq_length</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+            <span class="k">if</span> <span class="n">encoded_output</span><span class="o">.</span><span class="n">labels</span><span class="p">:</span>
+                <span class="n">labels_arr</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:</span><span class="n">seq_length</span><span class="p">]</span> <span class="o">=</span> <span class="n">encoded_output</span><span class="o">.</span><span class="n">labels</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+        <span class="c1"># positional_embeddings</span>
+        <span class="n">x</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="o">.</span><span class="n">vocab_size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="o">.</span><span class="n">vocab_size</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">ArrayEncodedOutput</span><span class="p">(</span>
+            <span class="n">token_ids</span><span class="o">=</span><span class="n">x</span><span class="p">,</span>
+            <span class="n">tokens</span><span class="o">=</span><span class="n">encoded_output</span><span class="o">.</span><span class="n">tokens</span><span class="p">,</span>
+            <span class="n">labels</span><span class="o">=</span><span class="n">labels_arr</span><span class="p">,</span>
+            <span class="n">char_locs</span><span class="o">=</span><span class="n">encoded_output</span><span class="o">.</span><span class="n">char_locs</span><span class="p">,</span>
+            <span class="n">mask</span><span class="o">=</span><span class="n">mask</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_compile_train_op</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span> <span class="n">grads</span><span class="p">,</span> <span class="n">n_updates_total</span><span class="p">):</span>
+        <span class="n">grads</span> <span class="o">=</span> <span class="n">average_grads</span><span class="p">(</span><span class="n">grads</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">summarize_grads</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">summaries</span> <span class="o">+=</span> <span class="n">tf</span><span class="o">.</span><span class="n">contrib</span><span class="o">.</span><span class="n">training</span><span class="o">.</span><span class="n">add_gradients_summaries</span><span class="p">(</span><span class="n">grads</span><span class="p">)</span>
+
+        <span class="n">grads</span> <span class="o">=</span> <span class="p">[</span><span class="n">grad</span> <span class="k">for</span> <span class="n">grad</span><span class="p">,</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">grads</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">train_op</span> <span class="o">=</span> <span class="n">AdamWeightDecay</span><span class="p">(</span>
+            <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
+            <span class="n">grads</span><span class="o">=</span><span class="n">grads</span><span class="p">,</span>
+            <span class="n">lr</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">lr</span><span class="p">,</span>
+            <span class="n">schedule</span><span class="o">=</span><span class="n">partial</span><span class="p">(</span><span class="n">schedules</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">lr_schedule</span><span class="p">],</span> <span class="n">warmup</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">lr_warmup</span><span class="p">),</span>
+            <span class="n">t_total</span><span class="o">=</span><span class="n">n_updates_total</span><span class="p">,</span>
+            <span class="n">l2</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">l2_reg</span><span class="p">,</span>
+            <span class="n">max_grad_norm</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_grad_norm</span><span class="p">,</span>
+            <span class="n">vector_l2</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">vector_l2</span><span class="p">,</span>
+            <span class="n">b1</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">b1</span><span class="p">,</span>
+            <span class="n">b2</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">b2</span><span class="p">,</span>
+            <span class="n">e</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">epsilon</span><span class="p">,</span>
+            <span class="n">pretrained_weights</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">saver</span><span class="o">.</span><span class="n">get_pretrained_weights</span><span class="p">(),</span>
+            <span class="n">deviation_regularization</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">regularize_deviation</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_construct_graph</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_updates_total</span><span class="p">,</span> <span class="n">target_dim</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">train</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="n">gpu_grads</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">summaries</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="c1"># store whether or not graph was previously compiled with dropout</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">train</span> <span class="o">=</span> <span class="n">train</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_define_placeholders</span><span class="p">(</span><span class="n">target_dim</span><span class="o">=</span><span class="n">target_dim</span><span class="p">)</span>
+
+        <span class="n">aggregator</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
+        <span class="n">train_loss_tower</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">gpus</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">visible_gpus</span>
+        <span class="n">n_splits</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">gpus</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span>
+
+        <span class="c1"># multi-GPU setup, using CPU as param server is most efficient unless system has direct GPU connections</span>
+        <span class="c1"># single GPU, no need to use a different GPU as a parameter server</span>
+        <span class="n">params_device</span> <span class="o">=</span> <span class="s1">&#39;cpu&#39;</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">gpus</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">1</span> <span class="k">else</span> <span class="n">gpus</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="c1"># decide on setting for language model loss coefficient</span>
+        <span class="c1"># if the language model loss does not contribute to overall loss,</span>
+        <span class="c1"># remove the language model computation from the graph</span>
+        <span class="n">lm_loss_coef</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">lm_loss_coef</span>
+        <span class="k">if</span> <span class="n">target_dim</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">lm_loss_coef</span> <span class="o">=</span> <span class="mf">1.0</span>
+        <span class="n">compile_lm</span> <span class="o">=</span> <span class="p">(</span><span class="n">train</span> <span class="ow">and</span> <span class="n">lm_loss_coef</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">require_lm</span>
+
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">M</span><span class="p">,</span> <span class="n">Y</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">soft_split</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">X</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">M</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">Y</span><span class="p">,</span> <span class="n">n_splits</span><span class="o">=</span><span class="n">n_splits</span><span class="p">)):</span>
+            <span class="n">do_reuse</span> <span class="o">=</span> <span class="kc">True</span> <span class="k">if</span> <span class="n">i</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="n">tf</span><span class="o">.</span><span class="n">AUTO_REUSE</span>
+
+            <span class="k">if</span> <span class="n">gpus</span><span class="p">:</span>
+                <span class="n">device</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">assign_to_gpu</span><span class="p">(</span><span class="n">gpus</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">params_device</span><span class="o">=</span><span class="n">params_device</span><span class="p">))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">device</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s1">&#39;cpu&#39;</span><span class="p">)</span>
+
+            <span class="n">scope</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">variable_scope</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">get_variable_scope</span><span class="p">(),</span> <span class="n">reuse</span><span class="o">=</span><span class="n">do_reuse</span><span class="p">)</span>
+
+            <span class="k">with</span> <span class="n">device</span><span class="p">,</span> <span class="n">scope</span><span class="p">:</span>
+                <span class="n">featurizer_state</span> <span class="o">=</span> <span class="n">featurizer</span><span class="p">(</span>
+                    <span class="n">X</span><span class="p">,</span>
+                    <span class="n">config</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">,</span>
+                    <span class="n">encoder</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="p">,</span>
+                    <span class="n">dropout_placeholder</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">do_dropout</span><span class="p">,</span>
+                    <span class="n">train</span><span class="o">=</span><span class="n">train</span><span class="p">,</span>
+                    <span class="n">reuse</span><span class="o">=</span><span class="n">do_reuse</span>
+                <span class="p">)</span>
+
+                <span class="k">if</span> <span class="n">compile_lm</span><span class="p">:</span>
+                    <span class="n">language_model_state</span> <span class="o">=</span> <span class="n">language_model</span><span class="p">(</span>
+                        <span class="n">X</span><span class="o">=</span><span class="n">X</span><span class="p">,</span>
+                        <span class="n">M</span><span class="o">=</span><span class="n">M</span><span class="p">,</span>
+                        <span class="n">config</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">,</span>
+                        <span class="n">embed_weights</span><span class="o">=</span><span class="n">featurizer_state</span><span class="p">[</span><span class="s1">&#39;embed_weights&#39;</span><span class="p">],</span>
+                        <span class="n">hidden</span><span class="o">=</span><span class="n">featurizer_state</span><span class="p">[</span><span class="s1">&#39;sequence_features&#39;</span><span class="p">],</span>
+                        <span class="n">reuse</span><span class="o">=</span><span class="n">do_reuse</span>
+                    <span class="p">)</span>
+
+                    <span class="n">train_loss</span> <span class="o">=</span> <span class="n">lm_loss_coef</span> <span class="o">*</span> <span class="n">tf</span><span class="o">.</span><span class="n">reduce_mean</span><span class="p">(</span><span class="n">language_model_state</span><span class="p">[</span><span class="s1">&#39;losses&#39;</span><span class="p">])</span>
+                    <span class="n">aggregator</span><span class="p">[</span><span class="s1">&#39;lm_losses&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">language_model_state</span><span class="p">[</span><span class="s1">&#39;losses&#39;</span><span class="p">])</span>
+                    <span class="n">lm_logits</span> <span class="o">=</span> <span class="n">language_model_state</span><span class="p">[</span><span class="s2">&quot;logits&quot;</span><span class="p">]</span>
+                    <span class="n">aggregator</span><span class="p">[</span><span class="s2">&quot;lm_model&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">sample_with_temperature</span><span class="p">(</span><span class="n">lm_logits</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">lm_temp</span><span class="p">))</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">train_loss</span> <span class="o">=</span> <span class="mi">0</span>
+
+                <span class="n">aggregator</span><span class="p">[</span><span class="s1">&#39;features&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">featurizer_state</span><span class="p">[</span><span class="s1">&#39;features&#39;</span><span class="p">])</span>
+
+                <span class="k">if</span> <span class="n">target_dim</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">with</span> <span class="n">tf</span><span class="o">.</span><span class="n">variable_scope</span><span class="p">(</span><span class="s1">&#39;model/target&#39;</span><span class="p">):</span>
+                        <span class="n">target_model_state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_target_model</span><span class="p">(</span>
+                            <span class="n">featurizer_state</span><span class="o">=</span><span class="n">featurizer_state</span><span class="p">,</span>
+                            <span class="n">targets</span><span class="o">=</span><span class="n">Y</span><span class="p">,</span>
+                            <span class="n">n_outputs</span><span class="o">=</span><span class="n">target_dim</span><span class="p">,</span>
+                            <span class="n">train</span><span class="o">=</span><span class="n">train</span><span class="p">,</span>
+                            <span class="n">reuse</span><span class="o">=</span><span class="n">do_reuse</span><span class="p">,</span>
+                            <span class="n">max_length</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span>
+                        <span class="p">)</span>
+                    <span class="n">train_loss</span> <span class="o">+=</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">lm_loss_coef</span><span class="p">)</span> <span class="o">*</span> <span class="n">tf</span><span class="o">.</span><span class="n">reduce_mean</span><span class="p">(</span><span class="n">target_model_state</span><span class="p">[</span><span class="s1">&#39;losses&#39;</span><span class="p">])</span>
+                    <span class="n">train_loss_tower</span> <span class="o">+=</span> <span class="n">train_loss</span>
+
+                    <span class="n">aggregator</span><span class="p">[</span><span class="s1">&#39;logits&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">target_model_state</span><span class="p">[</span><span class="s1">&#39;logits&#39;</span><span class="p">])</span>
+                    <span class="n">aggregator</span><span class="p">[</span><span class="s1">&#39;target_losses&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">target_model_state</span><span class="p">[</span><span class="s1">&#39;losses&#39;</span><span class="p">])</span>
+
+                <span class="n">params</span> <span class="o">=</span> <span class="n">find_trainable_variables</span><span class="p">(</span><span class="s2">&quot;model&quot;</span><span class="p">)</span>
+                <span class="n">grads</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">gradients</span><span class="p">(</span><span class="n">train_loss</span><span class="p">,</span> <span class="n">params</span><span class="p">)</span>
+                <span class="n">grads</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">grads</span><span class="p">,</span> <span class="n">params</span><span class="p">))</span>
+                <span class="n">gpu_grads</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">grads</span><span class="p">)</span>
+
+        <span class="k">with</span> <span class="n">tf</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="n">params_device</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">features</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">aggregator</span><span class="p">[</span><span class="s1">&#39;features&#39;</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">compile_lm</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">lm_predict_op</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">aggregator</span><span class="p">[</span><span class="s2">&quot;lm_model&quot;</span><span class="p">],</span> <span class="mi">0</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">lm_losses</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">aggregator</span><span class="p">[</span><span class="s1">&#39;lm_losses&#39;</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">lm_loss</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">reduce_mean</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lm_losses</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">summaries</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">summary</span><span class="o">.</span><span class="n">scalar</span><span class="p">(</span><span class="s1">&#39;LanguageModelLoss&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">lm_loss</span><span class="p">))</span>
+
+            <span class="k">if</span> <span class="n">train</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_compile_train_op</span><span class="p">(</span>
+                    <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
+                    <span class="n">grads</span><span class="o">=</span><span class="n">gpu_grads</span><span class="p">,</span>
+                    <span class="n">n_updates_total</span><span class="o">=</span><span class="n">n_updates_total</span>
+                <span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">target_dim</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logits</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">aggregator</span><span class="p">[</span><span class="s1">&#39;logits&#39;</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">target_losses</span> <span class="o">=</span> <span class="n">concat_or_stack</span><span class="p">(</span><span class="n">aggregator</span><span class="p">[</span><span class="s1">&#39;target_losses&#39;</span><span class="p">])</span>
+
+                <span class="bp">self</span><span class="o">.</span><span class="n">predict_op</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_predict_op</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">logits</span><span class="p">,</span> <span class="o">**</span><span class="n">target_model_state</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;predict_params&quot;</span><span class="p">,</span> <span class="p">{})</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">predict_proba_op</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_predict_proba_op</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">logits</span><span class="p">,</span> <span class="o">**</span><span class="n">target_model_state</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;predict_params&quot;</span><span class="p">,</span> <span class="p">{})</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">target_loss</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">reduce_mean</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">target_losses</span><span class="p">)</span>
+
+                <span class="bp">self</span><span class="o">.</span><span class="n">summaries</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">summary</span><span class="o">.</span><span class="n">scalar</span><span class="p">(</span><span class="s1">&#39;TargetModelLoss&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">target_loss</span><span class="p">))</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">summaries</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">summary</span><span class="o">.</span><span class="n">scalar</span><span class="p">(</span><span class="s1">&#39;TotalLoss&#39;</span><span class="p">,</span> <span class="n">train_loss_tower</span> <span class="o">/</span> <span class="n">n_splits</span><span class="p">))</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">summaries</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">summary</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">summaries</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">summaries</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">noop</span>
+
+    <span class="k">def</span> <span class="nf">_build_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_updates_total</span><span class="p">,</span> <span class="n">target_dim</span><span class="p">,</span> <span class="n">train</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Construct tensorflow symbolic graph.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_trained</span> <span class="ow">or</span> <span class="n">train</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">train</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">target_dim</span> <span class="o">!=</span> <span class="n">target_dim</span><span class="p">:</span>
+            <span class="c1"># reconstruct graph to include/remove dropout</span>
+            <span class="c1"># if `train` setting has changed</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_construct_graph</span><span class="p">(</span><span class="n">n_updates_total</span><span class="p">,</span> <span class="n">target_dim</span><span class="p">,</span> <span class="n">train</span><span class="o">=</span><span class="n">train</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_initialize_session</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">saver</span><span class="o">.</span><span class="n">initialize</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sess</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">target_dim</span> <span class="o">=</span> <span class="n">target_dim</span>
+        <span class="k">if</span> <span class="n">train</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">tensorboard_folder</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">tensorboard_folder</span><span class="p">):</span>
+                    <span class="n">os</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">tensorboard_folder</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">train_writer</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">summary</span><span class="o">.</span><span class="n">FileWriter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">tensorboard_folder</span> <span class="o">+</span> <span class="s1">&#39;/train&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">sess</span><span class="o">.</span><span class="n">graph</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">valid_writer</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">summary</span><span class="o">.</span><span class="n">FileWriter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">tensorboard_folder</span> <span class="o">+</span> <span class="s1">&#39;/valid&#39;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">sess</span><span class="o">.</span><span class="n">graph</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">is_built</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="k">def</span> <span class="nf">_initialize_session</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sess</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">gpus</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">visible_gpus</span>
+            <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s1">&#39;CUDA_VISIBLE_DEVICES&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;,&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="nb">str</span><span class="p">(</span><span class="n">gpu</span><span class="p">)</span> <span class="k">for</span> <span class="n">gpu</span> <span class="ow">in</span> <span class="n">gpus</span><span class="p">])</span>
+            <span class="n">conf</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">ConfigProto</span><span class="p">(</span><span class="n">allow_soft_placement</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">soft_device_placement</span><span class="p">,</span>
+                                  <span class="n">log_device_placement</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">log_device_placement</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sess</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">Session</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">conf</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_set_random_seed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="n">seed</span> <span class="o">=</span> <span class="n">seed</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">seed</span>
+        <span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+        <span class="n">tf</span><span class="o">.</span><span class="n">set_random_seed</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_target_placeholder</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">target_dim</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">tf</span><span class="o">.</span><span class="n">placeholder</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="n">target_dim</span> <span class="ow">or</span> <span class="mi">1</span><span class="p">])</span>  <span class="c1"># classification targets</span>
+
+    <span class="k">def</span> <span class="nf">_define_placeholders</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">target_dim</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="c1"># tf placeholders</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">X</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">placeholder</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span> <span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span><span class="p">,</span> <span class="mi">2</span><span class="p">])</span>  <span class="c1"># token idxs (BPE embedding + positional)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">M</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">placeholder</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span><span class="p">])</span>  <span class="c1"># sequence mask</span>
+        <span class="c1"># when target dim is not set, an array of [None] targets is passed as a placeholder</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">do_dropout</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">placeholder</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>  <span class="c1"># 1 for do dropout and 0 to not do dropout</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">Y</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_target_placeholder</span><span class="p">(</span><span class="n">target_dim</span><span class="o">=</span><span class="n">target_dim</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">generate_text</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed_text</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">max_length</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.</span>
+<span class="sd">        Temperature parameter for decoding is set in the config.</span>
+
+<span class="sd">        :param max_length: The maximum length to decode to.</span>
+<span class="sd">        :param seed_text: Defaults to the empty string. This will form the starting point to begin modelling</span>
+<span class="sd">        :return: A string containing the generated text.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">require_lm</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="n">encoded</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="o">.</span><span class="n">_encode</span><span class="p">([</span><span class="n">seed_text</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_build_model</span><span class="p">(</span><span class="n">n_updates_total</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">target_dim</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">target_dim</span><span class="p">,</span> <span class="n">train</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="n">string</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="p">[</span><span class="s1">&#39;_start_&#39;</span><span class="p">]]</span> <span class="o">+</span> <span class="n">encoded</span><span class="o">.</span><span class="n">token_ids</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">EOS</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="p">[</span><span class="s1">&#39;_classify_&#39;</span><span class="p">]</span>
+        <span class="k">with</span> <span class="n">warnings</span><span class="o">.</span><span class="n">catch_warnings</span><span class="p">():</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">filterwarnings</span><span class="p">(</span><span class="s2">&quot;ignore&quot;</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">encoded</span><span class="o">.</span><span class="n">token_ids</span><span class="p">),</span> <span class="p">(</span><span class="n">max_length</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+                <span class="n">arr_encoded</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_array_format</span><span class="p">(</span><span class="n">encoded</span><span class="p">)</span>
+                <span class="n">class_idx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">sess</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lm_predict_op</span><span class="p">,</span> <span class="p">{</span><span class="bp">self</span><span class="o">.</span><span class="n">X</span><span class="p">:</span> <span class="n">arr_encoded</span><span class="o">.</span><span class="n">token_ids</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">M</span><span class="p">:</span> <span class="n">arr_encoded</span><span class="o">.</span><span class="n">mask</span><span class="p">})</span>
+                <span class="n">string</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">class_idx</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+                <span class="k">if</span> <span class="n">string</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="n">EOS</span><span class="p">:</span>
+                    <span class="k">break</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="n">string</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Leave serialization of all tf objects to tf</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">required_fields</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="s1">&#39;label_encoder&#39;</span><span class="p">,</span> <span class="s1">&#39;target_dim&#39;</span><span class="p">,</span> <span class="s1">&#39;_load_from_file&#39;</span><span class="p">,</span> <span class="s1">&#39;config&#39;</span><span class="p">,</span> <span class="s1">&#39;target_type&#39;</span><span class="p">,</span>
+        <span class="p">]</span>
+        <span class="n">serialized_state</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">required_fields</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="n">serialized_state</span>
+
+    <span class="k">def</span> <span class="nf">save</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Saves the state of the model to disk to the folder specific by `path`.  If `path` does not exist, it will be auto-created.</span>
+
+<span class="sd">        Save is performed in two steps:</span>
+<span class="sd">            - Serialize tf graph to disk using tf.Saver</span>
+<span class="sd">            - Serialize python model using pickle</span>
+
+<span class="sd">        Note:</span>
+<span class="sd">            Does not serialize state of Adam optimizer.</span>
+<span class="sd">            Should not be used to save / restore a training model.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">path</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="n">path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">abspath</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">saver</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_load_from_file</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">load</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Load a saved fine-tuned model from disk.  Path provided should be a folder which contains .pkl and tf.Saver() files</span>
+
+<span class="sd">        :param path: string path name to load model from.  Same value as previously provided to :meth:`save`. Must be a folder.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">saver</span> <span class="o">=</span> <span class="n">Saver</span><span class="p">(</span><span class="n">JL_BASE</span><span class="p">)</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">saver</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+        <span class="n">model</span><span class="o">.</span><span class="n">_initialize</span><span class="p">()</span>
+        <span class="n">model</span><span class="o">.</span><span class="n">saver</span><span class="o">.</span><span class="n">variables</span> <span class="o">=</span> <span class="n">saver</span><span class="o">.</span><span class="n">variables</span>
+        <span class="n">tf</span><span class="o">.</span><span class="n">reset_default_graph</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">model</span>
+   
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">finetune_grid_search</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">Xs</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">test_size</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">eval_fn</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">probs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">return_all</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Performs grid search over config items defined using &quot;GridSearchable&quot; objects and returns either full results or</span>
+<span class="sd">        the config object that relates to the best results. The default config contains grid searchable objects for the</span>
+<span class="sd">        most important parameters to search over.</span>
+
+<span class="sd">        :param Xs: Input text. Either [num_samples] or [sequence, num_samples] for single or multi input models respectively.</span>
+<span class="sd">        :param Y: Targets, A list of targets, [num_samples] that correspond to each sample in Xs.</span>
+<span class="sd">        :param test_size: Int or float. If an int is given this number of samples is used to validate, if a float is</span>
+<span class="sd">         given then that fraction of samples is used.</span>
+<span class="sd">        :param config: A config object, or None to use the default config.</span>
+<span class="sd">        :param eval_fn: An eval function that takes 2 inputs (prediction, truth) and returns a float, with a max value being desired.</span>
+<span class="sd">        :param probs: If true, eval_fn is passed probability outputs from predict_proba, otherwise the output of predict is used.</span>
+<span class="sd">        :param return_all: If True, all results are returned, if False, only the best config is returned.</span>
+<span class="sd">        :return: default is to return the best config object. If return_all is true, it returns a list of tuples of the</span>
+<span class="sd">            form [(config, eval_fn output), ... ]</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">Xs</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="n">Xs</span> <span class="o">=</span> <span class="p">[</span><span class="n">Xs</span><span class="p">]</span>
+        <span class="n">config</span> <span class="o">=</span> <span class="n">config</span> <span class="ow">or</span> <span class="n">get_default_config</span><span class="p">()</span>
+        <span class="n">config</span><span class="o">.</span><span class="n">val_size</span> <span class="o">=</span> <span class="mf">0.0</span>
+        <span class="n">eval_fn</span> <span class="o">=</span> <span class="n">eval_fn</span> <span class="ow">or</span> <span class="bp">cls</span><span class="o">.</span><span class="n">get_eval_fn</span><span class="p">()</span>
+
+        <span class="n">trainXs</span><span class="p">,</span> <span class="n">testXs</span><span class="p">,</span> <span class="n">trainY</span><span class="p">,</span> <span class="n">testY</span> <span class="o">=</span> <span class="n">train_test_split</span><span class="p">(</span><span class="n">list_transpose</span><span class="p">(</span><span class="n">Xs</span><span class="p">),</span> <span class="n">Y</span><span class="p">,</span> <span class="n">test_size</span><span class="o">=</span><span class="n">test_size</span><span class="p">,</span> <span class="n">shuffle</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">trainXs</span> <span class="o">=</span> <span class="n">list_transpose</span><span class="p">(</span><span class="n">trainXs</span><span class="p">)</span>
+        <span class="n">testXs</span> <span class="o">=</span> <span class="n">list_transpose</span><span class="p">(</span><span class="n">testXs</span><span class="p">)</span>
+        <span class="n">gs</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">get_grid_searchable</span><span class="p">()</span>
+        <span class="n">ranged_keys</span> <span class="o">=</span> <span class="n">gs</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+        <span class="n">ranged_iterators</span> <span class="o">=</span> <span class="n">gs</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
+        <span class="n">grid_gen</span> <span class="o">=</span> <span class="n">itertools</span><span class="o">.</span><span class="n">product</span><span class="p">(</span><span class="o">*</span><span class="n">ranged_iterators</span><span class="p">)</span>
+        <span class="n">results</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">grid_item</span> <span class="ow">in</span> <span class="n">grid_gen</span><span class="p">:</span>
+            <span class="n">config_</span> <span class="o">=</span> <span class="n">deepcopy</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+            <span class="n">config_</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="nb">dict</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">ranged_keys</span><span class="p">,</span> <span class="n">grid_item</span><span class="p">)))</span>
+            <span class="n">instance</span> <span class="o">=</span> <span class="bp">cls</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">config_</span><span class="p">)</span>
+            <span class="n">instance</span><span class="o">.</span><span class="n">finetune</span><span class="p">(</span><span class="o">*</span><span class="n">trainXs</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="n">trainY</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">probs</span><span class="p">:</span>
+                <span class="n">res</span> <span class="o">=</span> <span class="n">instance</span><span class="o">.</span><span class="n">predict_proba</span><span class="p">(</span><span class="o">*</span><span class="n">testXs</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">res</span> <span class="o">=</span> <span class="n">instance</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="o">*</span><span class="n">testXs</span><span class="p">)</span>
+            <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">config_</span><span class="p">,</span> <span class="n">eval_fn</span><span class="p">(</span><span class="n">res</span><span class="p">,</span> <span class="n">testY</span><span class="p">)))</span>
+            <span class="k">del</span> <span class="n">instance</span>
+
+        <span class="k">if</span> <span class="n">return_all</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">results</span>
+        <span class="k">return</span> <span class="nb">max</span><span class="p">(</span><span class="n">results</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">finetune_grid_search_cv</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">Xs</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">n_splits</span><span class="p">,</span> <span class="n">test_size</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">eval_fn</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">probs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">return_all</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Performs cross validated grid search over config items defined using &quot;GridSearchable&quot; objects and returns either full results or</span>
+<span class="sd">        the config object that relates to the best results. The default config contains grid searchable objects for the</span>
+<span class="sd">        most important parameters to search over.</span>
+
+<span class="sd">        It should be noted that the cv splits are not guaranteed unique, but each split is given to each set of hparams.</span>
+
+<span class="sd">        :param Xs: Input text. Either [num_samples] or [sequence, num_samples] for single or multi input models respectively.</span>
+<span class="sd">        :param Y: Targets, A list of targets, [num_samples] that correspond to each sample in Xs.</span>
+<span class="sd">        :param n_splits: Number of CV splits to do.</span>
+<span class="sd">        :param test_size: Int or float. If an int is given this number of samples is used to validate, if a float is</span>
+<span class="sd">            given then that fraction of samples is used.</span>
+<span class="sd">        :param config: A config object, or None to use the default config.</span>
+<span class="sd">        :param eval_fn: An eval function that takes 2 batches of outputs and returns a float, with a max value being</span>
+<span class="sd">            desired. An arithmetic mean must make sense for this metric.</span>
+<span class="sd">        :param probs: If true, eval_fn is passed probability outputs from predict_proba, otherwise the output of predict is used.</span>
+<span class="sd">        :param return_all: If True, all results are returned, if False, only the best config is returned.</span>
+<span class="sd">        :return: default is to return the best config object. If return_all is true, it returns a list of tuples of the</span>
+<span class="sd">            form [(config, eval_fn output), ... ]</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">results</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_splits</span><span class="p">):</span>
+            <span class="n">res</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">finetune_grid_search</span><span class="p">(</span><span class="n">Xs</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="n">test_size</span><span class="o">=</span><span class="n">test_size</span><span class="p">,</span> <span class="n">probs</span><span class="o">=</span><span class="n">probs</span><span class="p">,</span> <span class="n">eval_fn</span><span class="o">=</span><span class="n">eval_fn</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span>
+                                           <span class="n">return_all</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">res</span><span class="p">)</span>
+        <span class="n">results</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="n">results</span><span class="p">))</span>
+        <span class="n">aggregated_results</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">configuration</span> <span class="ow">in</span> <span class="n">results</span><span class="p">:</span>
+            <span class="n">config_common</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="n">sum_res</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="n">n_res</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="k">for</span> <span class="n">config</span><span class="p">,</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">configuration</span><span class="p">:</span>
+                <span class="n">config_common</span> <span class="o">=</span> <span class="n">config_common</span> <span class="ow">or</span> <span class="n">config</span>
+                <span class="k">assert</span> <span class="n">config</span> <span class="o">==</span> <span class="n">config_common</span>
+                <span class="n">n_res</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="n">sum_res</span> <span class="o">+=</span> <span class="n">result</span>
+            <span class="n">aggregated_results</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">config_common</span><span class="p">,</span> <span class="n">sum_res</span><span class="o">/</span><span class="n">n_res</span><span class="p">))</span>
+
+        <span class="k">if</span> <span class="n">return_all</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">aggregated_results</span>
+
+        <span class="k">return</span> <span class="nb">max</span><span class="p">(</span><span class="n">aggregated_results</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">__del__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sess</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">sess</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
+            <span class="k">pass</span>
+</pre></div>
+
+           </div>
+           <div class="articleComments">
+            
+           </div>
+          </div>
+          <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2018, Madison May, Ben Townsend.
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'../../',
+            VERSION:'0.1.0',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true,
+            SOURCELINK_SUFFIX: '.txt'
+        };
+    </script>
+      <script type="text/javascript" src="../../_static/jquery.js"></script>
+      <script type="text/javascript" src="../../_static/underscore.js"></script>
+      <script type="text/javascript" src="../../_static/doctools.js"></script>
+
+  
+
+  
+  
+    <script type="text/javascript" src="../../_static/js/theme.js"></script>
+  
+
+  
+  
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.StickyNav.enable();
+      });
+  </script>
+   
+
+</body>
+</html>

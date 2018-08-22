@@ -76,6 +76,7 @@ For example usage of provided models, see the `finetune/datasets directory <http
 
 Finetune API Reference
 ======================
+
 .. autoclass:: finetune.Classifier
     :inherited-members:
 
@@ -88,8 +89,18 @@ Finetune API Reference
 .. autoclass:: finetune.MultifieldRegressor
     :inherited-members:
 
+.. autoclass:: finetune.MultiLabelClassifier
+    :inherited-members:
+
 .. autoclass:: finetune.SequenceLabeler
     :inherited-members:
 
 .. autoclass:: finetune.Comparison
     :inherited-members:
+
+
+Finetune Model Configuration Options
+====================================
+
+.. autoclass:: finetune.config.Settings
+    :members:
