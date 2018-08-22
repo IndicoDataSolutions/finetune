@@ -330,7 +330,7 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
         n_tokens = len(tokens)
 
         doc_annotations = []
-        annotation_ranges = {}
+        annotation_ranges = set()
         raw_annotation_end = 0
         start_idx = 0
         end_idx = 0
