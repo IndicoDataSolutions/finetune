@@ -73,6 +73,8 @@ class Settings(dict):
     :param log_device_placement: Log which device each operation is placed on for debugging purposes.  Defaults to `False`.
     :param allow_soft_placement: Allow tf to allocate an operation to a different device if a device is unavailable.  Defaults to `True`.
     :param save_adam_vars: Save adam parameters when calling `model.save()`.  Defaults to `True`.
+    :param num_layers_trained: How many layers to finetune.  Specifying a value less than 12 will train layers starting from model output. Defaults to `12`.
+    :param train_embeddings: Should embedding layer be finetuned? Defaults to `True`.
     """
     def get_grid_searchable(self):
         return self.grid_searchable
