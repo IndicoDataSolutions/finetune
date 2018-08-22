@@ -68,8 +68,10 @@ class TestMultiLabelClassifier(unittest.TestCase):
         return get_config(
             batch_size=2,
             max_length=128,
-            n_epochs=1,
+            n_epochs=2,
             verbose=False,
+            l2_reg=0.,
+            clf_p_drop=0.,
             **kwargs
         )
 
@@ -84,12 +86,13 @@ class TestMultiLabelClassifier(unittest.TestCase):
         valid_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text, [[t, 6, 3] for t in train_sample.Target])
 
+        probabilities = model.predict_proba(valid_sample.Text)
+        for proba in probabilities:
+            self.assertIsInstance(proba, dict)
+
         predictions = model.predict(valid_sample.Text)
         for prediction in predictions:
             self.assertIsInstance(prediction[0], (str, np.int, np.int64))
             self.assertIn(3, prediction)
             self.assertIn(6, prediction)
 
-        probabilities = model.predict_proba(valid_sample.Text)
-        for proba in probabilities:
-            self.assertIsInstance(proba, dict)

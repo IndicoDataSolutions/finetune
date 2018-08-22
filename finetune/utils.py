@@ -1,6 +1,8 @@
 import os
 from functools import partial
+import warnings
 
+import pandas as pd
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.framework import function
@@ -122,22 +124,6 @@ def viterbi_decode(score, transition_params):
     viterbi.reverse()
 
     return viterbi, np_softmax(trellis, axis=-1)
-
-
-def guarantee_initialized_variables(sess, keys=None):
-    """
-    Adapted from: https://stackoverflow.com/a/43601894
-    """
-    if keys is None:
-        keys = [""]
-
-    matching_vars = set()
-    for key in keys:
-        matching_vars |= set(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, ".*{}.*".format(key)))
-    is_not_initialized = sess.run([tf.is_variable_initialized(var) for var in matching_vars])
-    uninitialized_vars = [v for (v, f) in zip(matching_vars, is_not_initialized) if not f]
-    if len(uninitialized_vars):
-        sess.run(tf.variables_initializer(uninitialized_vars))
 
 
 def find_trainable_variables(key, exclude=None):
@@ -309,7 +295,7 @@ def sequence_decode(logits, transition_matrix):
     return tf.py_func(_sequence_decode, [logits, transition_matrix], [tf.int32, tf.float32])
 
 
-def finetune_to_indico_sequence(raw_texts, subseqs, labels, none_value=config.PAD_TOKEN, subtoken_predictions=False):
+def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_value=config.PAD_TOKEN, subtoken_predictions=False):
     """
     Maps from the labeled substring format into the 'indico' format. This is the exact inverse operation to
     :meth indico_to_finetune_sequence:.
@@ -337,20 +323,25 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, none_value=config.PA
     :return: Texts, annoatations both in the 'indico' format.
     """
     annotations = []
-    for raw_text, doc_seq, label_seq in zip(raw_texts, subseqs, labels):
+    for raw_text, doc_seq, label_seq, prob_seq in zip(raw_texts, subseqs, labels, probs or [None] * len(raw_texts)):
         tokens = NLP(raw_text)
         token_starts = [token.idx for token in tokens]
         token_ends = [token.idx + len(token.text) for token in tokens]
         n_tokens = len(tokens)
 
-        doc_annotations = set([])
+        doc_annotations = []
+        annotation_ranges = set()
         raw_annotation_end = 0
         start_idx = 0
         end_idx = 0
-        for sub_str, label in zip(doc_seq, label_seq):
+        for sub_str, label, confidences in zip(doc_seq, label_seq, prob_seq or [None] * len(doc_seq)):
             stripped_text = sub_str.strip()
 
             raw_annotation_start = raw_text.find(stripped_text, raw_annotation_end)
+            if raw_annotation_start == -1:
+                warnings.warn("Failed to find predicted sequence in text: {}.".format(stripped_text))
+                continue
+
             raw_annotation_end = raw_annotation_start + len(stripped_text)
 
             annotation_start = raw_annotation_start
@@ -369,15 +360,22 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, none_value=config.PA
                     annotation_end = token_ends[end_idx]
                     
             text = raw_text[annotation_start:annotation_end]
+            
             if label != none_value:
-                doc_annotations.add(
-                    (
-                        ("start", annotation_start),
-                        ("end", annotation_end),
-                        ("label", label),
-                        ("text", text)
-                    )
-                )
+                annotation = {
+                    "start": annotation_start,
+                    "end": annotation_end,
+                    "label": label,
+                    "text": text
+                }
+                if confidences is not None:
+                    annotation["confidence"] = confidences
+
+                # prevent duplicate annotation edge case
+                if (annotation_start, annotation_end) not in annotation_ranges:
+                    annotation_ranges.add((annotation_start, annotation_end))
+                    doc_annotations.append(annotation)
+                    
         doc_annotations = sorted([dict(items) for items in doc_annotations], key=lambda x: x['start'])
         annotations.append(doc_annotations)
     return raw_texts, annotations
@@ -429,8 +427,16 @@ def indico_to_finetune_sequence(texts, labels=None, none_value=config.PAD_TOKEN)
             if start != last_loc:
                 doc_subseqs.append(text[last_loc:start])
                 doc_labels.append(none_value)
+
+            if start == end:
+                # degenerate label
+                continue
             
-            if annotation.get('text') and  text[start:end] != annotation['text']:
+            doc_subseqs.append(text[start:end])
+            doc_labels.append(label)
+            last_loc = end
+
+            if annotation.get('text') and text[start:end] != annotation['text']:
                 raise ValueError(
                     "Annotation text does not match text specified by `start` and `end` indexes. "
                     "Text provided: `{}`.  Text extracted: `{}`.".format(
@@ -438,9 +444,7 @@ def indico_to_finetune_sequence(texts, labels=None, none_value=config.PAD_TOKEN)
                         text[start:end]
                     )
                 )
-            doc_subseqs.append(text[start:end])
-            doc_labels.append(label)
-            last_loc = end
+
         doc_subseqs.append(text[last_loc:])
         doc_labels.append(none_value)
         all_subseqs.append(doc_subseqs)

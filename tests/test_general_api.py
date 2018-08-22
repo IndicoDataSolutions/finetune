@@ -47,12 +47,17 @@ class TestModel(unittest.TestCase):
         cls._download_sst()
 
     def setUp(self):
-        self.save_file = 'tests/saved-models/test-save-load'
+        try:
+            os.mkdir("tests/saved-models")
+        except FileExistsError:
+            warnings.warn("tests/saved-models still exists, it is possible that some test is not cleaning up properly.")
+            pass
+        self.save_file = 'tests/saved-models/test-save-load.jl'
         self.dataset = pd.read_csv(self.dataset_path)
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
-        self.text_data_train = [train_sample.Text.values.tolist()] * 3
-        self.text_data_valid = [valid_sample.Text.values.tolist()] * 3
+        self.text_data_train = [[x] * 3 for x in train_sample.Text.values.tolist()]
+        self.text_data_valid = [[x] * 3 for x in valid_sample.Text.values.tolist()]
         self.train_targets = train_sample.Target
         tf.reset_default_graph()
 
@@ -63,13 +68,22 @@ class TestModel(unittest.TestCase):
         Ensure saving + loading does not change predictions
         """
         self.model = MultifieldClassifier()
-        self.model.fit(*self.text_data_train, self.train_targets)
-        predictions = self.model.predict(*self.text_data_valid)
+        self.model.fit(self.text_data_train, self.train_targets)
+        predictions = self.model.predict(self.text_data_valid)
         self.model.save(self.save_file)
         model = MultifieldRegressor.load(self.save_file)
-        new_predictions = model.predict(*self.text_data_valid)
+        new_predictions = model.predict(self.text_data_valid)
         for new_pred, old_pred in zip(new_predictions, predictions):
-            self.assertEqual(new_pred, old_pred)
+            self.assertEqual(new_pred, old_pred)\
+
+    def test_fields_too_long(self):
+        """
+        Smoke test for problems with multifield
+        """
+        self.model = MultifieldClassifier()
+        n_examples = 10
+        self.model.fit([["text " * 100] * 10] * n_examples, ["target"] * n_examples)
+        self.model.fit([["text", "text", "text", "text " * 300, "text " * 300]] * n_examples, ["target"] * n_examples)
 
     def test_multifield_regression(self):
         """                                                                                                                                                                         
@@ -78,13 +92,13 @@ class TestModel(unittest.TestCase):
         Ensure saving + loading does not change predictions                                                                                                                         
         """
         self.model = MultifieldRegressor()
-        self.model.fit(*self.text_data_train, [np.random.random() for _ in self.train_targets])
-        predictions = self.model.predict(*self.text_data_valid)
+        self.model.fit(self.text_data_train, [np.random.random() for _ in self.train_targets])
+        predictions = self.model.predict(self.text_data_valid)
         self.model.save(self.save_file)
         model = MultifieldRegressor.load(self.save_file)
-        new_predictions = model.predict(*self.text_data_valid)
+        new_predictions = model.predict(self.text_data_valid)
         for new_pred, old_pred in zip(new_predictions, predictions):
-            self.assertEqual(new_pred, old_pred)
+            self.assertAlmostEqual(new_pred, old_pred, places=2)
 
     def test_regressor(self):
         n_samples = 20

@@ -103,8 +103,8 @@ class TestSequenceLabeler(unittest.TestCase):
         probas = self.model.predict_proba(test_texts)
         self.assertIsInstance(probas, list)
         self.assertIsInstance(probas[0], list)
-        self.assertIsInstance(probas[0][0], tuple)
-        self.assertIsInstance(probas[0][0][1], dict)
+        self.assertIsInstance(probas[0][0], dict)
+        self.assertIsInstance(probas[0][0]['confidence'], dict)
         token_precision = sequence_labeling_token_precision(test_annotations, predictions)
         token_recall = sequence_labeling_token_recall(test_annotations, predictions)
         overlap_precision = sequence_labeling_overlap_precision(test_annotations, predictions)
@@ -130,8 +130,8 @@ class TestSequenceLabeler(unittest.TestCase):
         probas = self.model.predict_proba(test_texts)
         self.assertIsInstance(probas, list)
         self.assertIsInstance(probas[0], list)
-        self.assertIsInstance(probas[0][0], tuple)
-        self.assertIsInstance(probas[0][0][1], dict)
+        self.assertIsInstance(probas[0][0], dict)
+        self.assertIsInstance(probas[0][0]['confidence'], dict)
         token_precision = sequence_labeling_token_precision(test_annotations, predictions)
         token_recall = sequence_labeling_token_recall(test_annotations, predictions)
         overlap_precision = sequence_labeling_overlap_precision(test_annotations, predictions)
@@ -154,6 +154,7 @@ class TestSequenceLabeler(unittest.TestCase):
 
         with open(path, "rt") as fp:
             text, labels = json.load(fp)
+
         self.model.finetune(text * 10, labels * 10)
         
         predictions = self.model.predict(test_sequence)
@@ -163,4 +164,26 @@ class TestSequenceLabeler(unittest.TestCase):
         self.model.config.subtoken_predictions = True
         predictions = self.model.predict(test_sequence)
         self.assertTrue(1 <= len(predictions[0]) <= 3)
+        self.assertTrue(any(pred["text"] == "dog" for pred in predictions[0]))
+
+    def test_chunk_long_sequences(self):
+        test_sequence = ["I am a dog. A dog that's incredibly bright. I can talk, read, and write!" * 10]
+        path = os.path.join(os.path.dirname(__file__), "testdata.json")
+
+        # test ValueError raised when raw text is passed along with character idxs and doesn't match
+        self.model.config.chunk_long_sequences = True
+        self.model.config.max_length = 18
+        with self.assertRaises(ValueError):
+            self.model.fit(["Text about a dog."], [[{"start": 0, "end": 5, "text": "cat", "label": "dog"}]])
+
+        with open(path, "rt") as fp:
+            text, labels = json.load(fp)
+
+        self.model.finetune(text * 10, labels * 10)
+        
+        predictions = self.model.predict(test_sequence)
+        print(test_sequence)
+        print(predictions)
+        print(len(predictions))
+        self.assertEqual(len(predictions[0]), 20)
         self.assertTrue(any(pred["text"] == "dog" for pred in predictions[0]))

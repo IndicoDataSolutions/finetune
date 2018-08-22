@@ -205,11 +205,11 @@ class TestClassifier(unittest.TestCase):
         model = Classifier(verbose=False)
 
         # A dirty mock to make all model inferences output a hundred _classify_ tokens
-        def mock_init_from_pretrained(*args, **kwargs):
+        def load_mock(*args, **kwargs):
             model.sess = MagicMock()
             model.sess.run = MagicMock(return_value=100 * [model.encoder['_classify_']])
 
-        model._init_from_pretrained = mock_init_from_pretrained
+        model.saver.initialize = load_mock
         lm_out = model.generate_text()
         self.assertEqual(lm_out, '_start__classify_')
 

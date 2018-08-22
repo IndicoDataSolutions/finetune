@@ -10,6 +10,7 @@ from sklearn.model_selection import train_test_split
 
 from finetune import MultifieldClassifier
 from finetune.datasets import Dataset
+from finetune.config import get_default_config
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -44,11 +45,16 @@ class MultiNLI(Dataset):
 
 if __name__ == "__main__":
     # Train and evaluate on MultiNLI
-    dataset = MultiNLI(nrows=1000).dataframe
-    model = MultifieldClassifier(verbose=True)
+    dataset = MultiNLI(nrows=10).dataframe
     trainX1, testX1, trainX2, testX2, trainY, testY = train_test_split(
         dataset.x1, dataset.x2, dataset.target, test_size=0.3, random_state=42
     )
-    model.fit(list(zip(trainX1, trainX2)), Y=trainY)
-    accuracy = np.mean(model.predict(list(zip(testX1, testX2))) == testY)
-    print('Test Accuracy: {:0.2f}'.format(accuracy))
+    base_conf = get_default_config()
+    res = MultifieldClassifier.finetune_grid_search_cv([dataset.x1, dataset.x2], dataset.target, n_splits=2, config=base_conf,
+                                                    eval_fn=lambda y1, y2: np.mean(np.asarray(y1) == np.asarray(y2)),
+                                                    test_size=0.1)
+
+    model = MultifieldClassifier(res)
+    model.fit(trainX1, trainX2, Y=trainY)
+    acc = np.mean(np.asarray(model.predict(testX1, testX2)) == np.asarray(testY))
+    print('Test Accuracy: {:0.2f} with config {}'.format(acc, res))

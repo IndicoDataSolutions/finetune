@@ -69,10 +69,10 @@ class Reuters(Dataset):
 if __name__ == "__main__":
     dataset = Reuters(nrows=1000).dataframe
     dataset['annotations'] = [json.loads(annotation) for annotation in dataset['annotations']]
-    trainX, testX, trainY, testY = train_test_split(dataset.texts, dataset.annotations, test_size=0.3, random_state=42)
-    model = SequenceLabeler(verbose=False)
+    trainX, testX, trainY, testY = train_test_split(dataset.texts.values, dataset.annotations.values, test_size=0.3, random_state=42)
+    model = SequenceLabeler(verbose=False, max_length=64, chunk_long_sequences=True)
     model.fit(trainX, trainY)
     predictions = model.predict(testX)
     n_sample = 10
     for i in range(n_sample):
-        print(testX.values[i], predictions[i])
+        print(testX[i], predictions[i])

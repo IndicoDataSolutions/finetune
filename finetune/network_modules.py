@@ -47,18 +47,26 @@ def featurizer(X, encoder, dropout_placeholder, config, train=False, reuse=None,
     with tf.variable_scope('model/featurizer', reuse=reuse):
         embed_weights = tf.get_variable("we", [encoder.vocab_size + max_length, config.n_embed],
                                         initializer=tf.random_normal_initializer(stddev=config.weight_stddev))
-        embed_weights = dropout(embed_weights, config.embed_p_drop, train, dropout_placeholder)
+        if config.train_embeddings:
+            embed_weights = dropout(embed_weights, config.embed_p_drop, train, dropout_placeholder)
+        else:
+            embed_weights = tf.stop_gradient(embed_weights)
 
         X = tf.reshape(X, [-1, max_length, 2])
 
         h = embed(X, embed_weights)
         for layer in range(config.n_layer):
+            if (layer - config.n_layer) == config.num_layers_trained and config.num_layers_trained != 12:
+                h = tf.stop_gradient(h)
+                train_layer = False
+            else:
+                train_layer = train
             with tf.variable_scope('h%d_' % layer):
                 block_fn = functools.partial(block, n_head=config.n_heads, act_fn=config.act_fn,
                                              resid_pdrop=config.resid_p_drop, attn_pdrop=config.attn_p_drop,
                                              scope='h%d' % layer, dropout_placeholder=dropout_placeholder,
-                                             train=train, scale=True)
-                if config.low_memory_mode and train:
+                                             train=train_layer, scale=True)
+                if config.low_memory_mode and train_layer:
                     block_fn = recompute_grad(block_fn, use_entire_scope=True)
                 h = block_fn(h)
 
@@ -240,12 +248,20 @@ def sequence_labeler(hidden, targets, n_targets, dropout_placeholder, config, tr
     """
     with tf.variable_scope('sequence-labeler', reuse=reuse):
         nx = config.n_embed
-        a = attn(hidden, 'seq_label_attn', nx, config.seq_num_heads, config.seq_dropout, config.seq_dropout,
-                 dropout_placeholder, train=train, scale=False, mask=False)
-        n = norm(hidden + a, 'seq_label_residual')
-        flat_logits = tf.layers.dense(n, n_targets)
-        logits = tf.reshape(flat_logits, tf.concat([tf.shape(hidden)[:2], [n_targets]], 0))
-        # TODO (BEN): ADD: correct way to find lengths. - Same method in decoding. Cheating for now.
+        def seq_lab_internal(hidden):
+            attn_fn = functools.partial(attn, scope="seq_label_attn", n_state=nx, n_head=config.seq_num_heads,
+                                            resid_pdrop=config.resid_p_drop, attn_pdrop=config.attn_p_drop,
+                                            dropout_placeholder=dropout_placeholder, train=train, scale=False, mask=False)
+            n = norm(attn_fn(hidden) + hidden, 'seq_label_residual')
+            flat_logits = tf.layers.dense(n, n_targets)
+            logits = tf.reshape(flat_logits, tf.concat([tf.shape(hidden)[:2], [n_targets]], 0))
+            return logits
+
+        with tf.variable_scope('seq_lab_attn'):
+            if config.low_memory_mode and train:
+                seq_lab_internal = recompute_grad(seq_lab_internal, use_entire_scope=True)
+            logits = seq_lab_internal(hidden)
+
         transition_params = tf.get_variable("Transition_matrix", shape=[n_targets, n_targets])
 
         if train:

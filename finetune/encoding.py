@@ -24,7 +24,7 @@ EncodedOutput = namedtuple("EncodedOutput", [
     "token_ids", # list of list of subtoken ids (ints)
     "tokens",    # list of list of subtokens (strs)
     "labels",    # list of list of labels 
-    "char_locs"  # list of list of character locations (ints)
+    "char_locs", # list of list of character locations (ints)
 ])
 EncodedOutput.__new__.__defaults__ = (None,) * len(EncodedOutput._fields)
 ArrayEncodedOutput = namedtuple("ArrayEncodedOutput", [
@@ -159,6 +159,7 @@ class TextEncoder(object):
         batch_label_idxs = []
         batch_character_locs = []
         label = None
+        
         for i, text in enumerate(texts):
             if labels is not None:
                 label = labels[i]
@@ -191,7 +192,7 @@ class TextEncoder(object):
             token_ids=batch_token_idxs,
             tokens=batch_tokens,
             labels=batch_label_idxs,
-            char_locs=batch_character_locs
+            char_locs=batch_character_locs,
         )
 
     def decode(self, ids):
@@ -207,9 +208,9 @@ class TextEncoder(object):
         Takes some tokenized text and arranges it into a format that maximises the amount of kept text from each
         whilst keeping the overall sequence length within max_length tokens. It also adds the 3 special tokens. Start,
          Classify and Delimiter.
-        :param encoded: Lists of shape [sequences, batch, num_tokens]
+        :param encoded: Lists of shape [batch, n_fields, num_tokens]
         :param max_length: Int representing the max length of a single sample
-        :param verbose: Bool of whether to print he TQDM bar or not.
+        :param verbose: Bool of whether to print the TQDM bar or not.
         :param start: Override the default start token.
         :param delimiter: Override the default delimiter token.
         :param end: Override the default classify token
@@ -218,11 +219,11 @@ class TextEncoder(object):
         start = start or special_tokens or self.start
         delimiter = delimiter or special_tokens or self.delimiter
         clf_token = end or special_tokens or self.clf_token
-        num_samples = len(encoded)
+        num_samples = len(encoded[0])
         adjusted_max_length = max_length - num_samples - 1
         allocated_max_len = adjusted_max_length // num_samples
         outputs = []
-        for single_datum in zip(*encoded):
+        for single_datum in encoded:
             overflows = [allocated_max_len - len(sequence) for sequence in single_datum]
             spare = sum(overflows)
             if spare >= 0:
@@ -232,7 +233,7 @@ class TextEncoder(object):
                     max_length
                 ))
                 empty_tokens = sum(max(overflow, 0) for overflow in overflows)
-                num_over = [min(overflow, 0) for overflow in overflows].count(0)
+                num_over = [max(overflow, 0) for overflow in overflows].count(0)
                 if num_over == 0:
                     cut_len = allocated_max_len
                 else:
@@ -244,45 +245,54 @@ class TextEncoder(object):
             outputs.append(joined)
         return outputs
 
-    def encode_multi_input(self, *Xs, Y=None, max_length=None, verbose=True):
+    def encode_multi_input(self, Xs, Y=None, max_length=None, verbose=True):
         """
         Encodes the text for passing to the model, also tracks the location of each token to allow reconstruction.
         It can also, optionally, construct a per-token labels as required for training.
-        :param X: A batch of lists of strings.
-        :param Y: A list of list of targets where the dimensions of this is the same as X.
+        :param Xs: A batch of lists of lists of string -- [n_batch, n_fields, n_segments]
+        :param Y: A list of list of targets -- [n_batch, n_segments]
         :param max_length: Max length of the sequences.
         :param verbose: Flag to set whether to output a status bar.
         :return: A Labeled Sequence Object.
         """
-        # Xs: [n_seqs, n_batch, seq_len]
-        # Y: [n_batch, seq_len]
         multifield_token_ids = []
         multifield_tokens = []
         multifield_positions = []
         multifield_labels = []
 
-        # for each separate field
-        for X in Xs:
+        n_fields = None
+
+        # for each example
+        for i, X in enumerate(Xs):
+
+            if n_fields is None:
+                n_fields = len(X)
+            else:
+                if len(X) != n_fields:
+                    raise ValueError("Example {} has {} fields, expected {}.".format(
+                        i, len(X), n_fields
+                    ))  
             
-            # create placeholders for storing results for the field
+            # create placeholders for storing results for that example
             token_ids = []
             tokens = []
             positions = []
             labels = []
             
-            # for each example in that field
-
-            for i, x in enumerate(X):
-                assert type(x) == list, "This should be a list of strings, if its not, you've done something wrong..."
+            # for each field in that example
+            for field in X:
+                assert type(field) == list, "This should be a list of strings, if its not, you've done something wrong..."
                 targets = None if Y is None else Y[i]
-                encoded = self._encode(x, labels=targets)
+                encoded = self._encode(field, labels=targets)
                 token_ids.append(_flatten(encoded.token_ids))
                 tokens.append(_flatten(encoded.tokens))
                 positions.append(_flatten(encoded.char_locs))
                 labels.append(_flatten(encoded.labels))
                 if len(tokens[-1]) > (max_length - 2):
-                    warnings.warn("Some examples are longer than the max_length. Please trim documents or increase `max_length`. "
-                                "Fallback behaviour is to use the first {} byte-pair encoded tokens".format(max_length - 2))
+                    warnings.warn(
+                        "Some examples are longer than the max_length. Please trim documents or increase `max_length`. "
+                        "Fallback behaviour is to use the first {} byte-pair encoded tokens".format(max_length - 2)
+                    )
             
             # add this fields results to overall results
             multifield_token_ids.append(token_ids)
@@ -322,5 +332,5 @@ class TextEncoder(object):
             token_ids=token_ids,
             tokens=tokens,
             labels=labels,
-            char_locs=locations
+            char_locs=locations,
         )
