@@ -153,7 +153,7 @@ def get_default_config():
         save_adam_vars=False,
         num_layers_trained=12,
         train_embeddings=True,
-        class_weights=None
+        class_weights=None,
 
         # Must remain fixed
         n_heads=12,
