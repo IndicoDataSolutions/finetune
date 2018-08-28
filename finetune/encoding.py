@@ -36,6 +36,14 @@ ArrayEncodedOutput = namedtuple("ArrayEncodedOutput", [
 ])
 ArrayEncodedOutput.__new__.__defaults__ = (None,) * len(ArrayEncodedOutput._fields)
 
+SUBS = {
+    '—': '-',
+    '–': '-',
+    '―': '-',
+    '…': '...',
+    '´': "'"
+}
+
 
 def _flatten(nested_lists):
     return functools.reduce(lambda x, y: x + y, nested_lists, [])
@@ -59,12 +67,6 @@ def _text_standardize(text):
     Fixes some issues the spacy tokenizer had on books corpus
     Also handles whitespace standardization
     """
-    text = text.replace('—', '-')
-    text = text.replace('–', '-')
-    text = text.replace('―', '-')
-
-    text = text.replace('…', '...')
-    text = text.replace('´', "'")
     text = re.sub('''(-+|~+|!+|"+|;+|\?+|\++|,+|\)+|\(+|\\+|\/+|\*+|\[+|\]+|}+|{+|\|+|_+)''', r' \1 ', text)
     text = re.sub('\s*\n\s*', ' \n ', text)
     text = re.sub('[^\S\n]+', ' ', text)
@@ -172,31 +174,27 @@ class TextEncoder(object):
 
             for j, token in enumerate(tokens):
                 bpe_toks = self.bpe(token.text).split(' ')
-                subtokens.extend(bpe_toks)
-                subtoken_idxs.extend([
-                    self.encoder.get(t, self.UNK_IDX)
-                    for t in bpe_toks
-                ])
 
-                    
-                token_found = False
                 try:
                     if token.text.strip():
                         token_start = raw_text.index(token.text, token_start)
-                        token_found = True
                 except:
                     # text_standardization oddity
-                    pass
+                    continue
+
+                subtokens.extend(bpe_toks)
+                subtoken_idxs.extend([
+                    self.encoder.get(SUBS.get(t, t), self.UNK_IDX)
+                    for t in bpe_toks
+                ])
                 
                 assert len("".join(bpe_toks).replace("</w>", "")) == len(token.text.replace(' ', ''))
                 subtoken_positions = np.cumsum([len(tok.replace("</w>", '')) for tok in bpe_toks]) + token_start
 
-                # likely problem with text standardize, don't update token_start
-                if token_found:
-                    token_start += len(token.text)
+                token_start += len(token.text.strip())
                 
                 tok_pos.extend(subtoken_positions)
-                
+            
             batch_tokens.append(subtokens)
             batch_token_idxs.append(subtoken_idxs)
             batch_character_locs.append(tok_pos)

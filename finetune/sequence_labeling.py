@@ -45,20 +45,20 @@ class SequenceLabeler(BaseModel):
                            Providing more than `max_length` tokens as input will result in truncatindiion.
         :returns: list of class labels.
         """
-        doc_subseqs, _ = indico_to_finetune_sequence(X)
+        subseqs, _ = indico_to_finetune_sequence(X)
 
         max_length = max_length or self.config.max_length
         chunk_size = max_length - 2
         step_size = chunk_size // 3
         
-        arr_encoded = self._text_to_ids(doc_subseqs)
+        arr_encoded = self._text_to_ids(subseqs)
 
         labels = []
         batch_probas = []
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
             max_length = max_length or self.config.max_length
-            for xmb, mmb in self._infer_prep(doc_subseqs, max_length=max_length):
+            for xmb, mmb in self._infer_prep(subseqs, max_length=max_length):
                 output = self._eval(self.predict_op,
                     feed_dict={
                         self.X: xmb,
@@ -127,7 +127,6 @@ class SequenceLabeler(BaseModel):
 
             if end_of_doc:
                 # last chunk in a document
-
                 prob_dicts = []
                 for prob_seq in doc_probs:
                     # format probabilities as dictionary
@@ -137,7 +136,6 @@ class SequenceLabeler(BaseModel):
                 all_subseqs.append(doc_subseqs)
                 all_labels.append(doc_labels)
                 all_probs.append(prob_dicts)
-
         _, doc_annotations = finetune_to_indico_sequence(
             raw_texts=X,
             subseqs=all_subseqs,

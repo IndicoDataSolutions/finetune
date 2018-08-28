@@ -135,7 +135,6 @@ class BaseModel(object, metaclass=ABCMeta):
             Xs = [[x] for x in Xs]
     
         Xs = self._format_for_encoding(Xs)
-        
         if self.config.chunk_long_sequences and len(Xs[0]) == 1:
             # can only chunk single sequence inputs
             chunk_size = max_length - 2 
@@ -143,14 +142,16 @@ class BaseModel(object, metaclass=ABCMeta):
             encoded = self.encoder.encode_multi_input(Xs, Y=Y, max_length=sys.maxsize)
             d = defaultdict(list)
             for idx in range(len(encoded.token_ids)):
-                starts = list(range(0, len(encoded.token_ids[idx]), step_size))
+                length = len(encoded.token_ids[idx])
+                starts = list(range(0, length, step_size))
                 for start in starts:
                     end = start + chunk_size
                     for field in EncodedOutput._fields:
                         field_value = getattr(encoded, field)
                         if field_value is not None:
                             d[field].append(field_value[idx][start:end])
-
+                    if end >= length:
+                        break
             encoder_out = EncodedOutput(**d)
             return self._array_format(encoder_out)
         else:
