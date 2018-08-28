@@ -295,6 +295,11 @@ def sequence_decode(logits, transition_matrix):
     return tf.py_func(_sequence_decode, [logits, transition_matrix], [tf.int32, tf.float32])
 
 
+def truncate_text(text, max_chars=100):
+    if len(text) > max_chars:
+        text = text[:max_chars] + "..."
+    return text
+
 def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_value=config.PAD_TOKEN, subtoken_predictions=False):
     """
     Maps from the labeled substring format into the 'indico' format. This is the exact inverse operation to
@@ -339,7 +344,9 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
 
             raw_annotation_start = raw_text.find(stripped_text, raw_annotation_end)
             if raw_annotation_start == -1:
-                warnings.warn("Failed to find predicted sequence in text: {}.".format(stripped_text))
+                warnings.warn("Failed to find predicted sequence in text: {}.".format(
+                    truncate_text(stripped_text)
+                ))
                 continue
 
             raw_annotation_end = raw_annotation_start + len(stripped_text)
