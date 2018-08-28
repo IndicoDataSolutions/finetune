@@ -131,7 +131,8 @@ class TestClassifier(unittest.TestCase):
         model = Classifier(config=self.default_config())
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
-        model.fit(train_sample.Text, train_sample.Target)
+        model.fit(train_sample.Text.values, train_sample.Target.values)
+        model.predict(valid_sample.Text.values)
 
     def test_save_load(self):
         """

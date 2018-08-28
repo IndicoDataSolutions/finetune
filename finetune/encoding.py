@@ -170,18 +170,33 @@ class TextEncoder(object):
             tok_pos = []
             token_start = 0
 
-            for token in tokens:
+            for j, token in enumerate(tokens):
                 bpe_toks = self.bpe(token.text).split(' ')
                 subtokens.extend(bpe_toks)
                 subtoken_idxs.extend([
                     self.encoder.get(t, self.UNK_IDX)
                     for t in bpe_toks
                 ])
-                token_start = raw_text.find(token.text, token_start)
+
+                    
+                token_found = False
+                try:
+                    if token.text.strip():
+                        token_start = raw_text.index(token.text, token_start)
+                        token_found = True
+                except:
+                    # text_standardization oddity
+                    pass
+                
                 assert len("".join(bpe_toks).replace("</w>", "")) == len(token.text.replace(' ', ''))
                 subtoken_positions = np.cumsum([len(tok.replace("</w>", '')) for tok in bpe_toks]) + token_start
-                token_start += len(token.text)
+
+                # likely problem with text standardize, don't update token_start
+                if token_found:
+                    token_start += len(token.text)
+                
                 tok_pos.extend(subtoken_positions)
+                
             batch_tokens.append(subtokens)
             batch_token_idxs.append(subtoken_idxs)
             batch_character_locs.append(tok_pos)

@@ -71,14 +71,12 @@ class SequenceLabeler(BaseModel):
                 formatted_predictions = self.label_encoder.inverse_transform(prediction)
                 labels.extend(formatted_predictions)
 
-
         all_subseqs = []
         all_labels = []
         all_probs = []
 
         doc_idx = -1
-        
-        
+                
         for chunk_idx, (label_seq, position_seq, proba_seq) in enumerate(zip(labels, arr_encoded.char_locs, batch_probas)):
             start_of_doc = arr_encoded.token_ids[chunk_idx][0][0] == self.encoder.start
             end_of_doc = (
@@ -96,7 +94,6 @@ class SequenceLabeler(BaseModel):
                 doc_labels = []
                 doc_probs = []
                 doc_idx += 1
-                prob_accum = 0
                 start_of_token = 0
                 if not end_of_doc:
                     # predict only on first two thirds
@@ -107,7 +104,7 @@ class SequenceLabeler(BaseModel):
                     label_seq, position_seq, proba_seq = label_seq[step_size:], position_seq[step_size:], proba_seq[step_size:]
                 else:
                     # predict only on middle third
-                    label_seq, position_seq, proba_seq = label_seq[step_size:step_size*2], position_seq[step_size: step_size*2], proba_seq[step_size:step_size*2]
+                    label_seq, position_seq, proba_seq = label_seq[step_size:step_size*2], position_seq[step_size:step_size*2], proba_seq[step_size:step_size*2]
 
             for label, position, proba in zip(label_seq, position_seq, proba_seq):
                 if position == -1:
