@@ -20,6 +20,7 @@ from sklearn.metrics import accuracy_score
 from finetune import Classifier
 from finetune.datasets import generic_download
 from finetune.config import get_config, get_small_model_config
+from finetune.errors import FinetuneError
 
 SST_FILENAME = "SST-binary.csv"
 
@@ -109,6 +110,10 @@ class TestClassifier(unittest.TestCase):
         model = Classifier(config=self.default_config())
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
+
+        with self.assertRaises(FinetuneError):
+            model.fit(train_sample.Text, train_sample.Target[:1])
+
         model.fit(train_sample.Text, train_sample.Target)
 
         predictions = model.predict(valid_sample.Text)
@@ -126,7 +131,8 @@ class TestClassifier(unittest.TestCase):
         model = Classifier(config=self.default_config())
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
-        model.fit(train_sample.Text, train_sample.Target)
+        model.fit(train_sample.Text.values, train_sample.Target.values)
+        model.predict(valid_sample.Text.values)
 
     def test_save_load(self):
         """

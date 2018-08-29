@@ -45,20 +45,20 @@ class SequenceLabeler(BaseModel):
                            Providing more than `max_length` tokens as input will result in truncatindiion.
         :returns: list of class labels.
         """
-        doc_subseqs, _ = indico_to_finetune_sequence(X)
+        subseqs, _ = indico_to_finetune_sequence(X)
 
         max_length = max_length or self.config.max_length
         chunk_size = max_length - 2
         step_size = chunk_size // 3
         
-        arr_encoded = self._text_to_ids(doc_subseqs)
+        arr_encoded = self._text_to_ids(subseqs)
 
         labels = []
         batch_probas = []
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
             max_length = max_length or self.config.max_length
-            for xmb, mmb in self._infer_prep(doc_subseqs, max_length=max_length):
+            for xmb, mmb in self._infer_prep(subseqs, max_length=max_length):
                 output = self._eval(self.predict_op,
                     feed_dict={
                         self.X: xmb,
@@ -71,14 +71,12 @@ class SequenceLabeler(BaseModel):
                 formatted_predictions = self.label_encoder.inverse_transform(prediction)
                 labels.extend(formatted_predictions)
 
-
         all_subseqs = []
         all_labels = []
         all_probs = []
 
         doc_idx = -1
-        
-        
+                
         for chunk_idx, (label_seq, position_seq, proba_seq) in enumerate(zip(labels, arr_encoded.char_locs, batch_probas)):
             start_of_doc = arr_encoded.token_ids[chunk_idx][0][0] == self.encoder.start
             end_of_doc = (
@@ -96,7 +94,6 @@ class SequenceLabeler(BaseModel):
                 doc_labels = []
                 doc_probs = []
                 doc_idx += 1
-                prob_accum = 0
                 start_of_token = 0
                 if not end_of_doc:
                     # predict only on first two thirds
@@ -107,7 +104,7 @@ class SequenceLabeler(BaseModel):
                     label_seq, position_seq, proba_seq = label_seq[step_size:], position_seq[step_size:], proba_seq[step_size:]
                 else:
                     # predict only on middle third
-                    label_seq, position_seq, proba_seq = label_seq[step_size:step_size*2], position_seq[step_size: step_size*2], proba_seq[step_size:step_size*2]
+                    label_seq, position_seq, proba_seq = label_seq[step_size:step_size*2], position_seq[step_size:step_size*2], proba_seq[step_size:step_size*2]
 
             for label, position, proba in zip(label_seq, position_seq, proba_seq):
                 if position == -1:
@@ -130,7 +127,6 @@ class SequenceLabeler(BaseModel):
 
             if end_of_doc:
                 # last chunk in a document
-
                 prob_dicts = []
                 for prob_seq in doc_probs:
                     # format probabilities as dictionary
@@ -140,7 +136,6 @@ class SequenceLabeler(BaseModel):
                 all_subseqs.append(doc_subseqs)
                 all_labels.append(doc_labels)
                 all_probs.append(prob_dicts)
-
         _, doc_annotations = finetune_to_indico_sequence(
             raw_texts=X,
             subseqs=all_subseqs,

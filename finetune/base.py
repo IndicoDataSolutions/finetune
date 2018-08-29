@@ -24,6 +24,7 @@ from finetune.utils import (
 from finetune.encoding import TextEncoder, ArrayEncodedOutput, EncodedOutput
 from finetune.config import PAD_TOKEN, get_default_config
 from finetune.saver import Saver
+from finetune.errors import FinetuneError
 
 JL_BASE = os.path.join(os.path.dirname(__file__), "model", "Base_model.jl")
 
@@ -32,6 +33,7 @@ _LOGGER = logging.getLogger(__name__)
 DROPOUT_ON = 1
 DROPOUT_OFF = 0
 SAVE_PREFIX = 'model'
+MIN_UPDATES = 15
 
 
 class BaseModel(object, metaclass=ABCMeta):
@@ -133,24 +135,23 @@ class BaseModel(object, metaclass=ABCMeta):
             Xs = [[x] for x in Xs]
     
         Xs = self._format_for_encoding(Xs)
-        
         if self.config.chunk_long_sequences and len(Xs[0]) == 1:
             # can only chunk single sequence inputs
             chunk_size = max_length - 2 
             step_size = chunk_size // 3
             encoded = self.encoder.encode_multi_input(Xs, Y=Y, max_length=sys.maxsize)
-            
             d = defaultdict(list)
             for idx in range(len(encoded.token_ids)):
-                starts = list(range(0, len(encoded.token_ids[idx]), step_size))
+                length = len(encoded.token_ids[idx])
+                starts = list(range(0, length, step_size))
                 for start in starts:
                     end = start + chunk_size
-
                     for field in EncodedOutput._fields:
                         field_value = getattr(encoded, field)
                         if field_value is not None:
                             d[field].append(field_value[idx][start:end])
-
+                    if end >= length:
+                        break
             encoder_out = EncodedOutput(**d)
             return self._array_format(encoder_out)
         else:
@@ -194,6 +195,13 @@ class BaseModel(object, metaclass=ABCMeta):
         }
 
     def finetune(self, Xs, Y=None, batch_size=None):
+        if len(Xs) != len(Y):
+            raise FinetuneError(
+                "Mismatch between number of examples ({}) and number of targets ({}) provided.".format(
+                    len(Xs),
+                    len(Y)
+                )
+            )
         arr_encoded = self._text_to_ids(Xs)
         return self._training_loop(
             arr_encoded,
@@ -222,6 +230,12 @@ class BaseModel(object, metaclass=ABCMeta):
         n_batch_train = batch_size * max(len(self.config.visible_gpus), 1)
         n_examples = len(train_idxs)
         n_updates_total = (n_examples // n_batch_train) * self.config.n_epochs
+
+        if (n_updates_total) <= MIN_UPDATES:
+            warnings.warn(
+                "Model will only receive {} weight updates.  This may not be sufficient to find a good minima."
+                "Please consider lowering `config.batch_size` or providing more labeled training data to thet model."
+            )
 
         train_dataset = (arr_encoded.token_ids[train_idxs], arr_encoded.mask[train_idxs], train_Y)
         val_dataset = (arr_encoded.token_ids[val_idxs], arr_encoded.mask[val_idxs], val_Y)
@@ -727,7 +741,6 @@ class BaseModel(object, metaclass=ABCMeta):
         :param return_all: If True, all results are returned, if False, only the best config is returned.
         :return: default is to return the best config object. If return_all is true, it returns a list of tuples of the
             form [(config, eval_fn output), ... ]
-
         """
         if isinstance(Xs[0], str):
             Xs = [Xs]
