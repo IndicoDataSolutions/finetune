@@ -107,7 +107,7 @@ class BaseModel(object, metaclass=ABCMeta):
             return embeddings
 
         self.saver = Saver(
-            fallback_filename=JL_BASE,
+            fallback_filename=self.config.base_model_path,
             exclude_matches=None if self.config.save_adam_vars else "adam",
             variable_transforms=[process_embeddings]
         )
