@@ -19,7 +19,7 @@ from sklearn.metrics import accuracy_score
 
 from finetune import Classifier
 from finetune.datasets import generic_download
-from finetune.config import get_config
+from finetune.config import get_config, get_small_model_config
 
 SST_FILENAME = "SST-binary.csv"
 
@@ -163,6 +163,21 @@ class TestClassifier(unittest.TestCase):
         Ensure model converges to a reasonable solution for a trivial problem
         """
         model = Classifier(config=self.default_config())
+        n_per_class = (self.n_sample * 5)
+        trX = ['cat'] * n_per_class + ['finance'] * n_per_class
+        trY = copy(trX)
+        teX = ['feline'] * n_per_class + ['investment'] * n_per_class
+        teY = ['cat'] * n_per_class + ['finance'] * n_per_class
+        model.fit(trX, trY)
+        predY = model.predict(teX)
+        self.assertEqual(accuracy_score(teY, predY), 1.00)
+
+
+    def test_reasonable_predictions_smaller_model(self):
+        """
+        Ensure model converges to a reasonable solution for a trivial problem
+        """
+        model = Classifier(config=get_small_model_config())
         n_per_class = (self.n_sample * 5)
         trX = ['cat'] * n_per_class + ['finance'] * n_per_class
         trY = copy(trX)
