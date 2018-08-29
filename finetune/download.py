@@ -15,7 +15,8 @@ def download_data_if_required():
     file_list = [
         (github_base_url, "encoder_bpe_40000.json"),
         (github_base_url, "vocab_40000.bpe"),
-        (s3_base_url, "Base_model.jl")
+        (s3_base_url, "Base_model.jl"),
+        (s3_base_url, "SmallBaseModel.jl")
     ]
 
     for root_url, filename in file_list:

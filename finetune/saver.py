@@ -89,7 +89,7 @@ class Saver:
                     break
             
             if var_init is None and expect_new_variables:
-                init_vals.append(tf.initialize_variables([var]))
+                init_vals.append(tf.variables_initializer([var]))
             
             elif var_init is None and not expect_new_variables:
                 warnings.warn(

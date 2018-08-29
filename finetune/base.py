@@ -109,7 +109,7 @@ class BaseModel(object, metaclass=ABCMeta):
             return embeddings
 
         self.saver = Saver(
-            fallback_filename=JL_BASE,
+            fallback_filename=self.config.base_model_path,
             exclude_matches=None if self.config.save_adam_vars else "adam",
             variable_transforms=[process_embeddings]
         )
@@ -531,6 +531,16 @@ class BaseModel(object, metaclass=ABCMeta):
                     train_loss = lm_loss_coef * tf.reduce_mean(language_model_state['losses'])
                     aggregator['lm_losses'].append(language_model_state['losses'])
                     lm_logits = language_model_state["logits"]
+
+                    lm_logit_mask = np.zeros([1, lm_logits.get_shape().as_list()[-1]], dtype=np.float32)
+                    lm_logit_mask[:, self.encoder.vocab_size:] = -np.inf
+                    lm_logits += lm_logit_mask
+
+                    if "use_extra_toks" in self.config and not self.config.use_extra_toks:
+                        lm_logit_mask[:, self.encoder.start] = -np.inf
+                        lm_logit_mask[:, self.encoder.delimiter] = -np.inf
+                        lm_logit_mask[:, self.encoder.clf_token] = -np.inf
+
                     aggregator["lm_model"].append(sample_with_temperature(lm_logits, self.config.lm_temp))
                 else:
                     train_loss = 0
@@ -638,7 +648,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self.do_dropout = tf.placeholder(tf.float32)  # 1 for do dropout and 0 to not do dropout
         self.Y = self._target_placeholder(target_dim=target_dim)
 
-    def generate_text(self, seed_text='', max_length=None):
+    def generate_text(self, seed_text='', max_length=None, use_extra_toks=True):
         """
         Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
         Temperature parameter for decoding is set in the config.
@@ -648,19 +658,25 @@ class BaseModel(object, metaclass=ABCMeta):
         :return: A string containing the generated text.
         """
         self.require_lm = True
+        self.config.use_extra_toks = use_extra_toks
         encoded = self.encoder._encode([seed_text])
+        if encoded == [] and not use_extra_toks:
+            raise ValueError("If you are not using the extra tokens, you must provide some non-empty seed text")
+        start = [self.encoder.start] if use_extra_toks else []
+        encoded = EncodedOutput(token_ids=[start + encoded.token_ids[0]])
         self._build_model(n_updates_total=0, target_dim=self.target_dim, train=False)
-        string = [self.encoder['_start_']] + encoded.token_ids[0]
-        EOS = self.encoder['_classify_']
+        EOS = self.encoder.clf_token
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
             for i in range(len(encoded.token_ids), (max_length or self.config.max_length) - 1):
                 arr_encoded = self._array_format(encoded)
                 class_idx = self.sess.run(self.lm_predict_op, {self.X: arr_encoded.token_ids, self.M: arr_encoded.mask})
-                string.append(class_idx[i])
-                if string[-1] == EOS:
+                encoded.token_ids[0].append(class_idx[i])
+                if encoded.token_ids[0][-1] == EOS:
                     break
-        return self.encoder.decode(string)
+
+        del self.config["use_extra_toks"]
+        return self.encoder.decode(encoded.token_ids[0])
 
     def __getstate__(self):
         """
