@@ -1,8 +1,11 @@
+import functools
+
+import tensorflow as tf
+from tensorflow.contrib.crf import crf_log_likelihood
+
 from finetune.transformer import dropout, embed, block, attn, norm
 from finetune.utils import shape_list, merge_leading_dims
 from finetune.recompute_grads import recompute_grad
-import functools
-import tensorflow as tf
 
 
 def perceptron(x, ny, config, w_init=None, b_init=None):
@@ -121,6 +124,14 @@ def language_model(*, X, M, embed_weights, hidden, config, reuse=None):
         }
 
 
+def _apply_class_weight(losses, targets, class_weights=None):
+    if class_weights is not None:
+        # loss multiplier applied based on true class
+        weights = tf.reduce_sum(class_weights * tf.to_float(targets), axis=1)
+        losses *= weights
+    return losses
+
+
 def classifier(hidden, targets, n_targets, dropout_placeholder, config, train=False, reuse=None, **kwargs):
     """
     A simple linear classifier.
@@ -144,6 +155,9 @@ def classifier(hidden, targets, n_targets, dropout_placeholder, config, train=Fa
             logits=clf_logits,
             labels=tf.stop_gradient(targets)
         )
+
+        clf_losses = _apply_class_weight(clf_losses, targets, kwargs.get('class_weights'))
+
         return {
             'logits': clf_logits,
             'losses': clf_losses
@@ -164,6 +178,9 @@ def multi_choice_question(hidden, targets, n_targets, dropout_placeholder, confi
             logits=clf_out,
             labels=tf.stop_gradient(targets)
         )
+
+        clf_losses = _apply_class_weight(clf_losses, targets, kwargs.get('class_weights'))
+
         return {
             'logits': clf_out,
             'losses': clf_losses
@@ -193,6 +210,7 @@ def multi_classifier(hidden, targets, n_targets, dropout_placeholder, config, tr
             logits=clf_logits,
             labels=tf.stop_gradient(targets)
         )
+        clf_losses = _apply_class_weight(clf_losses, targets, kwargs.get('class_weights'))
         return {
             'logits': clf_logits,
             'losses': clf_losses
@@ -223,6 +241,15 @@ def regressor(hidden, targets, n_targets, dropout_placeholder, config, train=Fal
             'logits': outputs,
             'losses': loss
         }
+
+
+def class_reweighting(class_weights):
+    @tf.custom_gradient
+    def custom_grad(logits):
+        def grad(g):
+            return g * class_weights
+        return tf.identity(logits), grad
+    return custom_grad
 
 
 def sequence_labeler(hidden, targets, n_targets, dropout_placeholder, config, train=False, reuse=None, **kwargs):
@@ -264,10 +291,17 @@ def sequence_labeler(hidden, targets, n_targets, dropout_placeholder, config, tr
 
         transition_params = tf.get_variable("Transition_matrix", shape=[n_targets, n_targets])
 
+        class_weights = kwargs.get('class_weights')
+        if class_weights is not None:
+            logits = class_reweighting(class_weights)(logits)
+        
         if train:
-            log_likelihood, _ = tf.contrib.crf.crf_log_likelihood(logits, targets, kwargs.get('max_length') * tf.ones(
-                tf.shape(targets)[0]),
-                                                                  transition_params=transition_params)
+            log_likelihood, _ = crf_log_likelihood(
+                logits, 
+                targets,
+                kwargs.get('max_length') * tf.ones(tf.shape(targets)[0]),
+                transition_params=transition_params
+            )
         else:
             log_likelihood = tf.constant(0.)
 

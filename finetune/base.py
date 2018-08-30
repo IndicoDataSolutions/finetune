@@ -4,6 +4,7 @@ import warnings
 import logging
 import itertools
 import sys
+from pathlib import Path
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 from functools import partial
@@ -13,6 +14,8 @@ import tqdm
 import numpy as np
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+import pandas as pd
 
 from finetune.download import download_data_if_required
 from finetune.optimizers import AdamWeightDecay, schedules
@@ -24,6 +27,7 @@ from finetune.utils import (
 from finetune.encoding import TextEncoder, ArrayEncodedOutput, EncodedOutput
 from finetune.config import PAD_TOKEN, get_default_config
 from finetune.saver import Saver
+from finetune.imbalance import compute_class_weights, class_weight_tensor
 from finetune.errors import FinetuneError
 
 JL_BASE = os.path.join(os.path.dirname(__file__), "model", "Base_model.jl")
@@ -195,7 +199,7 @@ class BaseModel(object, metaclass=ABCMeta):
         }
 
     def finetune(self, Xs, Y=None, batch_size=None):
-        if len(Xs) != len(Y):
+        if Y is not None and len(Xs) != len(Y):
             raise FinetuneError(
                 "Mismatch between number of examples ({}) and number of targets ({}) provided.".format(
                     len(Xs),
@@ -240,6 +244,10 @@ class BaseModel(object, metaclass=ABCMeta):
         train_dataset = (arr_encoded.token_ids[train_idxs], arr_encoded.mask[train_idxs], train_Y)
         val_dataset = (arr_encoded.token_ids[val_idxs], arr_encoded.mask[val_idxs], val_Y)
 
+        self.config.class_weights = compute_class_weights(
+            class_weights=self.config.class_weights,
+            Y=Y
+        )
         self._build_model(n_updates_total=n_updates_total, target_dim=target_dim)
         self.is_trained = True
 
@@ -548,15 +556,26 @@ class BaseModel(object, metaclass=ABCMeta):
                 aggregator['features'].append(featurizer_state['features'])
 
                 if target_dim is not None:
-                    with tf.variable_scope('model/target'):
-                        target_model_state = self._target_model(
-                            featurizer_state=featurizer_state,
-                            targets=Y,
-                            n_outputs=target_dim,
-                            train=train,
-                            reuse=do_reuse,
-                            max_length=self.config.max_length
+
+                    weighted_tensor = None
+                    if self.config.class_weights is not None:
+                        weighted_tensor = class_weight_tensor(
+                            class_weights=self.config.class_weights,
+                            target_dim=target_dim,
+                            label_encoder=self.label_encoder
                         )
+
+                    with tf.variable_scope('model/target'):
+                        target_model_config = {
+                            'featurizer_state': featurizer_state,
+                            'targets': Y,
+                            'n_outputs': target_dim,
+                            'train': train,
+                            'reuse': do_reuse,
+                            'max_length': self.config.max_length,
+                            'class_weights': weighted_tensor
+                        }
+                        target_model_state = self._target_model(**target_model_config)
                     train_loss += (1 - lm_loss_coef) * tf.reduce_mean(target_model_state['losses'])
                     train_loss_tower += train_loss
 
@@ -668,7 +687,7 @@ class BaseModel(object, metaclass=ABCMeta):
         EOS = self.encoder.clf_token
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
-            for i in range(len(encoded.token_ids), (max_length or self.config.max_length) - 1):
+            for i in range(len(encoded.token_ids), (max_length or self.config.max_length) - 2):
                 arr_encoded = self._array_format(encoded)
                 class_idx = self.sess.run(self.lm_predict_op, {self.X: arr_encoded.token_ids, self.M: arr_encoded.mask})
                 encoded.token_ids[0].append(class_idx[i])
