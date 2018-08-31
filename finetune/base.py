@@ -291,6 +291,7 @@ class BaseModel(object, metaclass=ABCMeta):
                         }
                         if target_dim:
                             feed_dict[self.Y] = yval
+                            feed_dict[self.beta_placeholder] = 0.
 
                         outputs = self._eval(self.target_loss, self.summaries, feed_dict=feed_dict)
                         if self.valid_writer is not None:
