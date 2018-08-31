@@ -41,7 +41,7 @@ class StanfordSentimentTreebank(Dataset):
 if __name__ == "__main__":
     # Train and evaluate on SST
     dataset = StanfordSentimentTreebank(nrows=1000).dataframe
-    model = Classifier(verbose=True, n_epochs=2, val_size=0.01, val_interval=10, visible_gpus=[0], tensorboard_folder='.tensorboard')
+    model = Classifier(verbose=True, n_epochs=5, val_size=0.01, val_interval=10, visible_gpus=[], lr_warmup=0.1, tensorboard_folder='.tensorboard')
     trainX, testX, trainY, testY = train_test_split(dataset.Text, dataset.Target, test_size=0.3, random_state=42)
     model.fit(trainX, trainY)
     accuracy = np.mean(model.predict(testX) == testY)

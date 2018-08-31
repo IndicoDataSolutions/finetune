@@ -151,7 +151,7 @@ def classifier(hidden, targets, n_targets, dropout_placeholder, config, beta_pla
     with tf.variable_scope('classifier', reuse=reuse):
         hidden = dropout(hidden, config.clf_p_drop, train, dropout_placeholder)
         clf_logits = perceptron(hidden, n_targets, config)
-        preds = hardmax(clf_logits, -1)
+        preds = tf.one_hot(tf.argmax(clf_logits, -1), depth=n_targets)
         _targets = beta_placeholder * preds + (1 - beta_placeholder) * targets
         clf_losses = tf.nn.softmax_cross_entropy_with_logits_v2(
             logits=clf_logits,
