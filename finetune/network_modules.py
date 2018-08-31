@@ -2,7 +2,7 @@ import functools
 
 import tensorflow as tf
 from tensorflow.contrib.crf import crf_log_likelihood
-
+from tensorflow.contrib.seq2seq import hardmax
 from finetune.transformer import dropout, embed, block, attn, norm
 from finetune.utils import shape_list, merge_leading_dims
 from finetune.recompute_grads import recompute_grad
@@ -132,7 +132,7 @@ def _apply_class_weight(losses, targets, class_weights=None):
     return losses
 
 
-def classifier(hidden, targets, n_targets, dropout_placeholder, config, train=False, reuse=None, **kwargs):
+def classifier(hidden, targets, n_targets, dropout_placeholder, config, beta_placeholder=0.1, train=False, reuse=None, **kwargs):
     """
     A simple linear classifier.
 
@@ -151,9 +151,11 @@ def classifier(hidden, targets, n_targets, dropout_placeholder, config, train=Fa
     with tf.variable_scope('classifier', reuse=reuse):
         hidden = dropout(hidden, config.clf_p_drop, train, dropout_placeholder)
         clf_logits = perceptron(hidden, n_targets, config)
+        preds = hardmax(clf_logits, -1)
+        _targets = beta_placeholder * preds + (1 - beta_placeholder) * targets
         clf_losses = tf.nn.softmax_cross_entropy_with_logits_v2(
             logits=clf_logits,
-            labels=tf.stop_gradient(targets)
+            labels=tf.stop_gradient(_targets)
         )
 
         clf_losses = _apply_class_weight(clf_losses, targets, kwargs.get('class_weights'))
