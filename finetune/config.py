@@ -154,6 +154,7 @@ def get_default_config():
         num_layers_trained=12,
         train_embeddings=True,
         class_weights=None,
+        beta_coef=0.5,
 
         # Must remain fixed
         n_heads=12,

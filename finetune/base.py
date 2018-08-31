@@ -256,7 +256,6 @@ class BaseModel(object, metaclass=ABCMeta):
         global_step = 0
         best_val_loss = float("inf")
         val_window = [float("inf")] * self.config.val_window_size
-        BETA_CONSTANT = 0.5
 
         for i in range(self.config.n_epochs):
             iterator = iter_data(
@@ -318,7 +317,7 @@ class BaseModel(object, metaclass=ABCMeta):
                     tqdm.tqdm.write("Train loss: {}\t Validation loss: {}".format(avg_train_loss, avg_val_loss))
 
                 feed_dict[self.do_dropout] = DROPOUT_ON
-                feed_dict[self.beta_placeholder] = BETA_CONSTANT * (global_step / n_updates_total)
+                feed_dict[self.beta_placeholder] = self.config.beta_coef * (global_step / n_updates_total)
                 outputs = self._eval(self.target_loss, self.train_op, feed_dict=feed_dict)
 
                 cost = outputs.get(self.target_loss, 0)
