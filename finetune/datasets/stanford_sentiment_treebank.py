@@ -40,9 +40,27 @@ class StanfordSentimentTreebank(Dataset):
 
 if __name__ == "__main__":
     # Train and evaluate on SST
-    dataset = StanfordSentimentTreebank(nrows=1000).dataframe
-    model = Classifier(verbose=True, n_epochs=2, val_size=0.01, val_interval=10, visible_gpus=[], tensorboard_folder='.tensorboard')
-    trainX, testX, trainY, testY = train_test_split(dataset.Text, dataset.Target, test_size=0.3, random_state=42)
-    model.fit(trainX, trainY)
-    accuracy = np.mean(model.predict(testX) == testY)
-    print('Test Accuracy: {:0.2f}'.format(accuracy))
+    np.random.seed(42)
+    dataset = StanfordSentimentTreebank(nrows=500).dataframe
+    for beta_coef in np.linspace(0.0, 0.2, num=5):
+        model = Classifier(
+            verbose=True, 
+            n_epochs=5, 
+            val_size=0., 
+            val_interval=2**32, 
+            lr_warmup=0.1, 
+            tensorboard_folder='.tensorboard',
+            max_length=128,
+            beta_coef=beta_coef
+        )
+        print("Configuration: {}".format(model.config))
+        trainX, testX, trainY, testY = train_test_split(dataset.Text.values, dataset.Target.values, test_size=0.5, random_state=42)
+        n_train = trainY.shape[0]
+        percent_corruption = 0.25
+        print("Percent corruption: {:0.2f}".format(percent_corruption))
+        n_corrupted = int(n_train * percent_corruption)
+        corrupt_indexes = np.random.choice(list(range(n_train)), size=n_corrupted)
+        trainY[corrupt_indexes] = np.invert(trainY[corrupt_indexes])
+        model.fit(trainX, trainY)
+        accuracy = np.mean(model.predict(testX) == testY)
+        print('Test Accuracy: {:0.2f}'.format(accuracy))

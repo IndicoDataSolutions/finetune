@@ -68,6 +68,7 @@ class Classifier(BaseModel):
             targets=targets, 
             n_targets=n_outputs, 
             dropout_placeholder=self.do_dropout, 
+            beta_placeholder=self.beta_placeholder,
             config=self.config,
             train=train,
             reuse=reuse,

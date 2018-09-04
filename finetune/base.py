@@ -113,7 +113,7 @@ class BaseModel(object, metaclass=ABCMeta):
             return embeddings
 
         self.saver = Saver(
-            fallback_filename=self.config.base_model_path,
+            fallback_filename=self.config.get('base_model_path', JL_BASE),
             exclude_matches=None if self.config.save_adam_vars else "adam",
             variable_transforms=[process_embeddings]
         )
@@ -275,6 +275,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 global_step += 1
                 if global_step % self.config.val_interval == 0:
                     feed_dict[self.do_dropout] = DROPOUT_OFF
+                    feed_dict[self.beta_placeholder] = 0.
 
                     outputs = self._eval(self.summaries, feed_dict=feed_dict)
                     if self.train_writer is not None:
@@ -290,6 +291,7 @@ class BaseModel(object, metaclass=ABCMeta):
                         }
                         if target_dim:
                             feed_dict[self.Y] = yval
+                            feed_dict[self.beta_placeholder] = 0.
 
                         outputs = self._eval(self.target_loss, self.summaries, feed_dict=feed_dict)
                         if self.valid_writer is not None:
@@ -316,6 +318,7 @@ class BaseModel(object, metaclass=ABCMeta):
                     tqdm.tqdm.write("Train loss: {}\t Validation loss: {}".format(avg_train_loss, avg_val_loss))
 
                 feed_dict[self.do_dropout] = DROPOUT_ON
+                feed_dict[self.beta_placeholder] = self.config.beta_coef * (global_step / n_updates_total)
                 outputs = self._eval(self.target_loss, self.train_op, feed_dict=feed_dict)
 
                 cost = outputs.get(self.target_loss, 0)
@@ -665,6 +668,7 @@ class BaseModel(object, metaclass=ABCMeta):
         # when target dim is not set, an array of [None] targets is passed as a placeholder
 
         self.do_dropout = tf.placeholder(tf.float32)  # 1 for do dropout and 0 to not do dropout
+        self.beta_placeholder = tf.placeholder(tf.float32)
         self.Y = self._target_placeholder(target_dim=target_dim)
 
     def generate_text(self, seed_text='', max_length=None, use_extra_toks=True):
