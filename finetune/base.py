@@ -13,6 +13,7 @@ from copy import deepcopy
 import tqdm
 import numpy as np
 import tensorflow as tf
+from imblearn.over_sampling import RandomOverSampler
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 import pandas as pd
@@ -231,8 +232,19 @@ class BaseModel(object, metaclass=ABCMeta):
             target_dim = self.label_encoder.target_dim
 
         batch_size = batch_size or self.config.batch_size
+
+        train_dataset = (arr_encoded.token_ids[train_idxs], arr_encoded.mask[train_idxs], train_Y)
+        is_classification_task = all([isinstance(y, int) for y in train_Y])
+        if self.config.oversample and is_classification_task:
+            oversample_idxs = RandomOverSampler().fit_sample(
+                X=list(range(len(train_Y))),
+                y=train_Y
+            )
+            train_dataset = (arr[oversample_idxs] for arr in train_dataset)
+
+                
         n_batch_train = batch_size * max(len(self.config.visible_gpus), 1)
-        n_examples = len(train_idxs)
+        n_examples = len(train_dataset[0])
         n_updates_total = (n_examples // n_batch_train) * self.config.n_epochs
 
         if (n_updates_total) <= MIN_UPDATES:
@@ -241,7 +253,6 @@ class BaseModel(object, metaclass=ABCMeta):
                 "Please consider lowering `config.batch_size` or providing more labeled training data to thet model."
             )
 
-        train_dataset = (arr_encoded.token_ids[train_idxs], arr_encoded.mask[train_idxs], train_Y)
         val_dataset = (arr_encoded.token_ids[val_idxs], arr_encoded.mask[val_idxs], val_Y)
 
         self.config.class_weights = compute_class_weights(

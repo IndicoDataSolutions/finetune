@@ -77,6 +77,8 @@ class Settings(dict):
     :param save_adam_vars: Save adam parameters when calling `model.save()`.  Defaults to `True`.
     :param num_layers_trained: How many layers to finetune.  Specifying a value less than 12 will train layers starting from model output. Defaults to `12`.
     :param train_embeddings: Should embedding layer be finetuned? Defaults to `True`.
+    :param class_weights: One of 'log', 'linear', or 'sqrt'. Auto-scales gradient updates based on class frequency.  Can also be a dictionary that maps from true class name to loss coefficient. Defaults to `None`.
+    :param oversample: Should rare classes be oversampled?  Defaults to `False`.
     """
     def get_grid_searchable(self):
         return self.grid_searchable
@@ -154,6 +156,7 @@ def get_default_config():
         num_layers_trained=12,
         train_embeddings=True,
         class_weights=None,
+        oversample=False,
 
         # Must remain fixed
         n_heads=12,
