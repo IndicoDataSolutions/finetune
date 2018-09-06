@@ -35,8 +35,8 @@ class Saver:
             fallback = joblib.load(self.fallback_filename)
         included, excluded = self.find_trainable_variables()
 
-        if not all(var.name in fallback for var in excluded):
-            warnings.warn("Attempting to do a partial save where variables are excluded that do not have a "
+        if not all((var.name in fallback) or (var not in tf.trainable_variables()) for var in excluded):
+            warnings.warn("Attempting to do a partial save where trainable variables are excluded that do not have a "
                           "corresponding default.")
         values = finetune_obj.sess.run(included)
         if self.save_dtype is not None:
