@@ -25,7 +25,7 @@ class SequenceLabeler(BaseModel):
         "n_epochs": 5,
         "lr_warmup": 0.1,
         "low_memory_mode": True,
-        "chunk_long_sequence": True
+        "chunk_long_sequences": True
     }
 
     def __init__(self, config=None, **kwargs):

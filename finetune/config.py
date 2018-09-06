@@ -1,7 +1,7 @@
 import os
+import subprocess
 
 import tensorflow as tf
-from tensorflow.python.client import device_lib
 from functools import lru_cache
 from collections import namedtuple
 
@@ -12,13 +12,24 @@ PAD_TOKEN = '<PAD>'
 @lru_cache()
 def all_gpus():
     """
-    Get integer ids of all available GPUs
+    Get integer ids of all available GPUs.
+
+    Sample response from nvidia-smi -L:
+        GPU 0: GeForce GTX 980 (UUID: GPU-2d683060-957f-d5ad-123c-a5b49b0116d9)
+        GPU 1: GeForce GTX 980 (UUID: GPU-7b8496dc-3eaf-8db7-01e7-c4a884f66acf)
+        GPU 2: GeForce GTX TITAN X (UUID: GPU-9e01f108-e7de-becd-2589-966dcc1c778f)
     """
-    local_device_protos = device_lib.list_local_devices()
-    return [
-        int(x.name.split(':')[-1]) for x in local_device_protos
-        if x.device_type == 'GPU'
-    ]
+    
+    sp = subprocess.Popen(['nvidia-smi', '-L'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    response = sp.communicate()[0]
+    gpu_list = response.decode('utf-8').strip().split('\n')
+    device_ids = []
+    for i, gpu in enumerate(gpu_list):
+        # May be worth logging GPU description
+        device_id_str, _, description = gpu.partition(':')
+        assert int(device_id_str.split(' ')[-1]) == i
+        device_ids.append(i)
+    return device_ids
 
 GridSearchable = namedtuple("GridSearchable", "default iterator")
 
