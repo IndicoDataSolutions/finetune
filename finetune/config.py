@@ -1,5 +1,7 @@
 import os
 import subprocess
+import traceback
+import warnings
 
 import tensorflow as tf
 from functools import lru_cache
@@ -19,23 +21,27 @@ def all_gpus():
         GPU 1: GeForce GTX 980 (UUID: GPU-7b8496dc-3eaf-8db7-01e7-c4a884f66acf)
         GPU 2: GeForce GTX TITAN X (UUID: GPU-9e01f108-e7de-becd-2589-966dcc1c778f)
     """
-    
-    sp = subprocess.Popen(['nvidia-smi', '-L'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    response = sp.communicate()[0]
-    gpu_list = response.decode('utf-8').strip().split('\n')
-    device_ids = []
-    for i, gpu in enumerate(gpu_list):
-        # May be worth logging GPU description
-        device_id_str, _, description = gpu.partition(':')
-        assert int(device_id_str.split(' ')[-1]) == i
-        device_ids.append(i)
+    try:
+        sp = subprocess.Popen(['nvidia-smi', '-L'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        response = sp.communicate()[0]
+        gpu_list = response.decode('utf-8').strip().split('\n')
+        device_ids = []
+        for i, gpu in enumerate(gpu_list):
+            # May be worth logging GPU description
+            device_id_str, _, description = gpu.partition(':')
+            assert int(device_id_str.split(' ')[-1]) == i
+            device_ids.append(i)
 
-    cuda_visible_devices = os.getenv("CUDA_VISIBLE_DEVICES")
-    if cuda_visible_devices:
-        device_ids = [
-            device_id for device_id in device_ids
-            if str(device_id) in cuda_visible_devices.split(',')
-        ]
+        cuda_visible_devices = os.getenv("CUDA_VISIBLE_DEVICES")
+        if cuda_visible_devices:
+            device_ids = [
+                device_id for device_id in device_ids
+                if str(device_id) in cuda_visible_devices.split(',')
+            ]
+    except:
+        # Failed to parse out available GPUs properly
+        warnings.warn("Failed to find available GPUS.  Falling back to CPU only mode.")
+        device_ids = []
 
     return device_ids
 

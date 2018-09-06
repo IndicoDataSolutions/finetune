@@ -654,7 +654,6 @@ class BaseModel(object, metaclass=ABCMeta):
                 allow_soft_placement=self.config.soft_device_placement,
                 log_device_placement=self.config.log_device_placement,
             )
-            conf.gpu_options.allow_growth = True
             self.sess = tf.Session(config=conf)
 
     def _set_random_seed(self, seed=None):
