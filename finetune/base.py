@@ -505,10 +505,6 @@ class BaseModel(object, metaclass=ABCMeta):
         gpus = self.config.visible_gpus
         n_splits = max(len(gpus), 1)
 
-        # multi-GPU setup, using CPU as param server is most efficient unless system has direct GPU connections
-        # single GPU, no need to use a different GPU as a parameter server
-        params_device = 'cpu' if len(gpus) != 1 else gpus[0]
-
         # decide on setting for language model loss coefficient
         # if the language model loss does not contribute to overall loss,
         # remove the language model computation from the graph
@@ -521,7 +517,7 @@ class BaseModel(object, metaclass=ABCMeta):
             do_reuse = True if i > 0 else tf.AUTO_REUSE
 
             if gpus:
-                device = tf.device(assign_to_gpu(gpus[i], params_device=params_device))
+                device = tf.device(assign_to_gpu(gpus[i], params_device=self.config.params_device))
             else:
                 device = tf.device('cpu')
 
@@ -598,7 +594,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 grads = list(zip(grads, params))
                 gpu_grads.append(grads)
 
-        with tf.device(params_device):
+        with tf.device(self.config.params_device):
             self.features = tf.concat(aggregator['features'], axis=0)
 
             if compile_lm:

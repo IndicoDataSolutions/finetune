@@ -29,6 +29,14 @@ def all_gpus():
         device_id_str, _, description = gpu.partition(':')
         assert int(device_id_str.split(' ')[-1]) == i
         device_ids.append(i)
+
+    cuda_visible_devices = os.getenv("CUDA_VISIBLE_DEVICES")
+    if cuda_visible_devices:
+        device_ids = [
+            device_id for device_id in device_ids
+            if str(device_id) in cuda_visible_devices.split(',')
+        ]
+
     return device_ids
 
 GridSearchable = namedtuple("GridSearchable", "default iterator")
@@ -90,6 +98,7 @@ class Settings(dict):
     :param train_embeddings: Should embedding layer be finetuned? Defaults to `True`.
     :param class_weights: One of 'log', 'linear', or 'sqrt'. Auto-scales gradient updates based on class frequency.  Can also be a dictionary that maps from true class name to loss coefficient. Defaults to `None`.
     :param oversample: Should rare classes be oversampled?  Defaults to `False`.
+    :param params_device: Which device should gradient updates be aggregated on?  Defaults to `"cpu"`. 
     """
     def get_grid_searchable(self):
         return self.grid_searchable
@@ -168,6 +177,7 @@ def get_default_config():
         train_embeddings=True,
         class_weights=None,
         oversample=False,
+        params_device="cpu",
 
         # Must remain fixed
         n_heads=12,
