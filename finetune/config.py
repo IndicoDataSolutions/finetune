@@ -86,9 +86,9 @@ class Settings(dict):
     :param verbose: Print TQDM logs?  Defaults to `True`.
 
     :param val_size: Validation set size as a percentage of all training data.  Validation will not be run by default if n_examples < 50.
-        If n_examples > 50, defaults to max(5, 0.05 * n_examples). 
+        If n_examples > 50, defaults to max(5, min(100, 0.05 * n_examples))
     :param val_interval: Evaluate on validation set after `val_interval` batches.  
-        Defaults to 10 * val_size / batch_size to ensure that too much time is not spent on validation.
+        Defaults to 4 * val_size / batch_size to ensure that too much time is not spent on validation.
     :param val_window_size: Print running average of validation score over `val_window_size` batches.  Defaults to `5`.
     
     :param rolling_avg_decay: Momentum-style parameter to smooth out validation estimates printed during training. Defaults to `0.99`.

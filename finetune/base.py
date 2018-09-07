@@ -228,16 +228,15 @@ class BaseModel(object, metaclass=ABCMeta):
                 val_size = 0
             else:
                 val_size = max(5, int(0.05 * n_examples))
+                val_size = min(100, val_size)
         else:
             val_size = self.config.val_size
-
-        print(self.config.val_size)
 
         # Auto-select reasonable validation interval
         if self.config.val_interval is None:
             # sys.maxsize corresponds to never running validation
             # and is used when val_size is set to 0
-            val_interval = 10 * int(math.ceil(val_size / batch_size)) or sys.maxsize
+            val_interval = 4 * int(math.ceil(val_size / batch_size)) or sys.maxsize
         else:
             val_interval = self.config.val_interval
 
@@ -337,7 +336,7 @@ class BaseModel(object, metaclass=ABCMeta):
                         if self.valid_writer is not None:
                             self.valid_writer.add_summary(outputs.get(self.summaries), global_step)
 
-                        val_cost = outputs.get(self.target_loss, outputs.get(self.lm_loss))
+                        val_cost = outputs.get(self.target_loss, outputs.get(self.total_loss))
                         sum_val_loss += val_cost
 
                         if avg_val_loss is None:
@@ -532,7 +531,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self._define_placeholders(target_dim=target_dim)
 
         aggregator = defaultdict(list)
-        train_loss_tower = 0
+        train_loss_tower = 0.
         gpus = self.config.visible_gpus
         n_splits = max(len(gpus), 1)
 
