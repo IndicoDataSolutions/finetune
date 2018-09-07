@@ -84,9 +84,13 @@ class Settings(dict):
         dataset size exceeds a few thousand examples.  Defaults to `0.0`.
     :param summarize_grads: Include gradient summary information in tensorboard.  Defaults to `False`.
     :param verbose: Print TQDM logs?  Defaults to `True`.
-    :param val_size: Validation set size as a percentage of all training data.  Defaults to `0.05`. 
-    :param val_interval: Evaluate on validation set after `val_interval` batches.  Defaults to `150`.
+
+    :param val_size: Validation set size as a percentage of all training data.  Validation will not be run by default if n_examples < 50.
+        If n_examples > 50, defaults to max(5, 0.05 * n_examples). 
+    :param val_interval: Evaluate on validation set after `val_interval` batches.  
+        Defaults to 10 * val_size / batch_size to ensure that too much time is not spent on validation.
     :param val_window_size: Print running average of validation score over `val_window_size` batches.  Defaults to `5`.
+    
     :param rolling_avg_decay: Momentum-style parameter to smooth out validation estimates printed during training. Defaults to `0.99`.
     :param lm_temp: Language model temperature -- a value of `0.0` corresponds to greedy maximum likelihood predictions 
         while a value of `1.0` corresponds to random predictions. Defaults to `0.2`. 
@@ -104,7 +108,8 @@ class Settings(dict):
     :param train_embeddings: Should embedding layer be finetuned? Defaults to `True`.
     :param class_weights: One of 'log', 'linear', or 'sqrt'. Auto-scales gradient updates based on class frequency.  Can also be a dictionary that maps from true class name to loss coefficient. Defaults to `None`.
     :param oversample: Should rare classes be oversampled?  Defaults to `False`.
-    :param params_device: Which device should gradient updates be aggregated on?  Defaults to `"cpu"`. 
+    :param params_device: Which device should gradient updates be aggregated on?
+        If you are using a single GPU and have more than 4Gb of GPU memory you should set this to GPU PCI number (0, 1, 2, etc.). Defaults to `"cpu"`. 
     """
     def get_grid_searchable(self):
         return self.grid_searchable
@@ -165,8 +170,8 @@ def get_default_config():
         lm_loss_coef=0.0,
         summarize_grads=False,
         verbose=True,
-        val_size=0.05,
-        val_interval=150,
+        val_size=None,
+        val_interval=None,
         val_window_size=5,
         rolling_avg_decay=0.99,
         lm_temp=0.2,

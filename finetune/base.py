@@ -4,6 +4,7 @@ import warnings
 import logging
 import itertools
 import sys
+import math
 from pathlib import Path
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
@@ -214,11 +215,39 @@ class BaseModel(object, metaclass=ABCMeta):
             batch_size=batch_size,
         )
 
+    def validation_settings(self, n_examples, batch_size):
+        """
+        Auto-select reasonable validation settings
+        """
+        if self.config.val_size != None and self.config.val_interval != None:
+            return self.config.val_size, self.config.val_interval
+        
+        # Auto-select reasonable validation size
+        if self.config.val_size is None:
+            if n_examples < 50:
+                val_size = 0
+            else:
+                val_size = max(5, 0.05 * n_examples)
+        else:
+            val_size = self.config.val_size
+
+        # Auto-select reasonable validation interval
+        if self.config.val_interval is None:
+            # sys.maxsize corresponds to never running validation
+            # and is used when val_size is set to 0
+            val_interval = 10 * int(math.ceil(val_size / batch_size)) or sys.maxsize
+        else:
+            val_interval = self.config.val_interval
+
+        return val_size, val_interval
+
     def _training_loop(self, arr_encoded, Y=None, batch_size=None):
         self.label_encoder = self._target_encoder()
 
         idxs = list(range(len(arr_encoded.token_ids)))
-        train_idxs, val_idxs = train_test_split(idxs, test_size=self.config.val_size)
+
+        val_size, val_interval = self.validation_settings(n_examples=len(idxs), batch_size=batch_size)
+        train_idxs, val_idxs = train_test_split(idxs, test_size=val_size)
 
         if Y is None:
             # only language model will be trained, mock fake target of right length
@@ -284,7 +313,7 @@ class BaseModel(object, metaclass=ABCMeta):
                     feed_dict[self.Y] = ymb
 
                 global_step += 1
-                if global_step % self.config.val_interval == 0:
+                if global_step % val_interval == 0:
                     feed_dict[self.do_dropout] = DROPOUT_OFF
 
                     outputs = self._eval(self.summaries, feed_dict=feed_dict)
@@ -302,11 +331,11 @@ class BaseModel(object, metaclass=ABCMeta):
                         if target_dim:
                             feed_dict[self.Y] = yval
 
-                        outputs = self._eval(self.target_loss, self.summaries, feed_dict=feed_dict)
+                        outputs = self._eval(self.target_loss, self.lm_loss, self.summaries, feed_dict=feed_dict)
                         if self.valid_writer is not None:
                             self.valid_writer.add_summary(outputs.get(self.summaries), global_step)
 
-                        val_cost = outputs.get(self.target_loss, 0)
+                        val_cost = outputs.get(self.target_loss, outputs.get(self.lm_loss))
                         sum_val_loss += val_cost
 
                         if avg_val_loss is None:
