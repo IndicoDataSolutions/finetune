@@ -252,7 +252,7 @@ def class_reweighting(class_weights):
     return custom_grad
 
 
-def sequence_labeler(hidden, targets, n_targets, dropout_placeholder, config, train=False, reuse=None, **kwargs):
+def sequence_labeler(hidden, targets, n_targets, dropout_placeholder, config, pad_id, multilabel=False, train=False, reuse=None, **kwargs):
     """
     An Attention based sequence labeler model. Takes the output of the pre-trained model, applies an additional
     randomly initialised multihead attention block, with residuals on top. The attention is not-future masked to allow
@@ -289,21 +289,40 @@ def sequence_labeler(hidden, targets, n_targets, dropout_placeholder, config, tr
                 seq_lab_internal = recompute_grad(seq_lab_internal, use_entire_scope=True)
             logits = seq_lab_internal(hidden)
 
-        transition_params = tf.get_variable("Transition_matrix", shape=[n_targets, n_targets])
-
         class_weights = kwargs.get('class_weights')
         if class_weights is not None:
             logits = class_reweighting(class_weights)(logits)
-        
-        if train:
-            log_likelihood, _ = crf_log_likelihood(
-                logits, 
-                targets,
-                kwargs.get('max_length') * tf.ones(tf.shape(targets)[0]),
-                transition_params=transition_params
-            )
+
+        log_likelihood = 0.0
+        if multilabel:
+            transition_params = []
+            logits_individual = tf.unstack(logits, n_targets, axis=-1)
+            targets_individual = tf.unstack(targets, n_targets, axis=-1)
+            logits = []
+            for i in range(n_targets):
+                if i == pad_id:
+                    logits.append(None)
+                    transition_params.append(None)
+                    continue
+                transition_params.append(tf.get_variable("Transition_matrix_{}".format(i), shape=[2, 2]))
+                logits.append(tf.stack((logits_individual[pad_id], logits_individual[i]), axis=-1))
+                if train:
+                    log_likelihood += crf_log_likelihood(
+                        logits[i],
+                        targets_individual[i],
+                        kwargs.get('max_length') * tf.ones(tf.shape(targets)[0]),
+                        transition_params=transition_params[i]
+                    )[0]
+
         else:
-            log_likelihood = tf.constant(0.)
+            transition_params = tf.get_variable("Transition_matrix", shape=[n_targets, n_targets])
+            if train:
+                log_likelihood, _ = crf_log_likelihood(
+                    logits,
+                    targets,
+                    kwargs.get('max_length') * tf.ones(tf.shape(targets)[0]),
+                    transition_params=transition_params
+                )
 
         return {
             'logits': logits,
