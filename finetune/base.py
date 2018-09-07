@@ -227,9 +227,11 @@ class BaseModel(object, metaclass=ABCMeta):
             if n_examples < 50:
                 val_size = 0
             else:
-                val_size = max(5, 0.05 * n_examples)
+                val_size = max(5, int(0.05 * n_examples))
         else:
             val_size = self.config.val_size
+
+        print(self.config.val_size)
 
         # Auto-select reasonable validation interval
         if self.config.val_interval is None:
@@ -246,6 +248,8 @@ class BaseModel(object, metaclass=ABCMeta):
 
         idxs = list(range(len(arr_encoded.token_ids)))
 
+        batch_size = batch_size or self.config.batch_size
+
         val_size, val_interval = self.validation_settings(n_examples=len(idxs), batch_size=batch_size)
         train_idxs, val_idxs = train_test_split(idxs, test_size=val_size)
 
@@ -259,8 +263,6 @@ class BaseModel(object, metaclass=ABCMeta):
             train_Y = self.label_encoder.fit_transform(Y[train_idxs])
             val_Y = self.label_encoder.transform(Y[val_idxs])
             target_dim = self.label_encoder.target_dim
-
-        batch_size = batch_size or self.config.batch_size
 
         train_dataset = (arr_encoded.token_ids[train_idxs], arr_encoded.mask[train_idxs], train_Y)
         is_classification_task = all([isinstance(y, int) for y in train_Y])
@@ -331,7 +333,7 @@ class BaseModel(object, metaclass=ABCMeta):
                         if target_dim:
                             feed_dict[self.Y] = yval
 
-                        outputs = self._eval(self.target_loss, self.lm_loss, self.summaries, feed_dict=feed_dict)
+                        outputs = self._eval(self.target_loss, self.total_loss, self.summaries, feed_dict=feed_dict)
                         if self.valid_writer is not None:
                             self.valid_writer.add_summary(outputs.get(self.summaries), global_step)
 
@@ -613,10 +615,10 @@ class BaseModel(object, metaclass=ABCMeta):
                         }
                         target_model_state = self._target_model(**target_model_config)
                     train_loss += (1 - lm_loss_coef) * tf.reduce_mean(target_model_state['losses'])
-                    train_loss_tower += train_loss
-
                     aggregator['logits'].append(target_model_state['logits'])
                     aggregator['target_losses'].append(target_model_state['losses'])
+                    
+                train_loss_tower += train_loss
 
                 params = find_trainable_variables("model")
                 grads = tf.gradients(train_loss, params)
@@ -650,10 +652,11 @@ class BaseModel(object, metaclass=ABCMeta):
                     self.logits, **target_model_state.get("predict_params", {})
                 )
                 self.target_loss = tf.reduce_mean(self.target_losses)
-
+                
                 self.summaries.append(tf.summary.scalar('TargetModelLoss', self.target_loss))
-                self.summaries.append(tf.summary.scalar('TotalLoss', train_loss_tower / n_splits))
 
+            self.total_loss = train_loss_tower / n_splits
+            self.summaries.append(tf.summary.scalar('TotalLoss', self.total_loss))
             self.summaries = tf.summary.merge(self.summaries) if self.summaries else self.noop
 
     def _build_model(self, n_updates_total, target_dim, train=True):
