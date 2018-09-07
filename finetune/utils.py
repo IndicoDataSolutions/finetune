@@ -348,15 +348,15 @@ def indico_to_finetune_sequence(texts, labels=None, none_value=config.PAD_TOKEN)
     The indico format is as follows:
         Raw text for X,
         Labels as a list of dicts, with each dict in the form:
-        {
-            'start': <Character index of the start of the labeled sequence>,
+         labeled sequence>,
             'end': <Character index of the end of the labeled sequence>,
             'label': <A categorical label (int or string) that represents the category of the subsequence,
             'text': <A field containing the sub-sequence contained between the start and end.
         }
 
     The Labeled substring, or finetune internal, format is as follows.
-    Each item of the data is a list strings of the form:
+    Each item of the data is a list strings of the form:{
+            'start': <Character index of the start of the
         ["The quick brown", "fox", "jumped over the lazy", ...]
     With the corresponding labels:
         ["PAD", "animal", "PAD", ...]

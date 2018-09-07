@@ -8,7 +8,7 @@ import numpy as np
 
 from finetune.base import BaseModel, DROPOUT_OFF
 from finetune.encoding import EncodedOutput, ArrayEncodedOutput
-from finetune.target_encoders import SequenceLabelingEncoder
+from finetune.target_encoders import SequenceLabelingEncoder, SequenceMultiLabelingEncoder
 from finetune.network_modules import sequence_labeler
 from finetune.crf import sequence_decode
 from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_sequence
@@ -57,6 +57,7 @@ class SequenceLabeler(BaseModel):
         X, Y = indico_to_finetune_sequence(X, Y, none_value="<PAD>")
         arr_encoded = self._text_to_ids(X, Y=Y)
         targets = arr_encoded.labels if fit_target_model else None
+        self.pad_idx = None if fit_target_model else self.label_encoder.transform([[self.config.pad_token]])[0].index(1)
         return self._training_loop(arr_encoded, Y=targets, batch_size=batch_size)
 
     def predict(self, X):
@@ -201,8 +202,10 @@ class SequenceLabeler(BaseModel):
             targets=targets, 
             n_targets=n_outputs,
             dropout_placeholder=self.do_dropout,
+            pad_id=self.pad_idx,
             config=self.config,
-            train=train, 
+            train=train,
+            multilabel=isinstance(self.label_encoder, SequenceMultiLabelingEncoder),
             reuse=reuse, 
             **kwargs
         )
@@ -213,3 +216,24 @@ class SequenceLabeler(BaseModel):
 
     def _predict_proba_op(self, logits, **kwargs):
         return tf.no_op()
+
+
+class SequenceMultiLabeler(SequenceLabeler):
+    def _target_encoder(self):
+        return SequenceMultiLabelingEncoder()
+
+    def _target_placeholder(self, target_dim=None):
+        return tf.placeholder(tf.int32, [None, self.config.max_length, self.label_encoder.target_dim()])
+
+    def _predict_op(self, logits, **kwargs):
+        trans_mats = kwargs.get("transition_matrix")
+        label_idxs = []
+        label_probas = []
+
+        for logits_i, trans_mat_i in zip(logits, trans_mats):
+            idx, prob = sequence_decode(logits_i, trans_mat_i)
+            label_idxs.append(idx)
+            label_probas.append(prob)
+        label_idxs = tf.stack(label_idxs, axis=-1)
+        label_probas = tf.stack(label_probas, axis=-1)
+        return label_idxs, label_probas
