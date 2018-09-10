@@ -4,6 +4,7 @@ import warnings
 import logging
 import itertools
 import sys
+import math
 from pathlib import Path
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
@@ -13,6 +14,7 @@ from copy import deepcopy
 import tqdm
 import numpy as np
 import tensorflow as tf
+from imblearn.over_sampling import RandomOverSampler
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 import pandas as pd
@@ -213,11 +215,42 @@ class BaseModel(object, metaclass=ABCMeta):
             batch_size=batch_size,
         )
 
+    def validation_settings(self, n_examples, batch_size):
+        """
+        Auto-select reasonable validation settings
+        """
+        if self.config.val_size != None and self.config.val_interval != None:
+            return self.config.val_size, self.config.val_interval
+        
+        # Auto-select reasonable validation size
+        if self.config.val_size is None:
+            if n_examples < 50:
+                val_size = 0
+            else:
+                val_size = max(5, int(0.05 * n_examples))
+                val_size = min(100, val_size)
+        else:
+            val_size = self.config.val_size
+
+        # Auto-select reasonable validation interval
+        if self.config.val_interval is None:
+            # sys.maxsize corresponds to never running validation
+            # and is used when val_size is set to 0
+            val_interval = 4 * int(math.ceil(val_size / batch_size)) or sys.maxsize
+        else:
+            val_interval = self.config.val_interval
+
+        return val_size, val_interval
+
     def _training_loop(self, arr_encoded, Y=None, batch_size=None):
         self.label_encoder = self._target_encoder()
 
         idxs = list(range(len(arr_encoded.token_ids)))
-        train_idxs, val_idxs = train_test_split(idxs, test_size=self.config.val_size)
+
+        batch_size = batch_size or self.config.batch_size
+
+        val_size, val_interval = self.validation_settings(n_examples=len(idxs), batch_size=batch_size)
+        train_idxs, val_idxs = train_test_split(idxs, test_size=val_size)
 
         if Y is None:
             # only language model will be trained, mock fake target of right length
@@ -230,9 +263,18 @@ class BaseModel(object, metaclass=ABCMeta):
             val_Y = self.label_encoder.transform(Y[val_idxs])
             target_dim = self.label_encoder.target_dim
 
-        batch_size = batch_size or self.config.batch_size
+        train_dataset = (arr_encoded.token_ids[train_idxs], arr_encoded.mask[train_idxs], train_Y)
+        is_classification_task = all([isinstance(y, int) for y in train_Y])
+        if self.config.oversample and is_classification_task:
+            oversample_idxs = RandomOverSampler().fit_sample(
+                X=list(range(len(train_Y))),
+                y=train_Y
+            )
+            train_dataset = (arr[oversample_idxs] for arr in train_dataset)
+
+                
         n_batch_train = batch_size * max(len(self.config.visible_gpus), 1)
-        n_examples = len(train_idxs)
+        n_examples = len(train_dataset[0])
         n_updates_total = (n_examples // n_batch_train) * self.config.n_epochs
 
         if (n_updates_total) <= MIN_UPDATES:
@@ -241,7 +283,6 @@ class BaseModel(object, metaclass=ABCMeta):
                 "Please consider lowering `config.batch_size` or providing more labeled training data to thet model."
             )
 
-        train_dataset = (arr_encoded.token_ids[train_idxs], arr_encoded.mask[train_idxs], train_Y)
         val_dataset = (arr_encoded.token_ids[val_idxs], arr_encoded.mask[val_idxs], val_Y)
 
         self.config.class_weights = compute_class_weights(
@@ -273,7 +314,7 @@ class BaseModel(object, metaclass=ABCMeta):
                     feed_dict[self.Y] = ymb
 
                 global_step += 1
-                if global_step % self.config.val_interval == 0:
+                if global_step % val_interval == 0:
                     feed_dict[self.do_dropout] = DROPOUT_OFF
 
                     outputs = self._eval(self.summaries, feed_dict=feed_dict)
@@ -291,11 +332,11 @@ class BaseModel(object, metaclass=ABCMeta):
                         if target_dim:
                             feed_dict[self.Y] = yval
 
-                        outputs = self._eval(self.target_loss, self.summaries, feed_dict=feed_dict)
+                        outputs = self._eval(self.target_loss, self.total_loss, self.summaries, feed_dict=feed_dict)
                         if self.valid_writer is not None:
                             self.valid_writer.add_summary(outputs.get(self.summaries), global_step)
 
-                        val_cost = outputs.get(self.target_loss, 0)
+                        val_cost = outputs.get(self.target_loss, outputs.get(self.total_loss))
                         sum_val_loss += val_cost
 
                         if avg_val_loss is None:
@@ -490,13 +531,9 @@ class BaseModel(object, metaclass=ABCMeta):
         self._define_placeholders(target_dim=target_dim)
 
         aggregator = defaultdict(list)
-        train_loss_tower = 0
+        train_loss_tower = 0.
         gpus = self.config.visible_gpus
         n_splits = max(len(gpus), 1)
-
-        # multi-GPU setup, using CPU as param server is most efficient unless system has direct GPU connections
-        # single GPU, no need to use a different GPU as a parameter server
-        params_device = 'cpu' if len(gpus) != 1 else gpus[0]
 
         # decide on setting for language model loss coefficient
         # if the language model loss does not contribute to overall loss,
@@ -510,7 +547,7 @@ class BaseModel(object, metaclass=ABCMeta):
             do_reuse = True if i > 0 else tf.AUTO_REUSE
 
             if gpus:
-                device = tf.device(assign_to_gpu(gpus[i], params_device=params_device))
+                device = tf.device(assign_to_gpu(gpus[i], params_device=self.config.params_device))
             else:
                 device = tf.device('cpu')
 
@@ -577,17 +614,17 @@ class BaseModel(object, metaclass=ABCMeta):
                         }
                         target_model_state = self._target_model(**target_model_config)
                     train_loss += (1 - lm_loss_coef) * tf.reduce_mean(target_model_state['losses'])
-                    train_loss_tower += train_loss
-
                     aggregator['logits'].append(target_model_state['logits'])
                     aggregator['target_losses'].append(target_model_state['losses'])
+                    
+                train_loss_tower += train_loss
 
                 params = find_trainable_variables("model")
                 grads = tf.gradients(train_loss, params)
                 grads = list(zip(grads, params))
                 gpu_grads.append(grads)
 
-        with tf.device(params_device):
+        with tf.device(self.config.params_device):
             self.features = tf.concat(aggregator['features'], axis=0)
 
             if compile_lm:
@@ -614,10 +651,11 @@ class BaseModel(object, metaclass=ABCMeta):
                     self.logits, **target_model_state.get("predict_params", {})
                 )
                 self.target_loss = tf.reduce_mean(self.target_losses)
-
+                
                 self.summaries.append(tf.summary.scalar('TargetModelLoss', self.target_loss))
-                self.summaries.append(tf.summary.scalar('TotalLoss', train_loss_tower / n_splits))
 
+            self.total_loss = train_loss_tower / n_splits
+            self.summaries.append(tf.summary.scalar('TotalLoss', self.total_loss))
             self.summaries = tf.summary.merge(self.summaries) if self.summaries else self.noop
 
     def _build_model(self, n_updates_total, target_dim, train=True):
@@ -643,10 +681,10 @@ class BaseModel(object, metaclass=ABCMeta):
 
     def _initialize_session(self):
         if self.sess is None:
-            gpus = self.config.visible_gpus
-            os.environ['CUDA_VISIBLE_DEVICES'] = ",".join([str(gpu) for gpu in gpus])
-            conf = tf.ConfigProto(allow_soft_placement=self.config.soft_device_placement,
-                                  log_device_placement=self.config.log_device_placement)
+            conf = tf.ConfigProto(
+                allow_soft_placement=self.config.soft_device_placement,
+                log_device_placement=self.config.log_device_placement,
+            )
             self.sess = tf.Session(config=conf)
 
     def _set_random_seed(self, seed=None):
