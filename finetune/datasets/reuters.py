@@ -14,7 +14,7 @@ from sklearn.model_selection import train_test_split
 from finetune.datasets import Dataset
 from finetune import SequenceLabeler
 from finetune.utils import finetune_to_indico_sequence
-from finetune.metrics import sequence_labeling_overlap_precision, sequence_labeling_overlap_recall
+from finetune.metrics import annotation_report
 
 XML_PATH = os.path.join("Data", "Sequence", "reuters.xml")
 DATA_PATH = os.path.join("Data", "Sequence", "reuters.json")
@@ -70,13 +70,13 @@ class Reuters(Dataset):
 if __name__ == "__main__":
     dataset = Reuters().dataframe
     dataset['annotations'] = [json.loads(annotation) for annotation in dataset['annotations']]
-    trainX, testX, trainY, testY = train_test_split(dataset.texts.values, dataset.annotations.values, test_size=0.3, random_state=42)
+    trainX, testX, trainY, testY = train_test_split(
+        dataset.texts.values, 
+        dataset.annotations.values, 
+        test_size=0.3,
+        random_state=42
+    )
     model = SequenceLabeler(batch_size=2, val_size=0.)
     model.fit(trainX, trainY)
     predictions = model.predict(testX)
-    print("Precision: {}".format(sequence_labeling_overlap_precision(testY, predictions)))
-    print("Recall: {}".format(sequence_labeling_overlap_recall(testY, predictions)))
-    n_sample = 10
-    for i in range(n_sample):
-        print(testX[i], predictions[i])
-        print()
+    print(annotation_report(testY, predictions))
