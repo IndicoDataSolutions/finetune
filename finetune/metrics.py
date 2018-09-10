@@ -80,7 +80,7 @@ def seq_recall(true, predicted, count_fn):
         FN = len(counts['false_negatives'])
         TP = len(counts['correct'])
         try:
-            results[cls_] =  TP / float(FN + TP)
+            results[cls_] = TP / float(FN + TP)
         except ZeroDivisionError: 
             results[cls_] = 0.
     return results
@@ -97,7 +97,18 @@ def seq_precision(true, predicted, count_fn):
         except ZeroDivisionError:
             results[cls_] = 0.
     return results
-    
+
+def micro_f1(true, predicted, count_fn):
+    class_counts = count_fn(true, predicted)
+    TP, FP, FN = 0, 0, 0
+    for cls_, counts in class_counts.items():
+        FN += len(counts['false_negatives'])
+        TP += len(counts['correct'])
+        FP += len(counts['false_positives'])
+    recall = TP/float(FN + TP)
+    precision = TP / float(FP + TP)
+    f1 = 2 * (recall * precision) / (recall + precision)
+    return f1
 
 def sequence_labeling_token_precision(true, predicted):
     """
@@ -112,6 +123,11 @@ def sequence_labeling_token_recall(true, predicted):
     """
     return seq_recall(true, predicted, count_fn=sequence_labeling_token_counts)
 
+def sequence_labeling_micro_token_f1(true, predicted):
+    """
+    Token level F1
+    """
+    return micro_f1(true, predicted, count_fn=sequence_labeling_token_counts)
 
 def sequences_overlap(true_seq, pred_seq):
     """
@@ -157,12 +173,12 @@ def sequence_labeling_overlaps(true, predicted):
 
         for pred_annotation in predicted_annotations:
             for true_annotation in true_annotations:
-                if (sequences_overlap(true_annotation, pred_annotation) and 
-                    true_annotation['label'] == pred_annotation['label']):
+                if (sequences_overlap(true_annotation, pred_annotation) and
+                        true_annotation['label'] == pred_annotation['label']):
                     break
             else:
                 d[pred_annotation['label']]['false_positives'].append(pred_annotation)
-    
+
     return d
 
 

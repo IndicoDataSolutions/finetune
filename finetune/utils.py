@@ -291,56 +291,68 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
         raw_annotation_end = 0
         start_idx = 0
         end_idx = 0
-        for sub_str, label, confidences in zip(doc_seq, label_seq, prob_seq or [None] * len(doc_seq)):
-            stripped_text = sub_str.strip()
+        for sub_str, raw_label, confidences in zip(doc_seq, label_seq, prob_seq or [None] * len(doc_seq)):
+            if not isinstance(raw_label, tuple):
+                label_list = [raw_label]
+            else:
+                label_list = raw_label
 
-            raw_annotation_start = raw_text.find(stripped_text, raw_annotation_end)
-            if raw_annotation_start == -1:
-                warnings.warn("Failed to find predicted sequence in text: {}.".format(
-                    truncate_text(stripped_text)
-                ))
-                continue
+            for label in label_list:
 
-            raw_annotation_end = raw_annotation_start + len(stripped_text)
+                stripped_text = sub_str.strip()
 
-            annotation_start = raw_annotation_start
-            annotation_end = raw_annotation_end
-            
-            # if we don't want to allow subtoken predictions, adjust start and end to match
-            # the start and ends of the nearest full tokens
-            if not subtoken_predictions:
+                raw_annotation_start = raw_text.find(stripped_text, raw_annotation_end)
+                for i, item in enumerate(doc_annotations):
+                    if item["label"] == label and item["end"] == raw_annotation_end:
+                        doc_annotations[-1], doc_annotations[i] = doc_annotations[i], doc_annotations[-1]
+                        # Swap the elements
+
+                if raw_annotation_start == -1:
+                    warnings.warn("Failed to find predicted sequence in text: {}.".format(
+                        truncate_text(stripped_text)
+                    ))
+                    continue
+
+                raw_annotation_end = raw_annotation_start + len(stripped_text)
+
+                annotation_start = raw_annotation_start
+                annotation_end = raw_annotation_end
+
+                # if we don't want to allow subtoken predictions, adjust start and end to match
+                # the start and ends of the nearest full tokens
+                if not subtoken_predictions:
+                    if label != none_value:
+                        # round to nearest token
+                        while start_idx < n_tokens and annotation_start >= token_starts[start_idx]:
+                            start_idx += 1
+                        annotation_start = token_starts[start_idx - 1]
+                        while end_idx < (n_tokens - 1) and annotation_end > token_ends[end_idx]:
+                            end_idx += 1
+                        annotation_end = token_ends[end_idx]
+
+                text = raw_text[annotation_start:annotation_end]
+
                 if label != none_value:
-                    # round to nearest token
-                    while start_idx < n_tokens and annotation_start >= token_starts[start_idx]:
-                        start_idx += 1
-                    annotation_start = token_starts[start_idx - 1]
-                    while end_idx < (n_tokens - 1) and annotation_end > token_ends[end_idx]:
-                        end_idx += 1
-                    annotation_end = token_ends[end_idx]
-                    
-            text = raw_text[annotation_start:annotation_end]
-            
-            if label != none_value:
-                annotation = {
-                    "start": annotation_start,
-                    "end": annotation_end,
-                    "label": label,
-                    "text": text
-                }
-                if confidences is not None:
-                    annotation["confidence"] = confidences
+                    annotation = {
+                        "start": annotation_start,
+                        "end": annotation_end,
+                        "label": label,
+                        "text": text
+                    }
+                    if confidences is not None:
+                        annotation["confidence"] = confidences
 
-                # prevent duplicate annotation edge case
-                if (annotation_start, annotation_end) not in annotation_ranges:
-                    annotation_ranges.add((annotation_start, annotation_end))
-                    doc_annotations.append(annotation)
-                    
+                    # prevent duplicate annotation edge case
+                    if (annotation_start, annotation_end) not in annotation_ranges:
+                        annotation_ranges.add((annotation_start, annotation_end))
+                        doc_annotations.append(annotation)
+
         doc_annotations = sorted([dict(items) for items in doc_annotations], key=lambda x: x['start'])
         annotations.append(doc_annotations)
     return raw_texts, annotations
 
 
-def indico_to_finetune_sequence(texts, labels=None, none_value=config.PAD_TOKEN):
+def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value=config.PAD_TOKEN):
     """
     Maps from the 'indico' format sequence labeling data. Into a labeled substring format. This is the exact inverse of
     :meth finetune_to_indico_sequence:.
@@ -376,23 +388,45 @@ def indico_to_finetune_sequence(texts, labels=None, none_value=config.PAD_TOKEN)
         labels = [[]] * len(texts)
 
     for text, label_seq in zip(texts, labels):
+        label_seq = sorted(label_seq, key=lambda x: x["start"])
         last_loc = 0
         doc_subseqs = []
         doc_labels = []
-        for annotation in label_seq:
+        for i, annotation in enumerate(label_seq):
             start = annotation["start"]
             end = annotation["end"]
             label = annotation["label"]
-            if start != last_loc:
+            if start > last_loc:
                 doc_subseqs.append(text[last_loc:start])
-                doc_labels.append(none_value)
+                if multi_label:
+                    doc_labels.append([none_value])
+                else:
+                    doc_labels.append(none_value)
+
+            if start < last_loc:
+                if not multi_label:
+                    raise ValueError("Overlapping annotations requires the multi-label model")
+                else:
+                    prev_end = label_seq[i - 1]["end"]
+                    prev_start = label_seq[i - 1]["end"]
+                    split_dist = prev_end - start
+                    if split_dist != prev_end - prev_start:
+                        dual_label_sub_seq = doc_subseqs[-1][-split_dist:]
+                        doc_subseqs[-1] = doc_subseqs[-1][:-split_dist]
+                        doc_subseqs.append(dual_label_sub_seq)
+                        doc_labels.append(doc_labels[-1])
+                    doc_labels[-1].append(label)
+                    start = prev_end
 
             if start == end:
                 # degenerate label
                 continue
             
             doc_subseqs.append(text[start:end])
-            doc_labels.append(label)
+            if multi_label:
+                doc_labels.append([label])
+            else:
+                doc_labels.append(label)
             last_loc = end
 
             if annotation.get('text') and text[start:end] != annotation['text']:
@@ -405,7 +439,10 @@ def indico_to_finetune_sequence(texts, labels=None, none_value=config.PAD_TOKEN)
                 )
 
         doc_subseqs.append(text[last_loc:])
-        doc_labels.append(none_value)
+        if multi_label:
+            doc_labels.append([none_value])
+        else:
+            doc_labels.append(none_value)
         all_subseqs.append(doc_subseqs)
         all_labels.append(doc_labels)
     return all_subseqs, all_labels

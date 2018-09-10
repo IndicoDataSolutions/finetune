@@ -123,15 +123,16 @@ class SequenceLabelingEncoder(LabelEncoder, BaseEncoder):
 
 class SequenceMultiLabelingEncoder(MultiLabelBinarizer, BaseEncoder):
     def fit_transform(self, y):
+
         y_flat = flatten(y)
         self.fit(y_flat)
-        return self.transform(y)
+        return [super(SequenceMultiLabelingEncoder, self).transform(seq) for seq in y]
 
     def transform(self, y):
-        return [self.transform(seq) for seq in y]
+        return [super(SequenceMultiLabelingEncoder, self).transform(seq) for seq in y]
 
     def inverse_transform(self, y):
-        return [self.inverse_transform(seq) for seq in y]
+        return [super(SequenceMultiLabelingEncoder, self).inverse_transform(seq) for seq in y]
 
 
 class MultilabelClassificationEncoder(MultiLabelBinarizer, BaseEncoder):

@@ -298,18 +298,14 @@ def sequence_labeler(hidden, targets, n_targets, dropout_placeholder, config, pa
             targets_individual = tf.unstack(targets, n_targets, axis=-1)
             logits = []
             for i in range(n_targets):
-                if i == pad_id:
-                    logits.append(None)
-                    transition_params.append(None)
-                    continue
                 transition_params.append(tf.get_variable("Transition_matrix_{}".format(i), shape=[2, 2]))
                 logits.append(tf.stack((logits_individual[pad_id], logits_individual[i]), axis=-1))
-                if train:
+                if train and i != pad_id:
                     log_likelihood += crf_log_likelihood(
-                        logits[i],
+                        logits[-1],
                         targets_individual[i],
                         kwargs.get('max_length') * tf.ones(tf.shape(targets)[0]),
-                        transition_params=transition_params[i]
+                        transition_params=transition_params[-1]
                     )[0]
 
         else:
@@ -323,7 +319,7 @@ def sequence_labeler(hidden, targets, n_targets, dropout_placeholder, config, pa
                 )
 
         return {
-            'logits': logits,
+            'logits': tf.stack(logits, axis=-1),
             'losses': -log_likelihood,
             'predict_params': {
                 'transition_matrix': transition_params

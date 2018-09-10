@@ -132,7 +132,7 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         return [[[x] for x in X] for X in Xs]
 
-    def _text_to_ids(self, Xs, Y=None):
+    def _text_to_ids(self, Xs, Y=None pad_token=None):
         # Maps lists of text to formatted numpy arrays of token ids and loss-masks marking the lengths of the sequences.
 
         # If 1d array of text is passed, coerce into multifield format
@@ -144,7 +144,7 @@ class BaseModel(object, metaclass=ABCMeta):
             # can only chunk single sequence inputs
             chunk_size = self.config.max_length - 2 
             step_size = chunk_size // 3
-            encoded = self.encoder.encode_multi_input(Xs, Y=Y, max_length=sys.maxsize)
+            encoded = self.encoder.encode_multi_input(Xs, Y=Y, max_length=sys.maxsize, pad_token=pad_token)
             d = defaultdict(list)
             for idx in range(len(encoded.token_ids)):
                 length = len(encoded.token_ids[idx])
@@ -158,11 +158,10 @@ class BaseModel(object, metaclass=ABCMeta):
                     if end >= length:
                         break
             encoder_out = EncodedOutput(**d)
-            return self._array_format(encoder_out)
+            return self._array_format(encoder_out, pad_token)
         else:
-            encoder_out = self.encoder.encode_multi_input(Xs, Y=Y, max_length=self.config.max_length)
+            encoder_out = self.encoder.encode_multi_input(Xs, Y=Y, max_length=self.config.max_length, pad_token=pad_token)
             return self._array_format(encoder_out)
-        
 
     @abstractmethod
     def _predict_op(self, logits, **kwargs):
@@ -261,6 +260,7 @@ class BaseModel(object, metaclass=ABCMeta):
             train_Y = self.label_encoder.fit_transform(Y[train_idxs])
             val_Y = self.label_encoder.transform(Y[val_idxs])
             target_dim = self.label_encoder.target_dim
+            self.pad_idx = list(self.label_encoder.classes_).index(self.config.pad_token)
 
         train_dataset = (arr_encoded.token_ids[train_idxs], arr_encoded.mask[train_idxs], train_Y)
         is_classification_task = all([isinstance(y, int) for y in train_Y])
@@ -463,7 +463,7 @@ class BaseModel(object, metaclass=ABCMeta):
         yield from iter_data(arr_encoded.token_ids, arr_encoded.mask, n_batch=n_batch_train,
                              verbose=self.config.verbose)
 
-    def _array_format(self, encoded_output):
+    def _array_format(self, encoded_output, pad_token=PAD_TOKEN):
         """
         Returns numpy array of token idxs and corresponding mask
         Returned `x` array contains two channels:
@@ -474,8 +474,13 @@ class BaseModel(object, metaclass=ABCMeta):
         seq_lengths = [len(x) for x in encoded_output.token_ids]
         x = np.zeros((n, self.config.max_length, 2), dtype=np.int32)
         mask = np.zeros((n, self.config.max_length), dtype=np.float32)
-        labels_arr = np.full((n, self.config.max_length), PAD_TOKEN,
-                             dtype='object') if encoded_output.labels is not None else None
+
+        if encoded_output.labels is not None:
+            labels_arr = np.empty((n, self.config.max_length), dtype='object')
+            labels_arr.fill(pad_token)
+        else:
+            labels_arr = None
+
         for i, seq_length in enumerate(seq_lengths):
             # BPE embedding
             x[i, :seq_length, 0] = encoded_output.token_ids[i]
