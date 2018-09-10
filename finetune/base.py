@@ -155,7 +155,10 @@ class BaseModel(object, metaclass=ABCMeta):
                     for field in EncodedOutput._fields:
                         field_value = getattr(encoded, field)
                         if field_value is not None:
-                            d[field].append(field_value[idx][start:end])
+                            if isinstance(field_value[idx], (list, tuple)):
+                                d[field].append(field_value[idx][start:end])
+                            else:
+                                d[field].append(field_value[idx])
                     if end >= length:
                         break
             encoder_out = EncodedOutput(**d)
@@ -208,10 +211,10 @@ class BaseModel(object, metaclass=ABCMeta):
                     len(Y)
                 )
             )
-        arr_encoded = self._text_to_ids(Xs)
+        arr_encoded = self._text_to_ids(Xs, Y)
         return self._training_loop(
             arr_encoded,
-            Y=Y,
+            Y=arr_encoded.labels,
             batch_size=batch_size,
         )
 
@@ -479,15 +482,32 @@ class BaseModel(object, metaclass=ABCMeta):
         seq_lengths = [len(x) for x in encoded_output.token_ids]
         x = np.zeros((n, self.config.max_length, 2), dtype=np.int32)
         mask = np.zeros((n, self.config.max_length), dtype=np.float32)
-        labels_arr = np.full((n, self.config.max_length), PAD_TOKEN,
-                             dtype='object') if encoded_output.labels is not None else None
+
+        is_seq_labeling = (
+            encoded_output.labels is not None and 
+            len(encoded_output.labels)
+            and isinstance(encoded_output.labels[0], (list, tuple))
+        )
+
+        labels_arr = None
+        if encoded_output.labels is not None:
+            if is_seq_labeling:
+                labels_arr = np.full((n, self.config.max_length), PAD_TOKEN, dtype='object')
+            else:
+                labels_arr = np.full((n,), 'None', dtype='object')
+       
         for i, seq_length in enumerate(seq_lengths):
             # BPE embedding
             x[i, :seq_length, 0] = encoded_output.token_ids[i]
             # masking: value of 1 means "consider this in cross-entropy LM loss"
             mask[i, 1:seq_length] = 1
-            if encoded_output.labels:
-                labels_arr[i, :seq_length] = encoded_output.labels[i]
+            if encoded_output.labels is not None:
+                labels = encoded_output.labels[i]
+                if isinstance(labels, (list, tuple)):
+                    labels_arr[i, :seq_length] = labels
+                else:
+                    labels_arr[i] = labels
+
         # positional_embeddings
         x[:, :, 1] = np.arange(self.encoder.vocab_size, self.encoder.vocab_size + self.config.max_length)
 

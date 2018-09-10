@@ -39,7 +39,7 @@ class Comparison(Classifier):
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
         """
-        arr_encoded = self._text_to_ids(pairs)
+        arr_encoded = self._text_to_ids(pairs, Y=Y)
         return self._training_loop(arr_encoded, Y=Y, batch_size=batch_size)
 
     def _define_placeholders(self, target_dim=None):
