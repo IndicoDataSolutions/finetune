@@ -71,7 +71,7 @@ if __name__ == "__main__":
     dataset = Reuters().dataframe
     dataset['annotations'] = [json.loads(annotation) for annotation in dataset['annotations']]
     trainX, testX, trainY, testY = train_test_split(dataset.texts.values, dataset.annotations.values, test_size=0.3, random_state=42)
-    model = SequenceLabeler(batch_size=2)
+    model = SequenceLabeler(batch_size=2, val_size=0.)
     model.fit(trainX, trainY)
     predictions = model.predict(testX)
     print("Precision: {}".format(sequence_labeling_overlap_precision(testY, predictions)))

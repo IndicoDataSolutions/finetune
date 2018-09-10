@@ -17,8 +17,8 @@ class TestValidationSettings(unittest.TestCase):
 
         val_size, val_interval = model.validation_settings(n_examples=80, batch_size=4)
         self.assertEqual(val_size, 5)
-        self.assertEqual(val_interval, 20)
+        self.assertEqual(val_interval, 8)
 
-        val_size, val_interval = model.validation_settings(n_examples=1000, batch_size=4)
-        self.assertEqual(val_size, 50)
-        self.assertEqual(val_interval, 130)
+        val_size, val_interval = model.validation_settings(n_examples=400, batch_size=4)
+        self.assertEqual(val_size, 20)
+        self.assertEqual(val_interval, 20)
