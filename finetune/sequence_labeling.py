@@ -20,6 +20,9 @@ class SequenceLabeler(BaseModel):
     :param config: A :py:class:`finetune.config.Settings` object or None (for default config).
     :param \**kwargs: key-value pairs of config items to override.
     """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.multi_label = False
         
     def finetune(self, X, Y=None, batch_size=None):
         """
@@ -32,10 +35,10 @@ class SequenceLabeler(BaseModel):
         :param val_interval: The interval for which validation is performed, measured in number of steps.
         """
         fit_target_model = (Y is not None)
-        X, Y = indico_to_finetune_sequence(X, Y, none_value="<PAD>")
-        arr_encoded = self._text_to_ids(X, Y=Y)
+        X, Y = indico_to_finetune_sequence(X, Y, multi_label=self.multi_label, none_value="<PAD>")
+        pad = self.config.pad_token
+        arr_encoded = self._text_to_ids(X, Y=Y, pad_token=[pad] if self.multi_label else pad)
         targets = arr_encoded.labels if fit_target_model else None
-        self.pad_idx = None if fit_target_model else self.label_encoder.transform([[self.config.pad_token]])[0].index(1)
         return self._training_loop(arr_encoded, Y=targets, batch_size=batch_size)
 
     def predict(self, X, max_length=None):
@@ -47,7 +50,7 @@ class SequenceLabeler(BaseModel):
                            Providing more than `max_length` tokens as input will result in truncatindiion.
         :returns: list of class labels.
         """
-        subseqs, _ = indico_to_finetune_sequence(X)
+        subseqs, _ = indico_to_finetune_sequence(X, multi_label=self.multi_label)
 
         max_length = max_length or self.config.max_length
         chunk_size = max_length - 2
@@ -134,6 +137,8 @@ class SequenceLabeler(BaseModel):
                     # format probabilities as dictionary
                     probs = np.mean(np.vstack(prob_seq), axis=0)
                     prob_dicts.append(dict(zip(self.label_encoder.classes_, probs)))
+                    if self.multi_label:
+                        del prob_dicts[-1][self.config.pad_token]
                 
                 all_subseqs.append(doc_subseqs)
                 all_labels.append(doc_labels)
@@ -191,7 +196,7 @@ class SequenceLabeler(BaseModel):
             pad_id=self.pad_idx,
             config=self.config,
             train=train,
-            multilabel=isinstance(self.label_encoder, SequenceMultiLabelingEncoder),
+            multilabel=self.multi_label,
             reuse=reuse, 
             **kwargs
         )
@@ -205,21 +210,26 @@ class SequenceLabeler(BaseModel):
 
 
 class SequenceMultiLabeler(SequenceLabeler):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.multi_label = True
+
     def _target_encoder(self):
         return SequenceMultiLabelingEncoder()
 
     def _target_placeholder(self, target_dim=None):
-        return tf.placeholder(tf.int32, [None, self.config.max_length, self.label_encoder.target_dim()])
+        return tf.placeholder(tf.int32, [None, self.config.max_length, self.label_encoder.target_dim])
+
 
     def _predict_op(self, logits, **kwargs):
+        logits = tf.unstack(logits, axis=-1)
         trans_mats = kwargs.get("transition_matrix")
         label_idxs = []
         label_probas = []
-
         for logits_i, trans_mat_i in zip(logits, trans_mats):
             idx, prob = sequence_decode(logits_i, trans_mat_i)
             label_idxs.append(idx)
-            label_probas.append(prob)
+            label_probas.append(prob[:, :, 1:])
         label_idxs = tf.stack(label_idxs, axis=-1)
         label_probas = tf.stack(label_probas, axis=-1)
         return label_idxs, label_probas
