@@ -34,15 +34,15 @@ class StanfordSentimentTreebank(Dataset):
             url="https://s3.amazonaws.com/enso-data/SST-binary.csv",
             text_column="Text",
             target_column="Target",
-            filename=SST_FILENAME
+            filename=SST_FILENAME,
         )
 
 
 if __name__ == "__main__":
     # Train and evaluate on SST
     dataset = StanfordSentimentTreebank(nrows=1000).dataframe
-    model = Classifier(verbose=True, n_epochs=2, val_size=0.01, val_interval=10, visible_gpus=[], tensorboard_folder='.tensorboard')
+    model = Classifier(verbose=True, n_epochs=2, val_size=0.01, val_interval=10, visible_gpus=[], tensorboard_folder='.tensorboard', max_length=32, chunk_long_sequence=True)
     trainX, testX, trainY, testY = train_test_split(dataset.Text, dataset.Target, test_size=0.3, random_state=42)
-    model.fit(trainX, trainY)
-    accuracy = np.mean(model.predict(testX) == testY)
+    model.fit(trainX.values, trainY.values)
+    accuracy = np.mean(model.predict(testX.values) == testY.values)
     print('Test Accuracy: {:0.2f}'.format(accuracy))

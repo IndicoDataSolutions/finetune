@@ -23,14 +23,14 @@ NLP = spacy.load('en', disable=['parser', 'tagger', 'ner', 'textcat'])
 EncodedOutput = namedtuple("EncodedOutput", [
     "token_ids", # list of list of subtoken ids (ints)
     "tokens",    # list of list of subtokens (strs)
-    "labels",    # list of list of labels 
+    "labels",    # list (or list of list) of labels 
     "char_locs", # list of list of character locations (ints)
 ])
 EncodedOutput.__new__.__defaults__ = (None,) * len(EncodedOutput._fields)
 ArrayEncodedOutput = namedtuple("ArrayEncodedOutput", [
     "token_ids", # int array shape (batch, seq_length)
     "tokens",    # list of list of subtokens (str) passed through from `EncoderOutput`
-    "labels",    # object array shape (batch, seq_length)
+    "labels",    # object array shape (batch,) or (batch, seq_length)
     "char_locs", # list of list of char_locs (int) passed through from `EncoderOutput`
     "mask",      # int array shape (batch, seq_length)
 ])
@@ -161,10 +161,10 @@ class TextEncoder(object):
         batch_label_idxs = []
         batch_character_locs = []
         label = None
-        
+
+        is_seq_labeling = isinstance(labels, (list, tuple))
+
         for i, text in enumerate(texts):
-            if labels is not None:
-                label = labels[i]
             raw_text = text.lower()
             tokens = self.nlp(_text_standardize(text))
             subtokens = []
@@ -199,7 +199,10 @@ class TextEncoder(object):
             batch_token_idxs.append(subtoken_idxs)
             batch_character_locs.append(tok_pos)
             if labels is not None:
-                batch_label_idxs.append([label] * len(subtoken_idxs))
+                if is_seq_labeling:
+                    batch_label_idxs.append([labels[i]] * len(subtoken_idxs))
+                else:
+                    batch_label_idxs.append(labels)
 
         return EncodedOutput(
             token_ids=batch_token_idxs,
@@ -334,12 +337,15 @@ class TextEncoder(object):
         if Y is None:
             labels = None
         else:
-            labels = self._cut_and_concat(
-                encoded=multifield_labels,
-                max_length=max_length,
-                verbose=verbose,
-                special_tokens=PAD_TOKEN
-            )
+            if isinstance(Y[0], (list, tuple)):
+                labels = self._cut_and_concat(
+                    encoded=multifield_labels,
+                    max_length=max_length,
+                    verbose=verbose,
+                    special_tokens=PAD_TOKEN
+                )
+            else:
+                labels = Y
 
         return EncodedOutput(
             token_ids=token_ids,
