@@ -64,6 +64,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self._initialize()
         self.target_dim = None
         self._load_from_file = False
+        self.pad_idx_ = None
 
     def _initialize(self):
         # Initializes the non-serialized bits of the class.
@@ -213,6 +214,14 @@ class BaseModel(object, metaclass=ABCMeta):
             batch_size=batch_size,
         )
 
+    @property
+    def pad_idx(self):
+        if self.pad_idx_ is None:
+            self.pad_idx_ = list(self.label_encoder.classes_).index(self.config.pad_token)
+        return self.pad_idx_
+
+
+
     def _training_loop(self, arr_encoded, Y=None, batch_size=None):
         self.label_encoder = self._target_encoder()
 
@@ -229,7 +238,6 @@ class BaseModel(object, metaclass=ABCMeta):
             train_Y = self.label_encoder.fit_transform(Y[train_idxs])
             val_Y = self.label_encoder.transform(Y[val_idxs])
             target_dim = self.label_encoder.target_dim
-            self.pad_idx = list(self.label_encoder.classes_).index(self.config.pad_token)
 
         batch_size = batch_size or self.config.batch_size
         n_batch_train = batch_size * max(len(self.config.visible_gpus), 1)
@@ -708,7 +716,7 @@ class BaseModel(object, metaclass=ABCMeta):
         Leave serialization of all tf objects to tf
         """
         required_fields = [
-            'label_encoder', 'target_dim', '_load_from_file', 'config', 'target_type',
+            'label_encoder', 'target_dim', '_load_from_file', 'config', 'target_type', "pad_idx_"
         ]
         serialized_state = {
             k: v for k, v in self.__dict__.items()
