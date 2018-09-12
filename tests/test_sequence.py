@@ -17,7 +17,7 @@ import requests
 from bs4 import BeautifulSoup as bs
 from bs4.element import Tag
 
-from finetune import SequenceLabeler
+from finetune import SequenceLabeler, SequenceMultiLabeler
 from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_sequence
 from finetune.metrics import (
     sequence_labeling_token_precision, sequence_labeling_token_recall,
@@ -187,3 +187,23 @@ class TestSequenceLabeler(unittest.TestCase):
         print(len(predictions))
         self.assertEqual(len(predictions[0]), 20)
         self.assertTrue(any(pred["text"] == "dog" for pred in predictions[0]))
+
+    def test_fit_predict_multi_model(self):
+        """
+        Ensure model training does not error out
+        Ensure model returns predictions
+        """
+        self.model = SequenceMultiLabeler(batch_size=2, max_length=256, lm_loss_coef=0.0, verbose=False)
+        raw_docs = ["".join(text) for text in self.texts]
+        texts, annotations = finetune_to_indico_sequence(raw_docs, self.texts, self.labels)
+        train_texts, test_texts, train_annotations, test_annotations = train_test_split(texts, annotations, test_size=0.1)
+        self.model.fit(train_texts, train_annotations)
+        predictions = self.model.predict(test_texts)
+        probas = self.model.predict_proba(test_texts)
+        self.assertIsInstance(probas, list)
+        self.assertIsInstance(probas[0], list)
+        self.assertIsInstance(probas[0][0], dict)
+        self.assertIsInstance(probas[0][0]['confidence'], dict)
+        self.model.save(self.save_file)
+        model = SequenceMultiLabeler.load(self.save_file)
+        model.predict(test_texts)
