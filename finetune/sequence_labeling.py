@@ -165,7 +165,6 @@ class SequenceLabeler(BaseModel):
                 all_subseqs.append(doc_subseqs)
                 all_labels.append(doc_labels)
                 all_probs.append(prob_dicts)
-        print(all_labels[0])
         _, doc_annotations = finetune_to_indico_sequence(
             raw_texts=X,
             subseqs=all_subseqs,
