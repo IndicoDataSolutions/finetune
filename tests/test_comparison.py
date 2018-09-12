@@ -32,7 +32,7 @@ class TestComparison(unittest.TestCase):
             n_epochs=1,
             l2_reg=0,
             lm_coef=0.,
-            val_size=0.1,
+            val_size=0.,
             verbose=False,
         )
         d.update(kwargs)

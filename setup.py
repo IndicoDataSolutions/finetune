@@ -19,6 +19,7 @@ REQUIREMENTS = [
     "h5py>=2.8.0",
     "joblib>=0.12.0",
     "bs4>=0.0.1",
+    "imblearn>=0.0"
 ]
 
 setup(
