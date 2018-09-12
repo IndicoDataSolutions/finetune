@@ -59,19 +59,16 @@ class SequenceLabeler(BaseModel):
         targets = arr_encoded.labels if fit_target_model else None
         return self._training_loop(arr_encoded, Y=targets, batch_size=batch_size)
 
-    def predict(self, X, max_length=None):
+    def predict(self, X):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
         :param X: A list / array of text, shape [batch]
-        :param max_length: the number of tokens to be included in the document representation.
-                           Providing more than `max_length` tokens as input will result in truncatindiion.
         :returns: list of class labels.
         """
         subseqs, _ = indico_to_finetune_sequence(X)
 
-        max_length = max_length or self.config.max_length
-        chunk_size = max_length - 2
+        chunk_size = self.config.max_length - 2
         step_size = chunk_size // 3
         
         arr_encoded = self._text_to_ids(subseqs)
@@ -80,8 +77,7 @@ class SequenceLabeler(BaseModel):
         batch_probas = []
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
-            max_length = max_length or self.config.max_length
-            for xmb, mmb in self._infer_prep(subseqs, max_length=max_length):
+            for xmb, mmb in self._infer_prep(subseqs):
                 output = self._eval(self.predict_op,
                     feed_dict={
                         self.X: xmb,
@@ -169,27 +165,23 @@ class SequenceLabeler(BaseModel):
 
         return doc_annotations
 
-    def featurize(self, X, max_length=None):
+    def featurize(self, X):
         """
         Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
 
         :param Xs: An iterable of lists or array of text, shape [batch, n_inputs, tokens]
-        :param max_length: the number of tokens to be included in the document representation.
-                           Providing more than `max_length` tokens as input will result in truncation.
         :returns: np.array of features of shape (n_examples, embedding_size).
         """
-        return self._featurize(X, max_length=max_length)
+        return self._featurize(X)
 
-    def predict_proba(self, X, max_length=None):
+    def predict_proba(self, X):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
         :param X: A list / array of text, shape [batch]
-        :param max_length: the number of tokens to be included in the document representation.
-                           Providing more than `max_length` tokens as input will result in truncatindiion.
         :returns: list of class labels.
         """
-        return self.predict(X, max_length=max_length)
+        return self.predict(X)
 
     def _format_for_encoding(self, Xs):
         """

@@ -28,38 +28,32 @@ class MultifieldClassifier(Classifier):
         """
         return BaseModel.finetune(self, Xs, Y=Y, batch_size=batch_size)
 
-    def predict(self, Xs, max_length=None):
+    def predict(self, Xs):
         """
         Produces list of most likely class labels as determined by the fine-tuned model.
 
         :param \*Xs: lists of text inputs, shape [batch, n_fields]
-        :param max_length: the number of tokens to be included in the document representation.
-                           Providing more than `max_length` tokens as input will result in truncation.
         :returns: list of class labels.
         """
-        return BaseModel.predict(self, Xs, max_length=max_length)
+        return BaseModel.predict(self, Xs)
 
-    def predict_proba(self, Xs, max_length=None):
+    def predict_proba(self, Xs):
         """
         Produces probability distribution over classes for each example in X.
 
         :param \*Xs: lists of text inputs, shape [batch, n_fields]
-        :param max_length: the number of tokens to be included in the document representation.
-                           Providing more than `max_length` tokens as input will result in truncation.
         :returns: list of dictionaries.  Each dictionary maps from X2 class label to its assigned class probability.
         """
-        return BaseModel.predict_proba(self, Xs, max_length=max_length)
+        return BaseModel.predict_proba(self, Xs)
 
-    def featurize(self, Xs, max_length=None):
+    def featurize(self, Xs):
         """
         Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
 
         :param \*Xs: lists of text inputs, shape [batch, n_fields]
-        :param max_length: the number of tokens to be included in the document representation.
-                           Providing more than `max_length` tokens as input will result in truncation.
         :returns: np.array of features of shape (n_examples, embedding_size).
         """
-        return BaseModel.featurize(self, Xs, max_length=max_length)
+        return BaseModel.featurize(self, Xs)
 
     def get_eval_fn(cls):
         return lambda labels, targets: np.mean(np.asarray(labels) == np.asarray(targets))
@@ -104,38 +98,32 @@ class MultifieldRegressor(Regressor):
         """
         return BaseModel.finetune(self, Xs, Y=Y, batch_size=batch_size)
 
-    def predict(self, Xs, max_length=None):
+    def predict(self, Xs):
         """
         Produces list of most likely class labels as determined by the fine-tuned model.
 
         :param \*Xs: lists of text inputs, shape [batch, n_fields]
-        :param max_length: the number of tokens to be included in the document representation.
-                           Providing more than `max_length` tokens as input will result in truncation.
         :returns: list of class labels.
         """
-        return BaseModel.predict(self, Xs, max_length=max_length)
+        return BaseModel.predict(self, Xs)
 
-    def predict_proba(self, Xs, max_length=None):
+    def predict_proba(self, Xs):
         """
         Produces probability distribution over classes for each example in X.
 
         :param \*Xs: lists of text inputs, shape [batch, n_fields]
-        :param max_length: the number of tokens to be included in the document representation.
-                           Providing more than `max_length` tokens as input will result in truncation.
         :returns: list of dictionaries.  Each dictionary maps from X2 class label to its assigned class probability.
         """
-        return BaseModel.predict_proba(self, Xs, max_length=max_length)
+        return BaseModel.predict_proba(self, Xs)
 
-    def featurize(self, Xs, max_length=None):
+    def featurize(self, Xs):
         """
         Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
 
         :param \*Xs: lists of text inputs, shape [batch, n_fields]
-        :param max_length: the number of tokens to be included in the document representation.
-                           Providing more than `max_length` tokens as input will result in truncation.
         :returns: np.array of features of shape (n_examples, embedding_size).
         """
-        return BaseModel.featurize(self, Xs, max_length=max_length)
+        return BaseModel.featurize(self, Xs)
 
     def _target_encoder(self):
         return RegressionEncoder()

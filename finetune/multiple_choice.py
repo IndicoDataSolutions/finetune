@@ -20,7 +20,7 @@ class MultipleChoice(BaseModel):
         super().__init__(*args, **kwargs)
         self.num_answers = None
 
-    def _text_to_ids(self, Xs, Y=None, max_length=None):
+    def _text_to_ids(self, Xs, Y=None):
         """
         Format multi question examples as a list of IDs
         """
@@ -44,7 +44,7 @@ class MultipleChoice(BaseModel):
         kwargs['mask'] = np.stack([arr.mask for arr in arrays], 1)
         return ArrayEncodedOutput(**kwargs)
 
-    def finetune(self, questions, answers, correct_answer, batch_size=None, fit_lm_only=False, max_length=None):
+    def finetune(self, questions, answers, correct_answer, batch_size=None, fit_lm_only=False):
         """
         :param questions: List or array of text, shape [batch]
         :param answers: List or array of text, shape [batch, n_answers], must contain the correct answer for each entry.
@@ -53,8 +53,6 @@ class MultipleChoice(BaseModel):
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
         """
-        max_length = max_length or self.config.max_length
-
         answer_idx = []
         if not len(correct_answer) == len(answers) == len(questions):
             raise ValueError("Answers, questions and corrext_answer are not all the same length, {},{},{}".format(
@@ -77,7 +75,7 @@ class MultipleChoice(BaseModel):
                         "Correct answer {} is not contained in possible answers {}".format(correct, others))
 
         self.num_answers = len(answers[0])
-        arr_encoded = self._text_to_ids(list(zip(questions, answers)), max_length=max_length)
+        arr_encoded = self._text_to_ids(list(zip(questions, answers)))
         labels = None if fit_lm_only else answer_idx
         return self._training_loop(arr_encoded, Y=labels, batch_size=batch_size)
 
@@ -108,33 +106,29 @@ class MultipleChoice(BaseModel):
     def _predict_proba_op(self, logits, **kwargs):
         return tf.nn.softmax(logits, -1)
 
-    def predict(self, questions, answers, max_length=None):
+    def predict(self, questions, answers):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
 
         :param question: List or array of text, shape [batch]
         :param answers: List or array of text, shape [batch, n_answers]
-        :param max_length: the number of byte-pair encoded tokens to be included in the document representation.
-                           Providing more than `max_length` tokens as input will result in truncation.
         :returns: list of class labels.
         """
-        raw_ids = BaseModel.predict(self, list(zip(questions, answers)), max_length=max_length)
+        raw_ids = BaseModel.predict(self, list(zip(questions, answers)))
         return [ans[i] for ans, i in zip(zip(*answers), raw_ids)]
 
-    def predict_proba(self, questions, answers, max_length=None):
+    def predict_proba(self, questions, answers):
         """
         Produces a probability distribution over classes for each example in X.
 
 
         :param question: List or array of text, shape [batch]
         :param answers: List or array of text, shape [batch, n_answers]
-        :param max_length: the number of byte-pair encoded tokens to be included in the document representation.
-                           Providing more than `max_length` tokens as input will result in truncation.
         :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
         """
         answers = list_transpose(answers)
-        raw_probas = self._predict_proba(zip(questions, answers), max_length=max_length)
+        raw_probas = self._predict_proba(zip(questions, answers))
 
         formatted_predictions = []
         for probas, *answers_per_sample in zip(raw_probas, *answers):
@@ -143,14 +137,12 @@ class MultipleChoice(BaseModel):
             )
         return formatted_predictions
 
-    def featurize(self, questions, answers, max_length=None):
+    def featurize(self, questions, answers):
         """
         Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
 
         :param questions: List or array of text, shape [batch]
         :param answers: List or array of text, shape [n_answers, batch]
-        :param max_length: the number of byte-pair encoded tokens to be included in the document representation.
-                           Providing more than `max_length` tokens as input will result in truncation.
         :returns: np.array of features of shape (n_examples, embedding_size).
         """
-        return BaseModel.featurize(self, zip(questions, answers), max_length=max_length)
+        return BaseModel.featurize(self, zip(questions, answers))
