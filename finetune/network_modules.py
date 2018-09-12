@@ -307,6 +307,7 @@ def sequence_labeler(hidden, targets, n_targets, dropout_placeholder, config, pa
                         kwargs.get('max_length') * tf.ones(tf.shape(targets)[0]),
                         transition_params=transition_params[-1]
                     )[0]
+            logits = tf.stack(logits, axis=-1)
 
         else:
             transition_params = tf.get_variable("Transition_matrix", shape=[n_targets, n_targets])
@@ -319,7 +320,7 @@ def sequence_labeler(hidden, targets, n_targets, dropout_placeholder, config, pa
                 )
 
         return {
-            'logits': tf.stack(logits, axis=-1),
+            'logits': logits,
             'losses': -log_likelihood,
             'predict_params': {
                 'transition_matrix': transition_params

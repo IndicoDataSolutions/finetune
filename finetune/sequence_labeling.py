@@ -21,6 +21,7 @@ class SequenceLabeler(BaseModel):
     :param config: A :py:class:`finetune.config.Settings` object or None (for default config).
     :param \**kwargs: key-value pairs of config items to override.
     """
+<<<<<<< HEAD
     defaults = {
         "n_epochs": 5,
         "lr_warmup": 0.1,
@@ -42,7 +43,12 @@ class SequenceLabeler(BaseModel):
         d = copy.deepcopy(SequenceLabeler.defaults)
         d.update(kwargs)
         super().__init__(config=config, **d)
+=======
+
+    def _initialize(self):
+>>>>>>> 7b26dce... FIX: fixed multilabeling tests
         self.multi_label = False
+        return super()._initialize()
         
     def finetune(self, X, Y=None, batch_size=None):
         """
@@ -159,6 +165,7 @@ class SequenceLabeler(BaseModel):
                 all_subseqs.append(doc_subseqs)
                 all_labels.append(doc_labels)
                 all_probs.append(prob_dicts)
+        print(all_labels[0])
         _, doc_annotations = finetune_to_indico_sequence(
             raw_texts=X,
             subseqs=all_subseqs,
@@ -222,9 +229,10 @@ class SequenceLabeler(BaseModel):
 
 
 class SequenceMultiLabeler(SequenceLabeler):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def _initialize(self):
+        super()._initialize()
         self.multi_label = True
+
 
     def _target_encoder(self):
         return SequenceMultiLabelingEncoder()

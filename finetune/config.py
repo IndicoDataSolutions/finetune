@@ -204,7 +204,7 @@ def get_small_model_config():
     conf.n_heads = 8
     conf.n_embed = 512
     conf.n_layer = 6
-    conf.num_layers_trained=6
+    conf.num_layers_trained = 6
     conf.base_model_path = os.path.join(os.path.dirname(__file__), "model", "SmallBaseModel.jl")
     return conf
 

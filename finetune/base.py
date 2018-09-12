@@ -66,6 +66,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self._initialize()
         self.target_dim = None
         self._load_from_file = False
+        self.pad_idx_ = None
 
     def _initialize(self):
         # Initializes the non-serialized bits of the class.
@@ -132,7 +133,7 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         return [[[x] for x in X] for X in Xs]
 
-    def _text_to_ids(self, Xs, Y=None pad_token=None):
+    def _text_to_ids(self, Xs, Y=None, pad_token=None):
         # Maps lists of text to formatted numpy arrays of token ids and loss-masks marking the lengths of the sequences.
 
         # If 1d array of text is passed, coerce into multifield format
@@ -240,6 +241,13 @@ class BaseModel(object, metaclass=ABCMeta):
 
         return val_size, val_interval
 
+    @property
+    def pad_idx(self):
+        if self.pad_idx_ is None:
+            self.pad_idx_ = list(self.label_encoder.classes_).index(self.config.pad_token)
+        return self.pad_idx_
+
+
     def _training_loop(self, arr_encoded, Y=None, batch_size=None):
         self.label_encoder = self._target_encoder()
 
@@ -260,7 +268,6 @@ class BaseModel(object, metaclass=ABCMeta):
             train_Y = self.label_encoder.fit_transform(Y[train_idxs])
             val_Y = self.label_encoder.transform(Y[val_idxs])
             target_dim = self.label_encoder.target_dim
-            self.pad_idx = list(self.label_encoder.classes_).index(self.config.pad_token)
 
         train_dataset = (arr_encoded.token_ids[train_idxs], arr_encoded.mask[train_idxs], train_Y)
         is_classification_task = all([isinstance(y, int) for y in train_Y])
@@ -740,7 +747,7 @@ class BaseModel(object, metaclass=ABCMeta):
         Leave serialization of all tf objects to tf
         """
         required_fields = [
-            'label_encoder', 'target_dim', '_load_from_file', 'config', 'target_type',
+            'label_encoder', 'target_dim', '_load_from_file', 'config', 'target_type', "pad_idx_"
         ]
         serialized_state = {
             k: v for k, v in self.__dict__.items()

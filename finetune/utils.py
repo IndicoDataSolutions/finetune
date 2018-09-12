@@ -252,6 +252,12 @@ def average_grads(tower_grads):
     return average_grads
 
 
+def truncate_text(text, max_chars=100):
+    if len(text) > max_chars:
+        text = text[:max_chars] + "..."
+    return text
+
+
 def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_value=config.PAD_TOKEN, subtoken_predictions=False):
     """
     Maps from the labeled substring format into the 'indico' format. This is the exact inverse operation to
@@ -291,6 +297,7 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
         raw_annotation_end = 0
         start_idx = 0
         end_idx = 0
+        raw_annotation_start = 0
         for sub_str, raw_label, confidences in zip(doc_seq, label_seq, prob_seq or [None] * len(doc_seq)):
             if not isinstance(raw_label, tuple):
                 label_list = [raw_label]
@@ -301,7 +308,7 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
 
                 stripped_text = sub_str.strip()
 
-                raw_annotation_start = raw_text.find(stripped_text, raw_annotation_end)
+                raw_annotation_start = raw_text.find(stripped_text, raw_annotation_start)
                 for i, item in enumerate(doc_annotations):
                     if item["label"] == label and item["end"] == raw_annotation_end:
                         doc_annotations[-1], doc_annotations[i] = doc_annotations[i], doc_annotations[-1]
@@ -343,8 +350,8 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
                         annotation["confidence"] = confidences
 
                     # prevent duplicate annotation edge case
-                    if (annotation_start, annotation_end) not in annotation_ranges:
-                        annotation_ranges.add((annotation_start, annotation_end))
+                    if (annotation_start, annotation_end, label) not in annotation_ranges:
+                        annotation_ranges.add((annotation_start, annotation_end, label))
                         doc_annotations.append(annotation)
 
         doc_annotations = sorted([dict(items) for items in doc_annotations], key=lambda x: x['start'])
@@ -352,7 +359,7 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
     return raw_texts, annotations
 
 
-def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value=config.PAD_TOKEN):
+def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value=config.PAD_TOKEN, subtoken_labels=False):
     """
     Maps from the 'indico' format sequence labeling data. Into a labeled substring format. This is the exact inverse of
     :meth finetune_to_indico_sequence:.
@@ -388,6 +395,11 @@ def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value
         labels = [[]] * len(texts)
 
     for text, label_seq in zip(texts, labels):
+        tokens = NLP(text)
+        token_starts = [token.idx for token in tokens]
+        token_ends = [token.idx + len(token.text) for token in tokens]
+        n_tokens = len(tokens)
+
         label_seq = sorted(label_seq, key=lambda x: x["start"])
         last_loc = 0
         doc_subseqs = []
@@ -396,6 +408,14 @@ def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value
             start = annotation["start"]
             end = annotation["end"]
             label = annotation["label"]
+            if not subtoken_labels:
+                if label != none_value:
+                    # round to nearest token
+                    while start > 0 and start not in token_starts:
+                        start -= 1
+                    while end < len(text) and end not in token_ends:
+                        end += 1
+
             if start > last_loc:
                 doc_subseqs.append(text[last_loc:start])
                 if multi_label:
