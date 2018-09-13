@@ -1,4 +1,7 @@
+from collections import defaultdict
+
 from sklearn.metrics import accuracy_score, recall_score, precision_score
+import numpy as np
 
 from finetune.encoding import NLP
 
@@ -175,3 +178,40 @@ def sequence_labeling_overlap_recall(true, predicted):
     Sequence overlap recall
     """
     return seq_recall(true, predicted, count_fn=sequence_labeling_overlaps)
+
+
+def annotation_report(y_true, y_pred, labels=None, target_names=None, sample_weight=None, digits=2, width=20):
+    # Adaptation of https://github.com/scikit-learn/scikit-learn/blob/f0ab589f/sklearn/metrics/classification.py#L1363
+    token_precision = sequence_labeling_token_precision(y_true, y_pred)
+    token_recall = sequence_labeling_token_recall(y_true, y_pred)
+    overlap_precision = sequence_labeling_overlap_precision(y_true, y_pred)
+    overlap_recall = sequence_labeling_overlap_recall(y_true, y_pred)
+
+    count_dict = defaultdict(int)
+    for annotation_seq in y_true:
+        for annotation in annotation_seq:
+            count_dict[annotation['label']] += 1
+
+    seqs = [token_precision, token_recall, overlap_precision, overlap_recall, dict(count_dict)]
+    labels = set(token_precision.keys()) | set(token_recall.keys())
+    target_names = [u'%s' % l for l in labels]
+    counts = [count_dict.get(target_name) for target_name in target_names]
+
+    last_line_heading = 'Weighted Summary'
+    headers = ["token_precision", "token_recall", "overlap_precision", "overlap_recall", "support"]
+    head_fmt = u'{:>{width}s} ' + u' {:>{width}}' * len(headers)
+    report = head_fmt.format(u'', *headers, width=width)
+    report += u'\n\n'
+    row_fmt = u'{:>{width}s} ' + u' {:>{width}.{digits}f}' * 4 + u' {:>{width}}' '\n'
+    seqs = [
+        [seq.get(target_name) for target_name in target_names]
+        for seq in seqs
+    ]
+    rows = zip(target_names, *seqs)
+    for row in rows:
+        report += row_fmt.format(*row, width=width, digits=digits)
+
+    report += u'\n'
+    averages = [np.average(seq, weights=counts) for seq in seqs[:-1]] + [np.sum(seqs[-1])]
+    report += row_fmt.format(last_line_heading, *averages, width=width, digits=digits)
+    return report
