@@ -19,39 +19,33 @@ class MultiLabelClassifier(BaseModel):
         super().__init__(*args, **kwargs)
         self.threshold_placeholder = None
 
-    def featurize(self, X, max_length=None):
+    def featurize(self, X):
         """
         Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
 
         :param X: list or array of text to embed.
-        :param max_length: the number of tokens to be included in the document representation.
-                           Providing more than `max_length` tokens as input will result in truncation.
         :returns: np.array of features of shape (n_examples, embedding_size).
         """
-        return super().featurize(X, max_length=max_length)
+        return super().featurize(X)
 
-    def predict(self, X, threshold=None, max_length=None):
+    def predict(self, X, threshold=None):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
         :param X: list or array of text to embed.
-        :param max_length: the number of tokens to be included in the document representation.
-                           Providing more than `max_length` tokens as input will result in truncation.
         :returns: list of class labels.
         """
         threshold = threshold or self.config.multi_label_threshold
-        return self._predict(X, threshold=threshold, max_length=max_length)
+        return self._predict(X, threshold=threshold)
 
-    def predict_proba(self, X, max_length=None):
+    def predict_proba(self, X):
         """
         Produces a probability distribution over classes for each example in X.
 
         :param X: list or array of text to embed.
-        :param max_length: the number of tokens to be included in the document representation.
-                           Providing more than `max_length` tokens as input will result in truncation.
         :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
         """
-        return super().predict_proba(X, max_length=max_length)
+        return super().predict_proba(X)
 
     def finetune(self, X, Y=None, batch_size=None):
         """
@@ -84,12 +78,11 @@ class MultiLabelClassifier(BaseModel):
     def _predict_proba_op(self, logits, **kwargs):
         return tf.nn.sigmoid(logits)
 
-    def _predict(self, X, threshold, max_length=None):
+    def _predict(self, X, threshold):
         predictions = []
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
-            max_length = max_length or self.config.max_length
-            for xmb, mmb in self._infer_prep(X, max_length=max_length):
+            for xmb, mmb in self._infer_prep(X):
                 output = self._eval(
                     self.predict_op,
                     feed_dict={

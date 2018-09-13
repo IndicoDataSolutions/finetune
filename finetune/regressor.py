@@ -16,35 +16,29 @@ class Regressor(BaseModel):
     """
     
 
-    def featurize(self, X, max_length=None):
+    def featurize(self, X):
         """
         Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
 
         :param X: list or array of text to embed.
-        :param max_length: the number of tokens to be included in the document representation.
-                           Providing more than `max_length` tokens as input will result in truncation.
         :returns: np.array of features of shape (n_examples, embedding_size).
         """
-        return self._featurize(X, max_length=max_length)
+        return self._featurize(X)
 
-    def predict(self, X, max_length=None):
+    def predict(self, X):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
         :param X: list or array of text to embed.
-        :param max_length: the number of tokens to be included in the document representation.
-                           Providing more than `max_length` tokens as input will result in truncation.
         :returns: list of class labels.
         """
-        return super().predict(X, max_length=max_length)
+        return super().predict(X)
 
-    def predict_proba(self, X, max_length=None):
+    def predict_proba(self, X):
         """
         Produces a probability distribution over classes for each example in X.
 
         :param X: list or array of text to embed.
-        :param max_length: the number of tokens to be included in the document representation.
-                           Providing more than `max_length` tokens as input will result in truncation.
         :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
         """
         raise AttributeError("`Regressor` model does not support `predict_proba`.")
