@@ -83,6 +83,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self.train = None  # gradient + parameter update
         self.features = None  # hidden representation fed to classifier
         self.summaries = None  # Tensorboard summaries
+        self.gradient_summaries = None
         self.train_writer = None
         self.valid_writer = None
         self.predict_params = None
@@ -92,8 +93,14 @@ class BaseModel(object, metaclass=ABCMeta):
         self.sess = None
         self.noop = tf.no_op()
 
+        # loss variables
+        self.ema_train_loss = None
+        self.ema_validation_loss = None
+        self.validation_losses = [] # running window of validation losses
+        self.best_validation_loss = float('inf') # lowest observed validation loss
+        
         # indicator vars
-        self.is_built = False  # has tf graph been constructed?
+        self.is_built = False    # has tf graph been constructed?
         self.is_trained = False  # has model been fine-tuned?
         self.require_lm = False
 
@@ -248,6 +255,109 @@ class BaseModel(object, metaclass=ABCMeta):
         return self.pad_idx_
 
 
+    def _initialize_summaries(self):
+        # Side effect: creation of self.tf_summaries attribute 
+        # that maps from a tensor to it's corresponding summary
+        self.tf_summaries = {}
+        for tensor, summary_name in self.summaries.items():
+            tf_summary = tf.Summary()
+            tf_summary.value.add(tag=summary_name, simple_value=None)
+            self.tf_summaries[tensor] = tf_summary
+        return self.tf_summaries
+
+    def validation_hook(self, train_data, validation_data, global_step, batch_size=None, compute_target_loss=True):
+        """
+        Run at every validation step
+        """
+        self._write_train_summaries(
+            data=train_data,
+            global_step=global_step
+        )
+        self._write_validation_summaries(
+            data=validation_data, 
+            global_step=global_step,
+            batch_size=batch_size,
+            compute_target_loss=compute_target_loss
+        )
+        if self.config.verbose:
+            tqdm.tqdm.write("Train loss: {}\t Validation loss: {}".format(
+                self.ema_train_loss, 
+                self.ema_validation_loss
+            ))
+
+    def _update_ema(self, name, value):
+        if getattr(self, name) is None:
+            setattr(self, name, value)
+        else:
+            updated_value = (
+                getattr(self, name) * self.config.rolling_avg_decay
+                + value * (1 - self.config.rolling_avg_decay)
+            )
+            setattr(self, name, updated_value)
+
+    def _write_train_summaries(self, data, global_step):
+        feed_dict = dict(zip([self.X, self.M, self.Y], data))
+        feed_dict[self.do_dropout] = DROPOUT_OFF
+        outputs = self._eval(*self.summaries.keys(), self.gradient_summaries, feed_dict=feed_dict)
+        if self.train_writer is not None:
+            for tensor, summary in self.tf_summaries.items():
+                value = outputs.get(tensor)
+                summary.value[0].simple_value = value
+                self.train_writer.add_summary(summary, global_step)
+
+            summarized_grads = outputs.get(self.gradient_summaries)
+            if summarized_grads is not None:
+                self.train_writer.add_summary(summarized_grads) 
+
+    def _write_validation_summaries(self, data, global_step, batch_size=None, compute_target_loss=True):
+        summary_accumulator = defaultdict(list)
+        n_devices = max(len(self.config.visible_gpus), 1)
+        batch_size = batch_size or self.config.batch_size * n_devices
+        iterator = iter_data(
+            *data,
+            n_batch=batch_size,
+            verbose=self.config.verbose,
+            tqdm_desc="Validation"
+        )
+        for xval, mval, yval in iterator:
+            feed_dict = {
+                self.X: xval,
+                self.M: mval,
+                self.do_dropout: DROPOUT_OFF
+            }
+            if compute_target_loss:
+                feed_dict[self.Y] = yval
+
+            outputs = self._eval(self.target_loss, self.total_loss, *self.summaries.keys(), feed_dict=feed_dict)
+            if self.valid_writer is not None:
+                for tensor in self.tf_summaries:
+                    value = outputs.get(tensor)
+                    summary_accumulator[tensor].append(value)
+
+        for tensor, summary in self.tf_summaries.items():
+            mean_value = np.mean(summary_accumulator[tensor])
+            summary.value[0].simple_value = mean_value
+            self.valid_writer.add_summary(summary, global_step)
+
+        # report target_loss if available,
+        # but backoff to total loss when not
+        val_losses = summary_accumulator.get(
+            self.target_loss,
+            summary_accumulator.get(self.total_loss)
+        )
+        mean_val_loss = np.mean(val_losses)
+        self._update_ema('ema_validation_loss', mean_val_loss)
+
+        self.validation_losses.append(mean_val_loss)
+        if len(self.validation_losses) > self.config.val_window_size:
+            self.validation_losses.pop(0)
+
+        windowed_val_loss = np.mean(self.validation_losses)
+        if windowed_val_loss <= self.best_validation_loss:
+            self.best_validation_loss = windowed_val_loss
+            if self.config.autosave_path is not None:
+                self.save(self.config.autosave_path)
+
     def _training_loop(self, arr_encoded, Y=None, batch_size=None):
         self.label_encoder = self._target_encoder()
 
@@ -278,7 +388,6 @@ class BaseModel(object, metaclass=ABCMeta):
             )
             train_dataset = (arr[oversample_idxs] for arr in train_dataset)
 
-                
         n_batch_train = batch_size * max(len(self.config.visible_gpus), 1)
         n_examples = len(train_dataset[0])
         n_updates_total = (n_examples // n_batch_train) * self.config.n_epochs
@@ -296,14 +405,10 @@ class BaseModel(object, metaclass=ABCMeta):
             Y=Y
         )
         self._build_model(n_updates_total=n_updates_total, target_dim=target_dim)
+        self._initialize_summaries()
         self.is_trained = True
-
-        avg_train_loss = None
-        avg_val_loss = None
+        
         global_step = 0
-        best_val_loss = float("inf")
-        val_window = [float("inf")] * self.config.val_window_size
-
         for i in range(self.config.n_epochs):
             iterator = iter_data(
                 *train_dataset, 
@@ -312,65 +417,34 @@ class BaseModel(object, metaclass=ABCMeta):
                 verbose=self.config.verbose
             )
             for (xmb, mmb, ymb) in iterator:
+                global_step += 1
+                compute_target_loss = (target_dim is not None)
+
+                if global_step % val_interval == 0:
+                    self.validation_hook(
+                        train_data=(xmb, mmb, ymb),
+                        validation_data=val_dataset,
+                        global_step=global_step,
+                        batch_size=n_batch_train,
+                        compute_target_loss=compute_target_loss
+                    )
+                    
                 feed_dict = {
                     self.X: xmb,
                     self.M: mmb,
+                    self.do_dropout: DROPOUT_ON
                 }
-                if target_dim:
+                if compute_target_loss:
                     feed_dict[self.Y] = ymb
 
-                global_step += 1
-                if global_step % val_interval == 0:
-                    feed_dict[self.do_dropout] = DROPOUT_OFF
-
-                    outputs = self._eval(self.summaries, feed_dict=feed_dict)
-                    if self.train_writer is not None:
-                        self.train_writer.add_summary(outputs.get(self.summaries), global_step)
-
-                    sum_val_loss = 0
-                    for xval, mval, yval in iter_data(*val_dataset, n_batch=n_batch_train, verbose=self.config.verbose,
-                                                      tqdm_desc="Validation"):
-                        feed_dict = {
-                            self.X: xval,
-                            self.M: mval,
-                            self.do_dropout: DROPOUT_OFF
-                        }
-                        if target_dim:
-                            feed_dict[self.Y] = yval
-
-                        outputs = self._eval(self.target_loss, self.total_loss, self.summaries, feed_dict=feed_dict)
-                        if self.valid_writer is not None:
-                            self.valid_writer.add_summary(outputs.get(self.summaries), global_step)
-
-                        val_cost = outputs.get(self.target_loss, outputs.get(self.total_loss))
-                        sum_val_loss += val_cost
-
-                        if avg_val_loss is None:
-                            avg_val_loss = val_cost
-                        else:
-                            avg_val_loss = (
-                                    avg_val_loss * self.config.rolling_avg_decay
-                                    + val_cost * (1 - self.config.rolling_avg_decay)
-                            )
-                    val_window.append(sum_val_loss)
-                    val_window.pop(0)
-
-                    if np.mean(val_window) <= best_val_loss:
-                        best_val_loss = np.mean(val_window)
-                        if self.config.autosave_path is not None:
-                            self.save(self.config.autosave_path)
-
-                    tqdm.tqdm.write("Train loss: {}\t Validation loss: {}".format(avg_train_loss, avg_val_loss))
-
-                feed_dict[self.do_dropout] = DROPOUT_ON
-                outputs = self._eval(self.target_loss, self.train_op, feed_dict=feed_dict)
-
-                cost = outputs.get(self.target_loss, 0)
-                if avg_train_loss is None:
-                    avg_train_loss = cost
-                else:
-                    avg_train_loss = avg_train_loss * self.config.rolling_avg_decay + cost * (
-                            1 - self.config.rolling_avg_decay)
+                outputs = self._eval(
+                    self.target_loss,
+                    self.total_loss,
+                    self.train_op,
+                    feed_dict=feed_dict
+                )
+                train_loss = outputs.get(self.target_loss, outputs.get(self.total_loss))
+                self._update_ema('ema_train_loss', train_loss)
 
         return self
 
@@ -510,7 +584,7 @@ class BaseModel(object, metaclass=ABCMeta):
         grads = average_grads(grads)
 
         if self.config.summarize_grads:
-            self.summaries += tf.contrib.training.add_gradients_summaries(grads)
+            self.gradient_summaries = tf.summary.merge(tf.contrib.training.add_gradients_summaries(grads))
 
         grads = [grad for grad, param in grads]
         self.train_op = AdamWeightDecay(
@@ -531,7 +605,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
     def _construct_graph(self, n_updates_total, target_dim=None, train=True):
         gpu_grads = []
-        self.summaries = []
+        self.summaries = {}
 
         # store whether or not graph was previously compiled with dropout
         self.train = train
@@ -633,12 +707,11 @@ class BaseModel(object, metaclass=ABCMeta):
 
         with tf.device(self.config.params_device):
             self.features = tf.concat(aggregator['features'], axis=0)
-
             if compile_lm:
                 self.lm_predict_op = tf.concat(aggregator["lm_model"], 0)
                 self.lm_losses = tf.concat(aggregator['lm_losses'], axis=0)
                 self.lm_loss = tf.reduce_mean(self.lm_losses)
-                self.summaries.append(tf.summary.scalar('LanguageModelLoss', self.lm_loss))
+                self.summaries[self.lm_loss] = 'LanguageModelLoss'
 
             if train:
                 self._compile_train_op(
@@ -659,11 +732,10 @@ class BaseModel(object, metaclass=ABCMeta):
                 )
                 self.target_loss = tf.reduce_mean(self.target_losses)
                 
-                self.summaries.append(tf.summary.scalar('TargetModelLoss', self.target_loss))
+                self.summaries[self.target_loss] = 'TargetModelLoss'
 
             self.total_loss = train_loss_tower / n_splits
-            self.summaries.append(tf.summary.scalar('TotalLoss', self.total_loss))
-            self.summaries = tf.summary.merge(self.summaries) if self.summaries else self.noop
+            self.summaries[self.total_loss] = 'TotalLoss'
 
     def _build_model(self, n_updates_total, target_dim, train=True):
         """
