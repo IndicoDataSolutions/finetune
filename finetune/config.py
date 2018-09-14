@@ -1,7 +1,9 @@
 import os
+import subprocess
+import traceback
+import warnings
 
 import tensorflow as tf
-from tensorflow.python.client import device_lib
 from functools import lru_cache
 from collections import namedtuple
 
@@ -12,13 +14,36 @@ PAD_TOKEN = '<PAD>'
 @lru_cache()
 def all_gpus():
     """
-    Get integer ids of all available GPUs
+    Get integer ids of all available GPUs.
+
+    Sample response from nvidia-smi -L:
+        GPU 0: GeForce GTX 980 (UUID: GPU-2d683060-957f-d5ad-123c-a5b49b0116d9)
+        GPU 1: GeForce GTX 980 (UUID: GPU-7b8496dc-3eaf-8db7-01e7-c4a884f66acf)
+        GPU 2: GeForce GTX TITAN X (UUID: GPU-9e01f108-e7de-becd-2589-966dcc1c778f)
     """
-    local_device_protos = device_lib.list_local_devices()
-    return [
-        int(x.name.split(':')[-1]) for x in local_device_protos
-        if x.device_type == 'GPU'
-    ]
+    try:
+        sp = subprocess.Popen(['nvidia-smi', '-L'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        response = sp.communicate()[0]
+        gpu_list = response.decode('utf-8').strip().split('\n')
+        device_ids = []
+        for i, gpu in enumerate(gpu_list):
+            # May be worth logging GPU description
+            device_id_str, _, description = gpu.partition(':')
+            assert int(device_id_str.split(' ')[-1]) == i
+            device_ids.append(i)
+
+        cuda_visible_devices = os.getenv("CUDA_VISIBLE_DEVICES")
+        if cuda_visible_devices:
+            device_ids = [
+                device_id for device_id in device_ids
+                if str(device_id) in cuda_visible_devices.split(',')
+            ]
+    except:
+        # Failed to parse out available GPUs properly
+        warnings.warn("Failed to find available GPUS.  Falling back to CPU only mode.")
+        device_ids = []
+
+    return device_ids
 
 GridSearchable = namedtuple("GridSearchable", "default iterator")
 
@@ -59,9 +84,13 @@ class Settings(dict):
         dataset size exceeds a few thousand examples.  Defaults to `0.0`.
     :param summarize_grads: Include gradient summary information in tensorboard.  Defaults to `False`.
     :param verbose: Print TQDM logs?  Defaults to `True`.
-    :param val_size: Validation set size as a percentage of all training data.  Defaults to `0.05`. 
-    :param val_interval: Evaluate on validation set after `val_interval` batches.  Defaults to `150`.
+
+    :param val_size: Validation set size as a percentage of all training data.  Validation will not be run by default if n_examples < 50.
+        If n_examples > 50, defaults to max(5, min(100, 0.05 * n_examples))
+    :param val_interval: Evaluate on validation set after `val_interval` batches.  
+        Defaults to 4 * val_size / batch_size to ensure that too much time is not spent on validation.
     :param val_window_size: Print running average of validation score over `val_window_size` batches.  Defaults to `5`.
+    
     :param rolling_avg_decay: Momentum-style parameter to smooth out validation estimates printed during training. Defaults to `0.99`.
     :param lm_temp: Language model temperature -- a value of `0.0` corresponds to greedy maximum likelihood predictions 
         while a value of `1.0` corresponds to random predictions. Defaults to `0.2`. 
@@ -77,6 +106,10 @@ class Settings(dict):
     :param save_adam_vars: Save adam parameters when calling `model.save()`.  Defaults to `True`.
     :param num_layers_trained: How many layers to finetune.  Specifying a value less than 12 will train layers starting from model output. Defaults to `12`.
     :param train_embeddings: Should embedding layer be finetuned? Defaults to `True`.
+    :param class_weights: One of 'log', 'linear', or 'sqrt'. Auto-scales gradient updates based on class frequency.  Can also be a dictionary that maps from true class name to loss coefficient. Defaults to `None`.
+    :param oversample: Should rare classes be oversampled?  Defaults to `False`.
+    :param params_device: Which device should gradient updates be aggregated on?
+        If you are using a single GPU and have more than 4Gb of GPU memory you should set this to GPU PCI number (0, 1, 2, etc.). Defaults to `"cpu"`. 
     """
     def get_grid_searchable(self):
         return self.grid_searchable
@@ -137,8 +170,8 @@ def get_default_config():
         lm_loss_coef=0.0,
         summarize_grads=False,
         verbose=True,
-        val_size=0.05,
-        val_interval=150,
+        val_size=None,
+        val_interval=None,
         val_window_size=5,
         rolling_avg_decay=0.99,
         lm_temp=0.2,
@@ -154,6 +187,8 @@ def get_default_config():
         num_layers_trained=12,
         train_embeddings=True,
         class_weights=None,
+        oversample=False,
+        params_device="cpu",
 
         # Must remain fixed
         n_heads=12,

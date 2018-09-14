@@ -12,7 +12,8 @@ LABEL com.nvidia.cuda.version="${CUDA_VERSION}"
 ENV NVIDIA_VISIBLE_DEVICES=all \
     NVIDIA_DRIVER_CAPABILITIES=compute,utility \
     NVIDIA_REQUIRE_CUDA="cuda>=8.0" \
-    LANG=C.UTF-8
+    LANG=C.UTF-8 \
+    CUDA_DEVICE_ORDER=PCI_BUS_ID
 
 RUN apt-get update && mkdir /Finetune
 ADD requirements.txt /Finetune/requirements.txt
