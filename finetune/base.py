@@ -322,15 +322,15 @@ class BaseModel(object, metaclass=ABCMeta):
                 feed_dict[self.Y] = yval
 
             outputs = self._eval(self.target_loss, self.total_loss, *self.summaries.keys(), feed_dict=feed_dict)
-            if self.valid_writer is not None:
-                for tensor in self.tf_summaries:
-                    value = outputs.get(tensor)
-                    summary_accumulator[tensor].append(value)
+            for tensor in self.tf_summaries:
+                value = outputs.get(tensor)
+                summary_accumulator[tensor].append(value)
 
         for tensor, summary in self.tf_summaries.items():
             mean_value = np.mean(summary_accumulator[tensor])
             summary.value[0].simple_value = mean_value
-            self.valid_writer.add_summary(summary, global_step)
+            if self.valid_writer is not None:
+                self.valid_writer.add_summary(summary, global_step)
 
         # report target_loss if available,
         # but backoff to total loss when not
