@@ -312,3 +312,37 @@ def sequence_labeler(hidden, targets, n_targets, dropout_placeholder, config, tr
                 'transition_matrix': transition_params
             }
         }
+
+
+def cosine_similarity(hidden1, hidden2, targets, dropout_placeholder, config, train=False, reuse=None, **kwargs):
+    """
+    A simple model to compute cosine similarity between two document embeddings.
+
+    :param hidden1: The output of the featurizer for document 1. [batch_size, embed_dim]
+    :param hidden2: The output of the featurizer for document 2. [batch_size, embed_dim]
+    :param targets: One hot encoded target ids. [batch_size, n_classes]
+    :param dropout_placeholder:
+    :param config: A config object, containing all parameters for the featurizer.
+    :param train: If this flag is true, dropout and losses are added to the graph.
+    :param reuse: Should reuse be set within this scope.
+    :param kwargs: Spare arguments.
+    :return: dict containing:
+        logits: The unnormalised log probabilities of each class.
+        losses: The loss for the classifier.
+    """
+    with tf.variable_scope('cosine_similarity', reuse=reuse):
+        hidden1 = dropout(hidden1, config.clf_p_drop, train, dropout_placeholder)
+        hidden2 = dropout(hidden2, config.clf_p_drop, train, dropout_placeholder)
+        cos_sim_logits = tf.multiply(hidden1, hidden2)
+
+        cos_sim_losses = tf.nn.softmax_cross_entropy_with_logits_v2(
+            logits=cos_sim_logits,
+            labels=tf.stop_gradient(targets)
+        )
+
+        cos_sim_losses = _apply_class_weight(cos_sim_losses, targets, kwargs.get('class_weights'))
+
+        return {
+            'logits': cos_sim_logits,
+            'losses': cos_sim_losses
+        }
