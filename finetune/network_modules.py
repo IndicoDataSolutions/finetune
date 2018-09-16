@@ -334,7 +334,7 @@ def cosine_similarity(hidden1, hidden2, targets, n_targets, dropout_placeholder,
     with tf.variable_scope('cosine_similarity', reuse=reuse):
         hidden1 = dropout(hidden1, config.clf_p_drop, train, dropout_placeholder)
         hidden2 = dropout(hidden2, config.clf_p_drop, train, dropout_placeholder)
-        cos_sim_logits = tf.multiply(hidden1, hidden2)
+        cos_sim_logits = tf.sigmoid(tf.multiply(hidden1, hidden2))
 
         cos_sim_losses = tf.nn.softmax_cross_entropy_with_logits_v2(
             logits=cos_sim_logits,
