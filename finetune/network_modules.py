@@ -314,13 +314,14 @@ def sequence_labeler(hidden, targets, n_targets, dropout_placeholder, config, tr
         }
 
 
-def cosine_similarity(hidden1, hidden2, targets, dropout_placeholder, config, train=False, reuse=None, **kwargs):
+def cosine_similarity(hidden1, hidden2, targets, n_targets, dropout_placeholder, config, train=False, reuse=None, **kwargs):
     """
     A simple model to compute cosine similarity between two document embeddings.
 
     :param hidden1: The output of the featurizer for document 1. [batch_size, embed_dim]
     :param hidden2: The output of the featurizer for document 2. [batch_size, embed_dim]
     :param targets: One hot encoded target ids. [batch_size, n_classes]
+    :param n_targets: A python int containing the number of classes that the model should be learning to predict over.
     :param dropout_placeholder:
     :param config: A config object, containing all parameters for the featurizer.
     :param train: If this flag is true, dropout and losses are added to the graph.
