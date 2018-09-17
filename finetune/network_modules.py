@@ -54,12 +54,17 @@ def featurizer(X, encoder, dropout_placeholder, config, train=False, reuse=None)
             embed_weights = tf.stop_gradient(embed_weights)
 
         X = tf.reshape(X, [-1, config.max_length, 2])
-
+        clf_token = encoder['_classify_']
         h = embed(X, embed_weights)
         for layer in range(config.n_layer):
-            if (layer - config.n_layer) == config.num_layers_trained and config.num_layers_trained != 12:
+            if (config.n_layer - layer) == config.num_layers_trained and config.num_layers_trained != 12:
                 h = tf.stop_gradient(h)
                 train_layer = False
+                if config.reapply_clf:
+                    clf_loc = tf.cast(tf.equal(X[:, :, 0], clf_token), tf.int32)
+                    clf_embed = tf.stack([tf.zeros(config.n_embed), tf.get_variable("clf_embed", shape=(config.n_embed), dtype=tf.float32)], axis=0)
+                    h *= tf.to_float(1 - tf.expand_dims(clf_loc, -1)) # make the clf location = 0s
+                    h += tf.gather(clf_embed, clf_loc) # set that location equal to the new clf_token
             else:
                 train_layer = train
             with tf.variable_scope('h%d_' % layer):
@@ -73,7 +78,6 @@ def featurizer(X, encoder, dropout_placeholder, config, train=False, reuse=None)
 
         # Use hidden state at classifier token as input to final proj. + softmax
         clf_h = tf.reshape(h, [-1, config.n_embed])  # [batch * seq_len, embed]
-        clf_token = encoder['_classify_']
         pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
         clf_h = tf.gather(clf_h, tf.range(shape_list(X)[0], dtype=tf.int32) * config.max_length + pool_idx)
         clf_h = tf.reshape(clf_h, shape=initial_shape[0: -2] + [config.n_embed])

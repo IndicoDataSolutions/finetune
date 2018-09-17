@@ -102,6 +102,7 @@ class Settings(dict):
     :param tensorboard_folder: Directory for tensorboard logs. Tensorboard logs will not be written 
         unless tensorboard_folder is explicitly provided. Defaults to `None`.
     :param log_device_placement: Log which device each operation is placed on for debugging purposes.  Defaults to `False`.
+    :param reapply_clf: An experimental performance improvement for the partially trained models. If True, the clf token is replicated raw at the point where the model training begins.
     :param allow_soft_placement: Allow tf to allocate an operation to a different device if a device is unavailable.  Defaults to `True`.
     :param save_adam_vars: Save adam parameters when calling `model.save()`.  Defaults to `True`.
     :param num_layers_trained: How many layers to finetune.  Specifying a value less than 12 will train layers starting from model output. Defaults to `12`.
@@ -182,6 +183,7 @@ def get_default_config():
         autosave_path=None,
         tensorboard_folder=None,
         log_device_placement=False,
+        reapply_clf=True,
         soft_device_placement=True,
         save_adam_vars=False,
         num_layers_trained=12,
