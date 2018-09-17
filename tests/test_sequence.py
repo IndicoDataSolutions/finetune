@@ -205,5 +205,5 @@ class TestSequenceLabeler(unittest.TestCase):
         self.assertIsInstance(probas[0][0], dict)
         self.assertIsInstance(probas[0][0]['confidence'], dict)
         self.model.save(self.save_file)
-        model = SequenceMultiLabeler.load(self.save_file)
+        model = SequenceLabeler.load(self.save_file)
         model.predict(test_texts)
