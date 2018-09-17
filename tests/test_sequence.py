@@ -17,7 +17,7 @@ import requests
 from bs4 import BeautifulSoup as bs
 from bs4.element import Tag
 
-from finetune import SequenceLabeler, SequenceMultiLabeler
+from finetune import SequenceLabeler
 from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_sequence
 from finetune.metrics import (
     sequence_labeling_token_precision, sequence_labeling_token_recall,
@@ -193,7 +193,7 @@ class TestSequenceLabeler(unittest.TestCase):
         Ensure model training does not error out
         Ensure model returns predictions
         """
-        self.model = SequenceMultiLabeler(batch_size=2, max_length=256, lm_loss_coef=0.0, verbose=False)
+        self.model = SequenceLabeler(batch_size=2, max_length=256, lm_loss_coef=0.0, verbose=False, multi_label_sequences=True)
         raw_docs = ["".join(text) for text in self.texts]
         texts, annotations = finetune_to_indico_sequence(raw_docs, self.texts, self.labels)
         train_texts, test_texts, train_annotations, test_annotations = train_test_split(texts, annotations, test_size=0.1)
