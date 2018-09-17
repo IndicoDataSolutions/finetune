@@ -21,7 +21,7 @@ class SequenceLabeler(BaseModel):
     :param config: A :py:class:`finetune.config.Settings` object or None (for default config).
     :param \**kwargs: key-value pairs of config items to override.
     """
-<<<<<<< HEAD
+    
     defaults = {
         "n_epochs": 5,
         "lr_warmup": 0.1,
@@ -43,11 +43,9 @@ class SequenceLabeler(BaseModel):
         d = copy.deepcopy(SequenceLabeler.defaults)
         d.update(kwargs)
         super().__init__(config=config, **d)
-=======
 
     def _initialize(self):
->>>>>>> 7b26dce... FIX: fixed multilabeling tests
-        self.multi_label = False
+        self.multi_label = self.config.multi_label_sequences
         return super()._initialize()
         
     def finetune(self, X, Y=None, batch_size=None):
@@ -200,9 +198,13 @@ class SequenceLabeler(BaseModel):
         return [[X] for X in Xs]
 
     def _target_placeholder(self, target_dim=None):
+        if self.multi_label:
+            return tf.placeholder(tf.int32, [None, self.config.max_length, self.label_encoder.target_dim])
         return tf.placeholder(tf.int32, [None, self.config.max_length])  # classification targets
 
     def _target_encoder(self):
+        if self.multi_label:
+            return SequenceMultiLabelingEncoder()
         return SequenceLabelingEncoder()
 
     def _target_model(self, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
@@ -220,35 +222,20 @@ class SequenceLabeler(BaseModel):
         )
     
     def _predict_op(self, logits, **kwargs):
-        label_idxs, label_probas = sequence_decode(logits, kwargs.get("transition_matrix"))
+        trans_mats = kwargs.get("transition_matrix")
+        if self.multi_label:
+            logits = tf.unstack(logits, axis=-1)
+            label_idxs = []
+            label_probas = []
+            for logits_i, trans_mat_i in zip(logits, trans_mats):
+                idx, prob = sequence_decode(logits_i, trans_mat_i)
+                label_idxs.append(idx)
+                label_probas.append(prob[:, :, 1:])
+            label_idxs = tf.stack(label_idxs, axis=-1)
+            label_probas = tf.stack(label_probas, axis=-1)
+        else:
+            label_idxs, label_probas = sequence_decode(logits,trans_mats)
         return label_idxs, label_probas
 
     def _predict_proba_op(self, logits, **kwargs):
         return tf.no_op()
-
-
-class SequenceMultiLabeler(SequenceLabeler):
-    def _initialize(self):
-        super()._initialize()
-        self.multi_label = True
-
-
-    def _target_encoder(self):
-        return SequenceMultiLabelingEncoder()
-
-    def _target_placeholder(self, target_dim=None):
-        return tf.placeholder(tf.int32, [None, self.config.max_length, self.label_encoder.target_dim])
-
-
-    def _predict_op(self, logits, **kwargs):
-        logits = tf.unstack(logits, axis=-1)
-        trans_mats = kwargs.get("transition_matrix")
-        label_idxs = []
-        label_probas = []
-        for logits_i, trans_mat_i in zip(logits, trans_mats):
-            idx, prob = sequence_decode(logits_i, trans_mat_i)
-            label_idxs.append(idx)
-            label_probas.append(prob[:, :, 1:])
-        label_idxs = tf.stack(label_idxs, axis=-1)
-        label_probas = tf.stack(label_probas, axis=-1)
-        return label_idxs, label_probas
