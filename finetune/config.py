@@ -96,6 +96,7 @@ class Settings(dict):
         while a value of `1.0` corresponds to random predictions. Defaults to `0.2`. 
     :param seq_num_heads: Number of attention heads of final attention layer. Defaults to `16`.
     :param subtoken_predictions: Return predictions at subtoken granularity or token granularity?  Defaults to `False`.
+    :param multi_label_sequences: Use a multi-labeling approach to sequence labeling to allow overlapping labels.
     :param multi_label_threshold: Threshold of sigmoid unit in multi label classifier. 
         Can be increased or lowered to trade off precision / recall. Defaults to `0.5`.
     :param autosave_path: Save current best model (as measured by validation loss) to this location. Defaults to `None`.
@@ -178,6 +179,7 @@ def get_default_config():
         seq_num_heads=16,
         pad_token="<PAD>",
         subtoken_predictions=False,
+        multi_label_sequences=False,
         multi_label_threshold=0.5,
         autosave_path=None,
         tensorboard_folder=None,
@@ -204,7 +206,7 @@ def get_small_model_config():
     conf.n_heads = 8
     conf.n_embed = 512
     conf.n_layer = 6
-    conf.num_layers_trained=6
+    conf.num_layers_trained = 6
     conf.base_model_path = os.path.join(os.path.dirname(__file__), "model", "SmallBaseModel.jl")
     return conf
 

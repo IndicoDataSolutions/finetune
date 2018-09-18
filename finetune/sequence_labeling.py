@@ -8,7 +8,7 @@ import numpy as np
 
 from finetune.base import BaseModel, DROPOUT_OFF
 from finetune.encoding import EncodedOutput, ArrayEncodedOutput
-from finetune.target_encoders import SequenceLabelingEncoder
+from finetune.target_encoders import SequenceLabelingEncoder, SequenceMultiLabelingEncoder
 from finetune.network_modules import sequence_labeler
 from finetune.crf import sequence_decode
 from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_sequence
@@ -21,6 +21,7 @@ class SequenceLabeler(BaseModel):
     :param config: A :py:class:`finetune.config.Settings` object or None (for default config).
     :param \**kwargs: key-value pairs of config items to override.
     """
+      
     defaults = {
         "n_epochs": 5,
         "lr_warmup": 0.1,
@@ -42,7 +43,11 @@ class SequenceLabeler(BaseModel):
         d = copy.deepcopy(SequenceLabeler.defaults)
         d.update(kwargs)
         super().__init__(config=config, **d)
-        
+       
+    def _initialize(self):
+        self.multi_label = self.config.multi_label_sequences
+        return super()._initialize()
+  
     def finetune(self, X, Y=None, batch_size=None):
         """
         :param X: A list of text snippets. Format: [batch_size]
@@ -54,8 +59,9 @@ class SequenceLabeler(BaseModel):
         :param val_interval: The interval for which validation is performed, measured in number of steps.
         """
         fit_target_model = (Y is not None)
-        X, Y = indico_to_finetune_sequence(X, Y, none_value="<PAD>")
-        arr_encoded = self._text_to_ids(X, Y=Y)
+        X, Y = indico_to_finetune_sequence(X, Y, multi_label=self.multi_label, none_value="<PAD>")
+        pad = self.config.pad_token
+        arr_encoded = self._text_to_ids(X, Y=Y, pad_token=[pad] if self.multi_label else pad)
         targets = arr_encoded.labels if fit_target_model else None
         return self._training_loop(arr_encoded, Y=targets, batch_size=batch_size)
 
@@ -66,7 +72,7 @@ class SequenceLabeler(BaseModel):
         :param X: A list / array of text, shape [batch]
         :returns: list of class labels.
         """
-        subseqs, _ = indico_to_finetune_sequence(X)
+        subseqs, _ = indico_to_finetune_sequence(X, multi_label=self.multi_label)
 
         chunk_size = self.config.max_length - 2
         step_size = chunk_size // 3
@@ -151,6 +157,8 @@ class SequenceLabeler(BaseModel):
                     # format probabilities as dictionary
                     probs = np.mean(np.vstack(prob_seq), axis=0)
                     prob_dicts.append(dict(zip(self.label_encoder.classes_, probs)))
+                    if self.multi_label:
+                        del prob_dicts[-1][self.config.pad_token]
                 
                 all_subseqs.append(doc_subseqs)
                 all_labels.append(doc_labels)
@@ -190,9 +198,13 @@ class SequenceLabeler(BaseModel):
         return [[X] for X in Xs]
 
     def _target_placeholder(self, target_dim=None):
+        if self.multi_label:
+            return tf.placeholder(tf.int32, [None, self.config.max_length, self.label_encoder.target_dim])
         return tf.placeholder(tf.int32, [None, self.config.max_length])  # classification targets
 
     def _target_encoder(self):
+        if self.multi_label:
+            return SequenceMultiLabelingEncoder()
         return SequenceLabelingEncoder()
 
     def _target_model(self, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
@@ -201,14 +213,28 @@ class SequenceLabeler(BaseModel):
             targets=targets, 
             n_targets=n_outputs,
             dropout_placeholder=self.do_dropout,
+            pad_id=self.pad_idx,
             config=self.config,
-            train=train, 
+            train=train,
+            multilabel=self.multi_label,
             reuse=reuse, 
             **kwargs
         )
     
     def _predict_op(self, logits, **kwargs):
-        label_idxs, label_probas = sequence_decode(logits, kwargs.get("transition_matrix"))
+        trans_mats = kwargs.get("transition_matrix")
+        if self.multi_label:
+            logits = tf.unstack(logits, axis=-1)
+            label_idxs = []
+            label_probas = []
+            for logits_i, trans_mat_i in zip(logits, trans_mats):
+                idx, prob = sequence_decode(logits_i, trans_mat_i)
+                label_idxs.append(idx)
+                label_probas.append(prob[:, :, 1:])
+            label_idxs = tf.stack(label_idxs, axis=-1)
+            label_probas = tf.stack(label_probas, axis=-1)
+        else:
+            label_idxs, label_probas = sequence_decode(logits,trans_mats)
         return label_idxs, label_probas
 
     def _predict_proba_op(self, logits, **kwargs):

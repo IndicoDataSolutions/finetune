@@ -2,6 +2,7 @@ import numpy as np
 from sklearn.preprocessing import LabelEncoder, MultiLabelBinarizer
 from abc import ABCMeta
 
+from finetune.utils import flatten
 
 class BaseEncoder(metaclass=ABCMeta):
     @property
@@ -118,6 +119,20 @@ class SequenceLabelingEncoder(LabelEncoder, BaseEncoder):
         flat = np.reshape(y, [-1]).tolist()
         labels = super().inverse_transform(flat)
         return np.reshape(labels, shape)
+
+
+class SequenceMultiLabelingEncoder(MultiLabelBinarizer, BaseEncoder):
+    def fit_transform(self, y):
+
+        y_flat = flatten(y)
+        self.fit(y_flat)
+        return [super(SequenceMultiLabelingEncoder, self).transform(seq) for seq in y]
+
+    def transform(self, y):
+        return [super(SequenceMultiLabelingEncoder, self).transform(seq) for seq in y]
+
+    def inverse_transform(self, y):
+        return [super(SequenceMultiLabelingEncoder, self).inverse_transform(seq) for seq in y]
 
 
 class MultilabelClassificationEncoder(MultiLabelBinarizer, BaseEncoder):

@@ -258,7 +258,7 @@ class TextEncoder(object):
             outputs.append(joined)
         return outputs
 
-    def encode_multi_input(self, Xs, Y=None, max_length=None, verbose=True):
+    def encode_multi_input(self, Xs, Y=None, max_length=None, verbose=True, pad_token=PAD_TOKEN):
         """
         Encodes the text for passing to the model, also tracks the location of each token to allow reconstruction.
         It can also, optionally, construct a per-token labels as required for training.
@@ -338,7 +338,7 @@ class TextEncoder(object):
                 encoded=multifield_labels,
                 max_length=max_length,
                 verbose=verbose,
-                special_tokens=PAD_TOKEN
+                special_tokens=pad_token
             )
 
         return EncodedOutput(
