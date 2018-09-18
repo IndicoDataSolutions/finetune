@@ -27,7 +27,7 @@ def perceptron(x, ny, config, w_init=None, b_init=None):
         return tf.matmul(x, w) + b
 
 
-def featurizer(X, encoder, dropout_placeholder, config, train=False, reuse=None, max_length=None):
+def featurizer(X, encoder, dropout_placeholder, config, train=False, reuse=None):
     """
     The transformer element of the finetuning model. Maps from tokens ids to a dense, embedding of the sequence.
 
@@ -37,7 +37,6 @@ def featurizer(X, encoder, dropout_placeholder, config, train=False, reuse=None,
     :param config: A config object, containing all parameters for the featurizer.
     :param train: If this flag is true, dropout and losses are added to the graph.
     :param reuse: Should reuse be set within this scope.
-    :param max_length: Maximum sequence length.
     :return: A dict containing;
         embed_weights: the word embedding matrix.
         features: The output of the featurizer_final state.
@@ -46,16 +45,15 @@ def featurizer(X, encoder, dropout_placeholder, config, train=False, reuse=None,
     initial_shape = [a or -1 for a in X.get_shape().as_list()]
     X = tf.reshape(X, shape=[-1] + initial_shape[-2:])
 
-    max_length = max_length or config.max_length
     with tf.variable_scope('model/featurizer', reuse=reuse):
-        embed_weights = tf.get_variable("we", [encoder.vocab_size + max_length, config.n_embed],
+        embed_weights = tf.get_variable("we", [encoder.vocab_size + config.max_length, config.n_embed],
                                         initializer=tf.random_normal_initializer(stddev=config.weight_stddev))
         if config.train_embeddings:
             embed_weights = dropout(embed_weights, config.embed_p_drop, train, dropout_placeholder)
         else:
             embed_weights = tf.stop_gradient(embed_weights)
 
-        X = tf.reshape(X, [-1, max_length, 2])
+        X = tf.reshape(X, [-1, config.max_length, 2])
 
         h = embed(X, embed_weights)
         for layer in range(config.n_layer):
@@ -77,7 +75,7 @@ def featurizer(X, encoder, dropout_placeholder, config, train=False, reuse=None,
         clf_h = tf.reshape(h, [-1, config.n_embed])  # [batch * seq_len, embed]
         clf_token = encoder['_classify_']
         pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
-        clf_h = tf.gather(clf_h, tf.range(shape_list(X)[0], dtype=tf.int32) * max_length + pool_idx)
+        clf_h = tf.gather(clf_h, tf.range(shape_list(X)[0], dtype=tf.int32) * config.max_length + pool_idx)
         clf_h = tf.reshape(clf_h, shape=initial_shape[0: -2] + [config.n_embed])
         seq_feats = tf.reshape(h, shape=initial_shape[:-1] + [config.n_embed])
 
@@ -310,7 +308,6 @@ def sequence_labeler(hidden, targets, n_targets, dropout_placeholder, config, pa
                         transition_params=transition_params[-1]
                     )[0]
             logits = tf.stack(logits, axis=-1)
-
         else:
             transition_params = tf.get_variable("Transition_matrix", shape=[n_targets, n_targets])
             if train:
