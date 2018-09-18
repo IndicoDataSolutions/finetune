@@ -34,10 +34,10 @@ class QuoraDuplicate(Dataset):
         path = Path(self.filename)
         path.parent.mkdir(parents=True, exist_ok=True)
         comparison_download(
-            url="http://qim.ec.quoracdn.net/quora_duplicate_questions.tsv",
-            text_column1="question1",
-            text_column2="question2",
-            target_column="is_duplicate",
+            url="https://s3.amazonaws.com/enso-data/Quora.csv",
+            text_column1="Text1",
+            text_column2="Text2",
+            target_column="Target",
             filename=QUORA_SIMILARITY
         )
 
@@ -45,7 +45,10 @@ if __name__ == "__main__":
     # Train and evaluate on SST
     dataset = QuoraDuplicate(nrows=5000).dataframe
     model = Comparison(verbose=True, n_epochs=1)
-    trainX1, testX1, trainX2, testX2, trainY, testY = train_test_split(dataset.Text1, dataset.Text2, dataset.Target, test_size=0.3, random_state=42)
+    trainX1, testX1, trainX2, testX2, trainY, testY = train_test_split(
+        dataset.Text1.values, dataset.Text2.values, dataset.Target.values, 
+        test_size=0.3, random_state=42
+    )
     model.fit(list(zip(trainX1, trainX2)), trainY)
     accuracy = np.mean(model.predict(list(zip(testX1, testX2))) == testY)
     class_balance = np.mean(testY)
