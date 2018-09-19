@@ -346,16 +346,16 @@ def cosine_similarity(hidden_0, hidden_1, targets, n_targets, dropout_placeholde
     with tf.variable_scope('cosine_similarity', reuse=reuse):
         hidden1 = dropout(hidden_0, config.clf_p_drop, train, dropout_placeholder)
         hidden2 = dropout(hidden_1, config.clf_p_drop, train, dropout_placeholder)
-        cos_sim_logits = tf.sigmoid(tf.multiply(hidden1, hidden2))
+        dot_product = tf.reduce_sum(tf.multiply(hidden1, hidden2), axis=1)
 
-        cos_sim_losses = tf.nn.softmax_cross_entropy_with_logits_v2(
-            logits=cos_sim_logits,
-            labels=tf.stop_gradient(targets)
+        sigmoid_loss = tf.nn.sigmoid_cross_entropy_with_logits(
+            logits=dot_product,
+            labels=tf.stop_gradient(
+                tf.squeeze(targets)
+            )
         )
 
-        cos_sim_losses = _apply_class_weight(cos_sim_losses, targets, kwargs.get('class_weights'))
-
         return {
-            'logits': cos_sim_logits,
-            'losses': cos_sim_losses
+            'logits': dot_product,
+            'losses': sigmoid_loss
         }

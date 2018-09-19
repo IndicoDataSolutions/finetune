@@ -9,7 +9,7 @@ import numpy as np
 
 from sklearn.model_selection import train_test_split
 
-from finetune import Comparison
+from finetune.siamese_comparison import SiameseComparison
 from finetune.datasets import Dataset, comparison_download
 
 logging.basicConfig(level=logging.DEBUG)
@@ -44,7 +44,7 @@ class QuoraDuplicate(Dataset):
 if __name__ == "__main__":
     # Train and evaluate on SST
     dataset = QuoraDuplicate(nrows=5000).dataframe
-    model = Comparison(verbose=True, n_epochs=1)
+    model = SiameseComparison(verbose=True, n_epochs=1, low_memory_mode=True, batch_size=4)
     trainX1, testX1, trainX2, testX2, trainY, testY = train_test_split(
         dataset.Text1.values, dataset.Text2.values, dataset.Target.values, 
         test_size=0.3, random_state=42
