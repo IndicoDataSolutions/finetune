@@ -413,6 +413,7 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
                 if is_iob_tagged(doc["label"]):
                     doc["label"] = doc["label"].split("-", 1)[-1]
 
+
         doc_annotations = sorted([dict(items) for items in doc_annotations], key=lambda x: x['start'])
         annotations.append(doc_annotations)
     return raw_texts, annotations
@@ -507,6 +508,7 @@ def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value
                     )
 
             label_seq = new_label_seq
+        n_tokens = len(tokens)
 
         label_seq = sorted(label_seq, key=lambda x: x["start"])
         last_loc = 0
@@ -564,6 +566,7 @@ def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value
 
                     start = last_loc
                     annotation_text = annotation_text[last_loc - end:]
+
             if start >= end:
                 # degenerate label
                 last_loc = max(start, end)

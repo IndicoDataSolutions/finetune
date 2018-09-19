@@ -18,6 +18,7 @@ class SequenceLabeler(BaseModel):
     :param config: A :py:class:`finetune.config.Settings` object or None (for default config).
     :param \**kwargs: key-value pairs of config items to override.
     """
+
     
     defaults = {
         "n_epochs": 5,
@@ -58,6 +59,7 @@ class SequenceLabeler(BaseModel):
         fit_target_model = (Y is not None)
         X, Y = indico_to_finetune_sequence(X, Y, multi_label=self.multi_label, none_value="<PAD>",
                                            iob=self.config.iob_encoding)
+
         pad = self.config.pad_token
         arr_encoded = self._text_to_ids(X, Y=Y, pad_token=[pad] if self.multi_label else pad)
         targets = arr_encoded.labels if fit_target_model else None
