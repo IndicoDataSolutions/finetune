@@ -1,4 +1,5 @@
 import os
+import re
 from functools import partial
 import warnings
 import copy
@@ -12,9 +13,10 @@ from tqdm import tqdm
 from scipy import interpolate
 from sklearn.utils import shuffle
 
-from finetune.encoding import NLP
+from finetune.encoding import NLP, TextEncoder
 from finetune import config
 
+ENCODER = TextEncoder()
 
 def merge_leading_dims(X, target_rank):
     shape = [-1] + X.get_shape().as_list()[1 - target_rank:]
@@ -258,8 +260,44 @@ def truncate_text(text, max_chars=100):
         text = text[:max_chars] + "..."
     return text
 
+def is_iob_tagged(label):
+    return label.startswith("IE-")
 
-def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_value=config.PAD_TOKEN, subtoken_predictions=False):
+
+def iob_precedes(left, right, pad_token=config.PAD_TOKEN):
+    """
+    Returns Whether they can be joined, and the new label to give the pair or the right value this defines the policy for which labeling takes place.
+
+    The basic labeling policy, is that once in a sequence, they are given the label equivalent to the value(s) they are looking to be joined with.
+    """
+    if left == right == pad_token:
+        return True, pad_token
+
+    mapping = {
+        "B": "IE-",
+        "I": "IE-",
+        "E": "",
+    }
+    try:
+
+        right_loc, right_label = right.split("-", 1)
+
+        if left is None or "-" not in left:
+            return False, mapping[right_loc] + right_label
+
+        left_loc, left_label = left.split("-", 1)
+
+        if left_label != right_label:
+            return False, mapping[right_loc] + right_label
+
+        if right_label in left_label:
+            return True, mapping[right_loc] + right_label
+    except ValueError:
+        return False, right
+
+
+def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_value=config.PAD_TOKEN,
+                                subtoken_predictions=False, iob=False):
     """
     Maps from the labeled substring format into the 'indico' format. This is the exact inverse operation to
     :meth indico_to_finetune_sequence:.
@@ -307,16 +345,27 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
                 label_list = raw_label
 
             for label in label_list:
+                new_label = None
 
                 stripped_text = sub_str.strip()
 
+
                 raw_annotation_start = raw_text.find(stripped_text, raw_annotation_start)
                 raw_annotation_end = raw_annotation_start + len(stripped_text)
-                for i, item in enumerate(doc_annotations):
-                    if item["label"] == label and raw_annotation_start - item["end"] <= 1:
-                        raw_annotation_start = item["start"]
-                        doc_annotations.pop(i)
-                        break
+
+                if label != none_value:
+                    for i, item in enumerate(doc_annotations):
+                        if iob:
+                            join, new_label = iob_precedes(item["label"], label, none_value)
+                        else:
+                            join, new_label = item["label"] == label, label
+                        if join and raw_annotation_start - item["end"] <= 1:
+                            raw_annotation_start = item["start"]
+                            doc_annotations.pop(i)
+                            break
+                if iob and len(doc_annotations) == 0:
+                    _, new_label = iob_precedes(None, label, none_value)
+
 
                 if raw_annotation_start == -1:
                     warnings.warn("Failed to find predicted sequence in text: {}.".format(
@@ -329,7 +378,7 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
 
                 # if we don't want to allow subtoken predictions, adjust start and end to match
                 # the start and ends of the nearest full tokens
-                if not subtoken_predictions:
+                if (not subtoken_predictions) and (not iob or not is_iob_tagged(new_label or label)):
                     if multi_label:
                         start_idx = 0
                         end_idx = 0
@@ -348,7 +397,7 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
                     annotation = {
                         "start": annotation_start,
                         "end": annotation_end,
-                        "label": label,
+                        "label": new_label or label,
                         "text": text
                     }
                     if confidences is not None:
@@ -359,12 +408,17 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
                         annotation_ranges.add((annotation_start, annotation_end, label))
                         doc_annotations.append(annotation)
 
+        if iob:
+            for doc in doc_annotations:
+                if is_iob_tagged(doc["label"]):
+                    doc["label"] = doc["label"].split("-", 1)[-1]
+
         doc_annotations = sorted([dict(items) for items in doc_annotations], key=lambda x: x['start'])
         annotations.append(doc_annotations)
     return raw_texts, annotations
 
 
-def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value=config.PAD_TOKEN, subtoken_labels=False):
+def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value=config.PAD_TOKEN, subtoken_labels=False, iob=False):
     """
     Maps from the 'indico' format sequence labeling data. Into a labeled substring format. This is the exact inverse of
     :meth finetune_to_indico_sequence:.
@@ -403,7 +457,56 @@ def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value
         tokens = NLP(text)
         token_starts = [token.idx for token in tokens]
         token_ends = [token.idx + len(token.text) for token in tokens]
-        n_tokens = len(tokens)
+        if iob:
+            new_label_seq = []
+            for annotation in label_seq:
+                start = annotation["start"]
+                end = annotation["end"]
+                label = annotation["label"]
+                if label == none_value:
+                    new_label_seq.append(annotation)
+                    continue
+                assert isinstance(label, str),"to use iob encoding it is necessary to have string labels"
+                sub_text = annotation.get("text", None) or text[start:end]
+
+                encoded = ENCODER._encode([sub_text])
+                start_char_locs = [0] + encoded.char_locs[0][:-1]
+
+                if len(start_char_locs) > 0:
+                    if len(start_char_locs) == 1:
+                        B_locs = (start_char_locs[0], len(sub_text))
+                    else:
+                        B_locs = (start_char_locs[0], start_char_locs[1])
+                    new_label_seq.append(
+                        dict(
+                            start=start + B_locs[0],
+                            end=start + B_locs[1],
+                            text=sub_text[B_locs[0]:B_locs[1]],
+                            label="B-"+label,
+                        )
+                    )
+
+                if len(start_char_locs) > 1:
+                    E_locs = (start_char_locs[-1], len(sub_text))
+                    new_label_seq.append(
+                        dict(
+                            start=start + E_locs[0],
+                            end=start + E_locs[1],
+                            text=sub_text[E_locs[0]:E_locs[1]],
+                            label="E-" + label,
+                        )
+                    )
+                if len(start_char_locs) > 2:
+                    new_label_seq.append(
+                        dict(
+                            start=start + B_locs[1],
+                            end=start + E_locs[0],
+                            text=sub_text[B_locs[1]:E_locs[0]],
+                            label="I-" + label,
+                        )
+                    )
+
+            label_seq = new_label_seq
 
         label_seq = sorted(label_seq, key=lambda x: x["start"])
         last_loc = 0
@@ -414,7 +517,7 @@ def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value
             end = annotation["end"]
             label = annotation["label"]
             annotation_text = annotation.get("text")
-            if not subtoken_labels:
+            if not subtoken_labels and not iob:
                 if label != none_value:
                     # round to nearest token
                     while start > 0 and start not in token_starts:
@@ -461,7 +564,6 @@ def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value
 
                     start = last_loc
                     annotation_text = annotation_text[last_loc - end:]
-
             if start >= end:
                 # degenerate label
                 last_loc = max(start, end)
@@ -473,7 +575,7 @@ def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value
             else:
                 doc_labels.append(label)
 
-            if annotation_text is not None and text[start:end] != annotation_text:
+            if not iob and annotation_text is not None and text[start:end] != annotation_text:
                 raise ValueError(
                     "Annotation text does not match text specified by `start` and `end` indexes. "
                     "Text provided: `{}`.  Text extracted: `{}`.".format(

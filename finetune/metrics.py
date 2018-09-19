@@ -48,9 +48,8 @@ def sequence_labeling_token_counts(true, predicted):
         # correct + false negatives
         for true_token in true_tokens:
             for pred_token in pred_tokens:
-                if (pred_token['start'] == true_token['start'] and 
-                    pred_token['end'] == true_token['end']):
-
+                if (abs(pred_token['start'] - true_token['start']) <= 1 and
+                        abs(pred_token['end'] - true_token['end']) <= 1):  # this is equal down to 1 char, for spaces
                     if pred_token['label'] == true_token['label']:
                         d[true_token['label']]['correct'].append(true_token)
                     else:

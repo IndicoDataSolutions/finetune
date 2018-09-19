@@ -82,6 +82,57 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
         self.assertCountEqual(finetuney[0][1], finetuney_pred[0][1])
         self.assertCountEqual(finetuney[0][2], finetuney_pred[0][2])
 
+    def test_bio(self):
+        raw = ["Indico Is the best"]
+
+        finetunex = [
+            ["Indic", "o", " Is", " the best"]
+        ]
+        finetuney = [
+            ["B-True", "I-True", "E-True", "<PAD>"]
+        ]
+        indicox_pred, indicoy_pred = finetune_to_indico_sequence(raw, finetunex, finetuney,  iob=True)
+        indicoy = [
+            [
+                {'start': 0, 'end': 9, 'label': 'True', 'text': 'Indico Is'}
+            ]
+        ]
+
+        self.assertEqual(indicoy, indicoy_pred)
+        self.assertEqual(raw, indicox_pred)
+
+        finetunex_pred, finetuney_pred = indico_to_finetune_sequence(raw, indicoy, iob=True, multi_label=False)
+        self.assertEqual(finetunex_pred, finetunex)
+        self.assertCountEqual(finetuney[0][0], finetuney_pred[0][0])
+        self.assertCountEqual(finetuney[0][1], finetuney_pred[0][1])
+        self.assertCountEqual(finetuney[0][2], finetuney_pred[0][2])
+
+    def test_bio2(self):
+        raw = ["Indico Is the best"]
+
+        finetunex = [
+            ["Indic", "o", " ",  "Is", " the best"]
+        ]
+        finetuney = [
+            ["B-True", "E-True", "<PAD>",  "B-True", "<PAD>"]
+        ]
+        indicox_pred, indicoy_pred = finetune_to_indico_sequence(raw, finetunex, finetuney, iob=True)
+        indicoy = [
+            [
+                {'start': 0, 'end': 6, 'label': 'True', 'text': 'Indico'},
+                {'start': 7, 'end': 9, 'label': 'True', 'text': 'Is'}
+            ]
+        ]
+
+        self.assertEqual(indicoy, indicoy_pred)
+        self.assertEqual(raw, indicox_pred)
+
+        finetunex_pred, finetuney_pred = indico_to_finetune_sequence(raw, indicoy, multi_label=False, iob=True)
+        self.assertEqual(finetunex_pred, finetunex)
+        self.assertCountEqual(finetuney[0][0], finetuney_pred[0][0])
+        self.assertCountEqual(finetuney[0][1], finetuney_pred[0][1])
+        self.assertCountEqual(finetuney[0][2], finetuney_pred[0][2])
+
 
 
 if __name__ == '__main__':

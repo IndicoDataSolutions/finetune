@@ -2,12 +2,9 @@ import warnings
 import copy
 
 import tensorflow as tf
-from sklearn.model_selection import train_test_split
-import pandas as pd
 import numpy as np
 
 from finetune.base import BaseModel, DROPOUT_OFF
-from finetune.encoding import EncodedOutput, ArrayEncodedOutput
 from finetune.target_encoders import SequenceLabelingEncoder, SequenceMultiLabelingEncoder
 from finetune.network_modules import sequence_labeler
 from finetune.crf import sequence_decode
@@ -59,7 +56,8 @@ class SequenceLabeler(BaseModel):
         :param val_interval: The interval for which validation is performed, measured in number of steps.
         """
         fit_target_model = (Y is not None)
-        X, Y = indico_to_finetune_sequence(X, Y, multi_label=self.multi_label, none_value="<PAD>")
+        X, Y = indico_to_finetune_sequence(X, Y, multi_label=self.multi_label, none_value="<PAD>",
+                                           iob=self.config.iob_encoding)
         pad = self.config.pad_token
         arr_encoded = self._text_to_ids(X, Y=Y, pad_token=[pad] if self.multi_label else pad)
         targets = arr_encoded.labels if fit_target_model else None
@@ -72,7 +70,7 @@ class SequenceLabeler(BaseModel):
         :param X: A list / array of text, shape [batch]
         :returns: list of class labels.
         """
-        subseqs, _ = indico_to_finetune_sequence(X, multi_label=self.multi_label)
+        subseqs, _ = indico_to_finetune_sequence(X, multi_label=self.multi_label, iob=self.config.iob_encoding)
 
         chunk_size = self.config.max_length - 2
         step_size = chunk_size // 3
@@ -168,7 +166,8 @@ class SequenceLabeler(BaseModel):
             subseqs=all_subseqs,
             labels=all_labels,
             probs=all_probs,
-            subtoken_predictions=self.config.subtoken_predictions
+            subtoken_predictions=self.config.subtoken_predictions,
+            iob=self.config.iob_encoding
         )
 
         return doc_annotations
