@@ -179,7 +179,7 @@ def get_default_config():
         seq_num_heads=16,
         pad_token="<PAD>",
         subtoken_predictions=False,
-        iob_encoding=True,
+        iob_encoding=False,
         multi_label_sequences=False,
         multi_label_threshold=0.5,
         autosave_path=None,
