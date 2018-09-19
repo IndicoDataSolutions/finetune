@@ -325,3 +325,37 @@ def sequence_labeler(hidden, targets, n_targets, dropout_placeholder, config, pa
                 'transition_matrix': transition_params
             }
         }
+
+def cosine_similarity(hidden_0, hidden_1, targets, n_targets, dropout_placeholder, config, train=False, reuse=None, **kwargs):
+    """
+    A simple model to compute cosine similarity between two embeddings.
+
+    :param hidden_0: Embedding 1. [batch_size, embed_dim]
+    :param hidden_1: Embedding 2. [batch_size, embed_dim]
+    :param targets: One hot encoded target ids. [batch_size, n_classes]
+    :param n_targets: A python int containing the number of classes that the model should be learning to predict over.
+    :param dropout_placeholder:
+    :param config: A config object, containing all parameters for the featurizer.
+    :param train: If this flag is true, dropout and losses are added to the graph.
+    :param reuse: Should reuse be set within this scope.
+    :param kwargs: Spare arguments.
+    :return: dict containing:
+        logits: The unnormalised log probabilities of each class.
+        losses: The loss for the classifier.
+    """
+    with tf.variable_scope('cosine_similarity', reuse=reuse):
+        hidden1 = dropout(hidden_0, config.clf_p_drop, train, dropout_placeholder)
+        hidden2 = dropout(hidden_1, config.clf_p_drop, train, dropout_placeholder)
+        dot_product = tf.reduce_sum(tf.multiply(hidden1, hidden2), axis=1)
+
+        sigmoid_loss = tf.nn.sigmoid_cross_entropy_with_logits(
+            logits=dot_product,
+            labels=tf.stop_gradient(
+                tf.squeeze(targets)
+            )
+        )
+
+        return {
+            'logits': dot_product,
+            'losses': sigmoid_loss
+        }
