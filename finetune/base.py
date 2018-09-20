@@ -355,12 +355,16 @@ class BaseModel(object, metaclass=ABCMeta):
             self.config.class_weights = compute_class_weights(class_weights=self.config.class_weights,
                                                               Y=Y_t)  # TODO is this okay, just taken from a small sample of the dataset?
 
-        dataset_encoded = lambda: map(lambda xy: (self._text_to_ids([xy[0]])[:3], xy[1]), dataset())
+        def text_to_tokens_mask(X):
+            out = self._text_to_ids([X])
+            return out.token_ids, out.mask
+
+        dataset_encoded = lambda: map(lambda xy: (text_to_tokens_mask(xy[0]), xy[1]), dataset())
         tf_dataset = Dataset.from_generator(
             dataset_encoded,
             ((self.X.dtype, self.M.dtype), self.Y.dtype),
             # tokens, mask, labels, # TODO, update the API so this isnt pulled from placeholders...lol
-            ((self.X.shape, self.M.shape), self.Y.shape)
+            ((self.X.shape[1:], self.M.shape[1:]), self.Y.shape[1:])
         ).shuffle(shuffle_buffer_size, seed=self.config.seed).prefetch(prefetch_buffer)
         val_dataset = tf_dataset.take(val_size).batch(batch_size)
         train_dataset = tf_dataset.skip(val_size).batch(batch_size)
@@ -650,9 +654,9 @@ class BaseModel(object, metaclass=ABCMeta):
 
         return ArrayEncodedOutput(
             token_ids=x[0],
-            tokens=encoded_output.tokens[0],  # TODO GROSS, refactor this.
-            labels=labels_arr[0],
-            char_locs=encoded_output.char_locs[0],
+            tokens=encoded_output.tokens,  # TODO GROSS, refactor this.
+            labels=labels_arr,
+            char_locs=encoded_output.char_locs,
             mask=mask[0],
         )
 
