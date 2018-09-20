@@ -32,6 +32,8 @@ from finetune.saver import Saver
 from finetune.imbalance import compute_class_weights, class_weight_tensor
 from finetune.errors import FinetuneError
 
+from tensorflow.data import Dataset
+
 JL_BASE = os.path.join(os.path.dirname(__file__), "model", "Base_model.jl")
 
 _LOGGER = logging.getLogger(__name__)
@@ -41,6 +43,14 @@ DROPOUT_OFF = 0
 SAVE_PREFIX = 'model'
 MIN_UPDATES = 15
 
+import enum
+
+
+class Mode(enum.Enum):
+    FEATURIZE = 0
+    NORMAL = 2
+    PROBAS = 3
+    GENERATE_TEXT = 4
 
 class BaseModel(object, metaclass=ABCMeta):
     """
@@ -103,6 +113,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self.is_built = False    # has tf graph been constructed?
         self.is_trained = False  # has model been fine-tuned?
         self.require_lm = False
+        self.mode = Mode.NORMAL
 
         def process_embeddings(name, value):
             if "/we:0" not in name:
@@ -202,7 +213,7 @@ class BaseModel(object, metaclass=ABCMeta):
     def _eval(self, *tensors, feed_dict):
         """
         Evaluate the value of each of the provided tensors.
-        Returns a `dict` that maps from tensor to result value.  
+        Returns a `dict` that maps from tensor to result value.
         If any result value is None, that result is excluded from the results `dict`.
         """
         tensors = [
@@ -216,6 +227,7 @@ class BaseModel(object, metaclass=ABCMeta):
             if value is not None
         }
 
+
     def finetune(self, Xs, Y=None, batch_size=None):
         if Y is not None and len(Xs) != len(Y):
             raise FinetuneError(
@@ -224,26 +236,44 @@ class BaseModel(object, metaclass=ABCMeta):
                     len(Y)
                 )
             )
-        arr_encoded = self._text_to_ids(Xs)
-        return self._training_loop(
-            arr_encoded,
-            Y=Y,
-            batch_size=batch_size,
+        val_input_fn, train_input_fn = self._get_train_input_fns(Xs, Y, batch_size=batch_size)
+        train_spec = tf.estimator.TrainSpec(input_fn=train_input_fn)
+        eval_spec = tf.estimator.EvalSpec(input_fn=val_input_fn)
+        tf.estimator.train_and_evaluate(self.get_estimator(), train_spec=train_spec, eval_spec=eval_spec)
+
+
+    def get_estimator(self):
+        conf = tf.ConfigProto(
+            allow_soft_placement=self.config.soft_device_placement,
+            log_device_placement=self.config.log_device_placement,
         )
+        config = tf.estimator.RunConfig(
+            tf_random_seed=None,
+            save_summary_steps=100,
+            save_checkpoints_steps=1000,
+            save_checkpoints_secs=None,
+            session_config=conf,
+            keep_checkpoint_max=5,
+            keep_checkpoint_every_n_hours=10000,
+            log_step_count_steps=100,
+            #     train_distribute=None,
+            #    device_fn=None
+        )
+        return tf.estimator.Estimator(model_fn=self._model_fn, config=config)
 
     @property
     def pad_idx(self):
         if self.pad_idx_ is None:
             self.pad_idx_ = list(self.label_encoder.classes_).index(self.config.pad_token)
         return self.pad_idx_
-      
+
     def validation_settings(self, n_examples, batch_size):
         """
         Auto-select reasonable validation settings
         """
         if self.config.val_size != None and self.config.val_interval != None:
             return self.config.val_size, self.config.val_interval
-        
+
         # Auto-select reasonable validation size
         if self.config.val_size is None:
             if n_examples < 50:
@@ -265,7 +295,7 @@ class BaseModel(object, metaclass=ABCMeta):
         return val_size, val_interval
 
     def _initialize_summaries(self):
-        # Side effect: creation of self.tf_summaries attribute 
+        # Side effect: creation of self.tf_summaries attribute
         # that maps from a tensor to it's corresponding summary
         self.tf_summaries = {}
         for tensor, summary_name in self.summaries.items():
@@ -274,188 +304,225 @@ class BaseModel(object, metaclass=ABCMeta):
             self.tf_summaries[tensor] = tf_summary
         return self.tf_summaries
 
-    def validation_hook(self, train_data, validation_data, global_step, batch_size=None, compute_target_loss=True):
-        """
-        Run at every validation step
-        """
-        self._write_train_summaries(
-            data=train_data,
-            global_step=global_step
-        )
-        self._write_validation_summaries(
-            data=validation_data, 
-            global_step=global_step,
-            batch_size=batch_size,
-            compute_target_loss=compute_target_loss
-        )
-        if self.config.verbose:
-            tqdm.tqdm.write("Train loss: {}\t Validation loss: {}".format(
-                self.ema_train_loss, 
-                self.ema_validation_loss
-            ))
+    def _define_placeholders(self, target_dim=None):
+        # tf placeholders
+        self.X = tf.placeholder(tf.int32, [None, self.config.max_length, 2])  # token idxs (BPE embedding + positional)
+        self.M = tf.placeholder(tf.float32, [None, self.config.max_length])  # sequence mask
+        # when target dim is not set, an array of [None] targets is passed as a placeholder
+        self.do_dropout = tf.placeholder(tf.float32)  # 1 for do dropout and 0 to not do dropout
+        self.Y = self._target_placeholder(target_dim=target_dim)
 
-    def _update_ema(self, name, value):
-        if getattr(self, name) is None:
-            setattr(self, name, value)
-        else:
-            updated_value = (
-                getattr(self, name) * self.config.rolling_avg_decay
-                + value * (1 - self.config.rolling_avg_decay)
-            )
-            setattr(self, name, updated_value)
-
-    def _write_train_summaries(self, data, global_step):
-        feed_dict = dict(zip([self.X, self.M, self.Y], data))
-        feed_dict[self.do_dropout] = DROPOUT_OFF
-        outputs = self._eval(*self.summaries.keys(), self.gradient_summaries, feed_dict=feed_dict)
-        if self.train_writer is not None:
-            for tensor, summary in self.tf_summaries.items():
-                value = outputs.get(tensor)
-                summary.value[0].simple_value = value
-                self.train_writer.add_summary(summary, global_step)
-
-            summarized_grads = outputs.get(self.gradient_summaries)
-            if summarized_grads is not None:
-                self.train_writer.add_summary(summarized_grads) 
-
-    def _write_validation_summaries(self, data, global_step, batch_size=None, compute_target_loss=True):
-        summary_accumulator = defaultdict(list)
-        n_devices = max(len(self.config.visible_gpus), 1)
-        batch_size = batch_size or self.config.batch_size * n_devices
-        iterator = iter_data(
-            *data,
-            n_batch=batch_size,
-            verbose=self.config.verbose,
-            tqdm_desc="Validation"
-        )
-        for xval, mval, yval in iterator:
-            feed_dict = {
-                self.X: xval,
-                self.M: mval,
-                self.do_dropout: DROPOUT_OFF
-            }
-            if compute_target_loss:
-                feed_dict[self.Y] = yval
-
-            outputs = self._eval(self.target_loss, self.total_loss, *self.summaries.keys(), feed_dict=feed_dict)
-            for tensor in self.tf_summaries:
-                value = outputs.get(tensor)
-                summary_accumulator[tensor].append(value)
-
-        for tensor, summary in self.tf_summaries.items():
-            mean_value = np.mean(summary_accumulator[tensor])
-            summary.value[0].simple_value = mean_value
-            if self.valid_writer is not None:
-                self.valid_writer.add_summary(summary, global_step)
-
-        # report target_loss if available,
-        # but backoff to total loss when not
-        val_losses = summary_accumulator.get(
-            self.target_loss,
-            summary_accumulator.get(self.total_loss)
-        )
-        mean_val_loss = np.mean(val_losses)
-        self._update_ema('ema_validation_loss', mean_val_loss)
-
-        self.validation_losses.append(mean_val_loss)
-        if len(self.validation_losses) > self.config.val_window_size:
-            self.validation_losses.pop(0)
-
-        windowed_val_loss = np.mean(self.validation_losses)
-        if windowed_val_loss <= self.best_validation_loss:
-            self.best_validation_loss = windowed_val_loss
-            if self.config.autosave_path is not None:
-                self.save(self.config.autosave_path)
-
-    def _training_loop(self, arr_encoded, Y=None, batch_size=None):
-        self.label_encoder = self._target_encoder()
-
-        idxs = list(range(len(arr_encoded.token_ids)))
-
+    def _get_train_input_fns(self, Xs, Y=None, batch_size=None):
         batch_size = batch_size or self.config.batch_size
 
-        val_size, val_interval = self.validation_settings(n_examples=len(idxs), batch_size=batch_size)
-        train_idxs, val_idxs = train_test_split(idxs, test_size=val_size)
+        shuffle_buffer_size = 100
+        val_size = 10
+        prefetch_buffer = 2  # breaks the pipeline to allow concurrency
 
-        if Y is None:
-            # only language model will be trained, mock fake target of right length
-            train_Y = np.asarray([[]] * len(train_idxs))
-            val_Y = np.asarray([[]] * len(val_idxs))
-            target_dim = None
+        self.label_encoder = self._target_encoder()
+
+        # Create restartable generators
+        Y_t = None
+        target_dim = -1
+        if not callable(Xs):
+            if Y is None:
+                Y = np.asarray([[]] * len(Xs))
+                target_dim = None
+            else:
+                Y_t = self.label_encoder.fit_transform(Y)
+            dataset = lambda: zip(Xs, Y_t)
+
         else:
-            Y = np.asarray(Y)
-            train_Y = self.label_encoder.fit_transform(Y[train_idxs])
-            val_Y = self.label_encoder.transform(Y[val_idxs])
+            if Y is None:
+                target_dim = None
+
+                def Y():
+                    while True:
+                        yield []
+            else:
+                Y_fit = [itertools.islice(Y(), 100)]  # TODO find a more principled way to do this?
+                Y_t = self.label_encoder.fit_transform(Y_fit)
+
+            dataset = lambda: zip(Xs(), map(lambda y: self.label_encoder.transform([y])[0],
+                                            Y()))  # encode one sample at a time.
+        if target_dim == -1:
             target_dim = self.label_encoder.target_dim
+        self.lm_loss_coef = self.config.lm_loss_coef if target_dim is not None else 1.0
+        self.target_dim = target_dim
 
-        train_dataset = (arr_encoded.token_ids[train_idxs], arr_encoded.mask[train_idxs], train_Y)
-        is_classification_task = all([isinstance(y, int) for y in train_Y])
-        if self.config.oversample and is_classification_task:
-            oversample_idxs = RandomOverSampler().fit_sample(
-                X=list(range(len(train_Y))),
-                y=train_Y
-            )
-            train_dataset = (arr[oversample_idxs] for arr in train_dataset)
+        self._define_placeholders(target_dim=target_dim)  # TODO  This needs to go.
+        if Y_t is not None:
+            self.config.class_weights = compute_class_weights(class_weights=self.config.class_weights,
+                                                              Y=Y_t)  # TODO is this okay, just taken from a small sample of the dataset?
 
-        n_batch_train = batch_size * max(len(self.config.visible_gpus), 1)
-        n_examples = len(train_dataset[0])
-        n_updates_total = (n_examples // n_batch_train) * self.config.n_epochs
+        dataset_encoded = lambda: map(lambda xy: (self._text_to_ids([xy[0]])[:3], xy[1]), dataset())
+        tf_dataset = Dataset.from_generator(
+            dataset_encoded,
+            ((self.X.dtype, self.M.dtype), self.Y.dtype),
+            # tokens, mask, labels, # TODO, update the API so this isnt pulled from placeholders...lol
+            ((self.X.shape, self.M.shape), self.Y.shape)
+        ).shuffle(shuffle_buffer_size, seed=self.config.seed).prefetch(prefetch_buffer)
+        val_dataset = tf_dataset.take(val_size).batch(batch_size)
+        train_dataset = tf_dataset.skip(val_size).batch(batch_size)
 
-        if (n_updates_total) <= MIN_UPDATES:
-            warnings.warn(
-                "Model will only receive {} weight updates.  This may not be sufficient to find a good minima."
-                "Please consider lowering `config.batch_size` or providing more labeled training data to thet model."
-            )
+        return (lambda : val_dataset.make_one_shot_iterator().get_next("Val_dataset"),
+        lambda: train_dataset.make_one_shot_iterator().get_next("Train_dataset"))
 
-        val_dataset = (arr_encoded.token_ids[val_idxs], arr_encoded.mask[val_idxs], val_Y)
+    def _model_fn(self, features, labels, mode, params):
+        gpu_grads = []
 
-        self.config.class_weights = compute_class_weights(
-            class_weights=self.config.class_weights,
-            Y=Y
-        )
-        self._build_model(n_updates_total=n_updates_total, target_dim=target_dim)
-        self._initialize_summaries()
-        self.is_trained = True
-        
-        global_step = 0
-        for i in range(self.config.n_epochs):
-            iterator = iter_data(
-                *train_dataset, 
-                n_batch=n_batch_train, 
-                tqdm_desc="Epoch {}".format(i),
-                verbose=self.config.verbose
-            )
-            for (xmb, mmb, ymb) in iterator:
-                global_step += 1
-                compute_target_loss = (target_dim is not None)
+        train = mode == tf.estimator.ModeKeys.TRAIN
+        self.do_dropout = DROPOUT_ON if train else DROPOUT_OFF
+        aggregator = defaultdict(list)
+        train_loss_tower = 0.
+        gpus = self.config.visible_gpus
+        n_splits = max(len(gpus), 1)
 
-                if global_step % val_interval == 0:
-                    self.validation_hook(
-                        train_data=(xmb, mmb, ymb),
-                        validation_data=val_dataset,
-                        global_step=global_step,
-                        batch_size=n_batch_train,
-                        compute_target_loss=compute_target_loss
-                    )
-                    
-                feed_dict = {
-                    self.X: xmb,
-                    self.M: mmb,
-                    self.do_dropout: DROPOUT_ON
-                }
-                if compute_target_loss:
-                    feed_dict[self.Y] = ymb
+        # decide on setting for language model loss coefficient
+        # if the language model loss does not contribute to overall loss,
+        # remove the language model computation from the graph
 
-                outputs = self._eval(
-                    self.target_loss,
-                    self.total_loss,
-                    self.train_op,
-                    feed_dict=feed_dict
+        compile_lm = (train and self.lm_loss_coef > 0) or self.require_lm  # TODO switch this for the above self.mode
+
+        for i, (X, M, Y) in enumerate(soft_split(*features, labels, n_splits=n_splits)):
+            print(X, M, Y)
+            do_reuse = True if i > 0 else tf.AUTO_REUSE
+
+            if gpus:
+                device = tf.device(assign_to_gpu(gpus[i], params_device=self.config.params_device))
+            else:
+                device = tf.device('cpu')
+
+            scope = tf.variable_scope(tf.get_variable_scope(), reuse=do_reuse)
+
+            with device, scope:
+                featurizer_state = featurizer(
+                    X,
+                    config=self.config,
+                    encoder=self.encoder,
+                    dropout_placeholder=self.do_dropout,
+                    train=train,
+                    reuse=do_reuse
                 )
-                train_loss = outputs.get(self.target_loss, outputs.get(self.total_loss))
-                self._update_ema('ema_train_loss', train_loss)
 
-        return self
+                if compile_lm:
+                    language_model_state = language_model(
+                        X=X,
+                        M=M,
+                        config=self.config,
+                        embed_weights=featurizer_state['embed_weights'],
+                        hidden=featurizer_state['sequence_features'],
+                        reuse=do_reuse
+                    )
+
+                    train_loss = self.lm_loss_coef * tf.reduce_mean(language_model_state['losses'])
+                    aggregator['lm_losses'].append(language_model_state['losses'])
+                    lm_logits = language_model_state["logits"]
+
+                    lm_logit_mask = np.zeros([1, lm_logits.get_shape().as_list()[-1]], dtype=np.float32)
+                    lm_logit_mask[:, self.encoder.vocab_size:] = -np.inf
+                    lm_logits += lm_logit_mask
+
+                    if "use_extra_toks" in self.config and not self.config.use_extra_toks:
+                        lm_logit_mask[:, self.encoder.start] = -np.inf
+                        lm_logit_mask[:, self.encoder.delimiter] = -np.inf
+                        lm_logit_mask[:, self.encoder.clf_token] = -np.inf
+
+                    aggregator["lm_model"].append(sample_with_temperature(lm_logits, self.config.lm_temp))
+                else:
+                    train_loss = 0
+
+                aggregator['features'].append(featurizer_state['features'])
+
+                if self.target_dim is not None:
+                    weighted_tensor = None
+                    if self.config.class_weights is not None:
+                        weighted_tensor = class_weight_tensor(
+                            class_weights=self.config.class_weights,
+                            target_dim=self.target_dim,
+                            label_encoder=self.label_encoder
+                        )
+
+                    with tf.variable_scope('model/target'):
+                        target_model_config = {
+                            'featurizer_state': featurizer_state,
+                            'targets': Y,
+                            'n_outputs': self.target_dim,
+                            'train': train,
+                            'reuse': do_reuse,
+                            'max_length': self.config.max_length,
+                            'class_weights': weighted_tensor
+                        }
+                        target_model_state = self._target_model(**target_model_config)
+                    train_loss += (1 - self.lm_loss_coef) * tf.reduce_mean(target_model_state['losses'])
+                    aggregator['logits'].append(target_model_state['logits'])
+                    aggregator['target_losses'].append(target_model_state['losses'])
+
+                train_loss_tower += train_loss
+
+                params = find_trainable_variables("model")
+                grads = tf.gradients(train_loss, params)
+                grads = list(zip(grads, params))
+                gpu_grads.append(grads)
+
+        with tf.device(self.config.params_device):
+            self.features = tf.concat(aggregator['features'], axis=0)
+            if compile_lm:
+                self.lm_predict_op = tf.concat(aggregator["lm_model"], 0)
+                self.lm_losses = tf.concat(aggregator['lm_losses'], axis=0)
+                self.lm_loss = tf.reduce_mean(self.lm_losses)
+
+                tf.summary.scalar("LanguageModelLoss", self.lm_loss)
+
+            if train:
+                self._compile_train_op(
+                    params=params,
+                    grads=gpu_grads,
+                    n_updates_total=1000
+                    # TODO figure out what to do about this. We dont always know how many updates we will get now.
+                )
+
+            if self.target_dim is not None:
+                self.logits = tf.concat(aggregator['logits'], axis=0)
+                self.target_losses = concat_or_stack(aggregator['target_losses'])
+                self.target_loss = tf.reduce_mean(self.target_losses)
+
+                tf.summary.scalar("TargetModelLoss", self.target_loss)
+            self.total_loss = train_loss_tower / n_splits
+
+            tf.summary.scalar("TotalLoss", self.total_loss)
+
+        if mode == tf.estimator.ModeKeys.PREDICT:
+            if self.mode == Mode.NORMAL:
+                return tf.estimator.EstimatorSpec(
+                    mode=mode,
+                    predictions=self._predict_op(
+                        self.logits, **target_model_state.get("predict_params", {})
+                    )
+                )
+            if self.mode == Mode.PROBAS:
+                return tf.estimator.EstimatorSpec(
+                    mode=mode,
+                    predictions=self._predict_proba_op(
+                       self.logits, **target_model_state.get("predict_params", {})
+                    )
+                )
+            if self.mode == Mode.FEATURIZE:
+                return tf.estimator.EstimatorSpec(
+                    mode=mode,
+                    predictions=self.features
+                )
+            if self.mode == Mode.GENERATE_TEXT:
+                return tf.estimator.EstimatorSpec(
+                    mode=mode,
+                    predictions=self.lm_predict_op
+                )
+
+        if mode == tf.estimator.ModeKeys.TRAIN:
+            return tf.estimator.EstimatorSpec(mode=mode, loss=self.total_loss, train_op=self.train_op)
+
+        assert mode == tf.estimator.ModeKeys.EVAL
+        return tf.estimator.EstimatorSpec(mode=mode, loss=self.target_loss)
 
     def fit(self, *args, **kwargs):
         """ An alias for finetune. """
@@ -582,11 +649,11 @@ class BaseModel(object, metaclass=ABCMeta):
         x[:, :, 1] = np.arange(self.encoder.vocab_size, self.encoder.vocab_size + self.config.max_length)
 
         return ArrayEncodedOutput(
-            token_ids=x,
-            tokens=encoded_output.tokens,
-            labels=labels_arr,
-            char_locs=encoded_output.char_locs,
-            mask=mask,
+            token_ids=x[0],
+            tokens=encoded_output.tokens[0],  # TODO GROSS, refactor this.
+            labels=labels_arr[0],
+            char_locs=encoded_output.char_locs[0],
+            mask=mask[0],
         )
 
     def _compile_train_op(self, *, params, grads, n_updates_total):
@@ -612,168 +679,13 @@ class BaseModel(object, metaclass=ABCMeta):
             deviation_regularization=self.config.regularize_deviation
         )
 
-    def _construct_graph(self, n_updates_total, target_dim=None, train=True):
-        gpu_grads = []
-        self.summaries = {}
 
-        # store whether or not graph was previously compiled with dropout
-        self.train = train
-        self._define_placeholders(target_dim=target_dim)
-
-        aggregator = defaultdict(list)
-        train_loss_tower = 0.
-        gpus = self.config.visible_gpus
-        n_splits = max(len(gpus), 1)
-
-        # decide on setting for language model loss coefficient
-        # if the language model loss does not contribute to overall loss,
-        # remove the language model computation from the graph
-        lm_loss_coef = self.config.lm_loss_coef
-        if target_dim is None:
-            lm_loss_coef = 1.0
-        compile_lm = (train and lm_loss_coef > 0) or self.require_lm
-
-        for i, (X, M, Y) in enumerate(soft_split(self.X, self.M, self.Y, n_splits=n_splits)):
-            do_reuse = True if i > 0 else tf.AUTO_REUSE
-
-            if gpus:
-                device = tf.device(assign_to_gpu(gpus[i], params_device=self.config.params_device))
-            else:
-                device = tf.device('cpu')
-
-            scope = tf.variable_scope(tf.get_variable_scope(), reuse=do_reuse)
-
-            with device, scope:
-                featurizer_state = featurizer(
-                    X,
-                    config=self.config,
-                    encoder=self.encoder,
-                    dropout_placeholder=self.do_dropout,
-                    train=train,
-                    reuse=do_reuse
-                )
-
-                if compile_lm:
-                    language_model_state = language_model(
-                        X=X,
-                        M=M,
-                        config=self.config,
-                        embed_weights=featurizer_state['embed_weights'],
-                        hidden=featurizer_state['sequence_features'],
-                        reuse=do_reuse
-                    )
-
-                    train_loss = lm_loss_coef * tf.reduce_mean(language_model_state['losses'])
-                    aggregator['lm_losses'].append(language_model_state['losses'])
-                    lm_logits = language_model_state["logits"]
-
-                    lm_logit_mask = np.zeros([1, lm_logits.get_shape().as_list()[-1]], dtype=np.float32)
-                    lm_logit_mask[:, self.encoder.vocab_size:] = -np.inf
-                    lm_logits += lm_logit_mask
-
-                    if "use_extra_toks" in self.config and not self.config.use_extra_toks:
-                        lm_logit_mask[:, self.encoder.start] = -np.inf
-                        lm_logit_mask[:, self.encoder.delimiter] = -np.inf
-                        lm_logit_mask[:, self.encoder.clf_token] = -np.inf
-
-                    aggregator["lm_model"].append(sample_with_temperature(lm_logits, self.config.lm_temp))
-                else:
-                    train_loss = 0
-
-                aggregator['features'].append(featurizer_state['features'])
-
-                if target_dim is not None:
-
-                    weighted_tensor = None
-                    if self.config.class_weights is not None:
-                        weighted_tensor = class_weight_tensor(
-                            class_weights=self.config.class_weights,
-                            target_dim=target_dim,
-                            label_encoder=self.label_encoder
-                        )
-
-                    with tf.variable_scope('model/target'):
-                        target_model_config = {
-                            'featurizer_state': featurizer_state,
-                            'targets': Y,
-                            'n_outputs': target_dim,
-                            'train': train,
-                            'reuse': do_reuse,
-                            'max_length': self.config.max_length,
-                            'class_weights': weighted_tensor
-                        }
-                        target_model_state = self._target_model(**target_model_config)
-                    train_loss += (1 - lm_loss_coef) * tf.reduce_mean(target_model_state['losses'])
-                    aggregator['logits'].append(target_model_state['logits'])
-                    aggregator['target_losses'].append(target_model_state['losses'])
-                    
-                train_loss_tower += train_loss
-
-                params = find_trainable_variables("model")
-                grads = tf.gradients(train_loss, params)
-                grads = list(zip(grads, params))
-                gpu_grads.append(grads)
-
-        with tf.device(self.config.params_device):
-            self.features = tf.concat(aggregator['features'], axis=0)
-            if compile_lm:
-                self.lm_predict_op = tf.concat(aggregator["lm_model"], 0)
-                self.lm_losses = tf.concat(aggregator['lm_losses'], axis=0)
-                self.lm_loss = tf.reduce_mean(self.lm_losses)
-                self.summaries[self.lm_loss] = 'LanguageModelLoss'
-
-            if train:
-                self._compile_train_op(
-                    params=params,
-                    grads=gpu_grads,
-                    n_updates_total=n_updates_total
-                )
-
-            if target_dim is not None:
-                self.logits = tf.concat(aggregator['logits'], axis=0)
-                self.target_losses = concat_or_stack(aggregator['target_losses'])
-
-                self.predict_op = self._predict_op(
-                    self.logits, **target_model_state.get("predict_params", {})
-                )
-                self.predict_proba_op = self._predict_proba_op(
-                    self.logits, **target_model_state.get("predict_params", {})
-                )
-                self.target_loss = tf.reduce_mean(self.target_losses)
-                
-                self.summaries[self.target_loss] = 'TargetModelLoss'
-
-            self.total_loss = train_loss_tower / n_splits
-            self.summaries[self.total_loss] = 'TotalLoss'
-
-    def _build_model(self, n_updates_total, target_dim, train=True):
+    def _build_model(self, n_updates_total, target_dim, train=True): # probably need to call this somewhere
         """
         Construct tensorflow symbolic graph.
         """
-        if not self.is_trained or train != self.train or self.target_dim != target_dim:
-            # reconstruct graph to include/remove dropout
-            # if `train` setting has changed
-            self._construct_graph(n_updates_total, target_dim, train=train)
-
-        self._initialize_session()
         self.saver.initialize(self.sess)
-
         self.target_dim = target_dim
-        if train:
-            if self.config.tensorboard_folder is not None:
-                if not os.path.exists(self.config.tensorboard_folder):
-                    os.mkdir(self.config.tensorboard_folder)
-                self.train_writer = tf.summary.FileWriter(self.config.tensorboard_folder + '/train', self.sess.graph)
-                self.valid_writer = tf.summary.FileWriter(self.config.tensorboard_folder + '/valid', self.sess.graph)
-        self.is_built = True
-
-    def _initialize_session(self):
-        if self.sess is None:
-            conf = tf.ConfigProto(
-                allow_soft_placement=self.config.soft_device_placement,
-                log_device_placement=self.config.log_device_placement,
-            )
-            self.sess = tf.Session(config=conf)
 
     def _set_random_seed(self, seed=None):
         seed = seed or self.config.seed
@@ -784,14 +696,7 @@ class BaseModel(object, metaclass=ABCMeta):
     def _target_placeholder(self, target_dim=None):
         return tf.placeholder(tf.float32, [None, target_dim or 1])  # classification targets
 
-    def _define_placeholders(self, target_dim=None):
-        # tf placeholders
-        self.X = tf.placeholder(tf.int32, [None, self.config.max_length, 2])  # token idxs (BPE embedding + positional)
-        self.M = tf.placeholder(tf.float32, [None, self.config.max_length])  # sequence mask
-        # when target dim is not set, an array of [None] targets is passed as a placeholder
 
-        self.do_dropout = tf.placeholder(tf.float32)  # 1 for do dropout and 0 to not do dropout
-        self.Y = self._target_placeholder(target_dim=target_dim)
 
     def generate_text(self, seed_text='', max_length=None, use_extra_toks=True):
         """
