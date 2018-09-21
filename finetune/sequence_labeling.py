@@ -2,12 +2,9 @@ import warnings
 import copy
 
 import tensorflow as tf
-from sklearn.model_selection import train_test_split
-import pandas as pd
 import numpy as np
 
-from finetune.base import BaseModel, DROPOUT_OFF
-from finetune.encoding import EncodedOutput, ArrayEncodedOutput
+from finetune.base import BaseModel
 from finetune.target_encoders import SequenceLabelingEncoder, SequenceMultiLabelingEncoder
 from finetune.network_modules import sequence_labeler
 from finetune.crf import sequence_decode
@@ -88,7 +85,6 @@ class SequenceLabeler(BaseModel):
                     feed_dict={
                         self.X: xmb,
                         self.M: mmb,
-                        self.do_dropout: DROPOUT_OFF
                     }
                 )
                 prediction, probas = output.get(self.predict_op)

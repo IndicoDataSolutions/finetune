@@ -1,16 +1,9 @@
 import os
-from functools import partial
 import warnings
-import copy
-
-import pandas as pd
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.framework import function
-from tensorflow.contrib.crf import viterbi_decode
-from tqdm import tqdm
 from scipy import interpolate
-from sklearn.utils import shuffle
 
 from finetune.encoding import NLP
 from finetune import config
@@ -34,22 +27,6 @@ def concat_or_stack(tensors, axis=0):
     except ValueError:
         # tensors are scalars
         return tf.stack(tensors, axis=axis)
-
-
-def shuffle_data(*args):
-    """
-    Thin passthrough fn to sklearn.utils.shuffle, but allows for passing through None values
-    """
-    shuffled = shuffle(arg for arg in args if arg is not None)
-    results = []
-    idx = 0
-    for arg in args:
-        if arg is None:
-            results.append(arg)
-        else:
-            results.append(shuffled[idx])
-            idx += 1
-    return tuple(results)
 
 
 def format_gpu_string(num):
@@ -77,27 +54,6 @@ def make_path(f):
     if d and not os.path.exists(d):
         os.makedirs(d)
     return f
-
-
-def _identity_init(shape, dtype, partition_info, scale):
-    n = shape[-1]
-    w = np.eye(n) * scale
-    if len([s for s in shape if s != 1]) == 2:
-        w = w.reshape(shape)
-    return w.astype(np.float32)
-
-
-def identity_init(scale=1.0):
-    return partial(_identity_init, scale=scale)
-
-
-def _np_init(shape, dtype, partition_info, w):
-    return w
-
-
-def np_init(w):
-    return partial(_np_init, w=w)
-
 
 def find_trainable_variables(key, exclude=None):
     """
@@ -130,39 +86,14 @@ def soft_split(*xs, n_splits=None):
         start = tf.minimum(i * n_per, current_batch_size)
         end = tf.minimum((i + 1) * n_per, current_batch_size)
         i_range = tf.range(start, end)
-        yield [tf.gather(x, i_range) for x in xs]
+        yield [tf.gather(x, i_range) if x is not None else None for x in xs]
 
 
 def flatten(outer):
     return [el for inner in outer for el in inner]
 
-
-def remove_none(l):
-    return [e for e in l if e is not None]
-
-
 def list_transpose(l):
     return [list(i) for i in zip(*l)]
-
-
-def iter_data(*datas, n_batch=128, truncate=False, verbose=False, max_batches=float("inf"), tqdm_desc=None):
-    n = len(datas[0])
-    if truncate:
-        n = (n // n_batch) * n_batch
-    n = min(n, max_batches * n_batch)
-    n_batches = 0
-
-    for i in tqdm(
-            range(0, n, n_batch), total=n // n_batch, ncols=80, leave=False, disable=(not verbose),
-            desc=tqdm_desc
-        ):
-        if n_batches >= max_batches: raise StopIteration
-        if len(datas) == 1:
-            yield datas[0][i:i + n_batch]
-        else:
-            yield (d[i:i + n_batch] for d in datas)
-        n_batches += 1
-
 
 @function.Defun(
     python_grad_func=lambda x, dy: tf.convert_to_tensor(dy),

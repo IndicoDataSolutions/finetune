@@ -30,7 +30,7 @@ def AdamWeightDecay(params, grads, lr, schedule, t_total, b1=0.9, b2=0.999, e=1e
     """
     Adam with weight decay fix and added weight decay to pre-trained weights.
     """
-    
+    global_step = tf.train.get_or_create_global_step()
     with tf.variable_scope('adam', reuse=tf.AUTO_REUSE):
         t = tf.get_variable("t", shape=1, initializer=tf.zeros_initializer() , dtype=tf.float32, trainable=False)
         tt = t + 1
@@ -69,4 +69,4 @@ def AdamWeightDecay(params, grads, lr, schedule, t_total, b1=0.9, b2=0.999, e=1e
                 pt = p - lrt * update_vec
 
                 updates.extend([m.assign(mt), v.assign(vt), p.assign(pt)])
-        return tf.group(*updates)
+        return tf.group(*updates + [tf.assign_add(global_step, 1)])

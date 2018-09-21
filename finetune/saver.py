@@ -24,6 +24,7 @@ class Saver:
         self.exclude = None if exclude_matches is None else re.compile(exclude_matches)
         self.variables = None
         self.save_dtype = save_dtype
+        self.sess = None  # hook out a reference to the session during initialization.
 
     def save(self, finetune_obj, path, mkdir=True):
         folder = os.path.dirname(path)
@@ -38,7 +39,7 @@ class Saver:
         if not all((var.name in fallback) or (var not in tf.trainable_variables()) for var in excluded):
             warnings.warn("Attempting to do a partial save where trainable variables are excluded that do not have a "
                           "corresponding default.")
-        values = finetune_obj.sess.run(included)
+        values = self.sess.run(included)
         if self.save_dtype is not None:
             values = [a.astype(self.save_dtype) for a in values]
 
@@ -64,13 +65,12 @@ class Saver:
         var_dict = dict(zip((var.name for var in find_trainable_variables("model", exclude="model/target")), init_params))
         joblib.dump(var_dict, self.fallback_filename)
 
-
-    def initialize(self, sess, expect_new_variables=True):
+    def get_scaffold_initializer(self):
         """
-        :param sess:
-        :param expect_new_variables:
-        :return:
+        Assumes a default init op will be run, this function should be called after all variables are instantiated
+        and then the callback run after the graph is finalized
         """
+        tf.logging.info("Initializing pre-trained model (PART-1)")
         variables_fb = joblib.load(self.fallback_filename)
 
         if self.variables is not None:
@@ -79,31 +79,28 @@ class Saver:
             variables_sv = dict()
 
         all_vars = tf.global_variables()
-        uninit_variables = [v for s, v in zip(sess.run([tf.is_variable_initialized(t) for t in all_vars]), all_vars) if not s]
         init_vals = []
-        for var in uninit_variables:
+        for var in all_vars:
             var_init = None
             for saved_var_name, saved_var in itertools.chain(variables_sv.items(), variables_fb.items()):
                 if saved_var_name == var.name:
                     var_init = (var, saved_var)
                     break
-            
-            if var_init is None and expect_new_variables:
-                init_vals.append(tf.variables_initializer([var]))
-            
-            elif var_init is None and not expect_new_variables:
-                warnings.warn(
-                    "Var {} is not found in any checkpoint. Because expect_new_variables is True. This variable will remain uninitialized".format(
-                        var.name))
-            
+
+            if var_init is None:
+                continue  # Monitored session deals with these.
             else:
                 var, saved_var = var_init
                 for func in self.variable_transforms:
                     saved_var = func(var.name, saved_var)
-                init_vals.append(var.assign(saved_var))
-        
-        sess.run(init_vals)
-        self.variables = None # not an explicit del but should set reference count to 0 unless being used for deviation regularisation
+                init_vals.append(var.assign(tf.constant(saved_var)))
+        self.variables = None  # not an explicit del but should set reference count to 0 unless being used for deviation regularisation
+
+        def initializer(scafold, sess):
+            tf.logging.info("Initializing pre-trained model (PART-2)")
+            self.sess = sess
+            sess.run(init_vals)
+        return initializer
 
     def get_pretrained_weights(self):
         return joblib.load(self.fallback_filename)

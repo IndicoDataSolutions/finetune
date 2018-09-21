@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from finetune.base import BaseModel, DROPOUT_OFF
+from finetune.base import BaseModel
 from finetune.target_encoders import MultilabelClassificationEncoder
 from finetune.network_modules import multi_classifier
 
@@ -88,7 +88,6 @@ class MultiLabelClassifier(BaseModel):
                     feed_dict={
                         self.X: xmb,
                         self.M: mmb,
-                        self.do_dropout: DROPOUT_OFF,
                         self.threshold_placeholder: threshold
                     }
                 )

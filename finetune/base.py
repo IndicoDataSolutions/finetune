@@ -5,52 +5,33 @@ import logging
 import itertools
 import sys
 import math
-from pathlib import Path
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
-from functools import partial
 from copy import deepcopy
 
-import tqdm
 import numpy as np
 import tensorflow as tf
-from imblearn.over_sampling import RandomOverSampler
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder
-import pandas as pd
-
 from finetune.download import download_data_if_required
-from finetune.optimizers import AdamWeightDecay, schedules
-from finetune.network_modules import featurizer, language_model
-from finetune.utils import (
-    find_trainable_variables, assign_to_gpu, average_grads, interpolate_pos_embed,
-    iter_data, soft_split, concat_or_stack, sample_with_temperature, list_transpose
-)
+from finetune.utils import interpolate_pos_embed, list_transpose
 from finetune.encoding import TextEncoder, ArrayEncodedOutput, EncodedOutput
 from finetune.config import PAD_TOKEN, get_default_config
 from finetune.saver import Saver
-from finetune.imbalance import compute_class_weights, class_weight_tensor
+from finetune.imbalance import compute_class_weights
 from finetune.errors import FinetuneError
+from finetune.model import get_model_fn
+from finetune.model import PredictMode
 
 from tensorflow.data import Dataset
 
 JL_BASE = os.path.join(os.path.dirname(__file__), "model", "Base_model.jl")
-
 _LOGGER = logging.getLogger(__name__)
 
-DROPOUT_ON = 1
-DROPOUT_OFF = 0
+
 SAVE_PREFIX = 'model'
 MIN_UPDATES = 15
 
-import enum
 
-
-class Mode(enum.Enum):
-    FEATURIZE = 0
-    NORMAL = 2
-    PROBAS = 3
-    GENERATE_TEXT = 4
 
 class BaseModel(object, metaclass=ABCMeta):
     """
@@ -113,7 +94,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self.is_built = False    # has tf graph been constructed?
         self.is_trained = False  # has model been fine-tuned?
         self.require_lm = False
-        self.mode = Mode.NORMAL
+        self.mode = PredictMode.NORMAL
 
         def process_embeddings(name, value):
             if "/we:0" not in name:
@@ -250,16 +231,28 @@ class BaseModel(object, metaclass=ABCMeta):
         config = tf.estimator.RunConfig(
             tf_random_seed=None,
             save_summary_steps=100,
-            save_checkpoints_steps=1000,
+            save_checkpoints_steps=100,
             save_checkpoints_secs=None,
             session_config=conf,
             keep_checkpoint_max=5,
             keep_checkpoint_every_n_hours=10000,
-            log_step_count_steps=100,
+            log_step_count_steps=10,
             #     train_distribute=None,
             #    device_fn=None
         )
-        return tf.estimator.Estimator(model_fn=self._model_fn, config=config)
+
+        model_fn = get_model_fn(
+            target_model_fn=self._target_model,
+            predict_op=self.predict_op,
+            predict_proba_op=self.predict_proba_op,
+            build_target_model=self.target_dim is not None,
+            build_lm = self.config.lm_loss_coef > 0.0 or self.target_dim is None,
+            encoder=self.encoder,
+            target_dim=self.target_dim,
+            label_encoder = self.label_encoder,
+            saver=self.saver
+        )
+        return tf.estimator.Estimator(model_fn=model_fn, config=config, params=self.config)
 
     @property
     def pad_idx(self):
@@ -293,16 +286,6 @@ class BaseModel(object, metaclass=ABCMeta):
             val_interval = self.config.val_interval
 
         return val_size, val_interval
-
-    def _initialize_summaries(self):
-        # Side effect: creation of self.tf_summaries attribute
-        # that maps from a tensor to it's corresponding summary
-        self.tf_summaries = {}
-        for tensor, summary_name in self.summaries.items():
-            tf_summary = tf.Summary()
-            tf_summary.value.add(tag=summary_name, simple_value=None)
-            self.tf_summaries[tensor] = tf_summary
-        return self.tf_summaries
 
     def _define_placeholders(self, target_dim=None):
         # tf placeholders
@@ -357,197 +340,64 @@ class BaseModel(object, metaclass=ABCMeta):
 
         def text_to_tokens_mask(X):
             out = self._text_to_ids([X])
-            return out.token_ids, out.mask
+            return {
+                "tokens": out.token_ids,
+                "mask": out.mask
+            }
 
         dataset_encoded = lambda: map(lambda xy: (text_to_tokens_mask(xy[0]), xy[1]), dataset())
         tf_dataset = Dataset.from_generator(
             dataset_encoded,
-            ((self.X.dtype, self.M.dtype), self.Y.dtype),
-            # tokens, mask, labels, # TODO, update the API so this isnt pulled from placeholders...lol
-            ((self.X.shape[1:], self.M.shape[1:]), self.Y.shape[1:])
-        ).shuffle(shuffle_buffer_size, seed=self.config.seed).prefetch(prefetch_buffer)
-        val_dataset = tf_dataset.take(val_size).batch(batch_size)
-        train_dataset = tf_dataset.skip(val_size).batch(batch_size)
+            ({"tokens": self.X.dtype, "mask": self.M.dtype}, self.Y.dtype),
+            # tokens, mask # TODO, update the API so this isnt pulled from placeholders...lol
+            ({"tokens": self.X.shape[1:], "mask": self.M.shape[1:]}, self.Y.shape[1:])
+        ).shuffle(shuffle_buffer_size, seed=self.config.seed)
+
+        val_dataset = tf_dataset.take(val_size).batch(batch_size).prefetch(prefetch_buffer)
+        train_dataset = tf_dataset.skip(val_size).batch(batch_size).repeat(self.config.n_epochs).prefetch(prefetch_buffer)
 
         return (lambda : val_dataset.make_one_shot_iterator().get_next("Val_dataset"),
         lambda: train_dataset.make_one_shot_iterator().get_next("Train_dataset"))
 
-    def _model_fn(self, features, labels, mode, params):
-        gpu_grads = []
+    def _get_predict_input_fn(self, Xs, batch_size=None):
+        batch_size = batch_size or self.config.batch_size
+        prefetch_buffer = 2  # breaks the pipeline to allow concurrency
 
-        train = mode == tf.estimator.ModeKeys.TRAIN
-        self.do_dropout = DROPOUT_ON if train else DROPOUT_OFF
-        aggregator = defaultdict(list)
-        train_loss_tower = 0.
-        gpus = self.config.visible_gpus
-        n_splits = max(len(gpus), 1)
+        if not callable(Xs):
+            dataset = lambda: Xs
+        else:
+            dataset = Xs
 
-        # decide on setting for language model loss coefficient
-        # if the language model loss does not contribute to overall loss,
-        # remove the language model computation from the graph
+        self._define_placeholders(target_dim=self.target_dim)  # TODO  This needs to go.
 
-        compile_lm = (train and self.lm_loss_coef > 0) or self.require_lm  # TODO switch this for the above self.mode
+        def text_to_tokens_mask(X):
+            out = self._text_to_ids([X])
+            return {
+                "tokens": out.token_ids,
+                "mask": out.mask
+            }
 
-        for i, (X, M, Y) in enumerate(soft_split(*features, labels, n_splits=n_splits)):
-            print(X, M, Y)
-            do_reuse = True if i > 0 else tf.AUTO_REUSE
+        dataset_encoded = lambda: map(lambda xy: (text_to_tokens_mask(xy[0]), None), dataset())
+        tf_dataset = Dataset.from_generator(
+            dataset_encoded,
+            {"tokens": self.X.dtype, "mask": self.M.dtype},
+            # tokens, mask # TODO, update the API so this isnt pulled from placeholders...lol
+            {"tokens": self.X.shape[1:], "mask": self.M.shape[1:]}
+        )
+        dataset = tf_dataset.batch(batch_size).prefetch(prefetch_buffer)
 
-            if gpus:
-                device = tf.device(assign_to_gpu(gpus[i], params_device=self.config.params_device))
-            else:
-                device = tf.device('cpu')
-
-            scope = tf.variable_scope(tf.get_variable_scope(), reuse=do_reuse)
-
-            with device, scope:
-                featurizer_state = featurizer(
-                    X,
-                    config=self.config,
-                    encoder=self.encoder,
-                    dropout_placeholder=self.do_dropout,
-                    train=train,
-                    reuse=do_reuse
-                )
-
-                if compile_lm:
-                    language_model_state = language_model(
-                        X=X,
-                        M=M,
-                        config=self.config,
-                        embed_weights=featurizer_state['embed_weights'],
-                        hidden=featurizer_state['sequence_features'],
-                        reuse=do_reuse
-                    )
-
-                    train_loss = self.lm_loss_coef * tf.reduce_mean(language_model_state['losses'])
-                    aggregator['lm_losses'].append(language_model_state['losses'])
-                    lm_logits = language_model_state["logits"]
-
-                    lm_logit_mask = np.zeros([1, lm_logits.get_shape().as_list()[-1]], dtype=np.float32)
-                    lm_logit_mask[:, self.encoder.vocab_size:] = -np.inf
-                    lm_logits += lm_logit_mask
-
-                    if "use_extra_toks" in self.config and not self.config.use_extra_toks:
-                        lm_logit_mask[:, self.encoder.start] = -np.inf
-                        lm_logit_mask[:, self.encoder.delimiter] = -np.inf
-                        lm_logit_mask[:, self.encoder.clf_token] = -np.inf
-
-                    aggregator["lm_model"].append(sample_with_temperature(lm_logits, self.config.lm_temp))
-                else:
-                    train_loss = 0
-
-                aggregator['features'].append(featurizer_state['features'])
-
-                if self.target_dim is not None:
-                    weighted_tensor = None
-                    if self.config.class_weights is not None:
-                        weighted_tensor = class_weight_tensor(
-                            class_weights=self.config.class_weights,
-                            target_dim=self.target_dim,
-                            label_encoder=self.label_encoder
-                        )
-
-                    with tf.variable_scope('model/target'):
-                        target_model_config = {
-                            'featurizer_state': featurizer_state,
-                            'targets': Y,
-                            'n_outputs': self.target_dim,
-                            'train': train,
-                            'reuse': do_reuse,
-                            'max_length': self.config.max_length,
-                            'class_weights': weighted_tensor
-                        }
-                        target_model_state = self._target_model(**target_model_config)
-                    train_loss += (1 - self.lm_loss_coef) * tf.reduce_mean(target_model_state['losses'])
-                    aggregator['logits'].append(target_model_state['logits'])
-                    aggregator['target_losses'].append(target_model_state['losses'])
-
-                train_loss_tower += train_loss
-
-                params = find_trainable_variables("model")
-                grads = tf.gradients(train_loss, params)
-                grads = list(zip(grads, params))
-                gpu_grads.append(grads)
-
-        with tf.device(self.config.params_device):
-            self.features = tf.concat(aggregator['features'], axis=0)
-            if compile_lm:
-                self.lm_predict_op = tf.concat(aggregator["lm_model"], 0)
-                self.lm_losses = tf.concat(aggregator['lm_losses'], axis=0)
-                self.lm_loss = tf.reduce_mean(self.lm_losses)
-
-                tf.summary.scalar("LanguageModelLoss", self.lm_loss)
-
-            if train:
-                self._compile_train_op(
-                    params=params,
-                    grads=gpu_grads,
-                    n_updates_total=1000
-                    # TODO figure out what to do about this. We dont always know how many updates we will get now.
-                )
-
-            if self.target_dim is not None:
-                self.logits = tf.concat(aggregator['logits'], axis=0)
-                self.target_losses = concat_or_stack(aggregator['target_losses'])
-                self.target_loss = tf.reduce_mean(self.target_losses)
-
-                tf.summary.scalar("TargetModelLoss", self.target_loss)
-            self.total_loss = train_loss_tower / n_splits
-
-            tf.summary.scalar("TotalLoss", self.total_loss)
-
-        if mode == tf.estimator.ModeKeys.PREDICT:
-            if self.mode == Mode.NORMAL:
-                return tf.estimator.EstimatorSpec(
-                    mode=mode,
-                    predictions=self._predict_op(
-                        self.logits, **target_model_state.get("predict_params", {})
-                    )
-                )
-            if self.mode == Mode.PROBAS:
-                return tf.estimator.EstimatorSpec(
-                    mode=mode,
-                    predictions=self._predict_proba_op(
-                       self.logits, **target_model_state.get("predict_params", {})
-                    )
-                )
-            if self.mode == Mode.FEATURIZE:
-                return tf.estimator.EstimatorSpec(
-                    mode=mode,
-                    predictions=self.features
-                )
-            if self.mode == Mode.GENERATE_TEXT:
-                return tf.estimator.EstimatorSpec(
-                    mode=mode,
-                    predictions=self.lm_predict_op
-                )
-
-        if mode == tf.estimator.ModeKeys.TRAIN:
-            return tf.estimator.EstimatorSpec(mode=mode, loss=self.total_loss, train_op=self.train_op)
-
-        assert mode == tf.estimator.ModeKeys.EVAL
-        return tf.estimator.EstimatorSpec(mode=mode, loss=self.target_loss)
+        return lambda : dataset.make_one_shot_iterator().get_next("Pred_dataset")
 
     def fit(self, *args, **kwargs):
         """ An alias for finetune. """
         return self.finetune(*args, **kwargs)
 
     def _predict(self, Xs):
-        predictions = []
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore")
-            for xmb, mmb in self._infer_prep(Xs):
-                output = self._eval(self.predict_op,
-                    feed_dict={
-                        self.X: xmb,
-                        self.M: mmb,
-                        self.do_dropout: DROPOUT_OFF
-                    }
-                )
-                prediction = output.get(self.predict_op)
-                formatted_predictions = self.label_encoder.inverse_transform(prediction)
-                predictions.append(formatted_predictions)
-        return np.concatenate(predictions).tolist()
+        self.mode = PredictMode.NORMAL
+        estimator = self.get_estimator()
+        input_func = self._get_predict_input_fn(Xs)
+        pred_gen = estimator.predict(input_fn=input_func, predict_keys=self.mode)
+        return self.label_encoder.inverse_transform(list(pred_gen))
 
     def predict(self, Xs):
         return self._predict(Xs)
@@ -556,21 +406,11 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         Produce raw numeric outputs for proba predictions
         """
-        predictions = []
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore")
-            for xmb, mmb in self._infer_prep(Xs):
-                output = self._eval(
-                    self.predict_proba_op,
-                    feed_dict={
-                        self.X: xmb,
-                        self.M: mmb,
-                        self.do_dropout: DROPOUT_OFF
-                    }
-                )
-                probas = output.get(self.predict_proba_op)
-                predictions.extend(probas)
-        return predictions
+        self.mode = PredictMode.PROBAS
+        estimator = self.get_estimator()
+        input_func = self._get_predict_input_fn(Xs)
+        pred_gen = estimator.predict(input_fn=input_func, predict_keys=self.mode)
+        return list(pred_gen)
 
     def predict_proba(self, *args, **kwargs):
         """
@@ -660,37 +500,6 @@ class BaseModel(object, metaclass=ABCMeta):
             mask=mask[0],
         )
 
-    def _compile_train_op(self, *, params, grads, n_updates_total):
-        grads = average_grads(grads)
-
-        if self.config.summarize_grads:
-            self.gradient_summaries = tf.summary.merge(tf.contrib.training.add_gradients_summaries(grads))
-
-        grads = [grad for grad, param in grads]
-        self.train_op = AdamWeightDecay(
-            params=params,
-            grads=grads,
-            lr=self.config.lr,
-            schedule=partial(schedules[self.config.lr_schedule], warmup=self.config.lr_warmup),
-            t_total=n_updates_total,
-            l2=self.config.l2_reg,
-            max_grad_norm=self.config.max_grad_norm,
-            vector_l2=self.config.vector_l2,
-            b1=self.config.b1,
-            b2=self.config.b2,
-            e=self.config.epsilon,
-            pretrained_weights=self.saver.get_pretrained_weights(),
-            deviation_regularization=self.config.regularize_deviation
-        )
-
-
-    def _build_model(self, n_updates_total, target_dim, train=True): # probably need to call this somewhere
-        """
-        Construct tensorflow symbolic graph.
-        """
-        self.saver.initialize(self.sess)
-        self.target_dim = target_dim
-
     def _set_random_seed(self, seed=None):
         seed = seed or self.config.seed
         random.seed(seed)
@@ -699,8 +508,6 @@ class BaseModel(object, metaclass=ABCMeta):
 
     def _target_placeholder(self, target_dim=None):
         return tf.placeholder(tf.float32, [None, target_dim or 1])  # classification targets
-
-
 
     def generate_text(self, seed_text='', max_length=None, use_extra_toks=True):
         """
