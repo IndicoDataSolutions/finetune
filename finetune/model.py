@@ -98,7 +98,6 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
         return target_model_state
 
     def _model_fn(features, labels, mode, params):
-        tf.logging.warning(str(labels))
         if not build_target_model:
             lm_loss_coef = 1.
         else:
@@ -203,7 +202,7 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
             if build_lm:
                 predictions[PredictMode.GENERATE_TEXT] = lm_predict_op
 
-                return tf.estimator.EstimatorSpec(
+            return tf.estimator.EstimatorSpec(
                 mode=mode,
                 predictions=predictions,
                 scaffold=scaffold

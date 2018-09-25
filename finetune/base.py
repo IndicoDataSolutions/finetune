@@ -196,12 +196,6 @@ class BaseModel(object, metaclass=ABCMeta):
                                         eval_spec=eval_spec)
 
     def get_estimator(self, val_interval=None):
-        if self.rebuild:
-            warm_start_dir = self.estimator_dir
-            self.estimator_dir = tempfile.mkdtemp()
-            self.tmp_dirs.append(self.estimator_dir)
-        else:
-            warm_start_dir = None
         if self.estimator_ is None or self.rebuild:
             conf = tf.ConfigProto(
                 allow_soft_placement=self.config.soft_device_placement,
@@ -230,7 +224,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 saver=self.saver
             )
             self.estimator_ = tf.estimator.Estimator(model_dir=self.estimator_dir, model_fn=model_fn, config=config,
-                                                     params=self.config, warm_start_from=warm_start_dir)
+                                                     params=self.config)
 
         return self.estimator_
 
@@ -316,11 +310,12 @@ class BaseModel(object, metaclass=ABCMeta):
             Xs_fn = Xs
 
         dataset_encoded = lambda: map(self.text_to_tokens_mask, Xs_fn())
-        return Dataset.from_generator(dataset_encoded, *self.feed_shape_type_def())
+        types, shapes = self.feed_shape_type_def()
+        return Dataset.from_generator(dataset_encoded,types[0], shapes[0]) # 0s cut out the targets
 
     def feed_shape_type_def(self):
         self._define_placeholders(target_dim=self.target_dim)  # TODO  This needs to go.
-        return {"tokens": self.X.dtype, "mask": self.M.dtype}, {"tokens": self.X.shape[1:], "mask": self.M.shape[1:]}
+        return ({"tokens": self.X.dtype, "mask": self.M.dtype}, self.Y.dtype), ({"tokens": self.X.shape[1:], "mask": self.M.shape[1:]}, self.Y.shape[1:])
 
     def _get_train_input_fns(self, Xs, Y=None, batch_size=None, val_size=None):
         batch_size = batch_size or self.config.batch_size
