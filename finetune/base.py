@@ -31,8 +31,6 @@ _LOGGER = logging.getLogger(__name__)
 SAVE_PREFIX = 'model'
 MIN_UPDATES = 15
 
-
-
 class BaseModel(object, metaclass=ABCMeta):
     """
     A sklearn-style class for finetuning a Transformer language model on a classification task.
@@ -56,7 +54,6 @@ class BaseModel(object, metaclass=ABCMeta):
         self.label_encoder = None
         self._initialize()
         self.target_dim = None
-        self._load_from_file = False
         self.pad_idx_ = None
 
     def _initialize(self):
@@ -65,36 +62,6 @@ class BaseModel(object, metaclass=ABCMeta):
 
         download_data_if_required()
         self.encoder = TextEncoder()
-
-        # symbolic ops
-        self.logits = None  # classification logits
-        self.target_loss = None  # cross-entropy loss
-        self.lm_losses = None  # language modeling losses
-        self.lm_predict_op = None
-        self.train = None  # gradient + parameter update
-        self.features = None  # hidden representation fed to classifier
-        self.summaries = None  # Tensorboard summaries
-        self.gradient_summaries = None
-        self.train_writer = None
-        self.valid_writer = None
-        self.predict_params = None
-        self.train_op = None
-        self.predict_op = None
-        self.predict_proba_op = None
-        self.sess = None
-        self.noop = tf.no_op()
-
-        # loss variables
-        self.ema_train_loss = None
-        self.ema_validation_loss = None
-        self.validation_losses = [] # running window of validation losses
-        self.best_validation_loss = float('inf') # lowest observed validation loss
-        
-        # indicator vars
-        self.is_built = False    # has tf graph been constructed?
-        self.is_trained = False  # has model been fine-tuned?
-        self.require_lm = False
-        self.mode = PredictMode.NORMAL
 
         def process_embeddings(name, value):
             if "/we:0" not in name:
@@ -120,7 +87,7 @@ class BaseModel(object, metaclass=ABCMeta):
             variable_transforms=[process_embeddings]
         )
 
-    def _format_for_encoding(self, Xs):
+    def _format_for_encoding(self, X):
         """
         Most subclasses take in inputs as:
             List (batch) of list (docs)
@@ -130,15 +97,10 @@ class BaseModel(object, metaclass=ABCMeta):
         
         This method is responsible for standardizing inputs to the above format
         """
-        return [[[x] for x in X] for X in Xs]
+        return [[X]]
 
     def _text_to_ids(self, Xs, Y=None, pad_token=PAD_TOKEN):
-        # Maps lists of text to formatted numpy arrays of token ids and loss-masks marking the lengths of the sequences.
 
-        # If 1d array of text is passed, coerce into multifield format
-        if len(Xs) and isinstance(Xs[0], (bytes, str)):
-            Xs = [[x] for x in Xs]
-    
         Xs = self._format_for_encoding(Xs)
         if self.config.chunk_long_sequences and len(Xs[0]) == 1:
             # can only chunk single sequence inputs
@@ -210,46 +172,49 @@ class BaseModel(object, metaclass=ABCMeta):
 
 
     def finetune(self, Xs, Y=None, batch_size=None):
-        if Y is not None and len(Xs) != len(Y):
+        if not callable(Xs) and Y is not None and len(Xs) != len(Y):
             raise FinetuneError(
                 "Mismatch between number of examples ({}) and number of targets ({}) provided.".format(
                     len(Xs),
                     len(Y)
                 )
             )
-        val_input_fn, train_input_fn = self._get_train_input_fns(Xs, Y, batch_size=batch_size)
-        train_spec = tf.estimator.TrainSpec(input_fn=train_input_fn)
+        val_size, val_interval = self.validation_settings(n_examples=len(Xs) if not callable(Y) else self.config.n_examples, batch_size=batch_size or self.config.batch_size)
+        val_input_fn, train_input_fn = self._get_train_input_fns(Xs, Y, batch_size=batch_size, val_size=val_size)
+        sess = tf.Session()
+        itt = train_input_fn()
+        train_spec = tf.estimator.TrainSpec(input_fn=train_input_fn, max_steps=val_interval)
         eval_spec = tf.estimator.EvalSpec(input_fn=val_input_fn)
-        tf.estimator.train_and_evaluate(self.get_estimator(), train_spec=train_spec, eval_spec=eval_spec)
+        tf.estimator.train_and_evaluate(self.get_estimator(val_interval=val_interval), train_spec=train_spec, eval_spec=eval_spec)
 
 
-    def get_estimator(self):
+    def get_estimator(self, val_interval=None):
         conf = tf.ConfigProto(
             allow_soft_placement=self.config.soft_device_placement,
             log_device_placement=self.config.log_device_placement,
         )
         config = tf.estimator.RunConfig(
             tf_random_seed=None,
-            save_summary_steps=100,
-            save_checkpoints_steps=100,
+            save_summary_steps=val_interval,
+            save_checkpoints_steps=val_interval,
             save_checkpoints_secs=None,
             session_config=conf,
-            keep_checkpoint_max=5,
+            keep_checkpoint_max=1,
             keep_checkpoint_every_n_hours=10000,
-            log_step_count_steps=10,
+            log_step_count_steps=100,
             #     train_distribute=None,
             #    device_fn=None
         )
 
         model_fn = get_model_fn(
             target_model_fn=self._target_model,
-            predict_op=self.predict_op,
-            predict_proba_op=self.predict_proba_op,
+            predict_op=self._predict_op,
+            predict_proba_op=self._predict_proba_op,
             build_target_model=self.target_dim is not None,
-            build_lm = self.config.lm_loss_coef > 0.0 or self.target_dim is None,
+            build_lm=self.config.lm_loss_coef > 0.0 or self.target_dim is None,
             encoder=self.encoder,
             target_dim=self.target_dim,
-            label_encoder = self.label_encoder,
+            label_encoder=self.label_encoder,
             saver=self.saver
         )
         return tf.estimator.Estimator(model_fn=model_fn, config=config, params=self.config)
@@ -295,11 +260,11 @@ class BaseModel(object, metaclass=ABCMeta):
         self.do_dropout = tf.placeholder(tf.float32)  # 1 for do dropout and 0 to not do dropout
         self.Y = self._target_placeholder(target_dim=target_dim)
 
-    def _get_train_input_fns(self, Xs, Y=None, batch_size=None):
+    def _get_train_input_fns(self, Xs, Y=None, batch_size=None, val_size=None):
         batch_size = batch_size or self.config.batch_size
 
         shuffle_buffer_size = 100
-        val_size = 10
+        val_size = val_size or 0
         prefetch_buffer = 2  # breaks the pipeline to allow concurrency
 
         self.label_encoder = self._target_encoder()
@@ -339,7 +304,7 @@ class BaseModel(object, metaclass=ABCMeta):
                                                               Y=Y_t)  # TODO is this okay, just taken from a small sample of the dataset?
 
         def text_to_tokens_mask(X):
-            out = self._text_to_ids([X])
+            out = self._text_to_ids(X)
             return {
                 "tokens": out.token_ids,
                 "mask": out.mask
@@ -364,20 +329,20 @@ class BaseModel(object, metaclass=ABCMeta):
         prefetch_buffer = 2  # breaks the pipeline to allow concurrency
 
         if not callable(Xs):
-            dataset = lambda: Xs
+            Xs_fn = lambda: Xs
         else:
-            dataset = Xs
+            Xs_fn = Xs
 
         self._define_placeholders(target_dim=self.target_dim)  # TODO  This needs to go.
 
         def text_to_tokens_mask(X):
-            out = self._text_to_ids([X])
+            out = self._text_to_ids(X)
             return {
                 "tokens": out.token_ids,
                 "mask": out.mask
             }
 
-        dataset_encoded = lambda: map(lambda xy: (text_to_tokens_mask(xy[0]), None), dataset())
+        dataset_encoded = lambda: map(text_to_tokens_mask, Xs_fn())
         tf_dataset = Dataset.from_generator(
             dataset_encoded,
             {"tokens": self.X.dtype, "mask": self.M.dtype},
@@ -388,16 +353,20 @@ class BaseModel(object, metaclass=ABCMeta):
 
         return lambda : dataset.make_one_shot_iterator().get_next("Pred_dataset")
 
+    def _inferrence(self, Xs, mode):
+        estimator = self.get_estimator()
+        input_func = self._get_predict_input_fn(Xs)
+        pred_gen = list(map(lambda y: y[mode], estimator.predict(input_fn=input_func, predict_keys=mode)))
+        return pred_gen
+
+
     def fit(self, *args, **kwargs):
         """ An alias for finetune. """
         return self.finetune(*args, **kwargs)
 
     def _predict(self, Xs):
-        self.mode = PredictMode.NORMAL
-        estimator = self.get_estimator()
-        input_func = self._get_predict_input_fn(Xs)
-        pred_gen = estimator.predict(input_fn=input_func, predict_keys=self.mode)
-        return self.label_encoder.inverse_transform(list(pred_gen))
+        raw_preds = self._inferrence(Xs, PredictMode.NORMAL)
+        return self.label_encoder.inverse_transform(raw_preds)
 
     def predict(self, Xs):
         return self._predict(Xs)
@@ -406,11 +375,8 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         Produce raw numeric outputs for proba predictions
         """
-        self.mode = PredictMode.PROBAS
-        estimator = self.get_estimator()
-        input_func = self._get_predict_input_fn(Xs)
-        pred_gen = estimator.predict(input_fn=input_func, predict_keys=self.mode)
-        return list(pred_gen)
+        raw_preds = self._inferrence(Xs, PredictMode.PROBAS)
+        return raw_preds
 
     def predict_proba(self, *args, **kwargs):
         """
@@ -427,17 +393,11 @@ class BaseModel(object, metaclass=ABCMeta):
         return formatted_predictions
 
     def _featurize(self, Xs):
-        features = []
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore")
-            for xmb, mmb in self._infer_prep(Xs):
-                feature_batch = self.sess.run(self.features, {
-                    self.X: xmb,
-                    self.M: mmb,
-                    self.do_dropout: DROPOUT_OFF
-                })
-                features.append(feature_batch)
-        return np.concatenate(features)
+        self.mode = PredictMode.PROBAS
+        estimator = self.get_estimator()
+        input_func = self._get_predict_input_fn(Xs)
+        pred_gen = estimator.predict(input_fn=input_func, predict_keys=self.mode)
+        return list(pred_gen)
 
     @abstractmethod
     def featurize(self, *args, **kwargs):
@@ -457,13 +417,6 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         return self.featurize(*args, **kwargs)
 
-    def _infer_prep(self, Xs):
-        arr_encoded = self._text_to_ids(Xs)
-        n_batch_train = self.config.batch_size * max(len(self.config.visible_gpus), 1)
-        self._build_model(n_updates_total=0, target_dim=self.target_dim, train=False)
-        yield from iter_data(arr_encoded.token_ids, arr_encoded.mask, n_batch=n_batch_train,
-                             verbose=self.config.verbose)
-
     def _array_format(self, encoded_output, pad_token=PAD_TOKEN):
         """
         Returns numpy array of token idxs and corresponding mask
@@ -471,33 +424,31 @@ class BaseModel(object, metaclass=ABCMeta):
             0: byte-pair encoding embedding
             1: positional embedding
         """
-        n = len(encoded_output.token_ids)
-        seq_lengths = [len(x) for x in encoded_output.token_ids]
-        x = np.zeros((n, self.config.max_length, 2), dtype=np.int32)
-        mask = np.zeros((n, self.config.max_length), dtype=np.float32)
+        seq_length = len(encoded_output.token_ids)
+        x = np.zeros((self.config.max_length, 2), dtype=np.int32)
+        mask = np.zeros((self.config.max_length), dtype=np.float32)
 
         if encoded_output.labels is not None:
-            labels_arr = np.empty((n, self.config.max_length), dtype='object')
+            labels_arr = np.empty((self.config.max_length), dtype='object')
             labels_arr.fill(pad_token)
         else:
             labels_arr = None
 
-        for i, seq_length in enumerate(seq_lengths):
-            # BPE embedding
-            x[i, :seq_length, 0] = encoded_output.token_ids[i]
-            # masking: value of 1 means "consider this in cross-entropy LM loss"
-            mask[i, 1:seq_length] = 1
-            if encoded_output.labels:
-                labels_arr[i, :seq_length] = encoded_output.labels[i]
+        # BPE embedding
+        x[:seq_length, 0] = encoded_output.token_ids
+        # masking: value of 1 means "consider this in cross-entropy LM loss"
+        mask[1:seq_length] = 1
+        if encoded_output.labels:
+            labels_arr[:seq_length] = encoded_output.labels
         # positional_embeddings
-        x[:, :, 1] = np.arange(self.encoder.vocab_size, self.encoder.vocab_size + self.config.max_length)
+        x[:, 1] = np.arange(self.encoder.vocab_size, self.encoder.vocab_size + self.config.max_length)
 
         return ArrayEncodedOutput(
-            token_ids=x[0],
-            tokens=encoded_output.tokens,  # TODO GROSS, refactor this.
+            token_ids=x,
+            tokens=encoded_output.tokens,
             labels=labels_arr,
             char_locs=encoded_output.char_locs,
-            mask=mask[0],
+            mask=mask,
         )
 
     def _set_random_seed(self, seed=None):
@@ -509,7 +460,7 @@ class BaseModel(object, metaclass=ABCMeta):
     def _target_placeholder(self, target_dim=None):
         return tf.placeholder(tf.float32, [None, target_dim or 1])  # classification targets
 
-    def generate_text(self, seed_text='', max_length=None, use_extra_toks=True):
+    def generate_text(self, seed_text='', max_length=None, use_extra_toks=True): # TODO
         """
         Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
         Temperature parameter for decoding is set in the config.

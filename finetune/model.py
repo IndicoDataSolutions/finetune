@@ -17,11 +17,11 @@ DROPOUT_ON = 1
 DROPOUT_OFF = 0
 
 
-class PredictMode(enum.Enum):
-    FEATURIZE = 0
-    NORMAL = 2
-    PROBAS = 3
-    GENERATE_TEXT = 4
+class PredictMode:
+    FEATURIZE = "FEAT"
+    NORMAL = "NORM"
+    PROBAS = "PROBA"
+    GENERATE_TEXT = "GEN_TEXT"
 
 
 def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_model, build_lm, encoder, target_dim,
@@ -144,9 +144,10 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                                                          do_reuse=do_reuse)
                     if mode == tf.estimator.ModeKeys.TRAIN or mode == tf.estimator.ModeKeys.EVAL:
                         train_loss += (1 - lm_loss_coef) * tf.reduce_mean(target_model_state['losses'])
-                        aggregator['logits'].append(target_model_state['logits'])
                         target_loss_tower += tf.reduce_mean(target_model_state['losses'])
                         train_loss_tower += train_loss
+                    if mode == tf.estimator.ModeKeys.PREDICT:
+                        aggregator['logits'].append(target_model_state['logits'])
 
                 if build_lm:
                     lm_predict_op, language_model_state = language_model_op(X=X, M=M, params=params,
@@ -179,9 +180,12 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                 # TODO figure out what to do about this. We dont always know how many updates we will get now.
 
             if build_target_model:
-                logits = tf.concat(aggregator['logits'], axis=0)
+
                 target_loss = tf.reduce_mean(target_loss_tower)
                 tf.summary.scalar("TargetModelLoss", target_loss)
+                if mode == tf.estimator.ModeKeys.PREDICT:
+                    logits = tf.concat(aggregator['logits'], axis=0)
+
 
         if mode == tf.estimator.ModeKeys.TRAIN or mode == tf.estimator.ModeKeys.EVAL:
             total_loss = train_loss_tower / n_splits

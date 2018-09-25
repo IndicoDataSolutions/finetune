@@ -232,100 +232,76 @@ class TextEncoder(object):
         start = start or special_tokens or self.start
         delimiter = delimiter or special_tokens or self.delimiter
         clf_token = end or special_tokens or self.clf_token
-        num_samples = len(encoded[0])
+
+        num_samples = len(encoded)
         adjusted_max_length = max_length - num_samples - 1
         allocated_max_len = adjusted_max_length // num_samples
-        outputs = []
-        for single_datum in encoded:
-            overflows = [allocated_max_len - len(sequence) for sequence in single_datum]
-            spare = sum(overflows)
-            if spare >= 0:
-                cut_len = None
+
+        overflows = [allocated_max_len - len(sequence) for sequence in encoded]
+        spare = sum(overflows)
+
+        if spare >= 0:
+            cut_len = None
+        else:
+            warnings.warn("Document is longer than max length allowed, trimming document to {} tokens.".format(
+                max_length
+            ))
+            empty_tokens = sum(max(overflow, 0) for overflow in overflows)
+            num_over = [max(overflow, 0) for overflow in overflows].count(0)
+            if num_over == 0:
+                cut_len = allocated_max_len
             else:
-                warnings.warn("Document is longer than max length allowed, trimming document to {} tokens.".format(
-                    max_length
-                ))
-                empty_tokens = sum(max(overflow, 0) for overflow in overflows)
-                num_over = [max(overflow, 0) for overflow in overflows].count(0)
-                if num_over == 0:
-                    cut_len = allocated_max_len
-                else:
-                    cut_len = allocated_max_len + (empty_tokens // num_over)
-            joined = [start]
-            for d in single_datum:
-                joined += (d[:cut_len] + [delimiter])
-            joined = joined[:-1] + [clf_token]
-            outputs.append(joined)
-        return outputs
+                cut_len = allocated_max_len + (empty_tokens // num_over)
+
+        joined = [start]
+        for d in encoded:
+            joined += (d[:cut_len] + [delimiter])
+        joined = joined[:-1] + [clf_token]
+
+        return joined
 
     def encode_multi_input(self, Xs, Y=None, max_length=None, verbose=True, pad_token=PAD_TOKEN):
         """
         Encodes the text for passing to the model, also tracks the location of each token to allow reconstruction.
         It can also, optionally, construct a per-token labels as required for training.
-        :param Xs: A batch of lists of lists of string -- [n_batch, n_fields, n_segments]
+        :param Xs: A list of lists of string -- [n_fields, n_segments]
         :param Y: A list of list of targets -- [n_batch, n_segments]
         :param max_length: Max length of the sequences.
         :param verbose: Flag to set whether to output a status bar.
         :return: A Labeled Sequence Object.
         """
-        multifield_token_ids = []
-        multifield_tokens = []
-        multifield_positions = []
-        multifield_labels = []
+        token_ids = []
+        tokens = []
+        positions = []
+        labels = []
 
-        n_fields = None
+        # for each field in that example
+        for field in Xs:
+            assert type(field) == list, "This should be a list of strings, if its not, you've done something wrong..."
+            encoded = self._encode(field, labels=Y)
+            token_ids.append(_flatten(encoded.token_ids))
+            tokens.append(_flatten(encoded.tokens))
+            positions.append(_flatten(encoded.char_locs))
+            labels.append(_flatten(encoded.labels))
+            if len(tokens[-1]) > (max_length - 2):
+                warnings.warn(
+                    "Some examples are longer than the max_length. Please trim documents or increase `max_length`. "
+                    "Fallback behaviour is to use the first {} byte-pair encoded tokens".format(max_length - 2)
+                )
 
-        # for each example
-        for i, X in enumerate(Xs):
-
-            if n_fields is None:
-                n_fields = len(X)
-            else:
-                if len(X) != n_fields:
-                    raise ValueError("Example {} has {} fields, expected {}.".format(
-                        i, len(X), n_fields
-                    ))  
-            
-            # create placeholders for storing results for that example
-            token_ids = []
-            tokens = []
-            positions = []
-            labels = []
-            
-            # for each field in that example
-            for field in X:
-                assert type(field) == list, "This should be a list of strings, if its not, you've done something wrong..."
-                targets = None if Y is None else Y[i]
-                encoded = self._encode(field, labels=targets)
-                token_ids.append(_flatten(encoded.token_ids))
-                tokens.append(_flatten(encoded.tokens))
-                positions.append(_flatten(encoded.char_locs))
-                labels.append(_flatten(encoded.labels))
-                if len(tokens[-1]) > (max_length - 2):
-                    warnings.warn(
-                        "Some examples are longer than the max_length. Please trim documents or increase `max_length`. "
-                        "Fallback behaviour is to use the first {} byte-pair encoded tokens".format(max_length - 2)
-                    )
-            
-            # add this fields results to overall results
-            multifield_token_ids.append(token_ids)
-            multifield_tokens.append(tokens)
-            multifield_positions.append(positions)
-            multifield_labels.append(labels)
-        
         # merge fields + truncate if necessary
         token_ids = self._cut_and_concat(
-            encoded=multifield_token_ids,
+            encoded=token_ids,
             max_length=max_length,
             verbose=verbose
         )
         tokens = self._cut_and_concat(
-            encoded=multifield_tokens,
+            encoded=tokens,
             max_length=max_length,
             verbose=verbose
         )
         locations = self._cut_and_concat(
-            encoded=multifield_positions,
+            encoded=positions,
             max_length=max_length,
             verbose=verbose,
             special_tokens=-1
@@ -335,7 +311,7 @@ class TextEncoder(object):
             labels = None
         else:
             labels = self._cut_and_concat(
-                encoded=multifield_labels,
+                encoded=labels,
                 max_length=max_length,
                 verbose=verbose,
                 special_tokens=pad_token

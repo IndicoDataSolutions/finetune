@@ -93,7 +93,7 @@ class Saver:
                 var, saved_var = var_init
                 for func in self.variable_transforms:
                     saved_var = func(var.name, saved_var)
-                init_vals.append(var.assign(tf.constant(saved_var)))
+                init_vals.append(var.assign(tf.constant(saved_var, dtype=tf.float32)))
         self.variables = None  # not an explicit del but should set reference count to 0 unless being used for deviation regularisation
 
         def initializer(scafold, sess):
