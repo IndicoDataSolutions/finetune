@@ -8,6 +8,7 @@ import math
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 from copy import deepcopy
+import tempfile
 
 import numpy as np
 import tensorflow as tf
@@ -27,9 +28,9 @@ from tensorflow.data import Dataset
 JL_BASE = os.path.join(os.path.dirname(__file__), "model", "Base_model.jl")
 _LOGGER = logging.getLogger(__name__)
 
-
 SAVE_PREFIX = 'model'
 MIN_UPDATES = 15
+
 
 class BaseModel(object, metaclass=ABCMeta):
     """
@@ -56,12 +57,16 @@ class BaseModel(object, metaclass=ABCMeta):
         self.target_dim = None
         self.pad_idx_ = None
 
+
     def _initialize(self):
         # Initializes the non-serialized bits of the class.
         self._set_random_seed(self.config.seed)
-
+        self.estimator_ = None
+        self.rebuild = False
         download_data_if_required()
         self.encoder = TextEncoder()
+        self.estimator_dir = tempfile.mkdtemp()
+        self.tmp_dirs = [self.estimator_dir]
 
         def process_embeddings(name, value):
             if "/we:0" not in name:
@@ -74,7 +79,8 @@ class BaseModel(object, metaclass=ABCMeta):
             if self.config.interpolate_pos_embed and self.config.max_length != len(positional_embed):
                 positional_embed = interpolate_pos_embed(positional_embed, self.config.max_length)
             elif self.config.max_length > len(positional_embed):
-                raise ValueError("Max Length cannot be greater than {} if interploate_pos_embed is turned off".format(len(positional_embed)))
+                raise ValueError("Max Length cannot be greater than {} if interploate_pos_embed is turned off".format(
+                    len(positional_embed)))
             else:
                 positional_embed = positional_embed[:self.config.max_length]
 
@@ -104,7 +110,7 @@ class BaseModel(object, metaclass=ABCMeta):
         Xs = self._format_for_encoding(Xs)
         if self.config.chunk_long_sequences and len(Xs[0]) == 1:
             # can only chunk single sequence inputs
-            chunk_size = self.config.max_length - 2 
+            chunk_size = self.config.max_length - 2
             step_size = chunk_size // 3
             encoded = self.encoder.encode_multi_input(
                 Xs,
@@ -129,12 +135,12 @@ class BaseModel(object, metaclass=ABCMeta):
         else:
             encoder_out = self.encoder.encode_multi_input(
                 Xs,
-                Y=Y, 
+                Y=Y,
                 max_length=self.config.max_length,
                 pad_token=pad_token
             )
             return self._array_format(encoder_out, pad_token=pad_token)
-        
+
     @abstractmethod
     def _predict_op(self, logits, **kwargs):
         raise NotImplementedError
@@ -170,8 +176,9 @@ class BaseModel(object, metaclass=ABCMeta):
             if value is not None
         }
 
-
     def finetune(self, Xs, Y=None, batch_size=None):
+        saver_hook = self.saver.get_saver_hook()
+
         if not callable(Xs) and Y is not None and len(Xs) != len(Y):
             raise FinetuneError(
                 "Mismatch between number of examples ({}) and number of targets ({}) provided.".format(
@@ -179,45 +186,53 @@ class BaseModel(object, metaclass=ABCMeta):
                     len(Y)
                 )
             )
-        val_size, val_interval = self.validation_settings(n_examples=len(Xs) if not callable(Y) else self.config.n_examples, batch_size=batch_size or self.config.batch_size)
+        val_size, val_interval = self.validation_settings(
+            n_examples=len(Xs) if not callable(Y) else self.config.n_examples,
+            batch_size=batch_size or self.config.batch_size)
         val_input_fn, train_input_fn = self._get_train_input_fns(Xs, Y, batch_size=batch_size, val_size=val_size)
-        sess = tf.Session()
-        itt = train_input_fn()
-        train_spec = tf.estimator.TrainSpec(input_fn=train_input_fn, max_steps=val_interval)
+        train_spec = tf.estimator.TrainSpec(input_fn=train_input_fn, max_steps=val_interval, hooks=[saver_hook])
         eval_spec = tf.estimator.EvalSpec(input_fn=val_input_fn)
-        tf.estimator.train_and_evaluate(self.get_estimator(val_interval=val_interval), train_spec=train_spec, eval_spec=eval_spec)
-
+        tf.estimator.train_and_evaluate(self.get_estimator(val_interval=val_interval), train_spec=train_spec,
+                                        eval_spec=eval_spec)
 
     def get_estimator(self, val_interval=None):
-        conf = tf.ConfigProto(
-            allow_soft_placement=self.config.soft_device_placement,
-            log_device_placement=self.config.log_device_placement,
-        )
-        config = tf.estimator.RunConfig(
-            tf_random_seed=None,
-            save_summary_steps=val_interval,
-            save_checkpoints_steps=val_interval,
-            save_checkpoints_secs=None,
-            session_config=conf,
-            keep_checkpoint_max=1,
-            keep_checkpoint_every_n_hours=10000,
-            log_step_count_steps=100,
-            #     train_distribute=None,
-            #    device_fn=None
-        )
+        if self.rebuild:
+            warm_start_dir = self.estimator_dir
+            self.estimator_dir = tempfile.mkdtemp()
+            self.tmp_dirs.append(self.estimator_dir)
+        else:
+            warm_start_dir = None
+        if self.estimator_ is None or self.rebuild:
+            conf = tf.ConfigProto(
+                allow_soft_placement=self.config.soft_device_placement,
+                log_device_placement=self.config.log_device_placement,
+            )
+            config = tf.estimator.RunConfig(
+                tf_random_seed=None,
+                save_summary_steps=val_interval,
+                save_checkpoints_steps=val_interval,
+                save_checkpoints_secs=None if val_interval is not None else 600,
+                session_config=conf,
+                keep_checkpoint_max=1,
+                keep_checkpoint_every_n_hours=10000,
+                log_step_count_steps=100
+            )
 
-        model_fn = get_model_fn(
-            target_model_fn=self._target_model,
-            predict_op=self._predict_op,
-            predict_proba_op=self._predict_proba_op,
-            build_target_model=self.target_dim is not None,
-            build_lm=self.config.lm_loss_coef > 0.0 or self.target_dim is None,
-            encoder=self.encoder,
-            target_dim=self.target_dim,
-            label_encoder=self.label_encoder,
-            saver=self.saver
-        )
-        return tf.estimator.Estimator(model_fn=model_fn, config=config, params=self.config)
+            model_fn = get_model_fn(
+                target_model_fn=self._target_model,
+                predict_op=self._predict_op,
+                predict_proba_op=self._predict_proba_op,
+                build_target_model=self.target_dim is not None,
+                build_lm=self.config.lm_loss_coef > 0.0 or self.target_dim is None,
+                encoder=self.encoder,
+                target_dim=self.target_dim,
+                label_encoder=self.label_encoder,
+                saver=self.saver
+            )
+            self.estimator_ = tf.estimator.Estimator(model_dir=self.estimator_dir, model_fn=model_fn, config=config,
+                                                     params=self.config, warm_start_from=warm_start_dir)
+
+        return self.estimator_
 
     @property
     def pad_idx(self):
@@ -260,105 +275,86 @@ class BaseModel(object, metaclass=ABCMeta):
         self.do_dropout = tf.placeholder(tf.float32)  # 1 for do dropout and 0 to not do dropout
         self.Y = self._target_placeholder(target_dim=target_dim)
 
+    def text_to_tokens_mask(self, X):
+        out = self._text_to_ids(X)
+        return {
+            "tokens": out.token_ids,
+            "mask": out.mask
+        }
+
+    def _dataset_with_targets(self, Xs, Y):
+        self.label_encoder = self._target_encoder()
+
+        # Create restartable generators
+        Y_t = None
+        if not callable(Xs):
+            Y_t = self.label_encoder.fit_transform(Y)
+            dataset = lambda: zip(Xs, Y_t)
+
+        else:
+            Y_fit = [itertools.islice(Y(), 100)]  # TODO find a more principled way to do this?
+            Y_t = self.label_encoder.fit_transform(Y_fit)
+            dataset = lambda: zip(Xs(), map(lambda y: self.label_encoder.transform([y])[0],
+                                            Y()))  # encode one sample at a time.
+
+        target_dim = self.label_encoder.target_dim
+        self.lm_loss_coef = self.config.lm_loss_coef if target_dim is not None else 1.0
+        if target_dim != self.target_dim:
+            self.rebuild = True
+        self.target_dim = target_dim
+
+        if Y_t is not None:
+            self.config.class_weights = compute_class_weights(class_weights=self.config.class_weights, Y=Y_t)
+
+        dataset_encoded = lambda: map(lambda xy: (self.text_to_tokens_mask(xy[0]), xy[1]), dataset())
+        return Dataset.from_generator(dataset_encoded, *self.feed_shape_type_def())
+
+    def _dataset_without_targets(self, Xs):
+        if not callable(Xs):
+            Xs_fn = lambda: Xs
+        else:
+            Xs_fn = Xs
+
+        dataset_encoded = lambda: map(self.text_to_tokens_mask, Xs_fn())
+        return Dataset.from_generator(dataset_encoded, *self.feed_shape_type_def())
+
+    def feed_shape_type_def(self):
+        self._define_placeholders(target_dim=self.target_dim)  # TODO  This needs to go.
+        return {"tokens": self.X.dtype, "mask": self.M.dtype}, {"tokens": self.X.shape[1:], "mask": self.M.shape[1:]}
+
     def _get_train_input_fns(self, Xs, Y=None, batch_size=None, val_size=None):
         batch_size = batch_size or self.config.batch_size
 
         shuffle_buffer_size = 100
         val_size = val_size or 0
         prefetch_buffer = 2  # breaks the pipeline to allow concurrency
-
-        self.label_encoder = self._target_encoder()
-
-        # Create restartable generators
-        Y_t = None
-        target_dim = -1
-        if not callable(Xs):
-            if Y is None:
-                Y = np.asarray([[]] * len(Xs))
-                target_dim = None
-            else:
-                Y_t = self.label_encoder.fit_transform(Y)
-            dataset = lambda: zip(Xs, Y_t)
-
+        if Y is not None:
+            dataset = self._dataset_with_targets(Xs, Y)
         else:
-            if Y is None:
-                target_dim = None
+            dataset = self._dataset_without_targets(Xs)
 
-                def Y():
-                    while True:
-                        yield []
-            else:
-                Y_fit = [itertools.islice(Y(), 100)]  # TODO find a more principled way to do this?
-                Y_t = self.label_encoder.fit_transform(Y_fit)
-
-            dataset = lambda: zip(Xs(), map(lambda y: self.label_encoder.transform([y])[0],
-                                            Y()))  # encode one sample at a time.
-        if target_dim == -1:
-            target_dim = self.label_encoder.target_dim
-        self.lm_loss_coef = self.config.lm_loss_coef if target_dim is not None else 1.0
-        self.target_dim = target_dim
-
-        self._define_placeholders(target_dim=target_dim)  # TODO  This needs to go.
-        if Y_t is not None:
-            self.config.class_weights = compute_class_weights(class_weights=self.config.class_weights,
-                                                              Y=Y_t)  # TODO is this okay, just taken from a small sample of the dataset?
-
-        def text_to_tokens_mask(X):
-            out = self._text_to_ids(X)
-            return {
-                "tokens": out.token_ids,
-                "mask": out.mask
-            }
-
-        dataset_encoded = lambda: map(lambda xy: (text_to_tokens_mask(xy[0]), xy[1]), dataset())
-        tf_dataset = Dataset.from_generator(
-            dataset_encoded,
-            ({"tokens": self.X.dtype, "mask": self.M.dtype}, self.Y.dtype),
-            # tokens, mask # TODO, update the API so this isnt pulled from placeholders...lol
-            ({"tokens": self.X.shape[1:], "mask": self.M.shape[1:]}, self.Y.shape[1:])
-        ).shuffle(shuffle_buffer_size, seed=self.config.seed)
-
+        tf_dataset = dataset.shuffle(shuffle_buffer_size, seed=self.config.seed)
         val_dataset = tf_dataset.take(val_size).batch(batch_size).prefetch(prefetch_buffer)
-        train_dataset = tf_dataset.skip(val_size).batch(batch_size).repeat(self.config.n_epochs).prefetch(prefetch_buffer)
+        train_dataset = tf_dataset.skip(val_size).batch(batch_size).repeat(self.config.n_epochs).prefetch(
+            prefetch_buffer)
 
-        return (lambda : val_dataset.make_one_shot_iterator().get_next("Val_dataset"),
-        lambda: train_dataset.make_one_shot_iterator().get_next("Train_dataset"))
+        return (
+            lambda: val_dataset.make_one_shot_iterator().get_next("Val_dataset"),
+            lambda: train_dataset.make_one_shot_iterator().get_next("Train_dataset")
+        )
 
     def _get_predict_input_fn(self, Xs, batch_size=None):
         batch_size = batch_size or self.config.batch_size
         prefetch_buffer = 2  # breaks the pipeline to allow concurrency
-
-        if not callable(Xs):
-            Xs_fn = lambda: Xs
-        else:
-            Xs_fn = Xs
-
-        self._define_placeholders(target_dim=self.target_dim)  # TODO  This needs to go.
-
-        def text_to_tokens_mask(X):
-            out = self._text_to_ids(X)
-            return {
-                "tokens": out.token_ids,
-                "mask": out.mask
-            }
-
-        dataset_encoded = lambda: map(text_to_tokens_mask, Xs_fn())
-        tf_dataset = Dataset.from_generator(
-            dataset_encoded,
-            {"tokens": self.X.dtype, "mask": self.M.dtype},
-            # tokens, mask # TODO, update the API so this isnt pulled from placeholders...lol
-            {"tokens": self.X.shape[1:], "mask": self.M.shape[1:]}
-        )
+        tf_dataset = self._dataset_without_targets(Xs)
         dataset = tf_dataset.batch(batch_size).prefetch(prefetch_buffer)
-
-        return lambda : dataset.make_one_shot_iterator().get_next("Pred_dataset")
+        return lambda: dataset.make_one_shot_iterator().get_next("Pred_dataset")
 
     def _inferrence(self, Xs, mode):
         estimator = self.get_estimator()
         input_func = self._get_predict_input_fn(Xs)
         pred_gen = list(map(lambda y: y[mode], estimator.predict(input_fn=input_func, predict_keys=mode)))
         return pred_gen
-
 
     def fit(self, *args, **kwargs):
         """ An alias for finetune. """
@@ -393,11 +389,8 @@ class BaseModel(object, metaclass=ABCMeta):
         return formatted_predictions
 
     def _featurize(self, Xs):
-        self.mode = PredictMode.PROBAS
-        estimator = self.get_estimator()
-        input_func = self._get_predict_input_fn(Xs)
-        pred_gen = estimator.predict(input_fn=input_func, predict_keys=self.mode)
-        return list(pred_gen)
+        raw_preds = self._inferrence(Xs, PredictMode.FEATURIZE)
+        return np.asarray(raw_preds)
 
     @abstractmethod
     def featurize(self, *args, **kwargs):
@@ -460,34 +453,43 @@ class BaseModel(object, metaclass=ABCMeta):
     def _target_placeholder(self, target_dim=None):
         return tf.placeholder(tf.float32, [None, target_dim or 1])  # classification targets
 
-    def generate_text(self, seed_text='', max_length=None, use_extra_toks=True): # TODO
+    def generate_text(self, seed_text='', max_length=None, use_extra_toks=True):
         """
         Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
         Temperature parameter for decoding is set in the config.
-
         :param max_length: The maximum length to decode to.
         :param seed_text: Defaults to the empty string. This will form the starting point to begin modelling
         :return: A string containing the generated text.
         """
-        self.require_lm = True
+        dataset_encoded = lambda: [{"tokens": arr_encoded.token_ids, "mask": arr_encoded.mask}]
+
+        def get_input_fn():
+            tf_dataset = Dataset.from_generator(dataset_encoded, *self.feed_shape_type_def())
+            return lambda: tf_dataset.make_one_shot_iterator().get_next("gen_text_fn")
+
         self.config.use_extra_toks = use_extra_toks
         encoded = self.encoder._encode([seed_text])
         if encoded == [] and not use_extra_toks:
             raise ValueError("If you are not using the extra tokens, you must provide some non-empty seed text")
         start = [self.encoder.start] if use_extra_toks else []
         encoded = EncodedOutput(token_ids=[start + encoded.token_ids[0]])
-        self._build_model(n_updates_total=0, target_dim=self.target_dim, train=False)
+
+        estimator = self.get_estimator()
+        predict_fn = estimator.predict(input_fn=get_input_fn).next
+
         EOS = self.encoder.clf_token
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
             for i in range(len(encoded.token_ids), (max_length or self.config.max_length) - 2):
                 arr_encoded = self._array_format(encoded)
-                class_idx = self.sess.run(self.lm_predict_op, {self.X: arr_encoded.token_ids, self.M: arr_encoded.mask})
+                estimator.predict(input_fn=get_input_fn)
+                class_idx = predict_fn()[PredictMode.GENERATE_TEXT]
                 encoded.token_ids[0].append(class_idx[i])
                 if encoded.token_ids[0][-1] == EOS:
                     break
 
         del self.config["use_extra_toks"]
+
         return self.encoder.decode(encoded.token_ids[0])
 
     def __getstate__(self):
@@ -520,7 +522,6 @@ class BaseModel(object, metaclass=ABCMeta):
 
         path = os.path.abspath(path)
         self.saver.save(self, path)
-        self._load_from_file = False
 
     @classmethod
     def load(cls, path):
@@ -535,7 +536,7 @@ class BaseModel(object, metaclass=ABCMeta):
         model.saver.variables = saver.variables
         tf.reset_default_graph()
         return model
-   
+
     @classmethod
     def finetune_grid_search(cls, Xs, Y, *, test_size, config=None, eval_fn=None, probs=False, return_all=False):
         """
@@ -584,9 +585,9 @@ class BaseModel(object, metaclass=ABCMeta):
             return results
         return max(results, key=lambda x: x[1])[0]
 
-
     @classmethod
-    def finetune_grid_search_cv(cls, Xs, Y, *, n_splits, test_size, config=None, eval_fn=None, probs=False, return_all=False):
+    def finetune_grid_search_cv(cls, Xs, Y, *, n_splits, test_size, config=None, eval_fn=None, probs=False,
+                                return_all=False):
         """
         Performs cross validated grid search over config items defined using "GridSearchable" objects and returns either full results or
         the config object that relates to the best results. The default config contains grid searchable objects for the
@@ -623,7 +624,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 assert config == config_common
                 n_res += 1
                 sum_res += result
-            aggregated_results.append((config_common, sum_res/n_res))
+            aggregated_results.append((config_common, sum_res / n_res))
 
         if return_all:
             return aggregated_results
@@ -631,6 +632,11 @@ class BaseModel(object, metaclass=ABCMeta):
         return max(aggregated_results, key=lambda x: x[1])[0]
 
     def __del__(self):
+        for folder in self.tmp_dirs:
+            try:
+                os.rmdir(folder)
+            except:
+                pass
         try:
             if self.sess is not None:
                 self.sess.close()

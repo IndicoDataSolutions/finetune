@@ -98,6 +98,7 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
         return target_model_state
 
     def _model_fn(features, labels, mode, params):
+        tf.logging.warning(str(labels))
         if not build_target_model:
             lm_loss_coef = 1.
         else:
@@ -140,21 +141,20 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
 
                 if build_target_model:
                     target_model_state = target_model_op(featurizer_state=featurizer_state, Y=Y, params=params,
-                                                         mode=mode,
-                                                         do_reuse=do_reuse)
-                    if mode == tf.estimator.ModeKeys.TRAIN or mode == tf.estimator.ModeKeys.EVAL:
+                                                         mode=mode, do_reuse=do_reuse)
+                    if (mode == tf.estimator.ModeKeys.TRAIN or mode == tf.estimator.ModeKeys.EVAL) and Y is not None:
                         train_loss += (1 - lm_loss_coef) * tf.reduce_mean(target_model_state['losses'])
                         target_loss_tower += tf.reduce_mean(target_model_state['losses'])
-                        train_loss_tower += train_loss
+
                     if mode == tf.estimator.ModeKeys.PREDICT:
                         aggregator['logits'].append(target_model_state['logits'])
 
                 if build_lm:
-                    lm_predict_op, language_model_state = language_model_op(X=X, M=M, params=params,
+                    lm_predict_op_shard, language_model_state = language_model_op(X=X, M=M, params=params,
                                                                             featurizer_state=featurizer_state,
                                                                             do_reuse=do_reuse)
                     if mode == tf.estimator.ModeKeys.PREDICT:
-                        aggregator["lm_model"].append(lm_predict_op)
+                        aggregator["lm_model"].append(lm_predict_op_shard)
 
                     if mode == tf.estimator.ModeKeys.TRAIN or mode == tf.estimator.ModeKeys.EVAL:
                         train_loss += lm_loss_coef * tf.reduce_mean(language_model_state['losses'])
@@ -166,13 +166,15 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                     grads = list(zip(grads, variables))
                     gpu_grads.append(grads)
 
+                train_loss_tower += train_loss
+
         with tf.device(params.params_device):
             features = tf.concat(aggregator['features'], axis=0)
-            if build_lm:
+            if build_lm and mode == tf.estimator.ModeKeys.PREDICT:
                 lm_predict_op = tf.concat(aggregator["lm_model"], 0)
-                tf.summary.scalar("LanguageModelLoss", lm_loss_tower)
             else:
                 lm_predict_op = tf.constant(0)
+            tf.summary.scalar("LanguageModelLoss", tf.reduce_mean(lm_loss_tower))
 
             if mode == tf.estimator.ModeKeys.TRAIN:
                 variables = find_trainable_variables("model")
@@ -180,36 +182,37 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                 # TODO figure out what to do about this. We dont always know how many updates we will get now.
 
             if build_target_model:
-
                 target_loss = tf.reduce_mean(target_loss_tower)
                 tf.summary.scalar("TargetModelLoss", target_loss)
                 if mode == tf.estimator.ModeKeys.PREDICT:
                     logits = tf.concat(aggregator['logits'], axis=0)
-
 
         if mode == tf.estimator.ModeKeys.TRAIN or mode == tf.estimator.ModeKeys.EVAL:
             total_loss = train_loss_tower / n_splits
 
             tf.summary.scalar("TotalLoss", total_loss)
 
-        scaffold = Scaffold(init_fn=saver.get_scaffold_initializer())
+        init_op, init_fn = saver.get_scaffold_init_op()
+        scaffold = Scaffold(init_op=init_op, init_fn=init_fn)
 
         if mode == tf.estimator.ModeKeys.PREDICT:
-            return tf.estimator.EstimatorSpec(
+            predictions = {PredictMode.FEATURIZE: features}
+            if build_target_model:
+                predictions[PredictMode.NORMAL] = predict_op(logits, **target_model_state.get("predict_params", {})),
+                predictions[PredictMode.PROBAS] = predict_proba_op(logits, **target_model_state.get("predict_params", {})),
+            if build_lm:
+                predictions[PredictMode.GENERATE_TEXT] = lm_predict_op
+
+                return tf.estimator.EstimatorSpec(
                 mode=mode,
-                predictions={
-                    PredictMode.NORMAL: predict_op(logits, **target_model_state.get("predict_params", {})),
-                    PredictMode.PROBAS: predict_proba_op(logits, **target_model_state.get("predict_params", {})),
-                    PredictMode.GENERATE_TEXT: lm_predict_op,
-                    PredictMode.FEATURIZE: features
-                },
+                predictions=predictions,
                 scaffold=scaffold
             )
 
         if mode == tf.estimator.ModeKeys.TRAIN:
             return tf.estimator.EstimatorSpec(mode=mode, loss=total_loss, train_op=train_op, scaffold=scaffold)
 
-        assert mode == tf.estimator.ModeKeys.EVAL
-        return tf.estimator.EstimatorSpec(mode=mode, loss=target_loss, scaffold=scaffold)
+        assert mode == tf.estimator.ModeKeys.EVAL, "The mode is infact {}".format(mode)
+        return tf.estimator.EstimatorSpec(mode=mode, loss=total_loss, scaffold=scaffold)
 
     return _model_fn
