@@ -201,6 +201,12 @@ class BaseModel(object, metaclass=ABCMeta):
                 allow_soft_placement=self.config.soft_device_placement,
                 log_device_placement=self.config.log_device_placement,
             )
+            num_gpus = len(self.config.visible_gpus)
+            if num_gpus > 1:
+                distribute_strategy = tf.contrib.distribute.MirroredStrategy(num_gpus=num_gpus)
+            else:
+                distribute_strategy = None
+
             config = tf.estimator.RunConfig(
                 tf_random_seed=None,
                 save_summary_steps=val_interval,
@@ -209,8 +215,10 @@ class BaseModel(object, metaclass=ABCMeta):
                 session_config=conf,
                 keep_checkpoint_max=1,
                 keep_checkpoint_every_n_hours=10000,
-                log_step_count_steps=100
+                log_step_count_steps=100,
+                train_distribute=distribute_strategy
             )
+            print("TARGET_DIM = ", self.target_dim)
 
             model_fn = get_model_fn(
                 target_model_fn=self._target_model,
@@ -276,20 +284,14 @@ class BaseModel(object, metaclass=ABCMeta):
             "mask": out.mask
         }
 
-    def _dataset_with_targets(self, Xs, Y):
+    def _post_data_initialization(self, Y):
         self.label_encoder = self._target_encoder()
-
-        # Create restartable generators
-        Y_t = None
-        if not callable(Xs):
-            Y_t = self.label_encoder.fit_transform(Y)
-            dataset = lambda: zip(Xs, Y_t)
-
+        if not callable(Y):
+            Y_fit = Y
+            self.label_encoder.fit(Y)
         else:
             Y_fit = [itertools.islice(Y(), 100)]  # TODO find a more principled way to do this?
-            Y_t = self.label_encoder.fit_transform(Y_fit)
-            dataset = lambda: zip(Xs(), map(lambda y: self.label_encoder.transform([y])[0],
-                                            Y()))  # encode one sample at a time.
+            self.label_encoder.fit(Y_fit)
 
         target_dim = self.label_encoder.target_dim
         self.lm_loss_coef = self.config.lm_loss_coef if target_dim is not None else 1.0
@@ -297,8 +299,18 @@ class BaseModel(object, metaclass=ABCMeta):
             self.rebuild = True
         self.target_dim = target_dim
 
-        if Y_t is not None:
-            self.config.class_weights = compute_class_weights(class_weights=self.config.class_weights, Y=Y_t)
+        if Y_fit is not None:
+            self.config.class_weights = compute_class_weights(class_weights=self.config.class_weights, Y=Y_fit)
+
+    def _dataset_with_targets(self, Xs, Y):
+
+        if not callable(Xs):
+            Y_t = self.label_encoder.transform(Y)
+            dataset = lambda: zip(Xs, Y_t)
+
+        else:
+            dataset = lambda: zip(Xs(), map(lambda y: self.label_encoder.transform([y])[0],
+                                            Y()))  # encode one sample at a time.
 
         dataset_encoded = lambda: map(lambda xy: (self.text_to_tokens_mask(xy[0]), xy[1]), dataset())
         return Dataset.from_generator(dataset_encoded, *self.feed_shape_type_def())
@@ -324,26 +336,23 @@ class BaseModel(object, metaclass=ABCMeta):
         val_size = val_size or 0
         prefetch_buffer = 2  # breaks the pipeline to allow concurrency
         if Y is not None:
-            dataset = self._dataset_with_targets(Xs, Y)
+            self._post_data_initialization(Y)
+            dataset = lambda: self._dataset_with_targets(Xs, Y)
         else:
-            dataset = self._dataset_without_targets(Xs)
+            dataset = lambda: self._dataset_without_targets(Xs)
 
-        tf_dataset = dataset.shuffle(shuffle_buffer_size, seed=self.config.seed)
-        val_dataset = tf_dataset.take(val_size).batch(batch_size).prefetch(prefetch_buffer)
-        train_dataset = tf_dataset.skip(val_size).batch(batch_size).repeat(self.config.n_epochs).prefetch(
-            prefetch_buffer)
+        val_dataset = lambda: dataset().shuffle(shuffle_buffer_size, seed=self.config.seed).take(
+            val_size).batch(batch_size).prefetch(prefetch_buffer)
+        train_dataset = lambda: dataset().shuffle(shuffle_buffer_size, seed=self.config.seed).skip(
+            val_size).batch(batch_size).repeat(self.config.n_epochs).prefetch(prefetch_buffer)
 
-        return (
-            lambda: val_dataset.make_one_shot_iterator().get_next("Val_dataset"),
-            lambda: train_dataset.make_one_shot_iterator().get_next("Train_dataset")
-        )
+        return val_dataset, train_dataset
 
     def _get_predict_input_fn(self, Xs, batch_size=None):
         batch_size = batch_size or self.config.batch_size
         prefetch_buffer = 2  # breaks the pipeline to allow concurrency
-        tf_dataset = self._dataset_without_targets(Xs)
-        dataset = tf_dataset.batch(batch_size).prefetch(prefetch_buffer)
-        return lambda: dataset.make_one_shot_iterator().get_next("Pred_dataset")
+        tf_dataset = lambda: self._dataset_without_targets(Xs)
+        return lambda: tf_dataset().batch(batch_size).prefetch(prefetch_buffer)
 
     def _inferrence(self, Xs, mode):
         estimator = self.get_estimator()
@@ -456,36 +465,42 @@ class BaseModel(object, metaclass=ABCMeta):
         :param seed_text: Defaults to the empty string. This will form the starting point to begin modelling
         :return: A string containing the generated text.
         """
-        dataset_encoded = lambda: [{"tokens": arr_encoded.token_ids, "mask": arr_encoded.mask}]
+
+        def dataset_encoded():
+            while not dataset_encoded.finished:
+                yield {"tokens": arr_encoded.token_ids, "mask": arr_encoded.mask}
+
+        dataset_encoded.finished = False
 
         def get_input_fn():
-            tf_dataset = Dataset.from_generator(dataset_encoded, *self.feed_shape_type_def())
-            return lambda: tf_dataset.make_one_shot_iterator().get_next("gen_text_fn")
+            types, shapes = self.feed_shape_type_def()
+            tf_dataset = Dataset.from_generator(dataset_encoded, types[0], shapes[0])
+            return lambda: tf_dataset.batch(1)
 
         self.config.use_extra_toks = use_extra_toks
-        encoded = self.encoder._encode([seed_text])
+        encoded = self.encoder._encode(seed_text)
         if encoded == [] and not use_extra_toks:
             raise ValueError("If you are not using the extra tokens, you must provide some non-empty seed text")
         start = [self.encoder.start] if use_extra_toks else []
-        encoded = EncodedOutput(token_ids=[start + encoded.token_ids[0]])
+        encoded = EncodedOutput(token_ids=start + encoded.token_ids)
 
         estimator = self.get_estimator()
-        predict_fn = estimator.predict(input_fn=get_input_fn).next
+        predict = estimator.predict(input_fn=get_input_fn())
 
         EOS = self.encoder.clf_token
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
             for i in range(len(encoded.token_ids), (max_length or self.config.max_length) - 2):
                 arr_encoded = self._array_format(encoded)
-                estimator.predict(input_fn=get_input_fn)
-                class_idx = predict_fn()[PredictMode.GENERATE_TEXT]
-                encoded.token_ids[0].append(class_idx[i])
-                if encoded.token_ids[0][-1] == EOS:
+                class_idx = next(predict)[PredictMode.GENERATE_TEXT]
+                encoded.token_ids.append(class_idx[i])
+                if encoded.token_ids[-1] == EOS:
                     break
+            dataset_encoded.finished = True
 
         del self.config["use_extra_toks"]
 
-        return self.encoder.decode(encoded.token_ids[0])
+        return self.encoder.decode(encoded.token_ids)
 
     def __getstate__(self):
         """

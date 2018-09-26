@@ -103,25 +103,7 @@ def convert_gradient_to_tensor(x):
     force gradient to be a dense tensor
     it's often faster to do dense embedding gradient on GPU than sparse on CPU
     """
-    return x
-
-
-def assign_to_gpu(gpu=0, params_device="/device:CPU:0"):
-    """
-        A device assignment function to place all variables on :param params_device: and everything else on gpu
-        number :param gpu:
-
-        Useful for data parallelism across multiple GPUs.
-    """
-
-    def _assign(op):
-        node_def = op if isinstance(op, tf.NodeDef) else op.node_def
-        if node_def.op == "Variable":
-            return params_device
-        else:
-            return "/gpu:%d" % gpu
-
-    return _assign
+    return x # TODO verify this is the case with the new optimizer, they have inbuilt routines for dealing with sparse updates.
 
 
 def sample_with_temperature(logits, temperature):
@@ -132,57 +114,17 @@ def sample_with_temperature(logits, temperature):
     Returns:
       a Tensor with one fewer dimension than logits.
     """
+    logits_shape = shape_list(logits)
     if temperature == 0.0:
         # TF argmax doesn't handle >5 dimensions, so we reshape here.
-        logits_shape = shape_list(logits)
-        argmax = tf.argmax(tf.reshape(logits, [-1, logits_shape[-1]]), axis=1)
-        return tf.reshape(argmax, logits_shape[:-1])
+        argmax = tf.argmax(tf.reshape(logits, [-1, logits_shape[-1]]), axis=-1)
+        return tf.reshape(argmax, [-1] + logits_shape[:-1])
     else:
         assert temperature > 0.0
-        reshaped_logits = (
-                tf.reshape(logits, [-1, shape_list(logits)[-1]]) / temperature)
+        reshaped_logits = tf.reshape(logits, [-1, logits_shape[-1]]) / temperature
         choices = tf.multinomial(reshaped_logits, 1)
-        choices = tf.reshape(choices,
-                             shape_list(logits)[:logits.get_shape().ndims - 1])
+        choices = tf.reshape(choices, [-1] + logits_shape[:-1])
         return choices
-
-
-def average_grads(tower_grads):
-    def average_dense(grad_and_vars):
-        if len(grad_and_vars) == 1:
-            return grad_and_vars[0][0]
-
-        grad = grad_and_vars[0][0]
-        for g, _ in grad_and_vars[1:]:
-            grad += g
-        return grad / len(grad_and_vars)
-
-    def average_sparse(grad_and_vars):
-        if len(grad_and_vars) == 1:
-            return grad_and_vars[0][0]
-
-        indices = []
-        values = []
-        for g, _ in grad_and_vars:
-            indices += [g.indices]
-            values += [g.values]
-        indices = tf.concat(indices, 0)
-        values = tf.concat(values, 0)
-        return tf.IndexedSlices(values, indices, grad_and_vars[0][0].dense_shape)
-
-    average_grads = []
-    for grad_and_vars in zip(*tower_grads):
-        if grad_and_vars[0][0] is None:
-            grad = None
-        elif isinstance(grad_and_vars[0][0], tf.IndexedSlices):
-            grad = average_sparse(grad_and_vars)
-        else:
-            grad = average_dense(grad_and_vars)
-        v = grad_and_vars[0][1]
-        grad_and_var = (grad, v)
-        average_grads.append(grad_and_var)
-    return average_grads
-
 
 def truncate_text(text, max_chars=100):
     if len(text) > max_chars:

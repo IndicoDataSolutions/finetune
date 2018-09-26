@@ -258,11 +258,10 @@ class TestClassifier(unittest.TestCase):
         model = Classifier(verbose=False)
 
         # A dirty mock to make all model inferences output a hundred _classify_ tokens
-        def load_mock(*args, **kwargs):
-            model.sess = MagicMock()
-            model.sess.run = MagicMock(return_value=100 * [model.encoder['_classify_']])
+        fake_estimator = MagicMock()
+        model.get_estimator = lambda *args, **kwargs: fake_estimator
+        fake_estimator.predict = MagicMock(return_value=iter([{"GEN_TEXT" :100 * [model.encoder['_classify_']]}]))
 
-        model.saver.initialize = load_mock
         lm_out = model.generate_text()
         self.assertEqual(lm_out, '_start__classify_')
 
@@ -270,7 +269,7 @@ class TestClassifier(unittest.TestCase):
         """
         Ensure validation settings do not result in an error
         """
-        config = self.default_config(val_interval=10, val_size=0.5)
+        config = self.default_config(val_interval=10, val_size=10)
         model = Classifier(config=config)
         train_sample = self.dataset.sample(n=20)
         model.fit(train_sample.Text, train_sample.Target)
