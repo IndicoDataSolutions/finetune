@@ -270,6 +270,7 @@ class TextEncoder(object):
         :param verbose: Flag to set whether to output a status bar.
         :return: A Labeled Sequence Object.
         """
+
         token_ids = []
         tokens = []
         positions = []

@@ -4,11 +4,48 @@ import copy
 import tensorflow as tf
 import numpy as np
 
-from finetune.base import BaseModel
+from finetune.base import BaseModel, PredictMode
 from finetune.target_encoders import SequenceLabelingEncoder, SequenceMultiLabelingEncoder
 from finetune.network_modules import sequence_labeler
 from finetune.crf import sequence_decode
 from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_sequence
+import itertools
+
+from finetune.input_pipeline import BasePipeline
+
+
+class SequencePipeline(BasePipeline):
+    def __init__(self, config, multi_label):
+        super(SequencePipeline, self).__init__(config)
+        self.multi_label = multi_label
+
+    def _post_data_initialization(self, Y):
+        Y_ = list(itertools.chain.from_iterable(Y))
+        super()._post_data_initialization(Y_)
+
+    def text_to_tokens_mask(self, X, Y=None):
+        out_gen = self._text_to_ids(X, Y=Y)
+        for out in out_gen:
+            feats = {"tokens": out.token_ids, "mask": out.mask}
+            if Y is None:
+                yield feats
+            else:
+                yield feats, self.label_encoder.transform(out.labels)
+
+    def _format_for_encoding(self, X):
+        return [X]
+
+    def feed_shape_type_def(self):
+        TS = tf.TensorShape
+        target_shape = [self.config.max_length, self.label_encoder.target_dim] if self.multi_label else [
+            self.config.max_length]
+        return ({"tokens": tf.int32, "mask": tf.int32}, tf.int32), (
+            {"tokens": TS([self.config.max_length, 2]), "mask": TS([self.config.max_length])}, TS(target_shape))
+
+    def _target_encoder(self):
+        if self.multi_label:
+            return SequenceMultiLabelingEncoder()
+        return SequenceLabelingEncoder()
 
 
 class SequenceLabeler(BaseModel):
@@ -18,7 +55,7 @@ class SequenceLabeler(BaseModel):
     :param config: A :py:class:`finetune.config.Settings` object or None (for default config).
     :param \**kwargs: key-value pairs of config items to override.
     """
-      
+
     defaults = {
         "n_epochs": 5,
         "lr_warmup": 0.1,
@@ -40,27 +77,18 @@ class SequenceLabeler(BaseModel):
         d = copy.deepcopy(SequenceLabeler.defaults)
         d.update(kwargs)
         super().__init__(config=config, **d)
-       
+
+    def _get_input_pipeline(self):
+        return SequencePipeline(config=self.config, multi_label=self.multi_label)
+
     def _initialize(self):
         self.multi_label = self.config.multi_label_sequences
         return super()._initialize()
-  
-    def finetune(self, X, Y=None, batch_size=None):
-        """
-        :param X: A list of text snippets. Format: [batch_size]
-        :param Y: A list of lists of annotations. Format: [batch_size, n_annotations], where each annotation is of the form:
-            {'start': 0, 'end': 5, 'label': 'class', 'text': 'sample text'}
-        :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
-                           corresponds to the number of training examples provided to each GPU.
-        :param val_size: Float fraction or int number that represents the size of the validation set.
-        :param val_interval: The interval for which validation is performed, measured in number of steps.
-        """
-        fit_target_model = (Y is not None)
-        X, Y = indico_to_finetune_sequence(X, Y, multi_label=self.multi_label, none_value="<PAD>")
-        pad = self.config.pad_token
-        arr_encoded = self._text_to_ids(X, Y=Y, pad_token=[pad] if self.multi_label else pad)
-        targets = arr_encoded.labels if fit_target_model else None
-        return self._training_loop(arr_encoded, Y=targets, batch_size=batch_size)
+
+    def finetune(self, Xs, Y=None, batch_size=None):
+        Xs, Y_new = indico_to_finetune_sequence(Xs, labels=Y, multi_label=self.multi_label, none_value="<PAD>")
+        Y = Y_new if Y else None
+        return super().finetune(Xs, Y=Y, batch_size=batch_size)
 
     def predict(self, X):
         """
@@ -69,42 +97,27 @@ class SequenceLabeler(BaseModel):
         :param X: A list / array of text, shape [batch]
         :returns: list of class labels.
         """
-        subseqs, _ = indico_to_finetune_sequence(X, multi_label=self.multi_label)
-
         chunk_size = self.config.max_length - 2
         step_size = chunk_size // 3
-        
-        arr_encoded = self._text_to_ids(subseqs)
-
-        labels = []
-        batch_probas = []
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore")
-            for xmb, mmb in self._infer_prep(subseqs):
-                output = self._eval(self.predict_op,
-                    feed_dict={
-                        self.X: xmb,
-                        self.M: mmb,
-                    }
-                )
-                prediction, probas = output.get(self.predict_op)
-                batch_probas.extend(probas)
-                formatted_predictions = self.label_encoder.inverse_transform(prediction)
-                labels.extend(formatted_predictions)
+        arr_encoded = list(itertools.chain.from_iterable(self._text_to_ids([x]) for x in X))
+        labels, batch_probas = [], []
+        for pred in self._inferrence(lambda: ([x] for x in X), mode=None):
+            labels.append(self.input_pipeline.label_encoder.inverse_transform([pred[PredictMode.NORMAL]])[0])
+            batch_probas.append(pred[PredictMode.PROBAS])
 
         all_subseqs = []
         all_labels = []
         all_probs = []
 
         doc_idx = -1
-                
-        for chunk_idx, (label_seq, position_seq, proba_seq) in enumerate(zip(labels, arr_encoded.char_locs, batch_probas)):
-            start_of_doc = arr_encoded.token_ids[chunk_idx][0][0] == self.encoder.start
-            end_of_doc = (
-                chunk_idx + 1 >= len(arr_encoded.char_locs) or 
-                arr_encoded.token_ids[chunk_idx + 1][0][0] == self.encoder.start
-            )
+        for chunk_idx, (label_seq, proba_seq) in enumerate(zip(labels, batch_probas)):
 
+            position_seq = arr_encoded[chunk_idx].char_locs
+            start_of_doc = arr_encoded[chunk_idx].token_ids[0][0] == self.encoder.start
+            end_of_doc = (
+                    chunk_idx + 1 >= len(arr_encoded) or
+                    arr_encoded[chunk_idx + 1].token_ids[0][0] == self.encoder.start
+            )
             """
             Chunk idx for prediction.  Dividers at `step_size` increments.
             [  1  |  1  |  2  |  3  |  3  ]
@@ -118,14 +131,17 @@ class SequenceLabeler(BaseModel):
                 start_of_token = 0
                 if not end_of_doc:
                     # predict only on first two thirds
-                    label_seq, position_seq, proba_seq = label_seq[:step_size*2], position_seq[:step_size*2], proba_seq[:step_size*2]
+                    label_seq, position_seq, proba_seq = label_seq[:step_size * 2], position_seq[
+                    :step_size * 2], proba_seq[:step_size * 2]
             else:
                 if end_of_doc:
                     # predict on the rest of sequence
-                    label_seq, position_seq, proba_seq = label_seq[step_size:], position_seq[step_size:], proba_seq[step_size:]
+                    label_seq, position_seq, proba_seq = label_seq[step_size:], position_seq[step_size:], proba_seq[
+                    step_size:]
                 else:
                     # predict only on middle third
-                    label_seq, position_seq, proba_seq = label_seq[step_size:step_size*2], position_seq[step_size:step_size*2], proba_seq[step_size:step_size*2]
+                    label_seq, position_seq, proba_seq = label_seq[step_size:step_size * 2], position_seq[
+                    step_size:step_size * 2], proba_seq[step_size:step_size * 2]
 
             for label, position, proba in zip(label_seq, position_seq, proba_seq):
                 if position == -1:
@@ -155,7 +171,7 @@ class SequenceLabeler(BaseModel):
                     prob_dicts.append(dict(zip(self.label_encoder.classes_, probs)))
                     if self.multi_label:
                         del prob_dicts[-1][self.config.pad_token]
-                
+
                 all_subseqs.append(doc_subseqs)
                 all_labels.append(doc_labels)
                 all_probs.append(prob_dicts)
@@ -187,36 +203,20 @@ class SequenceLabeler(BaseModel):
         """
         return self.predict(X)
 
-    def _format_for_encoding(self, Xs):
-        """
-        Pad out each example to make it clear there is only a single field
-        """
-        return [[X] for X in Xs]
-
-    def _target_placeholder(self, target_dim=None):
-        if self.multi_label:
-            return tf.placeholder(tf.int32, [None, self.config.max_length, self.label_encoder.target_dim])
-        return tf.placeholder(tf.int32, [None, self.config.max_length])  # classification targets
-
-    def _target_encoder(self):
-        if self.multi_label:
-            return SequenceMultiLabelingEncoder()
-        return SequenceLabelingEncoder()
-
     def _target_model(self, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
         return sequence_labeler(
             hidden=featurizer_state['sequence_features'],
-            targets=targets, 
+            targets=targets,
             n_targets=n_outputs,
             dropout_placeholder=self.do_dropout,
             pad_id=self.pad_idx,
             config=self.config,
             train=train,
             multilabel=self.multi_label,
-            reuse=reuse, 
+            reuse=reuse,
             **kwargs
         )
-    
+
     def _predict_op(self, logits, **kwargs):
         trans_mats = kwargs.get("transition_matrix")
         if self.multi_label:
@@ -230,7 +230,7 @@ class SequenceLabeler(BaseModel):
             label_idxs = tf.stack(label_idxs, axis=-1)
             label_probas = tf.stack(label_probas, axis=-1)
         else:
-            label_idxs, label_probas = sequence_decode(logits,trans_mats)
+            label_idxs, label_probas = sequence_decode(logits, trans_mats)
         return label_idxs, label_probas
 
     def _predict_proba_op(self, logits, **kwargs):

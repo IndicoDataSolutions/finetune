@@ -4,6 +4,12 @@ import numpy as np
 from finetune.base import BaseModel
 from finetune.target_encoders import OneHotLabelEncoder
 from finetune.network_modules import classifier
+from finetune.input_pipeline import BasePipeline
+
+
+class ClassificationPipeline(BasePipeline):
+    def _target_encoder(self):
+        return OneHotLabelEncoder()
 
 
 class Classifier(BaseModel):
@@ -13,6 +19,9 @@ class Classifier(BaseModel):
     :param config: A :py:class:`finetune.config.Settings` object or None (for default config).
     :param \**kwargs: key-value pairs of config items to override.
     """
+
+    def _get_input_pipeline(self):
+        return ClassificationPipeline(self.config)
 
     def featurize(self, X):
         """
@@ -53,15 +62,11 @@ class Classifier(BaseModel):
     def get_eval_fn(cls):
         return lambda labels, targets: np.mean(np.asarray(labels) == np.asarray(targets))
 
-    def _target_encoder(self):
-        return OneHotLabelEncoder()
-
     def _target_model(self, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
         return classifier(
             hidden=featurizer_state['features'], 
             targets=targets, 
             n_targets=n_outputs, 
-            dropout_placeholder=self.do_dropout, 
             config=self.config,
             train=train,
             reuse=reuse,

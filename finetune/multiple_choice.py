@@ -24,24 +24,16 @@ class MultipleChoice(BaseModel):
         """
         Format multi question examples as a list of IDs
         """
-        qa_pairs = [
-            [q, answer_list[0]] 
-            for q, answer_list in Xs
-        ]
-        arrays = [
-            super(MultipleChoice, self)._text_to_ids(
-                [
-                    [q, answer_list[idx]] 
-                    for q, answer_list in Xs
-                ],
-                Y=Y
-            ) 
-            for idx in range(self.num_answers)
-        ]
+        q, answer_list = Xs
+        pairs = [[q, answer_list[idx]] for idx in range(len(answer_list))]
+        arrays = []
+        for pair in pairs:
+            arrays.append(super(MultipleChoice, self)._text_to_ids(pair, Y=Y))
+
         kwargs = arrays[0]._asdict()
         kwargs['tokens'] = [arr.tokens for arr in arrays]
-        kwargs['token_ids'] = np.stack([arr.token_ids for arr in arrays], 1)
-        kwargs['mask'] = np.stack([arr.mask for arr in arrays], 1)
+        kwargs['token_ids'] = np.stack([arr.token_ids for arr in arrays], 0)
+        kwargs['mask'] = np.stack([arr.mask for arr in arrays], 0)
         return ArrayEncodedOutput(**kwargs)
 
     def finetune(self, questions, answers, correct_answer, batch_size=None, fit_lm_only=False):
@@ -75,9 +67,7 @@ class MultipleChoice(BaseModel):
                         "Correct answer {} is not contained in possible answers {}".format(correct, others))
 
         self.num_answers = len(answers[0])
-        arr_encoded = self._text_to_ids(list(zip(questions, answers)))
-        labels = None if fit_lm_only else answer_idx
-        return self._training_loop(arr_encoded, Y=labels, batch_size=batch_size)
+        return super().finetune(lambda: zip(questions, answers), Y=correct_answer)
 
     def _define_placeholders(self, *args, **kwargs):
         super()._define_placeholders()

@@ -1,13 +1,8 @@
-import json
-
 import tensorflow as tf
 import numpy as np
-from sklearn.model_selection import train_test_split
-
 from finetune.classifier import Classifier
 from finetune.regressor import Regressor
 from finetune.base import BaseModel
-from finetune.target_encoders import OneHotLabelEncoder, RegressionEncoder
 from finetune.network_modules import classifier, regressor
 
 
@@ -57,9 +52,6 @@ class MultifieldClassifier(Classifier):
 
     def get_eval_fn(cls):
         return lambda labels, targets: np.mean(np.asarray(labels) == np.asarray(targets))
-
-    def _target_encoder(self):
-        return OneHotLabelEncoder()
 
     def _target_model(self, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
         return classifier(
@@ -125,9 +117,6 @@ class MultifieldRegressor(Regressor):
         """
         return BaseModel.featurize(self, Xs)
 
-    def _target_encoder(self):
-        return RegressionEncoder()
-
     def _target_model(self, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
         return regressor(
             hidden=featurizer_state['features'],
@@ -144,43 +133,4 @@ class MultifieldRegressor(Regressor):
         return logits
 
     def _predict_proba_op(self, logits, **kwargs):
-        return tf.no_op()
-
-
-if __name__ == "__main__":
-
-    with open("data/questions.json", "rt") as fp:
-        data = json.load(fp)
-
-    scores = []
-    questions = []
-    answers = []
-    save_path = 'saved-models/cola'
-
-    model = MultifieldClassifier()
-    xs = []
-
-    for item in data:
-        row = data[item]
-        scores.append(row["score"])
-        xs.append([row["question"], row["answers"][0]["answer"]])
-
-    scores_train, scores_test, xs_train, xs_test = train_test_split(
-        scores, xs, test_size=0.33, random_state=5)
-
-    model.finetune(xs_train, scores_train)
-
-    model = MultifieldClassifier.load(save_path)
-
-    print("TRAIN EVAL")
-    predictions = model.predict(xs_train)
-    print(predictions)
-
-    from scipy.stats import spearmanr
-
-    print(spearmanr(predictions, scores_train))
-
-    print("TEST EVAL")
-    predictions = model.predict(xs_test)
-    print(predictions)
-    print(spearmanr(predictions, scores_test))
+        return logits

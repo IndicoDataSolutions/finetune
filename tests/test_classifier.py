@@ -64,7 +64,8 @@ class TestClassifier(unittest.TestCase):
         tf.reset_default_graph()
 
     def tearDown(self):
-        shutil.rmtree("tests/saved-models/")
+        pass
+        #shutil.rmtree("tests/saved-models/")
 
     def default_config(self, **kwargs):
         return get_config(
@@ -145,7 +146,7 @@ class TestClassifier(unittest.TestCase):
         valid_sample = self.dataset.sample(n=(3 * self.n_sample))
         predictions = model.predict(valid_sample.Text.values)
         recall = recall_score(valid_sample.Target.values, predictions, pos_label=1)
-        model = Classifier(config=self.default_config(class_weights={'1': 100}))
+        model = Classifier(config=self.default_config(class_weights={1: 100}))
         model.fit(train_sample.Text.values, train_sample.Target.values)
         predictions = model.predict(valid_sample.Text.values)
         new_recall = recall_score(valid_sample.Target.values, predictions, pos_label=1)
@@ -260,7 +261,7 @@ class TestClassifier(unittest.TestCase):
         # A dirty mock to make all model inferences output a hundred _classify_ tokens
         fake_estimator = MagicMock()
         model.get_estimator = lambda *args, **kwargs: fake_estimator
-        fake_estimator.predict = MagicMock(return_value=iter([{"GEN_TEXT" :100 * [model.encoder['_classify_']]}]))
+        fake_estimator.predict = MagicMock(return_value=iter([{"GEN_TEXT" :100 * [model.input_pipeline.encoder['_classify_']]}]))
 
         lm_out = model.generate_text()
         self.assertEqual(lm_out, '_start__classify_')

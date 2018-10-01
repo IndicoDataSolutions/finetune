@@ -145,6 +145,7 @@ def get_default_config():
     :return: Config object.
     """
     return Settings(
+        dataset_size=1000,
         batch_size=2,
         visible_gpus=all_gpus(),
         n_epochs=GridSearchable(3, [1, 2, 3, 4]),

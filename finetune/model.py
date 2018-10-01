@@ -47,6 +47,7 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                 target_dim=target_dim,
                 label_encoder=label_encoder
             )
+            weighted_tensor = tf.Print(weighted_tensor, [weighted_tensor], summarize=100)
 
         with tf.variable_scope('model/target'):
             target_model_state = target_model_fn(
@@ -85,8 +86,16 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                 if mode == tf.estimator.ModeKeys.PREDICT:
                     logits = target_model_state["logits"]
                     predict_params = target_model_state.get("predict_params", {})
-                    predictions[PredictMode.NORMAL] = predict_op(logits, **predict_params)
-                    predictions[PredictMode.PROBAS] = predict_proba_op(logits, **predict_params)
+                    if "_threshold" in params:
+                        predict_params["threshold"] = params._threshold
+                    pred_op = predict_op(logits, **predict_params)
+                    if type(pred_op) == tuple:
+                        pred_op, pred_proba_op = pred_op
+                    else:
+                        pred_proba_op = predict_proba_op(logits, **predict_params)
+
+                    predictions[PredictMode.NORMAL] = pred_op
+                    predictions[PredictMode.PROBAS] = pred_proba_op
 
             if build_lm:
                 lm_predict_op, language_model_state = language_model_op(X=X, M=M, params=params,
@@ -99,7 +108,8 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                     predictions[PredictMode.GENERATE_TEXT] = lm_predict_op
 
         if mode == tf.estimator.ModeKeys.TRAIN:
-            lr_decay = lambda lr, global_step: lr * schedules[params.lr_schedule](tf.to_float(global_step) / 1000.0)
+            total_num_steps = params.n_epochs * params.dataset_size//params.batch_size
+            lr_decay = lambda lr, global_step: lr * schedules[params.lr_schedule](tf.to_float(global_step) / total_num_steps)
             # TODO, figure out how much data we will have.
             optimizer = lambda lr: tf.contrib.opt.AdamWOptimizer(weight_decay=params.l2_reg, learning_rate=lr,
                                                                  beta1=params.b1, beta2=params.b2,
@@ -116,8 +126,8 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                 summaries=summaries
             )
 
-        init_op, init_fn = saver.get_scaffold_init_op()
-        scaffold = Scaffold(init_op=init_op, init_fn=init_fn)
+        init_op = saver.get_scaffold_init_op()
+        scaffold = Scaffold(init_op=init_op)
 
         if mode == tf.estimator.ModeKeys.PREDICT:
             return tf.estimator.EstimatorSpec(

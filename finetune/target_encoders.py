@@ -4,6 +4,7 @@ from abc import ABCMeta
 
 from finetune.utils import flatten
 
+
 class BaseEncoder(metaclass=ABCMeta):
     @property
     def target_labels(self):
@@ -12,39 +13,6 @@ class BaseEncoder(metaclass=ABCMeta):
     @property
     def target_dim(self):
         return len(self.target_labels) if self.target_labels is not None else None
-
-
-class OrdinalClassificationEncoder(BaseEncoder):
-    def __init__(self, min_val=0.0, max_val=1.0):
-        self.min_val = min_val
-        self.max_val = max_val
-        self.lookup = None
-        self.inverse_lookup = None
-        self.keys = None
-        self.classes_ = [0, 1]
-
-    def fit(self, y):
-        self.keys = list(set(y))
-        self.keys.sort()
-        spaced_probs = np.linspace(self.min_val, self.max_val, len(self.keys))
-        prob_distributions = np.transpose([spaced_probs, 1 - spaced_probs])
-        self.inverse_lookup = spaced_probs
-        self.lookup = dict(zip(self.keys, prob_distributions))
-        return self
-
-    def transform(self, y):
-        return list(map(self.lookup.get, y))
-
-    def inverse_transform(self, y):
-        output = []
-        for item in y:
-            i_min = np.argmin(np.abs(self.inverse_lookup - item[0]))
-            output.append(self.keys[i_min])
-        return np.asarray(output)
-
-    def fit_transform(self, y):
-        self.fit(y)
-        return self.transform(y)
 
 
 class RegressionEncoder(BaseEncoder):
@@ -101,48 +69,21 @@ class OneHotLabelEncoder(LabelEncoder, BaseEncoder):
 
 
 class SequenceLabelingEncoder(LabelEncoder, BaseEncoder):
-
-    def fit_transform(self, y):
-        shape = np.shape(y)
-        flat = np.reshape(y, [-1])
-        labels = super().fit_transform(flat)
-        return np.reshape(labels, shape)
-
-    def transform(self, y):
-        shape = np.shape(y)
-        flat = np.reshape(y, [-1])
-        labels = super().transform(flat)
-        return np.reshape(labels, shape)
-
-    def inverse_transform(self, y):
-        shape = np.shape(y)
-        flat = np.reshape(y, [-1]).tolist()
-        labels = super().inverse_transform(flat)
-        return np.reshape(labels, shape)
+    pass
 
 
 class SequenceMultiLabelingEncoder(MultiLabelBinarizer, BaseEncoder):
-    def fit_transform(self, y):
-
-        y_flat = flatten(y)
-        self.fit(y_flat)
-        return [super(SequenceMultiLabelingEncoder, self).transform(seq) for seq in y]
-
-    def transform(self, y):
-        return [super(SequenceMultiLabelingEncoder, self).transform(seq) for seq in y]
-
-    def inverse_transform(self, y):
-        return [super(SequenceMultiLabelingEncoder, self).inverse_transform(seq) for seq in y]
+    pass
 
 
 class MultilabelClassificationEncoder(MultiLabelBinarizer, BaseEncoder):
-    """"""
+    pass
 
 
 class IDEncoder(BaseEncoder):
 
     def __init__(self):
-        self.classes_ = list(range(1))
+        self.classes_ = [0]
 
     def transform(self, x):
         return x
