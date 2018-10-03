@@ -64,8 +64,7 @@ class TestClassifier(unittest.TestCase):
         tf.reset_default_graph()
 
     def tearDown(self):
-        pass
-        #shutil.rmtree("tests/saved-models/")
+        shutil.rmtree("tests/saved-models/")
 
     def default_config(self, **kwargs):
         return get_config(

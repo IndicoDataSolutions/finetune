@@ -8,7 +8,6 @@ from scipy import interpolate
 from finetune.encoding import NLP
 from finetune import config
 
-
 def merge_leading_dims(X, target_rank):
     shape = [-1] + X.get_shape().as_list()[1 - target_rank:]
     return tf.reshape(X, shape)
@@ -55,6 +54,7 @@ def make_path(f):
         os.makedirs(d)
     return f
 
+
 def find_trainable_variables(key, exclude=None):
     """
     Simple helper function to get trainable variables that contain a certain string in their name :param key:, whilst
@@ -92,8 +92,10 @@ def soft_split(*xs, n_splits=None):
 def flatten(outer):
     return [el for inner in outer for el in inner]
 
+
 def list_transpose(l):
     return [list(i) for i in zip(*l)]
+
 
 @function.Defun(
     python_grad_func=lambda x, dy: tf.convert_to_tensor(dy),
@@ -103,7 +105,7 @@ def convert_gradient_to_tensor(x):
     force gradient to be a dense tensor
     it's often faster to do dense embedding gradient on GPU than sparse on CPU
     """
-    return x # TODO verify this is the case with the new optimizer, they have inbuilt routines for dealing with sparse updates.
+    return x  # TODO verify this is the case with the new optimizer, they have inbuilt routines for dealing with sparse updates.
 
 
 def sample_with_temperature(logits, temperature):
@@ -116,15 +118,14 @@ def sample_with_temperature(logits, temperature):
     """
     logits_shape = shape_list(logits)
     if temperature == 0.0:
-        # TF argmax doesn't handle >5 dimensions, so we reshape here.
-        argmax = tf.argmax(tf.reshape(logits, [-1, logits_shape[-1]]), axis=-1)
-        return tf.reshape(argmax, [-1] + logits_shape[:-1])
+        return tf.argmax(logits, axis=-1)
     else:
         assert temperature > 0.0
         reshaped_logits = tf.reshape(logits, [-1, logits_shape[-1]]) / temperature
         choices = tf.multinomial(reshaped_logits, 1)
-        choices = tf.reshape(choices, [-1] + logits_shape[:-1])
+        choices = tf.reshape(choices, logits_shape[:-1])
         return choices
+
 
 def truncate_text(text, max_chars=100):
     if len(text) > max_chars:
@@ -132,7 +133,8 @@ def truncate_text(text, max_chars=100):
     return text
 
 
-def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_value=config.PAD_TOKEN, subtoken_predictions=False):
+def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_value=config.PAD_TOKEN,
+                                subtoken_predictions=False):
     """
     Maps from the labeled substring format into the 'indico' format. This is the exact inverse operation to
     :meth indico_to_finetune_sequence:.
@@ -237,7 +239,8 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
     return raw_texts, annotations
 
 
-def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value=config.PAD_TOKEN, subtoken_labels=False):
+def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value=config.PAD_TOKEN,
+                                subtoken_labels=False):
     """
     Maps from the 'indico' format sequence labeling data. Into a labeled substring format. This is the exact inverse of
     :meth finetune_to_indico_sequence:.

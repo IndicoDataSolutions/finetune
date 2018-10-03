@@ -59,7 +59,6 @@ class BaseModel(object, metaclass=ABCMeta):
         # Initializes the non-serialized bits of the class.
         self._set_random_seed(self.config.seed)
         self.estimator_ = None
-        self.rebuild = False
         download_data_if_required()
         self.estimator_dir = tempfile.mkdtemp()
         self.tmp_dirs = [self.estimator_dir]
@@ -110,20 +109,24 @@ class BaseModel(object, metaclass=ABCMeta):
                     len(Y)
                 )
             )
+        batch_size = batch_size or self.config.batch_size
         val_size, val_interval = self.validation_settings(
             n_examples=len(Xs) if not callable(Xs) else self.config.dataset_size,
             batch_size=batch_size or self.config.batch_size)
         val_input_fn, train_input_fn = self.input_pipeline._get_train_input_fns(Xs, Y, batch_size=batch_size,
                                                                                 val_size=val_size)
+
         train_spec = tf.estimator.TrainSpec(input_fn=train_input_fn, max_steps=val_interval)
         eval_spec = tf.estimator.EvalSpec(input_fn=val_input_fn)
-        tf.estimator.train_and_evaluate(self.get_estimator(val_interval=val_interval), train_spec=train_spec,
+        estimator = self.get_estimator(val_interval=val_interval)
+        tf.estimator.train_and_evaluate(estimator, train_spec=train_spec,
                                         eval_spec=eval_spec)
 
-    def get_estimator(self, val_interval=None):
-        if self.estimator_ is None or self.rebuild:
+
+    def get_estimator(self, val_interval=None, force_build_lm=False):
+        if self.estimator_ is None or self.input_pipeline.rebuild or force_build_lm:
             hot_start = None
-            if self.rebuild:
+            if self.input_pipeline.rebuild:
                 try:
                     hot_start = tf.estimator.WarmStartSettings(
                         ckpt_to_initialize_from=tf.train.latest_checkpoint(self.estimator_dir),
@@ -132,7 +135,7 @@ class BaseModel(object, metaclass=ABCMeta):
                     os.remove(os.path.join(self.estimator_dir, "checkpoint"))
                 except ValueError:
                     pass
-                self.rebuild = False
+                self.input_pipeline.rebuild = False
 
             conf = tf.ConfigProto(
                 allow_soft_placement=self.config.soft_device_placement,
@@ -140,12 +143,12 @@ class BaseModel(object, metaclass=ABCMeta):
             )
             num_gpus = len(self.config.visible_gpus)
             if num_gpus > 1:
-                distribute_strategy = tf.contrib.distribute.MirroredStrategy(num_gpus=num_gpus)
+                distribute_strategy = tf.contrib.distribute.MirroredStrategy(num_gpus_per_worker=num_gpus)
             else:
-                distribute_strategy = None  # tf.contrib.distribute.OneDeviceStrategy("GPU:0") #TODO swap this in when 1.11 is released
+                distribute_strategy = None
 
             config = tf.estimator.RunConfig(
-                tf_random_seed=None,
+                tf_random_seed=self.config.seed,
                 save_summary_steps=val_interval,
                 save_checkpoints_steps=val_interval,
                 save_checkpoints_secs=None if val_interval is not None else 600,
@@ -156,12 +159,14 @@ class BaseModel(object, metaclass=ABCMeta):
                 train_distribute=distribute_strategy
             )
 
+            print("TARGET_DIM", self.input_pipeline.target_dim)
+
             model_fn = get_model_fn(
                 target_model_fn=self._target_model,
                 predict_op=self._predict_op,
                 predict_proba_op=self._predict_proba_op,
                 build_target_model=self.input_pipeline.target_dim is not None,
-                build_lm=self.config.lm_loss_coef > 0.0 or self.input_pipeline.target_dim is None,
+                build_lm=force_build_lm or self.config.lm_loss_coef > 0.0 or self.input_pipeline.target_dim is None,
                 encoder=self.input_pipeline.encoder,
                 target_dim=self.input_pipeline.target_dim,
                 label_encoder=self.input_pipeline.label_encoder,
@@ -213,8 +218,7 @@ class BaseModel(object, metaclass=ABCMeta):
     def _predict(self, Xs):
         raw_preds = self._inferrence(Xs, PredictMode.NORMAL)
         print("3, ", raw_preds)
-
-        return self.input_pipeline.label_encoder.inverse_transform(raw_preds)
+        return self.input_pipeline.label_encoder.inverse_transform(np.asarray(raw_preds))
 
     def predict(self, Xs):
         return self._predict(Xs)
@@ -276,7 +280,6 @@ class BaseModel(object, metaclass=ABCMeta):
         :param seed_text: Defaults to the empty string. This will form the starting point to begin modelling
         :return: A string containing the generated text.
         """
-
         def dataset_encoded():
             while not dataset_encoded.finished:
                 yield {"tokens": arr_encoded.token_ids, "mask": arr_encoded.mask}
@@ -289,13 +292,13 @@ class BaseModel(object, metaclass=ABCMeta):
             return tf_dataset.batch(1)
 
         self.config.use_extra_toks = use_extra_toks
-        encoded = self.input_pipeline.encoder._encode(seed_text)
+        encoded = self.input_pipeline.encoder._encode([seed_text])
         if encoded == [] and not use_extra_toks:
             raise ValueError("If you are not using the extra tokens, you must provide some non-empty seed text")
         start = [self.input_pipeline.encoder.start] if use_extra_toks else []
-        encoded = EncodedOutput(token_ids=start + encoded.token_ids)
+        encoded = EncodedOutput(token_ids=start + encoded.token_ids[0])
 
-        estimator = self.get_estimator()
+        estimator = self.get_estimator(force_build_lm=True)
         predict = estimator.predict(input_fn=get_input_fn)
 
         EOS = self.input_pipeline.encoder.clf_token

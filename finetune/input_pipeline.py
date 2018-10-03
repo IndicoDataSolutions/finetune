@@ -20,6 +20,7 @@ class BasePipeline(metaclass=ABCMeta):
         self.encoder = TextEncoder()
         self.target_dim = None
         self.pad_idx_ = None
+        self.rebuild = False
 
     @abstractmethod
     def _target_encoder(self):
@@ -65,6 +66,12 @@ class BasePipeline(metaclass=ABCMeta):
             mask=mask,
         )
 
+    def _adapt_feats_for_distributed(self, feats_labels):
+        if type(feats_labels) == tuple:
+            feats, labels = feats_labels
+            feats["labels"] = labels
+            return feats
+
     def text_to_tokens_mask(self, X, Y=None):
         out_gen = self._text_to_ids(X)
         for out in out_gen:
@@ -100,15 +107,21 @@ class BasePipeline(metaclass=ABCMeta):
             self.config.class_weights = compute_class_weights(class_weights=self.config.class_weights, Y=Y_fit)
 
     def _dataset_with_targets(self, Xs, Y):
-        if not callable(Xs):
+        if not callable(Xs) and not callable(Y):
             dataset = lambda: zip(Xs, Y)
-
-        else:
+        elif callable(Xs) and callable(Y):
             dataset = lambda: zip(Xs(), Y())  # encode one sample at a time.
+        else:
+            raise ValueError("Either neither or both of Xs and Y should be callable, not a mixture")
 
         dataset_encoded = lambda: itertools.chain.from_iterable(
             map(lambda xy: self.text_to_tokens_mask(*xy), dataset()))
-        return Dataset.from_generator(dataset_encoded, *self.feed_shape_type_def())
+        shape_def = self.feed_shape_type_def()
+        if len(self.config.visible_gpus) > 1:
+            dataset_encoded_ = dataset_encoded
+            dataset_encoded = lambda: map(self._adapt_feats_for_distributed, dataset_encoded_())
+            shape_def = [self._adapt_feats_for_distributed(s) for s in shape_def]
+        return Dataset.from_generator(dataset_encoded, *shape_def)
 
     def _dataset_without_targets(self, Xs):
         if not callable(Xs):
@@ -176,7 +189,6 @@ class BasePipeline(metaclass=ABCMeta):
                 pad_token=pad_token
             )
             length = len(encoded.token_ids)
-            print("length is ", length)
             starts = list(range(0, length, step_size))
             for start in starts:
                 d = dict()
@@ -184,7 +196,6 @@ class BasePipeline(metaclass=ABCMeta):
                 for field in EncodedOutput._fields:
                     field_value = getattr(encoded, field)
                     if field_value is not None:
-                        print("field value", field_value)
                         d[field] = field_value[start:end]
                 yield self._array_format(EncodedOutput(**d), pad_token=pad_token)
         else:

@@ -24,7 +24,8 @@ class SequencePipeline(BasePipeline):
         super()._post_data_initialization(Y_)
 
     def text_to_tokens_mask(self, X, Y=None):
-        out_gen = self._text_to_ids(X, Y=Y)
+        pad_token = [self.config.pad_token] if self.multi_label else self.config.pad_token
+        out_gen = self._text_to_ids(X, Y=Y, pad_token=pad_token)
         for out in out_gen:
             feats = {"tokens": out.token_ids, "mask": out.mask}
             if Y is None:
@@ -39,7 +40,7 @@ class SequencePipeline(BasePipeline):
         TS = tf.TensorShape
         target_shape = [self.config.max_length, self.label_encoder.target_dim] if self.multi_label else [
             self.config.max_length]
-        return ({"tokens": tf.int32, "mask": tf.int32}, tf.int32), (
+        return ({"tokens": tf.int32, "mask": tf.float32}, tf.int32), (
             {"tokens": TS([self.config.max_length, 2]), "mask": TS([self.config.max_length])}, TS(target_shape))
 
     def _target_encoder(self):
@@ -79,7 +80,7 @@ class SequenceLabeler(BaseModel):
         super().__init__(config=config, **d)
 
     def _get_input_pipeline(self):
-        return SequencePipeline(config=self.config, multi_label=self.multi_label)
+        return SequencePipeline(config=self.config, multi_label=self.config.multi_label_sequences)
 
     def _initialize(self):
         self.multi_label = self.config.multi_label_sequences
@@ -99,10 +100,10 @@ class SequenceLabeler(BaseModel):
         """
         chunk_size = self.config.max_length - 2
         step_size = chunk_size // 3
-        arr_encoded = list(itertools.chain.from_iterable(self._text_to_ids([x]) for x in X))
+        arr_encoded = list(itertools.chain.from_iterable(self.input_pipeline._text_to_ids([x]) for x in X))
         labels, batch_probas = [], []
         for pred in self._inferrence(lambda: ([x] for x in X), mode=None):
-            labels.append(self.input_pipeline.label_encoder.inverse_transform([pred[PredictMode.NORMAL]])[0])
+            labels.append(self.input_pipeline.label_encoder.inverse_transform(pred[PredictMode.NORMAL]))
             batch_probas.append(pred[PredictMode.PROBAS])
 
         all_subseqs = []
@@ -113,10 +114,10 @@ class SequenceLabeler(BaseModel):
         for chunk_idx, (label_seq, proba_seq) in enumerate(zip(labels, batch_probas)):
 
             position_seq = arr_encoded[chunk_idx].char_locs
-            start_of_doc = arr_encoded[chunk_idx].token_ids[0][0] == self.encoder.start
+            start_of_doc = arr_encoded[chunk_idx].token_ids[0][0] == self.input_pipeline.encoder.start
             end_of_doc = (
                     chunk_idx + 1 >= len(arr_encoded) or
-                    arr_encoded[chunk_idx + 1].token_ids[0][0] == self.encoder.start
+                    arr_encoded[chunk_idx + 1].token_ids[0][0] == self.input_pipeline.encoder.start
             )
             """
             Chunk idx for prediction.  Dividers at `step_size` increments.
@@ -168,7 +169,7 @@ class SequenceLabeler(BaseModel):
                 for prob_seq in doc_probs:
                     # format probabilities as dictionary
                     probs = np.mean(np.vstack(prob_seq), axis=0)
-                    prob_dicts.append(dict(zip(self.label_encoder.classes_, probs)))
+                    prob_dicts.append(dict(zip(self.input_pipeline.label_encoder.classes_, probs)))
                     if self.multi_label:
                         del prob_dicts[-1][self.config.pad_token]
 
@@ -208,8 +209,7 @@ class SequenceLabeler(BaseModel):
             hidden=featurizer_state['sequence_features'],
             targets=targets,
             n_targets=n_outputs,
-            dropout_placeholder=self.do_dropout,
-            pad_id=self.pad_idx,
+            pad_id=self.input_pipeline.pad_idx,
             config=self.config,
             train=train,
             multilabel=self.multi_label,

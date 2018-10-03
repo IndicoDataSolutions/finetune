@@ -1,9 +1,15 @@
-import tensorflow as tf
-import numpy as np
-from finetune.classifier import Classifier
-from finetune.regressor import Regressor
+from finetune.classifier import Classifier, ClassificationPipeline
+from finetune.regressor import Regressor, RegressionPipeline
 from finetune.base import BaseModel
-from finetune.network_modules import classifier, regressor
+
+class MultifieldClassificationPipeline(ClassificationPipeline):
+    def _format_for_encoding(self, X):
+        return [X]
+
+
+class MultifieldRegressionPipeline(RegressionPipeline):
+    def _format_for_encoding(self, X):
+        return [X]
 
 
 class MultifieldClassifier(Classifier):
@@ -13,6 +19,9 @@ class MultifieldClassifier(Classifier):
     :param config: A :py:class:`finetune.config.Settings` object or None (for default config).
     :param \**kwargs: key-value pairs of config items to override.
     """
+
+    def _get_input_pipeline(self):
+        return MultifieldClassificationPipeline(self.config)
         
     def finetune(self, Xs, Y=None, batch_size=None):
         """
@@ -50,28 +59,6 @@ class MultifieldClassifier(Classifier):
         """
         return BaseModel.featurize(self, Xs)
 
-    def get_eval_fn(cls):
-        return lambda labels, targets: np.mean(np.asarray(labels) == np.asarray(targets))
-
-    def _target_model(self, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
-        return classifier(
-            hidden=featurizer_state['features'], 
-            targets=targets, 
-            n_targets=n_outputs, 
-            dropout_placeholder=self.do_dropout, 
-            config=self.config,
-            train=train,
-            reuse=reuse,
-            **kwargs
-        )
-
-    def _predict_op(self, logits, **kwargs):
-        return tf.argmax(logits, -1)
-
-    def _predict_proba_op(self, logits, **kwargs):
-        return tf.nn.softmax(logits, -1)
-
-
 
 class MultifieldRegressor(Regressor):
     """ 
@@ -80,6 +67,9 @@ class MultifieldRegressor(Regressor):
     :param config: A :py:class:`finetune.config.Settings` object or None (for default config).
     :param \**kwargs: key-value pairs of config items to override.
     """
+
+    def _get_input_pipeline(self):
+        return MultifieldRegressionPipeline(self.config)
         
     def finetune(self, Xs, Y=None, batch_size=None):
         """
@@ -116,21 +106,3 @@ class MultifieldRegressor(Regressor):
         :returns: np.array of features of shape (n_examples, embedding_size).
         """
         return BaseModel.featurize(self, Xs)
-
-    def _target_model(self, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
-        return regressor(
-            hidden=featurizer_state['features'],
-            targets=targets, 
-            n_targets=n_outputs,
-            dropout_placeholder=self.do_dropout,
-            config=self.config,
-            train=train, 
-            reuse=reuse, 
-            **kwargs
-        )
-
-    def _predict_op(self, logits, **kwargs):
-        return logits
-
-    def _predict_proba_op(self, logits, **kwargs):
-        return logits

@@ -38,6 +38,7 @@ class RegressionEncoder(BaseEncoder):
         return output
 
     def inverse_transform(self, y):
+        y = np.array(y)
         if y.shape[1] == 1:
             return np.squeeze(y, 1)
         else:

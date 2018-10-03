@@ -42,6 +42,7 @@ def featurizer(X, encoder, config, train=False, reuse=None):
         sequence_features: The output of the featurizer at each timestep.
     """
     initial_shape = [a or -1 for a in X.get_shape().as_list()]
+    print(initial_shape)
     X = tf.reshape(X, shape=[-1] + initial_shape[-2:])
 
     with tf.variable_scope('model/featurizer', reuse=reuse):
@@ -75,7 +76,7 @@ def featurizer(X, encoder, config, train=False, reuse=None):
         clf_token = encoder['_classify_']
         pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
         clf_h = tf.gather(clf_h, tf.range(shape_list(X)[0], dtype=tf.int32) * config.max_length + pool_idx)
-        clf_h = tf.reshape(clf_h, shape=initial_shape[0: -2] + [config.n_embed])
+        clf_h = tf.reshape(clf_h, shape=initial_shape[: -2] + [config.n_embed])
         seq_feats = tf.reshape(h, shape=initial_shape[:-1] + [config.n_embed])
 
         return {
@@ -106,7 +107,8 @@ def language_model(*, X, M, embed_weights, hidden, config, reuse=None):
 
     with tf.variable_scope('model/language-model', reuse=reuse):
         # language model ignores last hidden state because we don't have a target
-        lm_h = tf.reshape(hidden[:, :-1], [-1, config.n_embed])  # [batch, seq_len, embed] --> [batch * seq_len, embed]
+        sliced_hidden = hidden[:, :-1]
+        lm_h = tf.reshape(sliced_hidden, [-1, config.n_embed])  # [batch, seq_len, embed] --> [batch * seq_len, embed]
         lm_logits = tf.matmul(lm_h, embed_weights, transpose_b=True)  # tied weights
         lm_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
             logits=lm_logits,
@@ -115,8 +117,10 @@ def language_model(*, X, M, embed_weights, hidden, config, reuse=None):
 
         lm_losses = tf.reshape(lm_losses, [shape_list(X)[0], shape_list(X)[1] - 1])
         lm_losses = tf.reduce_sum(lm_losses * M[:, 1:], 1) / tf.reduce_sum(M[:, 1:], 1)
+        lm_logits_shape = shape_list(lm_logits)
+        sliced_hidden_shape = shape_list(sliced_hidden)
         return {
-            'logits': lm_logits,
+            'logits': tf.reshape(lm_logits, shape=sliced_hidden_shape[:-1] + [lm_logits_shape[-1]]),
             'losses': lm_losses,
         }
 
@@ -169,7 +173,7 @@ def multi_choice_question(hidden, targets, n_targets, config, train=False, reuse
         hidden = dropout(hidden, config.clf_p_drop, train)
         hidden = tf.unstack(hidden, num=n_targets, axis=1)
         hidden = tf.concat(hidden, axis=0)
-        # some model
+
         clf_out = perceptron(hidden, 1, config)
         clf_out = tf.split(clf_out, n_targets, axis=0)
         clf_out = tf.concat(clf_out, 1)

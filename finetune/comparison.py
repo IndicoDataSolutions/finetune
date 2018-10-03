@@ -8,6 +8,10 @@ from finetune.encoding import ArrayEncodedOutput
 
 class ComparisonPipeline(ClassificationPipeline):
 
+    def _format_for_encoding(self, X):
+        return [X]
+
+
     def _text_to_ids(self, pair, Y=None, pad_token=None):
         """
         Format comparison examples as a list of IDs
@@ -42,6 +46,9 @@ class Comparison(Classifier):
         
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+    def _get_input_pipeline(self):
+        return ComparisonPipeline(self.config)
 
     def _target_model(self, *, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
         featurizer_state["sequence_features"] = tf.abs(tf.reduce_sum(featurizer_state["sequence_features"], 1))

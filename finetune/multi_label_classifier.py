@@ -26,6 +26,9 @@ class MultiLabelClassifier(BaseModel):
         super().__init__(*args, **kwargs)
         self.threshold_placeholder = None
 
+    def _get_input_pipeline(self):
+        return MultilabelClassificationPipeline(self.config)
+
     def featurize(self, X):
         """
         Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
@@ -42,8 +45,8 @@ class MultiLabelClassifier(BaseModel):
         :param X: list or array of text to embed.
         :returns: list of class labels.
         """
-        threshold = threshold or self.config.multi_label_threshold
-        return self._predict(X, threshold=threshold)
+        self.config._threshold = threshold or self.config.multi_label_threshold
+        return self._predict(X)
 
     def predict_proba(self, X):
         """
@@ -68,7 +71,6 @@ class MultiLabelClassifier(BaseModel):
             hidden=featurizer_state['features'],
             targets=targets,
             n_targets=n_outputs,
-            dropout_placeholder=self.do_dropout,
             config=self.config,
             train=train,
             reuse=reuse,
@@ -76,12 +78,8 @@ class MultiLabelClassifier(BaseModel):
         )
 
     def _predict_op(self, logits, **kwargs):
-        threshold = kwargs.get("threshold")
+        threshold = kwargs.get("threshold", self.config.multi_label_threshold)
         return tf.cast(tf.nn.sigmoid(logits) > threshold, tf.int32)
 
     def _predict_proba_op(self, logits, **kwargs):
         return tf.nn.sigmoid(logits)
-
-    def predict(self, X, threshold):
-        self.config._threshold = threshold
-        return super().predict(Xs=X)

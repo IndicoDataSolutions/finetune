@@ -40,7 +40,7 @@ class Regressor(BaseModel):
         :param X: list or array of text to embed.
         :returns: list of class labels.
         """
-        return super().predict(X)
+        return super().predict(X).tolist()
 
     def predict_proba(self, X):
         """

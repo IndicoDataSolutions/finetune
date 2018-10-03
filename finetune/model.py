@@ -47,8 +47,6 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                 target_dim=target_dim,
                 label_encoder=label_encoder
             )
-            weighted_tensor = tf.Print(weighted_tensor, [weighted_tensor], summarize=100)
-
         with tf.variable_scope('model/target'):
             target_model_state = target_model_fn(
                 featurizer_state=featurizer_state,
@@ -61,6 +59,10 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
         return target_model_state
 
     def _model_fn(features, labels, mode, params):
+        if "labels" in features:
+            assert labels is None, "For some reason distributed tensorflow doesnt let us use labels argument"
+            labels = features["labels"]
+
         if not build_target_model:
             lm_loss_coef = 1.
         else:
@@ -110,10 +112,10 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
         if mode == tf.estimator.ModeKeys.TRAIN:
             total_num_steps = params.n_epochs * params.dataset_size//params.batch_size
             lr_decay = lambda lr, global_step: lr * schedules[params.lr_schedule](tf.to_float(global_step) / total_num_steps)
-            # TODO, figure out how much data we will have.
             optimizer = lambda lr: tf.contrib.opt.AdamWOptimizer(weight_decay=params.l2_reg, learning_rate=lr,
                                                                  beta1=params.b1, beta2=params.b2,
                                                                  epsilon=params.epsilon)
+
             summaries = tf.contrib.layers.OPTIMIZER_SUMMARIES if params.summarize_grads else None
             train_op = tf.contrib.layers.optimize_loss(
                 loss=train_loss,
@@ -139,7 +141,7 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
         if mode == tf.estimator.ModeKeys.TRAIN:
             return tf.estimator.EstimatorSpec(mode=mode, loss=train_loss, train_op=train_op, scaffold=scaffold)
 
-        assert mode == tf.estimator.ModeKeys.EVAL, "The mode is infact {}".format(mode)
+        assert mode == tf.estimator.ModeKeys.EVAL, "The mode is actually {}".format(mode)
         return tf.estimator.EstimatorSpec(mode=mode, loss=train_loss, scaffold=scaffold)
 
     return _model_fn
