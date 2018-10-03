@@ -218,6 +218,7 @@ class TestClassifier(unittest.TestCase):
         model = Classifier(config=get_small_model_config())
         n_per_class = (self.n_sample * 5)
         trX = ['cat'] * n_per_class + ['finance'] * n_per_class
+        np.random.shuffle(trX)
         trY = copy(trX)
         teX = ['feline'] * n_per_class + ['investment'] * n_per_class
         teY = ['cat'] * n_per_class + ['finance'] * n_per_class

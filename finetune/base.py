@@ -113,10 +113,12 @@ class BaseModel(object, metaclass=ABCMeta):
         val_size, val_interval = self.validation_settings(
             n_examples=len(Xs) if not callable(Xs) else self.config.dataset_size,
             batch_size=batch_size or self.config.batch_size)
+        if val_size == 0:
+            val_interval = sys.maxsize
         val_input_fn, train_input_fn = self.input_pipeline._get_train_input_fns(Xs, Y, batch_size=batch_size,
                                                                                 val_size=val_size)
 
-        train_spec = tf.estimator.TrainSpec(input_fn=train_input_fn, max_steps=val_interval)
+        train_spec = tf.estimator.TrainSpec(input_fn=train_input_fn)
         eval_spec = tf.estimator.EvalSpec(input_fn=val_input_fn)
         estimator = self.get_estimator(val_interval=val_interval)
         tf.estimator.train_and_evaluate(estimator, train_spec=train_spec,
