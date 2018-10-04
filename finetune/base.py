@@ -145,7 +145,7 @@ class BaseModel(object, metaclass=ABCMeta):
             )
             num_gpus = len(self.config.visible_gpus)
             if num_gpus > 1:
-                distribute_strategy = tf.contrib.distribute.MirroredStrategy(num_gpus_per_worker=num_gpus)
+                distribute_strategy = tf.contrib.distribute.MirroredStrategy(num_gpus=num_gpus)
             else:
                 distribute_strategy = None
 
