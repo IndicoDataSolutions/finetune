@@ -7,3 +7,7 @@ from finetune.multi_label_classifier import MultiLabelClassifier
 from finetune.multiple_choice import MultipleChoice
 
 __version__, VERSION, version = ("0.4.1",) * 3
+
+import logging
+log = logging.getLogger('tensorflow')
+log.setLevel(logging.DEBUG)

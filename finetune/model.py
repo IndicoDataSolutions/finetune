@@ -112,9 +112,10 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
         if mode == tf.estimator.ModeKeys.TRAIN:
             total_num_steps = params.n_epochs * params.dataset_size//params.batch_size
             lr_decay = lambda lr, global_step: lr * schedules[params.lr_schedule](tf.to_float(global_step) / total_num_steps)
-            optimizer = lambda lr: tf.contrib.opt.AdamWOptimizer(weight_decay=params.l2_reg, learning_rate=lr,
-                                                                 beta1=params.b1, beta2=params.b2,
-                                                                 epsilon=params.epsilon)
+            # optimizer = lambda lr: tf.contrib.opt.AdamWOptimizer(weight_decay=params.l2_reg, learning_rate=lr,
+            #                                                      beta1=params.b1, beta2=params.b2,
+            #                                                      epsilon=params.epsilon)
+            optimizer = lambda lr: tf.contrib.optimizer_v2.AdamOptimizer(learning_rate=lr, beta1=params.b1, beta2=params.b2, epsilon=params.epsilon)
 
             summaries = tf.contrib.layers.OPTIMIZER_SUMMARIES if params.summarize_grads else None
             train_op = tf.contrib.layers.optimize_loss(
