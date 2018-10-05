@@ -41,8 +41,10 @@ def featurizer(X, encoder, config, train=False, reuse=None):
         features: The output of the featurizer_final state.
         sequence_features: The output of the featurizer at each timestep.
     """
+    import threading
+    print("featurizer called in thread id: {}".format(threading.get_ident()))
+
     initial_shape = [a or -1 for a in X.get_shape().as_list()]
-    print(initial_shape)
     X = tf.reshape(X, shape=[-1] + initial_shape[-2:])
 
     with tf.variable_scope('model/featurizer', reuse=reuse):

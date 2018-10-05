@@ -13,6 +13,7 @@ import shutil
 import numpy as np
 import tensorflow as tf
 from tensorflow.data import Dataset
+from tensorflow.python import debug as tf_debug
 from sklearn.model_selection import train_test_split
 
 from finetune.download import download_data_if_required
@@ -23,8 +24,10 @@ from finetune.saver import Saver
 from finetune.errors import FinetuneError
 from finetune.model import get_model_fn
 from finetune.model import PredictMode
+from finetune.estimator_utils import PatchedParameterServerStrategy, SaverHookFinetune
 
 JL_BASE = os.path.join(os.path.dirname(__file__), "model", "Base_model.jl")
+
 
 class BaseModel(object, metaclass=ABCMeta):
     """
@@ -116,17 +119,23 @@ class BaseModel(object, metaclass=ABCMeta):
         if val_size == 0:
             val_interval = sys.maxsize
         val_input_fn, train_input_fn = self.input_pipeline._get_train_input_fns(Xs, Y, batch_size=batch_size,
-                                                                                val_size=val_size)
+                                                                                       val_size=val_size)
 
-        train_spec = tf.estimator.TrainSpec(input_fn=train_input_fn)
         eval_spec = tf.estimator.EvalSpec(input_fn=val_input_fn)
-        estimator = self.get_estimator(val_interval=val_interval)
-        tf.estimator.train_and_evaluate(estimator, train_spec=train_spec,
-                                        eval_spec=eval_spec)
+        estimator = self.get_estimator()
+        saver_hook = SaverHookFinetune(
+            self.estimator_dir,
+            save_secs=None,
+            save_steps=val_interval
+        )
+        train_spec = tf.estimator.TrainSpec(input_fn=train_input_fn, hooks=[saver_hook])
+        tf.estimator.train_and_evaluate(estimator=estimator, train_spec=train_spec, eval_spec=eval_spec)
 
 
-    def get_estimator(self, val_interval=None, force_build_lm=False):
+    def get_estimator(self, force_build_lm=False):
         if self.estimator_ is None or self.input_pipeline.rebuild or force_build_lm:
+            import threading
+            print("get_estimator called in thread id: {}".format(threading.get_ident()))
             hot_start = None
             if self.input_pipeline.rebuild:
                 try:
@@ -145,23 +154,16 @@ class BaseModel(object, metaclass=ABCMeta):
             )
             num_gpus = len(self.config.visible_gpus)
             if num_gpus > 1:
-                distribute_strategy = tf.contrib.distribute.MirroredStrategy(num_gpus=num_gpus)
+                distribute_strategy = PatchedParameterServerStrategy(num_gpus_per_worker=num_gpus)
             else:
                 distribute_strategy = None
 
             config = tf.estimator.RunConfig(
                 tf_random_seed=self.config.seed,
-                save_summary_steps=val_interval,
-                save_checkpoints_steps=val_interval,
-                save_checkpoints_secs=None if val_interval is not None else 600,
                 session_config=conf,
-                keep_checkpoint_max=1,
-                keep_checkpoint_every_n_hours=10000,
                 log_step_count_steps=100,
                 train_distribute=distribute_strategy
             )
-
-            print("TARGET_DIM", self.input_pipeline.target_dim)
 
             model_fn = get_model_fn(
                 target_model_fn=self._target_model,
@@ -219,7 +221,6 @@ class BaseModel(object, metaclass=ABCMeta):
 
     def _predict(self, Xs):
         raw_preds = self._inferrence(Xs, PredictMode.NORMAL)
-        print("3, ", raw_preds)
         return self.input_pipeline.label_encoder.inverse_transform(np.asarray(raw_preds))
 
     def predict(self, Xs):
