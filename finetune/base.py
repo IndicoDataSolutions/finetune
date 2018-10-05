@@ -24,15 +24,9 @@ from finetune.saver import Saver
 from finetune.errors import FinetuneError
 from finetune.model import get_model_fn
 from finetune.model import PredictMode
+from finetune.estimator_utils import PatchedParameterServerStrategy, SaverHookFinetune
 
 JL_BASE = os.path.join(os.path.dirname(__file__), "model", "Base_model.jl")
-
-
-class PatchedParameterServerStrategy(tf.contrib.distribute.ParameterServerStrategy):
-
-    def _verify_destinations_not_different_worker(self, *args, **kwargs):
-        # this is currently broken in tf 1.11.0 -- mock this for now
-        pass
 
 
 class BaseModel(object, metaclass=ABCMeta):
@@ -125,14 +119,20 @@ class BaseModel(object, metaclass=ABCMeta):
         if val_size == 0:
             val_interval = sys.maxsize
         val_input_fn, train_input_fn = self.input_pipeline._get_train_input_fns(Xs, Y, batch_size=batch_size,
-                                                                                val_size=val_size)
+                                                                                       val_size=val_size)
 
-        # eval_spec = tf.estimator.EvalSpec(input_fn=val_input_fn)
-        estimator = self.get_estimator(val_interval=val_interval)
-        estimator.train(input_fn=train_input_fn)
+        eval_spec = tf.estimator.EvalSpec(input_fn=val_input_fn)
+        estimator = self.get_estimator()
+        saver_hook = SaverHookFinetune(
+            self.estimator_dir,
+            save_secs=None,
+            save_steps=val_interval
+        )
+        train_spec = tf.estimator.TrainSpec(input_fn=train_input_fn, hooks=[saver_hook])
+        tf.estimator.train_and_evaluate(estimator=estimator, train_spec=train_spec, eval_spec=eval_spec)
 
 
-    def get_estimator(self, val_interval=None, force_build_lm=False):
+    def get_estimator(self, force_build_lm=False):
         if self.estimator_ is None or self.input_pipeline.rebuild or force_build_lm:
             import threading
             print("get_estimator called in thread id: {}".format(threading.get_ident()))
@@ -160,13 +160,8 @@ class BaseModel(object, metaclass=ABCMeta):
 
             config = tf.estimator.RunConfig(
                 tf_random_seed=self.config.seed,
-                # save_summary_steps=val_interval,
-                # save_checkpoints_steps=val_interval,
-                # save_checkpoints_secs=None if val_interval is not None else 600,
                 session_config=conf,
-                # keep_checkpoint_max=1,
-                # keep_checkpoint_every_n_hours=10000,
-                # log_step_count_steps=100,
+                log_step_count_steps=100,
                 train_distribute=distribute_strategy
             )
 
