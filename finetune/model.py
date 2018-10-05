@@ -119,7 +119,7 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                 beta1=params.b1,
                 beta2=params.b2,
                 epsilon=params.epsilon,
-                weight_decay=params.l2_reg
+                weight_decay=params.l2_reg * lr
             )
 
             summaries = tf.contrib.layers.OPTIMIZER_SUMMARIES if params.summarize_grads else None
