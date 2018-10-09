@@ -9,6 +9,7 @@ from abc import ABCMeta, abstractmethod
 from copy import deepcopy
 import tempfile
 import shutil
+import glob
 
 import numpy as np
 import tensorflow as tf
@@ -63,8 +64,12 @@ class BaseModel(object, metaclass=ABCMeta):
         self._set_random_seed(self.config.seed)
         self.estimator_ = None
         download_data_if_required()
-        self.estimator_dir = tempfile.mkdtemp()
-        self.tmp_dirs = [self.estimator_dir]
+        if self.config.tensorboard_folder is not None:
+            self.estimator_dir = self.config.tensorboard_folder
+            self.cleanup_glob = os.path.join(self.estimator_dir, "(model.*|checkpoint)")
+        else:
+            self.estimator_dir = tempfile.mkdtemp()
+            self.cleanup_glob = self.estimator_dir
 
         def process_embeddings(name, value):
             if "/we:0" not in name:
@@ -121,33 +126,17 @@ class BaseModel(object, metaclass=ABCMeta):
         val_input_fn, train_input_fn = self.input_pipeline._get_train_input_fns(Xs, Y, batch_size=batch_size,
                                                                                        val_size=val_size)
 
-        eval_spec = tf.estimator.EvalSpec(input_fn=val_input_fn)
+        num_steps = (self.config.dataset_size * self.config.n_epochs / batch_size)/max(1, len(self.config.visible_gpus))
         estimator = self.get_estimator()
-        saver_hook = SaverHookFinetune(
-            self.estimator_dir,
-            save_secs=None,
-            save_steps=val_interval
-        )
-        train_spec = tf.estimator.TrainSpec(input_fn=train_input_fn, hooks=[saver_hook])
-        tf.estimator.train_and_evaluate(estimator=estimator, train_spec=train_spec, eval_spec=eval_spec)
-
+        train_hooks = [self.saver.get_saver_hook()]
+        if val_size > 0:
+            train_hooks.append(tf.contrib.estimator.InMemoryEvaluatorHook(estimator, val_input_fn, every_n_iter=val_interval, steps=val_size//batch_size))
+        estimator.train(train_input_fn, hooks=train_hooks, max_steps=num_steps)
 
     def get_estimator(self, force_build_lm=False):
         if self.estimator_ is None or self.input_pipeline.rebuild or force_build_lm:
             import threading
             print("get_estimator called in thread id: {}".format(threading.get_ident()))
-            hot_start = None
-            if self.input_pipeline.rebuild:
-                try:
-                    hot_start = tf.estimator.WarmStartSettings(
-                        ckpt_to_initialize_from=tf.train.latest_checkpoint(self.estimator_dir),
-                        vars_to_warm_start=[name for name, _ in tf.train.list_variables(self.estimator_dir) if
-                            not name.startswith("OptimizeLoss")])
-                    os.remove(os.path.join(self.estimator_dir, "checkpoint"))
-                except ValueError:
-                    pass
-                self.input_pipeline.rebuild = False
-
             conf = tf.ConfigProto(
                 allow_soft_placement=self.config.soft_device_placement,
                 log_device_placement=self.config.log_device_placement,
@@ -160,9 +149,14 @@ class BaseModel(object, metaclass=ABCMeta):
 
             config = tf.estimator.RunConfig(
                 tf_random_seed=self.config.seed,
+                save_summary_steps=None,
+                save_checkpoints_secs=None,
+                save_checkpoints_steps=None,
+                # disable auto summaries
                 session_config=conf,
                 log_step_count_steps=100,
-                train_distribute=distribute_strategy
+                train_distribute=distribute_strategy,
+                keep_checkpoint_max=1
             )
 
             model_fn = get_model_fn(
@@ -177,7 +171,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 saver=self.saver
             )
             self.estimator_ = tf.estimator.Estimator(model_dir=self.estimator_dir, model_fn=model_fn, config=config,
-                                                     params=self.config, warm_start_from=hot_start)
+                                                     params=self.config)
 
         return self.estimator_
 
@@ -459,6 +453,8 @@ class BaseModel(object, metaclass=ABCMeta):
         return max(aggregated_results, key=lambda x: x[1])[0]
 
     def __del__(self):
-        for folder in self.tmp_dirs:
-            shutil.rmtree(folder)
-        self.tmp_dirs = []
+        for file_or_folder in glob.glob(self.cleanup_glob):
+            try:
+                shutil.rmtree(file_or_folder)
+            except NotADirectoryError:
+                os.remove(file_or_folder)

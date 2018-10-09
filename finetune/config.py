@@ -184,6 +184,8 @@ def get_default_config():
         multi_label_threshold=0.5,
         autosave_path=None,
         tensorboard_folder=None,
+        shuffle_buffer_size=100,
+        min_secs_between_eval=60,
         log_device_placement=False,
         soft_device_placement=True,
         save_adam_vars=False,

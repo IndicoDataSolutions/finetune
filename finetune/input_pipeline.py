@@ -66,12 +66,6 @@ class BasePipeline(metaclass=ABCMeta):
             mask=mask,
         )
 
-    def _adapt_feats_for_distributed(self, feats_labels):
-        if type(feats_labels) == tuple:
-            feats, labels = feats_labels
-            feats["labels"] = labels
-            return feats
-
     def text_to_tokens_mask(self, X, Y=None):
         out_gen = self._text_to_ids(X)
         for out in out_gen:
@@ -117,10 +111,6 @@ class BasePipeline(metaclass=ABCMeta):
         dataset_encoded = lambda: itertools.chain.from_iterable(
             map(lambda xy: self.text_to_tokens_mask(*xy), dataset()))
         shape_def = self.feed_shape_type_def()
-        if len(self.config.visible_gpus) > 1:
-            dataset_encoded_ = dataset_encoded
-            dataset_encoded = lambda: map(self._adapt_feats_for_distributed, dataset_encoded_())
-            shape_def = [self._adapt_feats_for_distributed(s) for s in shape_def]
         return Dataset.from_generator(dataset_encoded, *shape_def)
 
     def _dataset_without_targets(self, Xs):
@@ -136,7 +126,7 @@ class BasePipeline(metaclass=ABCMeta):
     def _get_train_input_fns(self, Xs, Y=None, batch_size=None, val_size=None):
         batch_size = batch_size or self.config.batch_size
 
-        shuffle_buffer_size = 100
+        shuffle_buffer_size = self.config.shuffle_buffer_size
         val_size = val_size or 0
         prefetch_buffer = 2  # breaks the pipeline to allow concurrency
         if Y is not None:

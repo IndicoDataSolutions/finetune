@@ -28,14 +28,21 @@ class Saver:
             self.tpe.shutdown()
         return self.fallback_
 
-    def save(self, finetune_obj, path, mkdir=True):
-        ckpt_reader = tf.train.load_checkpoint(finetune_obj.estimator_dir)
-        variable_map = ckpt_reader.get_variable_to_shape_map()
-        names = [name for name in variable_map.keys() if self.exclude_matches is None or self.exclude_matches not in name]
-        names = [name if name.endswith(":0") else name for name in names]  # strip the :0 off the end
-        values = [ckpt_reader.get_tensor(name) for name in names]
-        names = [name + ":0" for name in names]
+    def get_saver_hook(self):
 
+        class SaverHook(tf.train.SessionRunHook):
+            def __init__(self2):
+                self2.included = None
+
+            def begin(self2):
+                self2.included = tf.global_variables()
+
+            def end(self2, session):
+                self.variables = dict(zip((var.name for var in self2.included), session.run(self2.included)))
+        return SaverHook()
+
+    def save(self, finetune_obj, path, mkdir=True):
+        names, values = self.variables.keys(), self.variables.values()
         folder = os.path.dirname(path)
         if not os.path.exists(folder) and mkdir:
             os.mkdir(folder)
@@ -61,6 +68,7 @@ class Saver:
             variables_sv = self.variables
         else:
             variables_sv = dict()
+        print("VAriablesSV", variables_sv)
 
         if tf.contrib.distribute.get_tower_context():
             def assign(var, val):
