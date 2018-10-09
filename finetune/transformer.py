@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 
-from finetune.utils import convert_gradient_to_tensor, shape_list
+from finetune.utils import shape_list
 from finetune.activations import act_fns
 
 
@@ -122,7 +122,6 @@ def block(x, n_head, act_fn, resid_pdrop, attn_pdrop, scope, train=False, scale=
 
 
 def embed(X, we):
-    we = convert_gradient_to_tensor(we)
     e = tf.gather(we, X)
     #    h = add_timing_signal_1d(e[:, :, 0])
     h = tf.reduce_sum(e, 2)

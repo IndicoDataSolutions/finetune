@@ -123,8 +123,13 @@ class BaseModel(object, metaclass=ABCMeta):
             batch_size=batch_size or self.config.batch_size)
         if val_size == 0:
             val_interval = sys.maxsize
-        val_input_fn, train_input_fn = self.input_pipeline._get_train_input_fns(Xs, Y, batch_size=batch_size,
-                                                                                       val_size=val_size)
+
+        val_input_fn, train_input_fn = self.input_pipeline._get_train_input_fns(
+            Xs,
+            Y,
+            batch_size=batch_size,
+            val_size=val_size
+        )
 
         num_steps = (self.config.dataset_size * self.config.n_epochs / batch_size)/max(1, len(self.config.visible_gpus))
         estimator = self.get_estimator()
@@ -135,8 +140,6 @@ class BaseModel(object, metaclass=ABCMeta):
 
     def get_estimator(self, force_build_lm=False):
         if self.estimator_ is None or self.input_pipeline.rebuild or force_build_lm:
-            import threading
-            print("get_estimator called in thread id: {}".format(threading.get_ident()))
             conf = tf.ConfigProto(
                 allow_soft_placement=self.config.soft_device_placement,
                 log_device_placement=self.config.log_device_placement,

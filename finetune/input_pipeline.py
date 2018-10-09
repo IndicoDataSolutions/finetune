@@ -118,7 +118,6 @@ class BasePipeline(metaclass=ABCMeta):
             Xs_fn = lambda: Xs
         else:
             Xs_fn = Xs
-
         dataset_encoded = lambda: itertools.chain.from_iterable(map(self.text_to_tokens_mask, Xs_fn()))
         types, shapes = self.feed_shape_type_def()
         return Dataset.from_generator(dataset_encoded, types[0], shapes[0])  # 0s cut out the targets

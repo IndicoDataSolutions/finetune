@@ -97,17 +97,6 @@ def list_transpose(l):
     return [list(i) for i in zip(*l)]
 
 
-@function.Defun(
-    python_grad_func=lambda x, dy: tf.convert_to_tensor(dy),
-    shape_func=lambda op: [op.inputs[0].get_shape()])
-def convert_gradient_to_tensor(x):
-    """
-    force gradient to be a dense tensor
-    it's often faster to do dense embedding gradient on GPU than sparse on CPU
-    """
-    return x  # TODO verify this is the case with the new optimizer, they have inbuilt routines for dealing with sparse updates.
-
-
 def sample_with_temperature(logits, temperature):
     """Either argmax or random sampling.
     Args:

@@ -118,7 +118,10 @@ def language_model(*, X, M, embed_weights, hidden, config, reuse=None):
         )
 
         lm_losses = tf.reshape(lm_losses, [shape_list(X)[0], shape_list(X)[1] - 1])
-        lm_losses = tf.reduce_sum(lm_losses * M[:, 1:], 1) / tf.reduce_sum(M[:, 1:], 1)
+
+        # tf.maximum op prevents divide by zero error when mask is all 0s
+        lm_losses = tf.reduce_sum(lm_losses * M[:, 1:], 1) / tf.maximum(tf.reduce_sum(M[:, 1:], 1), 1)
+
         lm_logits_shape = shape_list(lm_logits)
         sliced_hidden_shape = shape_list(sliced_hidden)
         return {

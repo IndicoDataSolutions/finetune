@@ -10,7 +10,7 @@ from finetune.network_modules import sequence_labeler
 from finetune.crf import sequence_decode
 from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_sequence
 import itertools
-
+import ipdb
 from finetune.input_pipeline import BasePipeline
 
 
@@ -38,10 +38,26 @@ class SequencePipeline(BasePipeline):
 
     def feed_shape_type_def(self):
         TS = tf.TensorShape
-        target_shape = [self.config.max_length, self.label_encoder.target_dim] if self.multi_label else [
-            self.config.max_length]
-        return ({"tokens": tf.int32, "mask": tf.float32}, tf.int32), (
-            {"tokens": TS([self.config.max_length, 2]), "mask": TS([self.config.max_length])}, TS(target_shape))
+        target_shape = (
+            [self.config.max_length, self.label_encoder.target_dim] 
+            if self.multi_label else [self.config.max_length]
+        )
+        return (
+            (
+                {
+                    "tokens": tf.int32,
+                    "mask": tf.float32
+                },
+                tf.int32
+            ), 
+            (
+                {
+                    "tokens": TS([self.config.max_length, 2]), 
+                    "mask": TS([self.config.max_length])
+                }, 
+                TS(target_shape)
+            )
+        )
 
     def _target_encoder(self):
         if self.multi_label:
@@ -123,6 +139,7 @@ class SequenceLabeler(BaseModel):
             Chunk idx for prediction.  Dividers at `step_size` increments.
             [  1  |  1  |  2  |  3  |  3  ]
             """
+            start, end = 0, None
             if start_of_doc:
                 # if this is the first chunk in a document, start accumulating from scratch
                 doc_subseqs = []
@@ -131,18 +148,18 @@ class SequenceLabeler(BaseModel):
                 doc_idx += 1
                 start_of_token = 0
                 if not end_of_doc:
-                    # predict only on first two thirds
-                    label_seq, position_seq, proba_seq = label_seq[:step_size * 2], position_seq[
-                    :step_size * 2], proba_seq[:step_size * 2]
+                    end = step_size * 2
             else:
                 if end_of_doc:
                     # predict on the rest of sequence
-                    label_seq, position_seq, proba_seq = label_seq[step_size:], position_seq[step_size:], proba_seq[
-                    step_size:]
+                    start = step_size
                 else:
                     # predict only on middle third
-                    label_seq, position_seq, proba_seq = label_seq[step_size:step_size * 2], position_seq[
-                    step_size:step_size * 2], proba_seq[step_size:step_size * 2]
+                    start, end = step_size, step_size * 2
+            
+            label_seq = label_seq[start:end]
+            position_seq = position_seq[start:end]
+            proba_seq = proba_seq[start:end]
 
             for label, position, proba in zip(label_seq, position_seq, proba_seq):
                 if position == -1:
