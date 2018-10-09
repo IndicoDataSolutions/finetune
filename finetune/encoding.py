@@ -81,7 +81,6 @@ class TextEncoder(object):
     UNK_IDX = 0
 
     def __init__(self):
-        self.nlp = NLP
         self.encoder = json.load(open(ENCODER_PATH))
         self.decoder = {v: k for k, v in self.encoder.items()}
 
@@ -166,7 +165,7 @@ class TextEncoder(object):
             if labels is not None:
                 label = labels[i]
             raw_text = text.lower()
-            tokens = self.nlp(_text_standardize(text))
+            tokens = NLP(_text_standardize(text))
             subtokens = []
             subtoken_idxs = []
             tok_pos = []
