@@ -32,7 +32,7 @@ JL_BASE = os.path.join(os.path.dirname(__file__), "model", "Base_model.jl")
 
 class BaseModel(object, metaclass=ABCMeta):
     """
-    A sklearn-style class for finetuning a Transformer language model on a classification task.
+    A sklearn-style task agnostic base class for finetuning a Transformer language model.
     """
 
     def __init__(self, config=None, **kwargs):
@@ -135,7 +135,8 @@ class BaseModel(object, metaclass=ABCMeta):
         estimator = self.get_estimator()
         train_hooks = [self.saver.get_saver_hook(estimator=estimator, keep_best_model=self.config.keep_best_model,
                                                  steps_per_epoch=steps_per_epoch,
-                                                 early_stopping_steps=self.config.early_stopping_steps)]
+                                                 early_stopping_steps=self.config.early_stopping_steps,
+                                                 eval_frequency=val_interval)]
         if val_size > 0:
             train_hooks.append(
                 tf.contrib.estimator.InMemoryEvaluatorHook(

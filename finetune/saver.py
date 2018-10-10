@@ -11,6 +11,18 @@ from finetune.errors import FinetuneError
 
 
 class SaverHook(_StopOnPredicateHook):
+
+    def __init__(self, saver, estimator, keep_best_model, early_stopping_steps, steps_per_epoch, eval_frequency):
+        super().__init__(self.stop_if_no_metric_improvement_fn, run_every_secs=None,
+                         run_every_steps=early_stopping_steps)
+        self.get_current_weights = False
+        self.included = None
+        self.saver = saver
+        self.keep_best_model = keep_best_model
+        self.early_stopping_steps = early_stopping_steps
+        self.steps_per_epoch = steps_per_epoch
+        self.estimator = estimator
+
     def stop_if_no_metric_improvement_fn(self):
         if not self.keep_best_model:
             return False
@@ -26,17 +38,6 @@ class SaverHook(_StopOnPredicateHook):
         if steps_diff > self.early_stopping_steps and most_recent_eval[0] > self.steps_per_epoch:
             return True
         return False
-
-    def __init__(self, saver, estimator, keep_best_model, early_stopping_steps, steps_per_epoch):
-        super().__init__(self.stop_if_no_metric_improvement_fn, run_every_secs=None,
-                         run_every_steps=early_stopping_steps)
-        self.get_current_weights = False
-        self.included = None
-        self.saver = saver
-        self.keep_best_model = keep_best_model
-        self.early_stopping_steps = early_stopping_steps
-        self.steps_per_epoch = steps_per_epoch
-        self.estimator = estimator
 
     def begin(self):
         super().begin()
@@ -72,9 +73,9 @@ class Saver:
             self.tpe.shutdown()
         return self.fallback_
 
-    def get_saver_hook(self, estimator, keep_best_model, steps_per_epoch, early_stopping_steps):
+    def get_saver_hook(self, estimator, keep_best_model, steps_per_epoch, early_stopping_steps, eval_frequency):
         return SaverHook(self, estimator=estimator, keep_best_model=keep_best_model, steps_per_epoch=steps_per_epoch,
-                         early_stopping_steps=early_stopping_steps)
+                         early_stopping_steps=early_stopping_steps, eval_frequency=eval_frequency)
 
     def save(self, finetune_obj, path, mkdir=True):
         if self.variables is None:
