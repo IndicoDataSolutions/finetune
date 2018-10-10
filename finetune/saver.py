@@ -45,7 +45,7 @@ class SaverHook(_StopOnPredicateHook):
     def after_run(self, run_context, run_values):
         super().after_run(run_context, run_values)
         if self.get_current_weights:
-            self.variables = dict(zip((var.name for var in self.included), run_context.session.run(self.included)))
+            self.saver.variables = dict(zip((var.name for var in self.included), run_context.session.run(self.included)))
             self.get_current_weights = False
 
     def end(self, session):
