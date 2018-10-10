@@ -126,7 +126,8 @@ class BaseModel(object, metaclass=ABCMeta):
         batch_size = batch_size or self.config.batch_size
         val_size, val_interval = self.validation_settings(
             n_examples=len(Xs) if not callable(Xs) else self.config.dataset_size,
-            batch_size=batch_size or self.config.batch_size)
+            batch_size=batch_size or self.config.batch_size
+        )
 
         val_input_fn, train_input_fn = self.input_pipeline.get_train_input_fns(Xs, Y, batch_size=batch_size,
                                                                                val_size=val_size)
@@ -149,6 +150,8 @@ class BaseModel(object, metaclass=ABCMeta):
                 eval_frequency=val_interval
             ),
             ProgressHook(
+                # TODO: fix this num_steps number -- currently model terminates before tqdm reaches this value? 
+                # Maybe due to math.ceil ops? To replicate run on reuters
                 n_batches=num_steps,
                 n_epochs=self.config.n_epochs
             )
@@ -233,16 +236,18 @@ class BaseModel(object, metaclass=ABCMeta):
 
     def _inference(self, Xs, mode=None):
         estimator = self.get_estimator()
-        input_func = self.input_pipeline.get_predict_input_fn(Xs)
         
         hooks = []
         try:
             n_batches = math.ceil(len(Xs) / self.config.batch_size)
             hooks.append(ProgressHook(n_batches=n_batches))
-        except:
+        except Exception:
             # generator of unkown length, can't log progress
             pass
         
+        input_func = self.input_pipeline.get_predict_input_fn(Xs)
+        
+
         pred_gen = list(
             map(
                 lambda y: y[mode] if mode else y, estimator.predict(

@@ -1,3 +1,5 @@
+import itertools
+import math
 import warnings
 import copy
 
@@ -9,8 +11,8 @@ from finetune.target_encoders import SequenceLabelingEncoder, SequenceMultiLabel
 from finetune.network_modules import sequence_labeler
 from finetune.crf import sequence_decode
 from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_sequence
-import itertools
-from finetune.input_pipeline import BasePipeline
+from finetune.input_pipeline import BasePipeline, ENCODER
+from finetune.estimator_utils import ProgressHook
 
 
 class SequencePipeline(BasePipeline):
@@ -103,8 +105,31 @@ class SequenceLabeler(BaseModel):
 
     def finetune(self, Xs, Y=None, batch_size=None):
         Xs, Y_new = indico_to_finetune_sequence(Xs, labels=Y, multi_label=self.multi_label, none_value="<PAD>")
-        Y = Y_new if Y else None
+        Y = Y_new if Y is not None else None
         return super().finetune(Xs, Y=Y, batch_size=batch_size)
+
+    def _inference(self, Xs, mode=None):
+        # TODO: refactor so we don't have to copy-pasta this
+        estimator = self.get_estimator()
+        
+        hooks = []
+        try:
+            n_batches = math.ceil(len(Xs) / self.config.batch_size)
+            hooks.append(ProgressHook(n_batches=n_batches))
+        except Exception:
+            # generator of unkown length, can't log progress
+            pass
+        
+        input_func = self.input_pipeline.get_predict_input_fn(lambda: ([x] for x in Xs))
+
+        pred_gen = list(
+            map(
+                lambda y: y[mode] if mode else y, estimator.predict(
+                    input_fn=input_func, predict_keys=mode, hooks=hooks
+                )
+            )
+        )
+        return pred_gen
 
     def predict(self, X):
         """
@@ -117,7 +142,7 @@ class SequenceLabeler(BaseModel):
         step_size = chunk_size // 3
         arr_encoded = list(itertools.chain.from_iterable(self.input_pipeline._text_to_ids([x]) for x in X))
         labels, batch_probas = [], []
-        for pred in self._inference(lambda: ([x] for x in X), mode=None):
+        for pred in self._inference(X, mode=None):
             labels.append(self.input_pipeline.label_encoder.inverse_transform(pred[PredictMode.NORMAL]))
             batch_probas.append(pred[PredictMode.PROBAS])
 
@@ -129,10 +154,10 @@ class SequenceLabeler(BaseModel):
         for chunk_idx, (label_seq, proba_seq) in enumerate(zip(labels, batch_probas)):
 
             position_seq = arr_encoded[chunk_idx].char_locs
-            start_of_doc = arr_encoded[chunk_idx].token_ids[0][0] == self.input_pipeline.encoder.start
+            start_of_doc = arr_encoded[chunk_idx].token_ids[0][0] == ENCODER.start
             end_of_doc = (
                     chunk_idx + 1 >= len(arr_encoded) or
-                    arr_encoded[chunk_idx + 1].token_ids[0][0] == self.input_pipeline.encoder.start
+                    arr_encoded[chunk_idx + 1].token_ids[0][0] == ENCODER.start
             )
             """
             Chunk idx for prediction.  Dividers at `step_size` increments.

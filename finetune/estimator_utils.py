@@ -1,17 +1,23 @@
 import math
+import logging
 
 import tqdm
 
 import tensorflow as tf
 from tensorflow.python.training import training
 
+LOGGER = logging.getLogger("finetune")
+
 
 class ProgressHook(training.SessionRunHook):
   
     def __init__(self, n_batches, n_epochs=None):
         self.iterations = 0
-        self.batches_per_epoch = int(math.ceil(n_batches / n_epochs))
         self.n_epochs = n_epochs
+        if self.n_epochs:
+            self.batches_per_epoch = int(math.ceil(n_batches / n_epochs))
+        else:
+            self.batches_per_epoch = n_batches
         self.progress_bar = None
 
     def epoch_descr(self, current_epoch):
@@ -30,6 +36,10 @@ class ProgressHook(training.SessionRunHook):
 
         self.progress_bar.n = current_batch
         self.progress_bar.refresh()
+
+    def end(self, session):
+        LOGGER.info("Training complete.")
+        del self.progress_bar
 
 
 class PatchedParameterServerStrategy(tf.contrib.distribute.ParameterServerStrategy):

@@ -82,10 +82,10 @@ class BasePipeline(metaclass=ABCMeta):
         self.label_encoder = self._target_encoder()
         if not callable(Y):
             Y_fit = Y
-            self.label_encoder.fit_transform(Y)
+            self.label_encoder.fit(Y)
         else:
             Y_fit = list(itertools.islice(Y(), 100))  # TODO find a more principled way to do this?
-            self.label_encoder.fit_transform(Y_fit)
+            self.label_encoder.fit(Y_fit)
 
         target_dim = self.label_encoder.target_dim
         self.lm_loss_coef = self.config.lm_loss_coef if target_dim is not None else 1.0
