@@ -34,14 +34,22 @@ JL_BASE = os.path.join(os.path.dirname(__file__), "model", "Base_model.jl")
 
 class ProgressHook(training.SessionRunHook):
   
-    def __init__(self, tqdm):
+    def __init__(self, n_batches, n_epochs):
         self.iterations = 0
-        self.tqdm = tqdm
+        self.batches_per_epoch = int(math.ceil(n_batches / n_epochs))
+        self.progress_bar = tqdm.tqdm(total=self.batches_per_epoch, desc=self.epoch_descr(0))
+        self.n_epochs = n_epochs
 
+    def epoch_descr(self, current_epoch):
+        return "Epoch {}/{}".format(current_epoch, self.n_epochs)
+    
     def after_run(self, run_context, run_values):
         self.iterations += 1
-        self.tqdm.update(self.iterations)
-        
+        current_epoch = self.iterations // self.batches_per_epoch
+        current_batch = self.iterations % self.batches_per_epoch
+        self.progress_bar.set_description(self.epoch_descr(current_epoch))
+        self.progress_bar.update(current_batch)
+        self.progress_bar.refresh()
 
 
 class BaseModel(object, metaclass=ABCMeta):
@@ -62,7 +70,6 @@ class BaseModel(object, metaclass=ABCMeta):
 
         self.config = config or get_default_config()
         self.config.update(kwargs)
-        self.tqdm = None
 
         if self.config.num_layers_trained != self.config.n_layer and self.config.train_embeddings:
             raise ValueError("If you are only finetuning a subset of the layers, you cannot finetune embeddings.")
@@ -147,7 +154,6 @@ class BaseModel(object, metaclass=ABCMeta):
 
         steps_per_epoch = int(math.ceil(math.ceil(self.config.dataset_size / batch_size)) / max(1, len(self.config.visible_gpus)))
         num_steps = steps_per_epoch * self.config.n_epochs
-        self.tqdm = tqdm.tqdm(total=num_steps)
         estimator = self.get_estimator()
         train_hooks = [
             self.saver.get_saver_hook(
@@ -157,7 +163,10 @@ class BaseModel(object, metaclass=ABCMeta):
                 early_stopping_steps=self.config.early_stopping_steps,
                 eval_frequency=val_interval
             ),
-            ProgressHook(self.tqdm)
+            ProgressHook(
+                n_batches=num_steps,
+                n_epochs=self.config.n_epochs
+            )
         ]
         if val_size > 0:
             train_hooks.append(
