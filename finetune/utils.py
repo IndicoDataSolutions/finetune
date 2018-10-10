@@ -2,12 +2,11 @@ import os
 import warnings
 import numpy as np
 import tensorflow as tf
-from tensorflow.python.framework import function
 from scipy import interpolate
 
 from finetune.encoding import NLP
 from finetune import config
- z
+
 def merge_leading_dims(X, target_rank):
     shape = [-1] + X.get_shape().as_list()[1 - target_rank:]
     return tf.reshape(X, shape)
@@ -335,8 +334,6 @@ def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value
                         doc_labels.insert(j + 1, doc_labels[j][:] + [label])
 
                     start = last_loc
-                    annotation_text = annotation_text[last_loc - end:]
-
             if start >= end:
                 # degenerate label
                 last_loc = max(start, end)
