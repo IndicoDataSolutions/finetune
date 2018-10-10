@@ -12,6 +12,7 @@ import time
 import shutil
 import glob
 
+import tqdm
 import numpy as np
 import tensorflow as tf
 from tensorflow.data import Dataset
@@ -25,9 +26,22 @@ from finetune.config import get_default_config
 from finetune.saver import Saver
 from finetune.errors import FinetuneError
 from finetune.model import get_model_fn, PredictMode
+from tensorflow.python.training import training
 from finetune.estimator_utils import PatchedParameterServerStrategy
 
 JL_BASE = os.path.join(os.path.dirname(__file__), "model", "Base_model.jl")
+
+
+class ProgressHook(training.SessionRunHook):
+  
+    def __init__(self, tqdm):
+        self.iterations = 0
+        self.tqdm = tqdm
+
+    def after_run(self, run_context, run_values):
+        self.iterations += 1
+        self.tqdm.update(self.iterations)
+        
 
 
 class BaseModel(object, metaclass=ABCMeta):
@@ -48,6 +62,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         self.config = config or get_default_config()
         self.config.update(kwargs)
+        self.tqdm = None
 
         if self.config.num_layers_trained != self.config.n_layer and self.config.train_embeddings:
             raise ValueError("If you are only finetuning a subset of the layers, you cannot finetune embeddings.")
@@ -130,20 +145,27 @@ class BaseModel(object, metaclass=ABCMeta):
             tf.logging.warning(
                 "Early stopping / keeping best model with a validation size of {} is likely to case undesired results".format(val_size))
 
-        steps_per_epoch = (self.config.dataset_size / batch_size) / max(1, len(self.config.visible_gpus))
+        steps_per_epoch = int(math.ceil(math.ceil(self.config.dataset_size / batch_size)) / max(1, len(self.config.visible_gpus)))
         num_steps = steps_per_epoch * self.config.n_epochs
+        self.tqdm = tqdm.tqdm(total=num_steps)
         estimator = self.get_estimator()
-        train_hooks = [self.saver.get_saver_hook(estimator=estimator, keep_best_model=self.config.keep_best_model,
-                                                 steps_per_epoch=steps_per_epoch,
-                                                 early_stopping_steps=self.config.early_stopping_steps,
-                                                 eval_frequency=val_interval)]
+        train_hooks = [
+            self.saver.get_saver_hook(
+                estimator=estimator,
+                keep_best_model=self.config.keep_best_model,
+                steps_per_epoch=steps_per_epoch,
+                early_stopping_steps=self.config.early_stopping_steps,
+                eval_frequency=val_interval
+            ),
+            ProgressHook(self.tqdm)
+        ]
         if val_size > 0:
             train_hooks.append(
                 tf.contrib.estimator.InMemoryEvaluatorHook(
                     estimator, val_input_fn, every_n_iter=val_interval, steps=val_size // batch_size
                 )
             )
-            
+        
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             estimator.train(train_input_fn, hooks=train_hooks, steps=num_steps)
