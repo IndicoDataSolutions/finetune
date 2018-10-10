@@ -144,7 +144,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 )
             )
 
-        estimator.train(train_input_fn, hooks=train_hooks, max_steps=num_steps)
+        estimator.train(train_input_fn, hooks=train_hooks, steps=num_steps)
 
     def get_estimator(self, force_build_lm=False):
         if self.estimator_ is None or self.input_pipeline.rebuild or force_build_lm:
