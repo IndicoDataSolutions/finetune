@@ -9,6 +9,7 @@ from tensorflow.contrib.estimator.python.estimator.early_stopping import _StopOn
 
 from finetune.errors import FinetuneError
 
+
 class SaverHook(_StopOnPredicateHook):
     def stop_if_no_metric_improvement_fn(self):
         if not self.keep_best_model:
@@ -16,11 +17,8 @@ class SaverHook(_StopOnPredicateHook):
         eval_results = tf.contrib.estimator.read_eval_metrics(self.estimator.eval_dir())
         if len(eval_results) == 0:
             return False
-        tf.logging.info(eval_results)
         most_recent_eval = max(eval_results.items(), key=lambda x: x[0])  # last steps.
         best_eval = min(eval_results.items(), key=lambda x: x[1]["loss"])  # lowest_loss
-        tf.logging.info(str(most_recent_eval))
-        tf.logging.info(str(best_eval))
         if most_recent_eval == best_eval:
             self.get_current_weights = True
         steps_diff = most_recent_eval[0] - best_eval[0]
@@ -75,7 +73,7 @@ class Saver:
         return self.fallback_
 
     def get_saver_hook(self, estimator, keep_best_model, steps_per_epoch, early_stopping_steps):
-        return SaverHook(self, estimator=estimator, save_best_model=keep_best_model, steps_per_epoch=steps_per_epoch,
+        return SaverHook(self, estimator=estimator, keep_best_model=keep_best_model, steps_per_epoch=steps_per_epoch,
                          early_stopping_steps=early_stopping_steps)
 
     def save(self, finetune_obj, path, mkdir=True):

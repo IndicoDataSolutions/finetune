@@ -463,8 +463,9 @@ class BaseModel(object, metaclass=ABCMeta):
         return max(aggregated_results, key=lambda x: x[1])[0]
 
     def __del__(self):
-        for file_or_folder in glob.glob(self.cleanup_glob):
-            try:
-                shutil.rmtree(file_or_folder)
-            except NotADirectoryError:
-                os.remove(file_or_folder)
+        if self.cleanup_glob is not None:
+            for file_or_folder in glob.glob(self.cleanup_glob):
+                try:
+                    shutil.rmtree(file_or_folder)
+                except NotADirectoryError:
+                    os.remove(file_or_folder)
