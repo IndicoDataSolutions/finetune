@@ -9,7 +9,6 @@ from tensorflow.contrib.estimator.python.estimator.early_stopping import _StopOn
 
 from finetune.errors import FinetuneError
 
-
 class SaverHook(_StopOnPredicateHook):
     def stop_if_no_metric_improvement_fn(self):
         if not self.keep_best_model:

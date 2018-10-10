@@ -122,7 +122,7 @@ class BasePipeline(metaclass=ABCMeta):
         types, shapes = self.feed_shape_type_def()
         return Dataset.from_generator(dataset_encoded, types[0], shapes[0])  # 0s cut out the targets
 
-    def _get_train_input_fns(self, Xs, Y=None, batch_size=None, val_size=None):
+    def get_train_input_fns(self, Xs, Y=None, batch_size=None, val_size=None):
         batch_size = batch_size or self.config.batch_size
 
         shuffle_buffer_size = self.config.shuffle_buffer_size
@@ -141,7 +141,7 @@ class BasePipeline(metaclass=ABCMeta):
 
         return val_dataset, train_dataset
 
-    def _get_predict_input_fn(self, Xs, batch_size=None):
+    def get_predict_input_fn(self, Xs, batch_size=None):
         batch_size = batch_size or self.config.batch_size
         prefetch_buffer = 2  # breaks the pipeline to allow concurrency
         tf_dataset = lambda: self._dataset_without_targets(Xs)

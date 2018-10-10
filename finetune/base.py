@@ -15,7 +15,6 @@ import glob
 import numpy as np
 import tensorflow as tf
 from tensorflow.data import Dataset
-from tensorflow.python import debug as tf_debug
 from sklearn.model_selection import train_test_split
 
 from finetune.download import download_data_if_required
@@ -66,17 +65,12 @@ class BaseModel(object, metaclass=ABCMeta):
         self.estimator_ = None
         download_data_if_required()
         if self.config.tensorboard_folder is not None:
-            self.estimator_dir = self.config.tensorboard_folder
-            self.cleanup_glob = os.path.join(self.estimator_dir, "(model.*|checkpoint)")
-        else:
-            self.estimator_dir = tempfile.mkdtemp()
-            self.cleanup_glob = self.estimator_dir
-
-        if os.path.exists(os.path.join(self.estimator_dir, "eval")):
-            # this dir has been used before - lets make a new folder inside of it.
-            self.estimator_dir = os.path.join(self.estimator_dir, str(time.time()))
+            self.estimator_dir = os.path.join(self.config.tensorboard_folder, str(time.time()))
             os.mkdir(self.estimator_dir)
-
+            self.cleanup_glob = None
+        else:
+            self.estimator_dir = tempfile.mkdtemp(prefix="Finetune")
+            self.cleanup_glob = self.estimator_dir
 
         def process_embeddings(name, value):
             if "/we:0" not in name:
@@ -128,22 +122,26 @@ class BaseModel(object, metaclass=ABCMeta):
         val_size, val_interval = self.validation_settings(
             n_examples=len(Xs) if not callable(Xs) else self.config.dataset_size,
             batch_size=batch_size or self.config.batch_size)
-        if val_size == 0:
-            val_interval = sys.maxsize
 
-        val_input_fn, train_input_fn = self.input_pipeline._get_train_input_fns(
-            Xs,
-            Y,
-            batch_size=batch_size,
-            val_size=val_size
-        )
+        val_input_fn, train_input_fn = self.input_pipeline.get_train_input_fns(Xs, Y, batch_size=batch_size,
+                                                                               val_size=val_size)
 
-        steps_per_epoch = (self.config.dataset_size * self.config.n_epochs / batch_size)/max(1, len(self.config.visible_gpus))
+        if val_size <= 10 and self.config.keep_best_model:
+            tf.logging.warning(
+                "Early stopping / keeping best model with a validation size of {} is likely to case undesired results".format(val_size))
+
+        steps_per_epoch = (self.config.dataset_size / batch_size) / max(1, len(self.config.visible_gpus))
         num_steps = steps_per_epoch * self.config.n_epochs
         estimator = self.get_estimator()
-        train_hooks = [self.saver.get_saver_hook(estimator=estimator, save_best_model=self.config.keep_best_model, steps_per_epoch=steps_per_epoch, early_stopping_steps=self.config.early_stopping_steps)]
+        train_hooks = [self.saver.get_saver_hook(estimator=estimator, keep_best_model=self.config.keep_best_model,
+                                                 steps_per_epoch=steps_per_epoch,
+                                                 early_stopping_steps=self.config.early_stopping_steps)]
         if val_size > 0:
-            train_hooks.append(tf.contrib.estimator.InMemoryEvaluatorHook(estimator, val_input_fn, every_n_iter=val_interval, steps=val_size//batch_size))
+            train_hooks.append(
+                tf.contrib.estimator.InMemoryEvaluatorHook(
+                    estimator, val_input_fn, every_n_iter=val_interval, steps=val_size // batch_size
+                )
+            )
 
         estimator.train(train_input_fn, hooks=train_hooks, max_steps=num_steps)
 
@@ -191,7 +189,7 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         Auto-select reasonable validation settings
         """
-        if self.config.val_size != None and self.config.val_interval != None:
+        if self.config.val_size is not None and self.config.val_interval is not None:
             return self.config.val_size, self.config.val_interval
 
         # Auto-select reasonable validation size
@@ -216,7 +214,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
     def _inferrence(self, Xs, mode=None):
         estimator = self.get_estimator()
-        input_func = self.input_pipeline._get_predict_input_fn(Xs)
+        input_func = self.input_pipeline.get_predict_input_fn(Xs)
         pred_gen = list(
             map(lambda y: y[mode] if mode else y, estimator.predict(input_fn=input_func, predict_keys=mode)))
         return pred_gen
