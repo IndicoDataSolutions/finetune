@@ -8,6 +8,7 @@ import math
 from abc import ABCMeta, abstractmethod
 from copy import deepcopy
 import tempfile
+import time
 import shutil
 import glob
 
@@ -71,6 +72,12 @@ class BaseModel(object, metaclass=ABCMeta):
             self.estimator_dir = tempfile.mkdtemp()
             self.cleanup_glob = self.estimator_dir
 
+        if os.path.exists(os.path.join(self.estimator_dir, "eval")):
+            # this dir has been used before - lets make a new folder inside of it.
+            self.estimator_dir = os.path.join(self.estimator_dir, str(time.time()))
+            os.mkdir(self.estimator_dir)
+
+
         def process_embeddings(name, value):
             if "/we:0" not in name:
                 return value
@@ -131,11 +138,13 @@ class BaseModel(object, metaclass=ABCMeta):
             val_size=val_size
         )
 
-        num_steps = (self.config.dataset_size * self.config.n_epochs / batch_size)/max(1, len(self.config.visible_gpus))
+        steps_per_epoch = (self.config.dataset_size * self.config.n_epochs / batch_size)/max(1, len(self.config.visible_gpus))
+        num_steps = steps_per_epoch * self.config.n_epochs
         estimator = self.get_estimator()
-        train_hooks = [self.saver.get_saver_hook()]
+        train_hooks = [self.saver.get_saver_hook(estimator=estimator, save_best_model=self.config.keep_best_model, steps_per_epoch=steps_per_epoch, early_stopping_steps=self.config.early_stopping_steps)]
         if val_size > 0:
             train_hooks.append(tf.contrib.estimator.InMemoryEvaluatorHook(estimator, val_input_fn, every_n_iter=val_interval, steps=val_size//batch_size))
+
         estimator.train(train_input_fn, hooks=train_hooks, max_steps=num_steps)
 
     def get_estimator(self, force_build_lm=False):
