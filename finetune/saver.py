@@ -49,7 +49,7 @@ class SaverHook(_StopOnPredicateHook):
             self.get_current_weights = False
 
     def end(self, session):
-        if not self.keep_best_model or self.variables is None:
+        if not self.keep_best_model or self.saver.variables is None:
             self.saver.variables = dict(zip((var.name for var in self.included), session.run(self.included)))
 
 
