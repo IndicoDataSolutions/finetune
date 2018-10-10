@@ -1,3 +1,5 @@
+import logging
+
 import os
 import subprocess
 import traceback
@@ -7,7 +9,7 @@ import tensorflow as tf
 from functools import lru_cache
 from collections import namedtuple
 
-# CONSTANTS
+LOGGER = logging.getLogger('finetune')
 PAD_TOKEN = '<PAD>'
 
 
@@ -25,19 +27,26 @@ def all_gpus():
         sp = subprocess.Popen(['nvidia-smi', '-L'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         response = sp.communicate()[0]
         gpu_list = response.decode('utf-8').strip().split('\n')
-        device_ids = []
+        device_ids = {}
         for i, gpu in enumerate(gpu_list):
             # May be worth logging GPU description
             device_id_str, _, description = gpu.partition(':')
             assert int(device_id_str.split(' ')[-1]) == i
-            device_ids.append(i)
+            device_ids[i] = description
 
         cuda_visible_devices = os.getenv("CUDA_VISIBLE_DEVICES")
         if cuda_visible_devices:
-            device_ids = [
-                device_id for device_id in device_ids
+            device_ids = {
+                device_id: description 
+                for device_id, description in device_ids.items()
                 if str(device_id) in cuda_visible_devices.split(',')
-            ]
+            }
+        LOGGER.info(" Visible Devices: {{{}}}".format(
+            ", ".join([
+                "{}:{}".format(device_id, description.split('(')[0]).strip()
+                for device_id, description in device_ids.items()
+            ])
+        ))
     except:
         # Failed to parse out available GPUs properly
         warnings.warn("Failed to find available GPUS.  Falling back to CPU only mode.")

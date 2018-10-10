@@ -12,12 +12,13 @@ from finetune.config import PAD_TOKEN
 from finetune.encoding import TextEncoder, ArrayEncodedOutput, EncodedOutput
 from finetune.imbalance import compute_class_weights
 
+ENCODER = TextEncoder()
+
 
 class BasePipeline(metaclass=ABCMeta):
     def __init__(self, config):
         self.config = config
         self.label_encoder = None
-        self.encoder = TextEncoder()
         self.target_dim = None
         self.pad_idx_ = None
         self.rebuild = False
@@ -56,7 +57,7 @@ class BasePipeline(metaclass=ABCMeta):
         if encoded_output.labels:
             labels_arr[:seq_length] = encoded_output.labels
         # positional_embeddings
-        x[:, 1] = np.arange(self.encoder.vocab_size, self.encoder.vocab_size + self.config.max_length)
+        x[:, 1] = np.arange(ENCODER.vocab_size, ENCODER.vocab_size + self.config.max_length)
 
         return ArrayEncodedOutput(
             token_ids=x,
@@ -171,7 +172,7 @@ class BasePipeline(metaclass=ABCMeta):
             # can only chunk single sequence inputs
             chunk_size = self.config.max_length - 2
             step_size = chunk_size // 3
-            encoded = self.encoder.encode_multi_input(
+            encoded = ENCODER.encode_multi_input(
                 Xs,
                 Y=Y,
                 max_length=sys.maxsize,
@@ -188,7 +189,7 @@ class BasePipeline(metaclass=ABCMeta):
                         d[field] = field_value[start:end]
                 yield self._array_format(EncodedOutput(**d), pad_token=pad_token)
         else:
-            encoder_out = self.encoder.encode_multi_input(
+            encoder_out = ENCODER.encode_multi_input(
                 Xs,
                 Y=Y,
                 max_length=self.config.max_length,

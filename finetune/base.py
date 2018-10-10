@@ -20,11 +20,11 @@ from sklearn.model_selection import train_test_split
 from finetune.download import download_data_if_required
 from finetune.utils import interpolate_pos_embed, list_transpose
 from finetune.encoding import EncodedOutput
+from finetune.input_pipeline import ENCODER
 from finetune.config import get_default_config
 from finetune.saver import Saver
 from finetune.errors import FinetuneError
-from finetune.model import get_model_fn
-from finetune.model import PredictMode
+from finetune.model import get_model_fn, PredictMode
 from finetune.estimator_utils import PatchedParameterServerStrategy
 
 JL_BASE = os.path.join(os.path.dirname(__file__), "model", "Base_model.jl")
@@ -76,8 +76,8 @@ class BaseModel(object, metaclass=ABCMeta):
             if "/we:0" not in name:
                 return value
 
-            vocab_size = self.input_pipeline.encoder.vocab_size
-            word_embeddings = value[:vocab_size - len(self.input_pipeline.encoder.special_tokens)]
+            vocab_size = ENCODER.vocab_size
+            word_embeddings = value[:vocab_size - len(ENCODER.special_tokens)]
             special_embed = value[len(word_embeddings): vocab_size]
             positional_embed = value[vocab_size:]
             if self.config.interpolate_pos_embed and self.config.max_length != len(positional_embed):
@@ -143,8 +143,10 @@ class BaseModel(object, metaclass=ABCMeta):
                     estimator, val_input_fn, every_n_iter=val_interval, steps=val_size // batch_size
                 )
             )
-
-        estimator.train(train_input_fn, hooks=train_hooks, steps=num_steps)
+            
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            estimator.train(train_input_fn, hooks=train_hooks, steps=num_steps)
 
     def get_estimator(self, force_build_lm=False):
         if self.estimator_ is None or self.input_pipeline.rebuild or force_build_lm:
@@ -176,7 +178,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 predict_proba_op=self._predict_proba_op,
                 build_target_model=self.input_pipeline.target_dim is not None,
                 build_lm=force_build_lm or self.config.lm_loss_coef > 0.0 or self.input_pipeline.target_dim is None,
-                encoder=self.input_pipeline.encoder,
+                encoder=ENCODER,
                 target_dim=self.input_pipeline.target_dim,
                 label_encoder=self.input_pipeline.label_encoder,
                 saver=self.saver
@@ -300,16 +302,16 @@ class BaseModel(object, metaclass=ABCMeta):
             return tf_dataset.batch(1)
 
         self.config.use_extra_toks = use_extra_toks
-        encoded = self.input_pipeline.encoder._encode([seed_text])
+        encoded = ENCODER._encode([seed_text])
         if encoded == [] and not use_extra_toks:
             raise ValueError("If you are not using the extra tokens, you must provide some non-empty seed text")
-        start = [self.input_pipeline.encoder.start] if use_extra_toks else []
+        start = [ENCODER.start] if use_extra_toks else []
         encoded = EncodedOutput(token_ids=start + encoded.token_ids[0])
 
         estimator = self.get_estimator(force_build_lm=True)
         predict = estimator.predict(input_fn=get_input_fn)
 
-        EOS = self.input_pipeline.encoder.clf_token
+        EOS = ENCODER.clf_token
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
             for i in range(len(encoded.token_ids), (max_length or self.config.max_length) - 2):
@@ -322,7 +324,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         del self.config["use_extra_toks"]
 
-        return self.input_pipeline.encoder.decode(encoded.token_ids)
+        return ENCODER.decode(encoded.token_ids)
 
     def __getstate__(self):
         """
