@@ -1,12 +1,25 @@
 import os
-import joblib
-
 from concurrent.futures import ThreadPoolExecutor
-
 import itertools
 
+import joblib
 import numpy as np
 import tensorflow as tf
+
+from finetune.errors import FinetuneError
+
+
+class SaverHook(tf.train.SessionRunHook):
+    
+    def __init__(self, saver):
+        self.included = None
+        self.saver = saver
+
+    def begin(self):
+        self.included = tf.global_variables()
+
+    def end(self, session):
+        self.saver.variables = dict(zip((var.name for var in self.included), session.run(self.included)))
 
 
 class Saver:
@@ -29,19 +42,12 @@ class Saver:
         return self.fallback_
 
     def get_saver_hook(self):
-
-        class SaverHook(tf.train.SessionRunHook):
-            def __init__(self2):
-                self2.included = None
-
-            def begin(self2):
-                self2.included = tf.global_variables()
-
-            def end(self2, session):
-                self.variables = dict(zip((var.name for var in self2.included), session.run(self2.included)))
-        return SaverHook()
+        return SaverHook(self)
 
     def save(self, finetune_obj, path, mkdir=True):
+        if self.variables is None:
+            raise FinetuneError("Cowardly refusing to save default model.")
+
         names, values = self.variables.keys(), self.variables.values()
         folder = os.path.dirname(path)
         if not os.path.exists(folder) and mkdir:
@@ -68,7 +74,6 @@ class Saver:
             variables_sv = self.variables
         else:
             variables_sv = dict()
-        print("VAriablesSV", variables_sv)
 
         if tf.contrib.distribute.get_tower_context():
             def assign(var, val):
@@ -101,12 +106,8 @@ class Saver:
                 for func in self.variable_transforms:
                     saved_var = func(var.name, saved_var)
                 init_vals.append(assign(var, saved_var))
-        self.variables = None
         init_vals.append(tf.variables_initializer(default_init))
         return tf.group(init_vals)
-
-    def get_pretrained_weights(self):
-        return joblib.load(self.fallback_filename)
 
     def remove_unchanged(self, variable_names, variable_values, fallback_vars):
         skips = []

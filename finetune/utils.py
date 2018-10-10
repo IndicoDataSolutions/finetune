@@ -279,6 +279,16 @@ def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value
             end = annotation["end"]
             label = annotation["label"]
             annotation_text = annotation.get("text")
+            
+            if annotation_text is not None and text[start:end] != annotation_text:
+                raise ValueError(
+                    "Annotation text does not match text specified by `start` and `end` indexes. "
+                    "Text provided: `{}`.  Text extracted: `{}`.".format(
+                        annotation_text,
+                        text[start:end]
+                    )
+                )
+
             if not subtoken_labels:
                 if label != none_value:
                     # round to nearest token
@@ -338,14 +348,6 @@ def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value
             else:
                 doc_labels.append(label)
 
-            if annotation_text is not None and text[start:end] != annotation_text:
-                raise ValueError(
-                    "Annotation text does not match text specified by `start` and `end` indexes. "
-                    "Text provided: `{}`.  Text extracted: `{}`.".format(
-                        annotation_text,
-                        text[start:end]
-                    )
-                )
             last_loc = end
 
         if last_loc != len(text):
