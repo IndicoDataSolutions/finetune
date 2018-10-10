@@ -117,7 +117,7 @@ class SequenceLabeler(BaseModel):
         step_size = chunk_size // 3
         arr_encoded = list(itertools.chain.from_iterable(self.input_pipeline._text_to_ids([x]) for x in X))
         labels, batch_probas = [], []
-        for pred in self._inferrence(lambda: ([x] for x in X), mode=None):
+        for pred in self._inference(lambda: ([x] for x in X), mode=None):
             labels.append(self.input_pipeline.label_encoder.inverse_transform(pred[PredictMode.NORMAL]))
             batch_probas.append(pred[PredictMode.PROBAS])
 

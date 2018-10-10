@@ -1,6 +1,7 @@
 import os
 from concurrent.futures import ThreadPoolExecutor
 import itertools
+import logging
 
 import joblib
 import numpy as np
@@ -8,6 +9,8 @@ import tensorflow as tf
 from tensorflow.contrib.estimator.python.estimator.early_stopping import _StopOnPredicateHook, _get_or_create_stop_var
 
 from finetune.errors import FinetuneError
+
+LOGGER = logging.getLogger('finetune')
 
 
 class SaverHook(_StopOnPredicateHook):
@@ -36,6 +39,7 @@ class SaverHook(_StopOnPredicateHook):
         steps_diff = most_recent_eval[0] - best_eval[0]
         tf.logging.info("No improvement in {} steps".format(steps_diff))
         if steps_diff > self.early_stopping_steps and most_recent_eval[0] > self.steps_per_epoch:
+            LOGGER.info("No decrease in loss in {} steps, early stopping triggered.".format(steps_diff))
             return True
         return False
 

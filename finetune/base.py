@@ -11,6 +11,7 @@ import tempfile
 import time
 import shutil
 import glob
+import pathlib
 
 import tqdm
 import numpy as np
@@ -26,30 +27,10 @@ from finetune.config import get_default_config
 from finetune.saver import Saver
 from finetune.errors import FinetuneError
 from finetune.model import get_model_fn, PredictMode
-from tensorflow.python.training import training
-from finetune.estimator_utils import PatchedParameterServerStrategy
+from finetune.estimator_utils import PatchedParameterServerStrategy, ProgressHook
 
 JL_BASE = os.path.join(os.path.dirname(__file__), "model", "Base_model.jl")
 
-
-class ProgressHook(training.SessionRunHook):
-  
-    def __init__(self, n_batches, n_epochs):
-        self.iterations = 0
-        self.batches_per_epoch = int(math.ceil(n_batches / n_epochs))
-        self.progress_bar = tqdm.tqdm(total=self.batches_per_epoch, desc=self.epoch_descr(0))
-        self.n_epochs = n_epochs
-
-    def epoch_descr(self, current_epoch):
-        return "Epoch {}/{}".format(current_epoch, self.n_epochs)
-    
-    def after_run(self, run_context, run_values):
-        self.iterations += 1
-        current_epoch = self.iterations // self.batches_per_epoch
-        current_batch = self.iterations % self.batches_per_epoch
-        self.progress_bar.set_description(self.epoch_descr(current_epoch))
-        self.progress_bar.update(current_batch)
-        self.progress_bar.refresh()
 
 
 class BaseModel(object, metaclass=ABCMeta):
@@ -87,8 +68,10 @@ class BaseModel(object, metaclass=ABCMeta):
         self.estimator_ = None
         download_data_if_required()
         if self.config.tensorboard_folder is not None:
-            self.estimator_dir = os.path.join(self.config.tensorboard_folder, str(time.time()))
-            os.mkdir(self.estimator_dir)
+            self.estimator_dir = os.path.abspath(
+                os.path.join(self.config.tensorboard_folder, str(int(time.time())))
+            )
+            pathlib.Path(self.estimator_dir).mkdir(parents=True, exist_ok=True)
             self.cleanup_glob = None
         else:
             self.estimator_dir = tempfile.mkdtemp(prefix="Finetune")
@@ -152,7 +135,9 @@ class BaseModel(object, metaclass=ABCMeta):
             tf.logging.warning(
                 "Early stopping / keeping best model with a validation size of {} is likely to case undesired results".format(val_size))
 
-        steps_per_epoch = int(math.ceil(math.ceil(self.config.dataset_size / batch_size)) / max(1, len(self.config.visible_gpus)))
+        steps_per_epoch = int(math.ceil(
+            math.ceil(self.config.dataset_size / batch_size)) / max(1, len(self.config.visible_gpus)
+        ))
         num_steps = steps_per_epoch * self.config.n_epochs
         estimator = self.get_estimator()
         train_hooks = [
@@ -246,11 +231,25 @@ class BaseModel(object, metaclass=ABCMeta):
 
         return val_size, val_interval
 
-    def _inferrence(self, Xs, mode=None):
+    def _inference(self, Xs, mode=None):
         estimator = self.get_estimator()
         input_func = self.input_pipeline.get_predict_input_fn(Xs)
+        
+        hooks = []
+        try:
+            n_batches = math.ceil(len(Xs) / self.config.batch_size)
+            hooks.append(ProgressHook(n_batches=n_batches))
+        except:
+            # generator of unkown length, can't log progress
+            pass
+        
         pred_gen = list(
-            map(lambda y: y[mode] if mode else y, estimator.predict(input_fn=input_func, predict_keys=mode)))
+            map(
+                lambda y: y[mode] if mode else y, estimator.predict(
+                    input_fn=input_func, predict_keys=mode, hooks=hooks
+                )
+            )
+        )
         return pred_gen
 
     def fit(self, *args, **kwargs):
@@ -258,7 +257,7 @@ class BaseModel(object, metaclass=ABCMeta):
         return self.finetune(*args, **kwargs)
 
     def _predict(self, Xs):
-        raw_preds = self._inferrence(Xs, PredictMode.NORMAL)
+        raw_preds = self._inference(Xs, PredictMode.NORMAL)
         return self.input_pipeline.label_encoder.inverse_transform(np.asarray(raw_preds))
 
     def predict(self, Xs):
@@ -268,7 +267,7 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         Produce raw numeric outputs for proba predictions
         """
-        raw_preds = self._inferrence(Xs, PredictMode.PROBAS)
+        raw_preds = self._inference(Xs, PredictMode.PROBAS)
         return raw_preds
 
     def predict_proba(self, *args, **kwargs):
@@ -286,7 +285,7 @@ class BaseModel(object, metaclass=ABCMeta):
         return formatted_predictions
 
     def _featurize(self, Xs):
-        raw_preds = self._inferrence(Xs, PredictMode.FEATURIZE)
+        raw_preds = self._inference(Xs, PredictMode.FEATURIZE)
         return np.asarray(raw_preds)
 
     @abstractmethod
@@ -340,7 +339,7 @@ class BaseModel(object, metaclass=ABCMeta):
         encoded = EncodedOutput(token_ids=start + encoded.token_ids[0])
 
         estimator = self.get_estimator(force_build_lm=True)
-        predict = estimator.predict(input_fn=get_input_fn)
+        predict = estimator.predict(input_fn=get_input_fn,)
 
         EOS = ENCODER.clf_token
         with warnings.catch_warnings():

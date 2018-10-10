@@ -8,11 +8,13 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.data import Dataset
 
+from finetune.errors import FinetuneError
 from finetune.config import PAD_TOKEN
 from finetune.encoding import TextEncoder, ArrayEncodedOutput, EncodedOutput
 from finetune.imbalance import compute_class_weights
 
 ENCODER = TextEncoder()
+LOGGER = logging.getLogger('finetune')
 
 
 class BasePipeline(metaclass=ABCMeta):
@@ -80,15 +82,8 @@ class BasePipeline(metaclass=ABCMeta):
         self.label_encoder = self._target_encoder()
         if not callable(Y):
             Y_fit = Y
-            self.config.dataset_size = len(Y)
             self.label_encoder.fit_transform(Y)
         else:
-            try:
-                self.config.dataset_size = len(Y())
-            except TypeError:
-                logging.warning(
-                    "Generator input function does not have a length, falling back to default in config of {}".format(
-                        self.config.dataset_size))
             Y_fit = list(itertools.islice(Y(), 100))  # TODO find a more principled way to do this?
             self.label_encoder.fit_transform(Y_fit)
 
@@ -117,8 +112,14 @@ class BasePipeline(metaclass=ABCMeta):
     def _dataset_without_targets(self, Xs):
         if not callable(Xs):
             Xs_fn = lambda: Xs
+            self._n_examples = len(Xs)
         else:
             Xs_fn = Xs
+            try:
+                self._n_examples = len(Xs)
+            except TypeError:
+                pass
+        
         dataset_encoded = lambda: itertools.chain.from_iterable(map(self.text_to_tokens_mask, Xs_fn()))
         types, shapes = self.feed_shape_type_def()
         return Dataset.from_generator(dataset_encoded, types[0], shapes[0])  # 0s cut out the targets
@@ -129,6 +130,19 @@ class BasePipeline(metaclass=ABCMeta):
         shuffle_buffer_size = self.config.shuffle_buffer_size
         val_size = val_size or 0
         prefetch_buffer = 2  # breaks the pipeline to allow concurrency
+
+        if callable(Xs):
+            try:
+                self.config.dataset_size = len(Xs())
+            except TypeError:
+                if self.config.dataset_size is None:
+                    raise FinetuneError(
+                        "Generator input function does not have a length and no `config.dataset_size` is specified. "
+                        "You must set `config.dataset_size` explicitly."
+                    )
+        else:
+            self.config.dataset_size = len(Xs)
+
         if Y is not None:
             self._post_data_initialization(Y)
             dataset = lambda: self._dataset_with_targets(Xs, Y)
