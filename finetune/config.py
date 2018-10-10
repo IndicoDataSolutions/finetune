@@ -70,7 +70,6 @@ class Settings(dict):
     :param resid_p_drop: Residual layer fully connected network dropout probability.  Defaults to `0.1`.
     :param clf_p_drop: Classifier dropout probability.  Defaults to `0.1`.
     :param l2_reg: L2 regularization coefficient. Defaults to `0.01`.
-    :param regularize_deviation: L2 penalty against pre-trained model weights.  Defaults to `0.0`.
     :param b1: Adam b1 parameter.  Defaults to `0.9`.
     :param b2: Adam b2 parameter.  Defaults to `0.999`.
     :param epsilon: Adam epsilon parameter: Defaults to `1e-8`.
@@ -89,10 +88,7 @@ class Settings(dict):
         If n_examples > 50, defaults to max(5, min(100, 0.05 * n_examples))
     :param val_interval: Evaluate on validation set after `val_interval` batches.  
         Defaults to 4 * val_size / batch_size to ensure that too much time is not spent on validation.
-    :param val_window_size: Print running average of validation score over `val_window_size` batches.  Defaults to `5`.
-    
-    :param rolling_avg_decay: Momentum-style parameter to smooth out validation estimates printed during training. Defaults to `0.99`.
-    :param lm_temp: Language model temperature -- a value of `0.0` corresponds to greedy maximum likelihood predictions 
+    :param lm_temp: Language model temperature -- a value of `0.0` corresponds to greedy maximum likelihood predictions
         while a value of `1.0` corresponds to random predictions. Defaults to `0.2`. 
     :param seq_num_heads: Number of attention heads of final attention layer. Defaults to `16`.
     :param subtoken_predictions: Return predictions at subtoken granularity or token granularity?  Defaults to `False`.
@@ -161,7 +157,6 @@ def get_default_config():
         clf_p_drop=0.1,
         l2_reg=GridSearchable(0.01, [0.0, 0.1, 0.01, 0.001]),
         vector_l2=False,
-        regularize_deviation=False,
         b1=0.9, 
         b2=0.999,
         epsilon=1e-8,
@@ -174,8 +169,6 @@ def get_default_config():
         verbose=True,
         val_size=None,
         val_interval=None,
-        val_window_size=5,
-        rolling_avg_decay=0.99,
         lm_temp=0.2,
         seq_num_heads=16,
         pad_token="<PAD>",
@@ -194,7 +187,7 @@ def get_default_config():
         num_layers_trained=12,
         train_embeddings=True,
         class_weights=None,
-        oversample=False,
+        oversample=False, # currently broken
         params_device="cpu",
 
         # Must remain fixed

@@ -14,7 +14,7 @@ class SaverHook(_StopOnPredicateHook):
 
     def __init__(self, saver, estimator, keep_best_model, early_stopping_steps, steps_per_epoch, eval_frequency):
         super().__init__(self.stop_if_no_metric_improvement_fn, run_every_secs=None,
-                         run_every_steps=early_stopping_steps)
+                         run_every_steps=eval_frequency)
         self.get_current_weights = False
         self.included = None
         self.saver = saver
@@ -80,8 +80,12 @@ class Saver:
     def save(self, finetune_obj, path, mkdir=True):
         if self.variables is None:
             raise FinetuneError("Cowardly refusing to save default model.")
+        if self.exclude_matches is not None:
+            variables = {k: v for k, v in self.variables.values() if self.exclude_matches not in k}
+        else:
+            variables = self.variables
 
-        names, values = self.variables.keys(), self.variables.values()
+        names, values = variables.keys(), variables.values()
         folder = os.path.dirname(path)
         if not os.path.exists(folder) and mkdir:
             os.mkdir(folder)
@@ -89,6 +93,7 @@ class Saver:
             values = [a.astype(self.save_dtype) for a in values]
 
         var_names_reduced, vals_reduced = self.remove_unchanged(names, values, self.fallback)
+
 
         var_dict = dict(zip(var_names_reduced, vals_reduced))
         assert len(vals_reduced) == len(var_names_reduced) == len(var_dict)
