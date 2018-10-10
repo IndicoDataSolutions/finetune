@@ -26,7 +26,7 @@ from finetune.saver import Saver
 from finetune.errors import FinetuneError
 from finetune.model import get_model_fn
 from finetune.model import PredictMode
-from finetune.estimator_utils import PatchedParameterServerStrategy, SaverHookFinetune
+from finetune.estimator_utils import PatchedParameterServerStrategy
 
 JL_BASE = os.path.join(os.path.dirname(__file__), "model", "Base_model.jl")
 

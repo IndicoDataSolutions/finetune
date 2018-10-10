@@ -1,13 +1,60 @@
 import os
-import joblib
-
 from concurrent.futures import ThreadPoolExecutor
-
 import itertools
 
+import joblib
 import numpy as np
 import tensorflow as tf
 from tensorflow.contrib.estimator.python.estimator.early_stopping import _StopOnPredicateHook, _get_or_create_stop_var
+
+from finetune.errors import FinetuneError
+
+
+class SaverHook(_StopOnPredicateHook):
+    def stop_if_no_metric_improvement_fn(self):
+        if not self.keep_best_model:
+            return False
+        eval_results = tf.contrib.estimator.read_eval_metrics(self.estimator.eval_dir())
+        if len(eval_results) == 0:
+            return False
+        tf.logging.info(eval_results)
+        most_recent_eval = max(eval_results.items(), key=lambda x: x[0])  # last steps.
+        best_eval = min(eval_results.items(), key=lambda x: x[1]["loss"])  # lowest_loss
+        tf.logging.info(str(most_recent_eval))
+        tf.logging.info(str(best_eval))
+        if most_recent_eval == best_eval:
+            self.get_current_weights = True
+        steps_diff = most_recent_eval[0] - best_eval[0]
+        tf.logging.info("No improvement in {} steps".format(steps_diff))
+        if steps_diff > self.early_stopping_steps and most_recent_eval[0] > self.steps_per_epoch:
+            return True
+        return False
+
+    def __init__(self, saver, estimator, keep_best_model, early_stopping_steps, steps_per_epoch):
+        super().__init__(self.stop_if_no_metric_improvement_fn, run_every_secs=None,
+                         run_every_steps=early_stopping_steps)
+        self.get_current_weights = False
+        self.included = None
+        self.saver = saver
+        self.keep_best_model = keep_best_model
+        self.early_stopping_steps = early_stopping_steps
+        self.steps_per_epoch = steps_per_epoch
+        self.estimator = estimator
+
+    def begin(self):
+        super().begin()
+        self.included = tf.global_variables()
+
+    def after_run(self, run_context, run_values):
+        super().after_run(run_context, run_values)
+        if self.get_current_weights:
+            self.variables = dict(zip((var.name for var in self.included), run_context.session.run(self.included)))
+            self.get_current_weights = False
+
+    def end(self, session):
+        if not self.keep_best_model or self.variables is None:
+            self.saver.variables = dict(zip((var.name for var in self.included), session.run(self.included)))
+
 
 class Saver:
     def __init__(self, fallback_filename, exclude_matches=None, variable_transforms=None, save_dtype=None):
@@ -28,48 +75,14 @@ class Saver:
             self.tpe.shutdown()
         return self.fallback_
 
-    def get_saver_hook(self, estimator, save_best_model, steps_per_epoch, early_stopping_steps):
-        class SaverHook(_StopOnPredicateHook):
-
-            def stop_if_no_metric_improvement_fn(self2):
-                eval_results = tf.contrib.estimator.read_eval_metrics(estimator.eval_dir())
-                if len(eval_results) == 0:
-                    return False
-                tf.logging.info(eval_results)
-                most_recent_eval = max(eval_results.items(), key=lambda x: x[0]) #last steps.
-                best_eval = min(eval_results.items(), key=lambda x: x[1]["loss"]) # lowest_loss
-                tf.logging.info(str(most_recent_eval))
-                tf.logging.info(str(best_eval))
-                if most_recent_eval == best_eval:
-                    self2.get_current_weights = True
-                steps_diff = most_recent_eval[0] - best_eval[0]
-                tf.logging.info("No improvement in {} steps".format(steps_diff))
-                if steps_diff > early_stopping_steps and most_recent_eval[0] > steps_per_epoch:
-                    return True
-                return False
-
-            def __init__(self2):
-                super().__init__(self2.stop_if_no_metric_improvement_fn, run_every_secs=60, run_every_steps=None)
-                self2.get_current_weights = False
-                self2.included = None
-
-            def begin(self2):
-                super().begin()
-                self2.included = tf.global_variables()
-
-            def after_run(self2, run_context, run_values):
-                super().after_run(run_context, run_values)
-                if self2.get_current_weights:
-                    self.variables = dict(zip((var.name for var in self2.included), run_context.session.run(self2.included)))
-                    self2.get_current_weights = False
-
-            def end(self2, session):
-                if not save_best_model or self.variables is None:
-                    self.variables = dict(zip((var.name for var in self2.included), session.run(self2.included)))
-
-        return SaverHook()
+    def get_saver_hook(self, estimator, keep_best_model, steps_per_epoch, early_stopping_steps):
+        return SaverHook(self, estimator=estimator, save_best_model=keep_best_model, steps_per_epoch=steps_per_epoch,
+                         early_stopping_steps=early_stopping_steps)
 
     def save(self, finetune_obj, path, mkdir=True):
+        if self.variables is None:
+            raise FinetuneError("Cowardly refusing to save default model.")
+
         names, values = self.variables.keys(), self.variables.values()
         folder = os.path.dirname(path)
         if not os.path.exists(folder) and mkdir:
@@ -92,7 +105,7 @@ class Saver:
         Assumes a default init op will be run, this function should be called after all variables are instantiated
         and then the callback run after the graph is finalized
         """
-        _get_or_create_stop_var() # TODO(BEN): This is currently required to force the stop var to get initialized.
+        _get_or_create_stop_var()  # TODO(BEN): This is currently required to force the stop var to get initialized.
 
         if self.variables is not None:
             variables_sv = self.variables
@@ -130,12 +143,8 @@ class Saver:
                 for func in self.variable_transforms:
                     saved_var = func(var.name, saved_var)
                 init_vals.append(assign(var, saved_var))
-        self.variables = None
         init_vals.append(tf.variables_initializer(default_init))
         return tf.group(init_vals)
-
-    def get_pretrained_weights(self):
-        return joblib.load(self.fallback_filename)
 
     def remove_unchanged(self, variable_names, variable_values, fallback_vars):
         skips = []
@@ -153,4 +162,3 @@ class Saver:
             [var for skip, var in zip(skips, variable_names) if not skip],
             [var_val for skip, var_val in zip(skips, variable_values) if not skip]
         )
-
