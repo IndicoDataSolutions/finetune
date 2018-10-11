@@ -177,6 +177,7 @@ class BasePipeline(metaclass=ABCMeta):
             n_examples=len(Xs) if not callable(Xs) else self.config.dataset_size,
             batch_size=batch_size or self.config.batch_size
         )
+
         self.config.dataset_size -= val_size
 
         if Y is not None:
@@ -186,9 +187,9 @@ class BasePipeline(metaclass=ABCMeta):
             dataset = lambda: self._dataset_without_targets(Xs)
 
         val_dataset = lambda: dataset().shuffle(shuffle_buffer_size, seed=self.config.seed).take(
-            val_size).batch(batch_size).prefetch(prefetch_buffer)
+            val_size).batch(batch_size, drop_remainder=False).prefetch(prefetch_buffer)
         train_dataset = lambda: dataset().shuffle(shuffle_buffer_size, seed=self.config.seed).skip(
-            val_size).batch(batch_size).repeat(self.config.n_epochs).prefetch(prefetch_buffer)
+            val_size).batch(batch_size, drop_remainder=False).repeat(self.config.n_epochs).prefetch(prefetch_buffer)
 
         return val_dataset, train_dataset, val_size, val_interval
 

@@ -115,6 +115,12 @@ class BaseModel(object, metaclass=ABCMeta):
         # Overridden by subclass to attach a target model onto the shared base featurizer.
         raise NotImplementedError
 
+    def _n_steps(self, n_examples, batch_size, n_gpus):
+        steps = int(math.ceil(
+            n_examples / (batch_size * n_gpus)
+        ))
+        return steps
+
     def finetune(self, Xs, Y=None, batch_size=None):
         if not callable(Xs) and Y is not None and len(Xs) != len(Y):
             raise FinetuneError(
@@ -126,14 +132,15 @@ class BaseModel(object, metaclass=ABCMeta):
         batch_size = batch_size or self.config.batch_size
 
         val_input_fn, train_input_fn, val_size, val_interval = self.input_pipeline.get_train_input_fns(Xs, Y, batch_size=batch_size)
-
         if val_size <= 10 and self.config.keep_best_model:
             tf.logging.warning(
                 "Early stopping / keeping best model with a validation size of {} is likely to case undesired results".format(val_size))
 
-        steps_per_epoch = int(math.ceil(
-            math.ceil(self.config.dataset_size / batch_size)) / max(1, len(self.config.visible_gpus)
-        ))
+        steps_per_epoch = self._n_steps(
+            n_examples=self.config.dataset_size,
+            batch_size=batch_size, 
+            n_gpus=max(1, len(self.config.visible_gpus))
+        )
         num_steps = steps_per_epoch * self.config.n_epochs
         estimator = self.get_estimator()
         train_hooks = [
@@ -145,8 +152,6 @@ class BaseModel(object, metaclass=ABCMeta):
                 eval_frequency=val_interval
             ),
             ProgressHook(
-                # TODO: fix this num_steps number -- currently model terminates before tqdm reaches this value? 
-                # Maybe due to math.ceil ops? To replicate run on reuters
                 n_batches=num_steps,
                 n_epochs=self.config.n_epochs
             )
@@ -196,16 +201,24 @@ class BaseModel(object, metaclass=ABCMeta):
             label_encoder=self.input_pipeline.label_encoder,
             saver=self.saver
         )
-        return tf.estimator.Estimator(model_dir=self.estimator_dir, model_fn=model_fn, config=config,
-                                      params=self.config)
+        return tf.estimator.Estimator(
+            model_dir=self.estimator_dir,
+            model_fn=model_fn,
+            config=config,
+            params=self.config
+        )
 
     def _inference(self, Xs, mode=None):
         estimator = self.get_estimator()
         
         hooks = []
         try:
-            n_batches = math.ceil(len(Xs) / self.config.batch_size)
-            hooks.append(ProgressHook(n_batches=n_batches))
+            steps = self._n_steps(
+                n_examples=len(Xs), 
+                batch_size=self.config.batch_size,
+                n_gpus=1
+            )
+            hooks.append(ProgressHook(n_batches=steps, mode='predict'))
         except Exception:
             # generator of unkown length, can't log progress
             pass

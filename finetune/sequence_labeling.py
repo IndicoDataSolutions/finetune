@@ -109,27 +109,8 @@ class SequenceLabeler(BaseModel):
         return super().finetune(Xs, Y=Y, batch_size=batch_size)
 
     def _inference(self, Xs, mode=None):
-        # TODO: refactor so we don't have to copy-pasta this
-        estimator = self.get_estimator()
-        
-        hooks = []
-        try:
-            n_batches = math.ceil(len(Xs) / self.config.batch_size)
-            hooks.append(ProgressHook(n_batches=n_batches))
-        except Exception:
-            # generator of unkown length, can't log progress
-            pass
-        
-        input_func = self.input_pipeline.get_predict_input_fn(lambda: ([x] for x in Xs))
-
-        pred_gen = list(
-            map(
-                lambda y: y[mode] if mode else y, estimator.predict(
-                    input_fn=input_func, predict_keys=mode, hooks=hooks
-                )
-            )
-        )
-        return pred_gen
+        Xs = [[x] for x in Xs]
+        return super()._inference(Xs, mode=mode)
 
     def predict(self, X):
         """
