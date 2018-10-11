@@ -25,24 +25,27 @@ class ProgressHook(training.SessionRunHook):
         self.progress_bar = None
 
     def epoch_descr(self, current_epoch):
-        return "Epoch {}/{}".format(current_epoch + 1, self.n_epochs)
+        return "Epoch {}/{}".format(current_epoch, self.n_epochs)
+    
+    def write_description(self, current_epoch):
+        if self.mode == 'train':
+            self.progress_bar.set_description(self.epoch_descr(current_epoch))
+        else:
+            self.progress_bar.set_description("Inference")
     
     def log_progress(self):
         self.iterations += 1
-        current_epoch = self.iterations // self.batches_per_epoch
+        current_epoch = self.iterations // self.batches_per_epoch + 1
         current_batch = self.iterations % self.batches_per_epoch
 
-        if current_batch == 0 and current_epoch != 0:
+        if current_batch == 0 and current_epoch != 1:
             current_epoch -= 1
             current_batch = self.batches_per_epoch
 
         if self.progress_bar is None:
             self.progress_bar = tqdm.tqdm(total=self.batches_per_epoch)
 
-        if self.mode == 'train':
-            self.progress_bar.set_description(self.epoch_descr(current_epoch))
-        else:
-            self.progress_bar.set_description("Inference")
+        self.write_description(current_epoch)
 
         self.progress_bar.n = current_batch
         self.progress_bar.refresh()
@@ -52,6 +55,7 @@ class ProgressHook(training.SessionRunHook):
 
     def end(self, session):
         self.progress_bar.n = self.batches_per_epoch
+        self.write_description(self.n_epochs)
         self.progress_bar.refresh()
         del self.progress_bar
 

@@ -95,7 +95,7 @@ class BasePipeline(metaclass=ABCMeta):
         if Y_fit is not None:
             self.config.class_weights = compute_class_weights(class_weights=self.config.class_weights, Y=Y_fit)
 
-    def _dataset_with_targets(self, Xs, Y):
+    def _dataset_with_targets(self, Xs, Y, mode='train'):
         if not callable(Xs) and not callable(Y):
             dataset = lambda: zip(Xs, Y)
         elif callable(Xs) and callable(Y):
