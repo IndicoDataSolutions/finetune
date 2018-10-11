@@ -90,8 +90,6 @@ class BasePipeline(metaclass=ABCMeta):
 
         target_dim = self.label_encoder.target_dim
         self.lm_loss_coef = self.config.lm_loss_coef if target_dim is not None else 1.0
-        if target_dim != self.target_dim and self.target_dim is None:
-            self.rebuild = True
         self.target_dim = target_dim
 
         if Y_fit is not None:

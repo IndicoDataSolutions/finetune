@@ -163,44 +163,41 @@ class BaseModel(object, metaclass=ABCMeta):
             estimator.train(train_input_fn, hooks=train_hooks, steps=num_steps)
 
     def get_estimator(self, force_build_lm=False):
-        if self.estimator_ is None or self.input_pipeline.rebuild or force_build_lm:
-            conf = tf.ConfigProto(
-                allow_soft_placement=self.config.soft_device_placement,
-                log_device_placement=self.config.log_device_placement,
-            )
-            num_gpus = len(self.config.visible_gpus)
-            if num_gpus > 1:
-                distribute_strategy = PatchedParameterServerStrategy(num_gpus_per_worker=num_gpus)
-            else:
-                distribute_strategy = None
+        conf = tf.ConfigProto(
+            allow_soft_placement=self.config.soft_device_placement,
+            log_device_placement=self.config.log_device_placement,
+        )
+        num_gpus = len(self.config.visible_gpus)
+        if num_gpus > 1:
+            distribute_strategy = PatchedParameterServerStrategy(num_gpus_per_worker=num_gpus)
+        else:
+            distribute_strategy = None
 
-            config = tf.estimator.RunConfig(
-                tf_random_seed=self.config.seed,
-                save_summary_steps=None,
-                save_checkpoints_secs=None,
-                save_checkpoints_steps=None,
-                # disable auto summaries
-                session_config=conf,
-                log_step_count_steps=100,
-                train_distribute=distribute_strategy,
-                keep_checkpoint_max=1
-            )
+        config = tf.estimator.RunConfig(
+            tf_random_seed=self.config.seed,
+            save_summary_steps=None,
+            save_checkpoints_secs=None,
+            save_checkpoints_steps=None,
+            # disable auto summaries
+            session_config=conf,
+            log_step_count_steps=100,
+            train_distribute=distribute_strategy,
+            keep_checkpoint_max=1
+        )
 
-            model_fn = get_model_fn(
-                target_model_fn=self._target_model,
-                predict_op=self._predict_op,
-                predict_proba_op=self._predict_proba_op,
-                build_target_model=self.input_pipeline.target_dim is not None,
-                build_lm=force_build_lm or self.config.lm_loss_coef > 0.0 or self.input_pipeline.target_dim is None,
-                encoder=ENCODER,
-                target_dim=self.input_pipeline.target_dim,
-                label_encoder=self.input_pipeline.label_encoder,
-                saver=self.saver
-            )
-            self.estimator_ = tf.estimator.Estimator(model_dir=self.estimator_dir, model_fn=model_fn, config=config,
-                                                     params=self.config)
-
-        return self.estimator_
+        model_fn = get_model_fn(
+            target_model_fn=self._target_model,
+            predict_op=self._predict_op,
+            predict_proba_op=self._predict_proba_op,
+            build_target_model=self.input_pipeline.target_dim is not None,
+            build_lm=force_build_lm or self.config.lm_loss_coef > 0.0 or self.input_pipeline.target_dim is None,
+            encoder=ENCODER,
+            target_dim=self.input_pipeline.target_dim,
+            label_encoder=self.input_pipeline.label_encoder,
+            saver=self.saver
+        )
+        return tf.estimator.Estimator(model_dir=self.estimator_dir, model_fn=model_fn, config=config,
+                                      params=self.config)
 
     def _inference(self, Xs, mode=None):
         estimator = self.get_estimator()
