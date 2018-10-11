@@ -85,7 +85,7 @@ class Saver:
         if self.variables is None:
             raise FinetuneError("Cowardly refusing to save default model.")
         if self.exclude_matches is not None:
-            variables = {k: v for k, v in self.variables.values() if self.exclude_matches not in k}
+            variables = {k: v for k, v in self.variables.items() if self.exclude_matches not in k}
         else:
             variables = self.variables
 
