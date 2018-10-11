@@ -185,7 +185,7 @@ def get_default_config():
         multi_label_sequences=False,
         multi_label_threshold=0.5,
         autosave_path=None,
-        keep_best_model=True,
+        keep_best_model=False,
         early_stopping_steps=100,
         tensorboard_folder=None,
         shuffle_buffer_size=100,

@@ -1,6 +1,7 @@
 import itertools
 import logging
 import sys
+import math
 
 from abc import ABCMeta, abstractmethod
 
@@ -107,6 +108,10 @@ class BasePipeline(metaclass=ABCMeta):
         dataset_encoded = lambda: itertools.chain.from_iterable(
             map(lambda xy: self.text_to_tokens_mask(*xy), dataset()))
         shape_def = self.feed_shape_type_def()
+        if not callable(Y) and self.config.chunk_long_sequences:
+            dataset_encoded_list = list(dataset_encoded())  # come up with a more principled way to do this .
+            dataset_encoded = lambda :dataset_encoded_list
+            self.config.dataset_size = len(dataset_encoded_list)
         return Dataset.from_generator(dataset_encoded, *shape_def)
 
     def _dataset_without_targets(self, Xs):
@@ -123,6 +128,33 @@ class BasePipeline(metaclass=ABCMeta):
         dataset_encoded = lambda: itertools.chain.from_iterable(map(self.text_to_tokens_mask, Xs_fn()))
         types, shapes = self.feed_shape_type_def()
         return Dataset.from_generator(dataset_encoded, types[0], shapes[0])  # 0s cut out the targets
+
+    def validation_settings(self, n_examples, batch_size):
+        """
+        Auto-select reasonable validation settings
+        """
+        if self.config.val_size is not None and self.config.val_interval is not None:
+            return self.config.val_size, self.config.val_interval
+
+        # Auto-select reasonable validation size
+        if self.config.val_size is None:
+            if n_examples < 50:
+                val_size = 0
+            else:
+                val_size = max(5, int(0.05 * n_examples))
+                val_size = min(100, val_size)
+        else:
+            val_size = self.config.val_size
+
+        # Auto-select reasonable validation interval
+        if self.config.val_interval is None:
+            # sys.maxsize corresponds to never running validation
+            # and is used when val_size is set to 0
+            val_interval = 4 * int(math.ceil(val_size / batch_size)) or sys.maxsize
+        else:
+            val_interval = self.config.val_interval
+
+        return int(val_size), int(val_interval)
 
     def get_train_input_fns(self, Xs, Y=None, batch_size=None, val_size=None):
         batch_size = batch_size or self.config.batch_size
@@ -143,6 +175,12 @@ class BasePipeline(metaclass=ABCMeta):
         else:
             self.config.dataset_size = len(Xs)
 
+        val_size, val_interval = self.validation_settings(
+            n_examples=len(Xs) if not callable(Xs) else self.config.dataset_size,
+            batch_size=batch_size or self.config.batch_size
+        )
+        self.config.dataset_size -= val_size
+
         if Y is not None:
             self._post_data_initialization(Y)
             dataset = lambda: self._dataset_with_targets(Xs, Y)
@@ -154,7 +192,7 @@ class BasePipeline(metaclass=ABCMeta):
         train_dataset = lambda: dataset().shuffle(shuffle_buffer_size, seed=self.config.seed).skip(
             val_size).batch(batch_size).repeat(self.config.n_epochs).prefetch(prefetch_buffer)
 
-        return val_dataset, train_dataset
+        return val_dataset, train_dataset, val_size, val_interval
 
     def get_predict_input_fn(self, Xs, batch_size=None):
         batch_size = batch_size or self.config.batch_size

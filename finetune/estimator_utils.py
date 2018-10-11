@@ -15,18 +15,22 @@ class ProgressHook(training.SessionRunHook):
         self.iterations = 0
         self.n_epochs = n_epochs
         if self.n_epochs:
-            self.batches_per_epoch = int(math.ceil(n_batches / n_epochs))
+            self.batches_per_epoch = int(n_batches / n_epochs)
         else:
             self.batches_per_epoch = n_batches
         self.progress_bar = None
 
     def epoch_descr(self, current_epoch):
-        return "Epoch {}/{}".format(current_epoch, self.n_epochs)
+        return "Epoch {}/{}".format(current_epoch + 1, self.n_epochs)
     
     def after_run(self, run_context, run_values):
-        self.iterations += 1
+        self.iterations = run_context.session.run(tf.train.get_global_step())
         current_epoch = self.iterations // self.batches_per_epoch
         current_batch = self.iterations % self.batches_per_epoch
+
+        if current_batch == 0 and current_epoch == self.n_epochs:
+            current_epoch -= 1
+            current_batch = self.batches_per_epoch
 
         if self.progress_bar is None:
             self.progress_bar = tqdm.tqdm(total=self.batches_per_epoch)

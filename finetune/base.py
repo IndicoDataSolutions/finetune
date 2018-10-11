@@ -124,13 +124,8 @@ class BaseModel(object, metaclass=ABCMeta):
                 )
             )
         batch_size = batch_size or self.config.batch_size
-        val_size, val_interval = self.validation_settings(
-            n_examples=len(Xs) if not callable(Xs) else self.config.dataset_size,
-            batch_size=batch_size or self.config.batch_size
-        )
 
-        val_input_fn, train_input_fn = self.input_pipeline.get_train_input_fns(Xs, Y, batch_size=batch_size,
-                                                                               val_size=val_size)
+        val_input_fn, train_input_fn, val_size, val_interval = self.input_pipeline.get_train_input_fns(Xs, Y, batch_size=batch_size)
 
         if val_size <= 10 and self.config.keep_best_model:
             tf.logging.warning(
@@ -206,33 +201,6 @@ class BaseModel(object, metaclass=ABCMeta):
                                                      params=self.config)
 
         return self.estimator_
-
-    def validation_settings(self, n_examples, batch_size):
-        """
-        Auto-select reasonable validation settings
-        """
-        if self.config.val_size is not None and self.config.val_interval is not None:
-            return self.config.val_size, self.config.val_interval
-
-        # Auto-select reasonable validation size
-        if self.config.val_size is None:
-            if n_examples < 50:
-                val_size = 0
-            else:
-                val_size = max(5, int(0.05 * n_examples))
-                val_size = min(100, val_size)
-        else:
-            val_size = self.config.val_size
-
-        # Auto-select reasonable validation interval
-        if self.config.val_interval is None:
-            # sys.maxsize corresponds to never running validation
-            # and is used when val_size is set to 0
-            val_interval = 4 * int(math.ceil(val_size / batch_size)) or sys.maxsize
-        else:
-            val_interval = self.config.val_interval
-
-        return val_size, val_interval
 
     def _inference(self, Xs, mode=None):
         estimator = self.get_estimator()
