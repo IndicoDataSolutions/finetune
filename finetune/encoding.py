@@ -277,7 +277,7 @@ class TextEncoder(object):
 
         # for each field in that example
         for field in Xs:
-            assert type(field) == list, "This should be a list of strings, if its not, you've done something wrong..."
+            assert isinstance(field, (list, tuple)), "This should be a list of strings, if its not, you've done something wrong..."
             encoded = self._encode(field, labels=Y)
             token_ids.append(_flatten(encoded.token_ids))
             tokens.append(_flatten(encoded.tokens))
