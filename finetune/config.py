@@ -196,7 +196,7 @@ def get_default_config():
         num_layers_trained=12,
         train_embeddings=True,
         class_weights=None,
-        oversample=False, # currently broken
+        oversample=False,
         params_device="cpu",
 
         # Must remain fixed

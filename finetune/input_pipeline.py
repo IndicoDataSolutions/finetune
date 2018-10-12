@@ -8,6 +8,8 @@ from abc import ABCMeta, abstractmethod
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.data import Dataset
+from sklearn.model_selection import train_test_split
+
 
 from finetune.errors import FinetuneError
 from finetune.config import PAD_TOKEN
@@ -85,7 +87,7 @@ class BasePipeline(metaclass=ABCMeta):
             Y_fit = Y
             self.label_encoder.fit(Y)
         else:
-            Y_fit = list(itertools.islice(Y(), 100))  # TODO find a more principled way to do this?
+            Y_fit = list(itertools.islice(Y(), 10000))
             self.label_encoder.fit(Y_fit)
 
         target_dim = self.label_encoder.target_dim
@@ -154,6 +156,16 @@ class BasePipeline(metaclass=ABCMeta):
 
         return int(val_size), int(val_interval)
 
+    def resampling(self, Xs, Y):
+        return Xs, Y
+
+    def _make_dataset(self, Xs, Y):
+        if Y is not None:
+            dataset = lambda: self._dataset_with_targets(Xs, Y)
+        else:
+            dataset = lambda: self._dataset_without_targets(Xs)
+        return dataset
+
     def get_train_input_fns(self, Xs, Y=None, batch_size=None, val_size=None):
         batch_size = batch_size or self.config.batch_size
 
@@ -182,14 +194,21 @@ class BasePipeline(metaclass=ABCMeta):
 
         if Y is not None:
             self._post_data_initialization(Y)
-            dataset = lambda: self._dataset_with_targets(Xs, Y)
-        else:
-            dataset = lambda: self._dataset_without_targets(Xs)
 
-        val_dataset = lambda: dataset().shuffle(shuffle_buffer_size, seed=self.config.seed).take(
-            val_size).batch(batch_size, drop_remainder=False).prefetch(prefetch_buffer)
-        train_dataset = lambda: dataset().shuffle(shuffle_buffer_size, seed=self.config.seed).skip(
-            val_size).batch(batch_size, drop_remainder=False).repeat(self.config.n_epochs).prefetch(prefetch_buffer)
+        if callable(Xs) or Y is None:
+            dataset = self._make_dataset(Xs, Y)
+            val_dataset_unbatched = lambda: dataset().shuffle(shuffle_buffer_size, seed=self.config.seed).take(val_size)
+            train_dataset_unbatched = lambda: dataset().shuffle(shuffle_buffer_size, seed=self.config.seed).skip(val_size)
+        else:
+            Xs_tr, Xs_va, Y_tr, Y_va = train_test_split(Xs, Y, test_size=val_size, random_state=self.config.seed)
+            Xs_tr, Y_tr = self.resampling(Xs_tr, Y_tr)
+            self.config.dataset_size = len(Xs_tr)
+            val_dataset_unbatched = self._make_dataset(Xs_tr, Y_tr)
+            train_dataset_unbatched = lambda : self._make_dataset(Xs_va, Y_va)().shuffle(shuffle_buffer_size, self.config.seed)
+
+        val_dataset = lambda: val_dataset_unbatched().batch(batch_size, drop_remainder=False).prefetch(prefetch_buffer)
+        train_dataset = lambda: train_dataset_unbatched().batch(batch_size, drop_remainder=False).repeat(
+            self.config.n_epochs).prefetch(prefetch_buffer)
 
         return val_dataset, train_dataset, val_size, val_interval
 
