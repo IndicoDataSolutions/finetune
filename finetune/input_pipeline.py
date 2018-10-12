@@ -4,6 +4,7 @@ import sys
 import math
 from abc import ABCMeta, abstractmethod
 
+import random
 import tqdm
 import numpy as np
 import tensorflow as tf
@@ -20,16 +21,17 @@ LOGGER = logging.getLogger('finetune')
 
 class ProgressBar(object):
   
-    def __init__(self, n_batches, n_epochs=None, n_prefetch=0, mode='train'):
+    def __init__(self, input_pipeline, batch_size, n_examples=None, val_size=0, mode='train'):
         if mode not in ('train', 'predict'):
             raise FinetuneError("Invalid value for `TQDM` mode: {}".format(mode))
         self.mode = mode
-        # self.iterations = -n_prefetch
+        self.input_pipeline = input_pipeline
         self.iterations = 0
-        self.n_epochs = n_epochs
-        self.n_batches = n_batches
-        self.n_prefetch = n_prefetch
+        self.n_epochs = self.input_pipeline.config.n_epochs
         self.progress_bar = None
+        self.batch_size = batch_size
+        self.val_size = val_size
+        self.n_examples = n_examples 
 
     def epoch_descr(self, current_epoch):
         return "Epoch {}/{}".format(current_epoch, self.n_epochs)
@@ -41,22 +43,24 @@ class ProgressBar(object):
             self.progress_bar.set_description("Inference")
     
     def tf_log_progress(self, *args):
-        args = list(args)
         with tf.control_dependencies([tf.py_func(self.log_progress, (), ())]):
-            args[0] = tf.contrib.framework.nest.map_structure(tf.identity, args[0])
-            return tuple(args)
-
+            return args
+        
     def log_progress(self):
         self.iterations += 1
+
+        if self.progress_bar is None:
+            self.n_examples = self.n_examples or self.input_pipeline.config.dataset_size
+            self.n_examples -= self.val_size
+            self.n_batches = math.ceil(self.n_examples / self.batch_size)
+            self.progress_bar = tqdm.tqdm(total=self.n_batches)
+
         current_epoch = self.iterations // self.n_batches + 1
         current_example = self.iterations % self.n_batches
 
         if current_example == 0 and current_epoch != 1:
             current_epoch -= 1
             current_example = self.n_batches
-
-        if self.progress_bar is None and self.iterations > 0:
-            self.progress_bar = tqdm.tqdm(total=self.n_batches)
 
         if self.progress_bar is not None:
             self.write_description(current_epoch)
@@ -159,8 +163,8 @@ class BasePipeline(metaclass=ABCMeta):
             map(lambda xy: self.text_to_tokens_mask(*xy), dataset()))
         shape_def = self.feed_shape_type_def()
         if not callable(Y) and self.config.chunk_long_sequences:
-            dataset_encoded_list = list(dataset_encoded())  # come up with a more principled way to do this .
-            dataset_encoded = lambda :dataset_encoded_list
+            dataset_encoded_list = list(dataset_encoded())  # come up with a more principled way to do this.
+            dataset_encoded = lambda: dataset_encoded_list
             self.config.dataset_size = len(dataset_encoded_list)
         return Dataset.from_generator(dataset_encoded, *shape_def)
 
@@ -206,11 +210,10 @@ class BasePipeline(metaclass=ABCMeta):
 
         return int(val_size), int(val_interval)
 
-    def get_train_input_fns(self, Xs, Y=None, batch_size=None, val_size=None):
+    def get_train_input_fns(self, Xs, Y=None, batch_size=None):
         batch_size = batch_size or self.config.batch_size
 
         shuffle_buffer_size = self.config.shuffle_buffer_size
-        val_size = val_size or 0
         prefetch_buffer = 2  # breaks the pipeline to allow concurrency
 
         if callable(Xs):
@@ -229,8 +232,7 @@ class BasePipeline(metaclass=ABCMeta):
             n_examples=len(Xs) if not callable(Xs) else self.config.dataset_size,
             batch_size=batch_size or self.config.batch_size
         )
-
-        self.config.dataset_size -= val_size
+        self.config.val_size = val_size
 
         if Y is not None:
             self._post_data_initialization(Y)
@@ -238,23 +240,20 @@ class BasePipeline(metaclass=ABCMeta):
         else:
             dataset = lambda: self._dataset_without_targets(Xs)
 
-        n_batches = math.ceil(self.config.dataset_size / batch_size)
-        train_tqdm = ProgressBar(n_batches=n_batches, n_epochs=self.config.n_epochs, n_prefetch=prefetch_buffer)
-        val_dataset = lambda: dataset().shuffle(shuffle_buffer_size, seed=self.config.seed).take(
-            val_size).batch(batch_size, drop_remainder=False).prefetch(prefetch_buffer)
-        train_dataset = lambda: dataset().shuffle(shuffle_buffer_size, seed=self.config.seed).skip(
-            val_size).batch(batch_size, drop_remainder=False).repeat(self.config.n_epochs).map(
+        train_tqdm = ProgressBar(self, batch_size=batch_size, val_size=val_size)
+        val_dataset = lambda: dataset().take(
+            val_size).shuffle(shuffle_buffer_size, seed=self.config.seed).batch(batch_size, drop_remainder=False).prefetch(prefetch_buffer)
+        train_dataset = lambda: dataset().skip(
+            val_size).shuffle(shuffle_buffer_size, seed=self.config.seed).batch(batch_size, drop_remainder=False).repeat(self.config.n_epochs).map(
                 train_tqdm.tf_log_progress
             ).prefetch(prefetch_buffer)
-
         return val_dataset, train_dataset, val_size, val_interval
 
     def get_predict_input_fn(self, Xs, batch_size=None):
         batch_size = batch_size or self.config.batch_size
         prefetch_buffer = 2  # breaks the pipeline to allow concurrency
         tf_dataset = lambda: self._dataset_without_targets(Xs)
-        predict_tqdm = ProgressBar(n_batches=len(Xs), mode='predict')
-        return lambda: tf_dataset().batch(batch_size).map(predict_tqdm.tf_log_progress).prefetch(prefetch_buffer)
+        return lambda: tf_dataset().batch(batch_size).prefetch(prefetch_buffer)
 
     @property
     def pad_idx(self):

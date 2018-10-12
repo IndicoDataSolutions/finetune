@@ -161,7 +161,7 @@ class BaseModel(object, metaclass=ABCMeta):
         
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            estimator.train(train_input_fn, hooks=train_hooks, steps=num_steps)
+            estimator.train(train_input_fn, hooks=train_hooks)
 
     def get_estimator(self, force_build_lm=False):
         conf = tf.ConfigProto(
@@ -207,7 +207,6 @@ class BaseModel(object, metaclass=ABCMeta):
     def _inference(self, Xs, mode=None):
         estimator = self.get_estimator()
         input_func = self.input_pipeline.get_predict_input_fn(Xs)
-
         pred_gen = list(
             map(
                 lambda y: y[mode] if mode else y, estimator.predict(
