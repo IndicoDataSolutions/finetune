@@ -12,7 +12,6 @@ from finetune.network_modules import sequence_labeler
 from finetune.crf import sequence_decode
 from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_sequence
 from finetune.input_pipeline import BasePipeline, ENCODER
-from finetune.estimator_utils import ProgressHook
 
 
 class SequencePipeline(BasePipeline):

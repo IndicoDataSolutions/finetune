@@ -2,9 +2,9 @@ import itertools
 import logging
 import sys
 import math
-
 from abc import ABCMeta, abstractmethod
 
+import tqdm
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.data import Dataset
@@ -16,6 +16,58 @@ from finetune.imbalance import compute_class_weights
 
 ENCODER = TextEncoder()
 LOGGER = logging.getLogger('finetune')
+
+
+class ProgressBar(object):
+  
+    def __init__(self, n_batches, n_epochs=None, n_prefetch=0, mode='train'):
+        if mode not in ('train', 'predict'):
+            raise FinetuneError("Invalid value for `TQDM` mode: {}".format(mode))
+        self.mode = mode
+        # self.iterations = -n_prefetch
+        self.iterations = 0
+        self.n_epochs = n_epochs
+        self.n_batches = n_batches
+        self.n_prefetch = n_prefetch
+        self.progress_bar = None
+
+    def epoch_descr(self, current_epoch):
+        return "Epoch {}/{}".format(current_epoch, self.n_epochs)
+    
+    def write_description(self, current_epoch):
+        if self.mode == 'train':
+            self.progress_bar.set_description(self.epoch_descr(current_epoch))
+        else:
+            self.progress_bar.set_description("Inference")
+    
+    def tf_log_progress(self, *args):
+        args = list(args)
+        with tf.control_dependencies([tf.py_func(self.log_progress, (), ())]):
+            args[0] = tf.contrib.framework.nest.map_structure(tf.identity, args[0])
+            return tuple(args)
+
+    def log_progress(self):
+        self.iterations += 1
+        current_epoch = self.iterations // self.n_batches + 1
+        current_example = self.iterations % self.n_batches
+
+        if current_example == 0 and current_epoch != 1:
+            current_epoch -= 1
+            current_example = self.n_batches
+
+        if self.progress_bar is None and self.iterations > 0:
+            self.progress_bar = tqdm.tqdm(total=self.n_batches)
+
+        if self.progress_bar is not None:
+            self.write_description(current_epoch)
+
+            self.progress_bar.n = current_example
+            self.progress_bar.refresh()
+
+    def __del__(self):
+        # ensure flush to stdout before deletion
+        if self.progress_bar is not None:
+            self.progress_bar.refresh()
 
 
 class BasePipeline(metaclass=ABCMeta):
@@ -186,10 +238,14 @@ class BasePipeline(metaclass=ABCMeta):
         else:
             dataset = lambda: self._dataset_without_targets(Xs)
 
+        n_batches = math.ceil(self.config.dataset_size / batch_size)
+        train_tqdm = ProgressBar(n_batches=n_batches, n_epochs=self.config.n_epochs, n_prefetch=prefetch_buffer)
         val_dataset = lambda: dataset().shuffle(shuffle_buffer_size, seed=self.config.seed).take(
             val_size).batch(batch_size, drop_remainder=False).prefetch(prefetch_buffer)
         train_dataset = lambda: dataset().shuffle(shuffle_buffer_size, seed=self.config.seed).skip(
-            val_size).batch(batch_size, drop_remainder=False).repeat(self.config.n_epochs).prefetch(prefetch_buffer)
+            val_size).batch(batch_size, drop_remainder=False).repeat(self.config.n_epochs).map(
+                train_tqdm.tf_log_progress
+            ).prefetch(prefetch_buffer)
 
         return val_dataset, train_dataset, val_size, val_interval
 
@@ -197,7 +253,8 @@ class BasePipeline(metaclass=ABCMeta):
         batch_size = batch_size or self.config.batch_size
         prefetch_buffer = 2  # breaks the pipeline to allow concurrency
         tf_dataset = lambda: self._dataset_without_targets(Xs)
-        return lambda: tf_dataset().batch(batch_size).prefetch(prefetch_buffer)
+        predict_tqdm = ProgressBar(n_batches=len(Xs), mode='predict')
+        return lambda: tf_dataset().batch(batch_size).map(predict_tqdm.tf_log_progress).prefetch(prefetch_buffer)
 
     @property
     def pad_idx(self):
