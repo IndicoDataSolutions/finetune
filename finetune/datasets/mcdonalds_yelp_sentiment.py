@@ -58,6 +58,6 @@ if __name__ == "__main__":
     for threshold in np.linspace(0, 1, 5):
         print("Threshold = {}".format(threshold))
         print(classification_report(
-            model.label_encoder.transform(testY),
-            model.label_encoder.transform(model.predict(testX, threshold=threshold))
+            model.input_pipeline.label_encoder.transform(testY),
+            model.input_pipeline.label_encoder.transform(model.predict(testX, threshold=threshold))
         ))

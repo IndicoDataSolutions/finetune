@@ -1,3 +1,5 @@
+import logging
+
 import os
 import subprocess
 import traceback
@@ -7,7 +9,7 @@ import tensorflow as tf
 from functools import lru_cache
 from collections import namedtuple
 
-# CONSTANTS
+LOGGER = logging.getLogger('finetune')
 PAD_TOKEN = '<PAD>'
 
 
@@ -25,19 +27,26 @@ def all_gpus():
         sp = subprocess.Popen(['nvidia-smi', '-L'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         response = sp.communicate()[0]
         gpu_list = response.decode('utf-8').strip().split('\n')
-        device_ids = []
+        device_ids = {}
         for i, gpu in enumerate(gpu_list):
             # May be worth logging GPU description
             device_id_str, _, description = gpu.partition(':')
             assert int(device_id_str.split(' ')[-1]) == i
-            device_ids.append(i)
+            device_ids[i] = description
 
         cuda_visible_devices = os.getenv("CUDA_VISIBLE_DEVICES")
         if cuda_visible_devices:
-            device_ids = [
-                device_id for device_id in device_ids
+            device_ids = {
+                device_id: description 
+                for device_id, description in device_ids.items()
                 if str(device_id) in cuda_visible_devices.split(',')
-            ]
+            }
+        LOGGER.info(" Visible Devices: {{{}}}".format(
+            ", ".join([
+                "{}:{}".format(device_id, description.split('(')[0]).strip()
+                for device_id, description in device_ids.items()
+            ])
+        ))
     except:
         # Failed to parse out available GPUs properly
         warnings.warn("Failed to find available GPUS.  Falling back to CPU only mode.")
@@ -141,7 +150,7 @@ def get_default_config():
     :return: Config object.
     """
     return Settings(
-        dataset_size=1000,
+        dataset_size=None,
         batch_size=2,
         visible_gpus=all_gpus(),
         n_epochs=GridSearchable(3, [1, 2, 3, 4]),
@@ -176,14 +185,14 @@ def get_default_config():
         multi_label_sequences=False,
         multi_label_threshold=0.5,
         autosave_path=None,
-        keep_best_model=True,
+        keep_best_model=False,
         early_stopping_steps=100,
         tensorboard_folder=None,
         shuffle_buffer_size=100,
         min_secs_between_eval=60,
         log_device_placement=False,
         soft_device_placement=True,
-        save_adam_vars=False,
+        save_adam_vars=True,
         num_layers_trained=12,
         train_embeddings=True,
         class_weights=None,

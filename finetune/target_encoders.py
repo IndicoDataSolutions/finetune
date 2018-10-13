@@ -89,6 +89,9 @@ class IDEncoder(BaseEncoder):
     def transform(self, x):
         return x
 
+    def fit(self, x):
+        return x
+
     def fit_transform(self, x):
         return x
 

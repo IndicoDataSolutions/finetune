@@ -1,4 +1,13 @@
+import math
+import logging
+
+import tqdm
 import tensorflow as tf
+from tensorflow.python.training import training
+
+from finetune.errors import FinetuneError
+
+LOGGER = logging.getLogger("finetune")
 
 
 class PatchedParameterServerStrategy(tf.contrib.distribute.ParameterServerStrategy):

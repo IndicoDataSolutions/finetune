@@ -19,6 +19,7 @@ from sklearn.metrics import accuracy_score, recall_score
 
 from finetune import Classifier
 from finetune.datasets import generic_download
+from finetune.input_pipeline import ENCODER
 from finetune.config import get_config, get_small_model_config
 from finetune.errors import FinetuneError
 
@@ -26,7 +27,7 @@ SST_FILENAME = "SST-binary.csv"
 
 
 class TestClassifier(unittest.TestCase):
-    n_sample = 20
+    n_sample = 26
     n_hidden = 768
     dataset_path = os.path.join(
         'Data', 'Classify', 'SST-binary.csv'
@@ -261,7 +262,7 @@ class TestClassifier(unittest.TestCase):
         # A dirty mock to make all model inferences output a hundred _classify_ tokens
         fake_estimator = MagicMock()
         model.get_estimator = lambda *args, **kwargs: fake_estimator
-        fake_estimator.predict = MagicMock(return_value=iter([{"GEN_TEXT" :100 * [model.input_pipeline.encoder['_classify_']]}]))
+        fake_estimator.predict = MagicMock(return_value=iter([{"GEN_TEXT" :100 * [ENCODER['_classify_']]}]))
 
         lm_out = model.generate_text()
         self.assertEqual(lm_out, '_start__classify_')

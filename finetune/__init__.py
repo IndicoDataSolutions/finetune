@@ -1,3 +1,8 @@
+import os
+import logging
+
+import tensorflow as tf
+
 from finetune.multifield import MultifieldClassifier, MultifieldRegressor
 from finetune.classifier import Classifier
 from finetune.regressor import Regressor
@@ -8,6 +13,12 @@ from finetune.multiple_choice import MultipleChoice
 
 __version__, VERSION, version = ("0.4.1",) * 3
 
-import logging
-log = logging.getLogger('tensorflow')
-log.setLevel(logging.DEBUG)
+
+# Logging configuration
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+tf.logging.set_verbosity(tf.logging.ERROR)
+
+logging.basicConfig(level=logging.INFO)
+LOGGER = logging.getLogger('finetune')
+LOGGER.setLevel(logging.INFO)
