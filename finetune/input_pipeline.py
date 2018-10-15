@@ -203,8 +203,8 @@ class BasePipeline(metaclass=ABCMeta):
             Xs_tr, Xs_va, Y_tr, Y_va = train_test_split(Xs, Y, test_size=val_size, random_state=self.config.seed)
             Xs_tr, Y_tr = self.resampling(Xs_tr, Y_tr)
             self.config.dataset_size = len(Xs_tr)
-            val_dataset_unbatched = self._make_dataset(Xs_tr, Y_tr)
-            train_dataset_unbatched = lambda : self._make_dataset(Xs_va, Y_va)().shuffle(shuffle_buffer_size, self.config.seed)
+            val_dataset_unbatched = self._make_dataset(Xs_va, Y_va)
+            train_dataset_unbatched = lambda: self._make_dataset(Xs_tr, Y_tr)().shuffle(shuffle_buffer_size, self.config.seed)
 
         val_dataset = lambda: val_dataset_unbatched().batch(batch_size, drop_remainder=False).prefetch(prefetch_buffer)
         train_dataset = lambda: train_dataset_unbatched().batch(batch_size, drop_remainder=False).repeat(
