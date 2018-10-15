@@ -99,11 +99,11 @@ class BasePipeline(metaclass=ABCMeta):
         if Y_fit is not None:
             self.config.class_weights = compute_class_weights(class_weights=self.config.class_weights, Y=Y_fit)
 
-    def _dataset_with_targets(self, Xs, Y, mode='train'):
+    def _dataset_with_targets(self, Xs, Y, train):
         if not callable(Xs) and not callable(Y):
-            dataset = lambda: zip(Xs, Y)
+            dataset = lambda: zip(self.wrap_tqdm(Xs, train), Y)
         elif callable(Xs) and callable(Y):
-            dataset = lambda: zip(Xs(), Y())  # encode one sample at a time.
+            dataset = lambda: zip(self.wrap_tqdm(Xs(), train), Y())  # encode one sample at a time.
         else:
             raise ValueError("Either neither or both of Xs and Y should be callable, not a mixture")
 
@@ -112,15 +112,15 @@ class BasePipeline(metaclass=ABCMeta):
         shape_def = self.feed_shape_type_def()
         if not callable(Y) and self.config.chunk_long_sequences:
             dataset_encoded_list = list(dataset_encoded())  # come up with a more principled way to do this .
-            dataset_encoded = lambda :dataset_encoded_list
+            dataset_encoded = lambda: dataset_encoded_list
             self.config.dataset_size = len(dataset_encoded_list)
         return Dataset.from_generator(dataset_encoded, *shape_def)
 
-    def _dataset_without_targets(self, Xs):
+    def _dataset_without_targets(self, Xs, train):
         if not callable(Xs):
-            Xs_fn = lambda: Xs
+            Xs_fn = lambda: self.wrap_tqdm(Xs, train)
         else:
-            Xs_fn = Xs
+            Xs_fn = lambda: self.wrap_tqdm(Xs(), train)
         
         dataset_encoded = lambda: itertools.chain.from_iterable(map(self.text_to_tokens_mask, Xs_fn()))
         types, shapes = self.feed_shape_type_def()
@@ -156,29 +156,38 @@ class BasePipeline(metaclass=ABCMeta):
     def resampling(self, Xs, Y):
         return Xs, Y
 
-    def _make_dataset(self, Xs, Y):
+    def _make_dataset(self, Xs, Y, train=False):
         if Y is not None:
-            dataset = lambda: self._dataset_with_targets(Xs, Y)
+            dataset = lambda: self._dataset_with_targets(Xs, Y, train=train)
         else:
-            dataset = lambda: self._dataset_without_targets(Xs)
+            dataset = lambda: self._dataset_without_targets(Xs, train=train)
         return dataset
 
-    def wrap_tqdm(self, gen, skip_tqdm=0):
+    def wrap_tqdm(self, gen, train):
+        if train is None:
+            return gen
         try:
             total = len(gen)
         except:
             total = self.config.dataset_size
 
         def internal_gen():
-            it = iter(gen) if not callable(gen) else gen()
-            desc = "Epoch {}/{}".format(self.epoch, self.config.n_epochs)
-            for i in itertools.chain(itertools.islice(it, skip_tqdm), tqdm.tqdm(it, desc=desc, total=total, miniters=1, leave=False)):
+            it = iter(gen)
+            if train:
+                desc = "Epoch {}/{}".format(self.epoch, self.config.n_epochs)
+            else:
+                desc = "Validation"
+            for _, it in zip(range(self._skip_tqdm), it):
                 yield i
-            self.epoch += 1
-        return internal_gen() if not callable(gen) else internal_gen
+            for i in tqdm.tqdm(it, desc=desc, total=total, miniters=1, leave=self.epoch == self.config.n_epochs and train):
+                yield i
+            if train:
+                self.epoch += 1
+
+        return internal_gen()
 
     def get_train_input_fns(self, Xs, Y=None, batch_size=None, val_size=None):
-        self.epoch = 0
+        self.epoch = 1
         batch_size = batch_size or self.config.batch_size
 
         shuffle_buffer_size = self.config.shuffle_buffer_size
@@ -201,23 +210,24 @@ class BasePipeline(metaclass=ABCMeta):
             n_examples=len(Xs) if not callable(Xs) else self.config.dataset_size,
             batch_size=batch_size or self.config.batch_size
         )
-
         self.config.dataset_size -= val_size
 
         if Y is not None:
             self._post_data_initialization(Y)
 
         if callable(Xs) or Y is None:
-            dataset = self._make_dataset(self.wrap_tqdm(Xs, skip_tqdm=val_size), Y)
+            self._skip_tqdm = val_size
+            dataset = self._make_dataset(Xs, Y, train=True)
             val_dataset_unbatched = lambda: dataset().shuffle(shuffle_buffer_size, seed=self.config.seed).take(val_size)
             train_dataset_unbatched = lambda: dataset().shuffle(shuffle_buffer_size, seed=self.config.seed).skip(val_size)
         else:
+            self._skip_tqdm = 0
             Xs_tr, Xs_va, Y_tr, Y_va = train_test_split(Xs, Y, test_size=val_size, random_state=self.config.seed)
             Xs_tr, Y_tr = self.resampling(Xs_tr, Y_tr)
             self.config.dataset_size = len(Xs_tr)
-            val_dataset_unbatched = self._make_dataset(Xs_va, Y_va)
+            val_dataset_unbatched = self._make_dataset(Xs_va, Y_va, train=False)
 
-            train_dataset_unbatched = lambda: self._make_dataset(self.wrap_tqdm(Xs_tr), Y_tr)().shuffle(shuffle_buffer_size, self.config.seed)
+            train_dataset_unbatched = self._make_dataset(Xs_tr, Y_tr, train=True)
 
         val_dataset = lambda: val_dataset_unbatched().batch(batch_size, drop_remainder=False).cache().prefetch(prefetch_buffer)
         train_dataset = lambda: train_dataset_unbatched().batch(batch_size, drop_remainder=False).repeat(
@@ -228,7 +238,7 @@ class BasePipeline(metaclass=ABCMeta):
     def get_predict_input_fn(self, Xs, batch_size=None):
         batch_size = batch_size or self.config.batch_size
         prefetch_buffer = 2  # breaks the pipeline to allow concurrency
-        tf_dataset = lambda: self._dataset_without_targets(Xs)
+        tf_dataset = lambda: self._dataset_without_targets(Xs, train=None)
         return lambda: tf_dataset().batch(batch_size).prefetch(prefetch_buffer)
 
     @property
