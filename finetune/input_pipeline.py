@@ -5,6 +5,7 @@ import math
 
 from abc import ABCMeta, abstractmethod
 
+import tqdm
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.data import Dataset
@@ -27,6 +28,7 @@ class BasePipeline(metaclass=ABCMeta):
         self.target_dim = None
         self.pad_idx_ = None
         self.rebuild = False
+        self.epoch = 0
 
     @abstractmethod
     def _target_encoder(self):
@@ -166,7 +168,17 @@ class BasePipeline(metaclass=ABCMeta):
             dataset = lambda: self._dataset_without_targets(Xs)
         return dataset
 
+    def wrap_tqdm(self, iter):
+        self.epoch += 1
+        try:
+            total = len(iter)
+        except:
+            total = self.config.dataset_size
+        desc = "Epoch {}/{}".format(self.epoch, self.config.n_epochs)
+        return tqdm.tqdm(iter, desc=desc, total=total, miniters=1, leave=False)
+
     def get_train_input_fns(self, Xs, Y=None, batch_size=None, val_size=None):
+        self.epoch = 0
         batch_size = batch_size or self.config.batch_size
 
         shuffle_buffer_size = self.config.shuffle_buffer_size
@@ -196,7 +208,7 @@ class BasePipeline(metaclass=ABCMeta):
             self._post_data_initialization(Y)
 
         if callable(Xs) or Y is None:
-            dataset = self._make_dataset(Xs, Y)
+            dataset = self._make_dataset(lambda: self.wrap_tqdm(Xs()), Y)
             val_dataset_unbatched = lambda: dataset().shuffle(shuffle_buffer_size, seed=self.config.seed).take(val_size)
             train_dataset_unbatched = lambda: dataset().shuffle(shuffle_buffer_size, seed=self.config.seed).skip(val_size)
         else:
@@ -204,9 +216,10 @@ class BasePipeline(metaclass=ABCMeta):
             Xs_tr, Y_tr = self.resampling(Xs_tr, Y_tr)
             self.config.dataset_size = len(Xs_tr)
             val_dataset_unbatched = self._make_dataset(Xs_va, Y_va)
-            train_dataset_unbatched = lambda: self._make_dataset(Xs_tr, Y_tr)().shuffle(shuffle_buffer_size, self.config.seed)
 
-        val_dataset = lambda: val_dataset_unbatched().batch(batch_size, drop_remainder=False).prefetch(prefetch_buffer)
+            train_dataset_unbatched = lambda: self._make_dataset(self.wrap_tqdm(Xs_tr), Y_tr)().shuffle(shuffle_buffer_size, self.config.seed)
+
+        val_dataset = lambda: val_dataset_unbatched().batch(batch_size, drop_remainder=False).cache().prefetch(prefetch_buffer)
         train_dataset = lambda: train_dataset_unbatched().batch(batch_size, drop_remainder=False).repeat(
             self.config.n_epochs).prefetch(prefetch_buffer)
 

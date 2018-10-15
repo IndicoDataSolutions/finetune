@@ -151,11 +151,11 @@ class BaseModel(object, metaclass=ABCMeta):
                 steps_per_epoch=steps_per_epoch,
                 early_stopping_steps=self.config.early_stopping_steps,
                 eval_frequency=val_interval
-            ),
-            ProgressHook(
-                n_batches=num_steps,
-                n_epochs=self.config.n_epochs
-            )
+            )#,
+#            ProgressHook(
+#                n_batches=num_steps,
+ #               n_epochs=self.config.n_epochs
+  #`          )
         ]
         if val_size > 0:
             train_hooks.append(
@@ -211,26 +211,18 @@ class BaseModel(object, metaclass=ABCMeta):
 
     def _inference(self, Xs, mode=None):
         estimator = self.get_estimator()
-        
-        hooks = []
-        try:
-            steps = self._n_steps(
-                n_examples=len(Xs), 
-                batch_size=self.config.batch_size,
-                n_gpus=1
-            )
-            hooks.append(ProgressHook(n_batches=steps, mode='predict'))
-        except Exception:
-            # generator of unkown length, can't log progress
-            pass
-        
         input_func = self.input_pipeline.get_predict_input_fn(Xs)
-        
+        length = len(Xs) if not callable(Xs) else None
 
         pred_gen = list(
             map(
-                lambda y: y[mode] if mode else y, estimator.predict(
-                    input_fn=input_func, predict_keys=mode, hooks=hooks
+                lambda y: y[mode] if mode else y,
+                tqdm.tqdm(
+                    estimator.predict(
+                        input_fn=input_func, predict_keys=mode
+                    ),
+                    total=length,
+                    desc="Inference"
                 )
             )
         )
