@@ -28,7 +28,7 @@ from finetune.config import get_default_config
 from finetune.saver import Saver
 from finetune.errors import FinetuneError
 from finetune.model import get_model_fn, PredictMode
-from finetune.estimator_utils import PatchedParameterServerStrategy, ProgressHook
+from finetune.estimator_utils import PatchedParameterServerStrategy
 
 JL_BASE = os.path.join(os.path.dirname(__file__), "model", "Base_model.jl")
 
@@ -151,11 +151,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 steps_per_epoch=steps_per_epoch,
                 early_stopping_steps=self.config.early_stopping_steps,
                 eval_frequency=val_interval
-            )#,
-#            ProgressHook(
-#                n_batches=num_steps,
- #               n_epochs=self.config.n_epochs
-  #`          )
+            )
         ]
         if val_size > 0:
             train_hooks.append(
