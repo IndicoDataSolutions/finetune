@@ -119,13 +119,8 @@ class BasePipeline(metaclass=ABCMeta):
     def _dataset_without_targets(self, Xs):
         if not callable(Xs):
             Xs_fn = lambda: Xs
-            self._n_examples = len(Xs)
         else:
             Xs_fn = Xs
-            try:
-                self._n_examples = len(Xs)
-            except TypeError:
-                pass
         
         dataset_encoded = lambda: itertools.chain.from_iterable(map(self.text_to_tokens_mask, Xs_fn()))
         types, shapes = self.feed_shape_type_def()
@@ -175,12 +170,12 @@ class BasePipeline(metaclass=ABCMeta):
             total = self.config.dataset_size
 
         def internal_gen():
-            it = iter(gen)
+            it = iter(gen) if not callable(gen) else gen()
             desc = "Epoch {}/{}".format(self.epoch, self.config.n_epochs)
             for i in itertools.chain(itertools.islice(it, skip_tqdm), tqdm.tqdm(it, desc=desc, total=total, miniters=1, leave=False)):
                 yield i
             self.epoch += 1
-        return internal_gen()
+        return internal_gen() if not callable(gen) else internal_gen
 
     def get_train_input_fns(self, Xs, Y=None, batch_size=None, val_size=None):
         self.epoch = 0
@@ -213,7 +208,7 @@ class BasePipeline(metaclass=ABCMeta):
             self._post_data_initialization(Y)
 
         if callable(Xs) or Y is None:
-            dataset = self._make_dataset(lambda: self.wrap_tqdm(Xs(), skip_tqdm=val_size), Y)
+            dataset = self._make_dataset(self.wrap_tqdm(Xs, skip_tqdm=val_size), Y)
             val_dataset_unbatched = lambda: dataset().shuffle(shuffle_buffer_size, seed=self.config.seed).take(val_size)
             train_dataset_unbatched = lambda: dataset().shuffle(shuffle_buffer_size, seed=self.config.seed).skip(val_size)
         else:
