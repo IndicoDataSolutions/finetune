@@ -178,7 +178,7 @@ class BasePipeline(metaclass=ABCMeta):
             else:
                 desc = "Validation"
             for _, it in zip(range(self._skip_tqdm), it):
-                yield i
+                yield it
             for i in tqdm.tqdm(it, desc=desc, total=total, miniters=1, leave=self.epoch == self.config.n_epochs and train):
                 yield i
             if train:
