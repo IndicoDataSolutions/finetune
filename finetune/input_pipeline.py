@@ -101,9 +101,9 @@ class BasePipeline(metaclass=ABCMeta):
 
     def _dataset_with_targets(self, Xs, Y, train):
         if not callable(Xs) and not callable(Y):
-            dataset = lambda: zip(self.wrap_tqdm(Xs, train), Y)
+            dataset = lambda: zip(Xs, Y)
         elif callable(Xs) and callable(Y):
-            dataset = lambda: zip(self.wrap_tqdm(Xs(), train), Y())  # encode one sample at a time.
+            dataset = lambda: zip(Xs(), Y())  # encode one sample at a time.
         else:
             raise ValueError("Either neither or both of Xs and Y should be callable, not a mixture")
 
@@ -112,16 +112,17 @@ class BasePipeline(metaclass=ABCMeta):
         shape_def = self.feed_shape_type_def()
         if not callable(Y) and self.config.chunk_long_sequences:
             dataset_encoded_list = list(dataset_encoded())  # come up with a more principled way to do this .
-            dataset_encoded = lambda: dataset_encoded_list
             self.config.dataset_size = len(dataset_encoded_list)
-        return Dataset.from_generator(dataset_encoded, *shape_def)
+        return Dataset.from_generator(lambda: self.wrap_tqdm(dataset_encoded(), train), *shape_def)
 
     def _dataset_without_targets(self, Xs, train):
         if not callable(Xs):
             Xs_fn = lambda: self.wrap_tqdm(Xs, train)
         else:
             Xs_fn = lambda: self.wrap_tqdm(Xs(), train)
-        
+
+        print("Before", tf.contrib.framework.nest.map_structure(type, Xs))
+
         dataset_encoded = lambda: itertools.chain.from_iterable(map(self.text_to_tokens_mask, Xs_fn()))
         types, shapes = self.feed_shape_type_def()
         return Dataset.from_generator(dataset_encoded, types[0], shapes[0])  # 0s cut out the targets
@@ -165,7 +166,7 @@ class BasePipeline(metaclass=ABCMeta):
 
     def wrap_tqdm(self, gen, train):
         if train is None:
-            return gen
+            return  gen
         try:
             total = len(gen)
         except:
@@ -177,8 +178,8 @@ class BasePipeline(metaclass=ABCMeta):
                 desc = "Epoch {}/{}".format(self.epoch, self.config.n_epochs)
             else:
                 desc = "Validation"
-            for _, it in zip(range(self._skip_tqdm), it):
-                yield it
+            for _, i in zip(range(self._skip_tqdm), it):
+                yield i
             for i in tqdm.tqdm(it, desc=desc, total=total, miniters=1, leave=self.epoch == self.config.n_epochs and train):
                 yield i
             if train:
