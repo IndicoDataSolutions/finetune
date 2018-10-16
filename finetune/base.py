@@ -1,9 +1,10 @@
 import os
 import random
+import gc
+import weakref
 import atexit
 import warnings
 import itertools
-import sys
 import math
 from abc import ABCMeta, abstractmethod
 from copy import deepcopy
@@ -32,8 +33,6 @@ from finetune.estimator_utils import PatchedParameterServerStrategy
 
 JL_BASE = os.path.join(os.path.dirname(__file__), "model", "Base_model.jl")
 
-
-
 class BaseModel(object, metaclass=ABCMeta):
     """
     A sklearn-style task agnostic base class for finetuning a Transformer language model.
@@ -47,7 +46,14 @@ class BaseModel(object, metaclass=ABCMeta):
         :param **kwargs: key-value pairs of config items to override.
         """
 
-        atexit.register(self.__del__)
+        weak_self = weakref.ref(self)
+
+        def cleanup():
+            strong_self = weak_self()
+            if strong_self is not None:
+                BaseModel.__del__(strong_self)
+
+        atexit.register(cleanup)
         tf.reset_default_graph()
 
         self.config = config or get_default_config()
