@@ -1,10 +1,17 @@
+import warnings
+
 import tensorflow as tf
 
-from finetune.base import BaseModel, DROPOUT_OFF
+from finetune.base import BaseModel
 from finetune.target_encoders import MultilabelClassificationEncoder
 from finetune.network_modules import multi_classifier
 
-import warnings
+from finetune.input_pipeline import BasePipeline
+
+
+class MultilabelClassificationPipeline(BasePipeline):
+    def _target_encoder(self):
+        return MultilabelClassificationEncoder()
 
 
 class MultiLabelClassifier(BaseModel):
@@ -18,6 +25,9 @@ class MultiLabelClassifier(BaseModel):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.threshold_placeholder = None
+
+    def _get_input_pipeline(self):
+        return MultilabelClassificationPipeline(self.config)
 
     def featurize(self, X):
         """
@@ -35,8 +45,8 @@ class MultiLabelClassifier(BaseModel):
         :param X: list or array of text to embed.
         :returns: list of class labels.
         """
-        threshold = threshold or self.config.multi_label_threshold
-        return self._predict(X, threshold=threshold)
+        self.config._threshold = threshold or self.config.multi_label_threshold
+        return self._predict(X)
 
     def predict_proba(self, X):
         """
@@ -56,15 +66,11 @@ class MultiLabelClassifier(BaseModel):
         """
         return super().finetune(X, Y=Y, batch_size=batch_size)
 
-    def _target_encoder(self):
-        return MultilabelClassificationEncoder()
-
     def _target_model(self, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
         return multi_classifier(
             hidden=featurizer_state['features'],
             targets=targets,
             n_targets=n_outputs,
-            dropout_placeholder=self.do_dropout,
             config=self.config,
             train=train,
             reuse=reuse,
@@ -72,27 +78,8 @@ class MultiLabelClassifier(BaseModel):
         )
 
     def _predict_op(self, logits, **kwargs):
-        self.threshold_placeholder = tf.placeholder(tf.float32)
-        return tf.cast(tf.nn.sigmoid(logits) > self.threshold_placeholder, tf.int32)
+        threshold = kwargs.get("threshold", self.config.multi_label_threshold)
+        return tf.cast(tf.nn.sigmoid(logits) > threshold, tf.int32)
 
     def _predict_proba_op(self, logits, **kwargs):
         return tf.nn.sigmoid(logits)
-
-    def _predict(self, X, threshold):
-        predictions = []
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore")
-            for xmb, mmb in self._infer_prep(X):
-                output = self._eval(
-                    self.predict_op,
-                    feed_dict={
-                        self.X: xmb,
-                        self.M: mmb,
-                        self.do_dropout: DROPOUT_OFF,
-                        self.threshold_placeholder: threshold
-                    }
-                )
-                prediction = output.get(self.predict_op)
-                formatted_predictions = self.label_encoder.inverse_transform(prediction)
-                predictions.extend(formatted_predictions)
-        return predictions

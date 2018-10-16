@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 
-from finetune.utils import convert_gradient_to_tensor, shape_list
+from finetune.utils import shape_list
 from finetune.activations import act_fns
 
 
@@ -17,9 +17,9 @@ def norm(x, scope, axis=[-1], e=1e-5):
         return x
 
 
-def dropout(x, pdrop, train, dropout_placeholder):
+def dropout(x, pdrop, train):
     if train and pdrop > 0:
-        x = tf.nn.dropout(x, 1 - (pdrop * dropout_placeholder))
+        x = tf.nn.dropout(x, 1 - pdrop)
     return x
 
 
@@ -31,7 +31,7 @@ def mask_attn_weights(w):
     return w
 
 
-def _attn(q, k, v, attn_pdrop, dropout_placeholder, train=False, scale=False, mask=True):
+def _attn(q, k, v, attn_pdrop, train=False, scale=False, mask=True):
     w = tf.matmul(q, k)
 
     if scale:
@@ -42,7 +42,7 @@ def _attn(q, k, v, attn_pdrop, dropout_placeholder, train=False, scale=False, ma
         w = mask_attn_weights(w)
     w = tf.nn.softmax(w)
 
-    w = dropout(w, attn_pdrop, train, dropout_placeholder)
+    w = dropout(w, attn_pdrop, train)
 
     a = tf.matmul(w, v)
     return a
@@ -85,7 +85,7 @@ def conv1d(x, scope, nf, rf, w_init=tf.random_normal_initializer(stddev=0.02), b
         return c
 
 
-def attn(x, scope, n_state, n_head, resid_pdrop, attn_pdrop, dropout_placeholder, train=False, scale=False, mask=True):
+def attn(x, scope, n_state, n_head, resid_pdrop, attn_pdrop, train=False, scale=False, mask=True):
     assert n_state % n_head == 0
     with tf.variable_scope(scope):
         c = conv1d(x, 'c_attn', n_state * 3, 1, train=train)
@@ -93,36 +93,35 @@ def attn(x, scope, n_state, n_head, resid_pdrop, attn_pdrop, dropout_placeholder
         q = split_heads(q, n_head)
         k = split_heads(k, n_head, k=True)
         v = split_heads(v, n_head)
-        a = _attn(q, k, v, attn_pdrop=attn_pdrop, dropout_placeholder=dropout_placeholder, train=train, scale=scale,
+        a = _attn(q, k, v, attn_pdrop=attn_pdrop, train=train, scale=scale,
                   mask=mask)
         a = merge_heads(a)
         a = conv1d(a, 'c_proj', n_state, 1, train=train)
-        a = dropout(a, resid_pdrop, train, dropout_placeholder)
+        a = dropout(a, resid_pdrop, train)
         return a
 
 
-def mlp(x, scope, n_state, act_fn, resid_pdrop, dropout_placeholder, train=False):
+def mlp(x, scope, n_state, act_fn, resid_pdrop, train=False):
     with tf.variable_scope(scope):
         nx = shape_list(x)[-1]
         act = act_fns[act_fn]
         h = act(conv1d(x, 'c_fc', n_state, 1, train=train))
         h2 = conv1d(h, 'c_proj', nx, 1, train=train)
-        h2 = dropout(h2, resid_pdrop, train, dropout_placeholder)
+        h2 = dropout(h2, resid_pdrop, train)
         return h2
 
 
-def block(x, n_head, act_fn, resid_pdrop, attn_pdrop, scope, dropout_placeholder, train=False, scale=False):
+def block(x, n_head, act_fn, resid_pdrop, attn_pdrop, scope, train=False, scale=False):
     with tf.variable_scope(scope):
         nx = shape_list(x)[-1]
-        a = attn(x, 'attn', nx, n_head, resid_pdrop, attn_pdrop, dropout_placeholder, train=train, scale=scale)
+        a = attn(x, 'attn', nx, n_head, resid_pdrop, attn_pdrop, train=train, scale=scale)
         n = norm(x + a, 'ln_1')
-        m = mlp(n, 'mlp', nx * 4, act_fn, resid_pdrop, dropout_placeholder, train=train)
+        m = mlp(n, 'mlp', nx * 4, act_fn, resid_pdrop, train=train)
         h = norm(n + m, 'ln_2')
         return h
 
 
 def embed(X, we):
-    we = convert_gradient_to_tensor(we)
     e = tf.gather(we, X)
     #    h = add_timing_signal_1d(e[:, :, 0])
     h = tf.reduce_sum(e, 2)

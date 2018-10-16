@@ -1,12 +1,52 @@
 import numpy as np
 
 from finetune.base import BaseModel
+from finetune.input_pipeline import BasePipeline
 from finetune.encoding import ArrayEncodedOutput
 from finetune.target_encoders import IDEncoder
 import tensorflow as tf
 
 from finetune.network_modules import multi_choice_question
 from finetune.utils import list_transpose
+
+class MultipleChoicePipeline(BasePipeline):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.num_answers = None
+
+
+    def _text_to_ids(self, Xs, Y=None, pad_token=None):
+        """
+        Format multi question examples as a list of IDs
+        """
+        q, answer_list = Xs
+        pairs = [[q, answer_list[idx]] for idx in range(len(answer_list))]
+        arrays = []
+        for pair in pairs:
+            arrays.append(next(super()._text_to_ids(pair, Y=Y)))
+
+        kwargs = arrays[0]._asdict()
+        kwargs['tokens'] = [arr.tokens for arr in arrays]
+        kwargs['token_ids'] = np.stack([arr.token_ids for arr in arrays], 0)
+        kwargs['mask'] = np.stack([arr.mask for arr in arrays], 0)
+        yield ArrayEncodedOutput(**kwargs)
+
+    def _format_for_encoding(self, X):
+        return [X]
+
+    def feed_shape_type_def(self):
+        TS = tf.TensorShape
+        return ({"tokens": tf.int32, "mask": tf.float32, 'dataset_step': tf.int32}, tf.int32), (
+            {
+                "tokens": TS([self.num_answers, self.config.max_length, 2]),
+                "mask": TS([self.num_answers, self.config.max_length]), 
+                'dataset_step': TS([])
+            }, 
+            TS([])
+        )
+
+    def _target_encoder(self):
+        return IDEncoder()
 
 
 class MultipleChoice(BaseModel):
@@ -20,31 +60,10 @@ class MultipleChoice(BaseModel):
         super().__init__(*args, **kwargs)
         self.num_answers = None
 
-    def _text_to_ids(self, Xs, Y=None):
-        """
-        Format multi question examples as a list of IDs
-        """
-        qa_pairs = [
-            [q, answer_list[0]] 
-            for q, answer_list in Xs
-        ]
-        arrays = [
-            super(MultipleChoice, self)._text_to_ids(
-                [
-                    [q, answer_list[idx]] 
-                    for q, answer_list in Xs
-                ],
-                Y=Y
-            ) 
-            for idx in range(self.num_answers)
-        ]
-        kwargs = arrays[0]._asdict()
-        kwargs['tokens'] = [arr.tokens for arr in arrays]
-        kwargs['token_ids'] = np.stack([arr.token_ids for arr in arrays], 1)
-        kwargs['mask'] = np.stack([arr.mask for arr in arrays], 1)
-        return ArrayEncodedOutput(**kwargs)
+    def _get_input_pipeline(self):
+        return MultipleChoicePipeline(self.config)
 
-    def finetune(self, questions, answers, correct_answer, batch_size=None, fit_lm_only=False):
+    def finetune(self, questions, answers, correct_answer, fit_lm_only=False):
         """
         :param questions: List or array of text, shape [batch]
         :param answers: List or array of text, shape [batch, n_answers], must contain the correct answer for each entry.
@@ -75,25 +94,15 @@ class MultipleChoice(BaseModel):
                         "Correct answer {} is not contained in possible answers {}".format(correct, others))
 
         self.num_answers = len(answers[0])
-        arr_encoded = self._text_to_ids(list(zip(questions, answers)))
+        self.input_pipeline.num_answers = self.num_answers #TODO(BEN) factor this inside the post_data_init
         labels = None if fit_lm_only else answer_idx
-        return self._training_loop(arr_encoded, Y=labels, batch_size=batch_size)
-
-    def _define_placeholders(self, *args, **kwargs):
-        super()._define_placeholders()
-        self.X = tf.placeholder(tf.int32, [None, self.num_answers, self.config.max_length, 2])
-        self.M = tf.placeholder(tf.float32, [None, self.num_answers, self.config.max_length])  # sequence mask
-        self.Y = tf.placeholder(tf.int32, [None])
-
-    def _target_encoder(self):
-        return IDEncoder()
+        return super().finetune(list(zip(questions, answers)), Y=labels)
 
     def _target_model(self, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
         return multi_choice_question(
             hidden=featurizer_state['features'],
             targets=targets,
             n_targets=self.num_answers,
-            dropout_placeholder=self.do_dropout,
             config=self.config,
             train=train,
             reuse=reuse,
@@ -116,7 +125,7 @@ class MultipleChoice(BaseModel):
         :returns: list of class labels.
         """
         raw_ids = BaseModel.predict(self, list(zip(questions, answers)))
-        return [ans[i] for ans, i in zip(zip(*answers), raw_ids)]
+        return [ans[i] for ans, i in zip(answers, raw_ids)]
 
     def predict_proba(self, questions, answers):
         """
