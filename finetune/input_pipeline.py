@@ -125,12 +125,17 @@ class BasePipeline(metaclass=ABCMeta):
         types, shapes = self.feed_shape_type_def()
         return Dataset.from_generator(dataset_encoded, types[0], shapes[0])  # 0s cut out the targets
 
+    def _integer_val_size(self, val_size):
+        if isinstance(val_size, float):
+            return int(val_size * self.config.dataset_size)
+        return val_size
+        
     def validation_settings(self, n_examples, batch_size):
         """
         Auto-select reasonable validation settings
         """
         if self.config.val_size is not None and self.config.val_interval is not None:
-            return self.config.val_size, self.config.val_interval
+            return self._integer_val_size(self.config.val_size), self.config.val_interval
 
         # Auto-select reasonable validation size
         if self.config.val_size is None:
@@ -140,7 +145,7 @@ class BasePipeline(metaclass=ABCMeta):
                 val_size = max(5, int(0.05 * n_examples))
                 val_size = min(100, val_size)
         else:
-            val_size = self.config.val_size
+            val_size = self._integer_val_size(self.config.val_size)
 
         # Auto-select reasonable validation interval
         if self.config.val_interval is None:
@@ -163,13 +168,18 @@ class BasePipeline(metaclass=ABCMeta):
         return dataset
 
     def wrap_tqdm(self, gen, train):
+
         if train is None:
-            return  gen
+            return gen
+
         try:
             total = len(gen)
         except:
-            total = self.config.dataset_size
-
+            if train:
+                total = self.config.dataset_size
+            else:
+                total = self.config.val_size
+    
         def internal_gen():
             it = iter(gen)
 
@@ -208,7 +218,7 @@ class BasePipeline(metaclass=ABCMeta):
         else:
             self.config.dataset_size = len(Xs)
 
-        val_size, val_interval = self.validation_settings(
+        self.config.val_size, self.config.val_interval = self.validation_settings(
             n_examples=len(Xs) if not callable(Xs) else self.config.dataset_size,
             batch_size=batch_size or self.config.batch_size
         )
@@ -220,11 +230,15 @@ class BasePipeline(metaclass=ABCMeta):
         if callable(Xs) or Y is None:
             self._skip_tqdm = val_size
             dataset = self._make_dataset(Xs, Y, train=True)
-            val_dataset_unbatched = lambda: dataset().shuffle(shuffle_buffer_size, seed=self.config.seed).take(val_size)
-            train_dataset_unbatched = lambda: dataset().shuffle(shuffle_buffer_size, seed=self.config.seed).skip(val_size)
+            val_dataset_unbatched = lambda: dataset().shuffle(
+                shuffle_buffer_size, seed=self.config.seed
+            ).take(self.config.val_size)
+            train_dataset_unbatched = lambda: dataset().shuffle(
+                shuffle_buffer_size, seed=self.config.seed
+            ).skip(self.config.val_size)
         else:
             self._skip_tqdm = 0
-            Xs_tr, Xs_va, Y_tr, Y_va = train_test_split(Xs, Y, test_size=val_size, random_state=self.config.seed)
+            Xs_tr, Xs_va, Y_tr, Y_va = train_test_split(Xs, Y, test_size=self.config.val_size, random_state=self.config.seed)
             Xs_tr, Y_tr = self.resampling(Xs_tr, Y_tr)
             self.config.dataset_size = len(Xs_tr)
             val_dataset_unbatched = self._make_dataset(Xs_va, Y_va, train=False)
@@ -235,7 +249,7 @@ class BasePipeline(metaclass=ABCMeta):
         train_dataset = lambda: train_dataset_unbatched().batch(batch_size, drop_remainder=False).repeat(
             self.config.n_epochs).prefetch(prefetch_buffer)
 
-        return val_dataset, train_dataset, val_size, val_interval
+        return val_dataset, train_dataset, self.config.val_size, self.config.val_interval
 
     def get_predict_input_fn(self, Xs, batch_size=None):
         batch_size = batch_size or self.config.batch_size
