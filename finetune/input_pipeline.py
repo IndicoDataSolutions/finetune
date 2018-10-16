@@ -121,8 +121,6 @@ class BasePipeline(metaclass=ABCMeta):
         else:
             Xs_fn = lambda: self.wrap_tqdm(Xs(), train)
 
-        print("Before", tf.contrib.framework.nest.map_structure(type, Xs))
-
         dataset_encoded = lambda: itertools.chain.from_iterable(map(self.text_to_tokens_mask, Xs_fn()))
         types, shapes = self.feed_shape_type_def()
         return Dataset.from_generator(dataset_encoded, types[0], shapes[0])  # 0s cut out the targets
@@ -174,14 +172,17 @@ class BasePipeline(metaclass=ABCMeta):
 
         def internal_gen():
             it = iter(gen)
+
             if train:
                 desc = "Epoch {}/{}".format(self.epoch, self.config.n_epochs)
             else:
                 desc = "Validation"
             for _, i in zip(range(self._skip_tqdm), it):
                 yield i
+
             for i in tqdm.tqdm(it, desc=desc, total=total, miniters=1, leave=self.epoch == self.config.n_epochs and train):
                 yield i
+            
             if train:
                 self.epoch += 1
 
