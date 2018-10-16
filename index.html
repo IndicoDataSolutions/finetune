@@ -233,21 +233,15 @@ docker <span class="nb">exec</span> -it finetune bash <span class="c1"># starts 
 </table>
 <dl class="method">
 <dt id="finetune.Classifier.featurize">
-<code class="descname">featurize</code><span class="sig-paren">(</span><em>X</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/classifier.html#Classifier.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Classifier.featurize" title="Permalink to this definition">¶</a></dt>
+<code class="descname">featurize</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/classifier.html#Classifier.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Classifier.featurize" title="Permalink to this definition">¶</a></dt>
 <dd><p>Embeds inputs in learned feature space. Can be called before or after calling <a class="reference internal" href="#module-finetune" title="finetune"><code class="xref py py-meth docutils literal notranslate"><span class="pre">finetune()</span></code></a>.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>X</strong> – list or array of text to embed.</li>
-<li><strong>max_length</strong> – the number of tokens to be included in the document representation.
-Providing more than <cite>max_length</cite> tokens as input will result in truncation.</li>
-</ul>
-</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>X</strong> – list or array of text to embed.</td>
 </tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">np.array of features of shape (n_examples, embedding_size).</p>
-</td>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">np.array of features of shape (n_examples, embedding_size).</td>
 </tr>
 </tbody>
 </table>
@@ -343,24 +337,12 @@ form [(config, eval_fn output), … ]</p>
 
 <dl class="method">
 <dt id="finetune.Classifier.generate_text">
-<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Classifier.generate_text" title="Permalink to this definition">¶</a></dt>
+<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=True</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Classifier.generate_text" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
-Temperature parameter for decoding is set in the config.</p>
-<table class="docutils field-list" frame="void" rules="none">
-<col class="field-name" />
-<col class="field-body" />
-<tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>max_length</strong> – The maximum length to decode to.</li>
-<li><strong>seed_text</strong> – Defaults to the empty string. This will form the starting point to begin modelling</li>
-</ul>
-</td>
-</tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">A string containing the generated text.</p>
-</td>
-</tr>
-</tbody>
-</table>
+Temperature parameter for decoding is set in the config.
+:param max_length: The maximum length to decode to.
+:param seed_text: Defaults to the empty string. This will form the starting point to begin modelling
+:return: A string containing the generated text.</p>
 </dd></dl>
 
 <dl class="classmethod">
@@ -379,21 +361,15 @@ Temperature parameter for decoding is set in the config.</p>
 
 <dl class="method">
 <dt id="finetune.Classifier.predict">
-<code class="descname">predict</code><span class="sig-paren">(</span><em>X</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/classifier.html#Classifier.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Classifier.predict" title="Permalink to this definition">¶</a></dt>
+<code class="descname">predict</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/classifier.html#Classifier.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Classifier.predict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces a list of most likely class labels as determined by the fine-tuned model.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>X</strong> – list or array of text to embed.</li>
-<li><strong>max_length</strong> – the number of tokens to be included in the document representation.
-Providing more than <cite>max_length</cite> tokens as input will result in truncation.</li>
-</ul>
-</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>X</strong> – list or array of text to embed.</td>
 </tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">list of class labels.</p>
-</td>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">list of class labels.</td>
 </tr>
 </tbody>
 </table>
@@ -401,21 +377,15 @@ Providing more than <cite>max_length</cite> tokens as input will result in trunc
 
 <dl class="method">
 <dt id="finetune.Classifier.predict_proba">
-<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>X</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/classifier.html#Classifier.predict_proba"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Classifier.predict_proba" title="Permalink to this definition">¶</a></dt>
+<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/classifier.html#Classifier.predict_proba"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Classifier.predict_proba" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces a probability distribution over classes for each example in X.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>X</strong> – list or array of text to embed.</li>
-<li><strong>max_length</strong> – the number of tokens to be included in the document representation.
-Providing more than <cite>max_length</cite> tokens as input will result in truncation.</li>
-</ul>
-</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>X</strong> – list or array of text to embed.</td>
 </tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.</p>
-</td>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.</td>
 </tr>
 </tbody>
 </table>
@@ -465,21 +435,15 @@ Should not be used to save / restore a training model.</dd>
 </table>
 <dl class="method">
 <dt id="finetune.Regressor.featurize">
-<code class="descname">featurize</code><span class="sig-paren">(</span><em>X</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/regressor.html#Regressor.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Regressor.featurize" title="Permalink to this definition">¶</a></dt>
+<code class="descname">featurize</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/regressor.html#Regressor.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Regressor.featurize" title="Permalink to this definition">¶</a></dt>
 <dd><p>Embeds inputs in learned feature space. Can be called before or after calling <a class="reference internal" href="#module-finetune" title="finetune"><code class="xref py py-meth docutils literal notranslate"><span class="pre">finetune()</span></code></a>.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>X</strong> – list or array of text to embed.</li>
-<li><strong>max_length</strong> – the number of tokens to be included in the document representation.
-Providing more than <cite>max_length</cite> tokens as input will result in truncation.</li>
-</ul>
-</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>X</strong> – list or array of text to embed.</td>
 </tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">np.array of features of shape (n_examples, embedding_size).</p>
-</td>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">np.array of features of shape (n_examples, embedding_size).</td>
 </tr>
 </tbody>
 </table>
@@ -575,24 +539,12 @@ form [(config, eval_fn output), … ]</p>
 
 <dl class="method">
 <dt id="finetune.Regressor.generate_text">
-<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Regressor.generate_text" title="Permalink to this definition">¶</a></dt>
+<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=True</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Regressor.generate_text" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
-Temperature parameter for decoding is set in the config.</p>
-<table class="docutils field-list" frame="void" rules="none">
-<col class="field-name" />
-<col class="field-body" />
-<tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>max_length</strong> – The maximum length to decode to.</li>
-<li><strong>seed_text</strong> – Defaults to the empty string. This will form the starting point to begin modelling</li>
-</ul>
-</td>
-</tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">A string containing the generated text.</p>
-</td>
-</tr>
-</tbody>
-</table>
+Temperature parameter for decoding is set in the config.
+:param max_length: The maximum length to decode to.
+:param seed_text: Defaults to the empty string. This will form the starting point to begin modelling
+:return: A string containing the generated text.</p>
 </dd></dl>
 
 <dl class="classmethod">
@@ -611,21 +563,15 @@ Temperature parameter for decoding is set in the config.</p>
 
 <dl class="method">
 <dt id="finetune.Regressor.predict">
-<code class="descname">predict</code><span class="sig-paren">(</span><em>X</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/regressor.html#Regressor.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Regressor.predict" title="Permalink to this definition">¶</a></dt>
+<code class="descname">predict</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/regressor.html#Regressor.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Regressor.predict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces a list of most likely class labels as determined by the fine-tuned model.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>X</strong> – list or array of text to embed.</li>
-<li><strong>max_length</strong> – the number of tokens to be included in the document representation.
-Providing more than <cite>max_length</cite> tokens as input will result in truncation.</li>
-</ul>
-</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>X</strong> – list or array of text to embed.</td>
 </tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">list of class labels.</p>
-</td>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">list of class labels.</td>
 </tr>
 </tbody>
 </table>
@@ -633,21 +579,15 @@ Providing more than <cite>max_length</cite> tokens as input will result in trunc
 
 <dl class="method">
 <dt id="finetune.Regressor.predict_proba">
-<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>X</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/regressor.html#Regressor.predict_proba"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Regressor.predict_proba" title="Permalink to this definition">¶</a></dt>
+<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/regressor.html#Regressor.predict_proba"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Regressor.predict_proba" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces a probability distribution over classes for each example in X.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>X</strong> – list or array of text to embed.</li>
-<li><strong>max_length</strong> – the number of tokens to be included in the document representation.
-Providing more than <cite>max_length</cite> tokens as input will result in truncation.</li>
-</ul>
-</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>X</strong> – list or array of text to embed.</td>
 </tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.</p>
-</td>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.</td>
 </tr>
 </tbody>
 </table>
@@ -696,21 +636,15 @@ Should not be used to save / restore a training model.</dd>
 </table>
 <dl class="method">
 <dt id="finetune.MultifieldClassifier.featurize">
-<code class="descname">featurize</code><span class="sig-paren">(</span><em>Xs</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultifieldClassifier.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultifieldClassifier.featurize" title="Permalink to this definition">¶</a></dt>
+<code class="descname">featurize</code><span class="sig-paren">(</span><em>Xs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultifieldClassifier.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultifieldClassifier.featurize" title="Permalink to this definition">¶</a></dt>
 <dd><p>Embeds inputs in learned feature space. Can be called before or after calling <a class="reference internal" href="#module-finetune" title="finetune"><code class="xref py py-meth docutils literal notranslate"><span class="pre">finetune()</span></code></a>.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>*Xs</strong> – lists of text inputs, shape [batch, n_fields]</li>
-<li><strong>max_length</strong> – the number of tokens to be included in the document representation.
-Providing more than <cite>max_length</cite> tokens as input will result in truncation.</li>
-</ul>
-</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>*Xs</strong> – lists of text inputs, shape [batch, n_fields]</td>
 </tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">np.array of features of shape (n_examples, embedding_size).</p>
-</td>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">np.array of features of shape (n_examples, embedding_size).</td>
 </tr>
 </tbody>
 </table>
@@ -806,24 +740,12 @@ form [(config, eval_fn output), … ]</p>
 
 <dl class="method">
 <dt id="finetune.MultifieldClassifier.generate_text">
-<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultifieldClassifier.generate_text" title="Permalink to this definition">¶</a></dt>
+<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=True</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultifieldClassifier.generate_text" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
-Temperature parameter for decoding is set in the config.</p>
-<table class="docutils field-list" frame="void" rules="none">
-<col class="field-name" />
-<col class="field-body" />
-<tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>max_length</strong> – The maximum length to decode to.</li>
-<li><strong>seed_text</strong> – Defaults to the empty string. This will form the starting point to begin modelling</li>
-</ul>
-</td>
-</tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">A string containing the generated text.</p>
-</td>
-</tr>
-</tbody>
-</table>
+Temperature parameter for decoding is set in the config.
+:param max_length: The maximum length to decode to.
+:param seed_text: Defaults to the empty string. This will form the starting point to begin modelling
+:return: A string containing the generated text.</p>
 </dd></dl>
 
 <dl class="classmethod">
@@ -842,21 +764,15 @@ Temperature parameter for decoding is set in the config.</p>
 
 <dl class="method">
 <dt id="finetune.MultifieldClassifier.predict">
-<code class="descname">predict</code><span class="sig-paren">(</span><em>Xs</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultifieldClassifier.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultifieldClassifier.predict" title="Permalink to this definition">¶</a></dt>
+<code class="descname">predict</code><span class="sig-paren">(</span><em>Xs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultifieldClassifier.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultifieldClassifier.predict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces list of most likely class labels as determined by the fine-tuned model.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>*Xs</strong> – lists of text inputs, shape [batch, n_fields]</li>
-<li><strong>max_length</strong> – the number of tokens to be included in the document representation.
-Providing more than <cite>max_length</cite> tokens as input will result in truncation.</li>
-</ul>
-</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>*Xs</strong> – lists of text inputs, shape [batch, n_fields]</td>
 </tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">list of class labels.</p>
-</td>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">list of class labels.</td>
 </tr>
 </tbody>
 </table>
@@ -864,21 +780,15 @@ Providing more than <cite>max_length</cite> tokens as input will result in trunc
 
 <dl class="method">
 <dt id="finetune.MultifieldClassifier.predict_proba">
-<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>Xs</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultifieldClassifier.predict_proba"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultifieldClassifier.predict_proba" title="Permalink to this definition">¶</a></dt>
+<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>Xs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultifieldClassifier.predict_proba"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultifieldClassifier.predict_proba" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces probability distribution over classes for each example in X.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>*Xs</strong> – lists of text inputs, shape [batch, n_fields]</li>
-<li><strong>max_length</strong> – the number of tokens to be included in the document representation.
-Providing more than <cite>max_length</cite> tokens as input will result in truncation.</li>
-</ul>
-</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>*Xs</strong> – lists of text inputs, shape [batch, n_fields]</td>
 </tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">list of dictionaries.  Each dictionary maps from X2 class label to its assigned class probability.</p>
-</td>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">list of dictionaries.  Each dictionary maps from X2 class label to its assigned class probability.</td>
 </tr>
 </tbody>
 </table>
@@ -927,21 +837,15 @@ Should not be used to save / restore a training model.</dd>
 </table>
 <dl class="method">
 <dt id="finetune.MultifieldRegressor.featurize">
-<code class="descname">featurize</code><span class="sig-paren">(</span><em>Xs</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultifieldRegressor.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultifieldRegressor.featurize" title="Permalink to this definition">¶</a></dt>
+<code class="descname">featurize</code><span class="sig-paren">(</span><em>Xs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultifieldRegressor.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultifieldRegressor.featurize" title="Permalink to this definition">¶</a></dt>
 <dd><p>Embeds inputs in learned feature space. Can be called before or after calling <a class="reference internal" href="#module-finetune" title="finetune"><code class="xref py py-meth docutils literal notranslate"><span class="pre">finetune()</span></code></a>.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>*Xs</strong> – lists of text inputs, shape [batch, n_fields]</li>
-<li><strong>max_length</strong> – the number of tokens to be included in the document representation.
-Providing more than <cite>max_length</cite> tokens as input will result in truncation.</li>
-</ul>
-</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>*Xs</strong> – lists of text inputs, shape [batch, n_fields]</td>
 </tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">np.array of features of shape (n_examples, embedding_size).</p>
-</td>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">np.array of features of shape (n_examples, embedding_size).</td>
 </tr>
 </tbody>
 </table>
@@ -1037,24 +941,12 @@ form [(config, eval_fn output), … ]</p>
 
 <dl class="method">
 <dt id="finetune.MultifieldRegressor.generate_text">
-<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultifieldRegressor.generate_text" title="Permalink to this definition">¶</a></dt>
+<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=True</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultifieldRegressor.generate_text" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
-Temperature parameter for decoding is set in the config.</p>
-<table class="docutils field-list" frame="void" rules="none">
-<col class="field-name" />
-<col class="field-body" />
-<tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>max_length</strong> – The maximum length to decode to.</li>
-<li><strong>seed_text</strong> – Defaults to the empty string. This will form the starting point to begin modelling</li>
-</ul>
-</td>
-</tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">A string containing the generated text.</p>
-</td>
-</tr>
-</tbody>
-</table>
+Temperature parameter for decoding is set in the config.
+:param max_length: The maximum length to decode to.
+:param seed_text: Defaults to the empty string. This will form the starting point to begin modelling
+:return: A string containing the generated text.</p>
 </dd></dl>
 
 <dl class="classmethod">
@@ -1073,21 +965,15 @@ Temperature parameter for decoding is set in the config.</p>
 
 <dl class="method">
 <dt id="finetune.MultifieldRegressor.predict">
-<code class="descname">predict</code><span class="sig-paren">(</span><em>Xs</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultifieldRegressor.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultifieldRegressor.predict" title="Permalink to this definition">¶</a></dt>
+<code class="descname">predict</code><span class="sig-paren">(</span><em>Xs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultifieldRegressor.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultifieldRegressor.predict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces list of most likely class labels as determined by the fine-tuned model.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>*Xs</strong> – lists of text inputs, shape [batch, n_fields]</li>
-<li><strong>max_length</strong> – the number of tokens to be included in the document representation.
-Providing more than <cite>max_length</cite> tokens as input will result in truncation.</li>
-</ul>
-</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>*Xs</strong> – lists of text inputs, shape [batch, n_fields]</td>
 </tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">list of class labels.</p>
-</td>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">list of class labels.</td>
 </tr>
 </tbody>
 </table>
@@ -1095,21 +981,15 @@ Providing more than <cite>max_length</cite> tokens as input will result in trunc
 
 <dl class="method">
 <dt id="finetune.MultifieldRegressor.predict_proba">
-<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>Xs</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultifieldRegressor.predict_proba"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultifieldRegressor.predict_proba" title="Permalink to this definition">¶</a></dt>
+<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>Xs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultifieldRegressor.predict_proba"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultifieldRegressor.predict_proba" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces probability distribution over classes for each example in X.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>*Xs</strong> – lists of text inputs, shape [batch, n_fields]</li>
-<li><strong>max_length</strong> – the number of tokens to be included in the document representation.
-Providing more than <cite>max_length</cite> tokens as input will result in truncation.</li>
-</ul>
-</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>*Xs</strong> – lists of text inputs, shape [batch, n_fields]</td>
 </tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">list of dictionaries.  Each dictionary maps from X2 class label to its assigned class probability.</p>
-</td>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">list of dictionaries.  Each dictionary maps from X2 class label to its assigned class probability.</td>
 </tr>
 </tbody>
 </table>
@@ -1158,21 +1038,15 @@ Should not be used to save / restore a training model.</dd>
 </table>
 <dl class="method">
 <dt id="finetune.MultiLabelClassifier.featurize">
-<code class="descname">featurize</code><span class="sig-paren">(</span><em>X</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multi_label_classifier.html#MultiLabelClassifier.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiLabelClassifier.featurize" title="Permalink to this definition">¶</a></dt>
+<code class="descname">featurize</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multi_label_classifier.html#MultiLabelClassifier.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiLabelClassifier.featurize" title="Permalink to this definition">¶</a></dt>
 <dd><p>Embeds inputs in learned feature space. Can be called before or after calling <a class="reference internal" href="#module-finetune" title="finetune"><code class="xref py py-meth docutils literal notranslate"><span class="pre">finetune()</span></code></a>.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>X</strong> – list or array of text to embed.</li>
-<li><strong>max_length</strong> – the number of tokens to be included in the document representation.
-Providing more than <cite>max_length</cite> tokens as input will result in truncation.</li>
-</ul>
-</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>X</strong> – list or array of text to embed.</td>
 </tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">np.array of features of shape (n_examples, embedding_size).</p>
-</td>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">np.array of features of shape (n_examples, embedding_size).</td>
 </tr>
 </tbody>
 </table>
@@ -1268,24 +1142,12 @@ form [(config, eval_fn output), … ]</p>
 
 <dl class="method">
 <dt id="finetune.MultiLabelClassifier.generate_text">
-<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiLabelClassifier.generate_text" title="Permalink to this definition">¶</a></dt>
+<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=True</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiLabelClassifier.generate_text" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
-Temperature parameter for decoding is set in the config.</p>
-<table class="docutils field-list" frame="void" rules="none">
-<col class="field-name" />
-<col class="field-body" />
-<tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>max_length</strong> – The maximum length to decode to.</li>
-<li><strong>seed_text</strong> – Defaults to the empty string. This will form the starting point to begin modelling</li>
-</ul>
-</td>
-</tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">A string containing the generated text.</p>
-</td>
-</tr>
-</tbody>
-</table>
+Temperature parameter for decoding is set in the config.
+:param max_length: The maximum length to decode to.
+:param seed_text: Defaults to the empty string. This will form the starting point to begin modelling
+:return: A string containing the generated text.</p>
 </dd></dl>
 
 <dl class="classmethod">
@@ -1304,21 +1166,15 @@ Temperature parameter for decoding is set in the config.</p>
 
 <dl class="method">
 <dt id="finetune.MultiLabelClassifier.predict">
-<code class="descname">predict</code><span class="sig-paren">(</span><em>X</em>, <em>threshold=None</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multi_label_classifier.html#MultiLabelClassifier.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiLabelClassifier.predict" title="Permalink to this definition">¶</a></dt>
+<code class="descname">predict</code><span class="sig-paren">(</span><em>X</em>, <em>threshold=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multi_label_classifier.html#MultiLabelClassifier.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiLabelClassifier.predict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces a list of most likely class labels as determined by the fine-tuned model.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>X</strong> – list or array of text to embed.</li>
-<li><strong>max_length</strong> – the number of tokens to be included in the document representation.
-Providing more than <cite>max_length</cite> tokens as input will result in truncation.</li>
-</ul>
-</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>X</strong> – list or array of text to embed.</td>
 </tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">list of class labels.</p>
-</td>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">list of class labels.</td>
 </tr>
 </tbody>
 </table>
@@ -1326,21 +1182,15 @@ Providing more than <cite>max_length</cite> tokens as input will result in trunc
 
 <dl class="method">
 <dt id="finetune.MultiLabelClassifier.predict_proba">
-<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>X</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multi_label_classifier.html#MultiLabelClassifier.predict_proba"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiLabelClassifier.predict_proba" title="Permalink to this definition">¶</a></dt>
+<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multi_label_classifier.html#MultiLabelClassifier.predict_proba"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiLabelClassifier.predict_proba" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces a probability distribution over classes for each example in X.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>X</strong> – list or array of text to embed.</li>
-<li><strong>max_length</strong> – the number of tokens to be included in the document representation.
-Providing more than <cite>max_length</cite> tokens as input will result in truncation.</li>
-</ul>
-</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>X</strong> – list or array of text to embed.</td>
 </tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.</p>
-</td>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.</td>
 </tr>
 </tbody>
 </table>
@@ -1389,43 +1239,15 @@ Should not be used to save / restore a training model.</dd>
 </table>
 <dl class="method">
 <dt id="finetune.SequenceLabeler.featurize">
-<code class="descname">featurize</code><span class="sig-paren">(</span><em>X</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/sequence_labeling.html#SequenceLabeler.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.SequenceLabeler.featurize" title="Permalink to this definition">¶</a></dt>
+<code class="descname">featurize</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/sequence_labeling.html#SequenceLabeler.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.SequenceLabeler.featurize" title="Permalink to this definition">¶</a></dt>
 <dd><p>Embeds inputs in learned feature space. Can be called before or after calling <a class="reference internal" href="#module-finetune" title="finetune"><code class="xref py py-meth docutils literal notranslate"><span class="pre">finetune()</span></code></a>.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>Xs</strong> – An iterable of lists or array of text, shape [batch, n_inputs, tokens]</li>
-<li><strong>max_length</strong> – the number of tokens to be included in the document representation.
-Providing more than <cite>max_length</cite> tokens as input will result in truncation.</li>
-</ul>
-</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>Xs</strong> – An iterable of lists or array of text, shape [batch, n_inputs, tokens]</td>
 </tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">np.array of features of shape (n_examples, embedding_size).</p>
-</td>
-</tr>
-</tbody>
-</table>
-</dd></dl>
-
-<dl class="method">
-<dt id="finetune.SequenceLabeler.finetune">
-<code class="descname">finetune</code><span class="sig-paren">(</span><em>X</em>, <em>Y=None</em>, <em>batch_size=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/sequence_labeling.html#SequenceLabeler.finetune"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.SequenceLabeler.finetune" title="Permalink to this definition">¶</a></dt>
-<dd><table class="docutils field-list" frame="void" rules="none">
-<col class="field-name" />
-<col class="field-body" />
-<tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
-<li><strong>X</strong> – A list of text snippets. Format: [batch_size]</li>
-<li><strong>Y</strong> – A list of lists of annotations. Format: [batch_size, n_annotations], where each annotation is of the form:
-{‘start’: 0, ‘end’: 5, ‘label’: ‘class’, ‘text’: ‘sample text’}</li>
-<li><strong>batch_size</strong> – integer number of examples per batch. When N_GPUS &gt; 1, this number
-corresponds to the number of training examples provided to each GPU.</li>
-<li><strong>val_size</strong> – Float fraction or int number that represents the size of the validation set.</li>
-<li><strong>val_interval</strong> – The interval for which validation is performed, measured in number of steps.</li>
-</ul>
-</td>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">np.array of features of shape (n_examples, embedding_size).</td>
 </tr>
 </tbody>
 </table>
@@ -1502,24 +1324,12 @@ form [(config, eval_fn output), … ]</p>
 
 <dl class="method">
 <dt id="finetune.SequenceLabeler.generate_text">
-<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.SequenceLabeler.generate_text" title="Permalink to this definition">¶</a></dt>
+<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=True</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.SequenceLabeler.generate_text" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
-Temperature parameter for decoding is set in the config.</p>
-<table class="docutils field-list" frame="void" rules="none">
-<col class="field-name" />
-<col class="field-body" />
-<tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>max_length</strong> – The maximum length to decode to.</li>
-<li><strong>seed_text</strong> – Defaults to the empty string. This will form the starting point to begin modelling</li>
-</ul>
-</td>
-</tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">A string containing the generated text.</p>
-</td>
-</tr>
-</tbody>
-</table>
+Temperature parameter for decoding is set in the config.
+:param max_length: The maximum length to decode to.
+:param seed_text: Defaults to the empty string. This will form the starting point to begin modelling
+:return: A string containing the generated text.</p>
 </dd></dl>
 
 <dl class="classmethod">
@@ -1538,21 +1348,15 @@ Temperature parameter for decoding is set in the config.</p>
 
 <dl class="method">
 <dt id="finetune.SequenceLabeler.predict">
-<code class="descname">predict</code><span class="sig-paren">(</span><em>X</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/sequence_labeling.html#SequenceLabeler.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.SequenceLabeler.predict" title="Permalink to this definition">¶</a></dt>
+<code class="descname">predict</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/sequence_labeling.html#SequenceLabeler.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.SequenceLabeler.predict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces a list of most likely class labels as determined by the fine-tuned model.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>X</strong> – A list / array of text, shape [batch]</li>
-<li><strong>max_length</strong> – the number of tokens to be included in the document representation.
-Providing more than <cite>max_length</cite> tokens as input will result in truncatindiion.</li>
-</ul>
-</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>X</strong> – A list / array of text, shape [batch]</td>
 </tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">list of class labels.</p>
-</td>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">list of class labels.</td>
 </tr>
 </tbody>
 </table>
@@ -1560,21 +1364,15 @@ Providing more than <cite>max_length</cite> tokens as input will result in trunc
 
 <dl class="method">
 <dt id="finetune.SequenceLabeler.predict_proba">
-<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>X</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/sequence_labeling.html#SequenceLabeler.predict_proba"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.SequenceLabeler.predict_proba" title="Permalink to this definition">¶</a></dt>
+<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/sequence_labeling.html#SequenceLabeler.predict_proba"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.SequenceLabeler.predict_proba" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces a list of most likely class labels as determined by the fine-tuned model.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>X</strong> – A list / array of text, shape [batch]</li>
-<li><strong>max_length</strong> – the number of tokens to be included in the document representation.
-Providing more than <cite>max_length</cite> tokens as input will result in truncatindiion.</li>
-</ul>
-</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>X</strong> – A list / array of text, shape [batch]</td>
 </tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">list of class labels.</p>
-</td>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">list of class labels.</td>
 </tr>
 </tbody>
 </table>
@@ -1623,21 +1421,15 @@ Should not be used to save / restore a training model.</dd>
 </table>
 <dl class="method">
 <dt id="finetune.Comparison.featurize">
-<code class="descname">featurize</code><span class="sig-paren">(</span><em>pairs</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/comparison.html#Comparison.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Comparison.featurize" title="Permalink to this definition">¶</a></dt>
+<code class="descname">featurize</code><span class="sig-paren">(</span><em>pairs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/comparison.html#Comparison.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Comparison.featurize" title="Permalink to this definition">¶</a></dt>
 <dd><p>Embeds inputs in learned feature space. Can be called before or after calling <a class="reference internal" href="#module-finetune" title="finetune"><code class="xref py py-meth docutils literal notranslate"><span class="pre">finetune()</span></code></a>.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>pairs</strong> – Array of text, shape [batch, 2]</li>
-<li><strong>max_length</strong> – the number of byte-pair encoded tokens to be included in the document representation.
-Providing more than <cite>max_length</cite> tokens as input will result in truncation.</li>
-</ul>
-</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>pairs</strong> – Array of text, shape [batch, 2]</td>
 </tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">np.array of features of shape (n_examples, embedding_size).</p>
-</td>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">np.array of features of shape (n_examples, embedding_size).</td>
 </tr>
 </tbody>
 </table>
@@ -1645,14 +1437,14 @@ Providing more than <cite>max_length</cite> tokens as input will result in trunc
 
 <dl class="method">
 <dt id="finetune.Comparison.finetune">
-<code class="descname">finetune</code><span class="sig-paren">(</span><em>pairs</em>, <em>Y=None</em>, <em>batch_size=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/comparison.html#Comparison.finetune"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Comparison.finetune" title="Permalink to this definition">¶</a></dt>
+<code class="descname">finetune</code><span class="sig-paren">(</span><em>X</em>, <em>Y=None</em>, <em>batch_size=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Comparison.finetune" title="Permalink to this definition">¶</a></dt>
 <dd><table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
 <tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
-<li><strong>pairs</strong> – Array of text, shape [batch, 2]</li>
-<li><strong>Y</strong> – integer or string-valued class labels. It is necessary for the items of Y to be sortable.</li>
+<li><strong>X</strong> – list or array of text.</li>
+<li><strong>Y</strong> – integer or string-valued class labels.</li>
 <li><strong>batch_size</strong> – integer number of examples per batch. When N_GPUS &gt; 1, this number
 corresponds to the number of training examples provided to each GPU.</li>
 </ul>
@@ -1733,24 +1525,12 @@ form [(config, eval_fn output), … ]</p>
 
 <dl class="method">
 <dt id="finetune.Comparison.generate_text">
-<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Comparison.generate_text" title="Permalink to this definition">¶</a></dt>
+<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=True</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Comparison.generate_text" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
-Temperature parameter for decoding is set in the config.</p>
-<table class="docutils field-list" frame="void" rules="none">
-<col class="field-name" />
-<col class="field-body" />
-<tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>max_length</strong> – The maximum length to decode to.</li>
-<li><strong>seed_text</strong> – Defaults to the empty string. This will form the starting point to begin modelling</li>
-</ul>
-</td>
-</tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">A string containing the generated text.</p>
-</td>
-</tr>
-</tbody>
-</table>
+Temperature parameter for decoding is set in the config.
+:param max_length: The maximum length to decode to.
+:param seed_text: Defaults to the empty string. This will form the starting point to begin modelling
+:return: A string containing the generated text.</p>
 </dd></dl>
 
 <dl class="classmethod">
@@ -1769,21 +1549,15 @@ Temperature parameter for decoding is set in the config.</p>
 
 <dl class="method">
 <dt id="finetune.Comparison.predict">
-<code class="descname">predict</code><span class="sig-paren">(</span><em>pairs</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/comparison.html#Comparison.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Comparison.predict" title="Permalink to this definition">¶</a></dt>
+<code class="descname">predict</code><span class="sig-paren">(</span><em>pairs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/comparison.html#Comparison.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Comparison.predict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces a list of most likely class labels as determined by the fine-tuned model.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>pairs</strong> – Array of text, shape [batch, 2]</li>
-<li><strong>max_length</strong> – the number of byte-pair encoded tokens to be included in the document representation.
-Providing more than <cite>max_length</cite> tokens as input will result in truncation.</li>
-</ul>
-</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>pairs</strong> – Array of text, shape [batch, 2]</td>
 </tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">list of class labels.</p>
-</td>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">list of class labels.</td>
 </tr>
 </tbody>
 </table>
@@ -1791,21 +1565,15 @@ Providing more than <cite>max_length</cite> tokens as input will result in trunc
 
 <dl class="method">
 <dt id="finetune.Comparison.predict_proba">
-<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>pairs</em>, <em>max_length=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/comparison.html#Comparison.predict_proba"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Comparison.predict_proba" title="Permalink to this definition">¶</a></dt>
+<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>pairs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/comparison.html#Comparison.predict_proba"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Comparison.predict_proba" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces a probability distribution over classes for each example in X.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>pairs</strong> – Array of text, shape [batch, 2]</li>
-<li><strong>max_length</strong> – the number of byte-pair encoded tokens to be included in the document representation.
-Providing more than <cite>max_length</cite> tokens as input will result in truncation.</li>
-</ul>
-</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>pairs</strong> – Array of text, shape [batch, 2]</td>
 </tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.</p>
-</td>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.</td>
 </tr>
 </tbody>
 </table>
@@ -1866,7 +1634,6 @@ and recompute remaining gradients incrementally in order to save memory.  Defaul
 <li><strong>resid_p_drop</strong> – Residual layer fully connected network dropout probability.  Defaults to <cite>0.1</cite>.</li>
 <li><strong>clf_p_drop</strong> – Classifier dropout probability.  Defaults to <cite>0.1</cite>.</li>
 <li><strong>l2_reg</strong> – L2 regularization coefficient. Defaults to <cite>0.01</cite>.</li>
-<li><strong>regularize_deviation</strong> – L2 penalty against pre-trained model weights.  Defaults to <cite>0.0</cite>.</li>
 <li><strong>b1</strong> – Adam b1 parameter.  Defaults to <cite>0.9</cite>.</li>
 <li><strong>b2</strong> – Adam b2 parameter.  Defaults to <cite>0.999</cite>.</li>
 <li><strong>epsilon</strong> – Adam epsilon parameter: Defaults to <cite>1e-8</cite>.</li>
@@ -1880,14 +1647,15 @@ and target model loss.  Usually not beneficial to turn on unless
 dataset size exceeds a few thousand examples.  Defaults to <cite>0.0</cite>.</li>
 <li><strong>summarize_grads</strong> – Include gradient summary information in tensorboard.  Defaults to <cite>False</cite>.</li>
 <li><strong>verbose</strong> – Print TQDM logs?  Defaults to <cite>True</cite>.</li>
-<li><strong>val_size</strong> – Validation set size as a percentage of all training data.  Defaults to <cite>0.05</cite>.</li>
-<li><strong>val_interval</strong> – Evaluate on validation set after <cite>val_interval</cite> batches.  Defaults to <cite>150</cite>.</li>
-<li><strong>val_window_size</strong> – Print running average of validation score over <cite>val_window_size</cite> batches.  Defaults to <cite>5</cite>.</li>
-<li><strong>rolling_avg_decay</strong> – Momentum-style parameter to smooth out validation estimates printed during training. Defaults to <cite>0.99</cite>.</li>
-<li><strong>lm_temp</strong> – Language model temperature – a value of <cite>0.0</cite> corresponds to greedy maximum likelihood predictions 
+<li><strong>val_size</strong> – Validation set size as a percentage of all training data.  Validation will not be run by default if n_examples &lt; 50.
+If n_examples &gt; 50, defaults to max(5, min(100, 0.05 * n_examples))</li>
+<li><strong>val_interval</strong> – Evaluate on validation set after <cite>val_interval</cite> batches.  
+Defaults to 4 * val_size / batch_size to ensure that too much time is not spent on validation.</li>
+<li><strong>lm_temp</strong> – Language model temperature – a value of <cite>0.0</cite> corresponds to greedy maximum likelihood predictions
 while a value of <cite>1.0</cite> corresponds to random predictions. Defaults to <cite>0.2</cite>.</li>
 <li><strong>seq_num_heads</strong> – Number of attention heads of final attention layer. Defaults to <cite>16</cite>.</li>
 <li><strong>subtoken_predictions</strong> – Return predictions at subtoken granularity or token granularity?  Defaults to <cite>False</cite>.</li>
+<li><strong>multi_label_sequences</strong> – Use a multi-labeling approach to sequence labeling to allow overlapping labels.</li>
 <li><strong>multi_label_threshold</strong> – Threshold of sigmoid unit in multi label classifier. 
 Can be increased or lowered to trade off precision / recall. Defaults to <cite>0.5</cite>.</li>
 <li><strong>autosave_path</strong> – Save current best model (as measured by validation loss) to this location. Defaults to <cite>None</cite>.</li>
@@ -1898,6 +1666,10 @@ unless tensorboard_folder is explicitly provided. Defaults to <cite>None</cite>.
 <li><strong>save_adam_vars</strong> – Save adam parameters when calling <cite>model.save()</cite>.  Defaults to <cite>True</cite>.</li>
 <li><strong>num_layers_trained</strong> – How many layers to finetune.  Specifying a value less than 12 will train layers starting from model output. Defaults to <cite>12</cite>.</li>
 <li><strong>train_embeddings</strong> – Should embedding layer be finetuned? Defaults to <cite>True</cite>.</li>
+<li><strong>class_weights</strong> – One of ‘log’, ‘linear’, or ‘sqrt’. Auto-scales gradient updates based on class frequency.  Can also be a dictionary that maps from true class name to loss coefficient. Defaults to <cite>None</cite>.</li>
+<li><strong>oversample</strong> – Should rare classes be oversampled?  Defaults to <cite>False</cite>.</li>
+<li><strong>params_device</strong> – Which device should gradient updates be aggregated on?
+If you are using a single GPU and have more than 4Gb of GPU memory you should set this to GPU PCI number (0, 1, 2, etc.). Defaults to <cite>“cpu”</cite>.</li>
 </ul>
 </td>
 </tr>
