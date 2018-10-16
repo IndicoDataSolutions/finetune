@@ -1,9 +1,10 @@
 import os
 import random
+import gc
+import weakref
 import atexit
 import warnings
 import itertools
-import sys
 import math
 from abc import ABCMeta, abstractmethod
 from copy import deepcopy
@@ -11,24 +12,26 @@ import tempfile
 import time
 import shutil
 import glob
+import pathlib
 
+import tqdm
 import numpy as np
 import tensorflow as tf
 from tensorflow.data import Dataset
 from sklearn.model_selection import train_test_split
 
+
 from finetune.download import download_data_if_required
 from finetune.utils import interpolate_pos_embed, list_transpose
 from finetune.encoding import EncodedOutput
+from finetune.input_pipeline import ENCODER
 from finetune.config import get_default_config
 from finetune.saver import Saver
 from finetune.errors import FinetuneError
-from finetune.model import get_model_fn
-from finetune.model import PredictMode
+from finetune.model import get_model_fn, PredictMode
 from finetune.estimator_utils import PatchedParameterServerStrategy
 
 JL_BASE = os.path.join(os.path.dirname(__file__), "model", "Base_model.jl")
-
 
 class BaseModel(object, metaclass=ABCMeta):
     """
@@ -43,7 +46,14 @@ class BaseModel(object, metaclass=ABCMeta):
         :param **kwargs: key-value pairs of config items to override.
         """
 
-        atexit.register(self.__del__)
+        weak_self = weakref.ref(self)
+
+        def cleanup():
+            strong_self = weak_self()
+            if strong_self is not None:
+                BaseModel.__del__(strong_self)
+
+        atexit.register(cleanup)
         tf.reset_default_graph()
 
         self.config = config or get_default_config()
@@ -65,8 +75,10 @@ class BaseModel(object, metaclass=ABCMeta):
         self.estimator_ = None
         download_data_if_required()
         if self.config.tensorboard_folder is not None:
-            self.estimator_dir = os.path.join(self.config.tensorboard_folder, str(time.time()))
-            os.mkdir(self.estimator_dir)
+            self.estimator_dir = os.path.abspath(
+                os.path.join(self.config.tensorboard_folder, str(int(time.time())))
+            )
+            pathlib.Path(self.estimator_dir).mkdir(parents=True, exist_ok=True)
             self.cleanup_glob = None
         else:
             self.estimator_dir = tempfile.mkdtemp(prefix="Finetune")
@@ -76,8 +88,8 @@ class BaseModel(object, metaclass=ABCMeta):
             if "/we:0" not in name:
                 return value
 
-            vocab_size = self.input_pipeline.encoder.vocab_size
-            word_embeddings = value[:vocab_size - len(self.input_pipeline.encoder.special_tokens)]
+            vocab_size = ENCODER.vocab_size
+            word_embeddings = value[:vocab_size - len(ENCODER.special_tokens)]
             special_embed = value[len(word_embeddings): vocab_size]
             positional_embed = value[vocab_size:]
             if self.config.interpolate_pos_embed and self.config.max_length != len(positional_embed):
@@ -110,6 +122,12 @@ class BaseModel(object, metaclass=ABCMeta):
         # Overridden by subclass to attach a target model onto the shared base featurizer.
         raise NotImplementedError
 
+    def _n_steps(self, n_examples, batch_size, n_gpus):
+        steps = int(math.ceil(
+            n_examples / (batch_size * n_gpus)
+        ))
+        return steps
+
     def finetune(self, Xs, Y=None, batch_size=None):
         if not callable(Xs) and Y is not None and len(Xs) != len(Y):
             raise FinetuneError(
@@ -119,105 +137,97 @@ class BaseModel(object, metaclass=ABCMeta):
                 )
             )
         batch_size = batch_size or self.config.batch_size
-        val_size, val_interval = self.validation_settings(
-            n_examples=len(Xs) if not callable(Xs) else self.config.dataset_size,
-            batch_size=batch_size or self.config.batch_size)
 
-        val_input_fn, train_input_fn = self.input_pipeline.get_train_input_fns(Xs, Y, batch_size=batch_size,
-                                                                               val_size=val_size)
-
+        val_input_fn, train_input_fn, val_size, val_interval = self.input_pipeline.get_train_input_fns(Xs, Y, batch_size=batch_size)
         if val_size <= 10 and self.config.keep_best_model:
             tf.logging.warning(
                 "Early stopping / keeping best model with a validation size of {} is likely to case undesired results".format(val_size))
 
-        steps_per_epoch = (self.config.dataset_size / batch_size) / max(1, len(self.config.visible_gpus))
+        steps_per_epoch = self._n_steps(
+            n_examples=self.config.dataset_size,
+            batch_size=batch_size, 
+            n_gpus=max(1, len(self.config.visible_gpus))
+        )
         num_steps = steps_per_epoch * self.config.n_epochs
         estimator = self.get_estimator()
-        train_hooks = [self.saver.get_saver_hook(estimator=estimator, keep_best_model=self.config.keep_best_model,
-                                                 steps_per_epoch=steps_per_epoch,
-                                                 early_stopping_steps=self.config.early_stopping_steps,
-                                                 eval_frequency=val_interval)]
+        train_hooks = [
+            self.saver.get_saver_hook(
+                estimator=estimator,
+                keep_best_model=self.config.keep_best_model,
+                steps_per_epoch=steps_per_epoch,
+                early_stopping_steps=self.config.early_stopping_steps,
+                eval_frequency=val_interval
+            )
+        ]
         if val_size > 0:
             train_hooks.append(
                 tf.contrib.estimator.InMemoryEvaluatorHook(
                     estimator, val_input_fn, every_n_iter=val_interval, steps=val_size // batch_size
                 )
             )
-
-        estimator.train(train_input_fn, hooks=train_hooks, steps=num_steps)
+        
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            estimator.train(train_input_fn, hooks=train_hooks, steps=num_steps)
 
     def get_estimator(self, force_build_lm=False):
-        if self.estimator_ is None or self.input_pipeline.rebuild or force_build_lm:
-            conf = tf.ConfigProto(
-                allow_soft_placement=self.config.soft_device_placement,
-                log_device_placement=self.config.log_device_placement,
-            )
-            num_gpus = len(self.config.visible_gpus)
-            if num_gpus > 1:
-                distribute_strategy = PatchedParameterServerStrategy(num_gpus_per_worker=num_gpus)
-            else:
-                distribute_strategy = None
-
-            config = tf.estimator.RunConfig(
-                tf_random_seed=self.config.seed,
-                save_summary_steps=None,
-                save_checkpoints_secs=None,
-                save_checkpoints_steps=None,
-                # disable auto summaries
-                session_config=conf,
-                log_step_count_steps=100,
-                train_distribute=distribute_strategy,
-                keep_checkpoint_max=1
-            )
-
-            model_fn = get_model_fn(
-                target_model_fn=self._target_model,
-                predict_op=self._predict_op,
-                predict_proba_op=self._predict_proba_op,
-                build_target_model=self.input_pipeline.target_dim is not None,
-                build_lm=force_build_lm or self.config.lm_loss_coef > 0.0 or self.input_pipeline.target_dim is None,
-                encoder=self.input_pipeline.encoder,
-                target_dim=self.input_pipeline.target_dim,
-                label_encoder=self.input_pipeline.label_encoder,
-                saver=self.saver
-            )
-            self.estimator_ = tf.estimator.Estimator(model_dir=self.estimator_dir, model_fn=model_fn, config=config,
-                                                     params=self.config)
-
-        return self.estimator_
-
-    def validation_settings(self, n_examples, batch_size):
-        """
-        Auto-select reasonable validation settings
-        """
-        if self.config.val_size is not None and self.config.val_interval is not None:
-            return self.config.val_size, self.config.val_interval
-
-        # Auto-select reasonable validation size
-        if self.config.val_size is None:
-            if n_examples < 50:
-                val_size = 0
-            else:
-                val_size = max(5, int(0.05 * n_examples))
-                val_size = min(100, val_size)
+        conf = tf.ConfigProto(
+            allow_soft_placement=self.config.soft_device_placement,
+            log_device_placement=self.config.log_device_placement,
+        )
+        num_gpus = len(self.config.visible_gpus)
+        if num_gpus > 1:
+            distribute_strategy = PatchedParameterServerStrategy(num_gpus_per_worker=num_gpus)
         else:
-            val_size = self.config.val_size
+            distribute_strategy = None
 
-        # Auto-select reasonable validation interval
-        if self.config.val_interval is None:
-            # sys.maxsize corresponds to never running validation
-            # and is used when val_size is set to 0
-            val_interval = 4 * int(math.ceil(val_size / batch_size)) or sys.maxsize
-        else:
-            val_interval = self.config.val_interval
+        config = tf.estimator.RunConfig(
+            tf_random_seed=self.config.seed,
+            save_summary_steps=None,
+            save_checkpoints_secs=None,
+            save_checkpoints_steps=None,
+            # disable auto summaries
+            session_config=conf,
+            log_step_count_steps=100,
+            train_distribute=distribute_strategy,
+            keep_checkpoint_max=1
+        )
 
-        return val_size, val_interval
+        model_fn = get_model_fn(
+            target_model_fn=self._target_model,
+            predict_op=self._predict_op,
+            predict_proba_op=self._predict_proba_op,
+            build_target_model=self.input_pipeline.target_dim is not None,
+            build_lm=force_build_lm or self.config.lm_loss_coef > 0.0 or self.input_pipeline.target_dim is None,
+            encoder=ENCODER,
+            target_dim=self.input_pipeline.target_dim,
+            label_encoder=self.input_pipeline.label_encoder,
+            saver=self.saver
+        )
+        return tf.estimator.Estimator(
+            model_dir=self.estimator_dir,
+            model_fn=model_fn,
+            config=config,
+            params=self.config
+        )
 
-    def _inferrence(self, Xs, mode=None):
+    def _inference(self, Xs, mode=None):
         estimator = self.get_estimator()
         input_func = self.input_pipeline.get_predict_input_fn(Xs)
+        length = len(Xs) if not callable(Xs) else None
+
         pred_gen = list(
-            map(lambda y: y[mode] if mode else y, estimator.predict(input_fn=input_func, predict_keys=mode)))
+            map(
+                lambda y: y[mode] if mode else y,
+                tqdm.tqdm(
+                    estimator.predict(
+                        input_fn=input_func, predict_keys=mode
+                    ),
+                    total=length,
+                    desc="Inference"
+                )
+            )
+        )
         return pred_gen
 
     def fit(self, *args, **kwargs):
@@ -225,7 +235,7 @@ class BaseModel(object, metaclass=ABCMeta):
         return self.finetune(*args, **kwargs)
 
     def _predict(self, Xs):
-        raw_preds = self._inferrence(Xs, PredictMode.NORMAL)
+        raw_preds = self._inference(Xs, PredictMode.NORMAL)
         return self.input_pipeline.label_encoder.inverse_transform(np.asarray(raw_preds))
 
     def predict(self, Xs):
@@ -235,7 +245,7 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         Produce raw numeric outputs for proba predictions
         """
-        raw_preds = self._inferrence(Xs, PredictMode.PROBAS)
+        raw_preds = self._inference(Xs, PredictMode.PROBAS)
         return raw_preds
 
     def predict_proba(self, *args, **kwargs):
@@ -253,7 +263,7 @@ class BaseModel(object, metaclass=ABCMeta):
         return formatted_predictions
 
     def _featurize(self, Xs):
-        raw_preds = self._inferrence(Xs, PredictMode.FEATURIZE)
+        raw_preds = self._inference(Xs, PredictMode.FEATURIZE)
         return np.asarray(raw_preds)
 
     @abstractmethod
@@ -300,16 +310,16 @@ class BaseModel(object, metaclass=ABCMeta):
             return tf_dataset.batch(1)
 
         self.config.use_extra_toks = use_extra_toks
-        encoded = self.input_pipeline.encoder._encode([seed_text])
+        encoded = ENCODER._encode([seed_text])
         if encoded == [] and not use_extra_toks:
             raise ValueError("If you are not using the extra tokens, you must provide some non-empty seed text")
-        start = [self.input_pipeline.encoder.start] if use_extra_toks else []
+        start = [ENCODER.start] if use_extra_toks else []
         encoded = EncodedOutput(token_ids=start + encoded.token_ids[0])
 
         estimator = self.get_estimator(force_build_lm=True)
-        predict = estimator.predict(input_fn=get_input_fn)
+        predict = estimator.predict(input_fn=get_input_fn,)
 
-        EOS = self.input_pipeline.encoder.clf_token
+        EOS = ENCODER.clf_token
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
             for i in range(len(encoded.token_ids), (max_length or self.config.max_length) - 2):
@@ -322,7 +332,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         del self.config["use_extra_toks"]
 
-        return self.input_pipeline.encoder.decode(encoded.token_ids)
+        return ENCODER.decode(encoded.token_ids)
 
     def __getstate__(self):
         """

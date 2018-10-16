@@ -76,7 +76,7 @@ if __name__ == "__main__":
         test_size=0.3,
         random_state=42
     )
-    model = SequenceLabeler(batch_size=2, val_size=0.)
+    model = SequenceLabeler(batch_size=2, val_size=0., chunk_long_sequences=True)
     model.fit(trainX, trainY)
     predictions = model.predict(testX)
     print(annotation_report(testY, predictions))

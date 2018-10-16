@@ -278,7 +278,7 @@ def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value
             end = annotation["end"]
             label = annotation["label"]
             annotation_text = annotation.get("text")
-            
+
             if annotation_text is not None and text[start:end] != annotation_text:
                 raise ValueError(
                     "Annotation text does not match text specified by `start` and `end` indexes. "
