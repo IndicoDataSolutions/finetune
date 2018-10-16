@@ -29,6 +29,7 @@ class BasePipeline(metaclass=ABCMeta):
         self.pad_idx_ = None
         self.rebuild = False
         self.epoch = 0
+        self.dataset_step = 0
 
     @abstractmethod
     def _target_encoder(self):
@@ -37,8 +38,9 @@ class BasePipeline(metaclass=ABCMeta):
 
     def feed_shape_type_def(self):
         TS = tf.TensorShape
-        return ({"tokens": tf.int32, "mask": tf.float32}, tf.float32), (
-            {"tokens": TS([self.config.max_length, 2]), "mask": TS([self.config.max_length])}, TS([self.target_dim]))
+        types = ({"tokens": tf.int32, "mask": tf.float32, 'dataset_step': TS([])}, tf.float32)
+        shapes = ({"tokens": TS([self.config.max_length, 2]), "mask": TS([]), 'dataset_step': None}, TS([self.target_dim]))
+        return types, shapes
 
     def _array_format(self, encoded_output, pad_token=PAD_TOKEN):
         """
@@ -113,13 +115,13 @@ class BasePipeline(metaclass=ABCMeta):
         if not callable(Y) and self.config.chunk_long_sequences:
             dataset_encoded_list = list(dataset_encoded())  # come up with a more principled way to do this .
             self.config.dataset_size = len(dataset_encoded_list)
-        return Dataset.from_generator(lambda: self.wrap_tqdm(dataset_encoded(), train), *shape_def)
+        return Dataset.from_generator(lambda: self.wrap_tqdm(dataset_encoded(), train, self), *shape_def)
 
     def _dataset_without_targets(self, Xs, train):
         if not callable(Xs):
-            Xs_fn = lambda: self.wrap_tqdm(Xs, train)
+            Xs_fn = lambda: self.wrap_tqdm(Xs, train, self)
         else:
-            Xs_fn = lambda: self.wrap_tqdm(Xs(), train)
+            Xs_fn = lambda: self.wrap_tqdm(Xs(), train, self)
 
         dataset_encoded = lambda: itertools.chain.from_iterable(map(self.text_to_tokens_mask, Xs_fn()))
         types, shapes = self.feed_shape_type_def()
@@ -167,7 +169,7 @@ class BasePipeline(metaclass=ABCMeta):
             dataset = lambda: self._dataset_without_targets(Xs, train=train)
         return dataset
 
-    def wrap_tqdm(self, gen, train):
+    def wrap_tqdm(self, gen, train, input_pipeline):
 
         if train is None:
             return gen
@@ -187,10 +189,16 @@ class BasePipeline(metaclass=ABCMeta):
                 desc = "Epoch {}/{}".format(self.epoch, self.config.n_epochs)
             else:
                 desc = "Validation"
+
             for _, i in zip(range(self._skip_tqdm), it):
+                i[0]['dataset_step'] = 0 # placeholder
                 yield i
 
             for i in tqdm.tqdm(it, desc=desc, total=total, miniters=1, leave=self.epoch == self.config.n_epochs and train):
+                input_pipeline.dataset_step += 1
+                # used for learning rate computation
+                # TODO(madison): better handle separation of concerns
+                i[0]['dataset_step'] = input_pipeline.dataset_step
                 yield i
             
             if train:

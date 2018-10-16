@@ -30,8 +30,9 @@ class ComparisonPipeline(ClassificationPipeline):
 
     def feed_shape_type_def(self):
         TS = tf.TensorShape
-        return ({"tokens": tf.int32, "mask": tf.int32}, tf.int32), (
-            {"tokens": TS([2, self.config.max_length, 2]), "mask": TS([2, self.config.max_length])},
+        return (
+            {"tokens": tf.int32, "mask": tf.int32, 'dataset_step': tf.int32}, tf.int32), (
+            {"tokens": TS([2, self.config.max_length, 2]), "mask": TS([2, self.config.max_length]), 'dataset_step': TS([])},
             TS([self.target_dim]))
 
 

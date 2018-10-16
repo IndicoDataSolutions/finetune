@@ -200,8 +200,7 @@ class BaseModel(object, metaclass=ABCMeta):
             build_target_model=self.input_pipeline.target_dim is not None,
             build_lm=force_build_lm or self.config.lm_loss_coef > 0.0 or self.input_pipeline.target_dim is None,
             encoder=ENCODER,
-            target_dim=self.input_pipeline.target_dim,
-            label_encoder=self.input_pipeline.label_encoder,
+            input_pipeline=self.input_pipeline,
             saver=self.saver
         )
         return tf.estimator.Estimator(
@@ -300,7 +299,7 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         def dataset_encoded():
             while not dataset_encoded.finished:
-                yield {"tokens": arr_encoded.token_ids, "mask": arr_encoded.mask}
+                yield {"tokens": arr_encoded.token_ids, "mask": arr_encoded.mask, 'dataset_step': 0}
 
         dataset_encoded.finished = False
 

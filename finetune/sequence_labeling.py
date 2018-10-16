@@ -47,14 +47,16 @@ class SequencePipeline(BasePipeline):
             (
                 {
                     "tokens": tf.int32,
-                    "mask": tf.float32
+                    "mask": tf.float32,
+                    "dataset_step": tf.int32
                 },
                 tf.int32
             ), 
             (
                 {
                     "tokens": TS([self.config.max_length, 2]), 
-                    "mask": TS([self.config.max_length])
+                    "mask": TS([self.config.max_length]),
+                    'dataset_step': TS([])
                 }, 
                 TS(target_shape)
             )

@@ -36,8 +36,14 @@ class MultipleChoicePipeline(BasePipeline):
 
     def feed_shape_type_def(self):
         TS = tf.TensorShape
-        return ({"tokens": tf.int32, "mask": tf.float32}, tf.int32), (
-            {"tokens": TS([self.num_answers, self.config.max_length, 2]), "mask": TS([self.num_answers, self.config.max_length])}, TS([]))
+        return ({"tokens": tf.int32, "mask": tf.float32, 'dataset_step': tf.int32}, tf.int32), (
+            {
+                "tokens": TS([self.num_answers, self.config.max_length, 2]),
+                "mask": TS([self.num_answers, self.config.max_length]), 
+                'dataset_step': TS([])
+            }, 
+            TS([])
+        )
 
     def _target_encoder(self):
         return IDEncoder()

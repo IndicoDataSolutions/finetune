@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 import tensorflow as tf
 from tensorflow.train import Scaffold
@@ -15,8 +17,11 @@ class PredictMode:
     GENERATE_TEXT = "GEN_TEXT"
 
 
-def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_model, build_lm, encoder, target_dim,
-                 label_encoder, saver):
+def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_model, build_lm, encoder, input_pipeline, saver):
+    
+    target_dim = input_pipeline.target_dim
+    label_encoder = input_pipeline.label_encoder
+
     def language_model_op(X, M, params, featurizer_state):
         language_model_state = language_model(
             X=X,
@@ -111,8 +116,8 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                     predictions[PredictMode.GENERATE_TEXT] = lm_predict_op
 
         if mode == tf.estimator.ModeKeys.TRAIN:
-            total_num_steps = params.n_epochs * params.dataset_size//params.batch_size
-            lr_decay = lambda lr, global_step: lr * schedules[params.lr_schedule](tf.to_float(global_step) / total_num_steps)
+            total_num_steps = params.n_epochs * int(math.ceil(params.dataset_size / params.batch_size))
+            lr_decay = lambda lr, global_step: lr * schedules[params.lr_schedule](tf.to_float(features['dataset_step']) / total_num_steps)
             
             optimizer = lambda lr: AdamWOptimizer(
                 learning_rate=lr,
