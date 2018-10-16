@@ -93,6 +93,7 @@
 <li><a class="reference internal" href="#">Finetune Quickstart Guide</a></li>
 <li><a class="reference internal" href="#installation">Installation</a></li>
 <li><a class="reference internal" href="#docker">Docker</a></li>
+<li><a class="reference internal" href="#dataset-loading">Dataset Loading</a></li>
 <li><a class="reference internal" href="#code-examples">Code Examples</a></li>
 <li><a class="reference internal" href="#finetune-api-reference">Finetune API Reference</a></li>
 <li><a class="reference internal" href="#finetune-model-configuration-options">Finetune Model Configuration Options</a></li>
@@ -206,6 +207,32 @@ pytest
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>./docker/build_docker.sh      <span class="c1"># builds a docker image</span>
 ./docker/start_docker.sh      <span class="c1"># starts a docker container in the background</span>
 docker <span class="nb">exec</span> -it finetune bash <span class="c1"># starts a bash session in the docker container</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="dataset-loading">
+<h1>Dataset Loading<a class="headerlink" href="#dataset-loading" title="Permalink to this headline">¶</a></h1>
+<p>Finetune supports providing input data as a list or as a data generator.  When a generator is provided as input, finetune
+takes advantage of the <code class="xref py py-mod docutils literal notranslate"><span class="pre">tf.data</span></code> module for data pipelining</p>
+<p>Providing text and targets in list format:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">X</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;german shepherd&#39;</span><span class="p">,</span> <span class="s1">&#39;maine coon&#39;</span><span class="p">,</span> <span class="s1">&#39;persian&#39;</span><span class="p">,</span> <span class="s1">&#39;beagle&#39;</span><span class="p">]</span>
+<span class="n">Y</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;dog&#39;</span><span class="p">,</span> <span class="s1">&#39;cat&#39;</span><span class="p">,</span> <span class="s1">&#39;cat&#39;</span><span class="p">,</span> <span class="s1">&#39;dog&#39;</span><span class="p">]</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">Classifier</span><span class="p">()</span>
+<span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">Y</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Providing data as a generator:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s1">&#39;pets.csv&#39;</span><span class="p">)</span>
+
+<span class="c1"># Even if raw data is greedily loaded,</span>
+<span class="c1"># using a generator allows us to defer data preprocessing</span>
+<span class="k">def</span> <span class="nf">text_generator</span><span class="p">():</span>
+    <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">df</span><span class="o">.</span><span class="n">Text</span><span class="o">.</span><span class="n">values</span><span class="p">:</span>
+        <span class="k">yield</span> <span class="n">row</span><span class="o">.</span><span class="n">Text</span>
+
+<span class="c1"># dataset_size must be specified if input is provided as generators</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">Classifier</span><span class="p">(</span><span class="n">dataset_size</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">df</span><span class="p">))</span>
+<span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">text_generator</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
