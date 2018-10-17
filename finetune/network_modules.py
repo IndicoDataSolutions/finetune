@@ -27,13 +27,12 @@ def perceptron(x, ny, config, w_init=None, b_init=None):
         return tf.matmul(x, w) + b
 
 
-def featurizer(X, encoder, dropout_placeholder, config, train=False, reuse=None):
+def featurizer(X, encoder, config, train=False, reuse=None):
     """
     The transformer element of the finetuning model. Maps from tokens ids to a dense, embedding of the sequence.
 
     :param X: A tensor of token indexes with shape [batch_size, sequence_length, token_idx]
     :param encoder: A TextEncoder object.
-    :param dropout_placeholder: A placeholder, 1 when dropout is on, 0 when it is off.
     :param config: A config object, containing all parameters for the featurizer.
     :param train: If this flag is true, dropout and losses are added to the graph.
     :param reuse: Should reuse be set within this scope.
@@ -49,7 +48,7 @@ def featurizer(X, encoder, dropout_placeholder, config, train=False, reuse=None)
         embed_weights = tf.get_variable("we", [encoder.vocab_size + config.max_length, config.n_embed],
                                         initializer=tf.random_normal_initializer(stddev=config.weight_stddev))
         if config.train_embeddings:
-            embed_weights = dropout(embed_weights, config.embed_p_drop, train, dropout_placeholder)
+            embed_weights = dropout(embed_weights, config.embed_p_drop, train)
         else:
             embed_weights = tf.stop_gradient(embed_weights)
 
@@ -62,11 +61,11 @@ def featurizer(X, encoder, dropout_placeholder, config, train=False, reuse=None)
                 train_layer = False
             else:
                 train_layer = train
+
             with tf.variable_scope('h%d_' % layer):
                 block_fn = functools.partial(block, n_head=config.n_heads, act_fn=config.act_fn,
                                              resid_pdrop=config.resid_p_drop, attn_pdrop=config.attn_p_drop,
-                                             scope='h%d' % layer, dropout_placeholder=dropout_placeholder,
-                                             train=train_layer, scale=True)
+                                             scope='h%d' % layer, train=train_layer, scale=True)
                 if config.low_memory_mode and train_layer:
                     block_fn = recompute_grad(block_fn, use_entire_scope=True)
                 h = block_fn(h)
@@ -76,7 +75,7 @@ def featurizer(X, encoder, dropout_placeholder, config, train=False, reuse=None)
         clf_token = encoder['_classify_']
         pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
         clf_h = tf.gather(clf_h, tf.range(shape_list(X)[0], dtype=tf.int32) * config.max_length + pool_idx)
-        clf_h = tf.reshape(clf_h, shape=initial_shape[0: -2] + [config.n_embed])
+        clf_h = tf.reshape(clf_h, shape=initial_shape[: -2] + [config.n_embed])
         seq_feats = tf.reshape(h, shape=initial_shape[:-1] + [config.n_embed])
 
         return {
@@ -107,7 +106,8 @@ def language_model(*, X, M, embed_weights, hidden, config, reuse=None):
 
     with tf.variable_scope('model/language-model', reuse=reuse):
         # language model ignores last hidden state because we don't have a target
-        lm_h = tf.reshape(hidden[:, :-1], [-1, config.n_embed])  # [batch, seq_len, embed] --> [batch * seq_len, embed]
+        sliced_hidden = hidden[:, :-1]
+        lm_h = tf.reshape(sliced_hidden, [-1, config.n_embed])  # [batch, seq_len, embed] --> [batch * seq_len, embed]
         lm_logits = tf.matmul(lm_h, embed_weights, transpose_b=True)  # tied weights
         lm_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
             logits=lm_logits,
@@ -115,9 +115,14 @@ def language_model(*, X, M, embed_weights, hidden, config, reuse=None):
         )
 
         lm_losses = tf.reshape(lm_losses, [shape_list(X)[0], shape_list(X)[1] - 1])
-        lm_losses = tf.reduce_sum(lm_losses * M[:, 1:], 1) / tf.reduce_sum(M[:, 1:], 1)
+
+        # tf.maximum op prevents divide by zero error when mask is all 0s
+        lm_losses = tf.reduce_sum(lm_losses * M[:, 1:], 1) / tf.maximum(tf.reduce_sum(M[:, 1:], 1), 1)
+
+        lm_logits_shape = shape_list(lm_logits)
+        sliced_hidden_shape = shape_list(sliced_hidden)
         return {
-            'logits': lm_logits,
+            'logits': tf.reshape(lm_logits, shape=sliced_hidden_shape[:-1] + [lm_logits_shape[-1]]),
             'losses': lm_losses,
         }
 
@@ -130,7 +135,7 @@ def _apply_class_weight(losses, targets, class_weights=None):
     return losses
 
 
-def classifier(hidden, targets, n_targets, dropout_placeholder, config, train=False, reuse=None, **kwargs):
+def classifier(hidden, targets, n_targets, config, train=False, reuse=None, **kwargs):
     """
     A simple linear classifier.
 
@@ -147,14 +152,17 @@ def classifier(hidden, targets, n_targets, dropout_placeholder, config, train=Fa
         losses: The loss for the classifier.
     """
     with tf.variable_scope('classifier', reuse=reuse):
-        hidden = dropout(hidden, config.clf_p_drop, train, dropout_placeholder)
+        hidden = dropout(hidden, config.clf_p_drop, train)
         clf_logits = perceptron(hidden, n_targets, config)
-        clf_losses = tf.nn.softmax_cross_entropy_with_logits_v2(
-            logits=clf_logits,
-            labels=tf.stop_gradient(targets)
-        )
+        if targets is None:
+            clf_losses = None
+        else:
+            clf_losses = tf.nn.softmax_cross_entropy_with_logits_v2(
+                logits=clf_logits,
+                labels=tf.stop_gradient(targets)
+            )
 
-        clf_losses = _apply_class_weight(clf_losses, targets, kwargs.get('class_weights'))
+            clf_losses = _apply_class_weight(clf_losses, targets, kwargs.get('class_weights'))
 
         return {
             'logits': clf_logits,
@@ -162,22 +170,25 @@ def classifier(hidden, targets, n_targets, dropout_placeholder, config, train=Fa
         }
 
 
-def multi_choice_question(hidden, targets, n_targets, dropout_placeholder, config, train=False, reuse=None, **kwargs):
+def multi_choice_question(hidden, targets, n_targets, config, train=False, reuse=None, **kwargs):
     with tf.variable_scope("model", reuse=reuse):
-        hidden = dropout(hidden, config.clf_p_drop, train, dropout_placeholder)
+        hidden = dropout(hidden, config.clf_p_drop, train)
         hidden = tf.unstack(hidden, num=n_targets, axis=1)
         hidden = tf.concat(hidden, axis=0)
-        # some model
+
         clf_out = perceptron(hidden, 1, config)
         clf_out = tf.split(clf_out, n_targets, axis=0)
         clf_out = tf.concat(clf_out, 1)
 
-        clf_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
-            logits=clf_out,
-            labels=tf.stop_gradient(targets)
-        )
+        if targets is None:
+            clf_losses = None
+        else:
+            clf_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
+                logits=clf_out,
+                labels=tf.stop_gradient(targets)
+            )
 
-        clf_losses = _apply_class_weight(clf_losses, targets, kwargs.get('class_weights'))
+            clf_losses = _apply_class_weight(clf_losses, targets, kwargs.get('class_weights'))
 
         return {
             'logits': clf_out,
@@ -185,14 +196,13 @@ def multi_choice_question(hidden, targets, n_targets, dropout_placeholder, confi
         }
 
 
-def multi_classifier(hidden, targets, n_targets, dropout_placeholder, config, train=False, reuse=None, **kwargs):
+def multi_classifier(hidden, targets, n_targets, config, train=False, reuse=None, **kwargs):
     """
     A simple linear classifier.
 
     :param hidden: The output of the featurizer. [batch_size, embed_dim]
     :param targets: The placeholder representing the sparse targets [batch_size, n_targets]
     :param n_targets: A python int containing the number of classes that the model should be learning to predict over.
-    :param dropout_placeholder:
     :param config: A config object, containing all parameters for the featurizer.
     :param train: If this flag is true, dropout and losses are added to the graph.
     :param reuse: Should reuse be set within this scope.
@@ -202,20 +212,23 @@ def multi_classifier(hidden, targets, n_targets, dropout_placeholder, config, tr
         losses: The loss for the classifier.
     """
     with tf.variable_scope('model', reuse=reuse):
-        hidden = dropout(hidden, config.clf_p_drop, train, dropout_placeholder)
+        hidden = dropout(hidden, config.clf_p_drop, train)
         clf_logits = perceptron(hidden, n_targets, config)
-        clf_losses = tf.nn.sigmoid_cross_entropy_with_logits(
-            logits=clf_logits,
-            labels=tf.stop_gradient(targets)
-        )
-        clf_losses = _apply_class_weight(clf_losses, targets, kwargs.get('class_weights'))
+        if targets is None:
+            clf_losses = None
+        else:
+            clf_losses = tf.nn.sigmoid_cross_entropy_with_logits(
+                logits=clf_logits,
+                labels=tf.stop_gradient(targets)
+            )
+            clf_losses = _apply_class_weight(clf_losses, targets, kwargs.get('class_weights'))
         return {
             'logits': clf_logits,
             'losses': clf_losses
         }
 
 
-def regressor(hidden, targets, n_targets, dropout_placeholder, config, train=False, reuse=None, **kwargs):
+def regressor(hidden, targets, n_targets, config, train=False, reuse=None, **kwargs):
     """
     A simple linear regressor.
 
@@ -232,9 +245,12 @@ def regressor(hidden, targets, n_targets, dropout_placeholder, config, train=Fal
         losses: L2 Loss for the regression targets.
     """
     with tf.variable_scope('regressor', reuse=reuse):
-        hidden = dropout(hidden, config.clf_p_drop, train, dropout_placeholder)
+        hidden = dropout(hidden, config.clf_p_drop, train)
         outputs = perceptron(hidden, n_targets, config)
-        loss = tf.nn.l2_loss(outputs - targets)
+        if targets is None:
+            loss = None
+        else:
+            loss = tf.nn.l2_loss(outputs - targets)
         return {
             'logits': outputs,
             'losses': loss
@@ -250,7 +266,7 @@ def class_reweighting(class_weights):
     return custom_grad
 
 
-def sequence_labeler(hidden, targets, n_targets, dropout_placeholder, config, pad_id, multilabel=False, train=False, reuse=None, **kwargs):
+def sequence_labeler(hidden, targets, n_targets, config, pad_id, multilabel=False, train=False, reuse=None, **kwargs):
     """
     An Attention based sequence labeler model. Takes the output of the pre-trained model, applies an additional
     randomly initialised multihead attention block, with residuals on top. The attention is not-future masked to allow
@@ -276,7 +292,7 @@ def sequence_labeler(hidden, targets, n_targets, dropout_placeholder, config, pa
         def seq_lab_internal(hidden):
             attn_fn = functools.partial(attn, scope="seq_label_attn", n_state=nx, n_head=config.seq_num_heads,
                                             resid_pdrop=config.resid_p_drop, attn_pdrop=config.attn_p_drop,
-                                            dropout_placeholder=dropout_placeholder, train=train, scale=False, mask=False)
+                                            train=train, scale=False, mask=False)
             n = norm(attn_fn(hidden) + hidden, 'seq_label_residual')
             flat_logits = tf.layers.dense(n, n_targets)
             logits = tf.reshape(flat_logits, tf.concat([tf.shape(hidden)[:2], [n_targets]], 0))
@@ -295,12 +311,13 @@ def sequence_labeler(hidden, targets, n_targets, dropout_placeholder, config, pa
         if multilabel:
             transition_params = []
             logits_individual = tf.unstack(logits, n_targets, axis=-1)
-            targets_individual = tf.unstack(targets, n_targets, axis=-1)
+            if targets is not None:
+                targets_individual = tf.unstack(targets, n_targets, axis=-1)
             logits = []
             for i in range(n_targets):
                 transition_params.append(tf.get_variable("Transition_matrix_{}".format(i), shape=[2, 2]))
                 logits.append(tf.stack((logits_individual[pad_id], logits_individual[i]), axis=-1))
-                if train and i != pad_id:
+                if targets is not None and train and i != pad_id:
                     log_likelihood += crf_log_likelihood(
                         logits[-1],
                         targets_individual[i],
@@ -310,7 +327,7 @@ def sequence_labeler(hidden, targets, n_targets, dropout_placeholder, config, pa
             logits = tf.stack(logits, axis=-1)
         else:
             transition_params = tf.get_variable("Transition_matrix", shape=[n_targets, n_targets])
-            if train:
+            if train and targets is not None:
                 log_likelihood, _ = crf_log_likelihood(
                     logits,
                     targets,

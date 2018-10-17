@@ -14,7 +14,9 @@ def compute_class_weights(class_weights, Y):
     Optionally compute class weights based on target distribution
     """
     if class_weights is None:
-        return 
+        return
+    if isinstance(Y, np.ndarray):
+        Y = Y.tolist()
 
     options = {'linear', 'log', 'sqrt'}
 

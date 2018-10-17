@@ -12,7 +12,6 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
             [("1",), ("1", "2"), ("2", ), ("<PAD>")]
         ]
         indicox_pred, indicoy_pred = finetune_to_indico_sequence(raw, finetunex, finetuney)
-        print(indicoy_pred)
 
         indicoy = [
             [

@@ -19,6 +19,7 @@ from sklearn.metrics import accuracy_score, recall_score
 
 from finetune import Classifier
 from finetune.datasets import generic_download
+from finetune.input_pipeline import ENCODER
 from finetune.config import get_config, get_small_model_config
 from finetune.errors import FinetuneError
 
@@ -145,7 +146,7 @@ class TestClassifier(unittest.TestCase):
         valid_sample = self.dataset.sample(n=(3 * self.n_sample))
         predictions = model.predict(valid_sample.Text.values)
         recall = recall_score(valid_sample.Target.values, predictions, pos_label=1)
-        model = Classifier(config=self.default_config(class_weights={'1': 100}))
+        model = Classifier(config=self.default_config(class_weights={1: 100}))
         model.fit(train_sample.Text.values, train_sample.Target.values)
         predictions = model.predict(valid_sample.Text.values)
         new_recall = recall_score(valid_sample.Target.values, predictions, pos_label=1)
@@ -218,6 +219,7 @@ class TestClassifier(unittest.TestCase):
         model = Classifier(config=get_small_model_config())
         n_per_class = (self.n_sample * 5)
         trX = ['cat'] * n_per_class + ['finance'] * n_per_class
+        np.random.shuffle(trX)
         trY = copy(trX)
         teX = ['feline'] * n_per_class + ['investment'] * n_per_class
         teY = ['cat'] * n_per_class + ['finance'] * n_per_class
@@ -258,11 +260,10 @@ class TestClassifier(unittest.TestCase):
         model = Classifier(verbose=False)
 
         # A dirty mock to make all model inferences output a hundred _classify_ tokens
-        def load_mock(*args, **kwargs):
-            model.sess = MagicMock()
-            model.sess.run = MagicMock(return_value=100 * [model.encoder['_classify_']])
+        fake_estimator = MagicMock()
+        model.get_estimator = lambda *args, **kwargs: fake_estimator
+        fake_estimator.predict = MagicMock(return_value=iter([{"GEN_TEXT" :100 * [ENCODER['_classify_']]}]))
 
-        model.saver.initialize = load_mock
         lm_out = model.generate_text()
         self.assertEqual(lm_out, '_start__classify_')
 
@@ -270,7 +271,7 @@ class TestClassifier(unittest.TestCase):
         """
         Ensure validation settings do not result in an error
         """
-        config = self.default_config(val_interval=10, val_size=0.5)
+        config = self.default_config(val_interval=10, val_size=10)
         model = Classifier(config=config)
         train_sample = self.dataset.sample(n=20)
         model.fit(train_sample.Text, train_sample.Target)
