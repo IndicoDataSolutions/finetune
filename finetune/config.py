@@ -198,6 +198,7 @@ def get_default_config():
         class_weights=None,
         oversample=False,
         params_device="cpu",
+        eval_acc=False,
 
         # Must remain fixed
         n_heads=12,

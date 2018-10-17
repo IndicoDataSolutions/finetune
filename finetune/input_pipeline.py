@@ -121,8 +121,6 @@ class BasePipeline(metaclass=ABCMeta):
         else:
             Xs_fn = lambda: self.wrap_tqdm(Xs(), train)
 
-        print("Before", tf.contrib.framework.nest.map_structure(type, Xs))
-
         dataset_encoded = lambda: itertools.chain.from_iterable(map(self.text_to_tokens_mask, Xs_fn()))
         types, shapes = self.feed_shape_type_def()
         return Dataset.from_generator(dataset_encoded, types[0], shapes[0])  # 0s cut out the targets
@@ -170,7 +168,10 @@ class BasePipeline(metaclass=ABCMeta):
         try:
             total = len(gen)
         except:
-            total = self.config.dataset_size
+            if train:
+                total = self.config.dataset_size
+            else:
+                total = self.config.val_size
 
         def internal_gen():
             it = iter(gen)

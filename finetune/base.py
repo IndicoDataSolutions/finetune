@@ -183,7 +183,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         config = tf.estimator.RunConfig(
             tf_random_seed=self.config.seed,
-            save_summary_steps=None,
+            save_summary_steps=self.config.val_interval,
             save_checkpoints_secs=None,
             save_checkpoints_steps=None,
             # disable auto summaries
