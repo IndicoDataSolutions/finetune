@@ -1,0 +1,2 @@
+2018
+v0.5.0 Tue Oct 16th -- Move core finetune infrastructure to tf.Estimator API for major model speedup!

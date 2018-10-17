@@ -182,9 +182,6 @@ class TestSequenceLabeler(unittest.TestCase):
         self.model.finetune(text * 10, labels * 10)
         
         predictions = self.model.predict(test_sequence)
-        print(test_sequence)
-        print(predictions)
-        print(len(predictions))
         self.assertEqual(len(predictions[0]), 20)
         self.assertTrue(any(pred["text"] == "dog" for pred in predictions[0]))
 
