@@ -115,7 +115,8 @@ class Settings(dict):
     :param class_weights: One of 'log', 'linear', or 'sqrt'. Auto-scales gradient updates based on class frequency.  Can also be a dictionary that maps from true class name to loss coefficient. Defaults to `None`.
     :param oversample: Should rare classes be oversampled?  Defaults to `False`.
     :param params_device: Which device should gradient updates be aggregated on?
-        If you are using a single GPU and have more than 4Gb of GPU memory you should set this to GPU PCI number (0, 1, 2, etc.). Defaults to `"cpu"`. 
+        If you are using a single GPU and have more than 4Gb of GPU memory you should set this to GPU PCI number (0, 1, 2, etc.). Defaults to `"cpu"`.
+    :param eval_acc: if True, calculates accuracy and writes it to the tensorboard summary files for valudation runs.
     """
     def get_grid_searchable(self):
         return self.grid_searchable

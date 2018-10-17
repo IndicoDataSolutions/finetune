@@ -231,6 +231,9 @@ class BasePipeline(metaclass=ABCMeta):
 
             train_dataset_unbatched = self._make_dataset(Xs_tr, Y_tr, train=True)
 
+        if self.config.chunk_long_sequences:
+            train_dataset_unbatched()
+
         val_dataset = lambda: val_dataset_unbatched().batch(batch_size, drop_remainder=False).cache().prefetch(prefetch_buffer)
         train_dataset = lambda: train_dataset_unbatched().batch(batch_size, drop_remainder=False).repeat(
             self.config.n_epochs).prefetch(prefetch_buffer)
