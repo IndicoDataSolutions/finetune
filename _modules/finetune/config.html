@@ -270,7 +270,8 @@
 <span class="sd">    :param class_weights: One of &#39;log&#39;, &#39;linear&#39;, or &#39;sqrt&#39;. Auto-scales gradient updates based on class frequency.  Can also be a dictionary that maps from true class name to loss coefficient. Defaults to `None`.</span>
 <span class="sd">    :param oversample: Should rare classes be oversampled?  Defaults to `False`.</span>
 <span class="sd">    :param params_device: Which device should gradient updates be aggregated on?</span>
-<span class="sd">        If you are using a single GPU and have more than 4Gb of GPU memory you should set this to GPU PCI number (0, 1, 2, etc.). Defaults to `&quot;cpu&quot;`. </span>
+<span class="sd">        If you are using a single GPU and have more than 4Gb of GPU memory you should set this to GPU PCI number (0, 1, 2, etc.). Defaults to `&quot;cpu&quot;`.</span>
+<span class="sd">    :param eval_acc: if True, calculates accuracy and writes it to the tensorboard summary files for valudation runs.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">def</span> <span class="nf">get_grid_searchable</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">grid_searchable</span>
@@ -353,6 +354,7 @@
         <span class="n">class_weights</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">oversample</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
         <span class="n">params_device</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span>
+        <span class="n">eval_acc</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
 
         <span class="c1"># Must remain fixed</span>
         <span class="n">n_heads</span><span class="o">=</span><span class="mi">12</span><span class="p">,</span>

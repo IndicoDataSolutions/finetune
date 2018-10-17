@@ -338,7 +338,7 @@
 
         <span class="n">config</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">estimator</span><span class="o">.</span><span class="n">RunConfig</span><span class="p">(</span>
             <span class="n">tf_random_seed</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">seed</span><span class="p">,</span>
-            <span class="n">save_summary_steps</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">save_summary_steps</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">val_interval</span><span class="p">,</span>
             <span class="n">save_checkpoints_secs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
             <span class="n">save_checkpoints_steps</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
             <span class="c1"># disable auto summaries</span>

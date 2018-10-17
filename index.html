@@ -1697,6 +1697,7 @@ unless tensorboard_folder is explicitly provided. Defaults to <cite>None</cite>.
 <li><strong>oversample</strong> – Should rare classes be oversampled?  Defaults to <cite>False</cite>.</li>
 <li><strong>params_device</strong> – Which device should gradient updates be aggregated on?
 If you are using a single GPU and have more than 4Gb of GPU memory you should set this to GPU PCI number (0, 1, 2, etc.). Defaults to <cite>“cpu”</cite>.</li>
+<li><strong>eval_acc</strong> – if True, calculates accuracy and writes it to the tensorboard summary files for valudation runs.</li>
 </ul>
 </td>
 </tr>
