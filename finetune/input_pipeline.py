@@ -179,7 +179,7 @@ class BasePipeline(metaclass=ABCMeta):
                 total = self.config.dataset_size
             else:
                 total = self.config.val_size
-    
+                
         def internal_gen():
             it = iter(gen)
 

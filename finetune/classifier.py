@@ -5,7 +5,7 @@ from imblearn.over_sampling import RandomOverSampler
 from finetune.base import BaseModel
 from finetune.target_encoders import OneHotLabelEncoder
 from finetune.network_modules import classifier
-from finetune.input_pipeline import BasePipeline, LOGGER
+from finetune.input_pipeline import BasePipeline
 
 
 class ClassificationPipeline(BasePipeline):

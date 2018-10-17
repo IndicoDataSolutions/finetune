@@ -1,12 +1,16 @@
+import logging
+
 import numpy as np
 import tensorflow as tf
 from tensorflow.train import Scaffold
-from tensorflow.contrib.opt.python.training.weight_decay_optimizers import extend_with_decoupled_weight_decay, AdamWOptimizer
+from tensorflow.contrib.opt.python.training.weight_decay_optimizers import AdamWOptimizer
 
 from finetune.network_modules import featurizer, language_model
 from finetune.utils import sample_with_temperature
 from finetune.optimizers import schedules
 from finetune.imbalance import class_weight_tensor
+
+LOGGER = logging.getLogger('finetune')
 
 class PredictMode:
     FEATURIZE = "FEAT"
@@ -74,6 +78,7 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
         X = features["tokens"]
         M = features["mask"]
         Y = labels
+        pred_op = None
 
         with tf.variable_scope(tf.get_variable_scope()):
             train_loss = 0.0
@@ -86,7 +91,7 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                     target_loss = tf.reduce_mean(target_model_state["losses"])
                     train_loss += (1 - lm_loss_coef) * target_loss
                     tf.summary.scalar("TargetModelLoss", target_loss)
-                if mode == tf.estimator.ModeKeys.PREDICT:
+                if mode == tf.estimator.ModeKeys.PREDICT or tf.estimator.ModeKeys.EVAL:
                     logits = target_model_state["logits"]
                     predict_params = target_model_state.get("predict_params", {})
                     if "_threshold" in params:
@@ -148,6 +153,15 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
             return tf.estimator.EstimatorSpec(mode=mode, loss=train_loss, train_op=train_op, scaffold=scaffold)
 
         assert mode == tf.estimator.ModeKeys.EVAL, "The mode is actually {}".format(mode)
-        return tf.estimator.EstimatorSpec(mode=mode, loss=train_loss, scaffold=scaffold)
+        if params.eval_acc and pred_op is not None:
+            LOGGER.info("Adding evaluation metrics, Accuracy")
+            labels_dense = tf.argmax(labels)
+            metrics = {
+                "Accuracy":  tf.metrics.accuracy(pred_op, labels_dense)
+            }
+        else:
+            metrics = None
+
+        return tf.estimator.EstimatorSpec(mode=mode, loss=train_loss, scaffold=scaffold, eval_metric_ops=metrics)
 
     return _model_fn

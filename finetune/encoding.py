@@ -12,7 +12,7 @@ import codecs
 import ftfy
 import spacy
 import numpy as np
-from tqdm import tqdm
+import tensorflow as tf
 
 from finetune.config import PAD_TOKEN
 
@@ -277,7 +277,8 @@ class TextEncoder(object):
 
         # for each field in that example
         for field in Xs:
-            assert isinstance(field, (list, tuple)), "This should be a list of strings, if its not, you've done something wrong..."
+            assert isinstance(field, (list, tuple)), "This should be a list of strings, if its not," \
+                "you've done something wrong... instead it's {}".format(tf.contrib.framework.nest.map_structure(type, field))
             encoded = self._encode(field, labels=Y)
             token_ids.append(_flatten(encoded.token_ids))
             tokens.append(_flatten(encoded.tokens))
