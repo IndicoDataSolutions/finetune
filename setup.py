@@ -6,6 +6,7 @@ from sys import version_info
 from setuptools import setup, find_packages
 from pathlib import Path
 import urllib
+import urllib.request
 
 
 REQUIREMENTS = [
