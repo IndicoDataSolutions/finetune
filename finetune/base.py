@@ -20,8 +20,6 @@ import tensorflow as tf
 from tensorflow.data import Dataset
 from sklearn.model_selection import train_test_split
 
-
-from finetune.download import download_data_if_required
 from finetune.utils import interpolate_pos_embed, list_transpose
 from finetune.encoding import EncodedOutput
 from finetune.input_pipeline import ENCODER
@@ -73,7 +71,6 @@ class BaseModel(object, metaclass=ABCMeta):
         # Initializes the non-serialized bits of the class.
         self._set_random_seed(self.config.seed)
         self.estimator_ = None
-        download_data_if_required()
         if self.config.tensorboard_folder is not None:
             self.estimator_dir = os.path.abspath(
                 os.path.join(self.config.tensorboard_folder, str(int(time.time())))

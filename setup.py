@@ -29,3 +29,7 @@ setup(
     install_requires=REQUIREMENTS,
     include_package_data=False
 )
+
+print("\nDownloading required model files...")
+from finetune.download import download_data_if_required
+download_data_if_required()
