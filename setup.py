@@ -28,7 +28,7 @@ REQUIREMENTS = [
 setup(
     name="finetune",
     packages=find_packages(),
-    version="0.5.4",
+    version="0.5.5",
     install_requires=REQUIREMENTS,
     include_package_data=False
 )
@@ -60,6 +60,4 @@ def download_data_if_required():
             fd.write(data)
             fd.close()
 
-
-if __name__ == "__main__":
-    download_data_if_required()
+download_data_if_required()
