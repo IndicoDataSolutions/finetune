@@ -220,7 +220,6 @@ class TestClassifier(unittest.TestCase):
         predY = model.predict(teX)
         self.assertEqual(accuracy_score(teY, predY), 1.00)
 
-
     def test_reasonable_predictions_smaller_model(self):
         """
         Ensure model converges to a reasonable solution for a trivial problem
