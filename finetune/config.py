@@ -5,6 +5,7 @@ import subprocess
 import traceback
 import warnings
 
+import numpy as np
 import tensorflow as tf
 from functools import lru_cache
 from collections import namedtuple
@@ -117,6 +118,7 @@ class Settings(dict):
     :param params_device: Which device should gradient updates be aggregated on?
         If you are using a single GPU and have more than 4Gb of GPU memory you should set this to GPU PCI number (0, 1, 2, etc.). Defaults to `"cpu"`.
     :param eval_acc: if True, calculates accuracy and writes it to the tensorboard summary files for valudation runs.
+    :param save_dtype: specifies what precision to save model weights with.  Defaults to `np.float32`.
     """
     def get_grid_searchable(self):
         return self.grid_searchable
@@ -200,6 +202,7 @@ def get_default_config():
         oversample=False,
         params_device="cpu",
         eval_acc=False,
+        save_dtype=None,
 
         # Must remain fixed
         n_heads=12,

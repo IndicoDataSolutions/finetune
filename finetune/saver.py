@@ -94,6 +94,7 @@ class Saver:
         if not os.path.exists(folder) and mkdir:
             os.mkdir(folder)
         if self.save_dtype is not None:
+            LOGGER.info("Saving with {} precision.".format(self.save_dtype.__class__.__name__))
             values = [a.astype(self.save_dtype) for a in values]
 
         var_names_reduced, vals_reduced = self.remove_unchanged(names, values, self.fallback)
