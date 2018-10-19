@@ -1,2 +1,3 @@
 2018
-v0.5.0 Tue Oct 16th -- Move core finetune infrastructure to tf.Estimator API for major model speedup!
+v0.5.0 Tue Oct 17th -- Move core finetune infrastructure to tf.Estimator API for major model speedup!
+v0.5.1 Thu Oct 19th -- Fix lazy encoder install
