@@ -1,8 +1,7 @@
-# Download data
 import os
+import urllib
+import urllib.request
 from pathlib import Path
-
-import requests
 
 import finetune
 
@@ -20,21 +19,17 @@ def download_data_if_required():
     ]
 
     for root_url, filename in file_list:
-        folder = os.path.join(
-            os.path.dirname(finetune.__file__),
-            'model'
-        )
+        folder = os.path.abspath(os.path.join(
+            os.path.dirname(finetune.__file__), 'model'
+        ))
         if not os.path.exists(folder):
             os.mkdir(folder)
 
         local_filepath = os.path.join(folder, filename)
 
         if not Path(local_filepath).exists():
-            data = requests.get(root_url + filename).content
+            print("Downloading: {}".format(local_filepath))
+            data = urllib.request.urlopen(root_url + filename).read()
             fd = open(local_filepath, 'wb')
             fd.write(data)
             fd.close()
-
-
-if __name__ == "__main__":
-    download_data_if_required()

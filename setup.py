@@ -4,7 +4,7 @@ IndicoAPI setup
 import os
 from sys import version_info
 from setuptools import setup, find_packages
-from pathlib import Path
+
 
 REQUIREMENTS = [
     "pandas>=0.23.1",
@@ -25,11 +25,7 @@ REQUIREMENTS = [
 setup(
     name="finetune",
     packages=find_packages(),
-    version="0.5.2",
+    version="0.5.8",
     install_requires=REQUIREMENTS,
     include_package_data=False
 )
-
-print("\nDownloading required model files...")
-from finetune.download import download_data_if_required
-download_data_if_required()

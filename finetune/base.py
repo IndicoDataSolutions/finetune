@@ -27,6 +27,7 @@ from finetune.config import get_default_config
 from finetune.saver import Saver
 from finetune.errors import FinetuneError
 from finetune.model import get_model_fn, PredictMode
+from finetune.download import download_data_if_required
 from finetune.estimator_utils import PatchedParameterServerStrategy
 
 JL_BASE = os.path.join(os.path.dirname(__file__), "model", "Base_model.jl")
@@ -61,6 +62,7 @@ class BaseModel(object, metaclass=ABCMeta):
             raise ValueError("If you are only finetuning a subset of the layers, you cannot finetune embeddings.")
 
         self.input_pipeline = self._get_input_pipeline()
+        download_data_if_required()
         self._initialize()
 
     @abstractmethod
