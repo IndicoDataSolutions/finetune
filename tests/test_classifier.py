@@ -173,12 +173,21 @@ class TestClassifier(unittest.TestCase):
         Ensure saving + loading does not change predictions
         """
         save_file = 'tests/saved-models/test-save-load'
-        model = Classifier(config=self.default_config())
+        model = Classifier(config=self.default_config(save_adam_vars=False))
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text, train_sample.Target)
         predictions = model.predict(valid_sample.Text)
+        
+        # testing file size reduction options
         model.save(save_file)
+        self.assertLess(os.stat(save_file).st_size, 500000000)
+
+        # reducing floating point precision
+        model.saver.save_dtype = np.float16
+        model.save(save_file)
+        self.assertLess(os.stat(save_file).st_size, 250000000)
+
         model = Classifier.load(save_file)
         new_predictions = model.predict(valid_sample.Text)
         for i, prediction in enumerate(predictions):
