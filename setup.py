@@ -25,7 +25,11 @@ REQUIREMENTS = [
 setup(
     name="finetune",
     packages=find_packages(),
-    version="0.5.0",
+    version="0.5.1",
     install_requires=REQUIREMENTS,
     include_package_data=False
 )
+
+print("\nDownloading required model files...")
+from finetune.download import download_data_if_required
+download_data_if_required()
