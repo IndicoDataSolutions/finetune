@@ -105,7 +105,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         self.saver = Saver(
             fallback_filename=self.config.base_model_path,
-            exclude_matches=None if self.config.save_adam_vars else "OptimizeLoss",
+            exclude_matches=None if self.config.save_adam_vars else "Adam",
             variable_transforms=[process_embeddings]
         )
 
