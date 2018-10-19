@@ -81,6 +81,12 @@ class TextEncoder(object):
     UNK_IDX = 0
 
     def __init__(self):
+        self.initialized = False
+
+    def _lazy_init(self):
+        if self.initialized:
+            return
+
         self.encoder = json.load(open(ENCODER_PATH))
         self.decoder = {v: k for k, v in self.encoder.items()}
 
@@ -97,9 +103,12 @@ class TextEncoder(object):
         self.start = self.encoder['_start_']
         self.delimiter = self.encoder['_delimiter_']
         self.clf_token = self.encoder['_classify_']
+        self.initialized = True
+
 
     @property
     def vocab_size(self):
+        self._lazy_init()
         return len(self.encoder)
 
     def __getitem__(self, key):
@@ -155,6 +164,7 @@ class TextEncoder(object):
         """
         Convert a batch of raw text to a batch of byte-pair encoded token indices.
         """
+        self._lazy_init()
         batch_tokens = []
         batch_token_idxs = []
         batch_label_idxs = []
