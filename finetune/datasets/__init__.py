@@ -67,7 +67,7 @@ def comparison_download(url, text_column1, text_column2, target_column, filename
 
     response = requests.get(url)
     _file = StringIO(response.text.replace('\r', '\n'))
-    df = pd.read_csv(_file, sep="\t")
+    df = pd.read_csv(_file, sep=",")
     df = df.dropna(subset=[text_column1, text_column2, target_column])
 
     new_df = pd.DataFrame(columns=['Text1', 'Text2', 'Target'])
