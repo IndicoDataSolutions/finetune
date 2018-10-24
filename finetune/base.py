@@ -53,7 +53,6 @@ class BaseModel(object, metaclass=ABCMeta):
                 BaseModel.__del__(strong_self)
 
         atexit.register(cleanup)
-        tf.reset_default_graph()
 
         self.config = config or get_default_config()
         self.config.update(kwargs)
@@ -376,7 +375,6 @@ class BaseModel(object, metaclass=ABCMeta):
         model = saver.load(path)
         model._initialize()
         model.saver.variables = saver.variables
-        tf.reset_default_graph()
         return model
 
     @classmethod

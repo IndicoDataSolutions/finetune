@@ -68,26 +68,6 @@ def find_trainable_variables(key, exclude=None):
     return trainable_variables
 
 
-def soft_split(*xs, n_splits=None):
-    """
-    Similar to tf.split but can accommodate batches that are not evenly divisible by n_splits.
-
-    Useful for data parallelism across multiple devices, where the batch size is not necessarily divisible by the
-    number of devices or is variable between batches.
-    """
-    if not n_splits or not isinstance(n_splits, int):
-        raise ValueError("n_splits must be a valid integer.")
-
-    x = xs[0]
-    current_batch_size = shape_list(x)[0]
-    n_per = tf.to_int32(tf.ceil(current_batch_size / n_splits))
-    for i in range(n_splits):
-        start = tf.minimum(i * n_per, current_batch_size)
-        end = tf.minimum((i + 1) * n_per, current_batch_size)
-        i_range = tf.range(start, end)
-        yield [tf.gather(x, i_range) if x is not None else None for x in xs]
-
-
 def flatten(outer):
     return [el for inner in outer for el in inner]
 
