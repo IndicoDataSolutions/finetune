@@ -1,22 +1,59 @@
+import logging
+
+import os
+import subprocess
+import traceback
+import warnings
+
+import numpy as np
 import tensorflow as tf
-from tensorflow.python.client import device_lib
 from functools import lru_cache
 from collections import namedtuple
 
-# CONSTANTS
+LOGGER = logging.getLogger('finetune')
 PAD_TOKEN = '<PAD>'
 
 
 @lru_cache()
 def all_gpus():
     """
-    Get integer ids of all available GPUs
+    Get integer ids of all available GPUs.
+
+    Sample response from nvidia-smi -L:
+        GPU 0: GeForce GTX 980 (UUID: GPU-2d683060-957f-d5ad-123c-a5b49b0116d9)
+        GPU 1: GeForce GTX 980 (UUID: GPU-7b8496dc-3eaf-8db7-01e7-c4a884f66acf)
+        GPU 2: GeForce GTX TITAN X (UUID: GPU-9e01f108-e7de-becd-2589-966dcc1c778f)
     """
-    local_device_protos = device_lib.list_local_devices()
-    return [
-        int(x.name.split(':')[-1]) for x in local_device_protos
-        if x.device_type == 'GPU'
-    ]
+    try:
+        sp = subprocess.Popen(['nvidia-smi', '-L'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        response = sp.communicate()[0]
+        gpu_list = response.decode('utf-8').strip().split('\n')
+        device_ids = {}
+        for i, gpu in enumerate(gpu_list):
+            # May be worth logging GPU description
+            device_id_str, _, description = gpu.partition(':')
+            assert int(device_id_str.split(' ')[-1]) == i
+            device_ids[i] = description
+
+        cuda_visible_devices = os.getenv("CUDA_VISIBLE_DEVICES")
+        if cuda_visible_devices:
+            device_ids = {
+                device_id: description 
+                for device_id, description in device_ids.items()
+                if str(device_id) in cuda_visible_devices.split(',')
+            }
+        LOGGER.info(" Visible Devices: {{{}}}".format(
+            ", ".join([
+                "{}:{}".format(device_id, description.split('(')[0]).strip()
+                for device_id, description in device_ids.items()
+            ])
+        ))
+    except:
+        # Failed to parse out available GPUs properly
+        warnings.warn("Failed to find available GPUS.  Falling back to CPU only mode.")
+        device_ids = []
+
+    return device_ids
 
 GridSearchable = namedtuple("GridSearchable", "default iterator")
 
@@ -43,7 +80,6 @@ class Settings(dict):
     :param resid_p_drop: Residual layer fully connected network dropout probability.  Defaults to `0.1`.
     :param clf_p_drop: Classifier dropout probability.  Defaults to `0.1`.
     :param l2_reg: L2 regularization coefficient. Defaults to `0.01`.
-    :param regularize_deviation: L2 penalty against pre-trained model weights.  Defaults to `0.0`.
     :param b1: Adam b1 parameter.  Defaults to `0.9`.
     :param b2: Adam b2 parameter.  Defaults to `0.999`.
     :param epsilon: Adam epsilon parameter: Defaults to `1e-8`.
@@ -57,14 +93,16 @@ class Settings(dict):
         dataset size exceeds a few thousand examples.  Defaults to `0.0`.
     :param summarize_grads: Include gradient summary information in tensorboard.  Defaults to `False`.
     :param verbose: Print TQDM logs?  Defaults to `True`.
-    :param val_size: Validation set size as a percentage of all training data.  Defaults to `0.05`. 
-    :param val_interval: Evaluate on validation set after `val_interval` batches.  Defaults to `150`.
-    :param val_window_size: Print running average of validation score over `val_window_size` batches.  Defaults to `5`.
-    :param rolling_avg_decay: Momentum-style parameter to smooth out validation estimates printed during training. Defaults to `0.99`.
-    :param lm_temp: Language model temperature -- a value of `0.0` corresponds to greedy maximum likelihood predictions 
+
+    :param val_size: Validation set size as a percentage of all training data.  Validation will not be run by default if n_examples < 50.
+        If n_examples > 50, defaults to max(5, min(100, 0.05 * n_examples))
+    :param val_interval: Evaluate on validation set after `val_interval` batches.  
+        Defaults to 4 * val_size / batch_size to ensure that too much time is not spent on validation.
+    :param lm_temp: Language model temperature -- a value of `0.0` corresponds to greedy maximum likelihood predictions
         while a value of `1.0` corresponds to random predictions. Defaults to `0.2`. 
     :param seq_num_heads: Number of attention heads of final attention layer. Defaults to `16`.
     :param subtoken_predictions: Return predictions at subtoken granularity or token granularity?  Defaults to `False`.
+    :param multi_label_sequences: Use a multi-labeling approach to sequence labeling to allow overlapping labels.
     :param multi_label_threshold: Threshold of sigmoid unit in multi label classifier. 
         Can be increased or lowered to trade off precision / recall. Defaults to `0.5`.
     :param autosave_path: Save current best model (as measured by validation loss) to this location. Defaults to `None`.
@@ -75,6 +113,12 @@ class Settings(dict):
     :param save_adam_vars: Save adam parameters when calling `model.save()`.  Defaults to `True`.
     :param num_layers_trained: How many layers to finetune.  Specifying a value less than 12 will train layers starting from model output. Defaults to `12`.
     :param train_embeddings: Should embedding layer be finetuned? Defaults to `True`.
+    :param class_weights: One of 'log', 'linear', or 'sqrt'. Auto-scales gradient updates based on class frequency.  Can also be a dictionary that maps from true class name to loss coefficient. Defaults to `None`.
+    :param oversample: Should rare classes be oversampled?  Defaults to `False`.
+    :param params_device: Which device should gradient updates be aggregated on?
+        If you are using a single GPU and have more than 4Gb of GPU memory you should set this to GPU PCI number (0, 1, 2, etc.). Defaults to `"cpu"`.
+    :param eval_acc: if True, calculates accuracy and writes it to the tensorboard summary files for valudation runs.
+    :param save_dtype: specifies what precision to save model weights with.  Defaults to `np.float32`.
     """
     def get_grid_searchable(self):
         return self.grid_searchable
@@ -109,6 +153,7 @@ def get_default_config():
     :return: Config object.
     """
     return Settings(
+        dataset_size=None,
         batch_size=2,
         visible_gpus=all_gpus(),
         n_epochs=GridSearchable(3, [1, 2, 3, 4]),
@@ -124,7 +169,6 @@ def get_default_config():
         clf_p_drop=0.1,
         l2_reg=GridSearchable(0.01, [0.0, 0.1, 0.01, 0.001]),
         vector_l2=False,
-        regularize_deviation=False,
         b1=0.9, 
         b2=0.999,
         epsilon=1e-8,
@@ -135,29 +179,48 @@ def get_default_config():
         lm_loss_coef=0.0,
         summarize_grads=False,
         verbose=True,
-        val_size=0.05,
-        val_interval=150,
-        val_window_size=5,
-        rolling_avg_decay=0.99,
+        val_size=None,
+        val_interval=None,
         lm_temp=0.2,
         seq_num_heads=16,
         pad_token="<PAD>",
         subtoken_predictions=False,
+        multi_label_sequences=False,
         multi_label_threshold=0.5,
         autosave_path=None,
+        keep_best_model=False,
+        early_stopping_steps=100,
         tensorboard_folder=None,
+        shuffle_buffer_size=100,
+        min_secs_between_eval=60,
         log_device_placement=False,
         soft_device_placement=True,
-        save_adam_vars=False,
+        save_adam_vars=True,
         num_layers_trained=12,
         train_embeddings=True,
+        class_weights=None,
+        oversample=False,
+        params_device="cpu",
+        eval_acc=False,
+        save_dtype=None,
 
         # Must remain fixed
         n_heads=12,
         n_layer=12,
         act_fn="gelu",
         n_embed=768,
+        base_model_path=os.path.join(os.path.dirname(__file__), "model", "Base_model.jl")
     )
+
+
+def get_small_model_config():
+    conf = get_default_config()
+    conf.n_heads = 8
+    conf.n_embed = 512
+    conf.n_layer = 6
+    conf.num_layers_trained = 6
+    conf.base_model_path = os.path.join(os.path.dirname(__file__), "model", "SmallBaseModel.jl")
+    return conf
 
 
 def get_config(**kwargs):

@@ -4,7 +4,7 @@ IndicoAPI setup
 import os
 from sys import version_info
 from setuptools import setup, find_packages
-from pathlib import Path
+
 
 REQUIREMENTS = [
     "pandas>=0.23.1",
@@ -19,12 +19,13 @@ REQUIREMENTS = [
     "h5py>=2.8.0",
     "joblib>=0.12.0",
     "bs4>=0.0.1",
+    "imblearn>=0.0"
 ]
 
 setup(
     name="finetune",
     packages=find_packages(),
-    version="0.4.1",
+    version="0.5.10",
     install_requires=REQUIREMENTS,
     include_package_data=False
 )
