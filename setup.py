@@ -25,7 +25,7 @@ REQUIREMENTS = [
 setup(
     name="finetune",
     packages=find_packages(),
-    version="0.5.8",
+    version="0.5.9",
     install_requires=REQUIREMENTS,
     include_package_data=False
 )
