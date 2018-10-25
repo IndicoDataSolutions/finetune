@@ -27,5 +27,9 @@ setup(
     packages=find_packages(),
     version="0.5.10",
     install_requires=REQUIREMENTS,
+    extras_require={
+        "tf": ["tensorflow"],
+        "tf_gpu": ["tensorflow-gpu"],
+    },
     include_package_data=False
 )
