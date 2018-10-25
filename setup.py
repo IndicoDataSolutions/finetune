@@ -28,8 +28,8 @@ setup(
     version="0.5.10",
     install_requires=REQUIREMENTS,
     extras_require={
-        "tf": ["tensorflow"],
-        "tf_gpu": ["tensorflow-gpu"],
+        "tf": ["tensorflow>=1.11.0"],
+        "tf_gpu": ["tensorflow-gpu>=1.11.0"],
     },
     include_package_data=False
 )
