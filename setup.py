@@ -8,7 +8,6 @@ from setuptools import setup, find_packages
 
 REQUIREMENTS = [
     "pandas>=0.23.1",
-    "IndicoIo>=1.1.5",
     "tqdm>=4.0.0",
     "numpy>=1.13.0",
     "scipy>=1.1.0",
