@@ -209,7 +209,7 @@ def get_default_config():
         n_layer=12,
         act_fn="gelu",
         n_embed=768,
-        base_model_path=os.path.join(os.path.dirname(__file__), "model", "Base_model.jl")
+        base_model_path="Base_model.jl"
     )
 
 
@@ -219,7 +219,7 @@ def get_small_model_config():
     conf.n_embed = 512
     conf.n_layer = 6
     conf.num_layers_trained = 6
-    conf.base_model_path = os.path.join(os.path.dirname(__file__), "model", "SmallBaseModel.jl")
+    conf.base_model_path = "SmallBaseModel.jl"
     return conf
 
 

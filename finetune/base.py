@@ -101,8 +101,9 @@ class BaseModel(object, metaclass=ABCMeta):
             embeddings = np.concatenate((word_embeddings, special_embed, positional_embed), axis=0)
             return embeddings
 
+        base_model_path = os.path.join(os.path.dirname(__file__), "model", self.config.base_model_path)
         self.saver = Saver(
-            fallback_filename=self.config.base_model_path,
+            fallback_filename=base_model_path,
             exclude_matches=None if self.config.save_adam_vars else "Adam",
             variable_transforms=[process_embeddings],
             save_dtype=self.config.save_dtype
@@ -472,7 +473,7 @@ class BaseModel(object, metaclass=ABCMeta):
         return max(aggregated_results, key=lambda x: x[1])[0]
 
     def __del__(self):
-        if self.cleanup_glob is not None:
+        if hasattr(self, 'cleanup_glob') and self.cleanup_glob is not None:
             for file_or_folder in glob.glob(self.cleanup_glob):
                 try:
                     shutil.rmtree(file_or_folder)
