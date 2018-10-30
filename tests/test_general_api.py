@@ -11,7 +11,7 @@ import tensorflow as tf
 import pandas as pd
 import numpy as np
 
-from finetune import MultifieldClassifier, MultifieldRegressor, Regressor
+from finetune import MultiFieldClassifier, MultiFieldRegressor, Regressor
 from finetune.config import get_config
 from finetune.datasets import generic_download
 
@@ -67,11 +67,11 @@ class TestModel(unittest.TestCase):
         Ensure saving + loading does not cause errors
         Ensure saving + loading does not change predictions
         """
-        self.model = MultifieldClassifier()
+        self.model = MultiFieldClassifier()
         self.model.fit(self.text_data_train, self.train_targets)
         predictions = self.model.predict(self.text_data_valid)
         self.model.save(self.save_file)
-        model = MultifieldRegressor.load(self.save_file)
+        model = MultiFieldRegressor.load(self.save_file)
         new_predictions = model.predict(self.text_data_valid)
         for new_pred, old_pred in zip(new_predictions, predictions):
             self.assertEqual(new_pred, old_pred)\
@@ -80,7 +80,7 @@ class TestModel(unittest.TestCase):
         """
         Smoke test for problems with multifield
         """
-        self.model = MultifieldClassifier()
+        self.model = MultiFieldClassifier()
         n_examples = 10
         self.model.fit([["text " * 100] * 10] * n_examples, ["target"] * n_examples)
         self.model.fit([["text", "text", "text", "text " * 300, "text " * 300]] * n_examples, ["target"] * n_examples)
@@ -91,11 +91,11 @@ class TestModel(unittest.TestCase):
         Ensure saving + loading does not cause errors                                                                                                                               
         Ensure saving + loading does not change predictions                                                                                                                         
         """
-        self.model = MultifieldRegressor()
+        self.model = MultiFieldRegressor()
         self.model.fit(self.text_data_train, [np.random.random() for _ in self.train_targets])
         predictions = self.model.predict(self.text_data_valid)
         self.model.save(self.save_file)
-        model = MultifieldRegressor.load(self.save_file)
+        model = MultiFieldRegressor.load(self.save_file)
         new_predictions = model.predict(self.text_data_valid)
         for new_pred, old_pred in zip(new_predictions, predictions):
             self.assertAlmostEqual(new_pred, old_pred, places=2)
