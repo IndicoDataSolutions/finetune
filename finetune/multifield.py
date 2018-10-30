@@ -2,17 +2,17 @@ from finetune.classifier import Classifier, ClassificationPipeline
 from finetune.regressor import Regressor, RegressionPipeline
 from finetune.base import BaseModel
 
-class MultifieldClassificationPipeline(ClassificationPipeline):
+class MultiFieldClassificationPipeline(ClassificationPipeline):
     def _format_for_encoding(self, X):
         return [X]
 
 
-class MultifieldRegressionPipeline(RegressionPipeline):
+class MultiFieldRegressionPipeline(RegressionPipeline):
     def _format_for_encoding(self, X):
         return [X]
 
 
-class MultifieldClassifier(Classifier):
+class MultiFieldClassifier(Classifier):
     """ 
     Classifies a set of documents into 1 of N classes.
 
@@ -21,7 +21,7 @@ class MultifieldClassifier(Classifier):
     """
 
     def _get_input_pipeline(self):
-        return MultifieldClassificationPipeline(self.config)
+        return MultiFieldClassificationPipeline(self.config)
         
     def finetune(self, Xs, Y=None, batch_size=None):
         """
@@ -60,7 +60,7 @@ class MultifieldClassifier(Classifier):
         return BaseModel.featurize(self, Xs)
 
 
-class MultifieldRegressor(Regressor):
+class MultiFieldRegressor(Regressor):
     """ 
     Regresses one or more floating point values given a set of documents per example.
 
@@ -69,7 +69,7 @@ class MultifieldRegressor(Regressor):
     """
 
     def _get_input_pipeline(self):
-        return MultifieldRegressionPipeline(self.config)
+        return MultiFieldRegressionPipeline(self.config)
         
     def finetune(self, Xs, Y=None, batch_size=None):
         """
