@@ -3,7 +3,7 @@ import logging
 
 import tensorflow as tf
 
-from finetune.multifield import MultifieldClassifier, MultifieldRegressor
+from finetune.multifield import MultiFieldClassifier, MultiFieldRegressor
 from finetune.classifier import Classifier
 from finetune.regressor import Regressor
 from finetune.sequence_labeling import SequenceLabeler
@@ -11,7 +11,7 @@ from finetune.comparison import Comparison
 from finetune.multi_label_classifier import MultiLabelClassifier
 from finetune.multiple_choice import MultipleChoice
 
-__version__, VERSION, version = ("0.5.10",) * 3
+__version__, VERSION, version = ("0.5.11",) * 3
 
 
 # Logging configuration

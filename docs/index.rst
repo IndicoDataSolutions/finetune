@@ -117,10 +117,10 @@ Finetune API Reference
 .. autoclass:: finetune.Regressor
     :inherited-members:
 
-.. autoclass:: finetune.MultifieldClassifier
+.. autoclass:: finetune.MultiFieldClassifier
     :inherited-members:
 
-.. autoclass:: finetune.MultifieldRegressor
+.. autoclass:: finetune.MultiFieldRegressor
     :inherited-members:
 
 .. autoclass:: finetune.MultiLabelClassifier
