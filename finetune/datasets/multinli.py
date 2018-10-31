@@ -8,7 +8,7 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 
-from finetune import MultifieldClassifier
+from finetune import MultiFieldClassifier
 from finetune.datasets import Dataset
 
 logging.basicConfig(level=logging.DEBUG)
@@ -45,7 +45,7 @@ class MultiNLI(Dataset):
 if __name__ == "__main__":
     # Train and evaluate on MultiNLI
     dataset = MultiNLI(nrows=1000).dataframe
-    model = MultifieldClassifier(verbose=True)
+    model = MultiFieldClassifier(verbose=True)
     trainX1, testX1, trainX2, testX2, trainY, testY = train_test_split(
         dataset.x1, dataset.x2, dataset.target, test_size=0.3, random_state=42
     )
