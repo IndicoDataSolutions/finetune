@@ -1,5 +1,10 @@
 import unittest
+
+import numpy as np
+
 from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_sequence
+from finetune.imbalance import compute_class_weights
+
 
 class TestFinetuneIndicoConverters(unittest.TestCase):
 
@@ -81,7 +86,13 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
         self.assertCountEqual(finetuney[0][1], finetuney_pred[0][1])
         self.assertCountEqual(finetuney[0][2], finetuney_pred[0][2])
 
+    def test_compute_class_weights(self):
+        # regression test for issue #181
+        np.random.seed(0)
+        y = np.random.choice(a=[0, 1, 2], size=1000, p=[0.3, 0.6, 0.1])
+        weights = compute_class_weights('log', y)
+        self.assertEqual(weights[1], 1.0)
 
-
+ 
 if __name__ == '__main__':
     unittest.main()
