@@ -88,8 +88,8 @@ Model Types
 - `Classifier`
 - `Regressor`
 - `SequenceLabeler`
-- `MultifieldClassifier`
-- `MultifieldRegressor`
+- `MultiFieldClassifier`
+- `MultiFieldRegressor`
 
 For example usage of each of these model types, see the [finetune/datasets directory](https://github.com/IndicoDataSolutions/finetune/tree/master/finetune/datasets).
 For purposes of simplicity and runtime these examples use smaller versions of the published datasets.
