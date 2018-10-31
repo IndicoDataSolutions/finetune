@@ -8,7 +8,7 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 
-from finetune import MultifieldClassifier
+from finetune import MultiFieldClassifier
 from finetune.datasets import Dataset
 from finetune.config import get_default_config
 
@@ -50,11 +50,11 @@ if __name__ == "__main__":
         dataset.x1, dataset.x2, dataset.target, test_size=0.3, random_state=42
     )
     base_conf = get_default_config()
-    res = MultifieldClassifier.finetune_grid_search_cv([dataset.x1, dataset.x2], dataset.target, n_splits=2, config=base_conf,
+    res = MultiFieldClassifier.finetune_grid_search_cv([dataset.x1, dataset.x2], dataset.target, n_splits=2, config=base_conf,
                                                     eval_fn=lambda y1, y2: np.mean(np.asarray(y1) == np.asarray(y2)),
                                                     test_size=0.1)
 
-    model = MultifieldClassifier(res)
+    model = MultiFieldClassifier(res)
     model.fit(trainX1, trainX2, Y=trainY)
     acc = np.mean(np.asarray(model.predict(testX1, testX2)) == np.asarray(testY))
     print('Test Accuracy: {:0.2f} with config {}'.format(acc, res))
