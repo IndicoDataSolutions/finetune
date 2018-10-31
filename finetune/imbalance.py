@@ -31,7 +31,7 @@ def compute_class_weights(class_weights, Y):
             elif class_weights == 'sqrt':
                 computed_weights[class_name] = np.sqrt(ratio)
             elif class_weights == 'log':
-                computed_weights[class_name] = np.log(ratio)
+                computed_weights[class_name] = np.log(ratio) + 1
         class_weights = computed_weights
     
     if not isinstance(class_weights, dict):
