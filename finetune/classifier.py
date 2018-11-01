@@ -13,7 +13,7 @@ class ClassificationPipeline(BasePipeline):
     def resampling(self, Xs, Y):
         if self.config.oversample:
             idxs, Ys = RandomOverSampler().fit_sample([[i] for i in range(len(Xs))], Y)
-            return [Xs[i[0]] for i in idxs], [Ys[i[0]] for i in idxs]
+            return [Xs[i[0]] for i in idxs], Ys
         return Xs, Y
 
     def _target_encoder(self):
