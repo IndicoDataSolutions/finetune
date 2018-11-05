@@ -211,8 +211,9 @@ class BaseModel(object, metaclass=ABCMeta):
             params=self.config
         )
 
-    def _inference(self, Xs, mode=None):
-        estimator = self.get_estimator()
+    def _inference(self, Xs, mode=None, estimator=None):
+        if estimator is None:
+            estimator = self.get_estimator()
         input_func = self.input_pipeline.get_predict_input_fn(Xs)
         length = len(Xs) if not callable(Xs) else None
 
@@ -234,18 +235,18 @@ class BaseModel(object, metaclass=ABCMeta):
         """ An alias for finetune. """
         return self.finetune(*args, **kwargs)
 
-    def _predict(self, Xs):
+    def _predict(self, Xs, estimator=None):
         raw_preds = self._inference(Xs, PredictMode.NORMAL)
         return self.input_pipeline.label_encoder.inverse_transform(np.asarray(raw_preds))
 
-    def predict(self, Xs):
-        return self._predict(Xs)
+    def predict(self, Xs, estimator=None):
+        return self._predict(Xs, estimator)
 
-    def _predict_proba(self, Xs):
+    def _predict_proba(self, Xs, estimator=None):
         """
         Produce raw numeric outputs for proba predictions
         """
-        raw_preds = self._inference(Xs, PredictMode.PROBAS)
+        raw_preds = self._inference(Xs, PredictMode.PROBAS, estimator)
         return raw_preds
 
     def predict_proba(self, *args, **kwargs):

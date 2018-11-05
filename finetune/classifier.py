@@ -40,23 +40,25 @@ class Classifier(BaseModel):
         """
         return super().featurize(X)
 
-    def predict(self, X):
+    def predict(self, X, estimator=None):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
         :param X: list or array of text to embed.
+        :param estimator: TensorFlow estimator.
         :returns: list of class labels.
         """
-        return super().predict(X)
+        return super().predict(X, estimator)
 
-    def predict_proba(self, X):
+    def predict_proba(self, X, estimator=None):
         """
         Produces a probability distribution over classes for each example in X.
 
         :param X: list or array of text to embed.
+        :param estimator: TensorFlow estimator.
         :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
         """
-        return super().predict_proba(X)
+        return super().predict_proba(X, estimator)
 
     def finetune(self, X, Y=None, batch_size=None):
         """
