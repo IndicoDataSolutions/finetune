@@ -15,10 +15,6 @@ from finetune import MultipleChoice
 
 class TestQuestionAnswer(unittest.TestCase):
 
-    @classmethod
-    def setUpClass(cls):
-        tf.reset_default_graph()
-
     def test_reasonable_predictions(self):
         model = MultipleChoice(n_epochs=100, val_size=0, max_length=64, batch_size=3, lr=2e-5, lr_schedule="none",
                                val_interval=10000, embed_p_drop=0., attn_p_drop=0., resid_p_drop=0, clf_p_drop=0)

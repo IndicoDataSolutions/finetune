@@ -37,6 +37,9 @@ class SequencePipeline(BasePipeline):
     def _format_for_encoding(self, X):
         return [X]
 
+    def _format_for_inference(self, X):
+        return [[x] for x in X]
+
     def feed_shape_type_def(self):
         TS = tf.TensorShape
         target_shape = (
@@ -107,10 +110,6 @@ class SequenceLabeler(BaseModel):
         Xs, Y_new = indico_to_finetune_sequence(Xs, labels=Y, multi_label=self.multi_label, none_value="<PAD>")
         Y = Y_new if Y is not None else None
         return super().finetune(Xs, Y=Y, batch_size=batch_size)
-
-    def _inference(self, Xs, mode=None):
-        Xs = [[x] for x in Xs]
-        return super()._inference(Xs, mode=mode)
 
     def predict(self, X):
         """

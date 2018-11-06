@@ -59,7 +59,6 @@ class TestModel(unittest.TestCase):
         self.text_data_train = [[x] * 3 for x in train_sample.Text.values.tolist()]
         self.text_data_valid = [[x] * 3 for x in valid_sample.Text.values.tolist()]
         self.train_targets = train_sample.Target
-        tf.reset_default_graph()
 
     def test_multifield_classify(self):
         """

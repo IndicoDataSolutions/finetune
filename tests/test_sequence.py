@@ -85,8 +85,6 @@ class TestSequenceLabeler(unittest.TestCase):
         with open(self.processed_path, 'rt') as fp:
             self.texts, self.labels = json.load(fp)
         
-        tf.reset_default_graph()
-
         self.model = SequenceLabeler(batch_size=2, max_length=256, lm_loss_coef=0.0, verbose=False)
     
     def test_fit_lm_only(self):

@@ -211,25 +211,34 @@ class BaseModel(object, metaclass=ABCMeta):
             params=self.config
         )
 
+    def _data_generator(self):
+        while True:
+            try:
+                yield self._data[self._iter_idx]
+                self._iter_idx += 1
+            except IndexError:
+                yield "" # placeholder to fill batch up
+
     def _inference(self, Xs, mode=None):
-        estimator = self.get_estimator()
-        input_func = self.input_pipeline.get_predict_input_fn(Xs)
-        length = len(Xs) if not callable(Xs) else None
+        self._data = self.input_pipeline._format_for_inference(Xs)
+        self._iter_idx = 0
 
-        pred_gen = list(
-            map(
-                lambda y: y[mode] if mode else y,
-                tqdm.tqdm(
-                    estimator.predict(
-                        input_fn=input_func, predict_keys=mode
-                    ),
-                    total=length,
-                    desc="Inference"
-                )
-            )
-        )
-        return pred_gen
+        n = len(self._data)
 
+        if not getattr(self, 'estimator', None):
+            self.estimator = self.get_estimator()
+            self._input_fn = lambda: self.input_pipeline._dataset_without_targets(
+                self._data_generator, train=None
+            ).batch(self.config.batch_size)
+            self._predictions = self.estimator.predict(input_fn=self._input_fn)
+
+        predictions = [None] * n
+        for i in range(n):
+            y = next(self._predictions)
+            y = y[mode] if mode else y
+            predictions[i] = y
+        return predictions
+        
     def fit(self, *args, **kwargs):
         """ An alias for finetune. """
         return self.finetune(*args, **kwargs)

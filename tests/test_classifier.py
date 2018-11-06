@@ -4,6 +4,7 @@ import logging
 import shutil
 import string
 from copy import copy
+import time
 from pathlib import Path
 from unittest.mock import MagicMock
 import warnings
@@ -62,8 +63,6 @@ class TestClassifier(unittest.TestCase):
             warnings.warn("tests/saved-models still exists, it is possible that some test is not cleaning up properly.")
             pass
 
-        tf.reset_default_graph()
-
     def tearDown(self):
         shutil.rmtree("tests/saved-models/")
 
@@ -101,6 +100,27 @@ class TestClassifier(unittest.TestCase):
         probabilities = model.predict_proba(valid_sample.Text)
         for proba in probabilities:
             self.assertIsInstance(proba, dict)
+
+    def test_cached_predict(self):
+        """
+        Ensure second call to predict is faster than first
+        """
+
+        model = Classifier(config=self.default_config())
+        train_sample = self.dataset.sample(n=self.n_sample)
+        valid_sample = self.dataset.sample(n=self.n_sample)
+        model.fit(train_sample.Text.values, train_sample.Target.values)
+
+        start = time.time()
+        model.predict(valid_sample.Text[:1].values)
+        first = time.time()
+        model.predict(valid_sample.Text[:1].values)
+        second = time.time()
+
+        first_prediction_time = (first - start)
+        second_prediction_time = (second - start)
+        self.assertLess(second_prediction_time, first_prediction_time / 2.)
+
 
     def test_fit_predict(self):
         """

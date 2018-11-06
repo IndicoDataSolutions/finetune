@@ -39,7 +39,6 @@ class TestComparison(unittest.TestCase):
         return d
 
     def setUp(self):
-        tf.reset_default_graph()
         random.seed(42)
         np.random.seed(42)
 

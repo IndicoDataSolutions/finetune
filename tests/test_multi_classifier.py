@@ -59,8 +59,6 @@ class TestMultiLabelClassifier(unittest.TestCase):
             warnings.warn("tests/saved-models still exists, it is possible that some test is not cleaning up properly.")
             pass
 
-        tf.reset_default_graph()
-
     def tearDown(self):
         shutil.rmtree("tests/saved-models/")
 
