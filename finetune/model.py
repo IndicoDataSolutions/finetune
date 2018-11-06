@@ -6,7 +6,7 @@ from tensorflow.train import Scaffold
 from tensorflow.contrib.opt.python.training.weight_decay_optimizers import AdamWOptimizer
 
 from finetune.network_modules import featurizer, language_model
-from finetune.utils import sample_with_temperature, AdamWFinetune
+from finetune.utils import sample_with_temperature
 from finetune.optimizers import schedules
 from finetune.imbalance import class_weight_tensor
 
@@ -119,7 +119,7 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
             total_num_steps = params.n_epochs * params.dataset_size//params.batch_size
             lr_decay = lambda lr, global_step: lr * schedules[params.lr_schedule](tf.to_float(global_step) / total_num_steps)
             
-            optimizer = lambda lr: AdamWFinetune(
+            optimizer = lambda lr: AdamWOptimizer(
                 learning_rate=lr,
                 beta1=params.b1,
                 beta2=params.b2,

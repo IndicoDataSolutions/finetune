@@ -56,7 +56,7 @@ def featurizer(X, encoder, config, train=False, reuse=None):
 
         h = embed(X, embed_weights)
         for layer in range(config.n_layer):
-            if (layer - config.n_layer) == config.num_layers_trained and config.num_layers_trained != 12:
+            if (config.n_layer - layer) == config.num_layers_trained and config.num_layers_trained != config.n_layer:
                 h = tf.stop_gradient(h)
                 train_layer = False
             else:

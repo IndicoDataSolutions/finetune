@@ -336,17 +336,3 @@ def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value
         all_subseqs.append(doc_subseqs)
         all_labels.append(doc_labels)
     return all_subseqs, all_labels
-
-
-class DecoupledWeightDecayExtensionFinetune(tf.contrib.opt.DecoupledWeightDecayExtension):
-    def apply_gradients(self, grads_and_vars, global_step=None, name=None):
-        decay_var_list = {v for g, v in grads_and_vars if g is not None}
-        return super(DecoupledWeightDecayExtensionFinetune, self).apply_gradients(
-            grads_and_vars, global_step=global_step, name=name, decay_var_list=decay_var_list)
-
-
-class AdamWFinetune(DecoupledWeightDecayExtensionFinetune, tf.train.AdamOptimizer):
-    def __init__(self, weight_decay, learning_rate=0.001, beta1=0.9, beta2=0.999,
-                 epsilon=1e-8, use_locking=False, name="AdamW"):
-        super(AdamWFinetune, self).__init__(weight_decay, learning_rate=learning_rate, beta1=beta1, beta2=beta2,
-                                            epsilon=epsilon, use_locking=use_locking, name=name)
