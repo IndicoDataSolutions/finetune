@@ -322,7 +322,7 @@ class BaseModel(object, metaclass=ABCMeta):
         EOS = ENCODER.clf_token
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
-            for i in range(len(encoded.token_ids), (max_length or self.config.max_length) - 2):
+            for i in range(len(encoded.token_ids) - 1, (max_length or self.config.max_length) - 2):
                 arr_encoded = self.input_pipeline._array_format(encoded)
                 class_idx = next(predict)[PredictMode.GENERATE_TEXT]
                 encoded.token_ids.append(class_idx[i])
