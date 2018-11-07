@@ -119,6 +119,7 @@ class Settings(dict):
         If you are using a single GPU and have more than 4Gb of GPU memory you should set this to GPU PCI number (0, 1, 2, etc.). Defaults to `"cpu"`.
     :param eval_acc: if True, calculates accuracy and writes it to the tensorboard summary files for valudation runs.
     :param save_dtype: specifies what precision to save model weights with.  Defaults to `np.float32`.
+    :param regression_loss: the loss to use for regression models L1 or L2, defaults to L2.
     """
     def get_grid_searchable(self):
         return self.grid_searchable
@@ -203,6 +204,7 @@ def get_default_config():
         params_device="cpu",
         eval_acc=False,
         save_dtype=None,
+        regression_loss="L2",
 
         # Must remain fixed
         n_heads=12,
