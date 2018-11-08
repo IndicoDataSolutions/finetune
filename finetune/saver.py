@@ -2,6 +2,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 import itertools
 import logging
+import sys
 
 import joblib
 import numpy as np
@@ -22,7 +23,7 @@ class SaverHook(_StopOnPredicateHook):
         self.included = None
         self.saver = saver
         self.keep_best_model = keep_best_model
-        self.early_stopping_steps = early_stopping_steps
+        self.early_stopping_steps = early_stopping_steps or sys.maxsize
         self.steps_per_epoch = steps_per_epoch
         self.estimator = estimator
 
