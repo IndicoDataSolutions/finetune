@@ -6,6 +6,7 @@ from tensorflow.contrib.crf import crf_log_likelihood
 from finetune.transformer import dropout, embed, block, attn, norm
 from finetune.utils import shape_list, merge_leading_dims
 from finetune.recompute_grads import recompute_grad
+from finetune.errors import FinetuneError
 
 
 def perceptron(x, ny, config, w_init=None, b_init=None):
@@ -257,7 +258,14 @@ def regressor(hidden, targets, n_targets, config, train=False, reuse=None, **kwa
         if targets is None:
             loss = None
         else:
-            loss = tf.nn.l2_loss(outputs - targets)
+            if config.regression_loss == "L2":
+                loss = tf.nn.l2_loss(outputs - targets)
+            elif config.regression_loss == "L1":
+                loss = tf.abs(outputs - targets)
+            else:
+                raise FinetuneError(
+                    "regression_loss needs to be either L1 or L2, instead it is {}".format(config.regression_loss)
+                )
         return {
             'logits': outputs,
             'losses': loss

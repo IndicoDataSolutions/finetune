@@ -122,6 +122,7 @@ class Settings(dict):
     :param regression_min_max_leak: the leak value used to stop 0 gradients before and after max values.
     :param regression_min: The soft minimum value for regression tasks.
     :param regression_max: The soft maximum value for regression tasks.
+    :param regression_loss: the loss to use for regression models L1 or L2, defaults to L2.
     """
     def get_grid_searchable(self):
         return self.grid_searchable
@@ -206,6 +207,7 @@ def get_default_config():
         params_device="cpu",
         eval_acc=False,
         save_dtype=None,
+        regression_loss="L2",
 
         regression_min_max_leak=0.1,
         regression_min=None,
