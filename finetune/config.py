@@ -203,9 +203,8 @@ def get_default_config():
         params_device="cpu",
         eval_acc=False,
         save_dtype=None,
-
-        featurizer_lr_mul=0.1,
-
+        featurizer_lr_mul=1.0,
+        
         # Must remain fixed
         n_heads=12,
         n_layer=12,
