@@ -1,4 +1,5 @@
 import logging
+import functools
 
 import numpy as np
 import tensorflow as tf
@@ -118,14 +119,18 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
         if mode == tf.estimator.ModeKeys.TRAIN:
             total_num_steps = params.n_epochs * params.dataset_size//params.batch_size
             lr_decay = lambda lr, global_step: lr * schedules[params.lr_schedule](tf.to_float(global_step) / total_num_steps)
-            
-            optimizer = lambda lr: AdamWOptimizer(
-                learning_rate=lr,
-                beta1=params.b1,
-                beta2=params.b2,
-                epsilon=params.epsilon,
-                weight_decay=params.l2_reg * lr
-            )
+
+            def optimizer(lr):
+                opt = AdamWOptimizer(
+                    learning_rate=lr,
+                    beta1=params.b1,
+                    beta2=params.b2,
+                    epsilon=params.epsilon,
+                    weight_decay=params.l2_reg * lr
+                )
+                decay_var_list = [v for v in tf.global_variables() if len(v.get_shape()) > 1 or params.vector_l2]
+                opt.apply_gradients = functools.partial(opt.apply_gradients, decay_var_list=decay_var_list)
+                return opt
 
             summaries = tf.contrib.layers.OPTIMIZER_SUMMARIES if params.summarize_grads else None
             train_op = tf.contrib.layers.optimize_loss(

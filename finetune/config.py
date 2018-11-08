@@ -80,6 +80,7 @@ class Settings(dict):
     :param resid_p_drop: Residual layer fully connected network dropout probability.  Defaults to `0.1`.
     :param clf_p_drop: Classifier dropout probability.  Defaults to `0.1`.
     :param l2_reg: L2 regularization coefficient. Defaults to `0.01`.
+    :param vector_l2: Whether to apply weight decay regularization to vectors (biases, normalization etc..). Defaults to False.
     :param b1: Adam b1 parameter.  Defaults to `0.9`.
     :param b2: Adam b2 parameter.  Defaults to `0.999`.
     :param epsilon: Adam epsilon parameter: Defaults to `1e-8`.
