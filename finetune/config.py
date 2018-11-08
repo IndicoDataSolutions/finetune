@@ -119,6 +119,9 @@ class Settings(dict):
         If you are using a single GPU and have more than 4Gb of GPU memory you should set this to GPU PCI number (0, 1, 2, etc.). Defaults to `"cpu"`.
     :param eval_acc: if True, calculates accuracy and writes it to the tensorboard summary files for valudation runs.
     :param save_dtype: specifies what precision to save model weights with.  Defaults to `np.float32`.
+    :param regression_min_max_leak: the leak value used to stop 0 gradients before and after max values.
+    :param regression_min: The soft minimum value for regression tasks.
+    :param regression_max: The soft maximum value for regression tasks.
     """
     def get_grid_searchable(self):
         return self.grid_searchable
@@ -203,6 +206,10 @@ def get_default_config():
         params_device="cpu",
         eval_acc=False,
         save_dtype=None,
+
+        regression_min_max_leak=0.1,
+        regression_min=None,
+        regression_max=None,
 
         # Must remain fixed
         n_heads=12,

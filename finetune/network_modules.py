@@ -247,6 +247,13 @@ def regressor(hidden, targets, n_targets, config, train=False, reuse=None, **kwa
     with tf.variable_scope('regressor', reuse=reuse):
         hidden = dropout(hidden, config.clf_p_drop, train)
         outputs = perceptron(hidden, n_targets, config)
+
+        if config.regression_min is not None:
+            outputs = tf.maximum(outputs, config.regression_min_max_leak * outputs + config.regression_min)
+        if config.regression_max is not None:
+            outputs = tf.minimum(outputs, config.regression_min_max_leak * outputs + config.regression_max)
+
+
         if targets is None:
             loss = None
         else:
