@@ -58,6 +58,12 @@ class SaverHook(_StopOnPredicateHook):
             self.saver.variables = dict(zip((var.name for var in self.included), session.run(self.included)))
 
 
+def pyfunc_assign(a, dtype):
+    def func():
+        return a.astype(dtype=dtype.as_numpy_dtype)
+
+    return tf.py_func(func, (), tf.as_dtype(dtype), stateful=False)
+
 class Saver:
     def __init__(self, fallback_filename, exclude_matches=None, variable_transforms=None, save_dtype=None):
         self.variable_transforms = variable_transforms or []
@@ -150,7 +156,8 @@ class Saver:
                 var, saved_var = var_init
                 for func in self.variable_transforms:
                     saved_var = func(var.name, saved_var)
-                init_vals.append(assign(var, saved_var))
+
+                init_vals.append(assign(var, pyfunc_assign(saved_var, var.dtype)))
         init_vals.append(tf.variables_initializer(default_init))
         return tf.group(init_vals)
 
