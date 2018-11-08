@@ -71,6 +71,8 @@ def featurizer(X, encoder, config, train=False, reuse=None):
                 h = block_fn(h)
 
         # Use hidden state at classifier token as input to final proj. + softmax
+        if config.featurizer_lr_mul != 1.0:
+            h = tf.stop_gradient(h * (1 - config.featurizer_lr_mul)) + config.featurizer_lr_mul * h
         clf_h = tf.reshape(h, [-1, config.n_embed])  # [batch * seq_len, embed]
         clf_token = encoder['_classify_']
         pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
