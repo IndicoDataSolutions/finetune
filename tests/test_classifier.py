@@ -102,18 +102,6 @@ class TestClassifier(unittest.TestCase):
         for proba in probabilities:
             self.assertIsInstance(proba, dict)
 
-    def test_multiple_models_fit(self):
-        """
-        Ensure second call to predict is faster than first
-        """
-
-        model = Classifier(config=self.default_config())
-        train_sample = self.dataset.sample(n=self.n_sample)
-        model.fit(train_sample.Text.values, train_sample.Target.values)
-
-        model2 = Classifier(config=self.default_config())
-        model2.fit(train_sample.Text.values, train_sample.Target.values)
-
     def test_multiple_models_fit_predict(self):
         """
         Ensure second call to predict is faster than first
@@ -138,25 +126,16 @@ class TestClassifier(unittest.TestCase):
         valid_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text.values, train_sample.Target.values)
 
-        start = time.time()
-        model.predict(valid_sample.Text[:1].values)
-        first = time.time()
-        model.predict(valid_sample.Text[:1].values)
-        second = time.time()
+        with model.cached_predict():
+            start = time.time()
+            model.predict(valid_sample.Text[:1].values)
+            first = time.time()
+            model.predict(valid_sample.Text[:1].values)
+            second = time.time()
 
         first_prediction_time = (first - start)
         second_prediction_time = (second - first)
         self.assertLess(second_prediction_time, first_prediction_time / 2.)
-
-        # stress test
-        print("Stress test")
-        for i in range(100):
-            print("Iteration {}".format(i))
-            model = Classifier(config=self.default_config())
-            print("Fitting")
-            model.fit(train_sample.Text.values, train_sample.Target.values)
-            print("Predicting")
-            model.predict(valid_sample.Text[:1].values)
 
     def test_fit_predict(self):
         """

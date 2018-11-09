@@ -70,10 +70,22 @@ class TestModel(unittest.TestCase):
         self.model.fit(self.text_data_train, self.train_targets)
         predictions = self.model.predict(self.text_data_valid)
         self.model.save(self.save_file)
-        model = MultiFieldRegressor.load(self.save_file)
+        model = MultiFieldClassifier.load(self.save_file)
         new_predictions = model.predict(self.text_data_valid)
         for new_pred, old_pred in zip(new_predictions, predictions):
-            self.assertEqual(new_pred, old_pred)\
+            self.assertEqual(new_pred, old_pred)
+    
+    def test_cached_predict(self):
+        """
+        Ensure fit predict works on classification with multi inputs
+        Ensure saving + loading does not cause errors
+        Ensure saving + loading does not change predictions
+        """
+        self.model = MultiFieldClassifier()
+        self.model.fit(self.text_data_train, self.train_targets)
+        with self.model.cached_predict():
+            self.model.predict(self.text_data_valid)
+            self.model.predict(self.text_data_valid)
 
     def test_fields_too_long(self):
         """

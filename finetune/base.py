@@ -1,6 +1,5 @@
 import os
 import random
-import gc
 import weakref
 import atexit
 import warnings
@@ -12,6 +11,7 @@ import tempfile
 import time
 import shutil
 import glob
+from contextlib import contextmanager
 import pathlib
 
 import tqdm
@@ -71,10 +71,13 @@ class BaseModel(object, metaclass=ABCMeta):
 
     def _initialize(self):
         # Initializes the non-serialized bits of the class.
-        gc.collect()
         self._set_random_seed(self.config.seed)
-        self.estimator_ = None
+
+        # state for prediction caching
+        self._predictions = None
+        self._cached_predict = False
         self._closed = False
+
         if self.config.tensorboard_folder is not None:
             self.estimator_dir = os.path.abspath(
                 os.path.join(self.config.tensorboard_folder, str(int(time.time())))
@@ -132,7 +135,6 @@ class BaseModel(object, metaclass=ABCMeta):
         return steps
 
     def finetune(self, Xs, Y=None, batch_size=None):
-        self.close()
         if not callable(Xs) and Y is not None and len(Xs) != len(Y):
             raise FinetuneError(
                 "Mismatch between number of examples ({}) and number of targets ({}) provided.".format(
@@ -216,17 +218,19 @@ class BaseModel(object, metaclass=ABCMeta):
             params=self.config
         )
 
-
     def close(self):
         self._closed = True
-        self.estimator = None
         
-        # force input fn termination
-        try:
-            for _ in self._predictions:
+        if self._predictions is not None:
+            
+            # force input fn termination
+            try:
+                for _ in self._predictions:
+                    pass
+            except AttributeError:
                 pass
-        except AttributeError:
-            pass
+
+            self._predictions = None
 
     def _data_generator(self):
         while not self._closed:
@@ -234,26 +238,58 @@ class BaseModel(object, metaclass=ABCMeta):
                 example = self._data.pop(0)
                 yield example
             except IndexError:
-                yield "" # placeholder to fill batch up
+                # placeholder to fill batch up
+                yield self.input_pipeline._format_for_inference([""])[0] 
 
-    def _inference(self, Xs, mode=None):
-        self._data = list(self.input_pipeline._format_for_inference(Xs))
+    @contextmanager
+    def cached_predict(self):
+        """
+        Context manager that prevents the recreation of the tensorflow graph on every call to BaseModel.predict().        
+        """
+        self._cached_predict = True
+        yield self
+        self._cached_predict = False
+        self.close()
+
+    def _cached_inference(self, Xs, mode=None):
+        """
+        Ensure graph is not rebuilt on subsequent calls to .predict()
+        """
+        self._data = Xs
         self._closed = False
         n = len(self._data)
-
-        if not getattr(self, 'estimator', None):
-            self.estimator = self.get_estimator()
-            self._input_fn = lambda: self.input_pipeline._dataset_without_targets(
-                self._data_generator, train=None
-            ).batch(self.config.batch_size)
-            self._predictions = self.estimator.predict(input_fn=self._input_fn)
+        if self._predictions is None:
+            _estimator = self.get_estimator()
+            input_fn = self.input_pipeline.get_predict_input_fn(self._data_generator)
+            # input_fn = lambda: self.input_pipeline._dataset_without_targets(
+            #     self._data_generator, train=None
+            # ).batch(self.config.batch_size)
+            self._predictions = _estimator.predict(input_fn=input_fn, predict_keys=mode)
 
         predictions = [None] * n
-        for i in range(n):
+        for i in tqdm.tqdm(range(n), total=n, desc="Inference"):
             y = next(self._predictions)
             y = y[mode] if mode else y
             predictions[i] = y
         return predictions
+
+    def _inference(self, Xs, mode=None):
+        Xs = self.input_pipeline._format_for_inference(Xs)
+        if self._cached_predict:
+            return self._cached_inference(Xs=Xs, mode=mode)
+        else:
+            estimator = self.get_estimator()
+            input_fn = self.input_pipeline.get_predict_input_fn(Xs)
+            length = len(Xs) if not callable(Xs) else None
+
+            predictions = tqdm.tqdm(
+                estimator.predict(
+                    input_fn=input_fn, predict_keys=mode
+                ),
+                total=length,
+                desc="Inference"
+            )
+            return [pred[mode] if mode else pred for pred in predictions]
         
     def fit(self, *args, **kwargs):
         """ An alias for finetune. """
@@ -498,8 +534,6 @@ class BaseModel(object, metaclass=ABCMeta):
         return max(aggregated_results, key=lambda x: x[1])[0]
 
     def __del__(self):
-        print("Calling __del__ of BaseModel")
-        self.close()
         if hasattr(self, 'cleanup_glob') and self.cleanup_glob is not None:
             for file_or_folder in glob.glob(self.cleanup_glob):
                 try:
