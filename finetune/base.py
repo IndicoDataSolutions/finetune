@@ -34,23 +34,6 @@ from finetune.estimator_utils import PatchedParameterServerStrategy
 JL_BASE = os.path.join(os.path.dirname(__file__), "model", "Base_model.jl")
 
 
-class PredictEndHook(SessionRunHook):
-    
-    def after_run(self, run_context, run_values):
-        print("After run...")
-
-    def before_run(self, run_context):
-        print("Before run...")
-
-    def being(self, session):
-        print("Beginning session...")
-
-    def end(self, session):
-        print("Ending session...")
-        session.close()
-        gc.collect()
-
-
 class BaseModel(object, metaclass=ABCMeta):
     """
     A sklearn-style task agnostic base class for finetuning a Transformer language model.
@@ -88,6 +71,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
     def _initialize(self):
         # Initializes the non-serialized bits of the class.
+        gc.collect()
         self._set_random_seed(self.config.seed)
         self.estimator_ = None
         self._closed = False
@@ -236,23 +220,13 @@ class BaseModel(object, metaclass=ABCMeta):
     def close(self):
         self._closed = True
         self.estimator = None
-        self._input_fn = None
+        
         # force input fn termination
         try:
-            next(self._predictions)
-        except StopIteration: 
-            pass
+            for _ in self._predictions:
+                pass
         except AttributeError:
             pass
-        except:
-            import traceback
-            traceback.print_exc()
-
-        self._predictions = None
-        self._data = None 
-
-        import gc
-        gc.collect()
 
     def _data_generator(self):
         while not self._closed:
@@ -272,9 +246,7 @@ class BaseModel(object, metaclass=ABCMeta):
             self._input_fn = lambda: self.input_pipeline._dataset_without_targets(
                 self._data_generator, train=None
             ).batch(self.config.batch_size)
-            self._predictions = self.estimator.predict(input_fn=self._input_fn, hooks=[
-                PredictEndHook()
-            ])
+            self._predictions = self.estimator.predict(input_fn=self._input_fn)
 
         predictions = [None] * n
         for i in range(n):
@@ -526,6 +498,7 @@ class BaseModel(object, metaclass=ABCMeta):
         return max(aggregated_results, key=lambda x: x[1])[0]
 
     def __del__(self):
+        print("Calling __del__ of BaseModel")
         self.close()
         if hasattr(self, 'cleanup_glob') and self.cleanup_glob is not None:
             for file_or_folder in glob.glob(self.cleanup_glob):
