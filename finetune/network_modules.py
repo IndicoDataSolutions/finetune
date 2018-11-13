@@ -251,9 +251,9 @@ def regressor(hidden, targets, n_targets, config, train=False, reuse=None, **kwa
         if targets is None:
             loss = None
         else:
-            if config.regression_loss == "L2":
+            if config.regression_loss.upper() == "L2":
                 loss = tf.nn.l2_loss(outputs - targets)
-            elif config.regression_loss == "L1":
+            elif config.regression_loss.upper() == "L1":
                 loss = tf.abs(outputs - targets)
             else:
                 raise FinetuneError(
