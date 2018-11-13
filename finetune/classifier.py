@@ -1,6 +1,7 @@
 import tensorflow as tf
 import numpy as np
 from imblearn.over_sampling import RandomOverSampler
+from sklearn.utils import shuffle
 
 from finetune.base import BaseModel
 from finetune.target_encoders import OneHotLabelEncoder
@@ -12,7 +13,7 @@ class ClassificationPipeline(BasePipeline):
 
     def resampling(self, Xs, Y):
         if self.config.oversample:
-            idxs, Ys = RandomOverSampler().fit_sample([[i] for i in range(len(Xs))], Y)
+            idxs, Ys = shuffle(*RandomOverSampler().fit_sample([[i] for i in range(len(Xs))], Y))
             return [Xs[i[0]] for i in idxs], Ys
         return Xs, Y
 
