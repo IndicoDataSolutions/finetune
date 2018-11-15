@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>finetune.classifier &mdash; finetune 0.1.0 documentation</title>
+  <title>finetune.classifier &mdash; finetune 0.5.11 documentation</title>
   
 
   
@@ -35,7 +35,7 @@
         <link rel="index" title="Index"
               href="../../genindex.html"/>
         <link rel="search" title="Search" href="../../search.html"/>
-    <link rel="top" title="finetune 0.1.0 documentation" href="../../index.html"/>
+    <link rel="top" title="finetune 0.5.11 documentation" href="../../index.html"/>
         <link rel="up" title="Module code" href="../index.html"/> 
 
   
@@ -65,7 +65,7 @@
             
             
               <div class="version">
-                0.1
+                0.5
               </div>
             
           
@@ -156,6 +156,7 @@
 <span></span><span class="kn">import</span> <span class="nn">tensorflow</span> <span class="k">as</span> <span class="nn">tf</span>
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 <span class="kn">from</span> <span class="nn">imblearn.over_sampling</span> <span class="k">import</span> <span class="n">RandomOverSampler</span>
+<span class="kn">from</span> <span class="nn">sklearn.utils</span> <span class="k">import</span> <span class="n">shuffle</span>
 
 <span class="kn">from</span> <span class="nn">finetune.base</span> <span class="k">import</span> <span class="n">BaseModel</span>
 <span class="kn">from</span> <span class="nn">finetune.target_encoders</span> <span class="k">import</span> <span class="n">OneHotLabelEncoder</span>
@@ -167,8 +168,8 @@
 
     <span class="k">def</span> <span class="nf">resampling</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">,</span> <span class="n">Y</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">oversample</span><span class="p">:</span>
-            <span class="n">idxs</span><span class="p">,</span> <span class="n">Ys</span> <span class="o">=</span> <span class="n">RandomOverSampler</span><span class="p">()</span><span class="o">.</span><span class="n">fit_sample</span><span class="p">([[</span><span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">Xs</span><span class="p">))],</span> <span class="n">Y</span><span class="p">)</span>
-            <span class="k">return</span> <span class="p">[</span><span class="n">Xs</span><span class="p">[</span><span class="n">i</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">idxs</span><span class="p">],</span> <span class="p">[</span><span class="n">Ys</span><span class="p">[</span><span class="n">i</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">idxs</span><span class="p">]</span>
+            <span class="n">idxs</span><span class="p">,</span> <span class="n">Ys</span> <span class="o">=</span> <span class="n">shuffle</span><span class="p">(</span><span class="o">*</span><span class="n">RandomOverSampler</span><span class="p">()</span><span class="o">.</span><span class="n">fit_sample</span><span class="p">([[</span><span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">Xs</span><span class="p">))],</span> <span class="n">Y</span><span class="p">))</span>
+            <span class="k">return</span> <span class="p">[</span><span class="n">Xs</span><span class="p">[</span><span class="n">i</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">idxs</span><span class="p">],</span> <span class="n">Ys</span>
         <span class="k">return</span> <span class="n">Xs</span><span class="p">,</span> <span class="n">Y</span>
 
     <span class="k">def</span> <span class="nf">_target_encoder</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -277,7 +278,7 @@
     <script type="text/javascript">
         var DOCUMENTATION_OPTIONS = {
             URL_ROOT:'../../',
-            VERSION:'0.1.0',
+            VERSION:'0.5.11',
             COLLAPSE_INDEX:false,
             FILE_SUFFIX:'.html',
             HAS_SOURCE:  true,

@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>finetune.multifield &mdash; finetune 0.1.0 documentation</title>
+  <title>finetune.multifield &mdash; finetune 0.5.11 documentation</title>
   
 
   
@@ -35,7 +35,7 @@
         <link rel="index" title="Index"
               href="../../genindex.html"/>
         <link rel="search" title="Search" href="../../search.html"/>
-    <link rel="top" title="finetune 0.1.0 documentation" href="../../index.html"/>
+    <link rel="top" title="finetune 0.5.11 documentation" href="../../index.html"/>
         <link rel="up" title="Module code" href="../index.html"/> 
 
   
@@ -65,7 +65,7 @@
             
             
               <div class="version">
-                0.1
+                0.5
               </div>
             
           
@@ -157,17 +157,18 @@
 <span class="kn">from</span> <span class="nn">finetune.regressor</span> <span class="k">import</span> <span class="n">Regressor</span><span class="p">,</span> <span class="n">RegressionPipeline</span>
 <span class="kn">from</span> <span class="nn">finetune.base</span> <span class="k">import</span> <span class="n">BaseModel</span>
 
-<span class="k">class</span> <span class="nc">MultifieldClassificationPipeline</span><span class="p">(</span><span class="n">ClassificationPipeline</span><span class="p">):</span>
+<span class="k">class</span> <span class="nc">MultiFieldClassificationPipeline</span><span class="p">(</span><span class="n">ClassificationPipeline</span><span class="p">):</span>
     <span class="k">def</span> <span class="nf">_format_for_encoding</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
         <span class="k">return</span> <span class="p">[</span><span class="n">X</span><span class="p">]</span>
 
 
-<span class="k">class</span> <span class="nc">MultifieldRegressionPipeline</span><span class="p">(</span><span class="n">RegressionPipeline</span><span class="p">):</span>
+<span class="k">class</span> <span class="nc">MultiFieldRegressionPipeline</span><span class="p">(</span><span class="n">RegressionPipeline</span><span class="p">):</span>
+    
     <span class="k">def</span> <span class="nf">_format_for_encoding</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
         <span class="k">return</span> <span class="p">[</span><span class="n">X</span><span class="p">]</span>
 
 
-<div class="viewcode-block" id="MultifieldClassifier"><a class="viewcode-back" href="../../index.html#finetune.MultifieldClassifier">[docs]</a><span class="k">class</span> <span class="nc">MultifieldClassifier</span><span class="p">(</span><span class="n">Classifier</span><span class="p">):</span>
+<div class="viewcode-block" id="MultiFieldClassifier"><a class="viewcode-back" href="../../index.html#finetune.MultiFieldClassifier">[docs]</a><span class="k">class</span> <span class="nc">MultiFieldClassifier</span><span class="p">(</span><span class="n">Classifier</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot; </span>
 <span class="sd">    Classifies a set of documents into 1 of N classes.</span>
 
@@ -176,9 +177,9 @@
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span> <span class="nf">_get_input_pipeline</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">MultifieldClassificationPipeline</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">MultiFieldClassificationPipeline</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">)</span>
         
-<div class="viewcode-block" id="MultifieldClassifier.finetune"><a class="viewcode-back" href="../../index.html#finetune.MultifieldClassifier.finetune">[docs]</a>    <span class="k">def</span> <span class="nf">finetune</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<div class="viewcode-block" id="MultiFieldClassifier.finetune"><a class="viewcode-back" href="../../index.html#finetune.MultiFieldClassifier.finetune">[docs]</a>    <span class="k">def</span> <span class="nf">finetune</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        :param \*Xs: lists of text inputs, shape [batch, n_fields]</span>
 <span class="sd">        :param Y: integer or string-valued class labels. It is necessary for the items of Y to be sortable.</span>
@@ -187,7 +188,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="n">BaseModel</span><span class="o">.</span><span class="n">finetune</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="n">Y</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="MultifieldClassifier.predict"><a class="viewcode-back" href="../../index.html#finetune.MultifieldClassifier.predict">[docs]</a>    <span class="k">def</span> <span class="nf">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">):</span>
+<div class="viewcode-block" id="MultiFieldClassifier.predict"><a class="viewcode-back" href="../../index.html#finetune.MultiFieldClassifier.predict">[docs]</a>    <span class="k">def</span> <span class="nf">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Produces list of most likely class labels as determined by the fine-tuned model.</span>
 
@@ -196,7 +197,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="n">BaseModel</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="MultifieldClassifier.predict_proba"><a class="viewcode-back" href="../../index.html#finetune.MultifieldClassifier.predict_proba">[docs]</a>    <span class="k">def</span> <span class="nf">predict_proba</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">):</span>
+<div class="viewcode-block" id="MultiFieldClassifier.predict_proba"><a class="viewcode-back" href="../../index.html#finetune.MultiFieldClassifier.predict_proba">[docs]</a>    <span class="k">def</span> <span class="nf">predict_proba</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Produces probability distribution over classes for each example in X.</span>
 
@@ -205,7 +206,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="n">BaseModel</span><span class="o">.</span><span class="n">predict_proba</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="MultifieldClassifier.featurize"><a class="viewcode-back" href="../../index.html#finetune.MultifieldClassifier.featurize">[docs]</a>    <span class="k">def</span> <span class="nf">featurize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">):</span>
+<div class="viewcode-block" id="MultiFieldClassifier.featurize"><a class="viewcode-back" href="../../index.html#finetune.MultiFieldClassifier.featurize">[docs]</a>    <span class="k">def</span> <span class="nf">featurize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.</span>
 
@@ -215,7 +216,7 @@
         <span class="k">return</span> <span class="n">BaseModel</span><span class="o">.</span><span class="n">featurize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">)</span></div></div>
 
 
-<div class="viewcode-block" id="MultifieldRegressor"><a class="viewcode-back" href="../../index.html#finetune.MultifieldRegressor">[docs]</a><span class="k">class</span> <span class="nc">MultifieldRegressor</span><span class="p">(</span><span class="n">Regressor</span><span class="p">):</span>
+<div class="viewcode-block" id="MultiFieldRegressor"><a class="viewcode-back" href="../../index.html#finetune.MultiFieldRegressor">[docs]</a><span class="k">class</span> <span class="nc">MultiFieldRegressor</span><span class="p">(</span><span class="n">Regressor</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot; </span>
 <span class="sd">    Regresses one or more floating point values given a set of documents per example.</span>
 
@@ -224,9 +225,9 @@
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span> <span class="nf">_get_input_pipeline</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">MultifieldRegressionPipeline</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">MultiFieldRegressionPipeline</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">)</span>
         
-<div class="viewcode-block" id="MultifieldRegressor.finetune"><a class="viewcode-back" href="../../index.html#finetune.MultifieldRegressor.finetune">[docs]</a>    <span class="k">def</span> <span class="nf">finetune</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<div class="viewcode-block" id="MultiFieldRegressor.finetune"><a class="viewcode-back" href="../../index.html#finetune.MultiFieldRegressor.finetune">[docs]</a>    <span class="k">def</span> <span class="nf">finetune</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        :param \*Xs: lists of text inputs, shape [batch, n_fields]</span>
 <span class="sd">        :param Y: floating point targets</span>
@@ -235,7 +236,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="n">BaseModel</span><span class="o">.</span><span class="n">finetune</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="n">Y</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="MultifieldRegressor.predict"><a class="viewcode-back" href="../../index.html#finetune.MultifieldRegressor.predict">[docs]</a>    <span class="k">def</span> <span class="nf">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">):</span>
+<div class="viewcode-block" id="MultiFieldRegressor.predict"><a class="viewcode-back" href="../../index.html#finetune.MultiFieldRegressor.predict">[docs]</a>    <span class="k">def</span> <span class="nf">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Produces list of most likely class labels as determined by the fine-tuned model.</span>
 
@@ -244,7 +245,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="n">BaseModel</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="MultifieldRegressor.predict_proba"><a class="viewcode-back" href="../../index.html#finetune.MultifieldRegressor.predict_proba">[docs]</a>    <span class="k">def</span> <span class="nf">predict_proba</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">):</span>
+<div class="viewcode-block" id="MultiFieldRegressor.predict_proba"><a class="viewcode-back" href="../../index.html#finetune.MultiFieldRegressor.predict_proba">[docs]</a>    <span class="k">def</span> <span class="nf">predict_proba</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Produces probability distribution over classes for each example in X.</span>
 
@@ -253,7 +254,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="n">BaseModel</span><span class="o">.</span><span class="n">predict_proba</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="MultifieldRegressor.featurize"><a class="viewcode-back" href="../../index.html#finetune.MultifieldRegressor.featurize">[docs]</a>    <span class="k">def</span> <span class="nf">featurize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">):</span>
+<div class="viewcode-block" id="MultiFieldRegressor.featurize"><a class="viewcode-back" href="../../index.html#finetune.MultiFieldRegressor.featurize">[docs]</a>    <span class="k">def</span> <span class="nf">featurize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.</span>
 
@@ -297,7 +298,7 @@
     <script type="text/javascript">
         var DOCUMENTATION_OPTIONS = {
             URL_ROOT:'../../',
-            VERSION:'0.1.0',
+            VERSION:'0.5.11',
             COLLAPSE_INDEX:false,
             FILE_SUFFIX:'.html',
             HAS_SOURCE:  true,

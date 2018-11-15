@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>finetune.sequence_labeling &mdash; finetune 0.1.0 documentation</title>
+  <title>finetune.sequence_labeling &mdash; finetune 0.5.11 documentation</title>
   
 
   
@@ -35,7 +35,7 @@
         <link rel="index" title="Index"
               href="../../genindex.html"/>
         <link rel="search" title="Search" href="../../search.html"/>
-    <link rel="top" title="finetune 0.1.0 documentation" href="../../index.html"/>
+    <link rel="top" title="finetune 0.5.11 documentation" href="../../index.html"/>
         <link rel="up" title="Module code" href="../index.html"/> 
 
   
@@ -65,7 +65,7 @@
             
             
               <div class="version">
-                0.1
+                0.5
               </div>
             
           
@@ -192,6 +192,9 @@
     <span class="k">def</span> <span class="nf">_format_for_encoding</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
         <span class="k">return</span> <span class="p">[</span><span class="n">X</span><span class="p">]</span>
 
+    <span class="k">def</span> <span class="nf">_format_for_inference</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[[</span><span class="n">x</span><span class="p">]</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">X</span><span class="p">]</span>
+
     <span class="k">def</span> <span class="nf">feed_shape_type_def</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">TS</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">TensorShape</span>
         <span class="n">target_shape</span> <span class="o">=</span> <span class="p">(</span>
@@ -262,10 +265,6 @@
         <span class="n">Xs</span><span class="p">,</span> <span class="n">Y_new</span> <span class="o">=</span> <span class="n">indico_to_finetune_sequence</span><span class="p">(</span><span class="n">Xs</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="n">Y</span><span class="p">,</span> <span class="n">multi_label</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">multi_label</span><span class="p">,</span> <span class="n">none_value</span><span class="o">=</span><span class="s2">&quot;&lt;PAD&gt;&quot;</span><span class="p">)</span>
         <span class="n">Y</span> <span class="o">=</span> <span class="n">Y_new</span> <span class="k">if</span> <span class="n">Y</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">finetune</span><span class="p">(</span><span class="n">Xs</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="n">Y</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">_inference</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-        <span class="n">Xs</span> <span class="o">=</span> <span class="p">[[</span><span class="n">x</span><span class="p">]</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">Xs</span><span class="p">]</span>
-        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_inference</span><span class="p">(</span><span class="n">Xs</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="n">mode</span><span class="p">)</span>
 
 <div class="viewcode-block" id="SequenceLabeler.predict"><a class="viewcode-back" href="../../index.html#finetune.SequenceLabeler.predict">[docs]</a>    <span class="k">def</span> <span class="nf">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -448,7 +447,7 @@
     <script type="text/javascript">
         var DOCUMENTATION_OPTIONS = {
             URL_ROOT:'../../',
-            VERSION:'0.1.0',
+            VERSION:'0.5.11',
             COLLAPSE_INDEX:false,
             FILE_SUFFIX:'.html',
             HAS_SOURCE:  true,

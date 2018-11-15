@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Finetune Quickstart Guide &mdash; finetune 0.1.0 documentation</title>
+  <title>Finetune Quickstart Guide &mdash; finetune 0.5.11 documentation</title>
   
 
   
@@ -35,7 +35,7 @@
         <link rel="index" title="Index"
               href="genindex.html"/>
         <link rel="search" title="Search" href="search.html"/>
-    <link rel="top" title="finetune 0.1.0 documentation" href="#"/> 
+    <link rel="top" title="finetune 0.5.11 documentation" href="#"/> 
 
   
   <script src="_static/js/modernizr.min.js"></script>
@@ -64,7 +64,7 @@
             
             
               <div class="version">
-                0.1
+                0.5
               </div>
             
           
@@ -94,6 +94,7 @@
 <li><a class="reference internal" href="#installation">Installation</a></li>
 <li><a class="reference internal" href="#docker">Docker</a></li>
 <li><a class="reference internal" href="#dataset-loading">Dataset Loading</a></li>
+<li><a class="reference internal" href="#prediction">Prediction</a></li>
 <li><a class="reference internal" href="#code-examples">Code Examples</a></li>
 <li><a class="reference internal" href="#finetune-api-reference">Finetune API Reference</a></li>
 <li><a class="reference internal" href="#finetune-model-configuration-options">Finetune Model Configuration Options</a></li>
@@ -236,6 +237,24 @@ takes advantage of the <code class="xref py py-mod docutils literal notranslate"
 </pre></div>
 </div>
 </div>
+<div class="section" id="prediction">
+<h1>Prediction<a class="headerlink" href="#prediction" title="Permalink to this headline">¶</a></h1>
+<p>After fitting the model, call <code class="xref py py-func docutils literal notranslate"><span class="pre">BaseModel.predict()</span></code> to infer on test data.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">model</span> <span class="o">=</span> <span class="n">Classifier</span><span class="p">()</span>
+<span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">train_data</span><span class="p">,</span> <span class="n">train_labels</span><span class="p">)</span>
+<span class="n">model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">test_data</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>To prevent recreating the tensorflow graph with each call to <code class="xref py py-func docutils literal notranslate"><span class="pre">BaseModel.predict()</span></code>,
+use the <code class="xref py py-func docutils literal notranslate"><span class="pre">model.cached_predict()</span></code> context manager.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">model</span> <span class="o">=</span> <span class="n">Classifier</span><span class="p">()</span>
+<span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">train_data</span><span class="p">,</span> <span class="n">train_labels</span><span class="p">)</span>
+<span class="k">with</span> <span class="n">model</span><span class="o">.</span><span class="n">cached_predict</span><span class="p">():</span>
+    <span class="n">model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">test_data</span><span class="p">)</span> <span class="c1"># triggers prediction graph construction</span>
+    <span class="n">model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">test_data</span><span class="p">)</span> <span class="c1"># graph is already cached, so subsequence calls are faster</span>
+</pre></div>
+</div>
+</div>
 <div class="section" id="code-examples">
 <h1>Code Examples<a class="headerlink" href="#code-examples" title="Permalink to this headline">¶</a></h1>
 <p>For example usage of provided models, see the <a class="reference external" href="https://github.com/IndicoDataSolutions/finetune/tree/master/finetune/datasets">finetune/datasets directory</a>.</p>
@@ -258,6 +277,12 @@ takes advantage of the <code class="xref py py-mod docutils literal notranslate"
 </tr>
 </tbody>
 </table>
+<dl class="method">
+<dt id="finetune.Classifier.cached_predict">
+<code class="descname">cached_predict</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Classifier.cached_predict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Context manager that prevents the recreation of the tensorflow graph on every call to BaseModel.predict().</p>
+</dd></dl>
+
 <dl class="method">
 <dt id="finetune.Classifier.featurize">
 <code class="descname">featurize</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/classifier.html#Classifier.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Classifier.featurize" title="Permalink to this definition">¶</a></dt>
@@ -461,6 +486,12 @@ Should not be used to save / restore a training model.</dd>
 </tbody>
 </table>
 <dl class="method">
+<dt id="finetune.Regressor.cached_predict">
+<code class="descname">cached_predict</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Regressor.cached_predict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Context manager that prevents the recreation of the tensorflow graph on every call to BaseModel.predict().</p>
+</dd></dl>
+
+<dl class="method">
 <dt id="finetune.Regressor.featurize">
 <code class="descname">featurize</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/regressor.html#Regressor.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Regressor.featurize" title="Permalink to this definition">¶</a></dt>
 <dd><p>Embeds inputs in learned feature space. Can be called before or after calling <a class="reference internal" href="#module-finetune" title="finetune"><code class="xref py py-meth docutils literal notranslate"><span class="pre">finetune()</span></code></a>.</p>
@@ -646,8 +677,8 @@ Should not be used to save / restore a training model.</dd>
 </dd></dl>
 
 <dl class="class">
-<dt id="finetune.MultifieldClassifier">
-<em class="property">class </em><code class="descclassname">finetune.</code><code class="descname">MultifieldClassifier</code><span class="sig-paren">(</span><em>config=None</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultifieldClassifier"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultifieldClassifier" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.MultiFieldClassifier">
+<em class="property">class </em><code class="descclassname">finetune.</code><code class="descname">MultiFieldClassifier</code><span class="sig-paren">(</span><em>config=None</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultiFieldClassifier"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiFieldClassifier" title="Permalink to this definition">¶</a></dt>
 <dd><p>Classifies a set of documents into 1 of N classes.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -662,8 +693,14 @@ Should not be used to save / restore a training model.</dd>
 </tbody>
 </table>
 <dl class="method">
-<dt id="finetune.MultifieldClassifier.featurize">
-<code class="descname">featurize</code><span class="sig-paren">(</span><em>Xs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultifieldClassifier.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultifieldClassifier.featurize" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.MultiFieldClassifier.cached_predict">
+<code class="descname">cached_predict</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldClassifier.cached_predict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Context manager that prevents the recreation of the tensorflow graph on every call to BaseModel.predict().</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.MultiFieldClassifier.featurize">
+<code class="descname">featurize</code><span class="sig-paren">(</span><em>Xs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultiFieldClassifier.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiFieldClassifier.featurize" title="Permalink to this definition">¶</a></dt>
 <dd><p>Embeds inputs in learned feature space. Can be called before or after calling <a class="reference internal" href="#module-finetune" title="finetune"><code class="xref py py-meth docutils literal notranslate"><span class="pre">finetune()</span></code></a>.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -678,8 +715,8 @@ Should not be used to save / restore a training model.</dd>
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.MultifieldClassifier.finetune">
-<code class="descname">finetune</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y=None</em>, <em>batch_size=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultifieldClassifier.finetune"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultifieldClassifier.finetune" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.MultiFieldClassifier.finetune">
+<code class="descname">finetune</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y=None</em>, <em>batch_size=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultiFieldClassifier.finetune"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiFieldClassifier.finetune" title="Permalink to this definition">¶</a></dt>
 <dd><table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -697,8 +734,8 @@ corresponds to the number of training examples provided to each GPU.</li>
 </dd></dl>
 
 <dl class="classmethod">
-<dt id="finetune.MultifieldClassifier.finetune_grid_search">
-<em class="property">classmethod </em><code class="descname">finetune_grid_search</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>test_size</em>, <em>config=None</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultifieldClassifier.finetune_grid_search" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.MultiFieldClassifier.finetune_grid_search">
+<em class="property">classmethod </em><code class="descname">finetune_grid_search</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>test_size</em>, <em>config=None</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldClassifier.finetune_grid_search" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs grid search over config items defined using “GridSearchable” objects and returns either full results or
 the config object that relates to the best results. The default config contains grid searchable objects for the
 most important parameters to search over.</p>
@@ -727,8 +764,8 @@ form [(config, eval_fn output), … ]</p>
 </dd></dl>
 
 <dl class="classmethod">
-<dt id="finetune.MultifieldClassifier.finetune_grid_search_cv">
-<em class="property">classmethod </em><code class="descname">finetune_grid_search_cv</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>n_splits</em>, <em>test_size</em>, <em>config=None</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultifieldClassifier.finetune_grid_search_cv" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.MultiFieldClassifier.finetune_grid_search_cv">
+<em class="property">classmethod </em><code class="descname">finetune_grid_search_cv</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>n_splits</em>, <em>test_size</em>, <em>config=None</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldClassifier.finetune_grid_search_cv" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs cross validated grid search over config items defined using “GridSearchable” objects and returns either full results or
 the config object that relates to the best results. The default config contains grid searchable objects for the
 most important parameters to search over.</p>
@@ -760,14 +797,14 @@ form [(config, eval_fn output), … ]</p>
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.MultifieldClassifier.fit">
-<code class="descname">fit</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultifieldClassifier.fit" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.MultiFieldClassifier.fit">
+<code class="descname">fit</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldClassifier.fit" title="Permalink to this definition">¶</a></dt>
 <dd><p>An alias for finetune.</p>
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.MultifieldClassifier.generate_text">
-<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=True</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultifieldClassifier.generate_text" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.MultiFieldClassifier.generate_text">
+<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=True</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldClassifier.generate_text" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
 Temperature parameter for decoding is set in the config.
 :param max_length: The maximum length to decode to.
@@ -776,22 +813,22 @@ Temperature parameter for decoding is set in the config.
 </dd></dl>
 
 <dl class="classmethod">
-<dt id="finetune.MultifieldClassifier.load">
-<em class="property">classmethod </em><code class="descname">load</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultifieldClassifier.load" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.MultiFieldClassifier.load">
+<em class="property">classmethod </em><code class="descname">load</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldClassifier.load" title="Permalink to this definition">¶</a></dt>
 <dd><p>Load a saved fine-tuned model from disk.  Path provided should be a folder which contains .pkl and tf.Saver() files</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>path</strong> – string path name to load model from.  Same value as previously provided to <a class="reference internal" href="#finetune.MultifieldClassifier.save" title="finetune.MultifieldClassifier.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a>. Must be a folder.</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>path</strong> – string path name to load model from.  Same value as previously provided to <a class="reference internal" href="#finetune.MultiFieldClassifier.save" title="finetune.MultiFieldClassifier.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a>. Must be a folder.</td>
 </tr>
 </tbody>
 </table>
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.MultifieldClassifier.predict">
-<code class="descname">predict</code><span class="sig-paren">(</span><em>Xs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultifieldClassifier.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultifieldClassifier.predict" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.MultiFieldClassifier.predict">
+<code class="descname">predict</code><span class="sig-paren">(</span><em>Xs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultiFieldClassifier.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiFieldClassifier.predict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces list of most likely class labels as determined by the fine-tuned model.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -806,8 +843,8 @@ Temperature parameter for decoding is set in the config.
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.MultifieldClassifier.predict_proba">
-<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>Xs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultifieldClassifier.predict_proba"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultifieldClassifier.predict_proba" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.MultiFieldClassifier.predict_proba">
+<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>Xs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultiFieldClassifier.predict_proba"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiFieldClassifier.predict_proba" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces probability distribution over classes for each example in X.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -822,8 +859,8 @@ Temperature parameter for decoding is set in the config.
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.MultifieldClassifier.save">
-<code class="descname">save</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultifieldClassifier.save" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.MultiFieldClassifier.save">
+<code class="descname">save</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldClassifier.save" title="Permalink to this definition">¶</a></dt>
 <dd><p>Saves the state of the model to disk to the folder specific by <cite>path</cite>.  If <cite>path</cite> does not exist, it will be auto-created.</p>
 <dl class="docutils">
 <dt>Save is performed in two steps:</dt>
@@ -839,16 +876,16 @@ Should not be used to save / restore a training model.</dd>
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.MultifieldClassifier.transform">
-<code class="descname">transform</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultifieldClassifier.transform" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.MultiFieldClassifier.transform">
+<code class="descname">transform</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldClassifier.transform" title="Permalink to this definition">¶</a></dt>
 <dd><p>An alias for <cite>featurize</cite>.</p>
 </dd></dl>
 
 </dd></dl>
 
 <dl class="class">
-<dt id="finetune.MultifieldRegressor">
-<em class="property">class </em><code class="descclassname">finetune.</code><code class="descname">MultifieldRegressor</code><span class="sig-paren">(</span><em>config=None</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultifieldRegressor"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultifieldRegressor" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.MultiFieldRegressor">
+<em class="property">class </em><code class="descclassname">finetune.</code><code class="descname">MultiFieldRegressor</code><span class="sig-paren">(</span><em>config=None</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultiFieldRegressor"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiFieldRegressor" title="Permalink to this definition">¶</a></dt>
 <dd><p>Regresses one or more floating point values given a set of documents per example.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -863,8 +900,14 @@ Should not be used to save / restore a training model.</dd>
 </tbody>
 </table>
 <dl class="method">
-<dt id="finetune.MultifieldRegressor.featurize">
-<code class="descname">featurize</code><span class="sig-paren">(</span><em>Xs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultifieldRegressor.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultifieldRegressor.featurize" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.MultiFieldRegressor.cached_predict">
+<code class="descname">cached_predict</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldRegressor.cached_predict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Context manager that prevents the recreation of the tensorflow graph on every call to BaseModel.predict().</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.MultiFieldRegressor.featurize">
+<code class="descname">featurize</code><span class="sig-paren">(</span><em>Xs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultiFieldRegressor.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiFieldRegressor.featurize" title="Permalink to this definition">¶</a></dt>
 <dd><p>Embeds inputs in learned feature space. Can be called before or after calling <a class="reference internal" href="#module-finetune" title="finetune"><code class="xref py py-meth docutils literal notranslate"><span class="pre">finetune()</span></code></a>.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -879,8 +922,8 @@ Should not be used to save / restore a training model.</dd>
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.MultifieldRegressor.finetune">
-<code class="descname">finetune</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y=None</em>, <em>batch_size=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultifieldRegressor.finetune"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultifieldRegressor.finetune" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.MultiFieldRegressor.finetune">
+<code class="descname">finetune</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y=None</em>, <em>batch_size=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultiFieldRegressor.finetune"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiFieldRegressor.finetune" title="Permalink to this definition">¶</a></dt>
 <dd><table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -898,8 +941,8 @@ corresponds to the number of training examples provided to each GPU.</li>
 </dd></dl>
 
 <dl class="classmethod">
-<dt id="finetune.MultifieldRegressor.finetune_grid_search">
-<em class="property">classmethod </em><code class="descname">finetune_grid_search</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>test_size</em>, <em>config=None</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultifieldRegressor.finetune_grid_search" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.MultiFieldRegressor.finetune_grid_search">
+<em class="property">classmethod </em><code class="descname">finetune_grid_search</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>test_size</em>, <em>config=None</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldRegressor.finetune_grid_search" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs grid search over config items defined using “GridSearchable” objects and returns either full results or
 the config object that relates to the best results. The default config contains grid searchable objects for the
 most important parameters to search over.</p>
@@ -928,8 +971,8 @@ form [(config, eval_fn output), … ]</p>
 </dd></dl>
 
 <dl class="classmethod">
-<dt id="finetune.MultifieldRegressor.finetune_grid_search_cv">
-<em class="property">classmethod </em><code class="descname">finetune_grid_search_cv</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>n_splits</em>, <em>test_size</em>, <em>config=None</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultifieldRegressor.finetune_grid_search_cv" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.MultiFieldRegressor.finetune_grid_search_cv">
+<em class="property">classmethod </em><code class="descname">finetune_grid_search_cv</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>n_splits</em>, <em>test_size</em>, <em>config=None</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldRegressor.finetune_grid_search_cv" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs cross validated grid search over config items defined using “GridSearchable” objects and returns either full results or
 the config object that relates to the best results. The default config contains grid searchable objects for the
 most important parameters to search over.</p>
@@ -961,14 +1004,14 @@ form [(config, eval_fn output), … ]</p>
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.MultifieldRegressor.fit">
-<code class="descname">fit</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultifieldRegressor.fit" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.MultiFieldRegressor.fit">
+<code class="descname">fit</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldRegressor.fit" title="Permalink to this definition">¶</a></dt>
 <dd><p>An alias for finetune.</p>
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.MultifieldRegressor.generate_text">
-<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=True</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultifieldRegressor.generate_text" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.MultiFieldRegressor.generate_text">
+<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=True</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldRegressor.generate_text" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
 Temperature parameter for decoding is set in the config.
 :param max_length: The maximum length to decode to.
@@ -977,22 +1020,22 @@ Temperature parameter for decoding is set in the config.
 </dd></dl>
 
 <dl class="classmethod">
-<dt id="finetune.MultifieldRegressor.load">
-<em class="property">classmethod </em><code class="descname">load</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultifieldRegressor.load" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.MultiFieldRegressor.load">
+<em class="property">classmethod </em><code class="descname">load</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldRegressor.load" title="Permalink to this definition">¶</a></dt>
 <dd><p>Load a saved fine-tuned model from disk.  Path provided should be a folder which contains .pkl and tf.Saver() files</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>path</strong> – string path name to load model from.  Same value as previously provided to <a class="reference internal" href="#finetune.MultifieldRegressor.save" title="finetune.MultifieldRegressor.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a>. Must be a folder.</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>path</strong> – string path name to load model from.  Same value as previously provided to <a class="reference internal" href="#finetune.MultiFieldRegressor.save" title="finetune.MultiFieldRegressor.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a>. Must be a folder.</td>
 </tr>
 </tbody>
 </table>
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.MultifieldRegressor.predict">
-<code class="descname">predict</code><span class="sig-paren">(</span><em>Xs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultifieldRegressor.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultifieldRegressor.predict" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.MultiFieldRegressor.predict">
+<code class="descname">predict</code><span class="sig-paren">(</span><em>Xs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultiFieldRegressor.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiFieldRegressor.predict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces list of most likely class labels as determined by the fine-tuned model.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -1007,8 +1050,8 @@ Temperature parameter for decoding is set in the config.
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.MultifieldRegressor.predict_proba">
-<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>Xs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultifieldRegressor.predict_proba"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultifieldRegressor.predict_proba" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.MultiFieldRegressor.predict_proba">
+<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>Xs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultiFieldRegressor.predict_proba"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiFieldRegressor.predict_proba" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces probability distribution over classes for each example in X.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -1023,8 +1066,8 @@ Temperature parameter for decoding is set in the config.
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.MultifieldRegressor.save">
-<code class="descname">save</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultifieldRegressor.save" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.MultiFieldRegressor.save">
+<code class="descname">save</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldRegressor.save" title="Permalink to this definition">¶</a></dt>
 <dd><p>Saves the state of the model to disk to the folder specific by <cite>path</cite>.  If <cite>path</cite> does not exist, it will be auto-created.</p>
 <dl class="docutils">
 <dt>Save is performed in two steps:</dt>
@@ -1040,8 +1083,8 @@ Should not be used to save / restore a training model.</dd>
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.MultifieldRegressor.transform">
-<code class="descname">transform</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultifieldRegressor.transform" title="Permalink to this definition">¶</a></dt>
+<dt id="finetune.MultiFieldRegressor.transform">
+<code class="descname">transform</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldRegressor.transform" title="Permalink to this definition">¶</a></dt>
 <dd><p>An alias for <cite>featurize</cite>.</p>
 </dd></dl>
 
@@ -1063,6 +1106,12 @@ Should not be used to save / restore a training model.</dd>
 </tr>
 </tbody>
 </table>
+<dl class="method">
+<dt id="finetune.MultiLabelClassifier.cached_predict">
+<code class="descname">cached_predict</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiLabelClassifier.cached_predict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Context manager that prevents the recreation of the tensorflow graph on every call to BaseModel.predict().</p>
+</dd></dl>
+
 <dl class="method">
 <dt id="finetune.MultiLabelClassifier.featurize">
 <code class="descname">featurize</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multi_label_classifier.html#MultiLabelClassifier.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiLabelClassifier.featurize" title="Permalink to this definition">¶</a></dt>
@@ -1265,6 +1314,12 @@ Should not be used to save / restore a training model.</dd>
 </tbody>
 </table>
 <dl class="method">
+<dt id="finetune.SequenceLabeler.cached_predict">
+<code class="descname">cached_predict</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#finetune.SequenceLabeler.cached_predict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Context manager that prevents the recreation of the tensorflow graph on every call to BaseModel.predict().</p>
+</dd></dl>
+
+<dl class="method">
 <dt id="finetune.SequenceLabeler.featurize">
 <code class="descname">featurize</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/sequence_labeling.html#SequenceLabeler.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.SequenceLabeler.featurize" title="Permalink to this definition">¶</a></dt>
 <dd><p>Embeds inputs in learned feature space. Can be called before or after calling <a class="reference internal" href="#module-finetune" title="finetune"><code class="xref py py-meth docutils literal notranslate"><span class="pre">finetune()</span></code></a>.</p>
@@ -1446,6 +1501,12 @@ Should not be used to save / restore a training model.</dd>
 </tr>
 </tbody>
 </table>
+<dl class="method">
+<dt id="finetune.Comparison.cached_predict">
+<code class="descname">cached_predict</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Comparison.cached_predict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Context manager that prevents the recreation of the tensorflow graph on every call to BaseModel.predict().</p>
+</dd></dl>
+
 <dl class="method">
 <dt id="finetune.Comparison.featurize">
 <code class="descname">featurize</code><span class="sig-paren">(</span><em>pairs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/comparison.html#Comparison.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Comparison.featurize" title="Permalink to this definition">¶</a></dt>
@@ -1661,6 +1722,7 @@ and recompute remaining gradients incrementally in order to save memory.  Defaul
 <li><strong>resid_p_drop</strong> – Residual layer fully connected network dropout probability.  Defaults to <cite>0.1</cite>.</li>
 <li><strong>clf_p_drop</strong> – Classifier dropout probability.  Defaults to <cite>0.1</cite>.</li>
 <li><strong>l2_reg</strong> – L2 regularization coefficient. Defaults to <cite>0.01</cite>.</li>
+<li><strong>vector_l2</strong> – Whether to apply weight decay regularization to vectors (biases, normalization etc..). Defaults to False.</li>
 <li><strong>b1</strong> – Adam b1 parameter.  Defaults to <cite>0.9</cite>.</li>
 <li><strong>b2</strong> – Adam b2 parameter.  Defaults to <cite>0.999</cite>.</li>
 <li><strong>epsilon</strong> – Adam epsilon parameter: Defaults to <cite>1e-8</cite>.</li>
@@ -1698,6 +1760,8 @@ unless tensorboard_folder is explicitly provided. Defaults to <cite>None</cite>.
 <li><strong>params_device</strong> – Which device should gradient updates be aggregated on?
 If you are using a single GPU and have more than 4Gb of GPU memory you should set this to GPU PCI number (0, 1, 2, etc.). Defaults to <cite>“cpu”</cite>.</li>
 <li><strong>eval_acc</strong> – if True, calculates accuracy and writes it to the tensorboard summary files for valudation runs.</li>
+<li><strong>save_dtype</strong> – specifies what precision to save model weights with.  Defaults to <cite>np.float32</cite>.</li>
+<li><strong>regression_loss</strong> – the loss to use for regression models L1 or L2, defaults to L2.</li>
 </ul>
 </td>
 </tr>
@@ -1742,7 +1806,7 @@ If you are using a single GPU and have more than 4Gb of GPU memory you should se
     <script type="text/javascript">
         var DOCUMENTATION_OPTIONS = {
             URL_ROOT:'./',
-            VERSION:'0.1.0',
+            VERSION:'0.5.11',
             COLLAPSE_INDEX:false,
             FILE_SUFFIX:'.html',
             HAS_SOURCE:  true,
