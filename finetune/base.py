@@ -233,13 +233,13 @@ class BaseModel(object, metaclass=ABCMeta):
             self._predictions = None
 
     def _data_generator(self):
+        self._cached_example = None
         while not self._closed:
             try:
-                example = self._data.pop(0)
-                yield example
+                self._cached_example = self._data.pop(0)
+                yield self._cached_example
             except IndexError:
-                # placeholder to fill batch up
-                yield self.input_pipeline._format_for_inference([""])[0] 
+                yield self._cached_example
 
     @contextmanager
     def cached_predict(self):
@@ -261,9 +261,6 @@ class BaseModel(object, metaclass=ABCMeta):
         if self._predictions is None:
             _estimator = self.get_estimator()
             input_fn = self.input_pipeline.get_predict_input_fn(self._data_generator)
-            # input_fn = lambda: self.input_pipeline._dataset_without_targets(
-            #     self._data_generator, train=None
-            # ).batch(self.config.batch_size)
             self._predictions = _estimator.predict(input_fn=input_fn, predict_keys=mode)
 
         predictions = [None] * n

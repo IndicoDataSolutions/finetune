@@ -8,6 +8,7 @@ class MultiFieldClassificationPipeline(ClassificationPipeline):
 
 
 class MultiFieldRegressionPipeline(RegressionPipeline):
+    
     def _format_for_encoding(self, X):
         return [X]
 
