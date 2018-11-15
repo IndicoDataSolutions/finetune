@@ -278,6 +278,9 @@ class BasePipeline(metaclass=ABCMeta):
         """
         return [[X]]
 
+    def _format_for_inference(self, X):
+        return list(X)
+
     def _text_to_ids(self, Xs, Y=None, pad_token=PAD_TOKEN):
         Xs = self._format_for_encoding(Xs)
         if self.config.chunk_long_sequences and len(Xs) == 1:

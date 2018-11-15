@@ -287,8 +287,9 @@ class TextEncoder(object):
 
         # for each field in that example
         for field in Xs:
-            assert isinstance(field, (list, tuple)), "This should be a list of strings, if its not," \
-                "you've done something wrong... instead it's {}".format(tf.contrib.framework.nest.map_structure(type, field))
+            assert isinstance(field, (list, tuple)), "This should be a list of strings, instead it's {}".format(
+                tf.contrib.framework.nest.map_structure(type, field)
+            )
             encoded = self._encode(field, labels=Y)
             token_ids.append(_flatten(encoded.token_ids))
             tokens.append(_flatten(encoded.tokens))

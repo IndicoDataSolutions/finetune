@@ -3,7 +3,9 @@ import unittest
 import logging
 import shutil
 import string
+import gc
 from copy import copy
+import time
 from pathlib import Path
 from unittest.mock import MagicMock
 import warnings
@@ -62,8 +64,6 @@ class TestClassifier(unittest.TestCase):
             warnings.warn("tests/saved-models still exists, it is possible that some test is not cleaning up properly.")
             pass
 
-        tf.reset_default_graph()
-
     def tearDown(self):
         shutil.rmtree("tests/saved-models/")
 
@@ -102,6 +102,41 @@ class TestClassifier(unittest.TestCase):
         for proba in probabilities:
             self.assertIsInstance(proba, dict)
 
+    def test_multiple_models_fit_predict(self):
+        """
+        Ensure second call to predict is faster than first
+        """
+        model = Classifier(config=self.default_config())
+        train_sample = self.dataset.sample(n=self.n_sample)
+        valid_sample = self.dataset.sample(n=self.n_sample)
+        model.fit(train_sample.Text.values, train_sample.Target.values)
+        model.predict(valid_sample.Text.values)
+
+        model2 = Classifier(config=self.default_config())
+        model2.fit(train_sample.Text.values, train_sample.Target.values)
+        model2.predict(valid_sample.Text.values)
+
+    def test_cached_predict(self):
+        """
+        Ensure second call to predict is faster than first
+        """
+
+        model = Classifier(config=self.default_config())
+        train_sample = self.dataset.sample(n=self.n_sample)
+        valid_sample = self.dataset.sample(n=self.n_sample)
+        model.fit(train_sample.Text.values, train_sample.Target.values)
+
+        with model.cached_predict():
+            start = time.time()
+            model.predict(valid_sample.Text[:1].values)
+            first = time.time()
+            model.predict(valid_sample.Text[:1].values)
+            second = time.time()
+
+        first_prediction_time = (first - start)
+        second_prediction_time = (second - first)
+        self.assertLess(second_prediction_time, first_prediction_time / 2.)
+
     def test_fit_predict(self):
         """
         Ensure model training does not error out
@@ -133,7 +168,6 @@ class TestClassifier(unittest.TestCase):
         model = Classifier(config=self.default_config())
         model.config.oversample = True
         train_sample = self.dataset.sample(n=self.n_sample)
-        valid_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text.values, train_sample.Target.values)
 
     def test_class_weights(self):
@@ -264,7 +298,7 @@ class TestClassifier(unittest.TestCase):
         self.assertEqual(type(lm_out_2), str)
         self.assertIn('_start_Indico RULE'.lower(), lm_out_2)
 
-    def test_early_termination_lm(self):
+    def test_generate_text_stop_early(self):
         model = Classifier(verbose=False)
 
         # A dirty mock to make all model inferences output a hundred _classify_ tokens

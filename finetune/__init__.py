@@ -13,7 +13,6 @@ from finetune.multiple_choice import MultipleChoice
 
 __version__, VERSION, version = ("0.5.11",) * 3
 
-
 # Logging configuration
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 tf.logging.set_verbosity(tf.logging.ERROR)
