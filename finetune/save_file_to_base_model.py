@@ -13,8 +13,8 @@ import tensorflow as tf
 
 flags = tf.flags
 FLAGS = flags.FLAGS
-flags.DEFINE_string("input_path", None, "Path to the save model to be conver")
-flags.DEFINE_string("output_name", None, "Path to the reference translation file")
+flags.DEFINE_string("input_path", None, "Path to the saved model to be converted")
+flags.DEFINE_string("output_name", None, "Filename for the newly created base model file")
 
 
 def main(_):
@@ -26,7 +26,7 @@ def main(_):
     weights_stripped = {k: v for k, v in weights.items() if "featurizer" in k and "OptimizeLoss" not in k}
     base_model_path = os.path.join(os.path.dirname(__file__), "model", FLAGS.output_name)
     jl.dump(weights_stripped, base_model_path)
-    print("Complete!!!")
+    print("Complete!")
 
 if __name__ == "__main__":
     tf.app.run()
