@@ -11,7 +11,7 @@ from finetune.comparison import Comparison
 from finetune.multi_label_classifier import MultiLabelClassifier
 from finetune.multiple_choice import MultipleChoice
 
-__version__, VERSION, version = ("0.5.11",) * 3
+__version__, VERSION, version = ("0.5.12",) * 3
 
 # Logging configuration
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
