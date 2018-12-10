@@ -256,9 +256,8 @@ class BasePipeline(metaclass=ABCMeta):
 
     def get_predict_input_fn(self, Xs, batch_size=None):
         batch_size = batch_size or self.config.batch_size
-        prefetch_buffer = 2  # breaks the pipeline to allow concurrency
         tf_dataset = lambda: self._dataset_without_targets(Xs, train=None)
-        return lambda: tf_dataset().batch(batch_size).prefetch(prefetch_buffer)
+        return lambda: tf_dataset().batch(batch_size)
 
     @property
     def pad_idx(self):

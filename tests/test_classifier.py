@@ -137,6 +137,17 @@ class TestClassifier(unittest.TestCase):
         second_prediction_time = (second - first)
         self.assertLess(second_prediction_time, first_prediction_time / 2.)
 
+    def test_correct_cached_predict(self):
+        model = Classifier(config=self.default_config())
+        train_sample = self.dataset.sample(n=self.n_sample)
+        valid_sample = self.dataset.sample(n=self.n_sample)
+        model.fit(train_sample.Text.values, train_sample.Target.values)
+        predictions = model.predict_proba(valid_sample.Text[:1].values)
+        predictions2 = model.predict_proba(valid_sample.Text[1:2].values)
+        with model.cached_predict():
+            np.testing.assert_allclose(list(model.predict_proba(valid_sample.Text[:1].values)[0].values()), list(predictions[0].values()), rtol=1e-5)
+            np.testing.assert_allclose(list(model.predict_proba(valid_sample.Text[1:2].values)[0].values()), list(predictions2[0].values()), rtol=1e-5)
+
     def test_fit_predict(self):
         """
         Ensure model training does not error out
