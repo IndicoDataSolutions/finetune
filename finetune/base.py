@@ -77,6 +77,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self._predictions = None
         self._cached_predict = False
         self._closed = False
+        self._to_pull = 0
 
         if self.config.tensorboard_folder is not None:
             self.estimator_dir = os.path.abspath(
@@ -239,6 +240,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 self._cached_example = self._data.pop(0)
                 yield self._cached_example
             except IndexError:
+                self._to_pull += 1
                 yield self._cached_example
 
     @contextmanager
@@ -250,6 +252,7 @@ class BaseModel(object, metaclass=ABCMeta):
         yield self
         self._cached_predict = False
         self.close()
+        self._to_pull = 0
 
     def _cached_inference(self, Xs, mode=None):
         """
@@ -263,11 +266,15 @@ class BaseModel(object, metaclass=ABCMeta):
             input_fn = self.input_pipeline.get_predict_input_fn(self._data_generator)
             self._predictions = _estimator.predict(input_fn=input_fn, predict_keys=mode)
 
+        for _ in range(self._to_pull):
+            next(self._predictions) # collect the null predictions from the queue
+
         predictions = [None] * n
         for i in tqdm.tqdm(range(n), total=n, desc="Inference"):
             y = next(self._predictions)
             y = y[mode] if mode else y
             predictions[i] = y
+        
         return predictions
 
     def _inference(self, Xs, mode=None):
