@@ -13,6 +13,7 @@ from finetune.imbalance import class_weight_tensor
 
 LOGGER = logging.getLogger('finetune')
 
+
 class PredictMode:
     FEATURIZE = "FEAT"
     NORMAL = "NORM"
@@ -20,8 +21,17 @@ class PredictMode:
     GENERATE_TEXT = "GEN_TEXT"
 
 
-def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_model, build_lm, encoder, target_dim,
-                 label_encoder, saver):
+def get_model_fn(
+    target_model_fn,
+    predict_op,
+    predict_proba_op,
+    build_target_model,
+    build_lm,
+    encoder,
+    target_dim,
+    label_encoder,
+    saver
+):
     def language_model_op(X, M, params, featurizer_state):
         language_model_state = language_model(
             X=X,

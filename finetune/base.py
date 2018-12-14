@@ -9,6 +9,7 @@ from abc import ABCMeta, abstractmethod
 from copy import deepcopy
 import tempfile
 import time
+from collections import defaultdict
 import shutil
 import glob
 from contextlib import contextmanager
@@ -30,8 +31,31 @@ from finetune.errors import FinetuneError
 from finetune.model import get_model_fn, PredictMode
 from finetune.download import download_data_if_required
 from finetune.estimator_utils import PatchedParameterServerStrategy
+from sklearn.feature_selection import mutual_info_classif
 
 JL_BASE = os.path.join(os.path.dirname(__file__), "model", "Base_model.jl")
+
+
+class FancyInitHook(tf.train.SessionRunHook):
+    
+    def __init__(self, fancy_init, classes):
+        self.fancy_init = fancy_init
+        self.classes = classes
+
+    def after_create_session(self, session, coord):
+        clf_weights = [v for v in tf.global_variables() if v.name == "model/target/classifier/perceptron/w:0"][0]
+        value = session.run(clf_weights)
+        weight_norm = np.mean(np.linalg.norm(value, axis=0))
+
+        mean_init_vals = np.vstack(np.mean(self.fancy_init[cls], axis=0) for cls in self.classes)
+        init_val_norms = np.linalg.norm(mean_init_vals, axis=0)
+        
+        ratios = [init_val_norm / weight_norm for init_val_norm in init_val_norms]
+        mean_init_vals /= ratios
+        
+        session.graph._unsafe_unfinalize()
+        session.run(clf_weights.assign(mean_init_vals.T))
+        session.graph.finalize()
 
 
 class BaseModel(object, metaclass=ABCMeta):
@@ -156,7 +180,18 @@ class BaseModel(object, metaclass=ABCMeta):
             n_gpus=max(1, len(self.config.visible_gpus))
         )
         num_steps = steps_per_epoch * self.config.n_epochs
+
+        if self.config.fancy_init:
+            features = self.featurize(Xs)
+            fancy_init = defaultdict(list)
+            for feature_arr, target in zip(features, Y):
+                fancy_init[target].append(feature_arr)
+            
+            for target in fancy_init:
+                fancy_init[target] = np.asarray(fancy_init[target], dtype=np.float32)
+
         estimator = self.get_estimator()
+
         train_hooks = [
             self.saver.get_saver_hook(
                 estimator=estimator,
@@ -164,9 +199,12 @@ class BaseModel(object, metaclass=ABCMeta):
                 steps_per_epoch=steps_per_epoch,
                 early_stopping_steps=self.config.early_stopping_steps,
                 eval_frequency=val_interval
-            ),
-            
+            ),   
         ]
+
+        if self.config.fancy_init:
+            train_hooks.append(FancyInitHook(fancy_init, classes=self.input_pipeline.label_encoder.classes_))
+
         if val_size > 0:
             train_hooks.append(
                 tf.contrib.estimator.InMemoryEvaluatorHook(
@@ -201,12 +239,17 @@ class BaseModel(object, metaclass=ABCMeta):
             keep_checkpoint_max=1
         )
 
+        build_lm = (
+            force_build_lm or
+            self.config.lm_loss_coef > 0.0 or
+            self.input_pipeline.target_dim is None
+        )
         model_fn = get_model_fn(
             target_model_fn=self._target_model,
             predict_op=self._predict_op,
             predict_proba_op=self._predict_proba_op,
             build_target_model=self.input_pipeline.target_dim is not None,
-            build_lm=force_build_lm or self.config.lm_loss_coef > 0.0 or self.input_pipeline.target_dim is None,
+            build_lm=build_lm,
             encoder=ENCODER,
             target_dim=self.input_pipeline.target_dim,
             label_encoder=self.input_pipeline.label_encoder,
