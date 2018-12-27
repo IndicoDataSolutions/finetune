@@ -177,6 +177,14 @@ class BaseModel(object, metaclass=ABCMeta):
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
+            if self.config.prefit_init:
+                tf.logging.info("Starting pre-fit initialisation...")
+                num_layers_trained = self.config.num_layers_trained
+                self.config.num_layers_trained = 0
+                estimator.train(train_input_fn, hooks=train_hooks, steps=num_steps)
+                self.config.num_layers_trained = num_layers_trained
+                self.saver.variables = {k: v for k, v in self.saver.variables.items() if "adam" not in k and "global_step" not in k}
+                tf.logging.info("Finishing pre-fit initialisation...")
             estimator.train(train_input_fn, hooks=train_hooks, steps=num_steps)
 
     def get_estimator(self, force_build_lm=False):
