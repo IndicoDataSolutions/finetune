@@ -20,6 +20,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.data import Dataset
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import normalize
 from tensorflow.train import SessionRunHook
 
 from finetune.utils import interpolate_pos_embed, list_transpose
@@ -184,6 +185,9 @@ class BaseModel(object, metaclass=ABCMeta):
                 estimator.train(train_input_fn, hooks=train_hooks, steps=num_steps)
                 self.config.num_layers_trained = num_layers_trained
                 self.saver.variables = {k: v for k, v in self.saver.variables.items() if "adam" not in k and "global_step" not in k}
+                for weight in self.saver.variables:
+                    if weight.startswith("model/target/") and weight.endswith("/w:0"):
+                        self.saver.variables[weight] = normalize(self.saver.variables[weight], axis=0) * self.config.weight_stddev
                 tf.logging.info("Finishing pre-fit initialisation...")
             estimator.train(train_input_fn, hooks=train_hooks, steps=num_steps)
 

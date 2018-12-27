@@ -206,7 +206,7 @@ def get_default_config():
         eval_acc=False,
         save_dtype=None,
         regression_loss="L2",
-        prefit_init=True,
+        prefit_init=False,
 
         # Must remain fixed
         n_heads=12,
