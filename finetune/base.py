@@ -186,8 +186,15 @@ class BaseModel(object, metaclass=ABCMeta):
                 self.config.num_layers_trained = num_layers_trained
                 self.saver.variables = {k: v for k, v in self.saver.variables.items() if "adam" not in k and "global_step" not in k}
                 for weight in self.saver.variables:
-                    if weight.startswith("model/target/") and weight.endswith("/w:0"):
-                        self.saver.variables[weight] = normalize(self.saver.variables[weight], axis=0) * self.config.weight_stddev
+                    if weight.startswith("model/target/"):
+                        w = self.saver.variables[weight]
+                        shape = w.shape
+                        if len(shape) ==1:
+                            continue
+                        w_flat = np.reshape(w, [-1, shape[-1]])
+                        expectation_of_norm = ((self.config.weight_stddev ** 2) * w_flat.shape[0]) ** 0.5
+                        self.saver.variables[weight] = np.reshape(expectation_of_norm * w_flat / np.linalg.norm(w_flat, axis=0), shape)
+
                 tf.logging.info("Finishing pre-fit initialisation...")
             estimator.train(train_input_fn, hooks=train_hooks, steps=num_steps)
 
