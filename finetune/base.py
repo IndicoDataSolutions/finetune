@@ -20,7 +20,6 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.data import Dataset
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import normalize
 from tensorflow.train import SessionRunHook
 
 from finetune.utils import interpolate_pos_embed, list_transpose
