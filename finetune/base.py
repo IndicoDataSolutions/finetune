@@ -14,13 +14,14 @@ import shutil
 import glob
 from contextlib import contextmanager
 import pathlib
+import logging
 
 import tqdm
 import numpy as np
 import tensorflow as tf
 from tensorflow.data import Dataset
 from sklearn.model_selection import train_test_split
-from tensorflow.train import SessionRunHook
+import joblib as jl
 
 from finetune.utils import interpolate_pos_embed, list_transpose
 from finetune.encoding import EncodedOutput
@@ -33,7 +34,7 @@ from finetune.download import download_data_if_required
 from finetune.estimator_utils import PatchedParameterServerStrategy
 
 JL_BASE = os.path.join(os.path.dirname(__file__), "model", "Base_model.jl")
-
+LOGGER = logging.getLogger('finetune')
 
 class BaseModel(object, metaclass=ABCMeta):
     """
@@ -430,6 +431,26 @@ class BaseModel(object, metaclass=ABCMeta):
 
         path = os.path.abspath(path)
         self.saver.save(self, path)
+
+    def create_basemodel(self, filename, exists_ok=False):
+        """
+        Saves the current weights into the correct file format to be used as a base model.
+        :param filename: the path to save the base model relative to finetune's basemodel filestore.
+        :param exists_ok: Whether to replace the model if it exists.
+        """
+        base_model_path = os.path.join(os.path.dirname(__file__), "model", filename)
+
+        if not exists_ok and os.path.exists(base_model_path):
+            base_model_path = base_model_path + str(int(time.time()))
+            LOGGER.warning(
+                "Cannot overwrite model {}, set exists_ok to overwrite, saving as {} to avoid loss of data.".format(
+                    filename, base_model_path))
+
+        if not self.saver.variables:
+            raise FinetuneError(
+                "Cannot save a base model with no weights changed. Call fit before creatibg a base model.")
+        weights_stripped = {k: v for k, v in self.saver.variables.items() if "featurizer" in k and "Adam" not in k}
+        jl.dump(weights_stripped, base_model_path)
 
     @classmethod
     def load(cls, path):
