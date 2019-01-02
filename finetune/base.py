@@ -432,10 +432,10 @@ class BaseModel(object, metaclass=ABCMeta):
         path = os.path.abspath(path)
         self.saver.save(self, path)
 
-    def create_basemodel(self, filename, exists_ok=False):
+    def create_base_model(self, filename, exists_ok=False):
         """
         Saves the current weights into the correct file format to be used as a base model.
-        :param filename: the path to save the base model relative to finetune's basemodel filestore.
+        :param filename: the path to save the base model relative to finetune's base model filestore.
         :param exists_ok: Whether to replace the model if it exists.
         """
         base_model_path = os.path.join(os.path.dirname(__file__), "model", filename)
@@ -448,7 +448,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         if not self.saver.variables:
             raise FinetuneError(
-                "Cannot save a base model with no weights changed. Call fit before creatibg a base model.")
+                "Cannot save a base model with no weights changed. Call fit before creating a base model.")
         weights_stripped = {k: v for k, v in self.saver.variables.items() if "featurizer" in k and "Adam" not in k}
         jl.dump(weights_stripped, base_model_path)
 
