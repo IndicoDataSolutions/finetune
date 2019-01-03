@@ -459,6 +459,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         :param path: string path name to load model from.  Same value as previously provided to :meth:`save`. Must be a folder.
         """
+        download_data_if_required()
         saver = Saver(JL_BASE)
         model = saver.load(path)
         model._initialize()
