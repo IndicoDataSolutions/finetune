@@ -81,15 +81,19 @@ class BaseModel(object, metaclass=ABCMeta):
         self._closed = False
         self._to_pull = 0
 
-        if self.config.tensorboard_folder is not None:
+        try:
             self.estimator_dir = os.path.abspath(
                 os.path.join(self.config.tensorboard_folder, str(int(time.time())))
             )
             pathlib.Path(self.estimator_dir).mkdir(parents=True, exist_ok=True)
             self.cleanup_glob = None
-        else:
+        except (TypeError, IOError):
+            # TypeError --> tensorboard_folder is None
+            # IOError --> user likely does not have permission to write to the tensorboard_folder directory
+            # Both cases we can resolve by
             self.estimator_dir = tempfile.mkdtemp(prefix="Finetune")
             self.cleanup_glob = self.estimator_dir
+            LOGGER.info("Saving tensorboard output to {}".format(self.estimator_dir))
 
         def process_embeddings(name, value):
             if "/we:0" not in name:
