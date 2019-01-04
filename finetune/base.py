@@ -457,7 +457,7 @@ class BaseModel(object, metaclass=ABCMeta):
         jl.dump(weights_stripped, base_model_path)
 
     @classmethod
-    def load(cls, path):
+    def load(cls, path, **kwargs):
         """
         Load a saved fine-tuned model from disk.  Path provided should be a folder which contains .pkl and tf.Saver() files
 
@@ -466,6 +466,7 @@ class BaseModel(object, metaclass=ABCMeta):
         download_data_if_required()
         saver = Saver(JL_BASE)
         model = saver.load(path)
+        model.config.update(kwargs)
         model._initialize()
         model.saver.variables = saver.variables
         return model
