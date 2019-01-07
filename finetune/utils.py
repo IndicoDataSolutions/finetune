@@ -238,6 +238,9 @@ def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value
     """
     all_subseqs = []
     all_labels = []
+    all_association_idx = []
+    all_association_type = []
+    all_idxs = []
 
     # placeholder for inference time
     if labels is None:
@@ -253,11 +256,20 @@ def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value
         last_loc = 0
         doc_subseqs = []
         doc_labels = []
+        doc_association_idx = []
+        doc_association_type = []
+
         for i, annotation in enumerate(label_seq):
             start = annotation["start"]
             end = annotation["end"]
             label = annotation["label"]
             annotation_text = annotation.get("text")
+            if "association" in annotation:
+                association_idx = annotation["association"]["index"]
+                association_type = annotation["association"]["relationship"]
+            else:
+                association_idx = -1
+                association_type = none_value
 
             if annotation_text is not None and text[start:end] != annotation_text:
                 raise ValueError(
@@ -282,6 +294,8 @@ def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value
                     doc_labels.append([none_value])
                 else:
                     doc_labels.append(none_value)
+                    doc_association_idx.append(-1)
+                    doc_association_type.append(none_value)
 
             j = len(doc_labels) - 1
             split_dist = last_loc - end
@@ -324,6 +338,8 @@ def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value
                 doc_labels.append([label])
             else:
                 doc_labels.append(label)
+                doc_association_idx.append(association_idx)
+                doc_association_type.append(association_type)
 
             last_loc = end
 
@@ -335,4 +351,8 @@ def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value
                 doc_labels.append(none_value)
         all_subseqs.append(doc_subseqs)
         all_labels.append(doc_labels)
-    return all_subseqs, all_labels
+        all_association_idx.append(doc_association_idx)
+        all_association_type.append(all_association_type)
+        all_idxs.append(list(range(len(all_association_type))))
+
+    return all_subseqs, all_labels, all_association_type, all_association_idx, all_idxs

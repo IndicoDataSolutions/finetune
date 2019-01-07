@@ -350,3 +350,86 @@ def sequence_labeler(hidden, targets, n_targets, config, pad_id, multilabel=Fals
                 'transition_matrix': transition_params
             }
         }
+
+
+def association(hidden, targets, n_targets, config, pad_id, train=False, reuse=None, **kwargs):
+    """
+    An Attention based sequence labeler model. Takes the output of the pre-trained model, applies an additional
+    randomly initialised multihead attention block, with residuals on top. The attention is not-future masked to allow
+    the model to label sequences based on context in both directions. The representations fed into this model are
+    necessarily future masked because a language modelling loss is the original objective of the featurizer.
+
+    :param hidden: The output of the featurizer. [batch_size, sequence_length, embed_dim]
+    :param targets: The placeholder representing the sequence labeling targets. [batch_size, sequence_length]
+    :param n_targets: A python int containing the number of classes that the model should be learning to predict over.
+    :param dropout_placeholder:
+    :param config: A config object, containing all parameters for the featurizer.
+    :param train: If this flag is true, dropout and losses are added to the graph.
+    :param reuse: Should reuse be set within this scope.
+    :param kwargs: Spare arguments.
+    :return: dict containing:
+        "logits": The un-normalised log probabilities of each class being in each location. For usable predictions,
+            sampling from this distrobution is not sufficiant and a viterbi decoding method should be used.
+        "losses": The negative log likelihood for the sequence targets.
+        "predict_params": A dictionary of params to be fed to the viterbi decode function.
+    """
+    with tf.variable_scope('sequence-labeler', reuse=reuse):
+        nx = config.n_embed
+        length = config.max_length
+        num_associations = len(config.possible_associations) + 1
+
+        def seq_lab_internal(hidden):
+            attn_fn = functools.partial(attn, scope="seq_label_attn", n_state=nx, n_head=config.seq_num_heads,
+                                            resid_pdrop=config.resid_p_drop, attn_pdrop=config.attn_p_drop,
+                                            train=train, scale=False, mask=False)
+            n = norm(attn_fn(hidden) + hidden, 'seq_label_residual')
+            flat_logits = tf.layers.dense(n, n_targets)
+            logits = tf.reshape(flat_logits, tf.concat([tf.shape(hidden)[:2], [n_targets]], 0))
+
+            association_head = tf.layers.dense(n, nx)
+            association_head = tf.reshape(association_head, tf.concat([tf.shape(hidden)[:2], [nx]], 0))
+
+            a = tf.expand_dims(association_head, 1)
+            b = tf.expand_dims(association_head, 2)
+
+            features = tf.concat([a - b, a * b, tf.tile(a, [1, length, 1, 1]), tf.tile(b, [1, 1, length, 1])], axis=-1)
+            associations_flat = tf.layers.dense(tf.reshape(features, shape=[-1, nx * 4]), num_associations)
+            associations = tf.reshape(associations_flat, [-1, length, length, num_associations])
+
+            return logits, associations_flat, associations
+
+        with tf.variable_scope('seq_lab_attn'):
+            if config.low_memory_mode and train:
+                seq_lab_internal = recompute_grad(seq_lab_internal, use_entire_scope=True)
+
+            logits, associations_flat, associations = seq_lab_internal(hidden)
+
+        class_weights = kwargs.get('class_weights')
+        if class_weights is not None:
+            logits = class_reweighting(class_weights)(logits)
+
+        log_likelihood = 0.0
+        association_loss = 0.0
+
+        transition_params = tf.get_variable("Transition_matrix", shape=[n_targets, n_targets])
+        if train and targets is not None:
+            log_likelihood, _ = crf_log_likelihood(
+                logits,
+                targets["labels"],
+                kwargs.get('max_length') * tf.ones(tf.shape(targets)[0]),
+                transition_params=transition_params
+            )
+
+            association_loss = tf.losses.sparse_softmax_crossentropy(
+                logits=associations_flat,
+                labels=tf.reshape(targets["associations"], shape=[-1])
+                #TODO MASKING
+            )
+
+        return {
+            'logits': {"sequence": logits, "association": associations},
+            'losses': -log_likelihood + association_loss, #TODO think about weighting
+            'predict_params': {
+                'transition_matrix': transition_params
+            }
+        }

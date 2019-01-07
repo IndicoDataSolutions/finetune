@@ -3,22 +3,28 @@ import math
 import warnings
 import copy
 
+from scipy.sparse import csr_matrix
 import tensorflow as tf
 import numpy as np
 
 from finetune.base import BaseModel, PredictMode
-from finetune.target_encoders import SequenceLabelingEncoder, SequenceMultiLabelingEncoder
-from finetune.network_modules import sequence_labeler
+from finetune.target_encoders import SequenceLabelingEncoder
+from finetune.network_modules import association
 from finetune.crf import sequence_decode
 from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_sequence
 from finetune.input_pipeline import BasePipeline, ENCODER
+from finetune.errors import FinetuneError
 from finetune.estimator_utils import ProgressHook
+from finetune.sequence_labeling import SequenceLabeler, SequencePipeline
 
 
-class SequencePipeline(BasePipeline):
+class AssociationPipeline(BasePipeline):
     def __init__(self, config, multi_label):
-        super(SequencePipeline, self).__init__(config)
+        super(AssociationPipeline, self).__init__(config)
         self.multi_label = multi_label
+        self.association_encoder = SequenceLabelingEncoder()
+        self.association_encoder.fit(config.possible_associations + [self.config.pad_token])
+        self.association_pad_idx = self.association_encoder.transform([self.config.pad_token])
 
     def _post_data_initialization(self, Y):
         Y_ = list(itertools.chain.from_iterable(Y))
@@ -32,7 +38,10 @@ class SequencePipeline(BasePipeline):
             if Y is None:
                 yield feats
             else:
-                yield feats, self.label_encoder.transform(out.labels)
+                label, association_type, association_idx, idx = out.labels
+                association_indicator = np.expand_dims(self.association_encoder.transform(association_type), 1) # len * 1 * num_associations
+                associations = csr_matrix(association_indicator, (idx, association_idx)).toarray()
+                yield feats, {"labels": self.label_encoder.transform(label), "associations": np.int32(associations)}
 
     def _format_for_encoding(self, X):
         return [X]
@@ -52,37 +61,34 @@ class SequencePipeline(BasePipeline):
                     "tokens": tf.int32,
                     "mask": tf.float32
                 },
-                tf.int32
+                {
+                    "labels": tf.int32,
+                    "associations": TS([self.config.max_length, self.config.max_length])
+                }
             ), 
             (
                 {
                     "tokens": TS([self.config.max_length, 2]), 
                     "mask": TS([self.config.max_length])
-                }, 
-                TS(target_shape)
+                },
+                {
+                    "labels": TS(target_shape),
+                    "associations": TS([self.config.max_length, self.config.max_length])
+                }
             )
         )
 
     def _target_encoder(self):
-        if self.multi_label:
-            return SequenceMultiLabelingEncoder()
         return SequenceLabelingEncoder()
 
 
-class SequenceLabeler(BaseModel):
+class Association(BaseModel):
     """ 
     Labels each token in a sequence as belonging to 1 of N token classes.
     
     :param config: A :py:class:`finetune.config.Settings` object or None (for default config).
     :param \**kwargs: key-value pairs of config items to override.
     """
-
-    defaults = {
-        "n_epochs": 5,
-        "lr_warmup": 0.1,
-        "low_memory_mode": True,
-        "chunk_long_sequences": True
-    }
 
     def __init__(self, config=None, **kwargs):
         """ 
@@ -95,20 +101,19 @@ class SequenceLabeler(BaseModel):
         :param chunk_long_sequences: defaults to `True`
         :param **kwargs: key-value pairs of config items to override.
         """
-        d = copy.deepcopy(SequenceLabeler.defaults)
-        d.update(kwargs)
-        super().__init__(config=config, **d)
+        super().__init__(config=config, **kwargs)
 
     def _get_input_pipeline(self):
-        return SequencePipeline(config=self.config, multi_label=self.config.multi_label_sequences)
+        return AssociationPipeline(config=self.config, multi_label=False)
 
     def _initialize(self):
-        self.multi_label = self.config.multi_label_sequences
+        if self.config.multi_label_sequences:
+            raise FinetuneError("Multi label association not supported")
         return super()._initialize()
 
     def finetune(self, Xs, Y=None, batch_size=None):
-        Xs, Y_new, *_ = indico_to_finetune_sequence(Xs, labels=Y, multi_label=self.multi_label, none_value="<PAD>")
-        Y = Y_new if Y is not None else None
+        Xs, Y_new, association_type, association_idx, idxs = indico_to_finetune_sequence(Xs, labels=Y, multi_label=False, none_value="<PAD>")
+        Y = list(zip(Y_new, association_type, association_idx, idxs)) if Y is not None else None
         return super().finetune(Xs, Y=Y, batch_size=batch_size)
 
     def predict(self, X):
@@ -226,19 +231,21 @@ class SequenceLabeler(BaseModel):
         return self.predict(X)
 
     def _target_model(self, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
-        return sequence_labeler(
+        return association(
             hidden=featurizer_state['sequence_features'],
             targets=targets,
             n_targets=n_outputs,
-            pad_id=self.input_pipeline.pad_idx,
             config=self.config,
             train=train,
-            multilabel=self.multi_label,
             reuse=reuse,
             **kwargs
         )
 
     def _predict_op(self, logits, **kwargs):
+
+        logits = logits["sequence"]
+        associations = logits["association"]
+
         trans_mats = kwargs.get("transition_matrix")
         if self.multi_label:
             logits = tf.unstack(logits, axis=-1)
@@ -252,7 +259,11 @@ class SequenceLabeler(BaseModel):
             label_probas = tf.stack(label_probas, axis=-1)
         else:
             label_idxs, label_probas = sequence_decode(logits, trans_mats)
-        return label_idxs, label_probas
+
+        association_prob = tf.softmax(associations, axis=-1)
+        association_pred = tf.argmax(associations, axis=-1)
+
+        return {"sequence": label_idxs, "association": association_pred}, {"sequence": label_probas, "association": association_pred}
 
     def _predict_proba_op(self, logits, **kwargs):
         return tf.no_op()

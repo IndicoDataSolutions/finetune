@@ -2,11 +2,8 @@ import logging
 
 import os
 import subprocess
-import traceback
 import warnings
 
-import numpy as np
-import tensorflow as tf
 from functools import lru_cache
 from collections import namedtuple
 
