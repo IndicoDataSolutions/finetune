@@ -462,6 +462,7 @@ class BaseModel(object, metaclass=ABCMeta):
         Load a saved fine-tuned model from disk.  Path provided should be a folder which contains .pkl and tf.Saver() files
 
         :param path: string path name to load model from.  Same value as previously provided to :meth:`save`. Must be a folder.
+        :param **kwargs: key-value pairs of config items to override.
         """
         download_data_if_required()
         saver = Saver(JL_BASE)
