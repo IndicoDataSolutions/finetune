@@ -270,7 +270,9 @@ def class_reweighting(class_weights):
     @tf.custom_gradient
     def custom_grad(logits):
         def grad(g):
-            return g * class_weights
+            new_g = g * class_weights
+            ratio = tf.reduce_sum(g) / tf.reduce_sum(new_g)
+            return new_g * ratio
         return tf.identity(logits), grad
     return custom_grad
 
