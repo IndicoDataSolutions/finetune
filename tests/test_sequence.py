@@ -47,7 +47,7 @@ class TestSequenceLabeler(unittest.TestCase):
             r = requests.get(url)
             with open(cls.dataset_path, "wb") as fp:
                 fp.write(r.content)
-        
+
         with codecs.open(cls.dataset_path, "r", "utf-8") as infile:
             soup = bs(infile, "html5lib")
 
@@ -70,7 +70,7 @@ class TestSequenceLabeler(unittest.TestCase):
             docs.append(texts)
             docs_labels.append(labels)
 
-        
+
         with open(cls.processed_path, 'wt') as fp:
             json.dump((docs, docs_labels), fp)
 
@@ -84,9 +84,9 @@ class TestSequenceLabeler(unittest.TestCase):
 
         with open(self.processed_path, 'rt') as fp:
             self.texts, self.labels = json.load(fp)
-        
+
         self.model = SequenceLabeler(batch_size=2, max_length=256, lm_loss_coef=0.0, verbose=False)
-    
+
     def test_fit_lm_only(self):
         """
         Ensure model training does not error out
@@ -119,6 +119,7 @@ class TestSequenceLabeler(unittest.TestCase):
         """
         Ensure model training does not error out
         Ensure model returns predictions
+        Ensure class reweighting behaves as intended
         """
         raw_docs = ["".join(text) for text in self.texts]
         texts, annotations = finetune_to_indico_sequence(raw_docs, self.texts, self.labels)
@@ -139,8 +140,18 @@ class TestSequenceLabeler(unittest.TestCase):
         self.assertIn('Named Entity', overlap_precision)
         self.assertIn('Named Entity', overlap_recall)
         self.model.save(self.save_file)
-        model = SequenceLabeler.load(self.save_file)
-        predictions = model.predict(test_texts)
+
+        reweighted_model = SequenceLabeler(
+            batch_size=2,
+            max_length=256,
+            lm_loss_coef=0.0,
+            verbose=False,
+            class_weights={'Named Entity': 5.}
+        )
+        reweighted_model.fit(train_texts, train_annotations)
+        reweighted_predictions = reweighted_model.predict(test_texts)
+        reweighted_token_recall = sequence_labeling_token_recall(test_annotations, reweighted_predictions)
+        self.assertGreater(reweighted_token_recall['Named Entity'], token_recall['Named Entity'])
 
     def test_cached_predict(self):
         """
@@ -167,7 +178,7 @@ class TestSequenceLabeler(unittest.TestCase):
             text, labels = json.load(fp)
 
         self.model.finetune(text * 10, labels * 10)
-        
+
         predictions = self.model.predict(test_sequence)
         self.assertTrue(1 <= len(predictions[0]) <= 3)
         self.assertTrue(any(pred["text"] == "dog" for pred in predictions[0]))
@@ -191,7 +202,7 @@ class TestSequenceLabeler(unittest.TestCase):
             text, labels = json.load(fp)
 
         self.model.finetune(text * 10, labels * 10)
-        
+
         predictions = self.model.predict(test_sequence)
         self.assertEqual(len(predictions[0]), 20)
         self.assertTrue(any(pred["text"] == "dog" for pred in predictions[0]))

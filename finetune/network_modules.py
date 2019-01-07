@@ -132,7 +132,7 @@ def _apply_class_weight(losses, targets, class_weights=None):
     if class_weights is not None:
         # loss multiplier applied based on true class
         weights = tf.reduce_sum(class_weights * tf.to_float(targets), axis=1)
-        weights *= tf.reduce_prod(tf.shape(weights)[:-1]) / tf.reduce_sum(weights)
+        weights *= tf.to_float(tf.reduce_prod(tf.shape(weights))) / tf.reduce_sum(weights)
         losses *= weights
     return losses
 
@@ -271,7 +271,7 @@ def class_reweighting(class_weights):
     def custom_grad(logits):
         def grad(g):
             new_g = g * class_weights
-            return new_g * tf.reduce_prod(tf.shape(g)[:-1]) / tf.reduce_sum(new_g)
+            return new_g * tf.reduce_sum(g) / tf.reduce_sum(new_g)
         return tf.identity(logits), grad
     return custom_grad
 
