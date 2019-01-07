@@ -132,6 +132,7 @@ def _apply_class_weight(losses, targets, class_weights=None):
     if class_weights is not None:
         # loss multiplier applied based on true class
         weights = tf.reduce_sum(class_weights * tf.to_float(targets), axis=1)
+        weights *= tf.ones_like(weights) / tf.reduce_sum(weights)
         losses *= weights
     return losses
 
@@ -316,6 +317,7 @@ def sequence_labeler(hidden, targets, n_targets, config, pad_id, multilabel=Fals
             logits = class_reweighting(class_weights)(logits)
 
         log_likelihood = 0.0
+
         if multilabel:
             transition_params = []
             logits_individual = tf.unstack(logits, n_targets, axis=-1)
