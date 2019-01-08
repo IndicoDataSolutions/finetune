@@ -244,7 +244,12 @@ class BasePipeline(metaclass=ABCMeta):
             ).skip(self.config.val_size)
         else:
             self._skip_tqdm = 0
-            Xs_tr, Xs_va, Y_tr, Y_va = train_test_split(Xs, Y, test_size=self.config.val_size, random_state=self.config.seed)
+            if self.config.val_set is None:
+                Xs_tr, Xs_va, Y_tr, Y_va = train_test_split(Xs, Y, test_size=self.config.val_size, random_state=self.config.seed)
+            else:
+                Xs_tr, Y_tr = Xs, Y
+                Xs_va, Y_va = self.config.val_set
+                
             Xs_tr, Y_tr = self.resampling(Xs_tr, Y_tr)
             self.config.dataset_size = len(Xs_tr)
             val_dataset_unbatched = self._make_dataset(Xs_va, Y_va, train=False)
