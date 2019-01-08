@@ -94,7 +94,7 @@ if __name__ == "__main__":
     # Train and evaluate on SST
     X = []
     Y = []
-    for i, a in enumerate(treebank.parsed_sents()):
+    for i, a in enumerate(treebank.parsed_sents()[:10]):
         x, y = clean(find_noun_verb_pairs(a))
         X.append(x)
         Y.append(y)

@@ -103,8 +103,12 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                     else:
                         pred_proba_op = predict_proba_op(logits, **predict_params)
 
-                    predictions[PredictMode.NORMAL] = pred_op
-                    predictions[PredictMode.PROBAS] = pred_proba_op
+                    if type(pred_op) == dict:
+                        predictions.update(pred_op)
+                        predictions.update(pred_proba_op)
+                    else:
+                        predictions[PredictMode.NORMAL] = pred_op
+                        predictions[PredictMode.PROBAS] = pred_proba_op
 
             if build_lm:
                 lm_predict_op, language_model_state = language_model_op(X=X, M=M, params=params,

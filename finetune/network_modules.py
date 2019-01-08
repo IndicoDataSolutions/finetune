@@ -352,7 +352,7 @@ def sequence_labeler(hidden, targets, n_targets, config, pad_id, multilabel=Fals
         }
 
 
-def association(hidden, targets, n_targets, config, pad_id, train=False, reuse=None, **kwargs):
+def association(hidden, targets, n_targets, config, train=False, reuse=None, **kwargs):
     """
     An Attention based sequence labeler model. Takes the output of the pre-trained model, applies an additional
     randomly initialised multihead attention block, with residuals on top. The attention is not-future masked to allow
@@ -404,23 +404,22 @@ def association(hidden, targets, n_targets, config, pad_id, train=False, reuse=N
 
             logits, associations_flat, associations = seq_lab_internal(hidden)
 
+        log_likelihood = 0.0
+        association_loss = 0.0
         class_weights = kwargs.get('class_weights')
         if class_weights is not None:
             logits = class_reweighting(class_weights)(logits)
-
-        log_likelihood = 0.0
-        association_loss = 0.0
 
         transition_params = tf.get_variable("Transition_matrix", shape=[n_targets, n_targets])
         if train and targets is not None:
             log_likelihood, _ = crf_log_likelihood(
                 logits,
                 targets["labels"],
-                kwargs.get('max_length') * tf.ones(tf.shape(targets)[0]),
+                kwargs.get('max_length') * tf.ones(tf.shape(targets["labels"])[0]),
                 transition_params=transition_params
             )
 
-            association_loss = tf.losses.sparse_softmax_crossentropy(
+            association_loss = tf.losses.sparse_softmax_cross_entropy(
                 logits=associations_flat,
                 labels=tf.reshape(targets["associations"], shape=[-1])
                 #TODO MASKING

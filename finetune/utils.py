@@ -102,7 +102,7 @@ def truncate_text(text, max_chars=100):
 
 
 def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_value=config.PAD_TOKEN,
-                                subtoken_predictions=False):
+                                subtoken_predictions=False, associations=None):
     """
     Maps from the labeled substring format into the 'indico' format. This is the exact inverse operation to
     :meth indico_to_finetune_sequence:.
@@ -130,7 +130,8 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
     :return: Texts, annoatations both in the 'indico' format.
     """
     annotations = []
-    for raw_text, doc_seq, label_seq, prob_seq in zip(raw_texts, subseqs, labels, probs or [None] * len(raw_texts)):
+    
+    for i, (raw_text, doc_seq, label_seq, prob_seq) in enumerate(zip(raw_texts, subseqs, labels, probs or [None] * len(raw_texts))):
         tokens = NLP(raw_text)
         token_starts = [token.idx for token in tokens]
         token_ends = [token.idx + len(token.text) for token in tokens]
@@ -192,7 +193,8 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
                         "start": annotation_start,
                         "end": annotation_end,
                         "label": label,
-                        "text": text
+                        "text": text,
+                        "subtoken_idxs": [i]
                     }
                     if confidences is not None:
                         annotation["confidence"] = confidences
@@ -349,10 +351,13 @@ def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value
                 doc_labels.append([none_value])
             else:
                 doc_labels.append(none_value)
+                doc_association_idx.append(-1)
+                doc_association_type.append(none_value)
+                
         all_subseqs.append(doc_subseqs)
         all_labels.append(doc_labels)
         all_association_idx.append(doc_association_idx)
-        all_association_type.append(all_association_type)
-        all_idxs.append(list(range(len(all_association_type))))
+        all_association_type.append(doc_association_type)
+        all_idxs.append(list(range(len(doc_association_type))))
 
     return all_subseqs, all_labels, all_association_type, all_association_idx, all_idxs

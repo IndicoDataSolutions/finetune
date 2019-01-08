@@ -138,6 +138,7 @@ class BaseModel(object, metaclass=ABCMeta):
         return steps
 
     def finetune(self, Xs, Y=None, batch_size=None):
+        print("inside base finetune")
         if not callable(Xs) and Y is not None and len(Xs) != len(Y):
             raise FinetuneError(
                 "Mismatch between number of examples ({}) and number of targets ({}) provided.".format(
@@ -148,6 +149,7 @@ class BaseModel(object, metaclass=ABCMeta):
         batch_size = batch_size or self.config.batch_size
 
         val_input_fn, train_input_fn, val_size, val_interval = self.input_pipeline.get_train_input_fns(Xs, Y, batch_size=batch_size)
+        print("Made input fn init")
         if val_size <= 10 and self.config.keep_best_model:
             tf.logging.warning(
                 "Early stopping / keeping best model with a validation size of {} is likely to case undesired results".format(val_size))
