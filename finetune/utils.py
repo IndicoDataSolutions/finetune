@@ -100,6 +100,36 @@ def truncate_text(text, max_chars=100):
         text = text[:max_chars] + "..."
     return text
 
+def assign_associations(labels, associations, none_value):
+    idx_lookup = {}
+
+    active_label_idx = -1
+    for label, segment_association in zip(labels, associations):
+        if label == none_value:
+            continue
+        active_label_idx += 1
+
+        for association in segment_association:
+            for bpe_idx, _, _, _ in association:
+                idx_lookup[bpe_idx] = active_label_idx
+
+    candiates = {}
+    for segment_label, segment_associations in zip(labels, associations):
+        if segment_label == none_value:
+            continue
+        for association in segment_associations:
+            for bpe_idx, candiate_bpe_idxs, candidate_assoc_labels, assoc_probs in association:
+                for candidate_idx, candidate_label, candidate_prob in zip(candiate_bpe_idxs, candidate_assoc_labels, assoc_probs):
+                    if candidate_label == none_value or candidate_idx not in idx_lookup:
+                        continue
+                    if idx_lookup[bpe_idx] not in candiates:
+                        candiates[idx_lookup[bpe_idx]] = []
+                    candiates[idx_lookup[bpe_idx]].append((idx_lookup[candidate_idx], candidate_label, candidate_prob))
+
+    # TODO some how sample these candidates eg maximum probabilities, to fit some schema
+    candiates = {k: max(v, key=lambda x: x[2]) for k, v in candiates.items()} # for now just pick maximum prob
+    return candiates
+
 
 def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_value=config.PAD_TOKEN,
                                 subtoken_predictions=False, associations=None):
@@ -130,8 +160,13 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
     :return: Texts, annoatations both in the 'indico' format.
     """
     annotations = []
-    
-    for i, (raw_text, doc_seq, label_seq, prob_seq) in enumerate(zip(raw_texts, subseqs, labels, probs or [None] * len(raw_texts))):
+    if associations is not None:
+        assoc_cleaned = assign_associations(labels, associations, none_value)
+    else:
+        assoc_cleaned = [None] * len(raw_texts)
+
+    loop_vals = zip(raw_texts, subseqs, labels, probs or [None] * len(raw_texts), assoc_cleaned)
+    for raw_text, doc_seq, label_seq, prob_seq, associations_seq in loop_vals:
         tokens = NLP(raw_text)
         token_starts = [token.idx for token in tokens]
         token_ends = [token.idx + len(token.text) for token in tokens]
@@ -142,7 +177,7 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
         start_idx = 0
         end_idx = 0
         raw_annotation_start = 0
-        for sub_str, raw_label, confidences in zip(doc_seq, label_seq, prob_seq or [None] * len(doc_seq)):
+        for i, (sub_str, raw_label, confidences) in enumerate(zip(doc_seq, label_seq, prob_seq or [None] * len(doc_seq))):
             if not isinstance(raw_label, tuple):
                 multi_label = False
                 label_list = [raw_label]
@@ -196,6 +231,13 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
                         "text": text,
                         "subtoken_idxs": [i]
                     }
+                    if associations_seq is not None and i in associations_seq:
+                        index, relationship, prob = associations_seq[i]
+                        annotation["associations"] = {
+                            "index": index,
+                            "relationship": relationship,
+                            "prob": prob
+                        }
                     if confidences is not None:
                         annotation["confidence"] = confidences
 

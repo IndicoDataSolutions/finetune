@@ -50,7 +50,7 @@ class AssociationPipeline(BasePipeline):
                 for l, a_t, a_i, i in out.labels:
                     labels.append(l)
                     if a_t != pad_token:
-                        assoc_mat[a_i][i] = class_list.index(pad_token)
+                        assoc_mat[a_i][i] = class_list.index(a_t)
                 print(assoc_mat)
 
                 yield feats, {"labels": self.label_encoder.transform(labels), "associations": np.array(assoc_mat, dtype=np.int32)}
@@ -143,18 +143,29 @@ class Association(BaseModel):
         chunk_size = self.config.max_length - 2
         step_size = chunk_size // 3
         arr_encoded = list(itertools.chain.from_iterable(self.input_pipeline._text_to_ids([x]) for x in X))
-        labels, batch_probas, associations = [], [] []
+        labels, batch_probas, associations = [], [], []
         for pred in self._inference(X, mode=None):
             labels.append(self.input_pipeline.label_encoder.inverse_transform(pred["sequence"]))
             batch_probas.append(pred["sequence_probs"])
-            associations.append((np.argmax((pred["association"], 0), pred["association"].max(0)))
+            print("probs shape is ", pred["association_probs"].shape)
+
+            most_likely_associations = np.argmax(pred["association"], 0)
+            most_likely_class_id = pred["association"][range(len(most_likely_associations)), tuple(most_likely_associations)]
+            print([prob[idx, cls] for prob, idx, cls in zip(pred["association_probs"], most_likely_associations, most_likely_class_id)])
+
+            associations.append((
+                most_likely_associations,
+                self.input_pipeline.association_encoder.inverse_transform(most_likely_class_id),
+                [prob[idx, cls] for prob, idx, cls in zip(pred["association_probs"], most_likely_associations, most_likely_class_id)]
+            ))
 
         all_subseqs = []
         all_labels = []
         all_probs = []
+        all_assocs = []
 
         doc_idx = -1
-        for chunk_idx, (label_seq, proba_seq, (association_idx, association_class)) in enumerate(zip(labels, batch_probas, associations)):
+        for chunk_idx, (label_seq, proba_seq, (association_idx, association_class, association_prob)) in enumerate(zip(labels, batch_probas, associations)):
             position_seq = arr_encoded[chunk_idx].char_locs
             start_of_doc = arr_encoded[chunk_idx].token_ids[0][0] == ENCODER.start
             end_of_doc = (
@@ -171,7 +182,7 @@ class Association(BaseModel):
                 doc_subseqs = []
                 doc_labels = []
                 doc_probs = []
-                associations = []
+                doc_assocs = []
                 doc_idx += 1
                 start_of_token = 0
                 if not end_of_doc:
@@ -188,7 +199,7 @@ class Association(BaseModel):
             position_seq = position_seq[start:end]
             proba_seq = proba_seq[start:end]
 
-            for label, position, proba in zip(label_seq, position_seq, proba_seq):
+            for tok_idx, (label, position, proba) in enumerate(zip(label_seq, position_seq, proba_seq)):
                 if position == -1:
                     # indicates padding / special tokens
                     continue
@@ -200,12 +211,12 @@ class Association(BaseModel):
                     doc_subseqs.append(X[doc_idx][start_of_token:position])
                     doc_labels.append(label)
                     doc_probs.append([proba])
-                    association.append([(chunk_idx, association_idx, association_class)])
+                    doc_assocs.append([(tok_idx, association_idx, association_class, association_prob)])
                 else:
                     # continue appending to current subsequence
                     doc_subseqs[-1] += X[doc_idx][start_of_token:position]
                     doc_probs[-1].append(proba)
-                    association[-1].append((chunk_idx, association_idx, association_class))
+                    doc_assocs[-1].append((tok_idx, association_idx, association_class, association_prob))
 
                 start_of_token = position
 
@@ -222,13 +233,13 @@ class Association(BaseModel):
                 all_subseqs.append(doc_subseqs)
                 all_labels.append(doc_labels)
                 all_probs.append(prob_dicts)
-                all_associations.append(associations)
+                all_assocs.append(doc_assocs)
         _, doc_annotations = finetune_to_indico_sequence(
             raw_texts=X,
             subseqs=all_subseqs,
             labels=all_labels,
             probs=all_probs,
-            associations=all_associations,
+            associations=all_assocs,
             subtoken_predictions=self.config.subtoken_predictions
         )
 
@@ -286,7 +297,7 @@ class Association(BaseModel):
         association_prob = tf.nn.softmax(associations, axis=-1)
         association_pred = tf.argmax(associations, axis=-1)
 
-        return {"sequence": label_idxs, "association": association_pred}, {"sequence_probs": label_probas, "association_probs": association_pred}
+        return {"sequence": label_idxs, "association": association_pred}, {"sequence_probs": label_probas, "association_probs": association_prob}
 
     def _predict_proba_op(self, logits, **kwargs):
         return tf.no_op()

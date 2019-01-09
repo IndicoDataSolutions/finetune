@@ -94,12 +94,11 @@ if __name__ == "__main__":
     # Train and evaluate on SST
     X = []
     Y = []
-    for i, a in enumerate(treebank.parsed_sents()[:10]):
+    for i, a in enumerate(treebank.parsed_sents()):
         x, y = clean(find_noun_verb_pairs(a))
         X.append(x)
         Y.append(y)
     model = Association(possible_associations=["has_verb"], max_length=32)
     trainX, testX, trainY, testY = train_test_split(X, Y, test_size=0.3, random_state=42)
     model.fit(trainX, trainY)
-    accuracy = np.mean(model.predict(testX) == testY)
-    print('Test Accuracy: {:0.2f}'.format(accuracy))
+    print(model.predict(testX))
