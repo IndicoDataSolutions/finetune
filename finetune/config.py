@@ -38,7 +38,7 @@ def all_gpus():
         cuda_visible_devices = os.getenv("CUDA_VISIBLE_DEVICES")
         if cuda_visible_devices:
             device_ids = {
-                device_id: description 
+                device_id: description
                 for device_id, description in device_ids.items()
                 if str(device_id) in cuda_visible_devices.split(',')
             }
@@ -66,14 +66,14 @@ class Settings(dict):
     :param visible_gpus: List of integer GPU ids to spread out computation across, defaults to all available GPUs.
     :param n_epochs: Number of iterations through training data, defaults to `3`.
     :param random_seed: Random seed to use for repeatability purposes, defaults to `42`.
-    :param max_length:  Maximum number of subtokens per sequence. Examples longer than this number will be truncated 
+    :param max_length:  Maximum number of subtokens per sequence. Examples longer than this number will be truncated
         (unless `chunk_long_sequences=True` for SequenceLabeler models). Defaults to `512`.
     :param weight_stddev: Standard deviation of initial weights.  Defaults to `0.02`.
-    :param chunk_long_sequences: When True, use a sliding window approach to predict on 
+    :param chunk_long_sequences: When True, use a sliding window approach to predict on
         examples that are longer than max length.  Defaults to `False`.
     :param low_memory_mode: When True, only store partial gradients on forward pass
         and recompute remaining gradients incrementally in order to save memory.  Defaults to `False`.
-    :param interpolate_pos_embed: Interpolate positional embeddings when `max_length` differs from it's original value of 
+    :param interpolate_pos_embed: Interpolate positional embeddings when `max_length` differs from it's original value of
         `512`. Defaults to `False`.
     :param embed_p_drop: Embedding dropout probability.  Defaults to `0.1`.
     :param attn_p_drop: Attention dropout probability.  Defaults to `0.1`.
@@ -90,24 +90,24 @@ class Settings(dict):
     :param max_grad_norm: Clip gradients larger than this norm. Defaults to `1.0`.
     :param lm_loss_coef: Language modeling loss coefficient -- a value between `0.0` - `1.0`
         that indicates how to trade off between language modeling loss
-        and target model loss.  Usually not beneficial to turn on unless 
+        and target model loss.  Usually not beneficial to turn on unless
         dataset size exceeds a few thousand examples.  Defaults to `0.0`.
     :param summarize_grads: Include gradient summary information in tensorboard.  Defaults to `False`.
     :param verbose: Print TQDM logs?  Defaults to `True`.
 
     :param val_size: Validation set size as a percentage of all training data.  Validation will not be run by default if n_examples < 50.
         If n_examples > 50, defaults to max(5, min(100, 0.05 * n_examples))
-    :param val_interval: Evaluate on validation set after `val_interval` batches.  
+    :param val_interval: Evaluate on validation set after `val_interval` batches.
         Defaults to 4 * val_size / batch_size to ensure that too much time is not spent on validation.
     :param lm_temp: Language model temperature -- a value of `0.0` corresponds to greedy maximum likelihood predictions
-        while a value of `1.0` corresponds to random predictions. Defaults to `0.2`. 
+        while a value of `1.0` corresponds to random predictions. Defaults to `0.2`.
     :param seq_num_heads: Number of attention heads of final attention layer. Defaults to `16`.
     :param subtoken_predictions: Return predictions at subtoken granularity or token granularity?  Defaults to `False`.
     :param multi_label_sequences: Use a multi-labeling approach to sequence labeling to allow overlapping labels.
-    :param multi_label_threshold: Threshold of sigmoid unit in multi label classifier. 
+    :param multi_label_threshold: Threshold of sigmoid unit in multi label classifier.
         Can be increased or lowered to trade off precision / recall. Defaults to `0.5`.
     :param autosave_path: Save current best model (as measured by validation loss) to this location. Defaults to `None`.
-    :param tensorboard_folder: Directory for tensorboard logs. Tensorboard logs will not be written 
+    :param tensorboard_folder: Directory for tensorboard logs. Tensorboard logs will not be written
         unless tensorboard_folder is explicitly provided. Defaults to `None`.
     :param log_device_placement: Log which device each operation is placed on for debugging purposes.  Defaults to `False`.
     :param allow_soft_placement: Allow tf to allocate an operation to a different device if a device is unavailable.  Defaults to `True`.
@@ -120,7 +120,8 @@ class Settings(dict):
         If you are using a single GPU and have more than 4Gb of GPU memory you should set this to GPU PCI number (0, 1, 2, etc.). Defaults to `"cpu"`.
     :param eval_acc: if True, calculates accuracy and writes it to the tensorboard summary files for valudation runs.
     :param save_dtype: specifies what precision to save model weights with.  Defaults to `np.float32`.
-    :param regression_loss: the loss to use for regression models L1 or L2, defaults to L2.
+    :param regression_loss: the loss to use for regression models. One of `L1` or `L2`, defaults to `L2`.
+    :param prefit_init: if True, fit target model weigths before finetuning the entire model. Defaults to `False`.
     """
     def get_grid_searchable(self):
         return self.grid_searchable
@@ -171,7 +172,7 @@ def get_default_config():
         clf_p_drop=0.1,
         l2_reg=GridSearchable(0.01, [0.0, 0.1, 0.01, 0.001]),
         vector_l2=False,
-        b1=0.9, 
+        b1=0.9,
         b2=0.999,
         epsilon=1e-8,
         lr_schedule='warmup_linear',

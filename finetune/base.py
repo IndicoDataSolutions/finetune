@@ -187,10 +187,9 @@ class BaseModel(object, metaclass=ABCMeta):
                 for weight in self.saver.variables:
                     if weight.startswith("model/target/"):
                         w = self.saver.variables[weight]
-                        shape = w.shape
-                        if len(shape) ==1:
+                        if len(w.shape) == 1:
                             continue
-                        w_flat = np.reshape(w, [-1, shape[-1]])
+                        w_flat = np.reshape(w, [-1, w.shape[-1]])
                         expectation_of_norm = ((self.config.weight_stddev ** 2) * w_flat.shape[0]) ** 0.5
                         self.saver.variables[weight] = np.reshape(expectation_of_norm * w_flat / np.linalg.norm(w_flat, axis=0), shape)
 
