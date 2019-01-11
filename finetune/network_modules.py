@@ -1,5 +1,5 @@
 import functools
-
+import numpy as np
 import tensorflow as tf
 from tensorflow.contrib.crf import crf_log_likelihood
 
@@ -264,7 +264,46 @@ def regressor(hidden, targets, n_targets, config, train=False, reuse=None, **kwa
             'logits': outputs,
             'losses': loss
         }
+        
+def ordinal_regressor(hidden, targets, n_targets, config, train=False, reuse=None, **kwargs):
+    """
+    A simple linear regressor.
 
+    :param hidden: The output of the featurizer. [batch_size, embed_dim]
+    :param targets: The placeholder representing the regression targets. [batch_size]
+    :param n_targets: A python int containing the number of outputs that the model should be learning to predict over.
+    :param dropout_placeholder:
+    :param config: A config object, containing all parameters for the featurizer.
+    :param train: If this flag is true, dropout and losses are added to the graph.
+    :param reuse: Should reuse be set within this scope.
+    :param kwargs: Spare arguments.
+    :return: dict containing:
+        logits: The regression outputs.
+        losses: All-threshold Loss for the regression targets.
+    """
+    with tf.variable_scope('ordinalregressor', reuse=reuse):
+        hidden = dropout(hidden, config.clf_p_drop, train)
+        outputs = perceptron(hidden, n_targets, config)
+        if targets is None:
+            loss = None
+        else:
+        #all-threshold loss
+            loss = tf.nn.sigmoid_cross_entropy_with_logits(
+                logits=outputs,
+                labels=tf.stop_gradient(targets))
+            ranks = tf.reduce_sum(targets, axis=1)
+            num_ranks = n_targets + 1
+            loss_mask = []
+            for row in range(len(loss)):
+                rank = ranks[row]
+                mask = [abs(rank-threshold) for threshold in range(row)]
+                loss_mask.append(mask)
+            loss = np.multiply(loss_mask,loss)
+            
+        return {
+            'logits': outputs,
+            'losses': loss
+        }
 
 def class_reweighting(class_weights):
     @tf.custom_gradient
