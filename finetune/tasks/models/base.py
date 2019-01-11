@@ -23,15 +23,16 @@ from tensorflow.data import Dataset
 from sklearn.model_selection import train_test_split
 import joblib as jl
 
-from finetune.utils import interpolate_pos_embed, list_transpose
-from finetune.encoding import EncodedOutput
-from finetune.input_pipeline import ENCODER
 from finetune.config import get_default_config
-from finetune.saver import Saver
 from finetune.errors import FinetuneError
-from finetune.model import get_model_fn, PredictMode
-from finetune.download import download_data_if_required
-from finetune.estimator_utils import PatchedParameterServerStrategy
+from finetune.encoding import EncodedOutput
+from finetune.base.positional_embedding import interpolate_pos_embed
+from finetune.base.input_pipeline import ENCODER
+from finetune.base.saver import Saver
+from finetune.base.model import get_model_fn, PredictMode
+from finetune.util.estimator import PatchedParameterServerStrategy
+from finetune.util.shapes import list_transpose
+from finetune.util.download import download_data_if_required
 
 JL_BASE = os.path.join(os.path.dirname(__file__), "model", "Base_model.jl")
 LOGGER = logging.getLogger('finetune')
@@ -114,7 +115,7 @@ class BaseModel(object, metaclass=ABCMeta):
             embeddings = np.concatenate((word_embeddings, special_embed, positional_embed), axis=0)
             return embeddings
 
-        base_model_path = os.path.join(os.path.dirname(__file__), "model", self.config.base_model_path)
+        base_model_path = os.path.join(os.path.dirname(__file__), "..", "..", "model", self.config.base_model_path)
         self.saver = Saver(
             fallback_filename=base_model_path,
             exclude_matches=None if self.config.save_adam_vars else "Adam",

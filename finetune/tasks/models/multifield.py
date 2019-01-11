@@ -1,6 +1,6 @@
-from finetune.classifier import Classifier, ClassificationPipeline
-from finetune.regressor import Regressor, RegressionPipeline
-from finetune.base import BaseModel
+from finetune.tasks.models.classifier import Classifier, ClassificationPipeline
+from finetune.tasks.models.regressor import Regressor, RegressionPipeline
+from finetune.tasks.models.base import BaseModel
 
 class MultiFieldClassificationPipeline(ClassificationPipeline):
     def _format_for_encoding(self, X):

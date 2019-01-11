@@ -2,8 +2,8 @@ import unittest
 
 import numpy as np
 
-from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_sequence
-from finetune.imbalance import compute_class_weights
+from finetune.encoding.sequence import indico_to_finetune_sequence, finetune_to_indico_sequence
+from finetune.util.imbalance import compute_class_weights
 
 
 class TestFinetuneIndicoConverters(unittest.TestCase):

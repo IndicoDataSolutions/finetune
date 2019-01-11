@@ -6,12 +6,14 @@ import tensorflow as tf
 from tensorflow.train import Scaffold
 from tensorflow.contrib.opt.python.training.weight_decay_optimizers import AdamWOptimizer
 
-from finetune.network_modules import featurizer, language_model
-from finetune.utils import sample_with_temperature
-from finetune.optimizers import schedules
-from finetune.imbalance import class_weight_tensor
+from finetune.base.network_modules import featurizer, language_model
+from finetune.base.lr_schedules import schedules
+from finetune.util.text_generation import sample_with_temperature
+from finetune.util.imbalance import class_weight_tensor
+
 
 LOGGER = logging.getLogger('finetune')
+
 
 class PredictMode:
     FEATURIZE = "FEAT"
@@ -22,6 +24,7 @@ class PredictMode:
 
 def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_model, build_lm, encoder, target_dim,
                  label_encoder, saver):
+                 
     def language_model_op(X, M, params, featurizer_state):
         language_model_state = language_model(
             X=X,

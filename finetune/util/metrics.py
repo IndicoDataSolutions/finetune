@@ -98,6 +98,7 @@ def seq_precision(true, predicted, count_fn):
             results[cls_] = 0.
     return results
 
+
 def micro_f1(true, predicted, count_fn):
     class_counts = count_fn(true, predicted)
     TP, FP, FN = 0, 0, 0
@@ -109,6 +110,7 @@ def micro_f1(true, predicted, count_fn):
     precision = TP / float(FP + TP)
     f1 = 2 * (recall * precision) / (recall + precision)
     return f1
+
 
 def sequence_labeling_token_precision(true, predicted):
     """
@@ -123,11 +125,13 @@ def sequence_labeling_token_recall(true, predicted):
     """
     return seq_recall(true, predicted, count_fn=sequence_labeling_token_counts)
 
+
 def sequence_labeling_micro_token_f1(true, predicted):
     """
     Token level F1
     """
     return micro_f1(true, predicted, count_fn=sequence_labeling_token_counts)
+
 
 def sequences_overlap(true_seq, pred_seq):
     """

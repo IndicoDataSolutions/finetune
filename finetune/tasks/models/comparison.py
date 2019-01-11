@@ -1,8 +1,8 @@
 import numpy as np
 import tensorflow as tf
 
-from finetune.base import BaseModel
-from finetune.classifier import Classifier, ClassificationPipeline
+from finetune.tasks.models.base import BaseModel
+from finetune.tasks.models.classifier import Classifier, ClassificationPipeline
 from finetune.encoding import ArrayEncodedOutput
 
 

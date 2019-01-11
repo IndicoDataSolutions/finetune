@@ -3,9 +3,9 @@ import functools
 import tensorflow as tf
 from tensorflow.contrib.crf import crf_log_likelihood
 
-from finetune.transformer import dropout, embed, block, attn, norm
-from finetune.utils import shape_list, merge_leading_dims
-from finetune.recompute_grads import recompute_grad
+from finetune.base.transformer import dropout, embed, block, attn, norm
+from finetune.util.shapes import shape_list, merge_leading_dims
+from finetune.util.recompute_grads import recompute_grad
 from finetune.errors import FinetuneError
 
 

@@ -1,36 +1,32 @@
+import warnings
+
 import tensorflow as tf
-import numpy as np
-from imblearn.over_sampling import RandomOverSampler
-from sklearn.utils import shuffle
 
-from finetune.base import BaseModel
-from finetune.target_encoders import OneHotLabelEncoder
-from finetune.network_modules import classifier
-from finetune.input_pipeline import BasePipeline
+from finetune.tasks.models.base import BaseModel
+from finetune.base.network_modules import multi_classifier
+from finetune.base.input_pipeline import BasePipeline
+from finetune.tasks.target_encoders import MultilabelClassificationEncoder
 
 
-class ClassificationPipeline(BasePipeline):
-
-    def resampling(self, Xs, Y):
-        if self.config.oversample:
-            idxs, Ys = shuffle(*RandomOverSampler().fit_sample([[i] for i in range(len(Xs))], Y))
-            return [Xs[i[0]] for i in idxs], Ys
-        return Xs, Y
-
+class MultilabelClassificationPipeline(BasePipeline):
     def _target_encoder(self):
-        return OneHotLabelEncoder()
+        return MultilabelClassificationEncoder()
 
 
-class Classifier(BaseModel):
+class MultiLabelClassifier(BaseModel):
     """ 
-    Classifies a single document into 1 of N categories.
-
+    Classifies a single document into upto N of N categories.
+    
     :param config: A :py:class:`finetune.config.Settings` object or None (for default config).
     :param \**kwargs: key-value pairs of config items to override.
     """
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.threshold_placeholder = None
+
     def _get_input_pipeline(self):
-        return ClassificationPipeline(self.config)
+        return MultilabelClassificationPipeline(self.config)
 
     def featurize(self, X):
         """
@@ -41,14 +37,15 @@ class Classifier(BaseModel):
         """
         return super().featurize(X)
 
-    def predict(self, X):
+    def predict(self, X, threshold=None):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
         :param X: list or array of text to embed.
         :returns: list of class labels.
         """
-        return super().predict(X)
+        self.config._threshold = threshold or self.config.multi_label_threshold
+        return self._predict(X)
 
     def predict_proba(self, X):
         """
@@ -62,20 +59,17 @@ class Classifier(BaseModel):
     def finetune(self, X, Y=None, batch_size=None):
         """
         :param X: list or array of text.
-        :param Y: integer or string-valued class labels.
+        :param Y: A list of lists containing labels for the corresponding X
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
         """
         return super().finetune(X, Y=Y, batch_size=batch_size)
 
-    def get_eval_fn(cls):
-        return lambda labels, targets: np.mean(np.asarray(labels) == np.asarray(targets))
-
     def _target_model(self, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
-        return classifier(
-            hidden=featurizer_state['features'], 
-            targets=targets, 
-            n_targets=n_outputs, 
+        return multi_classifier(
+            hidden=featurizer_state['features'],
+            targets=targets,
+            n_targets=n_outputs,
             config=self.config,
             train=train,
             reuse=reuse,
@@ -83,7 +77,8 @@ class Classifier(BaseModel):
         )
 
     def _predict_op(self, logits, **kwargs):
-        return tf.argmax(logits, -1)
+        threshold = kwargs.get("threshold", self.config.multi_label_threshold)
+        return tf.cast(tf.nn.sigmoid(logits) > threshold, tf.int32)
 
     def _predict_proba_op(self, logits, **kwargs):
-        return tf.nn.softmax(logits, -1)
+        return tf.nn.sigmoid(logits)

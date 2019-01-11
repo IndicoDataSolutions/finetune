@@ -65,6 +65,7 @@ def pyfunc_assign(a, dtype):
 
     return tf.py_func(func, (), tf.as_dtype(dtype), stateful=False)
 
+
 class Saver:
     def __init__(self, fallback_filename, exclude_matches=None, variable_transforms=None, save_dtype=None):
         self.variable_transforms = variable_transforms or []

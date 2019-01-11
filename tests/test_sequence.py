@@ -18,8 +18,8 @@ from bs4 import BeautifulSoup as bs
 from bs4.element import Tag
 
 from finetune import SequenceLabeler
-from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_sequence
-from finetune.metrics import (
+from finetune.encoding.sequence import indico_to_finetune_sequence, finetune_to_indico_sequence
+from finetune.util.metrics import (
     sequence_labeling_token_precision, sequence_labeling_token_recall,
     sequence_labeling_overlap_precision, sequence_labeling_overlap_recall
 )

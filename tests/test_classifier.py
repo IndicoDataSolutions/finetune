@@ -21,7 +21,7 @@ from sklearn.metrics import accuracy_score, recall_score
 
 from finetune import Classifier
 from finetune.datasets import generic_download
-from finetune.input_pipeline import ENCODER
+from finetune.base.input_pipeline import ENCODER
 from finetune.config import get_config, get_small_model_config
 from finetune.errors import FinetuneError
 

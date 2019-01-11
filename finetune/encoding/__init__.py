@@ -16,8 +16,8 @@ import tensorflow as tf
 
 from finetune.config import PAD_TOKEN
 
-ENCODER_PATH = os.path.join(os.path.dirname(__file__), 'model/encoder_bpe_40000.json')
-BPE_PATH = os.path.join(os.path.dirname(__file__), 'model/vocab_40000.bpe')
+ENCODER_PATH = os.path.join(os.path.dirname(__file__), '..', 'model/encoder_bpe_40000.json')
+BPE_PATH = os.path.join(os.path.dirname(__file__), '..', 'model/vocab_40000.bpe')
 NLP = spacy.load('en', disable=['parser', 'tagger', 'ner', 'textcat'])
 
 EncodedOutput = namedtuple("EncodedOutput", [

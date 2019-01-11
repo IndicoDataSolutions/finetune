@@ -12,7 +12,7 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 
 from finetune import Comparison
-from finetune.utils import list_transpose
+from finetune.util.shapes import list_transpose
 import random
 
 SST_FILENAME = "SST-binary.csv"

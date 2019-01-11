@@ -1,13 +1,13 @@
 import numpy as np
 
-from finetune.base import BaseModel
-from finetune.input_pipeline import BasePipeline
-from finetune.encoding import ArrayEncodedOutput
-from finetune.target_encoders import IDEncoder
 import tensorflow as tf
 
-from finetune.network_modules import multi_choice_question
-from finetune.utils import list_transpose
+from finetune.base.input_pipeline import BasePipeline
+from finetune.base.network_modules import multi_choice_question
+from finetune.encoding import ArrayEncodedOutput
+from finetune.tasks.models.base import BaseModel
+from finetune.tasks.target_encoders import IDEncoder
+from finetune.util.shapes import list_transpose
 
 class MultipleChoicePipeline(BasePipeline):
     def __init__(self, *args, **kwargs):
