@@ -49,8 +49,7 @@ class AssociationPipeline(BasePipeline):
                     labels.append(l)
                     for j, (_, a_t, a_i, _) in enumerate(out.labels):
                         if a_t != pad_token and idx == a_i:
-                            assoc_mat[j][i] = class_list.index(a_t)
-                            assoc_mat[i][j] = class_list.index(a_t) #TODO this makes relationships bidirectional, but theyre decoded unidirectionally
+                            assoc_mat[i][j] = class_list.index(a_t)
 
                 yield feats, {"labels": self.label_encoder.transform(labels), "associations": np.array(assoc_mat, dtype=np.int32)}
 
@@ -134,6 +133,7 @@ class Association(BaseModel):
 
     def prune_probs(self, prob_matrix, labels):
         viable_edges = self.config.viable_edges
+        possible_associations = list(self.input_pipeline.association_encoder.classes_)
         if viable_edges is None:
             return prob_matrix
         for i, l1 in enumerate(labels):
@@ -142,10 +142,10 @@ class Association(BaseModel):
 
             elif None not in viable_edges[l1]:
                 prob_matrix[i, :, self.input_pipeline.association_pad_idx] = 0.0
-
-            for j, l2 in enumerate(labels):
-                if l1 not in viable_edges or l2 not in viable_edges[l1]:
-                    prob_matrix[i, j, :] = 0.0  # this edge doesnt fit the schema
+            for cls in possible_associations:
+                for j, l2 in enumerate(labels):
+                    if l1 not in viable_edges or l2 not in [c_t[0] for c_t in viable_edges[l1] if c_t and c_t[1] == cls]:
+                        prob_matrix[i, j, possible_associations.index(cls)] = 0.0  # this edge doesnt fit the schema
         for i, l1 in enumerate(labels):
             for j, l2 in enumerate(labels):
                 print("{} {} {}".format(l1, l2, prob_matrix[i, j, :]))
