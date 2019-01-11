@@ -14,8 +14,6 @@ from finetune.crf import sequence_decode
 from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_sequence
 from finetune.input_pipeline import BasePipeline, ENCODER
 from finetune.errors import FinetuneError
-from finetune.estimator_utils import ProgressHook
-from finetune.sequence_labeling import SequenceLabeler, SequencePipeline
 
 
 class AssociationPipeline(BasePipeline):
@@ -47,11 +45,12 @@ class AssociationPipeline(BasePipeline):
             else:
                 labels = []
                 assoc_mat = [[assoc_pad_id for _ in range(len(out.labels))] for _ in range(len(out.labels))]
-                for l, a_t, a_i, i in out.labels:
+                for i, (l, _, _, idx) in enumerate(out.labels):
                     labels.append(l)
-                    if a_t != pad_token:
-                        assoc_mat[a_i][i] = class_list.index(a_t)
-                print(assoc_mat)
+                    for j, (_, a_t, a_i, _) in enumerate(out.labels):
+                        if a_t != pad_token and idx == a_i:
+                            assoc_mat[j][i] = class_list.index(a_t)
+                            assoc_mat[i][j] = class_list.index(a_t) #TODO this makes relationships bidirectional, but theyre decoded unidirectionally
 
                 yield feats, {"labels": self.label_encoder.transform(labels), "associations": np.array(assoc_mat, dtype=np.int32)}
 
@@ -133,6 +132,25 @@ class Association(BaseModel):
         print(Y)
         return super().finetune(Xs, Y=Y, batch_size=batch_size)
 
+    def prune_probs(self, prob_matrix, labels):
+        viable_edges = self.config.viable_edges
+        if viable_edges is None:
+            return prob_matrix
+        for i, l1 in enumerate(labels):
+            if l1 not in viable_edges:
+                prob_matrix[i, :, :] = 0.0
+
+            elif None not in viable_edges[l1]:
+                prob_matrix[i, :, self.input_pipeline.association_pad_idx] = 0.0
+
+            for j, l2 in enumerate(labels):
+                if l1 not in viable_edges or l2 not in viable_edges[l1]:
+                    prob_matrix[i, j, :] = 0.0  # this edge doesnt fit the schema
+        for i, l1 in enumerate(labels):
+            for j, l2 in enumerate(labels):
+                print("{} {} {}".format(l1, l2, prob_matrix[i, j, :]))
+        return prob_matrix
+
     def predict(self, X):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
@@ -145,14 +163,11 @@ class Association(BaseModel):
         arr_encoded = list(itertools.chain.from_iterable(self.input_pipeline._text_to_ids([x]) for x in X))
         labels, batch_probas, associations = [], [], []
         for pred in self._inference(X, mode=None):
-            labels.append(self.input_pipeline.label_encoder.inverse_transform(pred["sequence"]))
+            pred_labels = self.input_pipeline.label_encoder.inverse_transform(pred["sequence"])
+            labels.append(pred_labels)
             batch_probas.append(pred["sequence_probs"])
-            print("probs shape is ", pred["association_probs"].shape)
-
-            most_likely_associations = np.argmax(pred["association"], 0)
-            most_likely_class_id = pred["association"][range(len(most_likely_associations)), tuple(most_likely_associations)]
-            print([prob[idx, cls] for prob, idx, cls in zip(pred["association_probs"], most_likely_associations, most_likely_class_id)])
-
+            pred["association_probs"] = self.prune_probs(pred["association_probs"], pred_labels)
+            most_likely_associations, most_likely_class_id = zip(*[np.unravel_index(np.argmax(a, axis=None), a.shape) for a in pred["association_probs"]])
             associations.append((
                 most_likely_associations,
                 self.input_pipeline.association_encoder.inverse_transform(most_likely_class_id),
@@ -211,12 +226,12 @@ class Association(BaseModel):
                     doc_subseqs.append(X[doc_idx][start_of_token:position])
                     doc_labels.append(label)
                     doc_probs.append([proba])
-                    doc_assocs.append([(tok_idx, association_idx, association_class, association_prob)])
+                    doc_assocs.append([(tok_idx, association_idx[tok_idx], association_class[tok_idx], association_prob[tok_idx])])
                 else:
                     # continue appending to current subsequence
                     doc_subseqs[-1] += X[doc_idx][start_of_token:position]
                     doc_probs[-1].append(proba)
-                    doc_assocs[-1].append((tok_idx, association_idx, association_class, association_prob))
+                    doc_assocs[-1].append((tok_idx, association_idx[tok_idx], association_class[tok_idx], association_prob[tok_idx]))
 
                 start_of_token = position
 
@@ -266,6 +281,7 @@ class Association(BaseModel):
     def _target_model(self, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
         return association(
             hidden=featurizer_state['sequence_features'],
+            pool_idx=featurizer_state['pool_idx'],
             targets=targets,
             n_targets=n_outputs,
             config=self.config,

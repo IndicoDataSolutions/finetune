@@ -101,34 +101,41 @@ def truncate_text(text, max_chars=100):
     return text
 
 def assign_associations(labels, associations, none_value):
-    idx_lookup = {}
-
-    active_label_idx = -1
-    for label, segment_association in zip(labels, associations):
-        if label == none_value:
-            continue
-        active_label_idx += 1
-
-        for association in segment_association:
+    idx_lookups = [{} for _ in labels]
+    print(associations[0])
+    for i, (doc_label, doc_association) in enumerate(zip(labels, associations)):
+        active_label_idx = -1
+        for label, association in zip(doc_label, doc_association):
+            print(label)
+            if label == none_value:
+                continue
+            active_label_idx += 1
             for bpe_idx, _, _, _ in association:
-                idx_lookup[bpe_idx] = active_label_idx
+                idx_lookups[i][bpe_idx] = active_label_idx
 
-    candiates = {}
-    for segment_label, segment_associations in zip(labels, associations):
-        if segment_label == none_value:
+    print("idx lookup", idx_lookups)
+
+    all_candidates = []
+    for idx_lookup, doc_label, doc_association in zip(idx_lookups, labels, associations):
+        candiates = {}
+        if doc_label == none_value:
             continue
-        for association in segment_associations:
-            for bpe_idx, candiate_bpe_idxs, candidate_assoc_labels, assoc_probs in association:
-                for candidate_idx, candidate_label, candidate_prob in zip(candiate_bpe_idxs, candidate_assoc_labels, assoc_probs):
-                    if candidate_label == none_value or candidate_idx not in idx_lookup:
-                        continue
-                    if idx_lookup[bpe_idx] not in candiates:
-                        candiates[idx_lookup[bpe_idx]] = []
-                    candiates[idx_lookup[bpe_idx]].append((idx_lookup[candidate_idx], candidate_label, candidate_prob))
 
-    # TODO some how sample these candidates eg maximum probabilities, to fit some schema
-    candiates = {k: max(v, key=lambda x: x[2]) for k, v in candiates.items()} # for now just pick maximum prob
-    return candiates
+        print("Not skipped", doc_association)
+        for association in doc_association:
+            for bpe_idx, candidate_idx, candidate_label, candidate_prob in association:
+                if candidate_label == none_value or candidate_idx not in idx_lookup:
+                    continue
+
+                if idx_lookup[bpe_idx] not in candiates:
+                    candiates[idx_lookup[bpe_idx]] = []
+                candiates[idx_lookup[bpe_idx]].append((idx_lookup[candidate_idx], candidate_label, candidate_prob))
+
+        # TODO some how sample these candidates eg maximum probabilities, to fit some schema
+        candiates = {k: max(v, key=lambda x: x[2]) for k, v in candiates.items()} # for now just pick maximum prob
+        all_candidates.append(candiates)
+    print("Candidates:", all_candidates)
+    return all_candidates
 
 
 def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_value=config.PAD_TOKEN,
@@ -228,11 +235,10 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
                         "start": annotation_start,
                         "end": annotation_end,
                         "label": label,
-                        "text": text,
-                        "subtoken_idxs": [i]
+                        "text": text
                     }
-                    if associations_seq is not None and i in associations_seq:
-                        index, relationship, prob = associations_seq[i]
+                    if associations_seq is not None and len(doc_annotations) in associations_seq:
+                        index, relationship, prob = associations_seq[len(doc_annotations)]
                         annotation["associations"] = {
                             "index": index,
                             "relationship": relationship,
@@ -302,6 +308,7 @@ def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value
         doc_labels = []
         doc_association_idx = []
         doc_association_type = []
+        doc_current_label_idx = []
 
         for i, annotation in enumerate(label_seq):
             start = annotation["start"]
@@ -340,6 +347,7 @@ def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value
                     doc_labels.append(none_value)
                     doc_association_idx.append(-1)
                     doc_association_type.append(none_value)
+                    doc_current_label_idx.append(-2)
 
             j = len(doc_labels) - 1
             split_dist = last_loc - end
@@ -384,6 +392,7 @@ def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value
                 doc_labels.append(label)
                 doc_association_idx.append(association_idx)
                 doc_association_type.append(association_type)
+                doc_current_label_idx.append(i)
 
             last_loc = end
 
@@ -395,11 +404,12 @@ def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value
                 doc_labels.append(none_value)
                 doc_association_idx.append(-1)
                 doc_association_type.append(none_value)
+                doc_current_label_idx.append(-2)
                 
         all_subseqs.append(doc_subseqs)
         all_labels.append(doc_labels)
         all_association_idx.append(doc_association_idx)
         all_association_type.append(doc_association_type)
-        all_idxs.append(list(range(len(doc_association_type))))
+        all_idxs.append(doc_current_label_idx)
 
     return all_subseqs, all_labels, all_association_type, all_association_idx, all_idxs

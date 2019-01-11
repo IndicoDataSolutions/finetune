@@ -82,7 +82,8 @@ def featurizer(X, encoder, config, train=False, reuse=None):
         return {
             'embed_weights': embed_weights,
             'features': clf_h,
-            'sequence_features': seq_feats
+            'sequence_features': seq_feats,
+            'pool_idx': pool_idx
         }
 
 
@@ -352,7 +353,7 @@ def sequence_labeler(hidden, targets, n_targets, config, pad_id, multilabel=Fals
         }
 
 
-def association(hidden, targets, n_targets, config, train=False, reuse=None, **kwargs):
+def association(hidden, pool_idx, targets, n_targets, config, train=False, reuse=None, **kwargs):
     """
     An Attention based sequence labeler model. Takes the output of the pre-trained model, applies an additional
     randomly initialised multihead attention block, with residuals on top. The attention is not-future masked to allow
@@ -392,8 +393,10 @@ def association(hidden, targets, n_targets, config, train=False, reuse=None, **k
             a = tf.expand_dims(association_head, 1)
             b = tf.expand_dims(association_head, 2)
 
-            features = tf.concat([a - b, a * b, tf.tile(a, [1, length, 1, 1]), tf.tile(b, [1, 1, length, 1])], axis=-1)
-            associations_flat = tf.layers.dense(tf.reshape(features, shape=[-1, nx * 4]), num_associations)
+            probs = tf.nn.softmax(logits)
+
+            features = tf.concat([a - b, a * b, tf.tile(a, [1, length, 1, 1]), tf.tile(b, [1, 1, length, 1]), tf.tile(tf.expand_dims(probs, 1), [1, length, 1, 1]), tf.tile(tf.expand_dims(probs, 2), [1, 1, length, 1])], axis=-1)
+            associations_flat = tf.layers.dense(tf.reshape(features, shape=[-1, nx * 4 + 2 * n_targets]), num_associations)
             associations = tf.reshape(associations_flat, [-1, length, length, num_associations])
 
             return logits, associations_flat, associations
@@ -418,16 +421,20 @@ def association(hidden, targets, n_targets, config, train=False, reuse=None, **k
                 kwargs.get('max_length') * tf.ones(tf.shape(targets["labels"])[0]),
                 transition_params=transition_params
             )
+            sequence_mask = tf.sequence_mask(pool_idx + 1, maxlen=length, dtype=tf.float32)
+            mask = tf.expand_dims(sequence_mask, 1) * tf.expand_dims(sequence_mask, 2)
 
             association_loss = tf.losses.sparse_softmax_cross_entropy(
                 logits=associations_flat,
-                labels=tf.reshape(targets["associations"], shape=[-1])
-                #TODO MASKING
+                labels=tf.reshape(targets["associations"], shape=[-1]),
+                weights=tf.reshape(mask, shape=[-1])
             )
+
+        association_loss = tf.Print(association_loss, [association_loss, -log_likelihood])
 
         return {
             'logits': {"sequence": logits, "association": associations},
-            'losses': -log_likelihood + association_loss, #TODO think about weighting
+            'losses': -log_likelihood + 100 * association_loss, #TODO think about weighting
             'predict_params': {
                 'transition_matrix': transition_params
             }

@@ -203,6 +203,7 @@ def get_default_config():
         eval_acc=False,
         save_dtype=None,
         regression_loss="L2",
+        viable_edges=None,
 
         # Must remain fixed
         n_heads=12,
