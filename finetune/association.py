@@ -340,10 +340,12 @@ class Association(BaseModel):
 
         return (
             {
-                "sequence": label_idxs, "association": association_pred
+                "sequence": label_idxs,
+                "association": association_pred
             },
             {
-                "sequence_probs": label_probas, "association_probs": association_prob
+                "sequence_probs": label_probas,
+                "association_probs": association_prob
             }
         )
 
