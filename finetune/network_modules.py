@@ -355,15 +355,14 @@ def sequence_labeler(hidden, targets, n_targets, config, pad_id, multilabel=Fals
 
 def association(hidden, pool_idx, targets, n_targets, config, train=False, reuse=None, **kwargs):
     """
-    An Attention based sequence labeler model. Takes the output of the pre-trained model, applies an additional
-    randomly initialised multihead attention block, with residuals on top. The attention is not-future masked to allow
-    the model to label sequences based on context in both directions. The representations fed into this model are
-    necessarily future masked because a language modelling loss is the original objective of the featurizer.
+    An Attention based sequence labeler model with association.
 
     :param hidden: The output of the featurizer. [batch_size, sequence_length, embed_dim]
-    :param targets: The placeholder representing the sequence labeling targets. [batch_size, sequence_length]
+    :param pool_idx: the index of the classify tokens along the sequence dimension. [batch_size]
+    :param targets: A dict containing:
+     'labels': The sequence labeling targets. [batch_size, sequence_length],
+     'associations': A matrix of class ids for the associations [batch_size, sequence_length, seqence_length]
     :param n_targets: A python int containing the number of classes that the model should be learning to predict over.
-    :param dropout_placeholder:
     :param config: A config object, containing all parameters for the featurizer.
     :param train: If this flag is true, dropout and losses are added to the graph.
     :param reuse: Should reuse be set within this scope.
@@ -380,9 +379,11 @@ def association(hidden, pool_idx, targets, n_targets, config, train=False, reuse
         num_associations = len(config.possible_associations) + 1
 
         def seq_lab_internal(hidden):
-            attn_fn = functools.partial(attn, scope="seq_label_attn", n_state=nx, n_head=config.seq_num_heads,
-                                            resid_pdrop=config.resid_p_drop, attn_pdrop=config.attn_p_drop,
-                                            train=train, scale=False, mask=False)
+            attn_fn = functools.partial(
+                attn, scope="seq_label_attn", n_state=nx, n_head=config.seq_num_heads,
+                resid_pdrop=config.resid_p_drop, attn_pdrop=config.attn_p_drop,
+                train=train, scale=False, mask=False
+            )
             n = norm(attn_fn(hidden) + hidden, 'seq_label_residual')
             flat_logits = tf.layers.dense(n, n_targets)
             logits = tf.reshape(flat_logits, tf.concat([tf.shape(hidden)[:2], [n_targets]], 0))
@@ -395,8 +396,20 @@ def association(hidden, pool_idx, targets, n_targets, config, train=False, reuse
 
             probs = tf.nn.softmax(logits)
 
-            features = tf.concat([a - b, a * b, tf.tile(a, [1, length, 1, 1]), tf.tile(b, [1, 1, length, 1]), tf.tile(tf.expand_dims(probs, 1), [1, length, 1, 1]), tf.tile(tf.expand_dims(probs, 2), [1, 1, length, 1])], axis=-1)
-            associations_flat = tf.layers.dense(tf.reshape(features, shape=[-1, nx * 4 + 2 * n_targets]), num_associations)
+            features = tf.concat(
+                [
+                    a - b, a * b,
+                    tf.tile(a, [1, length, 1, 1]),
+                    tf.tile(b, [1, 1, length, 1]),
+                    tf.tile(tf.expand_dims(probs, 1),[1, length, 1, 1]),
+                    tf.tile(tf.expand_dims(probs, 2), [1, 1, length, 1])
+                ],
+                axis=-1
+            )
+            associations_flat = tf.layers.dense(
+                tf.reshape(features, shape=[-1, nx * 4 + 2 * n_targets])
+                , num_associations
+            )
             associations = tf.reshape(associations_flat, [-1, length, length, num_associations])
 
             return logits, associations_flat, associations
@@ -434,7 +447,7 @@ def association(hidden, pool_idx, targets, n_targets, config, train=False, reuse
 
         return {
             'logits': {"sequence": logits, "association": associations},
-            'losses': -log_likelihood + 100 * association_loss, #TODO think about weighting
+            'losses': -log_likelihood + 100 * association_loss,  # TODO: think about weighting.
             'predict_params': {
                 'transition_matrix': transition_params
             }

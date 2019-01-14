@@ -1,24 +1,18 @@
 import itertools
-import math
-import warnings
-import copy
-
-from scipy.sparse import csr_matrix
 import tensorflow as tf
 import numpy as np
 
-from finetune.base import BaseModel, PredictMode
+from finetune.base import BaseModel
 from finetune.target_encoders import SequenceLabelingEncoder
 from finetune.network_modules import association
 from finetune.crf import sequence_decode
 from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_sequence
 from finetune.input_pipeline import BasePipeline, ENCODER
 from finetune.errors import FinetuneError
-
+from finetune.base import LOGGER
 
 class AssociationPipeline(BasePipeline):
     def __init__(self, config, multi_label):
-        print("constructed pipeline")
         super(AssociationPipeline, self).__init__(config)
         self.multi_label = multi_label
         self.association_encoder = SequenceLabelingEncoder()
@@ -31,11 +25,9 @@ class AssociationPipeline(BasePipeline):
 
     def text_to_tokens_mask(self, X, Y=None):
         pad_token = [self.config.pad_token] if self.multi_label else self.config.pad_token
-        print("before IDS")
         if Y is not None:
             Y = list(zip(*Y))
         out_gen = self._text_to_ids(X, Y=Y, pad_token=[pad_token, pad_token, -1, -2])
-        print("after ids")
         class_list = self.association_encoder.classes_.tolist()
         assoc_pad_id = class_list.index(pad_token)
         for out in out_gen:
@@ -51,7 +43,8 @@ class AssociationPipeline(BasePipeline):
                         if a_t != pad_token and idx == a_i:
                             assoc_mat[i][j] = class_list.index(a_t)
 
-                yield feats, {"labels": self.label_encoder.transform(labels), "associations": np.array(assoc_mat, dtype=np.int32)}
+                yield feats, {"labels": self.label_encoder.transform(labels),
+                              "associations": np.array(assoc_mat, dtype=np.int32)}
 
     def _format_for_encoding(self, X):
         return [X]
@@ -62,7 +55,7 @@ class AssociationPipeline(BasePipeline):
     def feed_shape_type_def(self):
         TS = tf.TensorShape
         target_shape = (
-            [self.config.max_length, self.label_encoder.target_dim] 
+            [self.config.max_length, self.label_encoder.target_dim]
             if self.multi_label else [self.config.max_length]
         )
         return (
@@ -75,10 +68,10 @@ class AssociationPipeline(BasePipeline):
                     "labels": tf.int32,
                     "associations": tf.int32
                 }
-            ), 
+            ),
             (
                 {
-                    "tokens": TS([self.config.max_length, 2]), 
+                    "tokens": TS([self.config.max_length, 2]),
                     "mask": TS([self.config.max_length])
                 },
                 {
@@ -94,7 +87,8 @@ class AssociationPipeline(BasePipeline):
 
 class Association(BaseModel):
     """ 
-    Labels each token in a sequence as belonging to 1 of N token classes.
+    Labels each token in a sequence as belonging to 1 of N token classes and then builds a set of edges
+    between the labeled edges.
     
     :param config: A :py:class:`finetune.config.Settings` object or None (for default config).
     :param \**kwargs: key-value pairs of config items to override.
@@ -112,7 +106,6 @@ class Association(BaseModel):
         :param **kwargs: key-value pairs of config items to override.
         """
         self.multi_label = False
-        print("constructed association model")
         super().__init__(config=config, **kwargs)
 
     def _get_input_pipeline(self):
@@ -124,11 +117,29 @@ class Association(BaseModel):
         return super()._initialize()
 
     def finetune(self, Xs, Y=None, batch_size=None):
-        print("started converting")
-        Xs, Y_new, association_type, association_idx, idxs = indico_to_finetune_sequence(Xs, labels=Y, multi_label=False, none_value="<PAD>")
-        print("finished converting")
+        """
+        :param Xs: A list of strings.
+        :param Y: A list of labels of the same format as sequence labeling but with an option al additional field
+        of the form:
+        ```
+            {
+                ...
+                "association":{
+                        "index": a,
+                        "relationship": relationship_name
+                }
+                ...
+        ```
+        where index is the index of the relationship target into the label list and relationship_name is the type of
+        the relationship.
+        """
+        if self.config.possible_associations is None:
+            raise FinetuneError("Please set config.possible_associations before calling finetune.")
+        Xs, Y_new, association_type, association_idx, idxs = indico_to_finetune_sequence(
+            Xs, labels=Y, multi_label=False, none_value="<PAD>"
+        )
+
         Y = list(zip(Y_new, association_type, association_idx, idxs)) if Y is not None else None
-        print(Y)
         return super().finetune(Xs, Y=Y, batch_size=batch_size)
 
     def prune_probs(self, prob_matrix, labels):
@@ -144,11 +155,9 @@ class Association(BaseModel):
                 prob_matrix[i, :, self.input_pipeline.association_pad_idx] = 0.0
             for cls in possible_associations:
                 for j, l2 in enumerate(labels):
-                    if l1 not in viable_edges or l2 not in [c_t[0] for c_t in viable_edges[l1] if c_t and c_t[1] == cls]:
+                    if l1 not in viable_edges or l2 not in [c_t[0] for c_t in viable_edges[l1] if
+                                                            c_t and c_t[1] == cls]:
                         prob_matrix[i, j, possible_associations.index(cls)] = 0.0  # this edge doesnt fit the schema
-        for i, l1 in enumerate(labels):
-            for j, l2 in enumerate(labels):
-                print("{} {} {}".format(l1, l2, prob_matrix[i, j, :]))
         return prob_matrix
 
     def predict(self, X):
@@ -158,6 +167,10 @@ class Association(BaseModel):
         :param X: A list / array of text, shape [batch]
         :returns: list of class labels.
         """
+        LOGGER.warning("config.viable_edges is not set, this is probably incorrect.")
+
+        #TODO(Ben) combine this into the sequence labeling model??
+
         chunk_size = self.config.max_length - 2
         step_size = chunk_size // 3
         arr_encoded = list(itertools.chain.from_iterable(self.input_pipeline._text_to_ids([x]) for x in X))
@@ -167,30 +180,35 @@ class Association(BaseModel):
             labels.append(pred_labels)
             batch_probas.append(pred["sequence_probs"])
             pred["association_probs"] = self.prune_probs(pred["association_probs"], pred_labels)
-            most_likely_associations, most_likely_class_id = zip(*[np.unravel_index(np.argmax(a, axis=None), a.shape) for a in pred["association_probs"]])
+            most_likely_associations, most_likely_class_id = zip(
+                *[np.unravel_index(np.argmax(a, axis=None), a.shape) for a in pred["association_probs"]]
+            )
             associations.append((
                 most_likely_associations,
                 self.input_pipeline.association_encoder.inverse_transform(most_likely_class_id),
-                [prob[idx, cls] for prob, idx, cls in zip(pred["association_probs"], most_likely_associations, most_likely_class_id)]
+                [
+                    prob[idx, cls] for prob, idx, cls in zip(
+                    pred["association_probs"],
+                    most_likely_associations,
+                    most_likely_class_id
+                )
+                ]
             ))
-
         all_subseqs = []
         all_labels = []
         all_probs = []
         all_assocs = []
 
         doc_idx = -1
-        for chunk_idx, (label_seq, proba_seq, (association_idx, association_class, association_prob)) in enumerate(zip(labels, batch_probas, associations)):
+        for chunk_idx, (label_seq, proba_seq, association) in enumerate(zip(labels, batch_probas, associations)):
+            association_idx, association_class, association_prob = association
+
             position_seq = arr_encoded[chunk_idx].char_locs
             start_of_doc = arr_encoded[chunk_idx].token_ids[0][0] == ENCODER.start
             end_of_doc = (
                     chunk_idx + 1 >= len(arr_encoded) or
                     arr_encoded[chunk_idx + 1].token_ids[0][0] == ENCODER.start
             )
-            """
-            Chunk idx for prediction.  Dividers at `step_size` increments.
-            [  1  |  1  |  2  |  3  |  3  ]
-            """
             start, end = 0, None
             if start_of_doc:
                 # if this is the first chunk in a document, start accumulating from scratch
@@ -209,7 +227,7 @@ class Association(BaseModel):
                 else:
                     # predict only on middle third
                     start, end = step_size, step_size * 2
-            
+
             label_seq = label_seq[start:end]
             position_seq = position_seq[start:end]
             proba_seq = proba_seq[start:end]
@@ -226,12 +244,20 @@ class Association(BaseModel):
                     doc_subseqs.append(X[doc_idx][start_of_token:position])
                     doc_labels.append(label)
                     doc_probs.append([proba])
-                    doc_assocs.append([(tok_idx, association_idx[tok_idx], association_class[tok_idx], association_prob[tok_idx])])
+                    doc_assocs.append(
+                        [
+                            (tok_idx, association_idx[tok_idx], association_class[tok_idx], association_prob[tok_idx])
+                        ]
+                    )
                 else:
                     # continue appending to current subsequence
                     doc_subseqs[-1] += X[doc_idx][start_of_token:position]
                     doc_probs[-1].append(proba)
-                    doc_assocs[-1].append((tok_idx, association_idx[tok_idx], association_class[tok_idx], association_prob[tok_idx]))
+                    doc_assocs[-1].append(
+                        (
+                            tok_idx, association_idx[tok_idx], association_class[tok_idx], association_prob[tok_idx]
+                        )
+                    )
 
                 start_of_token = position
 
@@ -291,7 +317,6 @@ class Association(BaseModel):
         )
 
     def _predict_op(self, logits, **kwargs):
-        print(logits)
 
         associations = logits["association"]
         logits = logits["sequence"]
@@ -313,7 +338,14 @@ class Association(BaseModel):
         association_prob = tf.nn.softmax(associations, axis=-1)
         association_pred = tf.argmax(associations, axis=-1)
 
-        return {"sequence": label_idxs, "association": association_pred}, {"sequence_probs": label_probas, "association_probs": association_prob}
+        return (
+            {
+                "sequence": label_idxs, "association": association_pred
+            },
+            {
+                "sequence_probs": label_probas, "association_probs": association_prob
+            }
+        )
 
     def _predict_proba_op(self, logits, **kwargs):
         return tf.no_op()
