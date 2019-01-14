@@ -34,8 +34,8 @@ from finetune.util.estimator import PatchedParameterServerStrategy
 from finetune.util.shapes import list_transpose
 from finetune.util.download import download_data_if_required
 
-JL_BASE = os.path.join(os.path.dirname(__file__), "model", "Base_model.jl")
 LOGGER = logging.getLogger('finetune')
+
 
 class BaseModel(object, metaclass=ABCMeta):
     """
@@ -483,7 +483,7 @@ class BaseModel(object, metaclass=ABCMeta):
         :param **kwargs: key-value pairs of config items to override.
         """
         download_data_if_required()
-        saver = Saver(JL_BASE)
+        saver = Saver()
         model = saver.load(path)
         model.config.update(kwargs)
         model._initialize()
