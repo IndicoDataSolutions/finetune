@@ -74,37 +74,12 @@ class OrdinalRegressionEncoder(OrdinalEncoder, BaseEncoder):
         self.num_outputs = None
         super().__init__()
         
-    def get_thresholds(self, y):
-        """
-        Creates list of rankings. If all distances between rankings are the same,
-        output is unit ranking (e.g. 1, 2, 3...) . In any other case, the smallest 
-        distance between rankings is set to unity and other distances scaled by an 
-        appropriate factor.
-        
-        classes = list(set(y))
-        classes.sort()
-        num_classes = len(classes)
-        scaled = np.ones(num_classes)
-        diffs = [classes[i+1] - classes[i] for i in range(num_classes-1)]
-        print(diffs)
-        diffs = [0] + [diffs[i]/min(diffs) for i in range(num_classes-1)]
-        print(diffs)
-        for i in range(1,num_classes):
-            scaled[i] +=  np.sum(diffs[:i+1])
-        return scaled
-        """
-        
-        #for now, assume normal rankings (positive, constant distance between each other)
-        classes = list(set(y))
-        classes.sort()
-        return classes
-        
     def fit(self, x):
         x = np.array(x)
         rank = len(x.shape)
         if rank == 1:
             x = np.expand_dims(x, 1)
-        super().fit(x)
+        self.fit_transform(x)
         return self
 
     def transform(self, x):
@@ -117,24 +92,24 @@ class OrdinalRegressionEncoder(OrdinalEncoder, BaseEncoder):
         return labels
         
     def fit_transform(self, x):
-        labels = super().fit_transform(x)
-        labels = self.rank_to_thresholds(labels)
+        super().fit(x)
+        labels = self.transform(x)
         self.num_outputs = labels.shape[1]
         return labels
     
     def rank_to_thresholds(self,x):
         #changes a one-variable rank into an array of 1s and 0s defining the target output of each threshold
+        x = x[:10000]
         num_thresholds = len(self.categories_[0])-1
-        thresholds = []
-        #print("NUM: {}".format(num_thresholds))
-        #print("RANK: {}".format(x[0]))
-        for i in range(len(x)):
-            rank = int(x[i])
-            thresholds.append(np.concatenate((np.ones(rank,),np.zeros((num_thresholds-rank),))))
-        return thresholds
+        thresholds = [np.concatenate((np.ones(int(rank)),np.zeros((num_thresholds-int(rank))))) for rank in x]
+        return np.array(thresholds)
 
     def inverse_transform(self, y):
-        y = super().inverse_transform(y)
+        #this commented part doesn't work yet
+        #y = np.asarray(y)
+        #y = y > 0.5
+        #y = super().inverse_transform(y)
+        y = np.sum(y,axis = 1)
         return y
 
     @property

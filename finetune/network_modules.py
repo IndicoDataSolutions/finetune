@@ -267,11 +267,11 @@ def regressor(hidden, targets, n_targets, config, train=False, reuse=None, **kwa
         
 def ordinal_regressor(hidden, targets, n_targets, config, train=False, reuse=None, **kwargs):
     """
-    A simple linear regressor.
+    Ordinal Regressor using all-threshold loss.
 
     :param hidden: The output of the featurizer. [batch_size, embed_dim]
-    :param targets: The placeholder representing the regression targets. [batch_size]
-    :param n_targets: A python int containing the number of outputs that the model should be learning to predict over.
+    :param targets: The placeholder representing the regression targets (binary threshold values). [batch_size]
+    :param n_targets: A python int containing the number of thresholds that the model should be learning to predict over.
     :param dropout_placeholder:
     :param config: A config object, containing all parameters for the featurizer.
     :param train: If this flag is true, dropout and losses are added to the graph.
@@ -285,21 +285,12 @@ def ordinal_regressor(hidden, targets, n_targets, config, train=False, reuse=Non
         hidden = dropout(hidden, config.clf_p_drop, train)
         outputs = perceptron(hidden, n_targets, config)
         if targets is None:
+            outputs = tf.sigmoid(outputs)
             loss = None
         else:
-        #all-threshold loss
             loss = tf.nn.sigmoid_cross_entropy_with_logits(
                 logits=outputs,
                 labels=tf.stop_gradient(targets))
-            ranks = tf.reduce_sum(targets, axis=1)
-            num_ranks = n_targets + 1
-            loss_mask = []
-            for row in range(len(loss)):
-                rank = ranks[row]
-                mask = [abs(rank-threshold) for threshold in range(row)]
-                loss_mask.append(mask)
-            loss = np.multiply(loss_mask,loss)
-            
         return {
             'logits': outputs,
             'losses': loss
@@ -332,7 +323,7 @@ def sequence_labeler(hidden, targets, n_targets, config, pad_id, multilabel=Fals
     :param kwargs: Spare arguments.
     :return: dict containing:
         "logits": The un-normalised log probabilities of each class being in each location. For usable predictions,
-            sampling from this distrobution is not sufficiant and a viterbi decoding method should be used.
+            sampling from this distribution is not sufficient and a viterbi decoding method should be used.
         "losses": The negative log likelihood for the sequence targets.
         "predict_params": A dictionary of params to be fed to the viterbi decode function.
     """
