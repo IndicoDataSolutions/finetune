@@ -1,27 +1,18 @@
-import pandas as pd
-import numpy as np
-import scipy as scp
 import os
 import unittest
 import warnings
-from pathlib import Path
 
 # prevent excessive warning logs 
 warnings.filterwarnings('ignore')
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
-import tensorflow as tf
-import pandas as pd
-import numpy as np
 import random
+import numpy as np
 
 from sklearn.model_selection import train_test_split
-from finetune import MultiFieldClassifier, MultiFieldRegressor, Regressor
-from finetune.config import get_config
-from finetune.datasets import generic_download
-from finetune.ordinalregressor import OrdinalRegressor, ComparisonOrdinalRegressor
+from finetune import ordinalregressor
 
-class TestModel(unittest.TestCase):
+class TestOrdinal(unittest.TestCase):
     n_sample = 100
     n_hidden = 768
     
@@ -48,7 +39,7 @@ class TestModel(unittest.TestCase):
         Ensure model returns predictions of the right type
         Test model loss at least outperforms naive baseline
         """
-        model = OrdinalRegressor(n_epochs=1)
+        model = ordinalregressor.OrdinalRegressor(n_epochs=2)
 
         # fake dataset generation
         animals = ["dog", "cat", "horse", "cow", "pig", "sheep", "goat", "chicken", "guinea pig", "donkey", "turkey", "duck", "camel", "goose", "llama", "rabbit", "fox"]
@@ -73,7 +64,7 @@ class TestModel(unittest.TestCase):
         Ensure model returns predictions of the right type
         Test model loss at least outperforms naive baseline
         """
-        model = ComparisonOrdinalRegressor(n_epochs=1)
+        model = ordinalregressor.ComparisonOrdinalRegressor(n_epochs=2, low_memory_mode = True)
 
         # fake dataset generation
         animals = ["dog", "cat", "horse", "cow", "pig", "sheep", "goat", "chicken", "guinea pig", "donkey", "turkey", "duck", "camel", "goose", "llama", "rabbit", "fox"]
@@ -100,7 +91,28 @@ class TestModel(unittest.TestCase):
         naive_baseline_mse = np.mean([(naive_baseline - true)**2 for true in t_te])
         self.assertIsInstance(predictions, list)
         self.assertGreater(naive_baseline_mse, mse)
+        
+    def test_reasonable_predictions_unshared_weights(self):
+        """
+        Ensure model training does not error out
+        Ensure model returns predictions of the right type
+        Does not analyze model loss since unshared weights perform poorly at
+        these low data volumes
+        """
+        model = ordinalregressor.OrdinalRegressor(n_epochs=2, shared=False)
 
+        # fake dataset generation
+        animals = ["dog", "cat", "horse", "cow", "pig", "sheep", "goat", "chicken", "guinea pig", "donkey", "turkey", "duck", "camel", "goose", "llama", "rabbit", "fox"]
+        numbers = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen"]
+       
+        targets = np.asarray([1] * len(animals) + [0] * len(numbers))
+        data = animals + numbers
+
+        x_tr, x_te, t_tr, t_te = train_test_split(data, targets, test_size=0.3)
+        model.finetune(x_tr, t_tr)
+
+        predictions = model.predict(x_te)
+        self.assertIsInstance(predictions, list)
         
 if __name__ == '__main__':
     unittest.main()

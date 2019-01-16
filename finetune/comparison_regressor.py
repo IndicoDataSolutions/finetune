@@ -3,33 +3,14 @@ import numpy as np
 
 from finetune.target_encoders import RegressionEncoder
 from finetune.encoding import ArrayEncodedOutput
-from finetune.input_pipeline import BasePipeline
+from finetune.comparison import ComparisonPipeline
 from finetune.network_modules import regressor
 from finetune.base import BaseModel
 
-class ComparisonRegressionPipeline(BasePipeline):
+class ComparisonRegressionPipeline(ComparisonPipeline):
 
     def _target_encoder(self):
         return RegressionEncoder()
-    
-    def _format_for_encoding(self, X):
-        return [X]
-    
-    def _text_to_ids(self, pair, Y=None, pad_token=None):
-        """
-        Format comparison examples as a list of IDs
-
-        pairs: Array of text, shape [batch, 2]
-        """
-        assert self.config.chunk_long_sequences is False, "Chunk Long Sequences is not compatible with comparison"
-        arr_forward = next(super()._text_to_ids(pair, Y=None))
-        reversed_pair = pair[::-1]
-        arr_backward = next(super()._text_to_ids(reversed_pair, Y=None))
-        kwargs = arr_forward._asdict()
-        kwargs['tokens'] = [arr_forward.tokens, arr_backward.tokens]
-        kwargs['token_ids'] = np.stack([arr_forward.token_ids, arr_backward.token_ids], 0)
-        kwargs['mask'] = np.stack([arr_forward.mask, arr_backward.mask], 0)
-        yield ArrayEncodedOutput(**kwargs)
 
     def feed_shape_type_def(self):
         TS = tf.TensorShape
@@ -45,9 +26,6 @@ class ComparisonRegressor(BaseModel):
     :param config: A :py:class:`finetune.config.Settings` object or None (for default config).
     :param \**kwargs: key-value pairs of config items to override.
     """
-        
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
 
     def _get_input_pipeline(self):
         return ComparisonRegressionPipeline(self.config)

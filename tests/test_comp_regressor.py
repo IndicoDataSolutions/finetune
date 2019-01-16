@@ -1,24 +1,18 @@
 import os
 import unittest
 import warnings
-from pathlib import Path
 
 # prevent excessive warning logs 
 warnings.filterwarnings('ignore')
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
-import tensorflow as tf
-import pandas as pd
 import numpy as np
 import random
 
 from sklearn.model_selection import train_test_split
-from finetune import MultiFieldClassifier, MultiFieldRegressor, Regressor
-from finetune.config import get_config
-from finetune.datasets import generic_download
-from finetune.comparison_regressor import ComparisonRegressor
+from finetune import comparison_regressor
 
-class TestModel(unittest.TestCase):
+class TestComparisonRegression(unittest.TestCase):
     n_sample = 100
     n_hidden = 768
     
@@ -46,7 +40,7 @@ class TestModel(unittest.TestCase):
         Ensure model returns predictions of the right type
         Test model loss at least outperforms naive baseline
         """
-        model = ComparisonRegressor(n_epochs=2)
+        model = comparison_regressor.ComparisonRegressor(n_epochs=2, low_memory_mode = True)
 
         # fake dataset generation
         animals = ["dog", "cat", "horse", "cow", "pig", "sheep", "goat", "chicken", "guinea pig", "donkey", "turkey", "duck", "camel", "goose", "llama", "rabbit", "fox"]

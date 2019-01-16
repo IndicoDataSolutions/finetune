@@ -265,7 +265,7 @@ def regressor(hidden, targets, n_targets, config, train=False, reuse=None, **kwa
             'losses': loss
         }
         
-def ordinal_regressor(hidden, targets, n_targets, config, train=False, reuse=None, **kwargs):
+def ordinal_regressor(hidden, targets, n_targets, config, shared=True, train=False, reuse=None, **kwargs):
     """
     Ordinal Regressor using all-threshold loss.
 
@@ -283,21 +283,23 @@ def ordinal_regressor(hidden, targets, n_targets, config, train=False, reuse=Non
     """
     with tf.variable_scope('ordinalregressor', reuse=reuse):
         hidden = dropout(hidden, config.clf_p_drop, train)
-        '''
-        w_init = tf.random_normal_initializer(stddev=config.weight_stddev)
-        b_init = tf.random_normal_initializer(0)
-        nx = config.n_embed
-        w = tf.get_variable("w", [nx, 1], initializer=w_init)
-        b = tf.get_variable("b", [n_targets], initializer=b_init)
-        outputs = tf.matmul(hidden, w) + b
-        '''
-        outputs = perceptron(hidden, n_targets, config)
+        if shared:
+            w_init = tf.random_normal_initializer(stddev=config.weight_stddev)
+            b_init = tf.random_normal_initializer(0)
+            nx = config.n_embed
+            w = tf.get_variable("w", [nx, 1], initializer=w_init)
+            b = tf.get_variable("b", [n_targets], initializer=b_init)
+            logits = tf.matmul(hidden, w) + b
+        else:
+            logits = perceptron(hidden, n_targets, config)
+            
         if targets is None:
-            outputs = tf.sigmoid(outputs)
+            outputs = tf.sigmoid(logits)
             loss = None
         else:
+            outputs = logits
             loss = tf.nn.sigmoid_cross_entropy_with_logits(
-                logits=outputs,
+                logits=logits,
                 labels=tf.stop_gradient(targets))
         return {
             'logits': outputs,
