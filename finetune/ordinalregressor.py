@@ -83,7 +83,7 @@ class OrdinalRegressor(BaseModel):
     def _predict_proba_op(self, logits, **kwargs):
         return logits
     
-class MultiOrdinalRegressor(OrdinalRegressor):
+class ComparisonOrdinalRegressor(OrdinalRegressor):
     """
     for comparison
     """

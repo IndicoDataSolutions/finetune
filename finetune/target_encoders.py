@@ -99,17 +99,17 @@ class OrdinalRegressionEncoder(OrdinalEncoder, BaseEncoder):
     
     def rank_to_thresholds(self,x):
         #changes a one-variable rank into an array of 1s and 0s defining the target output of each threshold
-        x = x[:10000]
         num_thresholds = len(self.categories_[0])-1
         thresholds = [np.concatenate((np.ones(int(rank)),np.zeros((num_thresholds-int(rank))))) for rank in x]
         return np.array(thresholds)
 
     def inverse_transform(self, y):
-        #this commented part doesn't work yet
-        #y = np.asarray(y)
-        #y = y > 0.5
-        #y = super().inverse_transform(y)
-        y = np.sum(y,axis = 1)
+        y = np.array(y)
+        y = y > 0.5
+        rank = np.sum(y,axis = 1)
+        rank = np.expand_dims(rank, 1)
+        y = super().inverse_transform(rank)
+        y = np.squeeze(y)
         return y
 
     @property
