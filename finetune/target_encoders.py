@@ -69,44 +69,39 @@ class OneHotLabelEncoder(LabelEncoder, BaseEncoder):
         return self._make_one_hot(labels)
 
 class OrdinalRegressionEncoder(OrdinalEncoder, BaseEncoder):
-    
+
     def __init__(self):
         self.num_outputs = None
         super().__init__()
-        
+
+    def _force_2d(self, x):
+        return np.array(x, dtype=np.int32).reshape(-1, 1)
+
     def fit(self, x):
-        x = np.array(x)
-        rank = len(x.shape)
-        if rank == 1:
-            x = np.expand_dims(x, 1)
-        self.fit_transform(x)
+        super().fit(self._force_2d(x))
+        self.num_outputs = len(self.categories_[0]) - 1
         return self
 
     def transform(self, x):
-        x = np.array(x)
-        rank = len(x.shape)
-        if rank == 1:
-            x = np.expand_dims(x, 1)  # for single output value regression.
-        labels = super().transform(x)
-        labels = self.rank_to_thresholds(labels)
+        labels = super().transform(self._force_2d(x)).astype(np.int32)
+        labels = self.rank_to_one_hot(labels)
         return labels
-        
+
     def fit_transform(self, x):
-        super().fit(x)
-        labels = self.transform(x)
-        self.num_outputs = labels.shape[1]
-        return labels
-    
-    def rank_to_thresholds(self,x):
-        #changes a one-variable rank into an array of 1s and 0s defining the target output of each threshold
-        num_thresholds = len(self.categories_[0]) - 1
-        thresholds = [np.concatenate((np.ones(int(rank)),np.zeros((num_thresholds-int(rank))))) for rank in x]
-        return np.array(thresholds)
+        self.fit(x)
+        return self.transform(x)
+
+    def rank_to_one_hot(self, x):
+        # changes a one-variable rank into an array of 1s and 0s defining the target output of each threshold
+        one_hot = np.zeros((len(x), self.num_outputs), dtype=np.float32)
+        for i, (rank,) in enumerate(x):
+            one_hot[i, :rank] = 1
+        return one_hot
 
     def inverse_transform(self, y):
         y = np.array(y)
         y = y > 0.5
-        rank = np.sum(y, axis = 1)
+        rank = np.sum(y, axis=1)
         rank = np.expand_dims(rank, 1)
         y = super().inverse_transform(rank)
         y = np.squeeze(y)
@@ -119,7 +114,7 @@ class OrdinalRegressionEncoder(OrdinalEncoder, BaseEncoder):
     @property
     def target_labels(self):
         raise ValueError
-    
+
 class SequenceLabelingEncoder(LabelEncoder, BaseEncoder):
     pass
 
