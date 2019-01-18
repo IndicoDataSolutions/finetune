@@ -2,7 +2,7 @@ import os
 import unittest
 import warnings
 
-# prevent excessive warning logs 
+# prevent excessive warning logs
 warnings.filterwarnings('ignore')
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
@@ -10,13 +10,13 @@ import numpy as np
 import random
 
 from sklearn.model_selection import train_test_split
-from finetune import comparison_regressor
+from finetune import ComparisonRegressor
+
 
 class TestComparisonRegression(unittest.TestCase):
     n_sample = 100
     n_hidden = 768
-    
-    
+
     def default_config(self, **kwargs):
         d = dict(
             batch_size=2,
@@ -33,14 +33,14 @@ class TestComparisonRegression(unittest.TestCase):
     def setUp(self):
         random.seed(42)
         np.random.seed(42)
-     
+
     def test_reasonable_predictions(self):
         """
         Ensure model training does not error out
         Ensure model returns predictions of the right type
         Test model loss at least outperforms naive baseline
         """
-        model = comparison_regressor.ComparisonRegressor(n_epochs=2, low_memory_mode = True)
+        model = ComparisonRegressor(n_epochs=2, low_memory_mode = True)
 
         # fake dataset generation
         animals = ["dog", "cat", "horse", "cow", "pig", "sheep", "goat", "chicken", "guinea pig", "donkey", "turkey", "duck", "camel", "goose", "llama", "rabbit", "fox"]
@@ -54,7 +54,7 @@ class TestComparisonRegression(unittest.TestCase):
                 similar.append([random.choice(dataset), random.choice(dataset)])
         for i in range(n_per):
             different.append([random.choice(animals), random.choice(numbers)])
-        
+
         targets = np.asarray([1] * len(similar) + [0] * len(different))
         data = similar + different
 
@@ -69,6 +69,6 @@ class TestComparisonRegression(unittest.TestCase):
         self.assertIsInstance(predictions[0], np.float32)
         self.assertGreater(naive_baseline_mse, mse)
 
-        
+
 if __name__ == '__main__':
     unittest.main()
