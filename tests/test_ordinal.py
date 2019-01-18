@@ -10,7 +10,7 @@ import random
 import numpy as np
 
 from sklearn.model_selection import train_test_split
-from finetune import ordinalregressor
+from finetune.ordinal_regressor import ComparisonOrdinalRegressor, OrdinalRegressor
 
 ANIMALS = ["dog", "cat", "horse", "cow", "pig", "sheep", "goat", "chicken", "guinea pig", "donkey", "turkey", "duck", "camel", "goose", "llama", "rabbit", "fox"]
 NUMBERS = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen"]
@@ -43,7 +43,7 @@ class TestOrdinal(unittest.TestCase):
         Ensure model returns predictions of the right type
         Test model loss at least outperforms naive baseline
         """
-        model = ordinalregressor.OrdinalRegressor(n_epochs=2)
+        model = OrdinalRegressor(n_epochs=2)
 
         # fake dataset generation
         targets = np.asarray([1] * len(ANIMALS) + [0] * len(NUMBERS))
@@ -65,11 +65,7 @@ class TestOrdinal(unittest.TestCase):
         Ensure model returns predictions of the right type
         Test model loss at least outperforms naive baseline
         """
-        model = ordinalregressor.ComparisonOrdinalRegressor(n_epochs=2, low_memory_mode=True)
-
-        # fake dataset generation
-        ANIMALS = ["dog", "cat", "horse", "cow", "pig", "sheep", "goat", "chicken", "guinea pig", "donkey", "turkey", "duck", "camel", "goose", "llama", "rabbit", "fox"]
-        NUMBERS = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen"]
+        model = ComparisonOrdinalRegressor(n_epochs=2, low_memory_mode=True)
 
         n_per = 50
         similar = []
@@ -100,7 +96,7 @@ class TestOrdinal(unittest.TestCase):
         Does not analyze model loss since unshared weights perform poorly at
         these low data volumes
         """
-        model = ordinalregressor.OrdinalRegressor(n_epochs=2, shared=False)
+        model = OrdinalRegressor(n_epochs=2, shared=False)
 
         # fake dataset generation
 
