@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>finetune.comparison &mdash; finetune 0.5.11 documentation</title>
+  <title>finetune.comparison &mdash; finetune 0.5.13 documentation</title>
   
 
   
@@ -35,7 +35,7 @@
         <link rel="index" title="Index"
               href="../../genindex.html"/>
         <link rel="search" title="Search" href="../../search.html"/>
-    <link rel="top" title="finetune 0.5.11 documentation" href="../../index.html"/>
+    <link rel="top" title="finetune 0.5.13 documentation" href="../../index.html"/>
         <link rel="up" title="Module code" href="../index.html"/> 
 
   
@@ -160,7 +160,6 @@
 <span class="kn">from</span> <span class="nn">finetune.classifier</span> <span class="k">import</span> <span class="n">Classifier</span><span class="p">,</span> <span class="n">ClassificationPipeline</span>
 <span class="kn">from</span> <span class="nn">finetune.encoding</span> <span class="k">import</span> <span class="n">ArrayEncodedOutput</span>
 
-
 <span class="k">class</span> <span class="nc">ComparisonPipeline</span><span class="p">(</span><span class="n">ClassificationPipeline</span><span class="p">):</span>
 
     <span class="k">def</span> <span class="nf">_format_for_encoding</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
@@ -189,8 +188,6 @@
             <span class="p">{</span><span class="s2">&quot;tokens&quot;</span><span class="p">:</span> <span class="n">TS</span><span class="p">([</span><span class="mi">2</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span><span class="p">,</span> <span class="mi">2</span><span class="p">]),</span> <span class="s2">&quot;mask&quot;</span><span class="p">:</span> <span class="n">TS</span><span class="p">([</span><span class="mi">2</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span><span class="p">])},</span>
             <span class="n">TS</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">target_dim</span><span class="p">]))</span>
 
-
-
 <div class="viewcode-block" id="Comparison"><a class="viewcode-back" href="../../index.html#finetune.Comparison">[docs]</a><span class="k">class</span> <span class="nc">Comparison</span><span class="p">(</span><span class="n">Classifier</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot; </span>
 <span class="sd">    Compares two documents to solve a classification task.  </span>
@@ -198,10 +195,7 @@
 <span class="sd">    :param config: A :py:class:`finetune.config.Settings` object or None (for default config).</span>
 <span class="sd">    :param \**kwargs: key-value pairs of config items to override.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-        
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-
+    
     <span class="k">def</span> <span class="nf">_get_input_pipeline</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">ComparisonPipeline</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">)</span>
 
@@ -274,7 +268,7 @@
     <script type="text/javascript">
         var DOCUMENTATION_OPTIONS = {
             URL_ROOT:'../../',
-            VERSION:'0.5.11',
+            VERSION:'0.5.13',
             COLLAPSE_INDEX:false,
             FILE_SUFFIX:'.html',
             HAS_SOURCE:  true,

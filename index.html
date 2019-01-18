@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Finetune Quickstart Guide &mdash; finetune 0.5.11 documentation</title>
+  <title>Finetune Quickstart Guide &mdash; finetune 0.5.13 documentation</title>
   
 
   
@@ -35,7 +35,7 @@
         <link rel="index" title="Index"
               href="genindex.html"/>
         <link rel="search" title="Search" href="search.html"/>
-    <link rel="top" title="finetune 0.5.11 documentation" href="#"/> 
+    <link rel="top" title="finetune 0.5.13 documentation" href="#"/> 
 
   
   <script src="_static/js/modernizr.min.js"></script>
@@ -284,6 +284,14 @@ use the <code class="xref py py-func docutils literal notranslate"><span class="
 </dd></dl>
 
 <dl class="method">
+<dt id="finetune.Classifier.create_base_model">
+<code class="descname">create_base_model</code><span class="sig-paren">(</span><em>filename</em>, <em>exists_ok=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Classifier.create_base_model" title="Permalink to this definition">¶</a></dt>
+<dd><p>Saves the current weights into the correct file format to be used as a base model.
+:param filename: the path to save the base model relative to finetune’s base model filestore.
+:param exists_ok: Whether to replace the model if it exists.</p>
+</dd></dl>
+
+<dl class="method">
 <dt id="finetune.Classifier.featurize">
 <code class="descname">featurize</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/classifier.html#Classifier.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Classifier.featurize" title="Permalink to this definition">¶</a></dt>
 <dd><p>Embeds inputs in learned feature space. Can be called before or after calling <a class="reference internal" href="#module-finetune" title="finetune"><code class="xref py py-meth docutils literal notranslate"><span class="pre">finetune()</span></code></a>.</p>
@@ -399,13 +407,18 @@ Temperature parameter for decoding is set in the config.
 
 <dl class="classmethod">
 <dt id="finetune.Classifier.load">
-<em class="property">classmethod </em><code class="descname">load</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Classifier.load" title="Permalink to this definition">¶</a></dt>
+<em class="property">classmethod </em><code class="descname">load</code><span class="sig-paren">(</span><em>path</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Classifier.load" title="Permalink to this definition">¶</a></dt>
 <dd><p>Load a saved fine-tuned model from disk.  Path provided should be a folder which contains .pkl and tf.Saver() files</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>path</strong> – string path name to load model from.  Same value as previously provided to <a class="reference internal" href="#finetune.Classifier.save" title="finetune.Classifier.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a>. Must be a folder.</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>path</strong> – string path name to load model from.  Same value as previously provided to <a class="reference internal" href="#finetune.Classifier.save" title="finetune.Classifier.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a>. Must be a folder.</li>
+<li><strong>**kwargs</strong> – <p>key-value pairs of config items to override.</p>
+</li>
+</ul>
+</td>
 </tr>
 </tbody>
 </table>
@@ -489,6 +502,14 @@ Should not be used to save / restore a training model.</dd>
 <dt id="finetune.Regressor.cached_predict">
 <code class="descname">cached_predict</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Regressor.cached_predict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Context manager that prevents the recreation of the tensorflow graph on every call to BaseModel.predict().</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.Regressor.create_base_model">
+<code class="descname">create_base_model</code><span class="sig-paren">(</span><em>filename</em>, <em>exists_ok=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Regressor.create_base_model" title="Permalink to this definition">¶</a></dt>
+<dd><p>Saves the current weights into the correct file format to be used as a base model.
+:param filename: the path to save the base model relative to finetune’s base model filestore.
+:param exists_ok: Whether to replace the model if it exists.</p>
 </dd></dl>
 
 <dl class="method">
@@ -607,13 +628,18 @@ Temperature parameter for decoding is set in the config.
 
 <dl class="classmethod">
 <dt id="finetune.Regressor.load">
-<em class="property">classmethod </em><code class="descname">load</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Regressor.load" title="Permalink to this definition">¶</a></dt>
+<em class="property">classmethod </em><code class="descname">load</code><span class="sig-paren">(</span><em>path</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Regressor.load" title="Permalink to this definition">¶</a></dt>
 <dd><p>Load a saved fine-tuned model from disk.  Path provided should be a folder which contains .pkl and tf.Saver() files</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>path</strong> – string path name to load model from.  Same value as previously provided to <a class="reference internal" href="#finetune.Regressor.save" title="finetune.Regressor.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a>. Must be a folder.</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>path</strong> – string path name to load model from.  Same value as previously provided to <a class="reference internal" href="#finetune.Regressor.save" title="finetune.Regressor.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a>. Must be a folder.</li>
+<li><strong>**kwargs</strong> – <p>key-value pairs of config items to override.</p>
+</li>
+</ul>
+</td>
 </tr>
 </tbody>
 </table>
@@ -696,6 +722,14 @@ Should not be used to save / restore a training model.</dd>
 <dt id="finetune.MultiFieldClassifier.cached_predict">
 <code class="descname">cached_predict</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldClassifier.cached_predict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Context manager that prevents the recreation of the tensorflow graph on every call to BaseModel.predict().</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.MultiFieldClassifier.create_base_model">
+<code class="descname">create_base_model</code><span class="sig-paren">(</span><em>filename</em>, <em>exists_ok=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldClassifier.create_base_model" title="Permalink to this definition">¶</a></dt>
+<dd><p>Saves the current weights into the correct file format to be used as a base model.
+:param filename: the path to save the base model relative to finetune’s base model filestore.
+:param exists_ok: Whether to replace the model if it exists.</p>
 </dd></dl>
 
 <dl class="method">
@@ -814,13 +848,18 @@ Temperature parameter for decoding is set in the config.
 
 <dl class="classmethod">
 <dt id="finetune.MultiFieldClassifier.load">
-<em class="property">classmethod </em><code class="descname">load</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldClassifier.load" title="Permalink to this definition">¶</a></dt>
+<em class="property">classmethod </em><code class="descname">load</code><span class="sig-paren">(</span><em>path</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldClassifier.load" title="Permalink to this definition">¶</a></dt>
 <dd><p>Load a saved fine-tuned model from disk.  Path provided should be a folder which contains .pkl and tf.Saver() files</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>path</strong> – string path name to load model from.  Same value as previously provided to <a class="reference internal" href="#finetune.MultiFieldClassifier.save" title="finetune.MultiFieldClassifier.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a>. Must be a folder.</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>path</strong> – string path name to load model from.  Same value as previously provided to <a class="reference internal" href="#finetune.MultiFieldClassifier.save" title="finetune.MultiFieldClassifier.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a>. Must be a folder.</li>
+<li><strong>**kwargs</strong> – <p>key-value pairs of config items to override.</p>
+</li>
+</ul>
+</td>
 </tr>
 </tbody>
 </table>
@@ -903,6 +942,14 @@ Should not be used to save / restore a training model.</dd>
 <dt id="finetune.MultiFieldRegressor.cached_predict">
 <code class="descname">cached_predict</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldRegressor.cached_predict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Context manager that prevents the recreation of the tensorflow graph on every call to BaseModel.predict().</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.MultiFieldRegressor.create_base_model">
+<code class="descname">create_base_model</code><span class="sig-paren">(</span><em>filename</em>, <em>exists_ok=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldRegressor.create_base_model" title="Permalink to this definition">¶</a></dt>
+<dd><p>Saves the current weights into the correct file format to be used as a base model.
+:param filename: the path to save the base model relative to finetune’s base model filestore.
+:param exists_ok: Whether to replace the model if it exists.</p>
 </dd></dl>
 
 <dl class="method">
@@ -1021,13 +1068,18 @@ Temperature parameter for decoding is set in the config.
 
 <dl class="classmethod">
 <dt id="finetune.MultiFieldRegressor.load">
-<em class="property">classmethod </em><code class="descname">load</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldRegressor.load" title="Permalink to this definition">¶</a></dt>
+<em class="property">classmethod </em><code class="descname">load</code><span class="sig-paren">(</span><em>path</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldRegressor.load" title="Permalink to this definition">¶</a></dt>
 <dd><p>Load a saved fine-tuned model from disk.  Path provided should be a folder which contains .pkl and tf.Saver() files</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>path</strong> – string path name to load model from.  Same value as previously provided to <a class="reference internal" href="#finetune.MultiFieldRegressor.save" title="finetune.MultiFieldRegressor.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a>. Must be a folder.</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>path</strong> – string path name to load model from.  Same value as previously provided to <a class="reference internal" href="#finetune.MultiFieldRegressor.save" title="finetune.MultiFieldRegressor.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a>. Must be a folder.</li>
+<li><strong>**kwargs</strong> – <p>key-value pairs of config items to override.</p>
+</li>
+</ul>
+</td>
 </tr>
 </tbody>
 </table>
@@ -1110,6 +1162,14 @@ Should not be used to save / restore a training model.</dd>
 <dt id="finetune.MultiLabelClassifier.cached_predict">
 <code class="descname">cached_predict</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiLabelClassifier.cached_predict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Context manager that prevents the recreation of the tensorflow graph on every call to BaseModel.predict().</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.MultiLabelClassifier.create_base_model">
+<code class="descname">create_base_model</code><span class="sig-paren">(</span><em>filename</em>, <em>exists_ok=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiLabelClassifier.create_base_model" title="Permalink to this definition">¶</a></dt>
+<dd><p>Saves the current weights into the correct file format to be used as a base model.
+:param filename: the path to save the base model relative to finetune’s base model filestore.
+:param exists_ok: Whether to replace the model if it exists.</p>
 </dd></dl>
 
 <dl class="method">
@@ -1228,13 +1288,18 @@ Temperature parameter for decoding is set in the config.
 
 <dl class="classmethod">
 <dt id="finetune.MultiLabelClassifier.load">
-<em class="property">classmethod </em><code class="descname">load</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiLabelClassifier.load" title="Permalink to this definition">¶</a></dt>
+<em class="property">classmethod </em><code class="descname">load</code><span class="sig-paren">(</span><em>path</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiLabelClassifier.load" title="Permalink to this definition">¶</a></dt>
 <dd><p>Load a saved fine-tuned model from disk.  Path provided should be a folder which contains .pkl and tf.Saver() files</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>path</strong> – string path name to load model from.  Same value as previously provided to <a class="reference internal" href="#finetune.MultiLabelClassifier.save" title="finetune.MultiLabelClassifier.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a>. Must be a folder.</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>path</strong> – string path name to load model from.  Same value as previously provided to <a class="reference internal" href="#finetune.MultiLabelClassifier.save" title="finetune.MultiLabelClassifier.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a>. Must be a folder.</li>
+<li><strong>**kwargs</strong> – <p>key-value pairs of config items to override.</p>
+</li>
+</ul>
+</td>
 </tr>
 </tbody>
 </table>
@@ -1317,6 +1382,14 @@ Should not be used to save / restore a training model.</dd>
 <dt id="finetune.SequenceLabeler.cached_predict">
 <code class="descname">cached_predict</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#finetune.SequenceLabeler.cached_predict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Context manager that prevents the recreation of the tensorflow graph on every call to BaseModel.predict().</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.SequenceLabeler.create_base_model">
+<code class="descname">create_base_model</code><span class="sig-paren">(</span><em>filename</em>, <em>exists_ok=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.SequenceLabeler.create_base_model" title="Permalink to this definition">¶</a></dt>
+<dd><p>Saves the current weights into the correct file format to be used as a base model.
+:param filename: the path to save the base model relative to finetune’s base model filestore.
+:param exists_ok: Whether to replace the model if it exists.</p>
 </dd></dl>
 
 <dl class="method">
@@ -1416,13 +1489,18 @@ Temperature parameter for decoding is set in the config.
 
 <dl class="classmethod">
 <dt id="finetune.SequenceLabeler.load">
-<em class="property">classmethod </em><code class="descname">load</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.SequenceLabeler.load" title="Permalink to this definition">¶</a></dt>
+<em class="property">classmethod </em><code class="descname">load</code><span class="sig-paren">(</span><em>path</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.SequenceLabeler.load" title="Permalink to this definition">¶</a></dt>
 <dd><p>Load a saved fine-tuned model from disk.  Path provided should be a folder which contains .pkl and tf.Saver() files</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>path</strong> – string path name to load model from.  Same value as previously provided to <a class="reference internal" href="#finetune.SequenceLabeler.save" title="finetune.SequenceLabeler.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a>. Must be a folder.</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>path</strong> – string path name to load model from.  Same value as previously provided to <a class="reference internal" href="#finetune.SequenceLabeler.save" title="finetune.SequenceLabeler.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a>. Must be a folder.</li>
+<li><strong>**kwargs</strong> – <p>key-value pairs of config items to override.</p>
+</li>
+</ul>
+</td>
 </tr>
 </tbody>
 </table>
@@ -1487,7 +1565,7 @@ Should not be used to save / restore a training model.</dd>
 
 <dl class="class">
 <dt id="finetune.Comparison">
-<em class="property">class </em><code class="descclassname">finetune.</code><code class="descname">Comparison</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/comparison.html#Comparison"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Comparison" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="descclassname">finetune.</code><code class="descname">Comparison</code><span class="sig-paren">(</span><em>config=None</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/comparison.html#Comparison"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Comparison" title="Permalink to this definition">¶</a></dt>
 <dd><p>Compares two documents to solve a classification task.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -1505,6 +1583,14 @@ Should not be used to save / restore a training model.</dd>
 <dt id="finetune.Comparison.cached_predict">
 <code class="descname">cached_predict</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Comparison.cached_predict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Context manager that prevents the recreation of the tensorflow graph on every call to BaseModel.predict().</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.Comparison.create_base_model">
+<code class="descname">create_base_model</code><span class="sig-paren">(</span><em>filename</em>, <em>exists_ok=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Comparison.create_base_model" title="Permalink to this definition">¶</a></dt>
+<dd><p>Saves the current weights into the correct file format to be used as a base model.
+:param filename: the path to save the base model relative to finetune’s base model filestore.
+:param exists_ok: Whether to replace the model if it exists.</p>
 </dd></dl>
 
 <dl class="method">
@@ -1623,13 +1709,18 @@ Temperature parameter for decoding is set in the config.
 
 <dl class="classmethod">
 <dt id="finetune.Comparison.load">
-<em class="property">classmethod </em><code class="descname">load</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Comparison.load" title="Permalink to this definition">¶</a></dt>
+<em class="property">classmethod </em><code class="descname">load</code><span class="sig-paren">(</span><em>path</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Comparison.load" title="Permalink to this definition">¶</a></dt>
 <dd><p>Load a saved fine-tuned model from disk.  Path provided should be a folder which contains .pkl and tf.Saver() files</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>path</strong> – string path name to load model from.  Same value as previously provided to <a class="reference internal" href="#finetune.Comparison.save" title="finetune.Comparison.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a>. Must be a folder.</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>path</strong> – string path name to load model from.  Same value as previously provided to <a class="reference internal" href="#finetune.Comparison.save" title="finetune.Comparison.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a>. Must be a folder.</li>
+<li><strong>**kwargs</strong> – <p>key-value pairs of config items to override.</p>
+</li>
+</ul>
+</td>
 </tr>
 </tbody>
 </table>
@@ -1687,6 +1778,448 @@ Should not be used to save / restore a training model.</dd>
 <dl class="method">
 <dt id="finetune.Comparison.transform">
 <code class="descname">transform</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Comparison.transform" title="Permalink to this definition">¶</a></dt>
+<dd><p>An alias for <cite>featurize</cite>.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="finetune.OrdinalRegressor">
+<em class="property">class </em><code class="descclassname">finetune.</code><code class="descname">OrdinalRegressor</code><span class="sig-paren">(</span><em>shared_threshold_weights=True</em>, <em>config=None</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/ordinal_regressor.html#OrdinalRegressor"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.OrdinalRegressor" title="Permalink to this definition">¶</a></dt>
+<dd><p>Classifies a document into two or more ordered categories.</p>
+<p>For a full list of configuration options, see <cite>finetune.config</cite>.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>config</strong> – A config object generated by <cite>finetune.config.get_config</cite> or None (for default config).</li>
+<li><strong>**kwargs</strong> – key-value pairs of config items to override.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+<dl class="method">
+<dt id="finetune.OrdinalRegressor.cached_predict">
+<code class="descname">cached_predict</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#finetune.OrdinalRegressor.cached_predict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Context manager that prevents the recreation of the tensorflow graph on every call to BaseModel.predict().</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.OrdinalRegressor.create_base_model">
+<code class="descname">create_base_model</code><span class="sig-paren">(</span><em>filename</em>, <em>exists_ok=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.OrdinalRegressor.create_base_model" title="Permalink to this definition">¶</a></dt>
+<dd><p>Saves the current weights into the correct file format to be used as a base model.
+:param filename: the path to save the base model relative to finetune’s base model filestore.
+:param exists_ok: Whether to replace the model if it exists.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.OrdinalRegressor.featurize">
+<code class="descname">featurize</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/ordinal_regressor.html#OrdinalRegressor.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.OrdinalRegressor.featurize" title="Permalink to this definition">¶</a></dt>
+<dd><p>Embeds inputs in learned feature space. Can be called before or after calling <a class="reference internal" href="#module-finetune" title="finetune"><code class="xref py py-meth docutils literal notranslate"><span class="pre">finetune()</span></code></a>.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>X</strong> – list or array of text to embed.</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">np.array of features of shape (n_examples, embedding_size).</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.OrdinalRegressor.finetune">
+<code class="descname">finetune</code><span class="sig-paren">(</span><em>X</em>, <em>Y=None</em>, <em>batch_size=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/ordinal_regressor.html#OrdinalRegressor.finetune"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.OrdinalRegressor.finetune" title="Permalink to this definition">¶</a></dt>
+<dd><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>X</strong> – list or array of text.</li>
+<li><strong>Y</strong> – floating point targets</li>
+<li><strong>batch_size</strong> – integer number of examples per batch. When N_GPUS &gt; 1, this number
+corresponds to the number of training examples provided to each GPU.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="classmethod">
+<dt id="finetune.OrdinalRegressor.finetune_grid_search">
+<em class="property">classmethod </em><code class="descname">finetune_grid_search</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>test_size</em>, <em>config=None</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.OrdinalRegressor.finetune_grid_search" title="Permalink to this definition">¶</a></dt>
+<dd><p>Performs grid search over config items defined using “GridSearchable” objects and returns either full results or
+the config object that relates to the best results. The default config contains grid searchable objects for the
+most important parameters to search over.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>Xs</strong> – Input text. Either [num_samples] or [sequence, num_samples] for single or multi input models respectively.</li>
+<li><strong>Y</strong> – Targets, A list of targets, [num_samples] that correspond to each sample in Xs.</li>
+<li><strong>test_size</strong> – Int or float. If an int is given this number of samples is used to validate, if a float is
+given then that fraction of samples is used.</li>
+<li><strong>config</strong> – A config object, or None to use the default config.</li>
+<li><strong>eval_fn</strong> – An eval function that takes 2 inputs (prediction, truth) and returns a float, with a max value being desired.</li>
+<li><strong>probs</strong> – If true, eval_fn is passed probability outputs from predict_proba, otherwise the output of predict is used.</li>
+<li><strong>return_all</strong> – If True, all results are returned, if False, only the best config is returned.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">default is to return the best config object. If return_all is true, it returns a list of tuples of the
+form [(config, eval_fn output), … ]</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="classmethod">
+<dt id="finetune.OrdinalRegressor.finetune_grid_search_cv">
+<em class="property">classmethod </em><code class="descname">finetune_grid_search_cv</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>n_splits</em>, <em>test_size</em>, <em>config=None</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.OrdinalRegressor.finetune_grid_search_cv" title="Permalink to this definition">¶</a></dt>
+<dd><p>Performs cross validated grid search over config items defined using “GridSearchable” objects and returns either full results or
+the config object that relates to the best results. The default config contains grid searchable objects for the
+most important parameters to search over.</p>
+<p>It should be noted that the cv splits are not guaranteed unique, but each split is given to each set of hparams.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>Xs</strong> – Input text. Either [num_samples] or [sequence, num_samples] for single or multi input models respectively.</li>
+<li><strong>Y</strong> – Targets, A list of targets, [num_samples] that correspond to each sample in Xs.</li>
+<li><strong>n_splits</strong> – Number of CV splits to do.</li>
+<li><strong>test_size</strong> – Int or float. If an int is given this number of samples is used to validate, if a float is
+given then that fraction of samples is used.</li>
+<li><strong>config</strong> – A config object, or None to use the default config.</li>
+<li><strong>eval_fn</strong> – An eval function that takes 2 batches of outputs and returns a float, with a max value being
+desired. An arithmetic mean must make sense for this metric.</li>
+<li><strong>probs</strong> – If true, eval_fn is passed probability outputs from predict_proba, otherwise the output of predict is used.</li>
+<li><strong>return_all</strong> – If True, all results are returned, if False, only the best config is returned.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">default is to return the best config object. If return_all is true, it returns a list of tuples of the
+form [(config, eval_fn output), … ]</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.OrdinalRegressor.fit">
+<code class="descname">fit</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.OrdinalRegressor.fit" title="Permalink to this definition">¶</a></dt>
+<dd><p>An alias for finetune.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.OrdinalRegressor.generate_text">
+<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=True</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.OrdinalRegressor.generate_text" title="Permalink to this definition">¶</a></dt>
+<dd><p>Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
+Temperature parameter for decoding is set in the config.
+:param max_length: The maximum length to decode to.
+:param seed_text: Defaults to the empty string. This will form the starting point to begin modelling
+:return: A string containing the generated text.</p>
+</dd></dl>
+
+<dl class="classmethod">
+<dt id="finetune.OrdinalRegressor.load">
+<em class="property">classmethod </em><code class="descname">load</code><span class="sig-paren">(</span><em>path</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.OrdinalRegressor.load" title="Permalink to this definition">¶</a></dt>
+<dd><p>Load a saved fine-tuned model from disk.  Path provided should be a folder which contains .pkl and tf.Saver() files</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>path</strong> – string path name to load model from.  Same value as previously provided to <a class="reference internal" href="#finetune.OrdinalRegressor.save" title="finetune.OrdinalRegressor.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a>. Must be a folder.</li>
+<li><strong>**kwargs</strong> – <p>key-value pairs of config items to override.</p>
+</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.OrdinalRegressor.predict">
+<code class="descname">predict</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/ordinal_regressor.html#OrdinalRegressor.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.OrdinalRegressor.predict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Produces a list of most likely class labels as determined by the fine-tuned model.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>X</strong> – list or array of text to embed.</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">list of class labels.</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.OrdinalRegressor.predict_proba">
+<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/ordinal_regressor.html#OrdinalRegressor.predict_proba"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.OrdinalRegressor.predict_proba" title="Permalink to this definition">¶</a></dt>
+<dd><p>Produces a probability distribution over classes for each example in X.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>X</strong> – list or array of text to embed.</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.OrdinalRegressor.save">
+<code class="descname">save</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.OrdinalRegressor.save" title="Permalink to this definition">¶</a></dt>
+<dd><p>Saves the state of the model to disk to the folder specific by <cite>path</cite>.  If <cite>path</cite> does not exist, it will be auto-created.</p>
+<dl class="docutils">
+<dt>Save is performed in two steps:</dt>
+<dd><ul class="first last simple">
+<li>Serialize tf graph to disk using tf.Saver</li>
+<li>Serialize python model using pickle</li>
+</ul>
+</dd>
+<dt>Note:</dt>
+<dd>Does not serialize state of Adam optimizer.
+Should not be used to save / restore a training model.</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.OrdinalRegressor.transform">
+<code class="descname">transform</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.OrdinalRegressor.transform" title="Permalink to this definition">¶</a></dt>
+<dd><p>An alias for <cite>featurize</cite>.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="finetune.ComparisonOrdinalRegressor">
+<em class="property">class </em><code class="descclassname">finetune.</code><code class="descname">ComparisonOrdinalRegressor</code><span class="sig-paren">(</span><em>shared_threshold_weights=True</em>, <em>config=None</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/ordinal_regressor.html#ComparisonOrdinalRegressor"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.ComparisonOrdinalRegressor" title="Permalink to this definition">¶</a></dt>
+<dd><p>Compares two documents and classifies into two or more ordered categories.</p>
+<p>For a full list of configuration options, see <cite>finetune.config</cite>.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>config</strong> – A config object generated by <cite>finetune.config.get_config</cite> or None (for default config).</li>
+<li><strong>**kwargs</strong> – key-value pairs of config items to override.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+<dl class="method">
+<dt id="finetune.ComparisonOrdinalRegressor.cached_predict">
+<code class="descname">cached_predict</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#finetune.ComparisonOrdinalRegressor.cached_predict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Context manager that prevents the recreation of the tensorflow graph on every call to BaseModel.predict().</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.ComparisonOrdinalRegressor.create_base_model">
+<code class="descname">create_base_model</code><span class="sig-paren">(</span><em>filename</em>, <em>exists_ok=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.ComparisonOrdinalRegressor.create_base_model" title="Permalink to this definition">¶</a></dt>
+<dd><p>Saves the current weights into the correct file format to be used as a base model.
+:param filename: the path to save the base model relative to finetune’s base model filestore.
+:param exists_ok: Whether to replace the model if it exists.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.ComparisonOrdinalRegressor.featurize">
+<code class="descname">featurize</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.ComparisonOrdinalRegressor.featurize" title="Permalink to this definition">¶</a></dt>
+<dd><p>Embeds inputs in learned feature space. Can be called before or after calling <a class="reference internal" href="#module-finetune" title="finetune"><code class="xref py py-meth docutils literal notranslate"><span class="pre">finetune()</span></code></a>.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>X</strong> – list or array of text to embed.</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">np.array of features of shape (n_examples, embedding_size).</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.ComparisonOrdinalRegressor.finetune">
+<code class="descname">finetune</code><span class="sig-paren">(</span><em>X</em>, <em>Y=None</em>, <em>batch_size=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.ComparisonOrdinalRegressor.finetune" title="Permalink to this definition">¶</a></dt>
+<dd><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>X</strong> – list or array of text.</li>
+<li><strong>Y</strong> – floating point targets</li>
+<li><strong>batch_size</strong> – integer number of examples per batch. When N_GPUS &gt; 1, this number
+corresponds to the number of training examples provided to each GPU.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="classmethod">
+<dt id="finetune.ComparisonOrdinalRegressor.finetune_grid_search">
+<em class="property">classmethod </em><code class="descname">finetune_grid_search</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>test_size</em>, <em>config=None</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.ComparisonOrdinalRegressor.finetune_grid_search" title="Permalink to this definition">¶</a></dt>
+<dd><p>Performs grid search over config items defined using “GridSearchable” objects and returns either full results or
+the config object that relates to the best results. The default config contains grid searchable objects for the
+most important parameters to search over.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>Xs</strong> – Input text. Either [num_samples] or [sequence, num_samples] for single or multi input models respectively.</li>
+<li><strong>Y</strong> – Targets, A list of targets, [num_samples] that correspond to each sample in Xs.</li>
+<li><strong>test_size</strong> – Int or float. If an int is given this number of samples is used to validate, if a float is
+given then that fraction of samples is used.</li>
+<li><strong>config</strong> – A config object, or None to use the default config.</li>
+<li><strong>eval_fn</strong> – An eval function that takes 2 inputs (prediction, truth) and returns a float, with a max value being desired.</li>
+<li><strong>probs</strong> – If true, eval_fn is passed probability outputs from predict_proba, otherwise the output of predict is used.</li>
+<li><strong>return_all</strong> – If True, all results are returned, if False, only the best config is returned.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">default is to return the best config object. If return_all is true, it returns a list of tuples of the
+form [(config, eval_fn output), … ]</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="classmethod">
+<dt id="finetune.ComparisonOrdinalRegressor.finetune_grid_search_cv">
+<em class="property">classmethod </em><code class="descname">finetune_grid_search_cv</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>n_splits</em>, <em>test_size</em>, <em>config=None</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.ComparisonOrdinalRegressor.finetune_grid_search_cv" title="Permalink to this definition">¶</a></dt>
+<dd><p>Performs cross validated grid search over config items defined using “GridSearchable” objects and returns either full results or
+the config object that relates to the best results. The default config contains grid searchable objects for the
+most important parameters to search over.</p>
+<p>It should be noted that the cv splits are not guaranteed unique, but each split is given to each set of hparams.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>Xs</strong> – Input text. Either [num_samples] or [sequence, num_samples] for single or multi input models respectively.</li>
+<li><strong>Y</strong> – Targets, A list of targets, [num_samples] that correspond to each sample in Xs.</li>
+<li><strong>n_splits</strong> – Number of CV splits to do.</li>
+<li><strong>test_size</strong> – Int or float. If an int is given this number of samples is used to validate, if a float is
+given then that fraction of samples is used.</li>
+<li><strong>config</strong> – A config object, or None to use the default config.</li>
+<li><strong>eval_fn</strong> – An eval function that takes 2 batches of outputs and returns a float, with a max value being
+desired. An arithmetic mean must make sense for this metric.</li>
+<li><strong>probs</strong> – If true, eval_fn is passed probability outputs from predict_proba, otherwise the output of predict is used.</li>
+<li><strong>return_all</strong> – If True, all results are returned, if False, only the best config is returned.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">default is to return the best config object. If return_all is true, it returns a list of tuples of the
+form [(config, eval_fn output), … ]</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.ComparisonOrdinalRegressor.fit">
+<code class="descname">fit</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.ComparisonOrdinalRegressor.fit" title="Permalink to this definition">¶</a></dt>
+<dd><p>An alias for finetune.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.ComparisonOrdinalRegressor.generate_text">
+<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=True</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.ComparisonOrdinalRegressor.generate_text" title="Permalink to this definition">¶</a></dt>
+<dd><p>Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
+Temperature parameter for decoding is set in the config.
+:param max_length: The maximum length to decode to.
+:param seed_text: Defaults to the empty string. This will form the starting point to begin modelling
+:return: A string containing the generated text.</p>
+</dd></dl>
+
+<dl class="classmethod">
+<dt id="finetune.ComparisonOrdinalRegressor.load">
+<em class="property">classmethod </em><code class="descname">load</code><span class="sig-paren">(</span><em>path</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.ComparisonOrdinalRegressor.load" title="Permalink to this definition">¶</a></dt>
+<dd><p>Load a saved fine-tuned model from disk.  Path provided should be a folder which contains .pkl and tf.Saver() files</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>path</strong> – string path name to load model from.  Same value as previously provided to <a class="reference internal" href="#finetune.ComparisonOrdinalRegressor.save" title="finetune.ComparisonOrdinalRegressor.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a>. Must be a folder.</li>
+<li><strong>**kwargs</strong> – <p>key-value pairs of config items to override.</p>
+</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.ComparisonOrdinalRegressor.predict">
+<code class="descname">predict</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.ComparisonOrdinalRegressor.predict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Produces a list of most likely class labels as determined by the fine-tuned model.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>X</strong> – list or array of text to embed.</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">list of class labels.</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.ComparisonOrdinalRegressor.predict_proba">
+<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.ComparisonOrdinalRegressor.predict_proba" title="Permalink to this definition">¶</a></dt>
+<dd><p>Produces a probability distribution over classes for each example in X.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>X</strong> – list or array of text to embed.</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.ComparisonOrdinalRegressor.save">
+<code class="descname">save</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.ComparisonOrdinalRegressor.save" title="Permalink to this definition">¶</a></dt>
+<dd><p>Saves the state of the model to disk to the folder specific by <cite>path</cite>.  If <cite>path</cite> does not exist, it will be auto-created.</p>
+<dl class="docutils">
+<dt>Save is performed in two steps:</dt>
+<dd><ul class="first last simple">
+<li>Serialize tf graph to disk using tf.Saver</li>
+<li>Serialize python model using pickle</li>
+</ul>
+</dd>
+<dt>Note:</dt>
+<dd>Does not serialize state of Adam optimizer.
+Should not be used to save / restore a training model.</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.ComparisonOrdinalRegressor.transform">
+<code class="descname">transform</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.ComparisonOrdinalRegressor.transform" title="Permalink to this definition">¶</a></dt>
 <dd><p>An alias for <cite>featurize</cite>.</p>
 </dd></dl>
 
@@ -1806,7 +2339,7 @@ If you are using a single GPU and have more than 4Gb of GPU memory you should se
     <script type="text/javascript">
         var DOCUMENTATION_OPTIONS = {
             URL_ROOT:'./',
-            VERSION:'0.5.11',
+            VERSION:'0.5.13',
             COLLAPSE_INDEX:false,
             FILE_SUFFIX:'.html',
             HAS_SOURCE:  true,
