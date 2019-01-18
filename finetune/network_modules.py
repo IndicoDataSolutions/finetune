@@ -1,5 +1,5 @@
 import functools
-
+import numpy as np
 import tensorflow as tf
 from tensorflow.contrib.crf import crf_log_likelihood
 
@@ -265,6 +265,46 @@ def regressor(hidden, targets, n_targets, config, train=False, reuse=None, **kwa
             'losses': loss
         }
 
+def ordinal_regressor(hidden, targets, n_targets, config, shared_threshold_weights=True, train=False, reuse=None, **kwargs):
+    """
+    Ordinal Regressor using all-threshold loss.
+
+    :param hidden: The output of the featurizer. [batch_size, embed_dim]
+    :param targets: The placeholder representing the regression targets (binary threshold values). [batch_size]
+    :param n_targets: A python int containing the number of thresholds that the model should be learning to predict over.
+    :param dropout_placeholder:
+    :param config: A config object, containing all parameters for the featurizer.
+    :param train: If this flag is true, dropout and losses are added to the graph.
+    :param reuse: Should reuse be set within this scope.
+    :param kwargs: Spare arguments.
+    :return: dict containing:
+        logits: The regression outputs.
+        losses: All-threshold Loss for the regression targets.
+    """
+    with tf.variable_scope('ordinalregressor', reuse=reuse):
+        hidden = dropout(hidden, config.clf_p_drop, train)
+        if shared_threshold_weights:
+            w_init = tf.random_normal_initializer(stddev=config.weight_stddev)
+            b_init = tf.random_normal_initializer(0)
+            nx = config.n_embed
+            w = tf.get_variable("w", [nx, 1], initializer=w_init)
+            b = tf.get_variable("b", [n_targets], initializer=b_init)
+            logits = tf.matmul(hidden, w) + b
+        else:
+            logits = perceptron(hidden, n_targets, config)
+
+        if targets is None:
+            outputs = tf.sigmoid(logits)
+            loss = None
+        else:
+            outputs = logits
+            loss = tf.nn.sigmoid_cross_entropy_with_logits(
+                logits=logits,
+                labels=tf.stop_gradient(targets))
+        return {
+            'logits': outputs,
+            'losses': loss
+        }
 
 def class_reweighting(class_weights):
     @tf.custom_gradient
@@ -293,7 +333,7 @@ def sequence_labeler(hidden, targets, n_targets, config, pad_id, multilabel=Fals
     :param kwargs: Spare arguments.
     :return: dict containing:
         "logits": The un-normalised log probabilities of each class being in each location. For usable predictions,
-            sampling from this distrobution is not sufficiant and a viterbi decoding method should be used.
+            sampling from this distribution is not sufficient and a viterbi decoding method should be used.
         "losses": The negative log likelihood for the sequence targets.
         "predict_params": A dictionary of params to be fed to the viterbi decode function.
     """
