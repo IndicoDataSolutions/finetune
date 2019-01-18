@@ -2,7 +2,7 @@ import os
 import unittest
 import warnings
 
-# prevent excessive warning logs 
+# prevent excessive warning logs
 warnings.filterwarnings('ignore')
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
@@ -12,10 +12,14 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from finetune import ordinalregressor
 
+ANIMALS = ["dog", "cat", "horse", "cow", "pig", "sheep", "goat", "chicken", "guinea pig", "donkey", "turkey", "duck", "camel", "goose", "llama", "rabbit", "fox"]
+NUMBERS = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen"]
+
+
 class TestOrdinal(unittest.TestCase):
     n_sample = 100
     n_hidden = 768
-    
+
     def default_config(self, **kwargs):
         d = dict(
             batch_size=2,
@@ -32,7 +36,7 @@ class TestOrdinal(unittest.TestCase):
     def setUp(self):
         random.seed(42)
         np.random.seed(42)
-        
+
     def test_reasonable_predictions(self):
         """
         Ensure model training does not error out
@@ -42,11 +46,8 @@ class TestOrdinal(unittest.TestCase):
         model = ordinalregressor.OrdinalRegressor(n_epochs=2)
 
         # fake dataset generation
-        animals = ["dog", "cat", "horse", "cow", "pig", "sheep", "goat", "chicken", "guinea pig", "donkey", "turkey", "duck", "camel", "goose", "llama", "rabbit", "fox"]
-        numbers = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen"]
-       
-        targets = np.asarray([1] * len(animals) + [0] * len(numbers))
-        data = animals + numbers
+        targets = np.asarray([1] * len(ANIMALS) + [0] * len(NUMBERS))
+        data = ANIMALS + NUMBERS
 
         x_tr, x_te, t_tr, t_te = train_test_split(data, targets, test_size=0.3)
         model.finetune(x_tr, t_tr)
@@ -57,28 +58,28 @@ class TestOrdinal(unittest.TestCase):
         naive_baseline_mse = np.mean([(naive_baseline - true)**2 for true in t_te])
         self.assertIsInstance(predictions, list)
         self.assertGreater(naive_baseline_mse, mse)
-         
+
     def test_reasonable_predictions_comparison(self):
         """
         Ensure model training does not error out
         Ensure model returns predictions of the right type
         Test model loss at least outperforms naive baseline
         """
-        model = ordinalregressor.ComparisonOrdinalRegressor(n_epochs=2, low_memory_mode = True)
+        model = ordinalregressor.ComparisonOrdinalRegressor(n_epochs=2, low_memory_mode=True)
 
         # fake dataset generation
-        animals = ["dog", "cat", "horse", "cow", "pig", "sheep", "goat", "chicken", "guinea pig", "donkey", "turkey", "duck", "camel", "goose", "llama", "rabbit", "fox"]
-        numbers = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen"]
+        ANIMALS = ["dog", "cat", "horse", "cow", "pig", "sheep", "goat", "chicken", "guinea pig", "donkey", "turkey", "duck", "camel", "goose", "llama", "rabbit", "fox"]
+        NUMBERS = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen"]
 
         n_per = 50
         similar = []
         different = []
-        for dataset in [animals, numbers]:
+        for dataset in [ANIMALS, NUMBERS]:
             for i in range(n_per // 2):
                 similar.append([random.choice(dataset), random.choice(dataset)])
         for i in range(n_per):
-            different.append([random.choice(animals), random.choice(numbers)])
-        
+            different.append([random.choice(ANIMALS), random.choice(NUMBERS)])
+
         targets = np.asarray([1] * len(similar) + [0] * len(different))
         data = similar + different
 
@@ -91,7 +92,7 @@ class TestOrdinal(unittest.TestCase):
         naive_baseline_mse = np.mean([(naive_baseline - true)**2 for true in t_te])
         self.assertIsInstance(predictions, list)
         self.assertGreater(naive_baseline_mse, mse)
-        
+
     def test_reasonable_predictions_unshared_weights(self):
         """
         Ensure model training does not error out
@@ -102,17 +103,15 @@ class TestOrdinal(unittest.TestCase):
         model = ordinalregressor.OrdinalRegressor(n_epochs=2, shared=False)
 
         # fake dataset generation
-        animals = ["dog", "cat", "horse", "cow", "pig", "sheep", "goat", "chicken", "guinea pig", "donkey", "turkey", "duck", "camel", "goose", "llama", "rabbit", "fox"]
-        numbers = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen"]
-       
-        targets = np.asarray([1] * len(animals) + [0] * len(numbers))
-        data = animals + numbers
+
+        targets = np.asarray([1] * len(ANIMALS) + [0] * len(NUMBERS))
+        data = ANIMALS + NUMBERS
 
         x_tr, x_te, t_tr, t_te = train_test_split(data, targets, test_size=0.3)
         model.finetune(x_tr, t_tr)
 
         predictions = model.predict(x_te)
         self.assertIsInstance(predictions, list)
-        
+
 if __name__ == '__main__':
     unittest.main()
