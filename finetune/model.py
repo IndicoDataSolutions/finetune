@@ -13,6 +13,7 @@ from finetune.optimizers.learning_rate_schedules import schedules
 from finetune.optimizers.adamax import AdamaxWOptimizer
 from finetune.util.imbalance import class_weight_tensor
 from finetune.errors import FinetuneError
+from finetune.convolutional import featurizer as conv_featurizer
 
 LOGGER = logging.getLogger('finetune')
 
@@ -92,12 +93,16 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
         with tf.variable_scope(tf.get_variable_scope()):
             train_loss = 0.0
 
-            featurizer_state = params.base_model.get_featurizer(
-                X,
-                encoder=encoder,
-                config=params,
-                train=train
-            )
+            if params.use_conv:
+                featurizer_state = conv_featurizer(X, config=params, encoder=encoder, train=train)
+            else:
+                featurizer_state = params.base_model.get_featurizer(
+                    X,
+                    encoder=encoder,
+                    config=params,
+                    train=train
+                )
+
             predictions = {PredictMode.FEATURIZE: featurizer_state["features"]}
 
             if build_target_model:
@@ -173,7 +178,17 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
 
                 if params.dont_optimize_zero_gradients:
                     opt = dont_optimize_zeros(opt)
-                
+
+                if params.scale_loss:
+                    loss_scale_manager = tf.contrib.mixed_precision.ExponentialUpdateLossScaleManager(
+                        init_loss_scale=2 ** 15,
+                        incr_every_n_steps=2000,
+                        decr_every_n_nan_or_inf=2,
+                        incr_ratio=2,
+                        decr_ratio=0.5
+                    )  # params taken from fb transformer paper.
+                    opt = tf.contrib.mixed_precision.LossScaleOptimizer(opt, loss_scale_manager)
+
                 return opt
 
             summaries = tf.contrib.layers.OPTIMIZER_SUMMARIES if params.summarize_grads else None
@@ -202,7 +217,7 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
             LOGGER.info("Adding evaluation metrics, Accuracy")
             labels_dense = tf.argmax(labels)
             metrics = {
-                "Accuracy":  tf.metrics.accuracy(pred_op, labels_dense)
+                "Accuracy": tf.metrics.accuracy(pred_op, labels_dense)
             }
         else:
             metrics = None

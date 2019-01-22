@@ -294,6 +294,12 @@ def get_default_config():
         association_types=None,
         assocation_loss_weight=100.0,
 
+        # For experimental conv model
+        use_conv=False,
+        kernel_width=3,
+        use_fp16=True,
+        use_timing=False,
+
         # Location of model weights
         base_model=GPTModel,
         base_model_path=None,
@@ -303,6 +309,7 @@ def get_default_config():
         n_layer=None,
         act_fn=None,
         n_embed=None,
+
         # for TextCNN SourceModel only
         kernel_sizes=None,
         num_filters_per_size=None,

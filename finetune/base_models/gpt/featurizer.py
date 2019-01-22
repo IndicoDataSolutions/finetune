@@ -190,3 +190,4 @@ def gpt_featurizer(X, encoder, config, train=False, reuse=None):
             'sequence_features': seq_feats,
             'pool_idx': pool_idx
         }
+
