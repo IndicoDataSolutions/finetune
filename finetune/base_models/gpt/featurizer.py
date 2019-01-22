@@ -370,7 +370,7 @@ def gpt_featurizer(
             "lengths": lengths,
             "attention_weights": w,  # [n_heads, seq_len, seq_len]
         }
-
         if explain:
             out["explain_out"] = explain_out
         return out
+
