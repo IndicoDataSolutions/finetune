@@ -16,7 +16,7 @@ class AssociationPipeline(BasePipeline):
         super(AssociationPipeline, self).__init__(config)
         self.multi_label = multi_label
         self.association_encoder = SequenceLabelingEncoder()
-        self.association_encoder.fit(config.possible_associations + [self.config.pad_token])
+        self.association_encoder.fit(config.association_types + [self.config.pad_token])
         self.association_pad_idx = self.association_encoder.transform([self.config.pad_token])
 
     def _post_data_initialization(self, Y):
@@ -133,8 +133,8 @@ class Association(BaseModel):
         where index is the index of the relationship target into the label list and relationship_name is the type of
         the relationship.
         """
-        if self.config.possible_associations is None:
-            raise FinetuneError("Please set config.possible_associations before calling finetune.")
+        if self.config.association_types is None:
+            raise FinetuneError("Please set config.association_types before calling finetune.")
         Xs, Y_new, association_type, association_idx, idxs = indico_to_finetune_sequence(
             Xs, labels=Y, multi_label=False, none_value="<PAD>"
         )
@@ -144,7 +144,7 @@ class Association(BaseModel):
 
     def prune_probs(self, prob_matrix, labels):
         viable_edges = self.config.viable_edges
-        possible_associations = list(self.input_pipeline.association_encoder.classes_)
+        association_types = list(self.input_pipeline.association_encoder.classes_)
         if viable_edges is None:
             return prob_matrix
         for i, l1 in enumerate(labels):
@@ -153,11 +153,11 @@ class Association(BaseModel):
 
             elif None not in viable_edges[l1]:
                 prob_matrix[i, :, self.input_pipeline.association_pad_idx] = 0.0
-            for cls in possible_associations:
+            for cls in association_types:
                 for j, l2 in enumerate(labels):
                     if l1 not in viable_edges or l2 not in [c_t[0] for c_t in viable_edges[l1] if
                                                             c_t and c_t[1] == cls]:
-                        prob_matrix[i, j, possible_associations.index(cls)] = 0.0  # this edge doesnt fit the schema
+                        prob_matrix[i, j, association_types.index(cls)] = 0.0  # this edge doesnt fit the schema
         return prob_matrix
 
     def predict(self, X):
@@ -167,7 +167,8 @@ class Association(BaseModel):
         :param X: A list / array of text, shape [batch]
         :returns: list of class labels.
         """
-        LOGGER.warning("config.viable_edges is not set, this is probably incorrect.")
+        if self.config.viable_edges is None:
+            LOGGER.warning("config.viable_edges is not set, this is probably incorrect.")
 
         #TODO(Ben) combine this into the sequence labeling model??
 

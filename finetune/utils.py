@@ -102,18 +102,14 @@ def truncate_text(text, max_chars=100):
 
 def assign_associations(labels, associations, none_value):
     idx_lookups = [{} for _ in labels]
-    print(associations[0])
     for i, (doc_label, doc_association) in enumerate(zip(labels, associations)):
         active_label_idx = -1
         for label, association in zip(doc_label, doc_association):
-            print(label)
             if label == none_value:
                 continue
             active_label_idx += 1
             for bpe_idx, _, _, _ in association:
                 idx_lookups[i][bpe_idx] = active_label_idx
-
-    print("idx lookup", idx_lookups)
 
     all_candidates = []
     for idx_lookup, doc_label, doc_association in zip(idx_lookups, labels, associations):
@@ -121,7 +117,6 @@ def assign_associations(labels, associations, none_value):
         if doc_label == none_value:
             continue
 
-        print("Not skipped", doc_association)
         for association in doc_association:
             for bpe_idx, candidate_idx, candidate_label, candidate_prob in association:
                 if candidate_label == none_value or candidate_idx not in idx_lookup:
@@ -134,7 +129,6 @@ def assign_associations(labels, associations, none_value):
         # TODO some how sample these candidates eg maximum probabilities, to fit some schema
         candiates = {k: max(v, key=lambda x: x[2]) for k, v in candiates.items()} # for now just pick maximum prob
         all_candidates.append(candiates)
-    print("Candidates:", all_candidates)
     return all_candidates
 
 

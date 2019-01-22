@@ -152,6 +152,11 @@ def get_default_config():
     :return: Config object.
     """
     return Settings(
+        # General Settings
+        low_memory_mode=False,
+        interpolate_pos_embed=True,
+        save_adam_vars=True,
+        shuffle_buffer_size=100,
         dataset_size=None,
         batch_size=2,
         visible_gpus=all_gpus(),
@@ -159,51 +164,69 @@ def get_default_config():
         seed=42,
         max_length=512,
         weight_stddev=0.02,
-        chunk_long_sequences=False,
-        low_memory_mode=False,
-        interpolate_pos_embed=True,
+        save_dtype=None,
+
+        # Regularization
         embed_p_drop=0.1,
         attn_p_drop=0.1,
         resid_p_drop=0.1,
         clf_p_drop=0.1,
         l2_reg=GridSearchable(0.01, [0.0, 0.1, 0.01, 0.001]),
         vector_l2=False,
+
+        # Early Stopping and Validation
+        autosave_path=None,
+        keep_best_model=False,
+        early_stopping_steps=None,
+        min_secs_between_eval=60,
+        eval_acc=False,
+        val_size=None,
+        val_interval=None,
+
+        # Debugging
+        log_device_placement=False,
+        soft_device_placement=True,
+        tensorboard_folder=None,
+        summarize_grads=False,
+
+        # Partial Fitting
+        num_layers_trained=12,
+        train_embeddings=True,
+
+        # Class Imbalance
+        class_weights=None,
+        oversample=False,
+        params_device="cpu",
+
+        # Optimization Params
         b1=0.9, 
         b2=0.999,
         epsilon=1e-8,
         lr_schedule='warmup_linear',
         lr=GridSearchable(6.25e-5, [6.25e-4, 6.25e-5, 6.25e-6]),
         lr_warmup=0.002,
-        max_grad_norm=1,
+        max_grad_norm=1.0,
+
+
+        # Language Model Settings
         lm_loss_coef=0.0,
-        summarize_grads=False,
-        verbose=True,
-        val_size=None,
-        val_interval=None,
         lm_temp=0.2,
+
+        # Sequence Labeling
         seq_num_heads=16,
         pad_token="<PAD>",
         subtoken_predictions=False,
         multi_label_sequences=False,
         multi_label_threshold=0.5,
-        autosave_path=None,
-        keep_best_model=False,
-        early_stopping_steps=None,
-        tensorboard_folder=None,
-        shuffle_buffer_size=100,
-        min_secs_between_eval=60,
-        log_device_placement=False,
-        soft_device_placement=True,
-        save_adam_vars=True,
-        num_layers_trained=12,
-        train_embeddings=True,
-        class_weights=None,
-        oversample=False,
-        params_device="cpu",
-        eval_acc=False,
-        save_dtype=None,
+        chunk_long_sequences=False,
+
+        # Regression Params
         regression_loss="L2",
+
+        # Association Params
         viable_edges=None,
+        association_types=None,
+        assocation_loss_weight=100.0,
 
         # Must remain fixed
         n_heads=12,

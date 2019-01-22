@@ -18,7 +18,7 @@ class TestAssociation(unittest.TestCase):
         return (
             data.get_data(rows),
             {
-                "possible_associations": ["has_verb"],
+                "association_types": ["has_verb"],
                 "viable_edges": {
                     "noun_phrase": [
                         ["verb", "has_verb"],

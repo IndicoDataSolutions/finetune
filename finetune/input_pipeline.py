@@ -217,7 +217,6 @@ class BasePipeline(metaclass=ABCMeta):
                     )
         else:
             self.config.dataset_size = len(Xs)
-        print("this shouldnt be a problem")
 
         self.config.val_size, self.config.val_interval = self.validation_settings(
             n_examples=len(Xs) if not callable(Xs) else self.config.dataset_size,
@@ -227,8 +226,6 @@ class BasePipeline(metaclass=ABCMeta):
 
         if Y is not None:
             self._post_data_initialization(Y)
-
-        print("after PDA")
 
         if callable(Xs) or Y is None:
             self._skip_tqdm = val_size
@@ -244,15 +241,11 @@ class BasePipeline(metaclass=ABCMeta):
             Xs_tr, Xs_va, Y_tr, Y_va = train_test_split(Xs, Y, test_size=self.config.val_size, random_state=self.config.seed)
             Xs_tr, Y_tr = self.resampling(Xs_tr, Y_tr)
             self.config.dataset_size = len(Xs_tr)
-            print("before val dataset")
             val_dataset_unbatched = self._make_dataset(Xs_va, Y_va, train=False)
-            print("after_val_dataset")
             train_dataset_unbatched = self._make_dataset(Xs_tr, Y_tr, train=True)
 
         if self.config.chunk_long_sequences:
-            print("starting to run queues")
             train_dataset_unbatched()
-            print("Finished running queues")
 
         val_dataset = lambda: val_dataset_unbatched().batch(batch_size, drop_remainder=False).cache().prefetch(prefetch_buffer)
         train_dataset = lambda: train_dataset_unbatched().batch(batch_size, drop_remainder=False).repeat(

@@ -173,8 +173,6 @@ class TextEncoder(object):
         
         for i, text in enumerate(texts):
             if labels is not None:
-                print(labels)
-                print(i)
                 label = labels[i]
             raw_text = text.lower()
             tokens = NLP(_text_standardize(text))

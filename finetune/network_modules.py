@@ -376,7 +376,7 @@ def association(hidden, pool_idx, targets, n_targets, config, train=False, reuse
     with tf.variable_scope('sequence-labeler', reuse=reuse):
         nx = config.n_embed
         length = config.max_length
-        num_associations = len(config.possible_associations) + 1
+        num_associations = len(config.association_types) + 1
 
         def seq_lab_internal(hidden):
             attn_fn = functools.partial(
@@ -394,22 +394,16 @@ def association(hidden, pool_idx, targets, n_targets, config, train=False, reuse
             a = tf.expand_dims(association_head, 1)
             b = tf.expand_dims(association_head, 2)
 
-            probs = tf.nn.softmax(logits)
-
             features = tf.concat(
                 [
                     a - b, a * b,
                     tf.tile(a, [1, length, 1, 1]),
                     tf.tile(b, [1, 1, length, 1]),
-                    tf.tile(tf.expand_dims(probs, 1),[1, length, 1, 1]),
-                    tf.tile(tf.expand_dims(probs, 2), [1, 1, length, 1])
+                    # TODO: Think about using prediction as a feature for associations.
                 ],
                 axis=-1
             )
-            associations_flat = tf.layers.dense(
-                tf.reshape(features, shape=[-1, nx * 4 + 2 * n_targets])
-                , num_associations
-            )
+            associations_flat = tf.layers.dense(tf.reshape(features, shape=[-1, nx * 4]), num_associations)
             associations = tf.reshape(associations_flat, [-1, length, length, num_associations])
 
             return logits, associations_flat, associations
@@ -443,11 +437,9 @@ def association(hidden, pool_idx, targets, n_targets, config, train=False, reuse
                 weights=tf.reshape(mask, shape=[-1])
             )
 
-        association_loss = tf.Print(association_loss, [association_loss, -log_likelihood])
-
         return {
             'logits': {"sequence": logits, "association": associations},
-            'losses': -log_likelihood + 100 * association_loss,  # TODO: think about weighting.
+            'losses': -log_likelihood + config.assocation_loss_weight * association_loss,  # TODO: think about weighting.
             'predict_params': {
                 'transition_matrix': transition_params
             }
