@@ -1,6 +1,8 @@
 import tensorflow as tf
+
 from finetune.transformer import dropout, embed, block, attn, norm
-from finetune.utils import shape_list,
+from finetune.utils import shape_list
+
 
 def embed_no_timing(X, we):
     return tf.gather(we, X[:, :, 0])
@@ -22,15 +24,15 @@ def gated_linear_unit(X, kernel_width, layer_name, use_fp16, residual=None):
         b_gate = tf.get_variable(name="B_gate", shape=[nx])
 
         if use_fp16:
-            W = tf.case(W, tf.float16)
-            b = tf.case(b, tf.float16)
-            W_gate = tf.case(W_gate, tf.float16)
-            b_gate = tf.case(b_gate, tf.float16)
+            W = tf.cast(W, tf.float16)
+            b = tf.cast(b, tf.float16)
+            W_gate = tf.cast(W_gate, tf.float16)
+            b_gate = tf.cast(b_gate, tf.float16)
 
         conv = tf.nn.conv1d(
             padded_input,
             W,
-            strides=1,
+            stride=1,
             padding="VALID",
             name="conv"
         )
@@ -41,7 +43,7 @@ def gated_linear_unit(X, kernel_width, layer_name, use_fp16, residual=None):
         conv_gate = tf.nn.conv1d(
             padded_input,
             W_gate,
-            strides=1,
+            stride=1,
             padding="VALID",
             name="conv"
         )
@@ -100,15 +102,15 @@ def featurizer(X, encoder, config, train=False, reuse=None):
             h = embed_no_timing(X, embed_weights)
 
         if config.use_fp16:
-            h = tf.case(h, tf.float16)
+            h = tf.cast(h, tf.float16)
 
         for layer in range(config.n_layer):
             if (config.n_layer - layer) == config.num_layers_trained and config.num_layers_trained != config.n_layer:
                 h = tf.stop_gradient(h)
-                h = block(h, block_name='block%d_' % layer, kernel_width=config.kernel_width, use_fp16=config.use_fp16)
+            h = block(h, block_name='block%d_' % layer, kernel_width=config.kernel_width, use_fp16=config.use_fp16)
 
         if config.use_fp16:
-            h = tf.case(h, tf.float32)
+            h = tf.cast(h, tf.float32)
 
         # Use hidden state at classifier token as input to final proj. + softmax
         clf_h = tf.reshape(h, [-1, config.n_embed])  # [batch * seq_len, embed]

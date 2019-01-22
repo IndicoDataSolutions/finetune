@@ -181,8 +181,8 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
 
                 if params.scale_loss:
                     loss_scale_manager = tf.contrib.mixed_precision.ExponentialUpdateLossScaleManager(
-                        init_loss_scale=2 ** 15,
-                        incr_every_n_steps=2000,
+                        init_loss_scale=5000,
+                        incr_every_n_steps=200,
                         decr_every_n_nan_or_inf=2,
                         incr_ratio=2,
                         decr_ratio=0.5
@@ -192,12 +192,21 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                 return opt
 
             summaries = tf.contrib.layers.OPTIMIZER_SUMMARIES if params.summarize_grads else None
+            if not params.scale_loss:
+                clip_gradients = float(params.max_grad_norm)
+            else:
+                def clip_gradients(grads_n_vars):
+                    clipped = []
+                    for g, v in grads_n_vars:
+                        clipped.append((tf.clip_by_norm(g, float(params.max_grad_norm)), v))
+                    return clipped
+                
             train_op = tf.contrib.layers.optimize_loss(
                 loss=train_loss,
                 global_step=tf.train.get_or_create_global_step(),
                 learning_rate=params.lr,
                 optimizer=optimizer,
-                clip_gradients=float(params.max_grad_norm),
+                clip_gradients=clip_gradients,
                 learning_rate_decay_fn=lr_decay,
                 increment_global_step=True,
                 summaries=summaries
