@@ -200,7 +200,7 @@ class BaseModel(object, metaclass=ABCMeta):
                         w_flat = np.reshape(w, [-1, w.shape[-1]])
                         expectation_of_norm = ((self.config.weight_stddev ** 2) * w_flat.shape[0]) ** 0.5
                         self.saver.variables[weight] = np.reshape(
-                            expectation_of_norm * w_flat / np.linalg.norm(w_flat, axis=0), shape)
+                            expectation_of_norm * w_flat / np.linalg.norm(w_flat, axis=0), w.shape)
 
                 tf.logging.info("Finishing pre-fit initialisation...")
             estimator.train(train_input_fn, hooks=train_hooks, steps=num_steps)
