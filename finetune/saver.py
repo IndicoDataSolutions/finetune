@@ -51,7 +51,8 @@ class SaverHook(_StopOnPredicateHook):
     def after_run(self, run_context, run_values):
         super().after_run(run_context, run_values)
         if self.get_current_weights:
-            self.saver.variables = dict(zip((var.name for var in self.included), run_context.session.run(self.included)))
+            self.saver.variables = dict(
+                zip((var.name for var in self.included), run_context.session.run(self.included)))
             self.get_current_weights = False
 
     def end(self, session):
@@ -65,6 +66,7 @@ def pyfunc_assign(a, dtype):
 
     return tf.py_func(func, (), tf.as_dtype(dtype), stateful=False)
 
+
 class Saver:
     def __init__(self, fallback_filename, exclude_matches=None, variable_transforms=None, save_dtype=None):
         self.variable_transforms = variable_transforms or []
@@ -75,6 +77,7 @@ class Saver:
         self.variables = None
         self.save_dtype = save_dtype
         self.fallback_ = None
+        self.saver_hook = None
 
     @property
     def fallback(self):
@@ -85,8 +88,13 @@ class Saver:
         return self.fallback_
 
     def get_saver_hook(self, estimator, keep_best_model, steps_per_epoch, early_stopping_steps, eval_frequency):
-        return SaverHook(self, estimator=estimator, keep_best_model=keep_best_model, steps_per_epoch=steps_per_epoch,
-                         early_stopping_steps=early_stopping_steps, eval_frequency=eval_frequency)
+        if self.saver_hook is None:
+            self.saver_hook = SaverHook(
+                self, estimator=estimator, keep_best_model=keep_best_model,
+                steps_per_epoch=steps_per_epoch,
+                early_stopping_steps=early_stopping_steps, eval_frequency=eval_frequency
+            )
+        return self.saver_hook
 
     def save(self, finetune_obj, path, mkdir=True):
         if self.variables is None:
@@ -105,7 +113,6 @@ class Saver:
             values = [a.astype(self.save_dtype) for a in values]
 
         var_names_reduced, vals_reduced = self.remove_unchanged(names, values, self.fallback)
-
 
         var_dict = dict(zip(var_names_reduced, vals_reduced))
         assert len(vals_reduced) == len(var_names_reduced) == len(var_dict)

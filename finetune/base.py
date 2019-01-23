@@ -36,6 +36,7 @@ from finetune.estimator_utils import PatchedParameterServerStrategy
 JL_BASE = os.path.join(os.path.dirname(__file__), "model", "Base_model.jl")
 LOGGER = logging.getLogger('finetune')
 
+
 class BaseModel(object, metaclass=ABCMeta):
     """
     A sklearn-style task agnostic base class for finetuning a Transformer language model.
@@ -153,8 +154,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         val_input_fn, train_input_fn, val_size, val_interval = self.input_pipeline.get_train_input_fns(Xs, Y, batch_size=batch_size)
         if val_size <= 10 and self.config.keep_best_model:
-            tf.logging.warning(
-                "Early stopping / keeping best model with a validation size of {} is likely to case undesired results".format(val_size))
+            tf.logging.warning("Early stopping / keeping best model with a validation size of {} is likely to case undesired results".format(val_size))
 
         steps_per_epoch = self._n_steps(
             n_examples=self.config.dataset_size,
@@ -163,22 +163,23 @@ class BaseModel(object, metaclass=ABCMeta):
         )
         num_steps = steps_per_epoch * self.config.n_epochs
         estimator = self.get_estimator()
-        train_hooks = [
-            self.saver.get_saver_hook(
-                estimator=estimator,
-                keep_best_model=self.config.keep_best_model,
-                steps_per_epoch=steps_per_epoch,
-                early_stopping_steps=self.config.early_stopping_steps,
-                eval_frequency=val_interval
-            ),
+        saver_hook = self.saver.get_saver_hook(
+            estimator=estimator,
+            keep_best_model=self.config.keep_best_model,
+            steps_per_epoch=steps_per_epoch,
+            early_stopping_steps=self.config.early_stopping_steps,
+            eval_frequency=val_interval
+        )
 
-        ]
+        train_hooks = []
         if val_size > 0:
             train_hooks.append(
                 tf.contrib.estimator.InMemoryEvaluatorHook(
-                    estimator, val_input_fn, every_n_iter=val_interval, steps=val_size // batch_size
+                    estimator, val_input_fn, every_n_iter=val_interval, steps=val_size // batch_size, hooks=[saver_hook]
                 )
             )
+        else:
+            train_hooks.append(saver_hook)
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -188,7 +189,9 @@ class BaseModel(object, metaclass=ABCMeta):
                 self.config.num_layers_trained = 0
                 estimator.train(train_input_fn, hooks=train_hooks, steps=num_steps)
                 self.config.num_layers_trained = num_layers_trained
-                self.saver.variables = {k: v for k, v in self.saver.variables.items() if "adam" not in k and "global_step" not in k}
+                self.saver.variables = {
+                    k: v for k, v in self.saver.variables.items() if "adam" not in k and "global_step" not in k
+                }
                 for weight in self.saver.variables:
                     if weight.startswith("model/target/"):
                         w = self.saver.variables[weight]
@@ -196,7 +199,8 @@ class BaseModel(object, metaclass=ABCMeta):
                             continue
                         w_flat = np.reshape(w, [-1, w.shape[-1]])
                         expectation_of_norm = ((self.config.weight_stddev ** 2) * w_flat.shape[0]) ** 0.5
-                        self.saver.variables[weight] = np.reshape(expectation_of_norm * w_flat / np.linalg.norm(w_flat, axis=0), shape)
+                        self.saver.variables[weight] = np.reshape(
+                            expectation_of_norm * w_flat / np.linalg.norm(w_flat, axis=0), shape)
 
                 tf.logging.info("Finishing pre-fit initialisation...")
             estimator.train(train_input_fn, hooks=train_hooks, steps=num_steps)
@@ -290,7 +294,7 @@ class BaseModel(object, metaclass=ABCMeta):
             self._predictions = _estimator.predict(input_fn=input_fn, predict_keys=mode)
 
         for _ in range(self._to_pull):
-            next(self._predictions) # collect the null predictions from the queue
+            next(self._predictions)  # collect the null predictions from the queue
 
         predictions = [None] * n
         for i in tqdm.tqdm(range(n), total=n, desc="Inference"):
@@ -386,6 +390,7 @@ class BaseModel(object, metaclass=ABCMeta):
         :param seed_text: Defaults to the empty string. This will form the starting point to begin modelling
         :return: A string containing the generated text.
         """
+
         def dataset_encoded():
             while not dataset_encoded.finished:
                 yield {"tokens": arr_encoded.token_ids, "mask": arr_encoded.mask}
@@ -405,7 +410,7 @@ class BaseModel(object, metaclass=ABCMeta):
         encoded = EncodedOutput(token_ids=start + encoded.token_ids[0])
 
         estimator = self.get_estimator(force_build_lm=True)
-        predict = estimator.predict(input_fn=get_input_fn,)
+        predict = estimator.predict(input_fn=get_input_fn, )
 
         EOS = ENCODER.clf_token
         with warnings.catch_warnings():
