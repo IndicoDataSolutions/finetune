@@ -113,10 +113,12 @@ def featurizer(X, encoder, config, train=False, reuse=None):
             h = tf.cast(h, tf.float32)
 
         # Use hidden state at classifier token as input to final proj. + softmax
-        clf_h = tf.reshape(h, [-1, config.n_embed])  # [batch * seq_len, embed]
+#        clf_h = tf.reshape(h, [-1, config.n_embed])  # [batch * seq_len, embed]
         clf_token = encoder['_classify_']
         pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
-        clf_h = tf.gather(clf_h, tf.range(shape_list(X)[0], dtype=tf.int32) * config.max_length + pool_idx)
+        pool_mask  = tf.expand_dims(tf.sequence_mask(lengths=pool_idx, maxlen=config.max_length, dtype=tf.float32), -1)
+        
+        clf_h = tf.reduce_sum(h * pool_mask, axis=1) / tf.reduce_sum(pool_mask, axis=1)
         clf_h = tf.reshape(clf_h, shape=initial_shape[: -2] + [config.n_embed])
         seq_feats = tf.reshape(h, shape=initial_shape[:-1] + [config.n_embed])
 
