@@ -51,14 +51,12 @@ class SaverHook(_StopOnPredicateHook):
     def after_run(self, run_context, run_values):
         super().after_run(run_context, run_values)
         if self.get_current_weights:
-            print("KEEPING BEST MODEL")
             self.saver.variables = dict(zip((var.name for var in self.included), run_context.session.run(self.included)))
             self.get_current_weights = False
 
     def end(self, session):
         self.stop_if_no_metric_improvement_fn()
         if not self.keep_best_model or self.saver.variables is None or self.get_current_weights:
-            print("KEEPING BEST MODEL")
             self.saver.variables = dict(zip((var.name for var in self.included), session.run(self.included)))
 
 
