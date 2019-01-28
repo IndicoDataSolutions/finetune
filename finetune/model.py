@@ -6,7 +6,7 @@ import tensorflow as tf
 from tensorflow.train import Scaffold
 from tensorflow.contrib.opt.python.training.weight_decay_optimizers import AdamWOptimizer
 
-from finetune.network_modules import featurizer, language_model
+from finetune.network_modules import featurizer, language_model, mlm_featurizer
 from finetune.utils import sample_with_temperature
 from finetune.optimizers import schedules
 from finetune.imbalance import class_weight_tensor
@@ -83,7 +83,10 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
 
         with tf.variable_scope(tf.get_variable_scope()):
             train_loss = 0.0
-            featurizer_state = featurizer(X, config=params, encoder=encoder, train=train)
+            if params.mlm:
+                featurizer_state = mlm_featurizer(X, M, config=params, encoder=encoder, train=train, apply_mlm=build_lm)
+            else:
+                featurizer_state = featurizer(X, config=params, encoder=encoder, train=train)
             predictions = {PredictMode.FEATURIZE: featurizer_state["features"]}
 
             if build_target_model:
@@ -107,7 +110,12 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                     predictions[PredictMode.PROBAS] = pred_proba_op
 
             if build_lm:
-                lm_predict_op, language_model_state = language_model_op(X=X, M=M, params=params,
+                if "predict_mask" in featurizer_state:
+                    mask = featurizer_state["featurizer_state"]
+                else:
+                    mask = M
+
+                lm_predict_op, language_model_state = language_model_op(X=X, M=mask, params=params,
                                                                         featurizer_state=featurizer_state)
                 if mode == tf.estimator.ModeKeys.TRAIN or mode == tf.estimator.ModeKeys.EVAL:
                     lm_loss = tf.reduce_mean(language_model_state["losses"])

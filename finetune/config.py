@@ -209,6 +209,9 @@ def get_default_config():
         regression_loss="L2",
         prefit_init=False,
 
+        mlm=False,
+        mlm_drop_prob=0.15,
+
         # Must remain fixed
         n_heads=12,
         n_layer=12,

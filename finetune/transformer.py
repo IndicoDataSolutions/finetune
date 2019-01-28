@@ -38,8 +38,12 @@ def _attn(q, k, v, attn_pdrop, train=False, scale=False, mask=True):
         n_state = shape_list(v)[-1]
         w = w * tf.rsqrt(tf.cast(n_state, tf.float32))
 
-    if mask:
+    if mask is True:
         w = mask_attn_weights(w)
+
+    elif isinstance(mask, tf.Tensor):
+        w = tf.expand_dims(mask, 2) * w
+
     w = tf.nn.softmax(w)
 
     w = dropout(w, attn_pdrop, train)
@@ -111,10 +115,10 @@ def mlp(x, scope, n_state, act_fn, resid_pdrop, train=False):
         return h2
 
 
-def block(x, n_head, act_fn, resid_pdrop, attn_pdrop, scope, train=False, scale=False):
+def block(x, n_head, act_fn, resid_pdrop, attn_pdrop, scope, train=False, scale=False, mask=True):
     with tf.variable_scope(scope):
         nx = shape_list(x)[-1]
-        a = attn(x, 'attn', nx, n_head, resid_pdrop, attn_pdrop, train=train, scale=scale)
+        a = attn(x, 'attn', nx, n_head, resid_pdrop, attn_pdrop, train=train, scale=scale, mask=mask)
         n = norm(x + a, 'ln_1')
         m = mlp(n, 'mlp', nx * 4, act_fn, resid_pdrop, train=train)
         h = norm(n + m, 'ln_2')

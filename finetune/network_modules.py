@@ -7,6 +7,7 @@ from finetune.transformer import dropout, embed, block, attn, norm
 from finetune.utils import shape_list, merge_leading_dims
 from finetune.recompute_grads import recompute_grad
 from finetune.errors import FinetuneError
+from finetune.mlm_utils import get_bert_process_op
 
 
 def perceptron(x, ny, config, w_init=None, b_init=None):
@@ -86,6 +87,86 @@ def featurizer(X, encoder, config, train=False, reuse=None):
         }
 
 
+def mlm_featurizer(X, M, encoder, config, apply_mlm, train=False, reuse=None):
+    """
+    The transformer element of the finetuning model. Maps from tokens ids to a dense, embedding of the sequence.
+
+    :param X: A tensor of token indexes with shape [batch_size, sequence_length, token_idx]
+    :param encoder: A TextEncoder object.
+    :param config: A config object, containing all parameters for the featurizer.
+    :param train: If this flag is true, dropout and losses are added to the graph.
+    :param reuse: Should reuse be set within this scope.
+    :return: A dict containing;
+        embed_weights: the word embedding matrix.
+        features: The output of the featurizer_final state.
+        sequence_features: The output of the featurizer at each timestep.
+    """
+    initial_shape = [a or -1 for a in X.get_shape().as_list()]
+    X = tf.reshape(X, shape=[-1] + initial_shape[-2:])
+
+    with tf.variable_scope('model/featurizer', reuse=reuse):
+        embed_weights = tf.get_variable("we", [encoder.vocab_size + config.max_length, config.n_embed],
+                                        initializer=tf.random_normal_initializer(stddev=config.weight_stddev))
+
+        embed_weights_with_mask = tf.concat(
+            [
+                embed_weights,
+                tf.get_variable("mask_embed", [1, config.n_embed],
+                                initializer=tf.random_normal_initializer(stddev=config.weight_stddev))
+            ],
+            axis=0
+        )
+
+        if config.train_embeddings:
+            embed_weights_with_mask = dropout(embed_weights_with_mask, config.embed_p_drop, train)
+        else:
+            embed_weights_with_mask = tf.stop_gradient(embed_weights_with_mask)
+
+        X = tf.reshape(X, [-1, config.max_length, 2])
+
+        if apply_mlm:
+            word_embed, pos_embed = tf.unstack(X, -1)
+            word_embed, to_predict = get_bert_process_op(
+                word_embed,
+                max_predictions_per_seq=config.max_length//2,
+                masked_lm_prob=config.mlm_drop_prob,
+                vocab_len=encoder.vocab_size
+            )
+            X = tf.stack([word_embed, pos_embed], axis=-1)
+        else:
+            to_predict = 1.0
+
+        h = embed(X, embed_weights_with_mask)
+        for layer in range(config.n_layer):
+            if (config.n_layer - layer) == config.num_layers_trained and config.num_layers_trained != config.n_layer:
+                h = tf.stop_gradient(h)
+                train_layer = False
+            else:
+                train_layer = train
+
+            with tf.variable_scope('h%d_' % layer):
+                block_fn = functools.partial(block, n_head=config.n_heads, act_fn=config.act_fn,
+                                             resid_pdrop=config.resid_p_drop, attn_pdrop=config.attn_p_drop,
+                                             scope='h%d' % layer, train=train_layer, scale=True, mask=M)
+                if config.low_memory_mode and train_layer:
+                    block_fn = recompute_grad(block_fn, use_entire_scope=True)
+                h = block_fn(h)
+
+        # Use hidden state at classifier token as input to final proj. + softmax
+        clf_h = tf.reshape(h, [-1, config.n_embed])  # [batch * seq_len, embed]
+        clf_token = encoder['_classify_']
+        pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
+        clf_h = tf.gather(clf_h, tf.range(shape_list(X)[0], dtype=tf.int32) * config.max_length + pool_idx)
+        clf_h = tf.reshape(clf_h, shape=initial_shape[: -2] + [config.n_embed])
+        seq_feats = tf.reshape(h, shape=initial_shape[:-1] + [config.n_embed])
+
+        return {
+            'embed_weights': embed_weights,
+            'features': clf_h,
+            'sequence_features': seq_feats,
+            'predict_mask': M * to_predict
+        }
+
 def language_model(*, X, M, embed_weights, hidden, config, reuse=None):
     """
     A language model output and loss for the language modelling objective described in the original finetune paper.
@@ -107,12 +188,18 @@ def language_model(*, X, M, embed_weights, hidden, config, reuse=None):
 
     with tf.variable_scope('model/language-model', reuse=reuse):
         # language model ignores last hidden state because we don't have a target
-        sliced_hidden = hidden[:, :-1]
-        lm_h = tf.reshape(sliced_hidden, [-1, config.n_embed])  # [batch, seq_len, embed] --> [batch * seq_len, embed]
+        if not config.mlm:
+            hidden = hidden[:, :-1]
+
+        lm_h = tf.reshape(hidden, [-1, config.n_embed])  # [batch, seq_len, embed] --> [batch * seq_len, embed]
         lm_logits = tf.matmul(lm_h, embed_weights, transpose_b=True)  # tied weights
+        if config.mlm:
+            targ = X[:, :, 0]
+        else:
+            targ = X[:, 1:, 0]
         lm_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
             logits=lm_logits,
-            labels=tf.reshape(X[:, 1:, 0], [-1])
+            labels=tf.reshape(targ, [-1])
         )
 
         lm_losses = tf.reshape(lm_losses, [shape_list(X)[0], shape_list(X)[1] - 1])
@@ -121,7 +208,7 @@ def language_model(*, X, M, embed_weights, hidden, config, reuse=None):
         lm_losses = tf.reduce_sum(lm_losses * M[:, 1:], 1) / tf.maximum(tf.reduce_sum(M[:, 1:], 1), 1)
 
         lm_logits_shape = shape_list(lm_logits)
-        sliced_hidden_shape = shape_list(sliced_hidden)
+        sliced_hidden_shape = shape_list(hidden)
         return {
             'logits': tf.reshape(lm_logits, shape=sliced_hidden_shape[:-1] + [lm_logits_shape[-1]]),
             'losses': lm_losses,

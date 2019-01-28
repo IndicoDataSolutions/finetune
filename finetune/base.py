@@ -386,6 +386,9 @@ class BaseModel(object, metaclass=ABCMeta):
         :param seed_text: Defaults to the empty string. This will form the starting point to begin modelling
         :return: A string containing the generated text.
         """
+        if self.config.mlm:
+            raise FinetuneError("Cannot generate language with a Mass Language Model")
+
         def dataset_encoded():
             while not dataset_encoded.finished:
                 yield {"tokens": arr_encoded.token_ids, "mask": arr_encoded.mask}
