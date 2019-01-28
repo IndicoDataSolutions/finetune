@@ -297,9 +297,9 @@ def get_default_config():
         # For experimental conv model
         use_conv=False,
         kernel_width=3,
-        use_fp16=True,
+        use_fp16=False,
         use_timing=False,
-        scale_loss=True,
+        scale_loss=False,
 
         # Location of model weights
         base_model=GPTModel,

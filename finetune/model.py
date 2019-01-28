@@ -181,11 +181,11 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
 
                 if params.scale_loss:
                     loss_scale_manager = tf.contrib.mixed_precision.ExponentialUpdateLossScaleManager(
-                        init_loss_scale=1000,
-                        incr_every_n_steps=2000,
+                        init_loss_scale=10,
+                        incr_every_n_steps=5000,
                         decr_every_n_nan_or_inf=2,
-                        incr_ratio=1.5,
-                        decr_ratio=0.6
+                        incr_ratio=1.8,
+                        decr_ratio=0.3
                     )
                     
                     opt = tf.contrib.mixed_precision.LossScaleOptimizer(opt, loss_scale_manager)

@@ -283,8 +283,8 @@ class BasePipeline(metaclass=ABCMeta):
             train_dataset_unbatched()
 
         val_dataset = lambda: val_dataset_unbatched().batch(batch_size, drop_remainder=False).cache().prefetch(prefetch_buffer)
-        train_dataset = lambda: train_dataset_unbatched().batch(batch_size, drop_remainder=False).repeat(
-            self.config.n_epochs).prefetch(prefetch_buffer)
+        train_dataset = lambda: train_dataset_unbatched().repeat(
+            self.config.n_epochs).batch(batch_size, drop_remainder=False).prefetch(prefetch_buffer)
 
         return val_dataset, train_dataset, self.config.val_size, self.config.val_interval
 

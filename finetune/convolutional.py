@@ -118,7 +118,8 @@ def featurizer(X, encoder, config, train=False, reuse=None):
         pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
         pool_mask  = tf.expand_dims(tf.sequence_mask(lengths=pool_idx, maxlen=config.max_length, dtype=tf.float32), -1)
         
-        clf_h = tf.reduce_sum(h * pool_mask, axis=1) / tf.reduce_sum(pool_mask, axis=1)
+#        clf_h = tf.reduce_sum(h * pool_mask, axis=1) / tf.reduce_sum(pool_mask, axis=1)
+        clf_h = tf.reduce_max(h * pool_mask, axis=1)
         clf_h = tf.reshape(clf_h, shape=initial_shape[: -2] + [config.n_embed])
         seq_feats = tf.reshape(h, shape=initial_shape[:-1] + [config.n_embed])
 
