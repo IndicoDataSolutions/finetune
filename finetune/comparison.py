@@ -5,7 +5,6 @@ from finetune.base import BaseModel
 from finetune.classifier import Classifier, ClassificationPipeline
 from finetune.encoding import ArrayEncodedOutput
 
-
 class ComparisonPipeline(ClassificationPipeline):
 
     def _format_for_encoding(self, X):
@@ -34,8 +33,6 @@ class ComparisonPipeline(ClassificationPipeline):
             {"tokens": TS([2, self.config.max_length, 2]), "mask": TS([2, self.config.max_length])},
             TS([self.target_dim]))
 
-
-
 class Comparison(Classifier):
     """ 
     Compares two documents to solve a classification task.  
@@ -43,10 +40,7 @@ class Comparison(Classifier):
     :param config: A :py:class:`finetune.config.Settings` object or None (for default config).
     :param \**kwargs: key-value pairs of config items to override.
     """
-        
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
+    
     def _get_input_pipeline(self):
         return ComparisonPipeline(self.config)
 

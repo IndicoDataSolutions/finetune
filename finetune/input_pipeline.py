@@ -168,7 +168,6 @@ class BasePipeline(metaclass=ABCMeta):
         return dataset
 
     def wrap_tqdm(self, gen, train):
-
         if train is None:
             return gen
 
@@ -181,16 +180,20 @@ class BasePipeline(metaclass=ABCMeta):
                 total = self.config.val_size
                 
         def internal_gen():
+            current_epoch = (self.epoch - 1) % self.config.n_epochs + 1
             it = iter(gen)
 
             if train:
-                desc = "Epoch {}/{}".format(self.epoch, self.config.n_epochs)
+                if self.config.prefit_init and self.epoch <= self.config.n_epochs:
+                    desc = "Initialization Epoch {}/{}".format(current_epoch, self.config.n_epochs)
+                else:
+                    desc = "Epoch {}/{}".format(current_epoch, self.config.n_epochs)
             else:
                 desc = "Validation"
             for _, i in zip(range(self._skip_tqdm), it):
                 yield i
 
-            for i in tqdm.tqdm(it, desc=desc, total=total, miniters=1, leave=self.epoch == self.config.n_epochs and train):
+            for i in tqdm.tqdm(it, desc=desc, total=total, miniters=1, leave=current_epoch  == self.config.n_epochs and train):
                 yield i
             
             if train:

@@ -91,8 +91,8 @@ Providing data as a generator:
 .. code-block:: python
 
     df = pd.read_csv('pets.csv')
-    
-    # Even if raw data is greedily loaded, 
+
+    # Even if raw data is greedily loaded,
     # using a generator allows us to defer data preprocessing
     def text_generator():
         for row in df.Text.values:
@@ -113,7 +113,7 @@ After fitting the model, call :py:func:`BaseModel.predict()` to infer on test da
     model.fit(train_data, train_labels)
     model.predict(test_data)
 
-To prevent recreating the tensorflow graph with each call to :py:func:`BaseModel.predict()`, 
+To prevent recreating the tensorflow graph with each call to :py:func:`BaseModel.predict()`,
 use the :py:func:`model.cached_predict()` context manager.
 
 .. code-block:: python
@@ -152,6 +152,12 @@ Finetune API Reference
     :inherited-members:
 
 .. autoclass:: finetune.Comparison
+    :inherited-members:
+
+.. autoclass:: finetune.OrdinalRegressor
+    :inherited-members:
+
+.. autoclass:: finetune.ComparisonOrdinalRegressor
     :inherited-members:
 
 

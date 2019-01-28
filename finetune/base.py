@@ -81,15 +81,19 @@ class BaseModel(object, metaclass=ABCMeta):
         self._closed = False
         self._to_pull = 0
 
-        if self.config.tensorboard_folder is not None:
+        try:
             self.estimator_dir = os.path.abspath(
                 os.path.join(self.config.tensorboard_folder, str(int(time.time())))
             )
             pathlib.Path(self.estimator_dir).mkdir(parents=True, exist_ok=True)
             self.cleanup_glob = None
-        else:
+        except (TypeError, IOError):
+            # TypeError --> tensorboard_folder is None
+            # IOError --> user likely does not have permission to write to the tensorboard_folder directory
+            # Both cases we can resolve by
             self.estimator_dir = tempfile.mkdtemp(prefix="Finetune")
             self.cleanup_glob = self.estimator_dir
+            LOGGER.info("Saving tensorboard output to {}".format(self.estimator_dir))
 
         def process_embeddings(name, value):
             if "/we:0" not in name:
@@ -178,6 +182,23 @@ class BaseModel(object, metaclass=ABCMeta):
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
+            if self.config.prefit_init:
+                tf.logging.info("Starting pre-fit initialisation...")
+                num_layers_trained = self.config.num_layers_trained
+                self.config.num_layers_trained = 0
+                estimator.train(train_input_fn, hooks=train_hooks, steps=num_steps)
+                self.config.num_layers_trained = num_layers_trained
+                self.saver.variables = {k: v for k, v in self.saver.variables.items() if "adam" not in k and "global_step" not in k}
+                for weight in self.saver.variables:
+                    if weight.startswith("model/target/"):
+                        w = self.saver.variables[weight]
+                        if len(w.shape) == 1:
+                            continue
+                        w_flat = np.reshape(w, [-1, w.shape[-1]])
+                        expectation_of_norm = ((self.config.weight_stddev ** 2) * w_flat.shape[0]) ** 0.5
+                        self.saver.variables[weight] = np.reshape(expectation_of_norm * w_flat / np.linalg.norm(w_flat, axis=0), shape)
+
+                tf.logging.info("Finishing pre-fit initialisation...")
             estimator.train(train_input_fn, hooks=train_hooks, steps=num_steps)
 
     def get_estimator(self, force_build_lm=False):
@@ -453,14 +474,17 @@ class BaseModel(object, metaclass=ABCMeta):
         jl.dump(weights_stripped, base_model_path)
 
     @classmethod
-    def load(cls, path):
+    def load(cls, path, **kwargs):
         """
         Load a saved fine-tuned model from disk.  Path provided should be a folder which contains .pkl and tf.Saver() files
 
         :param path: string path name to load model from.  Same value as previously provided to :meth:`save`. Must be a folder.
+        :param **kwargs: key-value pairs of config items to override.
         """
+        download_data_if_required()
         saver = Saver(JL_BASE)
         model = saver.load(path)
+        model.config.update(kwargs)
         model._initialize()
         model.saver.variables = saver.variables
         return model

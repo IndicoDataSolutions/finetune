@@ -1,5 +1,5 @@
 import numpy as np
-from sklearn.preprocessing import LabelEncoder, MultiLabelBinarizer
+from sklearn.preprocessing import LabelEncoder, MultiLabelBinarizer, OrdinalEncoder
 from abc import ABCMeta
 
 from finetune.utils import flatten
@@ -68,6 +68,52 @@ class OneHotLabelEncoder(LabelEncoder, BaseEncoder):
         labels = super().transform(y)
         return self._make_one_hot(labels)
 
+class OrdinalRegressionEncoder(OrdinalEncoder, BaseEncoder):
+
+    def __init__(self):
+        self.num_outputs = None
+        super().__init__()
+
+    def _force_2d(self, x):
+        return np.array(x, dtype=np.int32).reshape(-1, 1)
+
+    def fit(self, x):
+        super().fit(self._force_2d(x))
+        self.num_outputs = len(self.categories_[0]) - 1
+        return self
+
+    def transform(self, x):
+        labels = super().transform(self._force_2d(x)).astype(np.int32)
+        labels = self.rank_to_one_hot(labels)
+        return labels
+
+    def fit_transform(self, x):
+        self.fit(x)
+        return self.transform(x)
+
+    def rank_to_one_hot(self, x):
+        # changes a one-variable rank into an array of 1s and 0s defining the target output of each threshold
+        one_hot = np.zeros((len(x), self.num_outputs), dtype=np.float32)
+        for i, (rank,) in enumerate(x):
+            one_hot[i, :rank] = 1
+        return one_hot
+
+    def inverse_transform(self, y):
+        y = np.array(y)
+        y = y > 0.5
+        rank = np.sum(y, axis=1)
+        rank = np.expand_dims(rank, 1)
+        y = super().inverse_transform(rank)
+        y = np.squeeze(y)
+        return y
+
+    @property
+    def target_dim(self):
+        return self.num_outputs
+
+    @property
+    def target_labels(self):
+        raise ValueError
 
 class SequenceLabelingEncoder(LabelEncoder, BaseEncoder):
     pass

@@ -122,7 +122,9 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
 
         if mode == tf.estimator.ModeKeys.TRAIN:
             total_num_steps = params.n_epochs * params.dataset_size//params.batch_size
-            lr_decay = lambda lr, global_step: lr * schedules[params.lr_schedule](tf.to_float(global_step) / total_num_steps)
+            lr_decay = lambda lr, global_step: lr * schedules[params.lr_schedule](
+                tf.to_float(global_step) / total_num_steps
+            )
 
             def optimizer(lr):
                 opt = AdamWOptimizer(
