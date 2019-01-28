@@ -169,7 +169,8 @@ class BaseModel(object, metaclass=ABCMeta):
                 keep_best_model=self.config.keep_best_model,
                 steps_per_epoch=steps_per_epoch,
                 early_stopping_steps=self.config.early_stopping_steps,
-                eval_frequency=val_interval
+                eval_frequency=val_interval,
+                snapshot_model=self.config.take_snapshots
             ),
 
         ]

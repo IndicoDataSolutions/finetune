@@ -1,6 +1,9 @@
 import random
+
+import numpy as np
 import tensorflow as tf
 
+from finetune.utils import shape_list
 
 def create_masked_lm_predictions(tokens, masked_lm_prob, max_predictions_per_seq, vocab_len):
     """ Re-purposed from Bert Repo """
@@ -17,11 +20,11 @@ def create_masked_lm_predictions(tokens, masked_lm_prob, max_predictions_per_seq
         if index not in cand_indexes:
             to_predict.append(0.0)
             continue
+        
         to_predict.append(1.0)
 
         # 80% of the time, replace with [MASK]
         if random.random() < 0.8:
-            to_predict.append(1.0)
             masked_token = vocab_len  # mask token is the final token.
         else:
             # 10% of the time, keep original
@@ -33,21 +36,25 @@ def create_masked_lm_predictions(tokens, masked_lm_prob, max_predictions_per_seq
 
         output_tokens[index] = masked_token
 
-    return output_tokens, to_predict
-
+    return (np.array(output_tokens, dtype=np.int32), np.array(to_predict, np.float32))
 
 def get_bert_process_op(features, max_predictions_per_seq, vocab_len, masked_lm_prob):
     def tf_bert_process(token):
-        return tf.py_func(
+        output_tokens, to_predict =  tf.py_func(
             lambda _token: create_masked_lm_predictions(_token, masked_lm_prob, max_predictions_per_seq, vocab_len),
             [token],
-            (tf.int32, tf.float32),
+            [tf.int32, tf.float32],
             stateful=False,
         )
+        
+        base_shape = token.get_shape().as_list()
+        output_tokens = tf.reshape(output_tokens, base_shape)
+        to_predict = tf.reshape(to_predict, base_shape)
+        return [output_tokens, to_predict]
 
     output_features, to_predict = tf.map_fn(
         tf_bert_process,
         features,
-        dtype=(tf.int32, tf.float32)
+        dtype=[tf.int32, tf.float32]
     )
     return output_features, to_predict

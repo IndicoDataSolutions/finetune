@@ -16,7 +16,7 @@ LOGGER = logging.getLogger('finetune')
 
 class SaverHook(_StopOnPredicateHook):
 
-    def __init__(self, saver, estimator, keep_best_model, early_stopping_steps, steps_per_epoch, eval_frequency):
+    def __init__(self, saver, estimator, keep_best_model, early_stopping_steps, steps_per_epoch, eval_frequency, snapshot_model):
         super().__init__(self.stop_if_no_metric_improvement_fn, run_every_secs=None,
                          run_every_steps=eval_frequency)
         self.get_current_weights = False
@@ -26,6 +26,7 @@ class SaverHook(_StopOnPredicateHook):
         self.early_stopping_steps = early_stopping_steps or sys.maxsize
         self.steps_per_epoch = steps_per_epoch
         self.estimator = estimator
+        self.snapshot_model = snapshot_model
 
     def stop_if_no_metric_improvement_fn(self):
         if not self.keep_best_model:
@@ -52,6 +53,8 @@ class SaverHook(_StopOnPredicateHook):
         super().after_run(run_context, run_values)
         if self.get_current_weights:
             self.saver.variables = dict(zip((var.name for var in self.included), run_context.session.run(self.included)))
+            if self.snapshot_model:
+                joblib.dump(self.saver.variables, os.path.join(self.estimator.eval_dir(), "..", "weights_snapshot.jl"))
             self.get_current_weights = False
 
     def end(self, session):
@@ -84,9 +87,9 @@ class Saver:
             self.tpe.shutdown()
         return self.fallback_
 
-    def get_saver_hook(self, estimator, keep_best_model, steps_per_epoch, early_stopping_steps, eval_frequency):
+    def get_saver_hook(self, estimator, keep_best_model, steps_per_epoch, early_stopping_steps, eval_frequency, snapshot_model=False):
         return SaverHook(self, estimator=estimator, keep_best_model=keep_best_model, steps_per_epoch=steps_per_epoch,
-                         early_stopping_steps=early_stopping_steps, eval_frequency=eval_frequency)
+                         early_stopping_steps=early_stopping_steps, eval_frequency=eval_frequency, snapshot_model=snapshot_model)
 
     def save(self, finetune_obj, path, mkdir=True):
         if self.variables is None:

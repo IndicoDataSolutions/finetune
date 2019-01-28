@@ -111,7 +111,7 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
 
             if build_lm:
                 if "predict_mask" in featurizer_state:
-                    mask = featurizer_state["featurizer_state"]
+                    mask = featurizer_state["predict_mask"]
                 else:
                     mask = M
 

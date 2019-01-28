@@ -125,7 +125,7 @@ def mlm_featurizer(X, M, encoder, config, apply_mlm, train=False, reuse=None):
         X = tf.reshape(X, [-1, config.max_length, 2])
 
         if apply_mlm:
-            word_embed, pos_embed = tf.unstack(X, -1)
+            word_embed, pos_embed = tf.unstack(X, axis=-1)
             word_embed, to_predict = get_bert_process_op(
                 word_embed,
                 max_predictions_per_seq=config.max_length//2,
@@ -197,15 +197,17 @@ def language_model(*, X, M, embed_weights, hidden, config, reuse=None):
             targ = X[:, :, 0]
         else:
             targ = X[:, 1:, 0]
+            M = M[:, 1:]
+            
         lm_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
             logits=lm_logits,
             labels=tf.reshape(targ, [-1])
         )
 
-        lm_losses = tf.reshape(lm_losses, [shape_list(X)[0], shape_list(X)[1] - 1])
+        lm_losses = tf.reshape(lm_losses, [shape_list(X)[0], shape_list(targ)[1]])
 
         # tf.maximum op prevents divide by zero error when mask is all 0s
-        lm_losses = tf.reduce_sum(lm_losses * M[:, 1:], 1) / tf.maximum(tf.reduce_sum(M[:, 1:], 1), 1)
+        lm_losses = tf.reduce_sum(lm_losses * M, 1) / tf.maximum(tf.reduce_sum(M, 1), 1)
 
         lm_logits_shape = shape_list(lm_logits)
         sliced_hidden_shape = shape_list(hidden)

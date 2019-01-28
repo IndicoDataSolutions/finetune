@@ -211,6 +211,7 @@ def get_default_config():
 
         mlm=False,
         mlm_drop_prob=0.15,
+        take_snapshots=False,
 
         # Must remain fixed
         n_heads=12,

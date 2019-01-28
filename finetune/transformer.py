@@ -42,7 +42,7 @@ def _attn(q, k, v, attn_pdrop, train=False, scale=False, mask=True):
         w = mask_attn_weights(w)
 
     elif isinstance(mask, tf.Tensor):
-        w = tf.expand_dims(mask, 2) * w
+        w = tf.expand_dims(tf.expand_dims((1.0 - mask) * -1e9, 1), 2) + w
 
     w = tf.nn.softmax(w)
 
