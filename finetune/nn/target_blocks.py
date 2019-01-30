@@ -54,13 +54,13 @@ def language_model(*, X, M, embed_weights, hidden, config, reuse=None):
         lm_logits = tf.matmul(lm_h, embed_weights, transpose_b=True)  # tied weights
         lm_logits = tf.reshape(lm_logits, [batch, seq - 1, tf.shape(embed_weights)[0]])
 
-        lm_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
+        lm_losses = tf.losses.sparse_softmax_cross_entropy(
             logits=lm_logits,
-            labels=X[:, 1:, 0]
+            labels=tf.reshape(X[:, 1:, 0], [-1]),
+            weights=tf.reshape(M[:, 1:], [-1])
         )
 
         perplexity = tf.reduce_sum(tf.exp(lm_losses) * M[:, 1:], 1) / tf.reduce_sum(M[:, 1:], 1)
-
 
         lm_losses = tf.reshape(lm_losses, [shape_list(X)[0], shape_list(X)[1] - 1])
 
