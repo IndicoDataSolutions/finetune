@@ -29,7 +29,7 @@ class TestAssociation(unittest.TestCase):
         )
 
     def setUp(self):
-        data, schema = self.get_data_and_schema(10)
+        data, schema = self.get_data_and_schema(20)
         self.texts, self.labels = data
         self.model = Association(batch_size=2, max_length=32, **schema)
     
@@ -45,13 +45,17 @@ class TestAssociation(unittest.TestCase):
         self.assertIsInstance(predictions, list)
         self.assertEqual(len(predictions), len(test_texts))
         self.assertIsInstance(predictions[0], list)
-        self.assertIsInstance(predictions[0][0], dict)
-        sample_prediction = predictions[0][0]
-        self.assertIsInstance(sample_prediction["label"], str)
-        self.assertIn(sample_prediction["label"], ["verb", "noun_phrase"])
+        self.assertGreater(sum(len(p) for p in predictions), 0)
+        # make sure there is at least one prediction, if there isn't somethings probably broken.
+
         for pred in predictions:
+            pred_has_verb = any(p_i["label"] == "verb" for p_i in pred)
             for p_i in pred:
-                if p_i["label"] == "noun_phrase":
+                self.assertIsInstance(p_i, dict)
+                self.assertIsInstance(p_i["label"], str)
+                self.assertIn(p_i["label"], ["verb", "noun_phrase"])
+                
+                if p_i["label"] == "noun_phrase" and pred_has_verb:
                     self.assertIn("association", p_i)
                     # a noun_phrase MUST have a verb by the above schema.
 
