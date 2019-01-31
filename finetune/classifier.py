@@ -68,6 +68,7 @@ class Classifier(BaseModel):
         """
         return super().finetune(X, Y=Y, batch_size=batch_size)
 
+    @classmethod
     def get_eval_fn(cls):
         return lambda labels, targets: np.mean(np.asarray(labels) == np.asarray(targets))
 
