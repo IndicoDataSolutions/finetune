@@ -10,6 +10,7 @@ from finetune.sequence_labeling import SequenceLabeler
 from finetune.comparison import Comparison
 from finetune.multi_label_classifier import MultiLabelClassifier
 from finetune.multiple_choice import MultipleChoice
+from finetune.association import Association
 from finetune.comparison_regressor import ComparisonRegressor
 from finetune.ordinal_regressor import OrdinalRegressor, ComparisonOrdinalRegressor
 

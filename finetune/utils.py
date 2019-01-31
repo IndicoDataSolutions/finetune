@@ -100,9 +100,40 @@ def truncate_text(text, max_chars=100):
         text = text[:max_chars] + "..."
     return text
 
+def assign_associations(labels, associations, none_value):
+    idx_lookups = [{} for _ in labels]
+    for i, (doc_label, doc_association) in enumerate(zip(labels, associations)):
+        active_label_idx = -1
+        for label, association in zip(doc_label, doc_association):
+            if label == none_value:
+                continue
+            active_label_idx += 1
+            for bpe_idx, _, _, _ in association:
+                idx_lookups[i][bpe_idx] = active_label_idx
+
+    all_candidates = []
+    for idx_lookup, doc_label, doc_association in zip(idx_lookups, labels, associations):
+        candiates = {}
+        if doc_label == none_value:
+            continue
+
+        for association in doc_association:
+            for bpe_idx, candidate_idx, candidate_label, candidate_prob in association:
+                if candidate_label == none_value or candidate_idx not in idx_lookup:
+                    continue
+
+                if idx_lookup[bpe_idx] not in candiates:
+                    candiates[idx_lookup[bpe_idx]] = []
+                candiates[idx_lookup[bpe_idx]].append((idx_lookup[candidate_idx], candidate_label, candidate_prob))
+
+        # TODO some how sample these candidates eg maximum probabilities, to fit some schema
+        candiates = {k: max(v, key=lambda x: x[2]) for k, v in candiates.items()} # for now just pick maximum prob
+        all_candidates.append(candiates)
+    return all_candidates
+
 
 def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_value=config.PAD_TOKEN,
-                                subtoken_predictions=False):
+                                subtoken_predictions=False, associations=None):
     """
     Maps from the labeled substring format into the 'indico' format. This is the exact inverse operation to
     :meth indico_to_finetune_sequence:.
@@ -130,7 +161,13 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
     :return: Texts, annoatations both in the 'indico' format.
     """
     annotations = []
-    for raw_text, doc_seq, label_seq, prob_seq in zip(raw_texts, subseqs, labels, probs or [None] * len(raw_texts)):
+    if associations is not None:
+        assoc_cleaned = assign_associations(labels, associations, none_value)
+    else:
+        assoc_cleaned = [None] * len(raw_texts)
+
+    loop_vals = zip(raw_texts, subseqs, labels, probs or [None] * len(raw_texts), assoc_cleaned)
+    for raw_text, doc_seq, label_seq, prob_seq, associations_seq in loop_vals:
         tokens = NLP(raw_text)
         token_starts = [token.idx for token in tokens]
         token_ends = [token.idx + len(token.text) for token in tokens]
@@ -141,7 +178,7 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
         start_idx = 0
         end_idx = 0
         raw_annotation_start = 0
-        for sub_str, raw_label, confidences in zip(doc_seq, label_seq, prob_seq or [None] * len(doc_seq)):
+        for i, (sub_str, raw_label, confidences) in enumerate(zip(doc_seq, label_seq, prob_seq or [None] * len(doc_seq))):
             if not isinstance(raw_label, tuple):
                 multi_label = False
                 label_list = [raw_label]
@@ -194,6 +231,13 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
                         "label": label,
                         "text": text
                     }
+                    if associations_seq is not None and len(doc_annotations) in associations_seq:
+                        index, relationship, prob = associations_seq[len(doc_annotations)]
+                        annotation["associations"] = {
+                            "index": index,
+                            "relationship": relationship,
+                            "prob": prob
+                        }
                     if confidences is not None:
                         annotation["confidence"] = confidences
 
@@ -238,6 +282,9 @@ def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value
     """
     all_subseqs = []
     all_labels = []
+    all_association_idx = []
+    all_association_type = []
+    all_idxs = []
 
     # placeholder for inference time
     if labels is None:
@@ -253,11 +300,21 @@ def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value
         last_loc = 0
         doc_subseqs = []
         doc_labels = []
+        doc_association_idx = []
+        doc_association_type = []
+        doc_current_label_idx = []
+
         for i, annotation in enumerate(label_seq):
             start = annotation["start"]
             end = annotation["end"]
             label = annotation["label"]
             annotation_text = annotation.get("text")
+            if "association" in annotation:
+                association_idx = annotation["association"]["index"]
+                association_type = annotation["association"]["relationship"]
+            else:
+                association_idx = -1
+                association_type = none_value
 
             if annotation_text is not None and text[start:end] != annotation_text:
                 raise ValueError(
@@ -282,6 +339,9 @@ def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value
                     doc_labels.append([none_value])
                 else:
                     doc_labels.append(none_value)
+                    doc_association_idx.append(-1)
+                    doc_association_type.append(none_value)
+                    doc_current_label_idx.append(-2)
 
             j = len(doc_labels) - 1
             split_dist = last_loc - end
@@ -324,6 +384,9 @@ def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value
                 doc_labels.append([label])
             else:
                 doc_labels.append(label)
+                doc_association_idx.append(association_idx)
+                doc_association_type.append(association_type)
+                doc_current_label_idx.append(i)
 
             last_loc = end
 
@@ -333,6 +396,14 @@ def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value
                 doc_labels.append([none_value])
             else:
                 doc_labels.append(none_value)
+                doc_association_idx.append(-1)
+                doc_association_type.append(none_value)
+                doc_current_label_idx.append(-2)
+                
         all_subseqs.append(doc_subseqs)
         all_labels.append(doc_labels)
-    return all_subseqs, all_labels
+        all_association_idx.append(doc_association_idx)
+        all_association_type.append(doc_association_type)
+        all_idxs.append(doc_current_label_idx)
+
+    return all_subseqs, all_labels, all_association_type, all_association_idx, all_idxs

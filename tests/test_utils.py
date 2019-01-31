@@ -27,7 +27,7 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
         self.assertEqual(indicoy, indicoy_pred)
         self.assertEqual(raw, indicox_pred)
 
-        finetunex_pred, finetuney_pred = indico_to_finetune_sequence(raw, indicoy)
+        finetunex_pred, finetuney_pred, *_ = indico_to_finetune_sequence(raw, indicoy)
         self.assertEqual(finetunex_pred, finetunex)
         self.assertCountEqual(finetuney[0][0], finetuney_pred[0][0])
         self.assertCountEqual(finetuney[0][1], finetuney_pred[0][1])
@@ -54,7 +54,7 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
         self.assertEqual(indicoy, indicoy_pred)
         self.assertEqual(raw, indicox_pred)
 
-        finetunex_pred, finetuney_pred = indico_to_finetune_sequence(raw, indicoy)
+        finetunex_pred, finetuney_pred, *_ = indico_to_finetune_sequence(raw, indicoy)
         self.assertEqual(finetunex_pred, finetunex)
         self.assertCountEqual(finetuney[0][0], finetuney_pred[0][0])
         self.assertCountEqual(finetuney[0][1], finetuney_pred[0][1])
@@ -80,7 +80,7 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
         self.assertEqual(indicoy, indicoy_pred)
         self.assertEqual(raw, indicox_pred)
 
-        finetunex_pred, finetuney_pred = indico_to_finetune_sequence(raw, indicoy)
+        finetunex_pred, finetuney_pred, *_ = indico_to_finetune_sequence(raw, indicoy)
         self.assertEqual(finetunex_pred, finetunex)
         self.assertCountEqual(finetuney[0][0], finetuney_pred[0][0])
         self.assertCountEqual(finetuney[0][1], finetuney_pred[0][1])
