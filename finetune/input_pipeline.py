@@ -168,6 +168,9 @@ class BasePipeline(metaclass=ABCMeta):
         return dataset
 
     def wrap_tqdm(self, gen, train):
+        if self.config.debugging_logs:
+            return gen
+
         if train is None:
             return gen
 

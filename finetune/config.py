@@ -189,6 +189,7 @@ def get_default_config():
         soft_device_placement=True,
         tensorboard_folder=None,
         summarize_grads=False,
+        debugging_logs=False,
 
         # Partial Fitting
         num_layers_trained=12,
