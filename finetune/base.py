@@ -66,6 +66,9 @@ class BaseModel(object, metaclass=ABCMeta):
         self.input_pipeline = self._get_input_pipeline()
         download_data_if_required()
         self._initialize()
+        if self.config.debugging_logs:
+            os.environ["TF_CPP_MIN_LOG_LEVEL"] = "0"
+            tf.logging.set_verbosity(tf.logging.DEBUG)
 
     @abstractmethod
     def _get_input_pipeline(self):

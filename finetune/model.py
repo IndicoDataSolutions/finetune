@@ -18,6 +18,7 @@ class PredictMode:
     NORMAL = "NORM"
     PROBAS = "PROBA"
     GENERATE_TEXT = "GEN_TEXT"
+    LM_PERPLEXITY = "PERPLEXITY"
 
 
 def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_model, build_lm, encoder, target_dim,
@@ -119,6 +120,7 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                     tf.summary.scalar("LanguageModelLoss", lm_loss)
                 if mode == tf.estimator.ModeKeys.PREDICT:
                     predictions[PredictMode.GENERATE_TEXT] = lm_predict_op
+                    predictions[PredictMode.LM_PERPLEXITY] = language_model_state["perplexity"]
 
         if mode == tf.estimator.ModeKeys.TRAIN:
             total_num_steps = params.n_epochs * params.dataset_size//params.batch_size

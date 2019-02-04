@@ -105,16 +105,21 @@ def language_model(*, X, M, embed_weights, hidden, config, reuse=None):
     X = merge_leading_dims(X, 3)
     M = merge_leading_dims(M, 2)
     hidden = merge_leading_dims(hidden, 3)
-
+    batch, seq, _ = shape_list(X)
     with tf.variable_scope('model/language-model', reuse=reuse):
         # language model ignores last hidden state because we don't have a target
         sliced_hidden = hidden[:, :-1]
         lm_h = tf.reshape(sliced_hidden, [-1, config.n_embed])  # [batch, seq_len, embed] --> [batch * seq_len, embed]
         lm_logits = tf.matmul(lm_h, embed_weights, transpose_b=True)  # tied weights
+        lm_logits = tf.reshape(lm_logits, [batch, seq - 1, tf.shape(embed_weights)[0]])
+
         lm_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
             logits=lm_logits,
-            labels=tf.reshape(X[:, 1:, 0], [-1])
+            labels=X[:, 1:, 0]
         )
+
+        perplexity = tf.reduce_sum(tf.exp(lm_losses) * M[:, 1:], 1) / tf.reduce_sum(M[:, 1:], 1)
+
 
         lm_losses = tf.reshape(lm_losses, [shape_list(X)[0], shape_list(X)[1] - 1])
 
@@ -126,6 +131,8 @@ def language_model(*, X, M, embed_weights, hidden, config, reuse=None):
         return {
             'logits': tf.reshape(lm_logits, shape=sliced_hidden_shape[:-1] + [lm_logits_shape[-1]]),
             'losses': lm_losses,
+            'perplexity': perplexity
+
         }
 
 
