@@ -119,6 +119,7 @@ class Settings(dict):
     :param save_dtype: specifies what precision to save model weights with.  Defaults to `np.float32`.
     :param regression_loss: the loss to use for regression models. One of `L1` or `L2`, defaults to `L2`.
     :param prefit_init: if True, fit target model weigths before finetuning the entire model. Defaults to `False`.
+    :param debugging_logs: if True, output tensorflow logs and turn off TQDM logging. Defaults to `False`.
     """
     def get_grid_searchable(self):
         return self.grid_searchable
