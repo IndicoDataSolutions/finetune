@@ -78,12 +78,14 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
         train = estimator_mode == tf.estimator.ModeKeys.TRAIN
         X = features["tokens"]
         M = features["mask"]
+        aux = features['metadata']
         Y = labels
         pred_op = None
 
         with tf.variable_scope(tf.get_variable_scope()):
             train_loss = 0.0
             featurizer_state = featurizer(X, config=params, encoder=encoder, train=train)
+            featurizer_state['features'] = tf.concat([featurizer_state['features'], tf.reduce_mean(tf.to_float(aux), axis=1)], axis=1)
             predictions = {PredictMode.FEATURIZE: featurizer_state["features"]}
 
             if build_target_model:

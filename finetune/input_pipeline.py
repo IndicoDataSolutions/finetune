@@ -37,8 +37,24 @@ class BasePipeline(metaclass=ABCMeta):
 
     def feed_shape_type_def(self):
         TS = tf.TensorShape
-        return ({"tokens": tf.int32, "mask": tf.float32}, tf.float32), (
-            {"tokens": TS([self.config.max_length, 2]), "mask": TS([self.config.max_length])}, TS([self.target_dim]))
+        return (
+            (
+                {
+                    "tokens": tf.int32,
+                    "mask": tf.float32,
+                    "metadata": tf.bool
+                },
+                tf.float32
+            ),
+            (
+                {
+                    "tokens": TS([self.config.max_length, 2]),
+                    "mask": TS([self.config.max_length]),
+                    "metadata": TS([self.config.max_length, 4])
+                },
+                TS([self.target_dim])
+            )
+        )
 
     def _array_format(self, encoded_output, pad_token=PAD_TOKEN):
         """
@@ -57,12 +73,18 @@ class BasePipeline(metaclass=ABCMeta):
         else:
             labels_arr = None
 
+        metadata_arr = np.empty((self.config.max_length, 4), dtype=np.bool)
+        metadata_arr.fill(False)
+
         # BPE embedding
         x[:seq_length, 0] = encoded_output.token_ids
         # masking: value of 1 means "consider this in cross-entropy LM loss"
         mask[1:seq_length] = 1
         if encoded_output.labels:
             labels_arr[:seq_length] = encoded_output.labels
+
+        metadata_arr[:seq_length] = np.asarray(encoded_output.metadata)
+
         # positional_embeddings
         x[:, 1] = np.arange(ENCODER.vocab_size, ENCODER.vocab_size + self.config.max_length)
 
@@ -72,12 +94,13 @@ class BasePipeline(metaclass=ABCMeta):
             labels=labels_arr,
             char_locs=encoded_output.char_locs,
             mask=mask,
+            metadata=metadata_arr
         )
 
     def text_to_tokens_mask(self, X, Y=None):
         out_gen = self._text_to_ids(X)
         for out in out_gen:
-            feats = {"tokens": out.token_ids, "mask": out.mask}
+            feats = {"tokens": out.token_ids, "mask": out.mask, "metadata": out.metadata}
             if Y is None:
                 yield feats
             else:
@@ -129,7 +152,7 @@ class BasePipeline(metaclass=ABCMeta):
         if isinstance(val_size, float):
             return int(val_size * self.config.dataset_size)
         return val_size
-        
+
     def validation_settings(self, n_examples, batch_size):
         """
         Auto-select reasonable validation settings
@@ -143,7 +166,7 @@ class BasePipeline(metaclass=ABCMeta):
                 val_size = 0
             else:
                 val_size = max(5, int(0.05 * n_examples))
-                val_size = min(100, val_size)
+                val_size = min(500, val_size)
         else:
             val_size = self._integer_val_size(self.config.val_size)
 
@@ -178,7 +201,7 @@ class BasePipeline(metaclass=ABCMeta):
                 total = self.config.dataset_size
             else:
                 total = self.config.val_size
-                
+
         def internal_gen():
             current_epoch = (self.epoch - 1) % self.config.n_epochs + 1
             it = iter(gen)
@@ -195,7 +218,7 @@ class BasePipeline(metaclass=ABCMeta):
 
             for i in tqdm.tqdm(it, desc=desc, total=total, miniters=1, leave=current_epoch  == self.config.n_epochs and train):
                 yield i
-            
+
             if train:
                 self.epoch += 1
 

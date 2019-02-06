@@ -23,8 +23,9 @@ NLP = spacy.load('en', disable=['parser', 'tagger', 'ner', 'textcat'])
 EncodedOutput = namedtuple("EncodedOutput", [
     "token_ids", # list of list of subtoken ids (ints)
     "tokens",    # list of list of subtokens (strs)
-    "labels",    # list of list of labels 
+    "labels",    # list of list of labels
     "char_locs", # list of list of character locations (ints)
+    "metadata",  # list of list of token attributes (bool) -- see spacy.Token
 ])
 EncodedOutput.__new__.__defaults__ = (None,) * len(EncodedOutput._fields)
 ArrayEncodedOutput = namedtuple("ArrayEncodedOutput", [
@@ -33,6 +34,7 @@ ArrayEncodedOutput = namedtuple("ArrayEncodedOutput", [
     "labels",    # object array shape (batch, seq_length)
     "char_locs", # list of list of char_locs (int) passed through from `EncoderOutput`
     "mask",      # int array shape (batch, seq_length)
+    "metadata"   # bool array shape (batch, seq_length, 4)
 ])
 ArrayEncodedOutput.__new__.__defaults__ = (None,) * len(ArrayEncodedOutput._fields)
 
@@ -169,8 +171,9 @@ class TextEncoder(object):
         batch_token_idxs = []
         batch_label_idxs = []
         batch_character_locs = []
+        batch_metadata = []
         label = None
-        
+
         for i, text in enumerate(texts):
             if labels is not None:
                 label = labels[i]
@@ -179,10 +182,11 @@ class TextEncoder(object):
             subtokens = []
             subtoken_idxs = []
             tok_pos = []
+            metadata = []
             token_start = 0
 
             for j, token in enumerate(tokens):
-                bpe_toks = self.bpe(token.text).split(' ')
+                bpe_toks = self.bpe(token.lower_).split(' ')
 
                 try:
                     if token.text.strip():
@@ -192,21 +196,23 @@ class TextEncoder(object):
                     continue
 
                 subtokens.extend(bpe_toks)
+                metadata.extend([[token.is_digit, token.is_title, token.is_upper, token.is_punct]] * len(bpe_toks))
                 subtoken_idxs.extend([
                     self.encoder.get(SUBS.get(t, t), self.UNK_IDX)
                     for t in bpe_toks
                 ])
-                
-                assert len("".join(bpe_toks).replace("</w>", "")) == len(token.text.replace(' ', ''))
+
+                assert len("".join(bpe_toks).replace("</w>", "")) == len(token.lower_.replace(' ', ''))
                 subtoken_positions = np.cumsum([len(tok.replace("</w>", '')) for tok in bpe_toks]) + token_start
 
                 token_start += len(token.text.strip())
-                
+
                 tok_pos.extend(subtoken_positions)
-            
+
             batch_tokens.append(subtokens)
             batch_token_idxs.append(subtoken_idxs)
             batch_character_locs.append(tok_pos)
+            batch_metadata.append(metadata)
             if labels is not None:
                 batch_label_idxs.append([label] * len(subtoken_idxs))
 
@@ -215,6 +221,7 @@ class TextEncoder(object):
             tokens=batch_tokens,
             labels=batch_label_idxs,
             char_locs=batch_character_locs,
+            metadata=batch_metadata
         )
 
     def decode(self, ids):
@@ -283,6 +290,7 @@ class TextEncoder(object):
         token_ids = []
         tokens = []
         positions = []
+        metadatas = []
         labels = []
 
         # for each field in that example
@@ -294,6 +302,7 @@ class TextEncoder(object):
             token_ids.append(_flatten(encoded.token_ids))
             tokens.append(_flatten(encoded.tokens))
             positions.append(_flatten(encoded.char_locs))
+            metadatas.append(_flatten(encoded.metadata))
             labels.append(_flatten(encoded.labels))
             if len(tokens[-1]) > (max_length - 2):
                 warnings.warn(
@@ -311,6 +320,14 @@ class TextEncoder(object):
             encoded=tokens,
             max_length=max_length,
             verbose=verbose
+        )
+        metadatas = self._cut_and_concat(
+            encoded=metadatas,
+            max_length=max_length,
+            verbose=verbose,
+            start=[False, False, False, False],
+            end=[False, False, False, False],
+            delimiter=[False, False, False, False],
         )
         locations = self._cut_and_concat(
             encoded=positions,
@@ -334,4 +351,5 @@ class TextEncoder(object):
             tokens=tokens,
             labels=labels,
             char_locs=locations,
+            metadata=metadatas
         )
