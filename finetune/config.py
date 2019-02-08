@@ -162,13 +162,12 @@ class Settings(dict):
     __delattr__ = dict.__delitem__
 
 
-def get_default_config(visible_gpus=None):
+def get_default_config():
     """
     Gets a config object containing all the default parameters for each variant of the model.
 
     :return: Config object.
     """
-    visible_gpus = all_gpus(visible_gpus=tuple(visible_gpus))
     return Settings(
         # General Settings
         low_memory_mode=False,
@@ -177,7 +176,7 @@ def get_default_config(visible_gpus=None):
         shuffle_buffer_size=100,
         dataset_size=None,
         batch_size=2,
-        visible_gpus=visible_gpus,
+        visible_gpus=None, # defaults to all available
         n_epochs=GridSearchable(3, [1, 2, 3, 4]),
         seed=42,
         max_length=512,
@@ -273,8 +272,7 @@ def get_config(**kwargs):
 
     :param **kwargs: Keyword arguments to override default values.
     :return: Config object.    """
-    visible_gpus = kwargs.pop('visible_gpus', None)
-    config = get_default_config(visible_gpus=visible_gpus)
+    config = get_default_config()
     config.update(kwargs)
     return config
 

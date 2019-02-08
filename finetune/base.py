@@ -59,6 +59,7 @@ class BaseModel(object, metaclass=ABCMeta):
         atexit.register(cleanup)
 
         self.config = get_config(**kwargs)
+        self.resolved_gpus = None
 
         if self.config.num_layers_trained != self.config.n_layer and self.config.train_embeddings:
             raise ValueError("If you are only finetuning a subset of the layers, you cannot finetune embeddings.")
@@ -159,13 +160,15 @@ class BaseModel(object, metaclass=ABCMeta):
             tf.logging.warning(
                 "Early stopping / keeping best model with a validation size of {} is likely to case undesired results".format(val_size))
 
+        estimator = self.get_estimator()
+        
         steps_per_epoch = self._n_steps(
             n_examples=self.config.dataset_size,
             batch_size=batch_size,
-            n_gpus=max(1, len(self.config.visible_gpus))
+            n_gpus=max(1, len(self.resolved_gpus))
         )
         num_steps = steps_per_epoch * self.config.n_epochs
-        estimator = self.get_estimator()
+
         train_hooks = [
             self.saver.get_saver_hook(
                 estimator=estimator,
@@ -204,20 +207,39 @@ class BaseModel(object, metaclass=ABCMeta):
                 tf.logging.info("Finishing pre-fit initialisation...")
             estimator.train(train_input_fn, hooks=train_hooks, steps=num_steps)
 
+    def _distribute_strategy(self, visible_gpus):
+        """
+        Select a distribution strategy based on available devices.
+        
+        Side effect: sets self.resolved_gpus for future use in computing steps per epoch
+        """
+        if isinstance(visible_gpus, (list, tuple)):
+            resolved_gpus = all_gpus(visible_gpus=tuple(visible_gpus))
+        else:
+            resolved_gpus = all_gpus()
+        
+
+        num_gpus = len(resolved_gpus)
+        if num_gpus > 1:
+            distribute_strategy = PatchedParameterServerStrategy(
+                visible_gpus=resolved_gpus
+            )
+        elif num_gpus == 1:
+            gpu = resolved_gpus[0]
+            distribute_strategy = OneDeviceStrategy(device='/gpu:{}'.format(gpu))
+        else:
+            distribute_strategy = OneDeviceStrategy(device='/cpu:0')
+        
+        self.resolved_gpus = resolved_gpus
+        return distribute_strategy
+
     def get_estimator(self, force_build_lm=False):
         conf = tf.ConfigProto(
             allow_soft_placement=self.config.soft_device_placement,
             log_device_placement=self.config.log_device_placement,
         )
-        num_gpus = len(self.config.visible_gpus)
-        if num_gpus > 1:
-            distribute_strategy = PatchedParameterServerStrategy(num_gpus_per_worker=num_gpus)
-        elif num_gpus == 1:
-            gpu = self.config.visible_gpus[0]
-            distribute_strategy = OneDeviceStrategy(device='/gpu:{}'.format(gpu))
-        else:
-            distribute_strategy = OneDeviceStrategy(device='/cpu:0')
 
+        distribute_strategy = self._distribute_strategy(self.config.visible_gpus)
         config = tf.estimator.RunConfig(
             tf_random_seed=self.config.seed,
             save_summary_steps=self.config.val_interval,
@@ -490,13 +512,6 @@ class BaseModel(object, metaclass=ABCMeta):
         download_data_if_required()
         saver = Saver(JL_BASE)
         model = saver.load(path)
-
-        # visible_gpus must be restricted based on CUDA_VISIBLE_DEVICES
-        # as well as user provided device IDs
-        kwargs['visible_gpus'] = all_gpus(
-            visible_gpus=kwargs.pop('visible_gpus', None)
-        )
-
         model.config.update(kwargs)
         model._initialize()
         model.saver.variables = saver.variables
