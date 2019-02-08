@@ -20,13 +20,14 @@ import tqdm
 import numpy as np
 import tensorflow as tf
 from tensorflow.data import Dataset
+from tensorflow.contrib.distribute import OneDeviceStrategy
 from sklearn.model_selection import train_test_split
 import joblib as jl
 
 from finetune.utils import interpolate_pos_embed, list_transpose
 from finetune.encoding import EncodedOutput
 from finetune.input_pipeline import ENCODER
-from finetune.config import get_default_config
+from finetune.config import get_config, all_gpus
 from finetune.saver import Saver
 from finetune.errors import FinetuneError
 from finetune.model import get_model_fn, PredictMode
@@ -41,7 +42,7 @@ class BaseModel(object, metaclass=ABCMeta):
     A sklearn-style task agnostic base class for finetuning a Transformer language model.
     """
 
-    def __init__(self, config=None, **kwargs):
+    def __init__(self, **kwargs):
         """
         For a full list of configuration options, see `finetune.config`.
 
@@ -57,8 +58,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         atexit.register(cleanup)
 
-        self.config = config or get_default_config()
-        self.config.update(kwargs)
+        self.config = get_config(**kwargs)
 
         if self.config.num_layers_trained != self.config.n_layer and self.config.train_embeddings:
             raise ValueError("If you are only finetuning a subset of the layers, you cannot finetune embeddings.")
@@ -212,8 +212,11 @@ class BaseModel(object, metaclass=ABCMeta):
         num_gpus = len(self.config.visible_gpus)
         if num_gpus > 1:
             distribute_strategy = PatchedParameterServerStrategy(num_gpus_per_worker=num_gpus)
+        elif num_gpus == 1:
+            gpu = self.config.visible_gpus[0]
+            distribute_strategy = OneDeviceStrategy(device='/gpu:{}'.format(gpu))
         else:
-            distribute_strategy = None
+            distribute_strategy = OneDeviceStrategy(device='/cpu:0')
 
         config = tf.estimator.RunConfig(
             tf_random_seed=self.config.seed,
@@ -487,6 +490,13 @@ class BaseModel(object, metaclass=ABCMeta):
         download_data_if_required()
         saver = Saver(JL_BASE)
         model = saver.load(path)
+
+        # visible_gpus must be restricted based on CUDA_VISIBLE_DEVICES
+        # as well as user provided device IDs
+        kwargs['visible_gpus'] = all_gpus(
+            visible_gpus=kwargs.pop('visible_gpus', None)
+        )
+
         model.config.update(kwargs)
         model._initialize()
         model.saver.variables = saver.variables
