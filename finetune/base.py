@@ -27,7 +27,7 @@ import joblib as jl
 from finetune.utils import interpolate_pos_embed, list_transpose
 from finetune.encoding import EncodedOutput
 from finetune.input_pipeline import ENCODER
-from finetune.config import get_config, all_gpus
+from finetune.config import get_config, all_gpus, assert_valid_config
 from finetune.saver import Saver
 from finetune.errors import FinetuneError
 from finetune.model import get_model_fn, PredictMode
@@ -161,7 +161,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 "Early stopping / keeping best model with a validation size of {} is likely to case undesired results".format(val_size))
 
         estimator = self.get_estimator()
-        
+
         steps_per_epoch = self._n_steps(
             n_examples=self.config.dataset_size,
             batch_size=batch_size,
@@ -210,14 +210,14 @@ class BaseModel(object, metaclass=ABCMeta):
     def _distribute_strategy(self, visible_gpus):
         """
         Select a distribution strategy based on available devices.
-        
+
         Side effect: sets self.resolved_gpus for future use in computing steps per epoch
         """
         if isinstance(visible_gpus, (list, tuple)):
             resolved_gpus = all_gpus(visible_gpus=tuple(visible_gpus))
         else:
             resolved_gpus = all_gpus()
-        
+
 
         num_gpus = len(resolved_gpus)
         if num_gpus > 1:
@@ -229,7 +229,7 @@ class BaseModel(object, metaclass=ABCMeta):
             distribute_strategy = OneDeviceStrategy(device='/gpu:{}'.format(gpu))
         else:
             distribute_strategy = OneDeviceStrategy(device='/cpu:0')
-        
+
         self.resolved_gpus = resolved_gpus
         return distribute_strategy
 
@@ -509,6 +509,7 @@ class BaseModel(object, metaclass=ABCMeta):
         :param path: string path name to load model from.  Same value as previously provided to :meth:`save`. Must be a folder.
         :param **kwargs: key-value pairs of config items to override.
         """
+        assert_valid_config(**kwargs)
         download_data_if_required()
         saver = Saver(JL_BASE)
         model = saver.load(path)
@@ -518,7 +519,7 @@ class BaseModel(object, metaclass=ABCMeta):
         return model
 
     @classmethod
-    def finetune_grid_search(cls, Xs, Y, *, test_size, config=None, eval_fn=None, probs=False, return_all=False):
+    def finetune_grid_search(cls, Xs, Y, *, test_size, eval_fn=None, probs=False, return_all=False, **kwargs):
         """
         Performs grid search over config items defined using "GridSearchable" objects and returns either full results or
         the config object that relates to the best results. The default config contains grid searchable objects for the
@@ -528,16 +529,16 @@ class BaseModel(object, metaclass=ABCMeta):
         :param Y: Targets, A list of targets, [num_samples] that correspond to each sample in Xs.
         :param test_size: Int or float. If an int is given this number of samples is used to validate, if a float is
          given then that fraction of samples is used.
-        :param config: A config object, or None to use the default config.
         :param eval_fn: An eval function that takes 2 inputs (prediction, truth) and returns a float, with a max value being desired.
         :param probs: If true, eval_fn is passed probability outputs from predict_proba, otherwise the output of predict is used.
         :param return_all: If True, all results are returned, if False, only the best config is returned.
+        :param kwargs: Keyword arguments to pass to get_config()
         :return: default is to return the best config object. If return_all is true, it returns a list of tuples of the
             form [(config, eval_fn output), ... ]
         """
         if isinstance(Xs[0], str):
             Xs = [Xs]
-        config = config or get_default_config()
+        config = get_config(**kwargs)
         config.val_size = 0.0
         eval_fn = eval_fn or cls.get_eval_fn()
 
@@ -566,8 +567,8 @@ class BaseModel(object, metaclass=ABCMeta):
         return max(results, key=lambda x: x[1])[0]
 
     @classmethod
-    def finetune_grid_search_cv(cls, Xs, Y, *, n_splits, test_size, config=None, eval_fn=None, probs=False,
-                                return_all=False):
+    def finetune_grid_search_cv(cls, Xs, Y, *, n_splits, test_size, eval_fn=None, probs=False,
+                                return_all=False, **kwargs):
         """
         Performs cross validated grid search over config items defined using "GridSearchable" objects and returns either full results or
         the config object that relates to the best results. The default config contains grid searchable objects for the
@@ -580,18 +581,25 @@ class BaseModel(object, metaclass=ABCMeta):
         :param n_splits: Number of CV splits to do.
         :param test_size: Int or float. If an int is given this number of samples is used to validate, if a float is
             given then that fraction of samples is used.
-        :param config: A config object, or None to use the default config.
         :param eval_fn: An eval function that takes 2 batches of outputs and returns a float, with a max value being
             desired. An arithmetic mean must make sense for this metric.
         :param probs: If true, eval_fn is passed probability outputs from predict_proba, otherwise the output of predict is used.
         :param return_all: If True, all results are returned, if False, only the best config is returned.
+        :param kwargs: Keyword arguments to pass to get_config()
         :return: default is to return the best config object. If return_all is true, it returns a list of tuples of the
             form [(config, eval_fn output), ... ]
         """
         results = []
         for _ in range(n_splits):
-            res = cls.finetune_grid_search(Xs, Y, test_size=test_size, probs=probs, eval_fn=eval_fn, config=config,
-                                           return_all=True)
+            res = cls.finetune_grid_search(
+                Xs,
+                Y,
+                test_size=test_size,
+                probs=probs,
+                eval_fn=eval_fn,
+                return_all=True,
+                **kwargs
+            )
             results.append(res)
         results = list(zip(*results))
         aggregated_results = []

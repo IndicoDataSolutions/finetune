@@ -23,7 +23,7 @@ NLP = spacy.load('en', disable=['parser', 'tagger', 'ner', 'textcat'])
 EncodedOutput = namedtuple("EncodedOutput", [
     "token_ids", # list of list of subtoken ids (ints)
     "tokens",    # list of list of subtokens (strs)
-    "labels",    # list of list of labels 
+    "labels",    # list of list of labels
     "char_locs", # list of list of character locations (ints)
 ])
 EncodedOutput.__new__.__defaults__ = (None,) * len(EncodedOutput._fields)
@@ -160,7 +160,7 @@ class TextEncoder(object):
         self.cache[token] = word
         return word
 
-    def _encode(self, texts, labels=None, verbose=True):
+    def _encode(self, texts, labels=None):
         """
         Convert a batch of raw text to a batch of byte-pair encoded token indices.
         """
@@ -170,7 +170,7 @@ class TextEncoder(object):
         batch_label_idxs = []
         batch_character_locs = []
         label = None
-        
+
         for i, text in enumerate(texts):
             if labels is not None:
                 label = labels[i]
@@ -196,14 +196,14 @@ class TextEncoder(object):
                     self.encoder.get(SUBS.get(t, t), self.UNK_IDX)
                     for t in bpe_toks
                 ])
-                
+
                 assert len("".join(bpe_toks).replace("</w>", "")) == len(token.text.replace(' ', ''))
                 subtoken_positions = np.cumsum([len(tok.replace("</w>", '')) for tok in bpe_toks]) + token_start
 
                 token_start += len(token.text.strip())
-                
+
                 tok_pos.extend(subtoken_positions)
-            
+
             batch_tokens.append(subtokens)
             batch_token_idxs.append(subtoken_idxs)
             batch_character_locs.append(tok_pos)
@@ -224,7 +224,7 @@ class TextEncoder(object):
 
         return "".join([self.decoder.get(word_idx, '<unk>') for word_idx in ids]).replace("</w>", " ")
 
-    def _cut_and_concat(self, *, encoded, max_length, verbose, special_tokens=None, start=None, delimiter=None,
+    def _cut_and_concat(self, *, encoded, max_length, special_tokens=None, start=None, delimiter=None,
                         end=None):
         """
         Takes some tokenized text and arranges it into a format that maximises the amount of kept text from each
@@ -232,7 +232,6 @@ class TextEncoder(object):
          Classify and Delimiter.
         :param encoded: Lists of shape [batch, n_fields, num_tokens]
         :param max_length: Int representing the max length of a single sample
-        :param verbose: Bool of whether to print the TQDM bar or not.
         :param start: Override the default start token.
         :param delimiter: Override the default delimiter token.
         :param end: Override the default classify token
@@ -269,14 +268,13 @@ class TextEncoder(object):
 
         return joined
 
-    def encode_multi_input(self, Xs, Y=None, max_length=None, verbose=True, pad_token=PAD_TOKEN):
+    def encode_multi_input(self, Xs, Y=None, max_length=None, pad_token=PAD_TOKEN):
         """
         Encodes the text for passing to the model, also tracks the location of each token to allow reconstruction.
         It can also, optionally, construct a per-token labels as required for training.
         :param Xs: A list of lists of string -- [n_fields, n_segments]
         :param Y: A list of list of targets -- [n_batch, n_segments]
         :param max_length: Max length of the sequences.
-        :param verbose: Flag to set whether to output a status bar.
         :return: A Labeled Sequence Object.
         """
 
@@ -304,18 +302,15 @@ class TextEncoder(object):
         # merge fields + truncate if necessary
         token_ids = self._cut_and_concat(
             encoded=token_ids,
-            max_length=max_length,
-            verbose=verbose
+            max_length=max_length
         )
         tokens = self._cut_and_concat(
             encoded=tokens,
-            max_length=max_length,
-            verbose=verbose
+            max_length=max_length
         )
         locations = self._cut_and_concat(
             encoded=positions,
             max_length=max_length,
-            verbose=verbose,
             special_tokens=-1
         )
 
@@ -325,7 +320,6 @@ class TextEncoder(object):
             labels = self._cut_and_concat(
                 encoded=labels,
                 max_length=max_length,
-                verbose=verbose,
                 special_tokens=pad_token
             )
 

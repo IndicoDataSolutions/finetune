@@ -92,7 +92,7 @@ if __name__ == "__main__":
 
     data = get_dataset()
 
-    model = MultipleChoice(verbose=True, n_epochs=1)
+    model = MultipleChoice(n_epochs=1)
     train_data, test_data = train_test_split(data, test_size=0.3, random_state=42)
 
     train_qs = []
