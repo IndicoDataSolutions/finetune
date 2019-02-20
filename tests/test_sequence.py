@@ -85,7 +85,7 @@ class TestSequenceLabeler(unittest.TestCase):
         with open(self.processed_path, 'rt') as fp:
             self.texts, self.labels = json.load(fp)
 
-        self.model = SequenceLabeler(batch_size=2, max_length=256, lm_loss_coef=0.0, verbose=False)
+        self.model = SequenceLabeler(batch_size=2, max_length=256, lm_loss_coef=0.0)
 
     def test_fit_lm_only(self):
         """
@@ -145,7 +145,6 @@ class TestSequenceLabeler(unittest.TestCase):
             batch_size=2,
             max_length=256,
             lm_loss_coef=0.0,
-            verbose=False,
             class_weights={'Named Entity': 5.}
         )
         reweighted_model.fit(train_texts, train_annotations)
@@ -212,7 +211,7 @@ class TestSequenceLabeler(unittest.TestCase):
         Ensure model training does not error out
         Ensure model returns predictions
         """
-        self.model = SequenceLabeler(batch_size=2, max_length=256, lm_loss_coef=0.0, verbose=False, multi_label_sequences=True)
+        self.model = SequenceLabeler(batch_size=2, max_length=256, lm_loss_coef=0.0, multi_label_sequences=True)
         raw_docs = ["".join(text) for text in self.texts]
         texts, annotations = finetune_to_indico_sequence(raw_docs, self.texts, self.labels)
         train_texts, test_texts, train_annotations, _ = train_test_split(texts, annotations, test_size=0.1)

@@ -51,8 +51,7 @@ class MCDonaldsSentiment(Dataset):
 if __name__ == "__main__":
     # Train and evaluate on SST
     dataset = MCDonaldsSentiment().dataframe
-    print(dataset.Target)
-    model = MultiLabelClassifier(verbose=True, n_epochs=2)
+    model = MultiLabelClassifier(n_epochs=2)
     trainX, testX, trainY, testY = train_test_split(dataset.Text, dataset.Target, test_size=0.3, random_state=42)
     model.fit(trainX, trainY)
     for threshold in np.linspace(0, 1, 5):

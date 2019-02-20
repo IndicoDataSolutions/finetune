@@ -4,9 +4,15 @@ import numpy as np
 
 from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_sequence
 from finetune.imbalance import compute_class_weights
+from finetune.errors import FinetuneError
+from finetune import Classifier
 
 
 class TestFinetuneIndicoConverters(unittest.TestCase):
+
+    def test_invalid_keyword(self):
+        with self.assertRaises(FinetuneError):
+            model = Classifier(tensorboard='./testing') # should be tensorboard_folder
 
     def test_overlapping(self):
         raw = ["Indico Is the best hey"]
@@ -93,6 +99,6 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
         weights = compute_class_weights('log', y)
         self.assertEqual(weights[1], 1.0)
 
- 
+
 if __name__ == '__main__':
     unittest.main()

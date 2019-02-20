@@ -3,11 +3,15 @@ import logging
 
 import tqdm
 import tensorflow as tf
-from tensorflow.python.training import training
+from tensorflow.python.training import training, device_util
+from tensorflow.contrib.distribute.python import cross_tower_ops as cross_tower_ops_lib
+from tensorflow.contrib.distribute import ParameterServerStrategy
 
 from finetune.errors import FinetuneError
 
 LOGGER = logging.getLogger("finetune")
+_LOCAL_CPU = "/device:CPU:0"
+_LOCAL_GPU_0 = "/device:GPU:0"
 
 
 class ProgressHook(training.SessionRunHook):
@@ -60,11 +64,64 @@ class ProgressHook(training.SessionRunHook):
         del self.progress_bar
 
 
-class PatchedParameterServerStrategy(tf.contrib.distribute.ParameterServerStrategy):
+class PatchedParameterServerStrategy(ParameterServerStrategy):
 
+    def __init__(self, visible_gpus=()):
+        """Initializes this strategy.
+        Args:
+        num_gpus_per_worker: number of local GPUs or GPUs per worker, the default
+            is 0 meaning CPU only.
+        Raises:
+        ValueError: if `cluster_spec` is given but `task_type` or `task_id` is
+            not.
+        """
+        super(ParameterServerStrategy, self).__init__()
+        
+        self._visible_gpus = visible_gpus
+        self._num_gpus_per_worker = len(visible_gpus)
+        self._initialize_local(self._num_gpus_per_worker)
+
+        # We typically don't need to do all-reduce in this strategy.
+        self._cross_tower_ops = (
+            cross_tower_ops_lib.ReductionToOneDeviceCrossTowerOps(
+                reduce_to_device=_LOCAL_CPU))
+        
     def _verify_destinations_not_different_worker(self, *args, **kwargs):
         # this is currently broken in tf 1.11.0 -- mock this for now
         pass
+
+    def _initialize_local(self, num_gpus_per_worker=0):
+        """Initialize internal devices for local training."""
+        # Define compute devices which is a list of device strings and one for each
+        # tower. When there are GPUs, replicate operations on these GPUs. Otherwise,
+        # place operations on CPU.
+        if num_gpus_per_worker > 0:
+            self._compute_devices = list(map("/device:GPU:{}".format, self._visible_gpus))
+        else:
+            self._compute_devices = [_LOCAL_CPU]
+
+        self._compute_devices = list(map(device_util.resolve, self._compute_devices))
+        self._canonical_compute_device_set = set(self._compute_devices)
+
+        # If there is only one GPU, put everything on that GPU. Otherwise, place
+        # variables on CPU.
+        if num_gpus_per_worker == 1:
+            assert len(list(self._compute_devices)) == 1
+            self._variable_device = _LOCAL_GPU_0
+            self._parameter_devices = [_LOCAL_GPU_0]
+        else:
+            self._variable_device = _LOCAL_CPU
+            self._parameter_devices = [_LOCAL_CPU]
+
+        self._is_chief = True
+        self._cluster_spec = None
+        self._task_type = None
+        self._task_id = None
+
+        logging.info(
+            "ParameterServerStrategy with compute_devices = %r, "
+            "variable_device = %r", self._compute_devices, self._variable_device
+        )
 
 
 class LazySummaryHook(tf.train.SummarySaverHook):

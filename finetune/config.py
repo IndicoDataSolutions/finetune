@@ -1,18 +1,22 @@
 import logging
-
 import os
 import subprocess
 import warnings
-
-from functools import lru_cache
 from collections import namedtuple
+from functools import lru_cache
+
+import numpy as np
+from nltk.metrics.distance import edit_distance
+
+from finetune.errors import FinetuneError
+
 
 LOGGER = logging.getLogger('finetune')
 PAD_TOKEN = '<PAD>'
 
 
 @lru_cache()
-def all_gpus():
+def all_gpus(visible_gpus=None):
     """
     Get integer ids of all available GPUs.
 
@@ -21,6 +25,8 @@ def all_gpus():
         GPU 1: GeForce GTX 980 (UUID: GPU-7b8496dc-3eaf-8db7-01e7-c4a884f66acf)
         GPU 2: GeForce GTX TITAN X (UUID: GPU-9e01f108-e7de-becd-2589-966dcc1c778f)
     """
+    if visible_gpus is not None:
+        visible_gpus = [int(gpu) for gpu in visible_gpus]
     try:
         sp = subprocess.Popen(['nvidia-smi', '-L'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         response = sp.communicate()[0]
@@ -33,18 +39,31 @@ def all_gpus():
             device_ids[i] = description
 
         cuda_visible_devices = os.getenv("CUDA_VISIBLE_DEVICES")
+
+        # restricting GPUs based on env vars
         if cuda_visible_devices:
             device_ids = {
                 device_id: description
                 for device_id, description in device_ids.items()
                 if str(device_id) in cuda_visible_devices.split(',')
             }
-        LOGGER.info(" Visible Devices: {{{}}}".format(
+
+        # restricting GPUs based on config
+        if visible_gpus is not None:
+            device_ids = {
+                device_id: description
+                for device_id, description in device_ids.items()
+                if device_id in visible_gpus
+            }
+
+        LOGGER.info(" Visible GPUs: {{{}}}".format(
             ", ".join([
                 "{}:{}".format(device_id, description.split('(')[0]).strip()
                 for device_id, description in device_ids.items()
             ])
         ))
+
+        device_ids = list(device_ids.keys())
     except:
         # Failed to parse out available GPUs properly
         warnings.warn("Failed to find available GPUS.  Falling back to CPU only mode.")
@@ -90,8 +109,6 @@ class Settings(dict):
         and target model loss.  Usually not beneficial to turn on unless
         dataset size exceeds a few thousand examples.  Defaults to `0.0`.
     :param summarize_grads: Include gradient summary information in tensorboard.  Defaults to `False`.
-    :param verbose: Print TQDM logs?  Defaults to `True`.
-
     :param val_size: Validation set size as a percentage of all training data.  Validation will not be run by default if n_examples < 50.
         If n_examples > 50, defaults to max(5, min(100, 0.05 * n_examples))
     :param val_interval: Evaluate on validation set after `val_interval` batches.
@@ -147,6 +164,24 @@ class Settings(dict):
     __delattr__ = dict.__delitem__
 
 
+def did_you_mean(keyword, keyword_pool):
+    candidates = list(keyword_pool)
+    closest_match_idx = np.argmin([
+        edit_distance(keyword, candidate) for candidate in candidates
+    ])
+    return candidates[closest_match_idx]
+
+
+def assert_valid_config(**kwargs):
+    expected_keys = set(get_default_config().keys())
+    for kwarg in kwargs:
+        if kwarg not in expected_keys:
+            raise FinetuneError(
+                "Unexpected setting configuration: `{}` is an invalid keyword. "
+                "Did you mean `{}`?".format(kwarg, did_you_mean(kwarg, expected_keys))
+            )
+
+
 def get_default_config():
     """
     Gets a config object containing all the default parameters for each variant of the model.
@@ -161,7 +196,7 @@ def get_default_config():
         shuffle_buffer_size=100,
         dataset_size=None,
         batch_size=2,
-        visible_gpus=all_gpus(),
+        visible_gpus=None, # defaults to all available
         n_epochs=GridSearchable(3, [1, 2, 3, 4]),
         seed=42,
         max_length=512,
@@ -241,8 +276,8 @@ def get_default_config():
     )
 
 
-def get_small_model_config():
-    conf = get_default_config()
+def get_small_model_config(**kwargs):
+    conf = get_config(**kwargs)
     conf.n_heads = 8
     conf.n_embed = 512
     conf.n_layer = 6
@@ -257,12 +292,14 @@ def get_config(**kwargs):
 
     :param **kwargs: Keyword arguments to override default values.
     :return: Config object.    """
+    assert_valid_config(**kwargs)
     config = get_default_config()
     config.update(kwargs)
     return config
 
 
-def cpu_config():
-    config = get_default_config()
+def cpu_config(**kwargs):
+    config = get_config(**kwargs)
     config.visible_gpus = []
+    config.update(kwargs)
     return config

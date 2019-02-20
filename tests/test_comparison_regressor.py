@@ -23,9 +23,8 @@ class TestComparisonRegression(unittest.TestCase):
             max_length=128,
             n_epochs=1,
             l2_reg=0,
-            lm_coef=0.,
+            lm_loss_coef=0.,
             val_size=0.,
-            verbose=False,
         )
         d.update(kwargs)
         return d

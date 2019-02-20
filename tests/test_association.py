@@ -32,7 +32,7 @@ class TestAssociation(unittest.TestCase):
         data, schema = self.get_data_and_schema(20)
         self.texts, self.labels = data
         self.model = Association(batch_size=2, max_length=32, **schema)
-    
+
     def test_fit_lm_predict(self):
         """
         Ensure model training does not error out
@@ -54,7 +54,7 @@ class TestAssociation(unittest.TestCase):
                 self.assertIsInstance(p_i, dict)
                 self.assertIsInstance(p_i["label"], str)
                 self.assertIn(p_i["label"], ["verb", "noun_phrase"])
-                
+
                 if p_i["label"] == "noun_phrase" and pred_has_verb:
                     self.assertIn("association", p_i)
                     # a noun_phrase MUST have a verb by the above schema.

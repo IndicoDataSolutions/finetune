@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 import warnings
 
-# prevent excessive warning logs 
+# prevent excessive warning logs
 warnings.filterwarnings('ignore')
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
@@ -63,11 +63,10 @@ class TestMultiLabelClassifier(unittest.TestCase):
         shutil.rmtree("tests/saved-models/")
 
     def default_config(self, **kwargs):
-        return get_config(
+        return dict(
             batch_size=2,
             max_length=128,
             n_epochs=2,
-            verbose=False,
             l2_reg=0.,
             clf_p_drop=0.,
             **kwargs
@@ -79,7 +78,7 @@ class TestMultiLabelClassifier(unittest.TestCase):
         Ensure model returns predictions of the right type
         """
 
-        model = MultiLabelClassifier(config=self.default_config())
+        model = MultiLabelClassifier(**self.default_config())
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text, [[t, 6, 3] for t in train_sample.Target])
