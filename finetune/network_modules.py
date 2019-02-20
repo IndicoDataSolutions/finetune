@@ -3,7 +3,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.contrib.crf import crf_log_likelihood
 
-from finetune.transformer import dropout, embed, block, attn, norm
+from finetune.base_models.gpt.featurizer import attn, dropout, norm
 from finetune.utils import shape_list, merge_leading_dims
 from finetune.recompute_grads import recompute_grad
 from finetune.errors import FinetuneError
@@ -26,65 +26,6 @@ def perceptron(x, ny, config, w_init=None, b_init=None):
         w = tf.get_variable("w", [nx, ny], initializer=w_init)
         b = tf.get_variable("b", [ny], initializer=b_init)
         return tf.matmul(x, w) + b
-
-
-def featurizer(X, encoder, config, train=False, reuse=None):
-    """
-    The transformer element of the finetuning model. Maps from tokens ids to a dense, embedding of the sequence.
-
-    :param X: A tensor of token indexes with shape [batch_size, sequence_length, token_idx]
-    :param encoder: A TextEncoder object.
-    :param config: A config object, containing all parameters for the featurizer.
-    :param train: If this flag is true, dropout and losses are added to the graph.
-    :param reuse: Should reuse be set within this scope.
-    :return: A dict containing;
-        embed_weights: the word embedding matrix.
-        features: The output of the featurizer_final state.
-        sequence_features: The output of the featurizer at each timestep.
-    """
-    initial_shape = [a or -1 for a in X.get_shape().as_list()]
-    X = tf.reshape(X, shape=[-1] + initial_shape[-2:])
-
-    with tf.variable_scope('model/featurizer', reuse=reuse):
-        embed_weights = tf.get_variable("we", [encoder.vocab_size + config.max_length, config.n_embed],
-                                        initializer=tf.random_normal_initializer(stddev=config.weight_stddev))
-        if config.train_embeddings:
-            embed_weights = dropout(embed_weights, config.embed_p_drop, train)
-        else:
-            embed_weights = tf.stop_gradient(embed_weights)
-
-        X = tf.reshape(X, [-1, config.max_length, 2])
-
-        h = embed(X, embed_weights)
-        for layer in range(config.n_layer):
-            if (config.n_layer - layer) == config.num_layers_trained and config.num_layers_trained != config.n_layer:
-                h = tf.stop_gradient(h)
-                train_layer = False
-            else:
-                train_layer = train
-
-            with tf.variable_scope('h%d_' % layer):
-                block_fn = functools.partial(block, n_head=config.n_heads, act_fn=config.act_fn,
-                                             resid_pdrop=config.resid_p_drop, attn_pdrop=config.attn_p_drop,
-                                             scope='h%d' % layer, train=train_layer, scale=True)
-                if config.low_memory_mode and train_layer:
-                    block_fn = recompute_grad(block_fn, use_entire_scope=True)
-                h = block_fn(h)
-
-        # Use hidden state at classifier token as input to final proj. + softmax
-        clf_h = tf.reshape(h, [-1, config.n_embed])  # [batch * seq_len, embed]
-        clf_token = encoder['_classify_']
-        pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
-        clf_h = tf.gather(clf_h, tf.range(shape_list(X)[0], dtype=tf.int32) * config.max_length + pool_idx)
-        clf_h = tf.reshape(clf_h, shape=initial_shape[: -2] + [config.n_embed])
-        seq_feats = tf.reshape(h, shape=initial_shape[:-1] + [config.n_embed])
-
-        return {
-            'embed_weights': embed_weights,
-            'features': clf_h,
-            'sequence_features': seq_feats,
-            'pool_idx': pool_idx
-        }
 
 
 def language_model(*, X, M, embed_weights, hidden, config, reuse=None):

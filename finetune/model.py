@@ -6,12 +6,15 @@ import tensorflow as tf
 from tensorflow.train import Scaffold
 from tensorflow.contrib.opt.python.training.weight_decay_optimizers import AdamWOptimizer
 
-from finetune.network_modules import featurizer, language_model
+from finetune.network_modules import language_model
+from finetune.base_models.gpt.featurizer import gpt_featurizer
+from finetune.base_models.gpt2.featurizer import gpt2_featurizer
 from finetune.utils import sample_with_temperature
 from finetune.optimizers import schedules
 from finetune.imbalance import class_weight_tensor
 
 LOGGER = logging.getLogger('finetune')
+
 
 class PredictMode:
     FEATURIZE = "FEAT"
@@ -19,6 +22,12 @@ class PredictMode:
     PROBAS = "PROBA"
     GENERATE_TEXT = "GEN_TEXT"
     LM_PERPLEXITY = "PERPLEXITY"
+
+
+FEATURIZERS = {
+    'gpt': gpt_featurizer,
+    'gpt2': gpt2_featurizer
+}
 
 
 def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_model, build_lm, encoder, target_dim,
@@ -84,6 +93,8 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
 
         with tf.variable_scope(tf.get_variable_scope()):
             train_loss = 0.0
+
+            featurizer = FEATURIZERS.get(params.base_model())
             featurizer_state = featurizer(X, config=params, encoder=encoder, train=train)
             predictions = {PredictMode.FEATURIZE: featurizer_state["features"]}
 

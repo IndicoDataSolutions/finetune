@@ -7,6 +7,7 @@ from scipy import interpolate
 from finetune.encoding import NLP
 from finetune import config
 
+
 def merge_leading_dims(X, target_rank):
     shape = [-1] + X.get_shape().as_list()[1 - target_rank:]
     return tf.reshape(X, shape)
@@ -399,7 +400,7 @@ def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value
                 doc_association_idx.append(-1)
                 doc_association_type.append(none_value)
                 doc_current_label_idx.append(-2)
-                
+
         all_subseqs.append(doc_subseqs)
         all_labels.append(doc_labels)
         all_association_idx.append(doc_association_idx)

@@ -67,14 +67,18 @@ def pyfunc_assign(a, dtype):
     return tf.py_func(func, (), tf.as_dtype(dtype), stateful=False)
 
 class Saver:
-    def __init__(self, fallback_filename, exclude_matches=None, variable_transforms=None, save_dtype=None):
+    def __init__(self, fallback_filename=None, exclude_matches=None, variable_transforms=None, save_dtype=None):
         self.variable_transforms = variable_transforms or []
-        self.fallback_filename = fallback_filename
         self.exclude_matches = exclude_matches
-        self.tpe = ThreadPoolExecutor()
-        self.fallback_future = self.tpe.submit(joblib.load, fallback_filename)
         self.variables = None
         self.save_dtype = save_dtype
+        if fallback_filename is not None:
+            self.set_fallback(fallback_filename)
+
+    def set_fallback(self, fallback_filename):
+        self.tpe = ThreadPoolExecutor()
+        self.fallback_filename = fallback_filename
+        self.fallback_future = self.tpe.submit(joblib.load, fallback_filename)
         self.fallback_ = None
 
     @property
@@ -106,8 +110,6 @@ class Saver:
             values = [a.astype(self.save_dtype) for a in values]
 
         var_names_reduced, vals_reduced = self.remove_unchanged(names, values, self.fallback)
-
-
         var_dict = dict(zip(var_names_reduced, vals_reduced))
         assert len(vals_reduced) == len(var_names_reduced) == len(var_dict)
         joblib.dump((var_dict, finetune_obj), path)

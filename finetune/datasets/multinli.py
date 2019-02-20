@@ -45,7 +45,7 @@ class MultiNLI(Dataset):
 if __name__ == "__main__":
     # Train and evaluate on MultiNLI
     dataset = MultiNLI(nrows=1000).dataframe
-    model = MultiFieldClassifier(verbose=True)
+    model = MultiFieldClassifier()
     trainX1, testX1, trainX2, testX2, trainY, testY = train_test_split(
         dataset.x1, dataset.x2, dataset.target, test_size=0.3, random_state=42
     )

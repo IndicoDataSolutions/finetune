@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 import warnings
 
-# prevent excessive warning logs 
+# prevent excessive warning logs
 warnings.filterwarnings('ignore')
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
@@ -21,7 +21,6 @@ from sklearn.metrics import accuracy_score, recall_score
 
 from finetune import Classifier
 from finetune.datasets import generic_download
-from finetune.input_pipeline import ENCODER
 from finetune.config import get_config, get_small_model_config
 from finetune.errors import FinetuneError
 
@@ -68,13 +67,12 @@ class TestClassifier(unittest.TestCase):
         shutil.rmtree("tests/saved-models/")
 
     def default_config(self, **kwargs):
-        return get_config(
+        return dict(get_config(
             batch_size=2,
             max_length=128,
             n_epochs=1,
-            verbose=False,
             **kwargs
-        )
+        ))
 
     def test_fit_lm_only(self):
         """
@@ -106,13 +104,13 @@ class TestClassifier(unittest.TestCase):
         """
         Ensure second call to predict is faster than first
         """
-        model = Classifier(config=self.default_config())
+        model = Classifier(**self.default_config())
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text.values, train_sample.Target.values)
         model.predict(valid_sample.Text.values)
 
-        model2 = Classifier(config=self.default_config())
+        model2 = Classifier(**self.default_config())
         model2.fit(train_sample.Text.values, train_sample.Target.values)
         model2.predict(valid_sample.Text.values)
 
@@ -121,7 +119,7 @@ class TestClassifier(unittest.TestCase):
         Ensure second call to predict is faster than first
         """
 
-        model = Classifier(config=self.default_config())
+        model = Classifier(**self.default_config())
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text.values, train_sample.Target.values)
@@ -138,7 +136,7 @@ class TestClassifier(unittest.TestCase):
         self.assertLess(second_prediction_time, first_prediction_time / 2.)
 
     def test_correct_cached_predict(self):
-        model = Classifier(config=self.default_config())
+        model = Classifier(**self.default_config())
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text.values, train_sample.Target.values)
@@ -154,13 +152,13 @@ class TestClassifier(unittest.TestCase):
         Ensure model returns predictions of the right type
         """
 
-        model = Classifier(config=self.default_config())
+        model = Classifier(**self.default_config())
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
-        
+
         with self.assertRaises(FinetuneError):
             model.fit(train_sample.Text, train_sample.Target[:1])
-        
+
         model.fit(train_sample.Text.values, train_sample.Target.values)
 
         predictions = model.predict(valid_sample.Text.values)
@@ -176,14 +174,14 @@ class TestClassifier(unittest.TestCase):
         Ensure model training does not error out when oversampling is set to True
         """
 
-        model = Classifier(config=self.default_config())
+        model = Classifier(**self.default_config())
         model.config.oversample = True
         train_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text.values, train_sample.Target.values)
 
     def test_class_weights(self):
         # testing class weights
-        model = Classifier(config=self.default_config())
+        model = Classifier(**self.default_config())
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text.values, train_sample.Target.values)
@@ -191,21 +189,21 @@ class TestClassifier(unittest.TestCase):
         valid_sample = self.dataset.sample(n=(3 * self.n_sample))
         predictions = model.predict(valid_sample.Text.values)
         recall = recall_score(valid_sample.Target.values, predictions, pos_label=1)
-        model = Classifier(config=self.default_config(class_weights={1: 100}))
+        model = Classifier(**self.default_config(class_weights={1: 100}))
         model.fit(train_sample.Text.values, train_sample.Target.values)
         predictions = model.predict(valid_sample.Text.values)
         new_recall = recall_score(valid_sample.Target.values, predictions, pos_label=1)
         self.assertTrue(new_recall >= recall)
 
         # test auto-inferred class weights function
-        model = Classifier(config=self.default_config(class_weights='log'))
+        model = Classifier(**self.default_config(class_weights='log'))
         model.fit(train_sample.Text.values, train_sample.Target.values)
 
     def test_fit_predict_batch_size_1(self):
         """
         Ensure training is possible with batch size of 1
         """
-        model = Classifier(config=self.default_config())
+        model = Classifier(**self.default_config())
         model.config.batch_size = 1
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
@@ -218,12 +216,13 @@ class TestClassifier(unittest.TestCase):
         Ensure saving + loading does not change predictions
         """
         save_file = 'tests/saved-models/test-save-load'
-        model = Classifier(config=self.default_config(save_adam_vars=False))
+        config = self.default_config(save_adam_vars=False)
+        model = Classifier(**config)
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text, train_sample.Target)
         predictions = model.predict(valid_sample.Text)
-        
+
         # testing file size reduction options
         model.save(save_file)
         self.assertLess(os.stat(save_file).st_size, 500000000)
@@ -243,7 +242,7 @@ class TestClassifier(unittest.TestCase):
         Ensure featurization returns an array of the right shape
         Ensure featurization is still possible after fit
         """
-        model = Classifier(config=self.default_config())
+        model = Classifier(**self.default_config())
         train_sample = self.dataset.sample(n=self.n_sample)
         features = model.featurize(train_sample.Text)
         self.assertEqual(features.shape, (self.n_sample, self.n_hidden))
@@ -255,7 +254,7 @@ class TestClassifier(unittest.TestCase):
         """
         Ensure model converges to a reasonable solution for a trivial problem
         """
-        model = Classifier(config=self.default_config())
+        model = Classifier(**self.default_config())
         n_per_class = (self.n_sample * 5)
         trX = ['cat'] * n_per_class + ['finance'] * n_per_class
         trY = copy(trX)
@@ -269,7 +268,7 @@ class TestClassifier(unittest.TestCase):
         """
         Ensure model converges to a reasonable solution for a trivial problem
         """
-        model = Classifier(config=get_small_model_config())
+        model = Classifier(**get_small_model_config())
         n_per_class = (self.n_sample * 5)
         trX = ['cat'] * n_per_class + ['finance'] * n_per_class
         np.random.shuffle(trX)
@@ -285,7 +284,7 @@ class TestClassifier(unittest.TestCase):
         Ensure saving + loading does not cause errors
         Ensure saving + loading does not change predictions
         """
-        model = Classifier(verbose=False)
+        model = Classifier()
         lm_out = model.generate_text("", max_length=5)
         self.assertEqual(type(lm_out), str)
         lm_out_2 = model.generate_text("Indico RULE")
@@ -298,7 +297,7 @@ class TestClassifier(unittest.TestCase):
         Ensure saving + loading does not change predictions
         """
         save_file = 'tests/saved-models/test-save-load'
-        model = Classifier(verbose=False)
+        model = Classifier()
         train_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text, train_sample.Target)
         lm_out = model.generate_text("", 5)
@@ -310,12 +309,19 @@ class TestClassifier(unittest.TestCase):
         self.assertIn('_start_Indico RULE'.lower(), lm_out_2)
 
     def test_generate_text_stop_early(self):
-        model = Classifier(verbose=False)
+        model = Classifier()
 
         # A dirty mock to make all model inferences output a hundred _classify_ tokens
         fake_estimator = MagicMock()
         model.get_estimator = lambda *args, **kwargs: fake_estimator
-        fake_estimator.predict = MagicMock(return_value=iter([{"GEN_TEXT" :100 * [ENCODER['_classify_']]}]))
+        model.input_pipeline.text_encoder._lazy_init()
+        fake_estimator.predict = MagicMock(
+            return_value=iter([
+                {
+                    "GEN_TEXT": 100 * [model.input_pipeline.text_encoder['_classify_']]
+                }
+            ])
+        )
 
         lm_out = model.generate_text()
         self.assertEqual(lm_out, '_start__classify_')
@@ -325,6 +331,6 @@ class TestClassifier(unittest.TestCase):
         Ensure validation settings do not result in an error
         """
         config = self.default_config(val_interval=10, val_size=10)
-        model = Classifier(config=config)
+        model = Classifier(**config)
         train_sample = self.dataset.sample(n=20)
         model.fit(train_sample.Text, train_sample.Target)

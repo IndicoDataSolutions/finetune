@@ -2,6 +2,7 @@ import itertools
 import logging
 import sys
 import math
+import os
 
 from abc import ABCMeta, abstractmethod
 
@@ -12,18 +13,35 @@ from tensorflow.python.data import Dataset
 from sklearn.model_selection import train_test_split
 
 
+import finetune
 from finetune.errors import FinetuneError
 from finetune.config import PAD_TOKEN
-from finetune.encoding import TextEncoder, ArrayEncodedOutput, EncodedOutput
+from finetune.base_models.gpt.encoder import GPTEncoder
+from finetune.encoding import ArrayEncodedOutput, EncodedOutput
 from finetune.imbalance import compute_class_weights
 
-ENCODER = TextEncoder()
 LOGGER = logging.getLogger('finetune')
 
+ENCODERS = {
+    'gpt': GPTEncoder
+}
 
 class BasePipeline(metaclass=ABCMeta):
     def __init__(self, config):
         self.config = config
+
+        finetune_base_folder = os.path.dirname(finetune.__file__)
+        self.base_model_root = self.config.base_model_path.split('/')[0]
+        self._encoder = ENCODERS.get(self.base_model_root, GPTEncoder)
+        self.text_encoder = self._encoder(
+            encoder_path=os.path.join(
+                finetune_base_folder, 'model', self.base_model_root, 'encoder.json'
+            ),
+            vocab_path=os.path.join(
+                finetune_base_folder, 'model', self.base_model_root, 'vocab.bpe'
+            )
+        )
+
         self.label_encoder = None
         self.target_dim = None
         self.pad_idx_ = None
@@ -37,8 +55,22 @@ class BasePipeline(metaclass=ABCMeta):
 
     def feed_shape_type_def(self):
         TS = tf.TensorShape
-        return ({"tokens": tf.int32, "mask": tf.float32}, tf.float32), (
-            {"tokens": TS([self.config.max_length, 2]), "mask": TS([self.config.max_length])}, TS([self.target_dim]))
+        return (
+            (
+                {
+                    "tokens": tf.int32,
+                    "mask": tf.float32
+                },
+                tf.float32
+            ),
+            (
+                {
+                    "tokens": TS([self.config.max_length, 2]),
+                    "mask": TS([self.config.max_length])
+                },
+                TS([self.target_dim])
+            )
+        )
 
     def _array_format(self, encoded_output, pad_token=PAD_TOKEN):
         """
@@ -64,7 +96,9 @@ class BasePipeline(metaclass=ABCMeta):
         if encoded_output.labels:
             labels_arr[:seq_length] = encoded_output.labels
         # positional_embeddings
-        x[:, 1] = np.arange(ENCODER.vocab_size, ENCODER.vocab_size + self.config.max_length)
+        x[:, 1] = np.arange(
+            self.text_encoder.vocab_size, self.text_encoder.vocab_size + self.config.max_length
+        )
 
         return ArrayEncodedOutput(
             token_ids=x,
@@ -129,7 +163,7 @@ class BasePipeline(metaclass=ABCMeta):
         if isinstance(val_size, float):
             return int(val_size * self.config.dataset_size)
         return val_size
-        
+
     def validation_settings(self, n_examples, batch_size):
         """
         Auto-select reasonable validation settings
@@ -181,7 +215,7 @@ class BasePipeline(metaclass=ABCMeta):
                 total = self.config.dataset_size
             else:
                 total = self.config.val_size
-                
+
         def internal_gen():
             current_epoch = (self.epoch - 1) % self.config.n_epochs + 1
             it = iter(gen)
@@ -198,7 +232,7 @@ class BasePipeline(metaclass=ABCMeta):
 
             for i in tqdm.tqdm(it, desc=desc, total=total, miniters=1, leave=current_epoch  == self.config.n_epochs and train):
                 yield i
-            
+
             if train:
                 self.epoch += 1
 
@@ -291,7 +325,7 @@ class BasePipeline(metaclass=ABCMeta):
             # can only chunk single sequence inputs
             chunk_size = self.config.max_length - 2
             step_size = chunk_size // 3
-            encoded = ENCODER.encode_multi_input(
+            encoded = self.text_encoder.encode_multi_input(
                 Xs,
                 Y=Y,
                 max_length=sys.maxsize,
@@ -308,7 +342,7 @@ class BasePipeline(metaclass=ABCMeta):
                         d[field] = field_value[start:end]
                 yield self._array_format(EncodedOutput(**d), pad_token=pad_token)
         else:
-            encoder_out = ENCODER.encode_multi_input(
+            encoder_out = self.text_encoder.encode_multi_input(
                 Xs,
                 Y=Y,
                 max_length=self.config.max_length,

@@ -3,7 +3,7 @@ import unittest
 import warnings
 import random
 
-# prevent excessive warning logs 
+# prevent excessive warning logs
 warnings.filterwarnings('ignore')
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
@@ -31,9 +31,8 @@ class TestComparison(unittest.TestCase):
             max_length=128,
             n_epochs=1,
             l2_reg=0,
-            lm_coef=0.,
+            lm_loss_coef=0.,
             val_size=0.,
-            verbose=False,
         )
         d.update(kwargs)
         return d
@@ -51,16 +50,16 @@ class TestComparison(unittest.TestCase):
         model = Comparison(**self.default_config())
         n_samples = 10
         model.fit(
-            [["Transformers was a terrible movie but a great model", "Transformers are a great model but a terrible movie"]] * n_samples, 
+            [["Transformers was a terrible movie but a great model", "Transformers are a great model but a terrible movie"]] * n_samples,
             ['yes'] * n_samples
         )
 
         test_data = [["Transformers was a terrible movie but a great model", "Transformers are a great model but a terrible movie"]]
-        
+
         predictions = model.predict(test_data)
         for prediction in predictions:
             self.assertIsInstance(prediction, (str, bytes))
-        
+
         probabilities = model.predict_proba(test_data)
         for proba in probabilities:
             self.assertIsInstance(proba, dict)
@@ -80,7 +79,7 @@ class TestComparison(unittest.TestCase):
                 similar.append([random.choice(dataset), random.choice(dataset)])
         for i in range(n_per):
             different.append([random.choice(animals), random.choice(numbers)])
-        
+
         targets = np.asarray(["similar"] * len(similar) + ["different"] * len(different))
         data = similar + different
 
