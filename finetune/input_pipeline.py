@@ -17,13 +17,15 @@ import finetune
 from finetune.errors import FinetuneError
 from finetune.config import PAD_TOKEN
 from finetune.base_models.gpt.encoder import GPTEncoder
+from finetune.base_models.gpt2.encoder import GPT2Encoder
 from finetune.encoding import ArrayEncodedOutput, EncodedOutput
 from finetune.imbalance import compute_class_weights
 
 LOGGER = logging.getLogger('finetune')
 
 ENCODERS = {
-    'gpt': GPTEncoder
+    'gpt': GPTEncoder,
+    'gpt2': GPT2Encoder
 }
 
 class BasePipeline(metaclass=ABCMeta):
@@ -32,7 +34,7 @@ class BasePipeline(metaclass=ABCMeta):
 
         finetune_base_folder = os.path.dirname(finetune.__file__)
         self.base_model_root = self.config.base_model_path.split('/')[0]
-        self._encoder = ENCODERS.get(self.base_model_root, GPTEncoder)
+        self._encoder = ENCODERS[self.base_model_root]
         self.text_encoder = self._encoder(
             encoder_path=os.path.join(
                 finetune_base_folder, 'model', self.base_model_root, 'encoder.json'

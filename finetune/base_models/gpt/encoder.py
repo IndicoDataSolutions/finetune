@@ -15,7 +15,7 @@ import numpy as np
 import tensorflow as tf
 
 from finetune.config import PAD_TOKEN
-from finetune.encoding import NLP, EncodedOutput, ArrayEncodedOutput, BaseEncoder, get_pairs
+from finetune.encoding import NLP, EncodedOutput, BaseEncoder, get_pairs
 
 
 SUBS = {

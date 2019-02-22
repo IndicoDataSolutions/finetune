@@ -40,8 +40,8 @@ class StanfordSentimentTreebank(Dataset):
 
 if __name__ == "__main__":
     # Train and evaluate on SST
-    dataset = StanfordSentimentTreebank(nrows=100).dataframe
-    model = Classifier(n_epochs=1, batch_size=2, lr_warmup=0.1, tensorboard='.tensorboard')
+    dataset = StanfordSentimentTreebank(nrows=300).dataframe
+    model = Classifier(n_epochs=3, batch_size=2, lr_warmup=0.1, base_model_path='gpt2/model-sm.jl', val_size=0, max_length=1024)
     trainX, testX, trainY, testY = train_test_split(dataset.Text.values, dataset.Target.values, test_size=0.3, random_state=42)
     model.fit(trainX, trainY)
     accuracy = np.mean(model.predict(testX) == testY)

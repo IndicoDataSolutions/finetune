@@ -183,7 +183,6 @@ def gpt2_featurizer(X, encoder, config, train=False, reuse=None):
 
         # Transformer
         pasts = [None] * config.n_layer
-        assert len(pasts) == config.n_layer
         for layer, past in enumerate(pasts):
             if (config.n_layer - layer) == config.num_layers_trained and config.num_layers_trained != config.n_layer:
                 h = tf.stop_gradient(h)
@@ -203,7 +202,7 @@ def gpt2_featurizer(X, encoder, config, train=False, reuse=None):
         clf_token = encoder['_classify_']
         pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
         clf_h = tf.gather(clf_h, tf.range(shape_list(X)[0], dtype=tf.int32) * config.max_length + pool_idx)
-        clf_h = tf.reshape(clf_h, shape=initial_shape[: -2] + [config.n_embed])
+        clf_h = tf.reshape(clf_h, shape=initial_shape[:-2] + [config.n_embed])
         seq_feats = tf.reshape(h, shape=initial_shape[:-1] + [config.n_embed])
 
         return {

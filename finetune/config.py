@@ -249,7 +249,7 @@ def get_default_config():
         lr=GridSearchable(6.25e-5, [6.25e-4, 6.25e-5, 6.25e-6]),
         lr_warmup=0.002,
         max_grad_norm=1.0,
-
+        prefit_init=False,
 
         # Language Model Settings
         lm_loss_coef=0.0,
@@ -265,7 +265,6 @@ def get_default_config():
 
         # Regression Params
         regression_loss="L2",
-        prefit_init=False,
 
         # Association Params
         viable_edges=None,

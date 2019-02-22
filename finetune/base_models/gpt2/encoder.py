@@ -5,8 +5,12 @@ from functools import lru_cache
 
 import numpy as np
 
-from finetune.encoding import BaseEncoder, EncodedOutput, ArrayEncodedOutput, get_pairs
+import finetune
+from finetune.encoding import BaseEncoder, EncodedOutput, get_pairs
 
+FINETUNE_FOLDER = os.path.dirname(finetune.__file__)
+ENCODER_PATH = os.path.join(FINETUNE_FOLDER, 'model', 'gpt2', 'encoder.json')
+VOCAB_PATH = os.path.join(FINETUNE_FOLDER, 'model', 'gpt2', 'vocab.bpe')
 
 @lru_cache()
 def bytes_to_unicode():
@@ -19,13 +23,17 @@ def bytes_to_unicode():
     To avoid that, we want lookup tables between utf-8 bytes and unicode strings.
     And avoids mapping to whitespace/control characters the bpe code barfs on.
     """
-    bs = list(range(ord("!"), ord("~")+1))+list(range(ord("¡"), ord("¬")+1))+list(range(ord("®"), ord("ÿ")+1))
+    bs = (
+        list(range(ord("!"), ord("~") + 1)) +
+        list(range(ord("¡"), ord("¬") + 1)) +
+        list(range(ord("®"), ord("ÿ") + 1))
+    )
     cs = bs[:]
     n = 0
-    for b in range(2**8):
+    for b in range(2 ** 8):
         if b not in bs:
             bs.append(b)
-            cs.append(2**8+n)
+            cs.append(2 ** 8 + n)
             n += 1
     cs = [chr(n) for n in cs]
     return dict(zip(bs, cs))
@@ -37,6 +45,9 @@ class GPT2Encoder(BaseEncoder):
     required for finetune. Particularly with respect to formatting with multiple inputs.
     """
     UNK_IDX = 0
+
+    def __init__(self, encoder_path=ENCODER_PATH, vocab_path=VOCAB_PATH):
+        super().__init__(encoder_path=encoder_path, vocab_path=vocab_path)
 
     def _lazy_init(self, errors='replace'):
         if self.initialized:
@@ -132,13 +143,12 @@ class GPT2Encoder(BaseEncoder):
 
             tokens = re.findall(self.pat, text)
             for j, token in enumerate(tokens):
-                token = ''.join(self.byte_encoder[b] for b in token.encode('utf-8'))
-                bpe_toks = [self.encoder[bpe_token] for bpe_token in self.bpe(token).split(' ')]
-
+                encoded_token = ''.join(self.byte_encoder[b] for b in token.encode('utf-8'))
+                bpe_toks = self.bpe(encoded_token).split(' ')
                 try:
-                    if token.text.strip():
+                    if token.strip():
                         token_start = text.index(token, token_start)
-                except:
+                except ValueError:
                     # text_standardization oddity
                     continue
 
@@ -147,8 +157,8 @@ class GPT2Encoder(BaseEncoder):
                     self.encoder.get(t, self.UNK_IDX)
                     for t in bpe_toks
                 ])
-                subtoken_positions = np.cumsum([len(tok.replace("</w>", '')) for tok in bpe_toks]) + token_start
-                token_start += len(token.text.strip())
+                subtoken_positions = np.cumsum([len(tok) for tok in bpe_toks]) + token_start
+                token_start += len(token.strip())
                 tok_pos.extend(subtoken_positions)
 
             batch_tokens.append(subtokens)

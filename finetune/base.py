@@ -106,6 +106,7 @@ class BaseModel(object, metaclass=ABCMeta):
             word_embeddings = value[:vocab_size - len(self.input_pipeline.text_encoder.special_tokens)]
             special_embed = value[len(word_embeddings): vocab_size]
             positional_embed = value[vocab_size:]
+
             if self.config.interpolate_pos_embed and self.config.max_length != len(positional_embed):
                 positional_embed = interpolate_pos_embed(positional_embed, self.config.max_length)
 
