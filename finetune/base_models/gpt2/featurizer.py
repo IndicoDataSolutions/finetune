@@ -130,14 +130,13 @@ def mlp(x, scope, n_state, *, hparams, train=False):
         return h2
 
 
-def block(x, scope, *, past, hparams, train=False):
-    with tf.variable_scope(scope):
-        nx = x.shape[-1].value
-        a = attn(norm(x, 'ln_1'), 'attn', nx, past=past, hparams=hparams, train=train)
-        x = x + a
-        m = mlp(norm(x, 'ln_2'), 'mlp', nx * 4, hparams=hparams, train=train)
-        x = x + m
-        return x
+def block(x, *, past, hparams, train=False):
+    nx = x.shape[-1].value
+    a = attn(norm(x, 'ln_1'), 'attn', nx, past=past, hparams=hparams, train=train)
+    x = x + a
+    m = mlp(norm(x, 'ln_2'), 'mlp', nx * 4, hparams=hparams, train=train)
+    x = x + m
+    return x
 
 
 def past_shape(*, hparams, batch_size=None, sequence=None):
@@ -190,10 +189,11 @@ def gpt2_featurizer(X, encoder, config, train=False, reuse=None):
             else:
                 train_layer = train
 
-            block_fn = functools.partial(block, scope='h%d' % layer, past=past, hparams=config, train=train)
-            if config.low_memory_mode and train_layer:
-                block_fn = recompute_grad(block, use_entire_scope=True)
-            h = block_fn(h)
+            with tf.variable_scope('h%d' % layer):
+                block_fn = functools.partial(block, past=past, hparams=config, train=train)
+                if config.low_memory_mode and train_layer:
+                    block_fn = recompute_grad(block_fn, use_entire_scope=True)
+                h = block_fn(h)
 
         h = norm(h, 'ln_f')
 
