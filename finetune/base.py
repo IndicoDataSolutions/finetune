@@ -31,10 +31,12 @@ from finetune.config import get_config, all_gpus, assert_valid_config
 from finetune.saver import Saver, InitializeHook
 from finetune.errors import FinetuneError
 from finetune.model import get_model_fn, PredictMode
+
 from finetune.util.download import download_data_if_required
 from finetune.util.estimator import PatchedParameterServerStrategy
 from finetune.util.positional_embeddings import embedding_preprocessor
 
+from finetune.in_memory_finetune import InMemoryFinetune
 
 LOGGER = logging.getLogger('finetune')
 
@@ -197,6 +199,20 @@ class BaseModel(object, metaclass=ABCMeta):
                 eval_frequency=early_stopping_interval
             )
         )
+
+        if self.config.in_memory_finetune is not None:
+            for f in self.config.in_memory_finetune:
+                train_hooks.append(InMemoryFinetune(
+                    config_to_eval=f["config"],
+                    finetune=self,
+                    eval_dir=estimator.eval_dir(),
+                    X=f["X"],
+                    Y=f["Y"],
+                    X_test=f["X_test"],
+                    Y_test=f["Y_test"],
+                    name=f["name"],
+                    every_n_iter=f["every_n_iter"]
+                ))
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")

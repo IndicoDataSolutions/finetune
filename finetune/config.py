@@ -299,7 +299,9 @@ def get_default_config():
         kernel_width=3,
         use_fp16=True,
         use_timing=False,
-        scale_loss=True, 
+        scale_loss=True,
+        loss_scale_every_n_steps=2,
+        in_memory_finetune=None,
 
         # Location of model weights
         base_model=GPTModel,
