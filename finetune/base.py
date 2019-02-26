@@ -159,15 +159,19 @@ class BaseModel(object, metaclass=ABCMeta):
         batch_size = batch_size or self.config.batch_size
 
         val_input_fn, train_input_fn, val_size, val_interval = self.input_pipeline.get_train_input_fns(Xs, Y, batch_size=batch_size)
-        if val_size <= 10 and self.config.keep_best_model:
-            tf.logging.warning(
-                "Early stopping / keeping best model with a validation size of {} is likely to case undesired results".format(val_size))
+        if self.config.keep_best_model:
+            if isinstance(val_size, dict):
+                tf.logging.warning("Cannot early stop or keep best model with MTL")
+            elif val_size <= 10:
+                tf.logging.warning(
+                "Early stopping / keeping best model with a validation size of {} is likely to case undesired results".format(val_size)
+                )
 
         force_build_lm = (Y is None)
         estimator = self.get_estimator(force_build_lm=force_build_lm)
 
         steps_per_epoch = self._n_steps(
-            n_examples=self.config.dataset_size,
+            n_examples=self.input_pipeline.dataset_size,
             batch_size=batch_size,
             n_gpus=max(1, len(self.resolved_gpus))
         )
@@ -179,11 +183,18 @@ class BaseModel(object, metaclass=ABCMeta):
                 keep_best_model=self.config.keep_best_model,
                 steps_per_epoch=steps_per_epoch,
                 early_stopping_steps=self.config.early_stopping_steps,
-                eval_frequency=val_interval
+                eval_frequency=val_interval if not isinstance(val_interval, dict) else sys.maxsize
             ),
-
         ]
-        if val_size > 0:
+
+        if self.config.tasks is not None:
+            for task in self.config.tasks:
+                train_hooks.append(
+                    tf.contrib.estimator.InMemoryEvaluatorHook(
+                        estimator, val_input_fn[task], every_n_iter=val_interval[task], steps=val_size[task] // batch_size, name=task
+                    )
+                )
+        elif val_size > 0:
             train_hooks.append(
                 tf.contrib.estimator.InMemoryEvaluatorHook(
                     estimator, val_input_fn, every_n_iter=val_interval, steps=val_size // batch_size
@@ -321,7 +332,7 @@ class BaseModel(object, metaclass=ABCMeta):
             self._predictions = _estimator.predict(input_fn=input_fn, predict_keys=mode)
 
         for _ in range(self._to_pull):
-            next(self._predictions) # collect the null predictions from the queue
+            next(self._predictions)  # collect the null predictions from the queue
 
         predictions = [None] * n
         for i in tqdm.tqdm(range(n), total=n, desc="Inference"):

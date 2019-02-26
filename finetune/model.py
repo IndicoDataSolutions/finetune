@@ -106,6 +106,7 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                     if "_threshold" in params:
                         predict_params["threshold"] = params._threshold
                     pred_op = predict_op(logits, **predict_params)
+
                     if type(pred_op) == tuple:
                         pred_op, pred_proba_op = pred_op
                     else:

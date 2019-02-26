@@ -14,6 +14,7 @@ from finetune.association import Association
 from finetune.comparison_regressor import ComparisonRegressor
 from finetune.ordinal_regressor import OrdinalRegressor, ComparisonOrdinalRegressor
 from finetune.language_model import LanguageModel
+from finetune.mtl import MultiTask
 
 __version__, VERSION, version = ("0.5.15",) * 3
 

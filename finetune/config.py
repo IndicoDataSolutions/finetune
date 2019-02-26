@@ -259,6 +259,8 @@ def get_default_config():
         prefit_init=False,
         accum_steps=1,
 
+        # MTL
+        tasks=None,
 
         # Language Model Settings
         lm_loss_coef=0.0,

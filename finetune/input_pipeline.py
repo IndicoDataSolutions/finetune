@@ -34,6 +34,10 @@ class BasePipeline(metaclass=ABCMeta):
         self.rebuild = False
         self.epoch = 0
 
+    @property
+    def dataset_size(self):
+        return self.config.dataset_size
+
     @abstractmethod
     def _target_encoder(self):
         # Overridden by subclass to produce the right target encoding for a given target model.
@@ -217,7 +221,7 @@ class BasePipeline(metaclass=ABCMeta):
             for _, i in zip(range(self._skip_tqdm), it):
                 yield i
 
-            for i in tqdm.tqdm(it, desc=desc, total=total, miniters=1, leave=current_epoch  == self.config.n_epochs and train):
+            for i in tqdm.tqdm(it, desc=desc, total=total, miniters=1, leave=current_epoch == self.config.n_epochs and train):
                 yield i
 
             if train:
