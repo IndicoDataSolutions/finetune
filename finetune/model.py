@@ -6,8 +6,8 @@ import tensorflow as tf
 from tensorflow.train import Scaffold
 from tensorflow.contrib.opt.python.training.weight_decay_optimizers import AdamWOptimizer
 
-from finetune.network_modules import language_model
-from finetune.utils import sample_with_temperature, get_grad_accumulation_optimizer
+from finetune.network_modules import featurizer, language_model
+from finetune.utils import sample_with_temperature, dont_optimize_zeros, get_grad_accumulation_optimizer
 from finetune.optimizers import schedules
 from finetune.imbalance import class_weight_tensor
 
@@ -57,6 +57,7 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
             )
         with tf.variable_scope('model/target'):
             target_model_state = target_model_fn(
+                config=params,
                 featurizer_state=featurizer_state,
                 targets=Y,
                 n_outputs=target_dim,
@@ -131,9 +132,10 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                     predictions[PredictMode.LM_PERPLEXITY] = language_model_state["perplexity"]
 
         if mode == tf.estimator.ModeKeys.TRAIN:
-            total_num_steps = params.n_epochs * params.dataset_size // params.batch_size
-            lr_decay = lambda lr, global_step: lr * schedules[params.lr_schedule](
-                tf.to_float(global_step) / total_num_steps
+            total_num_steps = params.n_epochs * params.dataset_size//params.batch_size
+            lr_decay = lambda lr, global_step: tf.maximum(
+                0.0,
+                lr * schedules[params.lr_schedule](tf.to_float(global_step) / total_num_steps)
             )
 
             def optimizer(lr):
@@ -141,7 +143,7 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                     Optimizer = get_grad_accumulation_optimizer(AdamWOptimizer, params.accum_steps)
                 else:
                     Optimizer = AdamWOptimizer
-                
+
                 opt = Optimizer(
                     learning_rate=lr,
                     beta1=params.b1,
@@ -149,8 +151,13 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                     epsilon=params.epsilon,
                     weight_decay=params.l2_reg * lr
                 )
+                
                 decay_var_list = [v for v in tf.global_variables() if len(v.get_shape()) > 1 or params.vector_l2]
                 opt.apply_gradients = functools.partial(opt.apply_gradients, decay_var_list=decay_var_list)
+
+                if params.dont_optimize_zero_gradients:
+                    opt = dont_optimize_zeros(opt)
+                
                 return opt
 
             summaries = tf.contrib.layers.OPTIMIZER_SUMMARIES if params.summarize_grads else None

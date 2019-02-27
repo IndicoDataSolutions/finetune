@@ -30,7 +30,7 @@ class ComparisonPipeline(ClassificationPipeline):
     def feed_shape_type_def(self):
         TS = tf.TensorShape
         return ({"tokens": tf.int32, "mask": tf.float32}, tf.float32), (
-            {"tokens": TS([2, self.config.max_length, 2]), "mask": TS([2, self.config.max_length])},
+            {"tokens": TS([None, self.config.max_length, 2]), "mask": TS([None, self.config.max_length])},
             TS([self.target_dim]))
 
 class Comparison(Classifier):
@@ -44,10 +44,12 @@ class Comparison(Classifier):
     def _get_input_pipeline(self):
         return ComparisonPipeline(self.config)
 
-    def _target_model(self, *, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
+    @staticmethod
+    def _target_model(config, *, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
+        featurizer_state = featurizer_state.copy()
         featurizer_state["sequence_features"] = tf.abs(tf.reduce_sum(featurizer_state["sequence_features"], 1))
         featurizer_state["features"] = tf.abs(tf.reduce_sum(featurizer_state["features"], 1))
-        return super()._target_model(featurizer_state=featurizer_state, targets=targets, n_outputs=n_outputs, train=train, reuse=reuse, **kwargs)
+        return Classifier._target_model(config, featurizer_state=featurizer_state, targets=targets, n_outputs=n_outputs, train=train, reuse=reuse, **kwargs)
 
     def predict(self, pairs):
         """

@@ -72,12 +72,13 @@ class Classifier(BaseModel):
     def get_eval_fn(cls):
         return lambda labels, targets: np.mean(np.asarray(labels) == np.asarray(targets))
 
-    def _target_model(self, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
+    @staticmethod
+    def _target_model(config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
         return classifier(
             hidden=featurizer_state['features'], 
             targets=targets, 
             n_targets=n_outputs, 
-            config=self.config,
+            config=config,
             train=train,
             reuse=reuse,
             **kwargs

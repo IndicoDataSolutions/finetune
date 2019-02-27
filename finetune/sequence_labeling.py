@@ -1,6 +1,4 @@
 import itertools
-import math
-import warnings
 import copy
 
 import tensorflow as tf
@@ -11,8 +9,8 @@ from finetune.target_encoders import SequenceLabelingEncoder, SequenceMultiLabel
 from finetune.network_modules import sequence_labeler
 from finetune.crf import sequence_decode
 from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_sequence
+
 from finetune.input_pipeline import BasePipeline
-from finetune.estimator_utils import ProgressHook
 
 
 class SequencePipeline(BasePipeline):
@@ -233,15 +231,16 @@ class SequenceLabeler(BaseModel):
         """
         return self.predict(X)
 
-    def _target_model(self, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
+    @staticmethod
+    def _target_model(config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
         return sequence_labeler(
             hidden=featurizer_state['sequence_features'],
             targets=targets,
             n_targets=n_outputs,
-            pad_id=self.input_pipeline.pad_idx,
-            config=self.config,
+            pad_id=config.pad_idx,
+            config=config,
             train=train,
-            multilabel=self.multi_label,
+            multilabel=config.multi_label_sequences,
             reuse=reuse,
             **kwargs
         )

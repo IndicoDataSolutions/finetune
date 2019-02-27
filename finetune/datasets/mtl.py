@@ -7,7 +7,7 @@ import numpy as np
 
 from sklearn.model_selection import train_test_split
 
-from finetune import MultiTask, Classifier
+from finetune import MultiTask, Classifier, Comparison
 from finetune.datasets.stanford_sentiment_treebank import StanfordSentimentTreebank
 from finetune.datasets.quora_similarity import QuoraDuplicate
 from finetune.datasets.reuters import Reuters
@@ -32,10 +32,9 @@ if __name__ == "__main__":
             
     
     model = MultiTask(tasks={
-        "sst": "classification",
-        "qqp": "comparison",
-#        "reuters": "sequence"
-    }, debugging_logs=True, lr=6.25e-6, n_epochs=30)
+        "sst": Classifier,
+        "qqp": Comparison
+    }, debugging_logs=True, lr=6.25e-6, n_epochs=2)
 
     q_trainX1, q_testX1, q_trainX2, q_testX2, q_trainY, q_testY = train_test_split(
         q_dataset.Text1.values, q_dataset.Text2.values, q_dataset.Target.values,
@@ -48,12 +47,10 @@ if __name__ == "__main__":
         {
             "sst": trainX,
             "qqp": list(zip(q_trainX1, q_trainX2)),
-#            "reuters": r_trainX
         },
         {
             "sst": trainY,
             "qqp": q_trainY,
-#            "reuters": r_trainY
         }
     )
     model.create_base_model("mtl_sst_qqp_test.jl", exists_ok=True)

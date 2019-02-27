@@ -261,6 +261,7 @@ def get_default_config():
 
         # MTL
         tasks=None,
+        dont_optimize_zero_gradients=False,
 
         # Language Model Settings
         lm_loss_coef=0.0,

@@ -36,7 +36,7 @@ def SST_train(data_folder):
 def MRPC_train(data_folder):
     data_folder += "/MRPC"
 
-    train_dataframe = pd.read_csv(os.path.join(data_folder, "train.tsv"), sep="\t", quoting=3)
+    train_dataframe = pd.read_csv(os.path.join(data_folder, "train.tsv"), sep="\t", quoting=3).astype(str)
     train_X, train_Y = list(zip(train_dataframe["#1 String"].values,train_dataframe["#2 String"].values)), train_dataframe.Quality.values
 
     return "mrpc", train_X, train_Y, Comparison
@@ -70,7 +70,7 @@ def MNLI_train(data_folder):
 def QNLI_train(data_folder):
     data_folder += "/QNLI"
     
-    train_dataframe = pd.read_csv(os.path.join(data_folder, "train.tsv"), sep="\t", quoting=3)
+    train_dataframe = pd.read_csv(os.path.join(data_folder, "train.tsv"), sep="\t", quoting=3).astype(str)
     train_X, train_Y = list(zip(train_dataframe.question.values,train_dataframe.sentence.values)), train_dataframe.label.values
     return "qnli", train_X, train_Y, MultiFieldClassifier
     

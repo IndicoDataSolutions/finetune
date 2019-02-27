@@ -136,8 +136,9 @@ class BaseModel(object, metaclass=ABCMeta):
     def _predict_proba_op(self, logits, **kwargs):
         raise NotImplementedError
 
+    @staticmethod
     @abstractmethod
-    def _target_model(self, *, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
+    def _target_model(*, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
         # Overridden by subclass to attach a target model onto the shared base featurizer.
         raise NotImplementedError
 
