@@ -84,8 +84,9 @@ def block(X, kernel_width, block_name, use_fp16, training, pdrop, backwards=Fals
         h0 = attention_layer(h0, backwards, seq_lens, block_name + "_1")
         h0 = tf.nn.relu(h0)
                           
-        h1 = gated_linear_unit(h0, kernel_width, "1",use_fp16, training, backwards, mask)
-        h1 = tf.nn.relu(h1)
+#        h1 = gated_linear_unit(h0, kernel_width, "1",use_fp16, training, backwards, mask)
+#        h1 = tf.nn.relu(h1)
+        h1 = h0
         
         h2 = gated_linear_unit(h1, kernel_width, "2",use_fp16, training, backwards, mask)
         h2 = attention_layer(h2, backwards, seq_lens, block_name + "_2")
@@ -195,9 +196,8 @@ def featurizer(X, encoder, config, train=False, reuse=None):
         if config.use_fp16:
             h = tf.cast(h, tf.float32)
 
-        h = tf.reshape(h, shape=[-1] + initial_shape[-2:])
-
         mask = tf.expand_dims(tf.sequence_mask(pool_idx, maxlen=tf.shape(h)[1], dtype=tf.float32), -1)
+        h = tf.Print(h, (tf.shape(h), tf.shape(mask)))
         max_pooled = tf.reduce_max(h + (1.0 -  mask) * -1e9, 1)
         mean_pool = tf.reduce_sum(h * mask, 1) / (tf.reduce_sum(mask) + 1e-9)
         clf_h = tf.concat((max_pooled, mean_pool), axis=1)

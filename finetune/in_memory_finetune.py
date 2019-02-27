@@ -1,4 +1,6 @@
 import os
+import traceback
+import sys
 
 from tensorflow.core.framework import summary_pb2
 from tensorflow.python.summary.writer import writer_cache
@@ -56,7 +58,7 @@ class InMemoryFinetune(tf.train.SessionRunHook):
             test_accuracy = np.mean(model.predict(test_x) == test_y)
             train_accuracy = np.mean(model.predict(train_x) == train_y)
         except Exception as e:
-            print(e)
+            traceback.print_exc(file=sys.stdout)
             test_accuracy = -1.0
             train_accuracy = -1.0
 
