@@ -14,10 +14,13 @@ import spacy
 import numpy as np
 import tensorflow as tf
 
-from finetune.config import PAD_TOKEN
+import finetune
 from finetune.encoding import NLP, EncodedOutput, BaseEncoder, get_pairs
 
 
+FINETUNE_FOLDER = os.path.dirname(finetune.__file__)
+ENCODER_PATH = os.path.join(FINETUNE_FOLDER, 'model', 'gpt', 'encoder.json')
+VOCAB_PATH = os.path.join(FINETUNE_FOLDER, 'model', 'gpt', 'vocab.bpe')
 SUBS = {
     '—': '-',
     '–': '-',
@@ -44,6 +47,9 @@ class GPTEncoder(BaseEncoder):
     required for finetune. Particularly with respect to formatting with multiple inputs.
     """
     UNK_IDX = 0
+
+    def __init__(self, encoder_path=ENCODER_PATH, vocab_path=VOCAB_PATH):
+        super().__init__(encoder_path=encoder_path, vocab_path=vocab_path)
 
     def _lazy_init(self):
         # Must set
@@ -140,8 +146,8 @@ class GPTEncoder(BaseEncoder):
 
                 try:
                     if token.text.strip():
-                        token_start = raw_text.index(token.text, token_start)
-                except:
+                        token_start = raw_text.index(token.text.strip(), token_start)
+                except ValueError:
                     # text_standardization oddity
                     continue
 

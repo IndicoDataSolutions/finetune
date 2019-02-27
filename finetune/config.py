@@ -9,12 +9,22 @@ from functools import lru_cache
 import numpy as np
 from nltk.metrics.distance import edit_distance
 
+import finetune
 from finetune.errors import FinetuneError
-
+from finetune.base_models.gpt.model import GPTModel
+from finetune.base_models.gpt2.model import GPT2Model
 
 LOGGER = logging.getLogger('finetune')
-PAD_TOKEN = '<PAD>'
 
+
+def finetune_model_path(path):
+    return os.path.abspath(
+        os.path.join(
+            os.path.dirname(finetune.__file__),
+            'model',
+            path
+        )
+    )
 
 @lru_cache()
 def all_gpus(visible_gpus=None):
@@ -140,8 +150,15 @@ class Settings(dict):
     :param debugging_logs: if True, output tensorflow logs and turn off TQDM logging. Defaults to `False`.
     """
 
-    def base_model(self):
-        return self.base_model_path.split('/')[0]
+    @property
+    def base_model_folder(self):
+        return os.path.abspath(
+            os.path.join(
+                os.path.dirname(finetune.__file__),
+                'model',
+                self.base_model_path.rpartition('/')[0]
+            )
+        )
 
     def get_grid_searchable(self):
         return self.grid_searchable
@@ -193,10 +210,10 @@ def get_default_config():
 
     :return: Config object.
     """
-    return Settings(
+    settings = Settings(
         # General Settings
         low_memory_mode=False,
-        interpolate_pos_embed=True,
+        interpolate_pos_embed=False,
         save_adam_vars=True,
         shuffle_buffer_size=100,
         dataset_size=None,
@@ -271,23 +288,33 @@ def get_default_config():
         association_types=None,
         assocation_loss_weight=100.0,
 
-        # Must remain fixed
-        n_heads=12,
-        n_layer=12,
-        act_fn="gelu",
-        n_embed=768,
-        base_model_path=os.path.join("gpt2", "model-sm.jl")
+        # Location of model weights
+        base_model=GPT2Model,
+        base_model_path=finetune_model_path(
+            os.path.join("gpt2", "model-sm.jl")
+        ),
+
+        # Possible `SourceModel` specific settings
+        n_heads=None,
+        n_layer=None,
+        act_fn=None,
+        n_embed=None,
     )
+    return settings
 
 
 def get_small_model_config(**kwargs):
-    conf = get_config(**kwargs)
-    conf.n_heads = 8
-    conf.n_embed = 512
-    conf.n_layer = 6
-    conf.num_layers_trained = 6
-    conf.base_model_path = os.path.join("gpt", "model-sm.jl")
-    return conf
+    kwargs.update({
+        'base_model': GPTModel,
+        'base_model_path': finetune_model_path(
+            os.path.join("gpt", "model-sm.jl")
+        ),
+        'n_heads': 8,
+        'n_embed': 512,
+        'n_layer': 6,
+        'num_layers_trained': 6
+    })
+    return get_config(**kwargs)
 
 
 def get_config(**kwargs):
@@ -298,6 +325,8 @@ def get_config(**kwargs):
     :return: Config object.    """
     assert_valid_config(**kwargs)
     config = get_default_config()
+    config.base_model = kwargs.get('base_model', config.base_model)
+    config.update(config.base_model.settings)
     config.update(kwargs)
     return config
 

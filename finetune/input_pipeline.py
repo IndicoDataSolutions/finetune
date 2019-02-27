@@ -15,34 +15,18 @@ from sklearn.model_selection import train_test_split
 
 import finetune
 from finetune.errors import FinetuneError
-from finetune.config import PAD_TOKEN
-from finetune.base_models.gpt.encoder import GPTEncoder
-from finetune.base_models.gpt2.encoder import GPT2Encoder
 from finetune.encoding import ArrayEncodedOutput, EncodedOutput
 from finetune.imbalance import compute_class_weights
 
 LOGGER = logging.getLogger('finetune')
 
-ENCODERS = {
-    'gpt': GPTEncoder,
-    'gpt2': GPT2Encoder
-}
 
 class BasePipeline(metaclass=ABCMeta):
     def __init__(self, config):
         self.config = config
 
         finetune_base_folder = os.path.dirname(finetune.__file__)
-        self.base_model_root = self.config.base_model_path.split('/')[0]
-        self._encoder = ENCODERS[self.base_model_root]
-        self.text_encoder = self._encoder(
-            encoder_path=os.path.join(
-                finetune_base_folder, 'model', self.base_model_root, 'encoder.json'
-            ),
-            vocab_path=os.path.join(
-                finetune_base_folder, 'model', self.base_model_root, 'vocab.bpe'
-            )
-        )
+        self.text_encoder = self.config.base_model.get_encoder()
 
         self.label_encoder = None
         self.target_dim = None
@@ -74,7 +58,7 @@ class BasePipeline(metaclass=ABCMeta):
             )
         )
 
-    def _array_format(self, encoded_output, pad_token=PAD_TOKEN):
+    def _array_format(self, encoded_output, pad_token=None):
         """
         Returns numpy array of token idxs and corresponding mask
         Returned `x` array contains two channels:
@@ -87,7 +71,7 @@ class BasePipeline(metaclass=ABCMeta):
 
         if encoded_output.labels is not None:
             labels_arr = np.empty((self.config.max_length), dtype='object')
-            labels_arr.fill(pad_token)
+            labels_arr.fill((pad_token or self.config.pad_token))
         else:
             labels_arr = None
 
@@ -102,16 +86,17 @@ class BasePipeline(metaclass=ABCMeta):
             self.text_encoder.vocab_size, self.text_encoder.vocab_size + self.config.max_length
         )
 
-        return ArrayEncodedOutput(
+        output = ArrayEncodedOutput(
             token_ids=x,
             tokens=encoded_output.tokens,
             labels=labels_arr,
             char_locs=encoded_output.char_locs,
             mask=mask,
         )
+        return output
 
     def text_to_tokens_mask(self, X, Y=None):
-        out_gen = self._text_to_ids(X)
+        out_gen = self._text_to_ids(X, pad_token=self.config.pad_token)
         for out in out_gen:
             feats = {"tokens": out.token_ids, "mask": out.mask}
             if Y is None:
@@ -321,7 +306,7 @@ class BasePipeline(metaclass=ABCMeta):
     def _format_for_inference(self, X):
         return list(X)
 
-    def _text_to_ids(self, Xs, Y=None, pad_token=PAD_TOKEN):
+    def _text_to_ids(self, Xs, Y=None, pad_token=None):
         Xs = self._format_for_encoding(Xs)
         if self.config.chunk_long_sequences and len(Xs) == 1:
             # can only chunk single sequence inputs
@@ -331,7 +316,7 @@ class BasePipeline(metaclass=ABCMeta):
                 Xs,
                 Y=Y,
                 max_length=sys.maxsize,
-                pad_token=pad_token
+                pad_token=(pad_token or self.config.pad_token)
             )
             length = len(encoded.token_ids)
             starts = list(range(0, length, step_size))
@@ -348,7 +333,7 @@ class BasePipeline(metaclass=ABCMeta):
                 Xs,
                 Y=Y,
                 max_length=self.config.max_length,
-                pad_token=pad_token
+                pad_token=(pad_token or self.config.pad_token)
             )
 
-            yield self._array_format(encoder_out, pad_token=pad_token)
+            yield self._array_format(encoder_out, pad_token=(pad_token or self.config.pad_token))

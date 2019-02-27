@@ -56,7 +56,7 @@ class TestOrdinal(unittest.TestCase):
         naive_baseline = max(np.mean(targets == 1), np.mean(targets == 0))
         naive_baseline_mse = np.mean([(naive_baseline - true)**2 for true in t_te])
         self.assertIsInstance(predictions, list)
-        self.assertGreater(naive_baseline_mse, mse)
+        self.assertGreater(mse, naive_baseline_mse)
 
     def test_reasonable_predictions_comparison(self):
         """
@@ -86,7 +86,7 @@ class TestOrdinal(unittest.TestCase):
         naive_baseline = max(np.mean(targets == 1), np.mean(targets == 0))
         naive_baseline_mse = np.mean([(naive_baseline - true)**2 for true in t_te])
         self.assertIsInstance(predictions, list)
-        self.assertGreater(naive_baseline_mse, mse)
+        self.assertGreater(mse, naive_baseline_mse)
 
     def test_reasonable_predictions_unshared_weights(self):
         """

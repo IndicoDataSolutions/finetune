@@ -27,7 +27,7 @@ class AssociationPipeline(BasePipeline):
         pad_token = [self.config.pad_token] if self.multi_label else self.config.pad_token
         if Y is not None:
             Y = list(zip(*Y))
-        out_gen = self._text_to_ids(X, Y=Y, pad_token=[pad_token, pad_token, -1, -2])
+        out_gen = self._text_to_ids(X, Y=Y, pad_token=(pad_token, pad_token, -1, -2))
         class_list = self.association_encoder.classes_.tolist()
         assoc_pad_id = class_list.index(pad_token)
         for out in out_gen:
@@ -135,7 +135,11 @@ class Association(BaseModel):
         if self.config.association_types is None:
             raise FinetuneError("Please set config.association_types before calling finetune.")
         Xs, Y_new, association_type, association_idx, idxs = indico_to_finetune_sequence(
-            Xs, labels=Y, multi_label=False, none_value="<PAD>"
+            Xs,
+            encoder=self.input_pipeline.text_encoder,
+            labels=Y,
+            multi_label=False,
+            none_value=self.config.pad_token
         )
 
         Y = list(zip(Y_new, association_type, association_idx, idxs)) if Y is not None else None
@@ -166,6 +170,7 @@ class Association(BaseModel):
         :param X: A list / array of text, shape [batch]
         :returns: list of class labels.
         """
+        pad_token = [self.config.pad_token] if self.multi_label else self.config.pad_token
         if self.config.viable_edges is None:
             LOGGER.warning("config.viable_edges is not set, this is probably incorrect.")
 
@@ -173,7 +178,10 @@ class Association(BaseModel):
 
         chunk_size = self.config.max_length - 2
         step_size = chunk_size // 3
-        arr_encoded = list(itertools.chain.from_iterable(self.input_pipeline._text_to_ids([x]) for x in X))
+        arr_encoded = list(itertools.chain.from_iterable(
+            self.input_pipeline._text_to_ids([x], pad_token=(pad_token, pad_token, -1, -2))
+            for x in X
+        ))
         labels, batch_probas, associations = [], [], []
         for pred in self._inference(X, mode=None):
             pred_labels = self.input_pipeline.label_encoder.inverse_transform(pred["sequence"])
@@ -277,11 +285,13 @@ class Association(BaseModel):
                 all_assocs.append(doc_assocs)
         _, doc_annotations = finetune_to_indico_sequence(
             raw_texts=X,
+            encoder=self.input_pipeline.text_encoder,
             subseqs=all_subseqs,
             labels=all_labels,
             probs=all_probs,
             associations=all_assocs,
-            subtoken_predictions=self.config.subtoken_predictions
+            subtoken_predictions=self.config.subtoken_predictions,
+            none_value=self.config.pad_token
         )
 
         return doc_annotations

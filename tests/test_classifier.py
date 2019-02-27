@@ -181,12 +181,10 @@ class TestClassifier(unittest.TestCase):
 
     def test_class_weights(self):
         # testing class weights
+        train_sample = self.dataset.sample(n=self.n_sample * 3)
+        valid_sample = self.dataset.sample(n=self.n_sample * 3)
         model = Classifier(**self.default_config())
-        train_sample = self.dataset.sample(n=self.n_sample)
-        valid_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text.values, train_sample.Target.values)
-        train_sample = self.dataset.sample(n=self.n_sample)
-        valid_sample = self.dataset.sample(n=(3 * self.n_sample))
         predictions = model.predict(valid_sample.Text.values)
         recall = recall_score(valid_sample.Target.values, predictions, pos_label=1)
         model = Classifier(**self.default_config(class_weights={1: 100}))
@@ -258,8 +256,8 @@ class TestClassifier(unittest.TestCase):
         n_per_class = (self.n_sample * 5)
         trX = ['cat'] * n_per_class + ['finance'] * n_per_class
         trY = copy(trX)
-        teX = ['feline'] * n_per_class + ['investment'] * n_per_class
-        teY = ['cat'] * n_per_class + ['finance'] * n_per_class
+        teX = ['feline'] + ['investment']
+        teY = ['cat'] + ['finance']
         model.fit(trX, trY)
         predY = model.predict(teX)
         self.assertEqual(accuracy_score(teY, predY), 1.00)
@@ -287,7 +285,7 @@ class TestClassifier(unittest.TestCase):
         model = Classifier()
         lm_out = model.generate_text("", max_length=5)
         self.assertEqual(type(lm_out), str)
-        lm_out_2 = model.generate_text("Indico RULE")
+        lm_out_2 = model.generate_text("Indico RULE").lower()
         self.assertEqual(type(lm_out_2), str)
         self.assertIn('_start_Indico RULE'.lower(), lm_out_2)
 

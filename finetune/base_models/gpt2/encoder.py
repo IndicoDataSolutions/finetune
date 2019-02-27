@@ -63,7 +63,7 @@ class GPT2Encoder(BaseEncoder):
         bpe_merges = [tuple(merge_str.split()) for merge_str in bpe_data.split('\n')[1:-1]]
         self.bpe_ranks = dict(zip(bpe_merges, range(len(bpe_merges))))
 
-        self.special_tokens = ['_start_', '_delimiter_', '_classify_']
+        self.special_tokens = ['<|endoftext|>', '_delimiter_', '_classify_']
         for token in self.special_tokens:
             self.encoder[token] = len(self.encoder)
 
@@ -71,7 +71,7 @@ class GPT2Encoder(BaseEncoder):
         self.errors = errors
         self.byte_encoder = bytes_to_unicode()
         self.byte_decoder = {v: k for k, v in self.byte_encoder.items()}
-        self.start = self.encoder['_start_']
+        self.start = self.encoder['<|endoftext|>']
         self.delimiter = self.encoder['_delimiter_']
         self.clf_token = self.encoder['_classify_']
         self.cache = {}
@@ -150,6 +150,7 @@ class GPT2Encoder(BaseEncoder):
                         token_start = text.index(token, token_start)
                 except ValueError:
                     # text_standardization oddity
+                    traceback.print_exc()
                     continue
 
                 subtokens.extend(bpe_toks)

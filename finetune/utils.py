@@ -5,7 +5,7 @@ import tensorflow as tf
 from scipy import interpolate
 
 from finetune.encoding import NLP
-from finetune import config
+from finetune.base_models.gpt.encoder import GPTEncoder
 
 
 def merge_leading_dims(X, target_rank):
@@ -34,7 +34,7 @@ def format_gpu_string(num):
 
 def shape_list(x):
     """
-    deal with dynamic shape in tensorflow cleanly
+    Deal with dynamic shape in tensorflow cleanly
     """
     ps = x.get_shape().as_list()
     ts = tf.shape(x)
@@ -133,7 +133,7 @@ def assign_associations(labels, associations, none_value):
     return all_candidates
 
 
-def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_value=config.PAD_TOKEN,
+def finetune_to_indico_sequence(raw_texts, subseqs, labels, encoder=None, probs=None, none_value=None,
                                 subtoken_predictions=False, associations=None):
     """
     Maps from the labeled substring format into the 'indico' format. This is the exact inverse operation to
@@ -167,11 +167,16 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
     else:
         assoc_cleaned = [None] * len(raw_texts)
 
+    encoded_docs = encoder._encode(raw_texts)
     loop_vals = zip(raw_texts, subseqs, labels, probs or [None] * len(raw_texts), assoc_cleaned)
-    for raw_text, doc_seq, label_seq, prob_seq, associations_seq in loop_vals:
-        tokens = NLP(raw_text)
-        token_starts = [token.idx for token in tokens]
-        token_ends = [token.idx + len(token.text) for token in tokens]
+    for doc_idx, (raw_text, doc_seq, label_seq, prob_seq, associations_seq) in enumerate(loop_vals):
+        tokens = encoded_docs.tokens[doc_idx]
+        token_ends = encoded_docs.char_locs[doc_idx]
+        if isinstance(encoder, GPTEncoder):
+            token_lengths = [len(token.strip().replace('</w>', '')) for token in tokens]
+        else:
+            token_lengths = [len(token) for token in tokens]
+        token_starts = [end - length for end, length in zip(token_ends, token_lengths)]
         n_tokens = len(tokens)
 
         doc_annotations = []
@@ -188,7 +193,6 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
                 label_list = raw_label
 
             for label in label_list:
-
                 stripped_text = sub_str.strip()
 
                 raw_annotation_start = raw_text.find(stripped_text, raw_annotation_start)
@@ -224,7 +228,6 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
                         annotation_end = token_ends[end_idx]
 
                 text = raw_text[annotation_start:annotation_end]
-
                 if label != none_value:
                     annotation = {
                         "start": annotation_start,
@@ -252,7 +255,7 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
     return raw_texts, annotations
 
 
-def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value=config.PAD_TOKEN,
+def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=True, none_value=None,
                                 subtoken_labels=False):
     """
     Maps from the 'indico' format sequence labeling data. Into a labeled substring format. This is the exact inverse of
@@ -291,10 +294,16 @@ def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value
     if labels is None:
         labels = [[]] * len(texts)
 
-    for text, label_seq in zip(texts, labels):
-        tokens = NLP(text)
-        token_starts = [token.idx for token in tokens]
-        token_ends = [token.idx + len(token.text) for token in tokens]
+    encoded_docs = encoder._encode(texts)
+
+    for doc_idx, (text, label_seq) in enumerate(zip(texts, labels)):
+        tokens = encoded_docs.tokens[doc_idx]
+        token_ends = encoded_docs.char_locs[doc_idx]
+        if isinstance(encoder, GPTEncoder):
+            token_lengths = [len(token.strip().replace('</w>', '')) for token in tokens]
+        else:
+            token_lengths = [len(token) for token in tokens]
+        token_starts = [end - length for end, length in zip(token_ends, token_lengths)]
         n_tokens = len(tokens)
 
         label_seq = sorted(label_seq, key=lambda x: x["start"])

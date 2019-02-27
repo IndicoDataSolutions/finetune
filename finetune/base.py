@@ -24,6 +24,7 @@ from tensorflow.contrib.distribute import OneDeviceStrategy
 from sklearn.model_selection import train_test_split
 import joblib as jl
 
+import finetune
 from finetune.utils import interpolate_pos_embed, list_transpose
 from finetune.encoding import EncodedOutput
 from finetune.config import get_config, all_gpus, assert_valid_config
@@ -60,16 +61,17 @@ class BaseModel(object, metaclass=ABCMeta):
 
         self.config = get_config(**kwargs)
         self.resolved_gpus = None
-
-        if self.config.num_layers_trained != self.config.n_layer and self.config.train_embeddings:
-            raise ValueError("If you are only finetuning a subset of the layers, you cannot finetune embeddings.")
-
+        self.validate_config()
         self.input_pipeline = self._get_input_pipeline()
         download_data_if_required()
         self._initialize()
         if self.config.debugging_logs:
             os.environ["TF_CPP_MIN_LOG_LEVEL"] = "0"
             tf.logging.set_verbosity(tf.logging.DEBUG)
+
+    def validate_config(self):
+        if self.config.num_layers_trained != self.config.n_layer and self.config.train_embeddings:
+            raise ValueError("If you are only finetuning a subset of the layers, you cannot finetune embeddings.")
 
     @abstractmethod
     def _get_input_pipeline(self):
@@ -119,9 +121,8 @@ class BaseModel(object, metaclass=ABCMeta):
             embeddings = np.concatenate((word_embeddings, special_embed, positional_embed), axis=0)
             return embeddings
 
-        base_model_path = os.path.join(os.path.dirname(__file__), "model", self.config.base_model_path)
         self.saver = Saver(
-            fallback_filename=base_model_path,
+            fallback_filename=self.config.base_model_path,
             exclude_matches=None if self.config.save_adam_vars else "Adam",
             variable_transforms=[process_embeddings],
             save_dtype=self.config.save_dtype
@@ -154,6 +155,7 @@ class BaseModel(object, metaclass=ABCMeta):
                     len(Y)
                 )
             )
+
         batch_size = batch_size or self.config.batch_size
 
         val_input_fn, train_input_fn, val_size, val_interval = self.input_pipeline.get_train_input_fns(Xs, Y, batch_size=batch_size)
@@ -203,7 +205,7 @@ class BaseModel(object, metaclass=ABCMeta):
                             continue
                         w_flat = np.reshape(w, [-1, w.shape[-1]])
                         expectation_of_norm = ((self.config.weight_stddev ** 2) * w_flat.shape[0]) ** 0.5
-                        self.saver.variables[weight] = np.reshape(expectation_of_norm * w_flat / np.linalg.norm(w_flat, axis=0), shape)
+                        self.saver.variables[weight] = np.reshape(expectation_of_norm * w_flat / np.linalg.norm(w_flat, axis=0), w.shape)
 
                 tf.logging.info("Finishing pre-fit initialisation...")
             estimator.train(train_input_fn, hooks=train_hooks, steps=num_steps)
@@ -218,7 +220,6 @@ class BaseModel(object, metaclass=ABCMeta):
             resolved_gpus = all_gpus(visible_gpus=tuple(visible_gpus))
         else:
             resolved_gpus = all_gpus()
-
 
         num_gpus = len(resolved_gpus)
         if num_gpus > 1:
@@ -515,8 +516,7 @@ class BaseModel(object, metaclass=ABCMeta):
         saver = Saver()
         model = saver.load(path)
         model.config.update(kwargs)
-        base_model_path = os.path.join(os.path.dirname(__file__), "model", model.config.base_model_path)
-        saver.set_fallback(base_model_path)
+        saver.set_fallback(model.config.base_model_folder)
         model._initialize()
         model.saver.variables = saver.variables
         return model

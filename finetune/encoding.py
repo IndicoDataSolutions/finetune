@@ -14,8 +14,6 @@ import spacy
 import numpy as np
 import tensorflow as tf
 
-from finetune.config import PAD_TOKEN
-
 
 NLP = spacy.load('en', disable=['parser', 'tagger', 'ner', 'textcat'])
 
@@ -63,8 +61,8 @@ def _flatten(nested_lists):
 
 class BaseEncoder(object):
     """
-    A modified wrapper for a public python BPE tokenizer. The modifications allow encoding directly into the formats
-    required for finetune. Particularly with respect to formatting with multiple inputs.
+    Base class for GPT and GPT-2 encoding
+    Translates raw texts into structured token arrays
     """
     UNK_IDX = 0
 
@@ -92,12 +90,6 @@ class BaseEncoder(object):
 
     def __setitem__(self, key, value):
         self.encoder[key] = value
-
-    def bpe(self, token):
-        """
-        Deconstruct a given token into its subtokens
-        """
-        raise NotImplementedError
 
     def _encode(self, texts, labels=None):
         """
@@ -156,7 +148,7 @@ class BaseEncoder(object):
 
         return joined
 
-    def encode_multi_input(self, Xs, Y=None, max_length=None, pad_token=PAD_TOKEN):
+    def encode_multi_input(self, Xs, Y=None, max_length=None, pad_token=None):
         """
         Encodes the text for passing to the model, also tracks the location of each token to allow reconstruction.
         It can also, optionally, construct a per-token labels as required for training.

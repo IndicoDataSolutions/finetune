@@ -18,7 +18,7 @@ from bs4 import BeautifulSoup as bs
 from bs4.element import Tag
 
 from finetune import SequenceLabeler
-from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_sequence
+from finetune.utils import finetune_to_indico_sequence
 from finetune.metrics import (
     sequence_labeling_token_precision, sequence_labeling_token_recall,
     sequence_labeling_overlap_precision, sequence_labeling_overlap_recall
@@ -85,7 +85,12 @@ class TestSequenceLabeler(unittest.TestCase):
         with open(self.processed_path, 'rt') as fp:
             self.texts, self.labels = json.load(fp)
 
-        self.model = SequenceLabeler(batch_size=2, max_length=256, lm_loss_coef=0.0)
+        self.model = SequenceLabeler(
+            batch_size=2,
+            max_length=256,
+            lm_loss_coef=0.0,
+            interpolate_pos_embed=False
+        )
 
     def test_fit_lm_only(self):
         """
@@ -93,7 +98,13 @@ class TestSequenceLabeler(unittest.TestCase):
         Ensure model returns predictions
         """
         raw_docs = ["".join(text) for text in self.texts]
-        texts, annotations = finetune_to_indico_sequence(raw_docs, self.texts, self.labels)
+        texts, annotations = finetune_to_indico_sequence(
+            raw_docs,
+            self.texts,
+            self.labels,
+            encoder=self.model.input_pipeline.text_encoder,
+            none_value=self.model.config.pad_token
+        )
         train_texts, test_texts, train_annotations, test_annotations = train_test_split(texts, annotations, test_size=0.1)
         self.model.fit(train_texts)
         self.model.fit(train_texts, train_annotations)
@@ -122,8 +133,16 @@ class TestSequenceLabeler(unittest.TestCase):
         Ensure class reweighting behaves as intended
         """
         raw_docs = ["".join(text) for text in self.texts]
-        texts, annotations = finetune_to_indico_sequence(raw_docs, self.texts, self.labels)
-        train_texts, test_texts, train_annotations, test_annotations = train_test_split(texts, annotations, test_size=0.1)
+        texts, annotations = finetune_to_indico_sequence(
+            raw_docs,
+            self.texts,
+            self.labels,
+            encoder=self.model.input_pipeline.text_encoder,
+            none_value=self.model.config.pad_token
+        )
+        train_texts, test_texts, train_annotations, test_annotations = train_test_split(
+            texts, annotations, test_size=0.1
+        )
         self.model.fit(train_texts, train_annotations)
         predictions = self.model.predict(test_texts)
         probas = self.model.predict_proba(test_texts)
@@ -145,7 +164,7 @@ class TestSequenceLabeler(unittest.TestCase):
             batch_size=2,
             max_length=256,
             lm_loss_coef=0.0,
-            class_weights={'Named Entity': 5.}
+            class_weights={'Named Entity': 5.},
         )
         reweighted_model.fit(train_texts, train_annotations)
         reweighted_predictions = reweighted_model.predict(test_texts)
@@ -158,7 +177,13 @@ class TestSequenceLabeler(unittest.TestCase):
         Ensure model returns predictions
         """
         raw_docs = ["".join(text) for text in self.texts]
-        texts, annotations = finetune_to_indico_sequence(raw_docs, self.texts, self.labels)
+        texts, annotations = finetune_to_indico_sequence(
+            raw_docs,
+            self.texts,
+            self.labels,
+            encoder=self.model.input_pipeline.text_encoder,
+            none_value=self.model.config.pad_token
+        )
         train_texts, test_texts, train_annotations, _ = train_test_split(texts, annotations, test_size=0.1)
         self.model.fit(train_texts, train_annotations)
         with self.model.cached_predict():
@@ -169,6 +194,13 @@ class TestSequenceLabeler(unittest.TestCase):
         test_sequence = ["I am a dog. A dog that's incredibly bright. I can talk, read, and write!"]
         path = os.path.join(os.path.dirname(__file__), "testdata.json")
 
+        self.model = SequenceLabeler(
+            batch_size=2,
+            max_length=256,
+            lm_loss_coef=0.0,
+            interpolate_pos_embed=False
+        )
+
         # test ValueError raised when raw text is passed along with character idxs and doesn't match
         with self.assertRaises(ValueError):
             self.model.fit(["Text about a dog."], [[{"start": 0, "end": 5, "text": "cat", "label": "dog"}]])
@@ -176,16 +208,16 @@ class TestSequenceLabeler(unittest.TestCase):
         with open(path, "rt") as fp:
             text, labels = json.load(fp)
 
-        self.model.finetune(text * 10, labels * 10)
+        self.model.fit(text * 10, labels * 10)
 
         predictions = self.model.predict(test_sequence)
         self.assertTrue(1 <= len(predictions[0]) <= 3)
-        self.assertTrue(any(pred["text"] == "dog" for pred in predictions[0]))
+        self.assertTrue(any(pred["text"].strip() == "dog" for pred in predictions[0]))
 
         self.model.config.subtoken_predictions = True
         predictions = self.model.predict(test_sequence)
         self.assertTrue(1 <= len(predictions[0]) <= 3)
-        self.assertTrue(any(pred["text"] == "dog" for pred in predictions[0]))
+        self.assertTrue(any(pred["text"].strip() == "dog" for pred in predictions[0]))
 
     def test_chunk_long_sequences(self):
         test_sequence = ["I am a dog. A dog that's incredibly bright. I can talk, read, and write!" * 10]
@@ -204,7 +236,7 @@ class TestSequenceLabeler(unittest.TestCase):
 
         predictions = self.model.predict(test_sequence)
         self.assertEqual(len(predictions[0]), 20)
-        self.assertTrue(any(pred["text"] == "dog" for pred in predictions[0]))
+        self.assertTrue(any(pred["text"].strip() == "dog" for pred in predictions[0]))
 
     def test_fit_predict_multi_model(self):
         """
@@ -213,7 +245,13 @@ class TestSequenceLabeler(unittest.TestCase):
         """
         self.model = SequenceLabeler(batch_size=2, max_length=256, lm_loss_coef=0.0, multi_label_sequences=True)
         raw_docs = ["".join(text) for text in self.texts]
-        texts, annotations = finetune_to_indico_sequence(raw_docs, self.texts, self.labels)
+        texts, annotations = finetune_to_indico_sequence(
+            raw_docs,
+            self.texts,
+            self.labels,
+            encoder=self.model.input_pipeline.text_encoder,
+            none_value=self.model.config.pad_token
+        )
         train_texts, test_texts, train_annotations, _ = train_test_split(texts, annotations, test_size=0.1)
         self.model.fit(train_texts, train_annotations)
         self.model.predict(test_texts)
