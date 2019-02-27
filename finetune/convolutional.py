@@ -81,21 +81,21 @@ def block(X, kernel_width, block_name, use_fp16, training, pdrop, backwards=Fals
             mask = None
 
         h0 = gated_linear_unit(X, kernel_width, "0",use_fp16, training, backwards, mask)
-        h0 = attention_layer(h0, backwards, seq_lens)
+        h0 = attention_layer(h0, backwards, seq_lens, block_name + "_1")
         h0 = tf.nn.relu(h0)
                           
         h1 = gated_linear_unit(h0, kernel_width, "1",use_fp16, training, backwards, mask)
         h1 = tf.nn.relu(h1)
         
         h2 = gated_linear_unit(h1, kernel_width, "2",use_fp16, training, backwards, mask)
-        h2 = attention_layer(h2, backwards, seq_lens)
+        h2 = attention_layer(h2, backwards, seq_lens, block_name + "_2")
         h2 = tf.nn.relu(h2)
         
         h4 = gated_linear_unit(h2, kernel_width, "4", use_fp16, training, backwards, mask)
     return h4
 
 
-def attention_layer(X, backwards, seq_lens):
+def attention_layer(X, backwards, seq_lens, layer):
     # X = batch, seq, features
     weight_orig = weight = X[:,:,0]
     dtype = weight.dtype
@@ -107,6 +107,8 @@ def attention_layer(X, backwards, seq_lens):
         b = tf.matrix_band_part(tf.ones([seq, seq]), -1, 0)
     if backwards and seq_lens is not None:
         b = tf.expand_dims(tf.sequence_mask(seq_lens, maxlen=tf.shape(X)[1], dtype=tf.float32), 1) * b
+
+
         
     b = tf.reshape(b, [1, seq, seq])
     if dtype == tf.float16:
@@ -114,6 +116,8 @@ def attention_layer(X, backwards, seq_lens):
     weight = weight * b + (-1e4 if dtype == tf.float16 else -1e9) * (1 - b)
     weight = tf.nn.softmax(weight, -1) * b
 #    weight = tf.Print(weight, [weight[0,2,:]])
+
+    tf.summary.image("attns_{}_at_{}".format("f" if not backwards else "b", layer), tf.expand_dims(tf.pow(weight, 0.2), -1))
 
     attn_size = feats // 3 - 1
     attention_bit = X[:,:,1: attn_size + 1]
@@ -176,9 +180,7 @@ def featurizer(X, encoder, config, train=False, reuse=None):
                 h = tf.stop_gradient(h)
             h = block(h, block_name='block%d_' % layer, kernel_width=config.kernel_width, use_fp16=config.use_fp16, training=train, pdrop=config.resid_p_drop)
             h_back = block(h_back, block_name='block%d_' % layer, kernel_width=config.kernel_width, use_fp16=config.use_fp16, training=train, pdrop=config.resid_p_drop, backwards=True, seq_lens=pool_idx)
-#        h = transformer_block(h, fp16=config.use_fp16, n_head=config.n_heads, act_fn=config.act_fn,
-#                              resid_pdrop=config.resid_p_drop, attn_pdrop=config.attn_p_drop,
-#                              scope='post_conv_block', train=train, scale=True)
+
         h = tf.concat((h, tf.concat((h_back[:, 2:], tf.zeros_like(h_back[:,:2])), axis=1)), axis=-1)
         embed_size = shape_list(h_back)[-1]
 
@@ -193,13 +195,13 @@ def featurizer(X, encoder, config, train=False, reuse=None):
         if config.use_fp16:
             h = tf.cast(h, tf.float32)
 
-        clf_h = tf.reshape(h, [-1, config.n_embed])  # [batch * seq_len, embed]
+        h = tf.reshape(h, shape=[-1] + initial_shape[-2:])
+
         mask = tf.expand_dims(tf.sequence_mask(pool_idx, maxlen=tf.shape(h)[1], dtype=tf.float32), -1)
         max_pooled = tf.reduce_max(h + (1.0 -  mask) * -1e9, 1)
         mean_pool = tf.reduce_sum(h * mask, 1) / (tf.reduce_sum(mask) + 1e-9)
         clf_h = tf.concat((max_pooled, mean_pool), axis=1)
         
-        #clf_h = tf.gather(clf_h, tf.range(shape_list(X)[0], dtype=tf.int32) * config.max_length + pool_idx)
         clf_h = tf.reshape(clf_h, shape=initial_shape[: -2] + [config.n_embed * 2])
         seq_feats = tf.reshape(h, shape=initial_shape[:-1] + [config.n_embed * 2])
 

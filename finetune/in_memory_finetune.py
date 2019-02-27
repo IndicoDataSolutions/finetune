@@ -52,11 +52,14 @@ class InMemoryFinetune(tf.train.SessionRunHook):
             model.saver.fallback_ = self._current_finetune.saver.fallback
             train_x, train_y = self.train_data
             model.fit(train_x, train_y)
-        except:
-            pass
-        test_x, test_y = self.test_data
-        test_accuracy = np.mean(model.predict(test_x) == test_y)
-        train_accuracy = np.mean(model.predict(train_x) == train_y)
+            test_x, test_y = self.test_data
+            test_accuracy = np.mean(model.predict(test_x) == test_y)
+            train_accuracy = np.mean(model.predict(train_x) == train_y)
+        except Exception as e:
+            print(e)
+            test_accuracy = -1.0
+            train_accuracy = -1.0
+
         global_step = session.run(tf.train.get_or_create_global_step())
         directory = os.path.join(self._eval_dir, "..", "finetuning")
 
