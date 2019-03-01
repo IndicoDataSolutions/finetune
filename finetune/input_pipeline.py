@@ -248,9 +248,9 @@ class BasePipeline(metaclass=ABCMeta):
                 self.config.dataset_size -= self.config.val_size
                 Xs_tr, Xs_va, Y_tr, Y_va = train_test_split(Xs, Y, test_size=self.config.val_size, random_state=self.config.seed)
             else:
-                self.config.val_size = len(Xs_va)
                 Xs_tr, Y_tr = Xs, Y
                 Xs_va, Y_va = self.config.val_set
+                self.config.val_size = len(Xs_va)
                 
             Xs_tr, Y_tr = self.resampling(Xs_tr, Y_tr)
             self.config.dataset_size = len(Xs_tr)
