@@ -228,12 +228,12 @@ class BasePipeline(metaclass=ABCMeta):
             n_examples=len(Xs) if not callable(Xs) else self.config.dataset_size,
             batch_size=batch_size or self.config.batch_size
         )
-        self.config.dataset_size -= val_size
 
         if Y is not None:
             self._post_data_initialization(Y)
 
         if callable(Xs) or Y is None:
+            self.config.dataset_size -= self.config.val_size
             self._skip_tqdm = val_size
             dataset = self._make_dataset(Xs, Y, train=True)
             val_dataset_unbatched = lambda: dataset().shuffle(
@@ -245,8 +245,10 @@ class BasePipeline(metaclass=ABCMeta):
         else:
             self._skip_tqdm = 0
             if self.config.val_set is None:
+                self.config.dataset_size -= self.config.val_size
                 Xs_tr, Xs_va, Y_tr, Y_va = train_test_split(Xs, Y, test_size=self.config.val_size, random_state=self.config.seed)
             else:
+                self.config.val_size = len(Xs_va)
                 Xs_tr, Y_tr = Xs, Y
                 Xs_va, Y_va = self.config.val_set
                 
