@@ -33,6 +33,10 @@ def gated_linear_unit(X, kernel_width, layer_name, use_fp16, training, backwards
         W_gate = tf.get_variable(name="W_gate", shape=[kernel_width, nx, nx], initializer=tf.initializers.random_normal(stddev=0.00001))
         b_gate = tf.get_variable(name="B_gate", shape=[nx], initializer=tf.initializers.random_normal(stddev=0.001))
 
+        if backwards:
+            W = tf.reverse(W, [0])
+            W_gate = tf.reverse(W_gate, [0])
+
         if use_fp16:
             W = tf.cast(W, tf.float16)
             b = tf.cast(b, tf.float16)
@@ -64,14 +68,8 @@ def gated_linear_unit(X, kernel_width, layer_name, use_fp16, training, backwards
         )
         conv_gate = tf.nn.bias_add(conv_gate, b_gate)
 
-        # residuals
-        if residual is not None:
-            conv = tf.add(conv, residual)
-            conv_gate = tf.add(conv_gate, residual)
-
-        h = tf.multiply(conv, tf.sigmoid(conv_gate, name="sig"))
-
-    return h
+        out = norm(conv_gate + X, "norm2", fp16=use_fp16, debug=False)
+    return out#tf.Print(out, [out])
 
 def block(X, kernel_width, block_name, use_fp16, training, pdrop, backwards=False, seq_lens=None):
     with tf.variable_scope(block_name, reuse=backwards):
