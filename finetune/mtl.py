@@ -59,6 +59,7 @@ class MultiTaskPipeline(BasePipeline):
             input_func_normalised, val_func_normalised = get_input_fns(task_id, input_func, val_func)
             input_funcs.append(input_func_normalised)
             val_funcs[task_name] = val_func_normalised
+            val_funcs[task_name + "_train"] = lambda: input_func_normalised().take(val_sizes[task_name])
 
         sum_frequencies = sum(frequencies)
         weights = [float(w) / sum_frequencies for w in frequencies]

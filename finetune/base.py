@@ -195,6 +195,11 @@ class BaseModel(object, metaclass=ABCMeta):
                         estimator, val_input_fn[task], every_n_iter=val_interval[task], steps=val_size[task] // batch_size, name=task
                     )
                 )
+                train_hooks.append(
+                    tf.contrib.estimator.InMemoryEvaluatorHook(
+                        estimator, val_input_fn[task + "_train"], every_n_iter=val_interval[task], steps=val_size[task] // batch_size, name=task + "_train"
+                    )
+                )
         elif val_size > 0:
             train_hooks.append(
                 tf.contrib.estimator.InMemoryEvaluatorHook(

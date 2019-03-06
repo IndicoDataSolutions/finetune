@@ -105,13 +105,13 @@ if __name__ == "__main__":
             SST_train,
             COLA_train,
             MRPC_train,
-            STS_train,
+#            STS_train,
             QQP_train,
         ]:
         name, x, y, cls = fn(DATA_PATH)
         tasks[name] = cls
-        Xs[name] = x[:1000]
-        Ys[name] = y[:1000]
+        Xs[name] = x[:100000]
+        Ys[name] = y[:100000]
         
     
     model = MultiTask(tasks=tasks, debugging_logs=True, lr=6.25e-6, n_epochs=30, tensorboard_folder="mtl_glue_1k", max_grad_norm=10.0)
