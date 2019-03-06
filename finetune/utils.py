@@ -17,7 +17,6 @@ def finetune_model_path(path):
         )
     )
 
-
 def merge_leading_dims(X, target_rank):
     shape = [-1] + X.get_shape().as_list()[1 - target_rank:]
     return tf.reshape(X, shape)

@@ -10,6 +10,7 @@ from finetune.network_modules import featurizer, language_model
 from finetune.utils import sample_with_temperature, dont_optimize_zeros, get_grad_accumulation_optimizer
 from finetune.optimizers import schedules
 from finetune.imbalance import class_weight_tensor
+from finetune.adamax import AdamaxWOptimizer
 
 LOGGER = logging.getLogger('finetune')
 
@@ -143,6 +144,10 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                     Optimizer = get_grad_accumulation_optimizer(AdamWOptimizer, params.accum_steps)
                 else:
                     Optimizer = AdamWOptimizer
+
+#                Optimizer = AdamWOptimizer
+
+                Optimizer = AdamaxWOptimizer
 
                 opt = Optimizer(
                     learning_rate=lr,
