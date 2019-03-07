@@ -407,3 +407,45 @@ def indico_to_finetune_sequence(texts, labels=None, multi_label=True, none_value
         all_idxs.append(doc_current_label_idx)
 
     return all_subseqs, all_labels, all_association_type, all_association_idx, all_idxs
+
+
+def get_grad_accumulation_optimizer(optimizer_class, accum_steps):
+    class GradAccumulationOptimiser(optimizer_class):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+
+        def apply_gradients(self, grads_and_vars, *args, **kwargs):
+            add_gradients_ops = []
+            zero_ops = []
+            grads_and_accumulated_vars = []
+            for g, v in grads_and_vars:
+                accum_grad = tf.get_variable(
+                    name=g.name[:-2] + "_acc",
+                    shape=g.shape,
+                    dtype=g.dtype,
+                    initializer=tf.constant_initializer(0)
+                )
+                add_gradients_ops.append(accum_grad.assign_add(g))
+                zero_ops.append(accum_grad.initializer)
+
+                grads_and_accumulated_vars.append((accum_grad, v))
+
+            global_step = tf.train.get_or_create_global_step()
+
+            def apply_grads():
+                with tf.control_dependencies([super(GradAccumulationOptimiser, self).apply_gradients(grads_and_accumulated_vars, *args, **kwargs)]):
+                    apply_grads_op = tf.group(zero_ops)
+                return apply_grads_op
+                
+            with tf.control_dependencies(add_gradients_ops):
+                return tf.cond(
+                    tf.equal(global_step % accum_steps, 0),
+                    true_fn=apply_grads,
+                    false_fn=lambda: tf.group([global_step.assign_add(1)])
+                )
+    return GradAccumulationOptimiser
+
+
+
+
+
