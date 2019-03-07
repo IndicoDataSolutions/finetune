@@ -302,6 +302,7 @@ def get_default_config():
         scale_loss=True,
         loss_scale_every_n_steps=2,
         in_memory_finetune=None,
+        sampled_softmax=None,
 
         # Location of model weights
         base_model=GPTModel,

@@ -32,27 +32,32 @@ class PredictMode:
 
 def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_model, build_lm, encoder, target_dim,
                  label_encoder, saver):
-    def language_model_op(X, M, params, featurizer_state):
+    def language_model_op(X, M, params, featurizer_state, mode):
         language_model_state = language_model(
             X=X,
             M=M,
             config=params,
             embed_weights=featurizer_state['embed_weights'],
             hidden=featurizer_state['sequence_features'],
+            train=mode == tf.estimator.ModeKeys.TRAIN,
         )
 
         lm_logits = language_model_state["logits"]
 
-        lm_logit_mask = np.zeros([1, lm_logits.get_shape().as_list()[-1]], dtype=np.float32)
-        lm_logit_mask[:, encoder.vocab_size:] = -np.inf
+        if lm_logits is not None:
 
-        if "use_extra_toks" in params and not params.use_extra_toks:
-            lm_logit_mask[:, encoder.start] = -np.inf
-            lm_logit_mask[:, encoder.delimiter] = -np.inf
-            lm_logit_mask[:, encoder.clf_token] = -np.inf
+            lm_logit_mask = np.zeros([1, lm_logits.get_shape().as_list()[-1]], dtype=np.float32)
+            lm_logit_mask[:, encoder.vocab_size:] = -np.inf
 
-        lm_logits += lm_logit_mask
-        lm_predict_op = sample_with_temperature(lm_logits, params.lm_temp)
+            if "use_extra_toks" in params and not params.use_extra_toks:
+                lm_logit_mask[:, encoder.start] = -np.inf
+                lm_logit_mask[:, encoder.delimiter] = -np.inf
+                lm_logit_mask[:, encoder.clf_token] = -np.inf
+
+                lm_logits += lm_logit_mask
+            lm_predict_op = sample_with_temperature(lm_logits, params.lm_temp)
+        else:
+            lm_predict_op = tf.no_op()
         return lm_predict_op, language_model_state
 
     def target_model_op(featurizer_state, Y, params, mode, **kwargs):
@@ -138,7 +143,8 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
 
             if build_lm:
                 lm_predict_op, language_model_state = language_model_op(X=X, M=M, params=params,
-                                                                        featurizer_state=featurizer_state)
+                                                                        featurizer_state=featurizer_state,
+                                                                        mode=mode)
                 if mode == tf.estimator.ModeKeys.TRAIN or mode == tf.estimator.ModeKeys.EVAL:
                     lm_loss = tf.reduce_mean(language_model_state["losses"])
                     train_loss += lm_loss_coef * lm_loss
