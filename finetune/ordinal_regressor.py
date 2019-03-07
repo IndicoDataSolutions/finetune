@@ -8,6 +8,7 @@ from finetune.input_pipeline import BasePipeline
 from finetune.regressor import RegressionPipeline
 from finetune.network_modules import multi_classifier
 from finetune.comparison_regressor import ComparisonRegressionPipeline
+from finetune.multifield import MultiFieldClassificationPipeline
 
 
 class OrdinalRegressionPipeline(BasePipeline):
@@ -17,6 +18,10 @@ class OrdinalRegressionPipeline(BasePipeline):
 
 class ComparisonOrdinalRegressionPipeline(ComparisonRegressionPipeline):
     def _target_encoder(self):
+        return OrdinalRegressionEncoder()
+
+class MultifieldOrdinalRegressionPipeline(MultiFieldClassificationPipeline):
+     def _target_encoder(self):
         return OrdinalRegressionEncoder()
 
 
@@ -90,6 +95,10 @@ class OrdinalRegressor(BaseModel):
 
     def _predict_proba_op(self, logits, **kwargs):
         return logits
+
+class MultifieldOrdinalRegressor(OrdinalRegressor):
+    def _get_input_pipeline(self):
+        return MultifieldOrdinalRegressionPipeline(self.config)
 
 
 class ComparisonOrdinalRegressor(OrdinalRegressor):

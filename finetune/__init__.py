@@ -12,7 +12,7 @@ from finetune.multi_label_classifier import MultiLabelClassifier
 from finetune.multiple_choice import MultipleChoice
 from finetune.association import Association
 from finetune.comparison_regressor import ComparisonRegressor
-from finetune.ordinal_regressor import OrdinalRegressor, ComparisonOrdinalRegressor
+from finetune.ordinal_regressor import OrdinalRegressor, ComparisonOrdinalRegressor, MultifieldOrdinalRegressor
 from finetune.language_model import LanguageModel
 
 __version__, VERSION, version = ("0.5.15",) * 3
