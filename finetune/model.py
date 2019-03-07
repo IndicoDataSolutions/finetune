@@ -41,9 +41,8 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
             hidden=featurizer_state['sequence_features'],
             train=mode == tf.estimator.ModeKeys.TRAIN,
         )
-
         lm_logits = language_model_state["logits"]
-
+        
         if lm_logits is not None:
 
             lm_logit_mask = np.zeros([1, lm_logits.get_shape().as_list()[-1]], dtype=np.float32)
