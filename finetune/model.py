@@ -14,12 +14,13 @@ from finetune.optimizers.adamax import AdamaxWOptimizer
 from finetune.util.imbalance import class_weight_tensor
 from finetune.errors import FinetuneError
 from finetune.convolutional import featurizer as conv_featurizer
-
+from finetune.adafactor import AdafactorWOptimizer
 LOGGER = logging.getLogger('finetune')
 
 OPTIMIZERS = {
     "AdamW": AdamWOptimizer,
-    "AdamaxW": AdamaxWOptimizer
+    "AdamaxW": AdamaxWOptimizer,
+    "AdafactorW": AdafactorWOptimizer
 }
 
 class PredictMode:
@@ -177,7 +178,7 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                     epsilon=params.epsilon,
                     weight_decay=params.l2_reg * lr
                 )
-                
+
                 decay_var_list = [v for v in tf.global_variables() if len(v.get_shape()) > 1 or params.vector_l2]
                 opt.apply_gradients = functools.partial(opt.apply_gradients, decay_var_list=decay_var_list)
 

@@ -6,7 +6,8 @@ from finetune.util.shapes import shape_list
 from finetune.transformer import dropout, embed, block, attn, norm, conv1d
 from finetune.optimizers.recompute_grads import recompute_grad
 from finetune.utils import shape_list
-
+import functools
+from finetune.recompute_grads import recompute_grad
 
 def embed_no_timing(X, we):
     return tf.gather(we, X[:, :, 0])
@@ -175,10 +176,20 @@ def featurizer(X, encoder, config, train=False, reuse=None):
         h_back = h + be
         h += fe 
         for layer in range(config.n_layer):
-            if (config.n_layer - layer) == config.num_layers_trained and config.num_layers_trained != config.n_layer:
-                h = tf.stop_gradient(h)
-            h = block(h, block_name='block%d_' % layer, kernel_width=config.kernel_width, use_fp16=config.use_fp16, training=train, pdrop=config.resid_p_drop)
-            h_back = block(h_back, block_name='block%d_' % layer, kernel_width=config.kernel_width, use_fp16=config.use_fp16, training=train, pdrop=config.resid_p_drop, backwards=True, seq_lens=pool_idx)
+            with tf.variable_scope('h%d_' % layer):
+                if (config.n_layer - layer) == config.num_layers_trained and config.num_layers_trained != config.n_layer:
+                    h = tf.stop_gradient(h)
+
+                block_fn_fwd = functools.partial(block, block_name='block%d_' % layer, kernel_width=config.kernel_width, use_fp16=config.use_fp16, training=train, pdrop=config.resid_p_drop)
+                block_fn_bwd = functools.partial(block, block_name='block%d_' % layer, kernel_width=config.kernel_width, use_fp16=config.use_fp16, training=train, pdrop=config.resid_p_drop, backwards=True, seq_lens=pool_idx)
+                if config.low_memory_mode and train:
+                    block_fn_fwd = recompute_grad(block_fn_fwd, use_entire_scope=True)
+                    block_fn_bwd = recompute_grad(block_fn_bwd, use_entire_scope=True)
+                h = block_fn_fwd(h)
+            with tf.variable_scope('h%d_' % layer, reuse=True):
+                h_back = block_fn_bwd(h_back)
+#            h = block(h, block_name='block%d_' % layer, kernel_width=config.kernel_width, use_fp16=config.use_fp16, training=train, pdrop=config.resid_p_drop)
+#            h_back = block(h_back, block_name='block%d_' % layer, kernel_width=config.kernel_width, use_fp16=config.use_fp16, training=train, pdrop=config.resid_p_drop, backwards=True, seq_lens=pool_idx)
 
         h = tf.concat((h, tf.concat((h_back[:, 2:], tf.zeros_like(h_back[:,:2])), axis=1)), axis=-1)
         embed_size = shape_list(h_back)[-1]

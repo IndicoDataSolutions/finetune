@@ -69,8 +69,8 @@ class InMemoryFinetune(tf.train.SessionRunHook):
             os.makedirs(directory)
         summary_writer = writer_cache.FileWriterCache.get(directory)
         summary_proto = summary_pb2.Summary()
-        summary_proto.value.add(tag="finetuning/train_accurary", simple_value=float(train_accuracy))
-        summary_proto.value.add(tag="finetuning/test_accurary", simple_value=float(test_accuracy))
+        summary_proto.value.add(tag="finetuning/{}_train_accurary".format(self._name), simple_value=float(train_accuracy))
+        summary_proto.value.add(tag="finetuning/{}_test_accurary".format(self._name), simple_value=float(test_accuracy))
         summary_writer.add_summary(summary_proto, global_step)
         summary_writer.flush()
     
