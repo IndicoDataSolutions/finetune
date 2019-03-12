@@ -248,6 +248,8 @@ def get_default_config():
         max_grad_norm=1.0,
         accum_steps=1,
 
+        # Ordinal Regression
+        shared_threshold_weights=False,
 
         # Language Model Settings
         lm_loss_coef=0.0,

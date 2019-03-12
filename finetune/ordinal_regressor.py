@@ -35,8 +35,7 @@ class OrdinalRegressor(BaseModel):
     :param \**kwargs: key-value pairs of config items to override.
     """
 
-    def __init__(self, shared_threshold_weights=True, **kwargs):
-        self.shared_threshold_weights = shared_threshold_weights
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
     def _get_input_pipeline(self):
@@ -51,13 +50,15 @@ class OrdinalRegressor(BaseModel):
         """
         return self._featurize(X)
 
-    def predict(self, X):
+    def predict(self, X, threshold=None):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
         :param X: list or array of text to embed.
         :returns: list of class labels.
         """
+        if threshold is not None:
+            self.input_pipeline.label_encoder.threshold = threshold
         return super().predict(X).tolist()
 
     def predict_proba(self, X):
@@ -86,7 +87,7 @@ class OrdinalRegressor(BaseModel):
             config=self.config,
             train=train,
             reuse=reuse,
-            shared_threshold_weights=self.shared_threshold_weights,
+            shared_threshold_weights=self.config.shared_threshold_weights,
             **kwargs
         )
 

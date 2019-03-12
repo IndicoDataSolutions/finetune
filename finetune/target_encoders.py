@@ -73,6 +73,7 @@ class OrdinalRegressionEncoder(OrdinalEncoder, BaseEncoder):
     def __init__(self):
         self.num_outputs = None
         super().__init__()
+        self.threshold = 0.5
 
     def _force_2d(self, x):
         return np.array(x, dtype=np.int32).reshape(-1, 1)
@@ -100,7 +101,7 @@ class OrdinalRegressionEncoder(OrdinalEncoder, BaseEncoder):
 
     def inverse_transform(self, y):
         y = np.array(y)
-        y = y > 0.5
+        y = y > self.threshold
         rank = np.sum(y, axis=1)
         rank = np.expand_dims(rank, 1)
         y = super().inverse_transform(rank)
