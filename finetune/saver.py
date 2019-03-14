@@ -162,6 +162,7 @@ class Saver:
                     saved_var = func(var.name, saved_var)
 
                 init_vals.append(assign(var, pyfunc_assign(saved_var, var.dtype)))
+        print("Randomly initializing: {}".format([v.name for v in default_init]))
         init_vals.append(tf.variables_initializer(default_init))
         return tf.group(init_vals)
 

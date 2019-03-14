@@ -175,8 +175,12 @@ def gpt2_featurizer(X, encoder, config, train=False, reuse=None):
         clf_token = encoder['_classify_']
         pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
         clf_h = tf.gather(clf_h, tf.range(shape_list(X)[0], dtype=tf.int32) * config.max_length + pool_idx)
-        clf_h = tf.reshape(clf_h, shape=initial_shape[:-2] + [config.n_embed])
+        clf_h = tf.reshape(clf_h, shape=initial_shape[:-2] + [config.n_embed]) * tf.get_variable("clf_tok_weight", shape=1)
         seq_feats = tf.reshape(h, shape=initial_shape[:-1] + [config.n_embed])
+
+        mask = tf.expand_dims(tf.sequence_mask(pool_idx, maxlen=tf.shape(h)[1], dtype=tf.float32), -1)
+        clf_h = tf.reduce_sum((h * mask)[:,1:,:], 1) / (tf.reduce_sum(mask) + 1e-9) * tf.get_variable("mean_weight", shape=1) + clf_h
+        clf_h = tf.reduce_max(h + (1.0 - mask) * -1e9, 1) * tf.get_variable("max_weight", shape=1) + clf_h
 
         return {
             'embed_weights': embed_weights,
