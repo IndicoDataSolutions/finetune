@@ -141,16 +141,6 @@ class Settings(dict):
     :param debugging_logs: if True, output tensorflow logs and turn off TQDM logging. Defaults to `False`.
     """
 
-#    @property
-#    def base_model_folder(self):
-#        return os.path.abspath(
-#            os.path.join(
-#                os.path.dirname(finetune.__file__),
-#                'model',
-#                self.base_model_path.rpartition('/')[0]
-#            )
-#        )
-
     def get_grid_searchable(self):
         return self.grid_searchable
 
@@ -286,9 +276,8 @@ def get_default_config():
         assocation_loss_weight=100.0,
 
         # Location of model weights
-        base_model=GPT2Model,
+        base_model=GPTModel,
         base_model_path=None,
-        base_model_folder=None,
 
         # Possible `SourceModel` specific settings
         n_heads=None,
