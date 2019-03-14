@@ -516,7 +516,7 @@ class BaseModel(object, metaclass=ABCMeta):
         saver = Saver()
         model = saver.load(path)
         model.config.update(kwargs)
-        saver.set_fallback(model.config.base_model_folder)
+        saver.set_fallback(model.config.base_model_path)
         model._initialize()
         model.saver.variables = saver.variables
         return model

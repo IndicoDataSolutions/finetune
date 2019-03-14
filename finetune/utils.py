@@ -4,9 +4,18 @@ import numpy as np
 import tensorflow as tf
 from scipy import interpolate
 
+import finetune
 from finetune.encoding import NLP
 from finetune.base_models.gpt.encoder import GPTEncoder
 
+def finetune_model_path(path):
+    return os.path.abspath(
+        os.path.join(
+            os.path.dirname(finetune.__file__),
+            'model',
+            path
+        )
+    )
 
 def merge_leading_dims(X, target_rank):
     shape = [-1] + X.get_shape().as_list()[1 - target_rank:]

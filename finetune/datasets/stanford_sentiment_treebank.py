@@ -8,7 +8,8 @@ from sklearn.model_selection import train_test_split
 
 from finetune import Classifier
 from finetune.datasets import Dataset, generic_download
-
+from finetune.base_models.gpt.model import GPTModel
+import joblib as jl
 logging.basicConfig(level=logging.DEBUG)
 
 SST_FILENAME = "SST-binary.csv"
@@ -41,7 +42,8 @@ class StanfordSentimentTreebank(Dataset):
 if __name__ == "__main__":
     # Train and evaluate on SST
     dataset = StanfordSentimentTreebank(nrows=1000).dataframe
-    model = Classifier(interpolate_pos_embed=False, n_epochs=3, batch_size=4, lr_warmup=0.1, base_model_path='gpt2/model-sm.jl', val_size=0, max_length=64)
+    model = Classifier(interpolate_pos_embed=False, n_epochs=3, batch_size=4, lr_warmup=0.1, val_size=0, max_length=64, base_model=GPTModel)
+    print(model.config.base_model_path)
     trainX, testX, trainY, testY = train_test_split(dataset.Text.values, dataset.Target.values, test_size=0.3, random_state=42)
     model.fit(trainX, trainY)
     accuracy = np.mean(model.predict(testX) == testY)
