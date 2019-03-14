@@ -60,7 +60,8 @@ def textcnn_featurizer(X, encoder, config, train=False, reuse=None):
                 kernel_size=kernel_size,
                 padding='same',
                 activation=tf.nn.relu,
-                name='conv' + str(i)
+                name='conv' + str(i),
+                kernel_initializer=tf.initializers.glorot_normal
             )
             conv_layers.append(conv)
             pool = tf.reduce_max(conv, axis=1)

@@ -16,5 +16,6 @@ class TextCNNModel(SourceModel):
         'num_filters_per_size': 2,
         'n_embed': len(kernel_sizes) * 2,
         'act_fn': "gelu",
-        'train_embeddings': False
+        'train_embeddings': False,
+        'lr': .01,
     }
