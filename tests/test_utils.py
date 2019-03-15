@@ -49,7 +49,7 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
     def test_overlapping_gpt2(self):
         raw = ["Indico Is the best hey"]
         finetunex = [
-            ["Indico ", "Is the", " best", " hey"]
+            ["Indico", " Is the", " best", " hey"]
         ]
         finetuney = [
             [("1",), ("1", "2"), ("2", ), ("<PAD>")]
@@ -62,7 +62,7 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
         indicoy = [
             [
                 {'start': 0, 'end': 13, 'label': '1', 'text': 'Indico Is the'},
-                {'start': 7, 'end': 18, 'label': '2', 'text': 'Is the best'},
+                {'start': 6, 'end': 18, 'label': '2', 'text': ' Is the best'},
             ]
         ]
         self.assertEqual(indicoy, indicoy_pred)

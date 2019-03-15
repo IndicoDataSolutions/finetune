@@ -13,6 +13,7 @@ class GPT2Model(SourceModel):
         'n_embed': 768,
         'n_heads': 12,
         'n_layer': 12,
+        'l2_reg': 0.002,
         'act_fn': "gelu",
         'interpolate_pos_embed': False,
         'base_model_path':  os.path.join("gpt2", "model-sm.jl")

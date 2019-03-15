@@ -220,7 +220,7 @@ class TestSequenceLabeler(unittest.TestCase):
         self.assertTrue(any(pred["text"].strip() == "dog" for pred in predictions[0]))
 
     def test_chunk_long_sequences(self):
-        test_sequence = ["I am a dog. A dog that's incredibly bright. I can talk, read, and write!" * 10]
+        test_sequence = ["I am a dog. A dog that's incredibly bright. I can talk, read, and write! " * 10]
         path = os.path.join(os.path.dirname(__file__), "testdata.json")
 
         # test ValueError raised when raw text is passed along with character idxs and doesn't match

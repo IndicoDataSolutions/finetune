@@ -23,11 +23,12 @@ class TestOrdinal(unittest.TestCase):
     def default_config(self, **kwargs):
         d = dict(
             batch_size=2,
-            max_length=128,
-            n_epochs=1,
-            l2_reg=0,
-            lm_loss_coef=0.,
+            max_length=16,
+            n_epochs=3,
             val_size=0.,
+            l2_reg=0.,
+            interpolate_pos_embed=False,
+            low_memory_mode=True,
         )
         d.update(kwargs)
         return d
@@ -42,7 +43,7 @@ class TestOrdinal(unittest.TestCase):
         Ensure model returns predictions of the right type
         Test model loss at least outperforms naive baseline
         """
-        model = OrdinalRegressor(n_epochs=2)
+        model = OrdinalRegressor(**self.default_config())
 
         # fake dataset generation
         targets = np.asarray([1] * len(ANIMALS) + [0] * len(NUMBERS))
@@ -64,9 +65,9 @@ class TestOrdinal(unittest.TestCase):
         Ensure model returns predictions of the right type
         Test model loss at least outperforms naive baseline
         """
-        model = ComparisonOrdinalRegressor(n_epochs=2, low_memory_mode=True)
+        model = ComparisonOrdinalRegressor(**self.default_config())
 
-        n_per = 50
+        n_per = 100
         similar = []
         different = []
         for dataset in [ANIMALS, NUMBERS]:
@@ -95,7 +96,7 @@ class TestOrdinal(unittest.TestCase):
         Does not analyze model loss since unshared weights perform poorly at
         these low data volumes
         """
-        model = OrdinalRegressor(n_epochs=2, shared_threshold_weights=False)
+        model = OrdinalRegressor(**self.default_config())
 
         # fake dataset generation
 
