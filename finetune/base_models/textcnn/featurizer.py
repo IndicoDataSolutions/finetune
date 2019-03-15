@@ -32,23 +32,8 @@ def textcnn_featurizer(X, encoder, config, train=False, reuse=None):
 
         X = tf.reshape(X, [-1, config.max_length, 2])
 
-        h = embed(X, embed_weights)
-
-        # we use the first transformer block of GPT as our embedding layer
-        # layer = 0
-        # with tf.variable_scope('h%d_' % layer):
-        #     block_fn = functools.partial(block, n_head=config.n_heads, act_fn=config.act_fn,
-        #                                  resid_pdrop=config.resid_p_drop, attn_pdrop=config.attn_p_drop,
-        #                                  scope='h%d' % layer, train=train, scale=True)
-        #     if config.low_memory_mode and train:
-        #         block_fn = recompute_grad(block_fn, use_entire_scope=True)
-        #     h = block_fn(h)
-
-        # # Use hidden state at classifier token as input to final proj. + softmax
-        # # Note: we get seq_feats and pool_idx from the output of the transformer block before the convolutional layer
-        # clf_token = encoder['_classify_']
-        # pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
-        # seq_feats = tf.reshape(h, shape=initial_shape[:-1] + [config.n_embed_featurizer])
+        # we remove positional embeddings from the model
+        h = embed(X[:, :, :1], embed_weights)
 
         # Convolutional Layer (this is all the same layer, just different filter sizes)
         pool_layers = []
@@ -71,10 +56,11 @@ def textcnn_featurizer(X, encoder, config, train=False, reuse=None):
         conv_seq = tf.concat(conv_layers, axis=2)
         clf_token = encoder['_classify_']
         pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
-        seq_feats = tf.reshape(conv_seq, shape=initial_shape[:-1] + [config.n_embed])
+        seq_feats = tf.reshape(conv_seq, shape=[-1, 1, config.max_length, config.n_embed])
 
         # Concatenate the univariate vectors
         clf_h = tf.concat(pool_layers, axis=1)
+        clf_h = tf.reshape(clf_h, shape=[-1, 1, config.n_embed])
 
         # note that, due to convolution and pooling, the dimensionality of the features is much smaller than in the
         # transformer base models
