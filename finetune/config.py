@@ -106,6 +106,7 @@ class Settings(dict):
     :param lr: Learning rate.  Defaults to `6.25e-5`.
     :param lr_warmup: Learning rate warmup (percentage of all batches to warmup for).  Defaults to `0.002`.
     :param max_grad_norm: Clip gradients larger than this norm. Defaults to `1.0`.
+    :param accum_steps: Number of updates to accumulate before applying. This is used to simulate a higher batch size.
     :param lm_loss_coef: Language modeling loss coefficient -- a value between `0.0` - `1.0`
         that indicates how to trade off between language modeling loss
         and target model loss.  Usually not beneficial to turn on unless
@@ -256,6 +257,8 @@ def get_default_config():
         lr_warmup=0.002,
         max_grad_norm=1.0,
         prefit_init=False,
+        accum_steps=1,
+
 
         # Language Model Settings
         lm_loss_coef=0.0,
