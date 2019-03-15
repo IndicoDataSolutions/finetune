@@ -43,7 +43,16 @@ class StanfordSentimentTreebank(Dataset):
 if __name__ == "__main__":
     # Train and evaluate on SST
     dataset = StanfordSentimentTreebank(nrows=1000).dataframe
-    model = Classifier(interpolate_pos_embed=False, n_epochs=8, batch_size=2, max_grad_norm=1.0, lr_warmup=0.1, val_size=None, max_length=64, base_model=GPT2Model, tensorboard_folder="./sst", l2_reg=0.0, lr=1e-4)
+    model = Classifier(
+        interpolate_pos_embed=False, 
+        n_epochs=3, 
+        batch_size=2, 
+        lr_warmup=0.1,
+        val_size=0, 
+        max_length=64, 
+        base_model=GPT2Model, 
+        tensorboard_folder="./sst"
+    )
     print(model.config.base_model_path)
     trainX, testX, trainY, testY = train_test_split(dataset.Text.values, dataset.Target.values, test_size=0.3, random_state=42)
     model.fit(trainX, trainY)
