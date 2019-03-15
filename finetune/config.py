@@ -139,6 +139,7 @@ class Settings(dict):
     :param regression_loss: the loss to use for regression models. One of `L1` or `L2`, defaults to `L2`.
     :param prefit_init: if True, fit target model weigths before finetuning the entire model. Defaults to `False`.
     :param debugging_logs: if True, output tensorflow logs and turn off TQDM logging. Defaults to `False`.
+    :param val_set: Where it is neccessary to use an explicit validation set, provide it here as a tuple (text, labels)
     """
 
     def get_grid_searchable(self):
@@ -211,6 +212,7 @@ def get_default_config():
         max_length=512,
         weight_stddev=0.02,
         save_dtype=None,
+        val_set=None,
 
         # Regularization
         embed_p_drop=0.1,
