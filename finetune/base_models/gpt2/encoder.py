@@ -63,7 +63,7 @@ class GPT2Encoder(BaseEncoder):
         bpe_merges = [tuple(merge_str.split()) for merge_str in bpe_data.split('\n')[1:-1]]
         self.bpe_ranks = dict(zip(bpe_merges, range(len(bpe_merges))))
 
-        self.special_tokens = ['<PLACEHOLDER/>', '_delimiter_', '_classify_']
+        self.special_tokens = ['_delimiter_', '_classify_']
         for token in self.special_tokens:
             self.encoder[token] = len(self.encoder)
 
