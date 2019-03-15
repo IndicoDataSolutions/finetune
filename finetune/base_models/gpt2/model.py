@@ -1,6 +1,9 @@
+import os
+
 from finetune.base_models import SourceModel
 from finetune.base_models.gpt2.encoder import GPT2Encoder
 from finetune.base_models.gpt2.featurizer import gpt2_featurizer
+from finetune.utils import finetune_model_path
 
 class GPT2Model(SourceModel):
 
@@ -11,5 +14,7 @@ class GPT2Model(SourceModel):
         'n_heads': 12,
         'n_layer': 12,
         'act_fn': "gelu",
-        'interpolate_pos_embed': False
+        'interpolate_pos_embed': False,
+        'base_model_path':  os.path.join("gpt2", "model-sm.jl")
+
     }

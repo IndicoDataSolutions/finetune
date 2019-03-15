@@ -63,7 +63,7 @@ class GPT2Encoder(BaseEncoder):
         bpe_merges = [tuple(merge_str.split()) for merge_str in bpe_data.split('\n')[1:-1]]
         self.bpe_ranks = dict(zip(bpe_merges, range(len(bpe_merges))))
 
-        self.special_tokens = ['<|endoftext|>', '_delimiter_', '_classify_']
+        self.special_tokens = ['_delimiter_', '_classify_']
         for token in self.special_tokens:
             self.encoder[token] = len(self.encoder)
 
@@ -78,6 +78,7 @@ class GPT2Encoder(BaseEncoder):
 
         # Should haved added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
         self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
+        self.initialized = True
 
     def bpe(self, token):
         if token in self.cache:

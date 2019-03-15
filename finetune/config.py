@@ -13,18 +13,9 @@ import finetune
 from finetune.errors import FinetuneError
 from finetune.base_models.gpt.model import GPTModel
 from finetune.base_models.gpt2.model import GPT2Model
+from finetune.utils import finetune_model_path
 
 LOGGER = logging.getLogger('finetune')
-
-
-def finetune_model_path(path):
-    return os.path.abspath(
-        os.path.join(
-            os.path.dirname(finetune.__file__),
-            'model',
-            path
-        )
-    )
 
 @lru_cache()
 def all_gpus(visible_gpus=None):
@@ -150,16 +141,6 @@ class Settings(dict):
     :param debugging_logs: if True, output tensorflow logs and turn off TQDM logging. Defaults to `False`.
     """
 
-    @property
-    def base_model_folder(self):
-        return os.path.abspath(
-            os.path.join(
-                os.path.dirname(finetune.__file__),
-                'model',
-                self.base_model_path.rpartition('/')[0]
-            )
-        )
-
     def get_grid_searchable(self):
         return self.grid_searchable
 
@@ -172,6 +153,12 @@ class Settings(dict):
     def __getattr__(self, attr):
         if attr.startswith('__'):
             raise AttributeError
+
+        if attr == "base_model_path":
+            full_path = finetune_model_path(self["base_model_path"])
+            if os.path.exists(full_path):
+                return full_path
+            
         return self[attr]
 
     def __setitem__(self, key, value):
@@ -289,10 +276,8 @@ def get_default_config():
         assocation_loss_weight=100.0,
 
         # Location of model weights
-        base_model=GPT2Model,
-        base_model_path=finetune_model_path(
-            os.path.join("gpt2", "model-sm.jl")
-        ),
+        base_model=GPTModel,
+        base_model_path=None,
 
         # Possible `SourceModel` specific settings
         n_heads=None,

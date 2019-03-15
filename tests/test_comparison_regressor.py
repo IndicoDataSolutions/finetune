@@ -39,7 +39,7 @@ class TestComparisonRegression(unittest.TestCase):
         Ensure model returns predictions of the right type
         Test model loss at least outperforms naive baseline
         """
-        model = ComparisonRegressor(n_epochs=2, low_memory_mode = True)
+        model = ComparisonRegressor(n_epochs=2, low_memory_mode=True)
 
         # fake dataset generation
         animals = ["dog", "cat", "horse", "cow", "pig", "sheep", "goat", "chicken", "guinea pig", "donkey", "turkey", "duck", "camel", "goose", "llama", "rabbit", "fox"]
@@ -57,7 +57,7 @@ class TestComparisonRegression(unittest.TestCase):
         targets = np.asarray([1] * len(similar) + [0] * len(different))
         data = similar + different
 
-        x_tr, x_te, t_tr, t_te = train_test_split(data, targets, test_size=0.3)
+        x_tr, x_te, t_tr, t_te = train_test_split(data, targets, test_size=0.3, random_state=42)
         model.finetune(x_tr, t_tr)
 
         predictions = model.predict(x_te)
@@ -66,7 +66,7 @@ class TestComparisonRegression(unittest.TestCase):
         naive_baseline_mse = np.mean([(naive_baseline - true)**2 for true in t_te])
         self.assertIsInstance(predictions, np.ndarray)
         self.assertIsInstance(predictions[0], np.float32)
-        self.assertGreater(mse, naive_baseline_mse)
+        self.assertGreater(naive_baseline_mse, mse)
 
 
 if __name__ == '__main__':
