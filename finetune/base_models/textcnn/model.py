@@ -9,7 +9,6 @@ class TextCNNModel(SourceModel):
     kernel_sizes = [2, 3, 4]
     settings = {
         'n_embed_featurizer': 768,
-        'n_heads': 12,
         'n_layer': 1,
         'num_layers_trained': 1,
         'kernel_sizes': kernel_sizes,
