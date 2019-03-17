@@ -5,6 +5,7 @@ from copy import copy
 from pathlib import Path
 import codecs
 import json
+import random
 
 # required for tensorflow logging control
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -79,17 +80,27 @@ class TestSequenceLabeler(unittest.TestCase):
     def setUpClass(cls):
         cls._download_reuters()
 
+    def default_config(self, **kwargs):
+        d = dict(
+            batch_size=2,
+            max_length=256,
+            lm_loss_coef=0.0,
+            val_size=0,
+            interpolate_pos_embed=False,
+            debugging_logs=True
+        )
+        d.update(**kwargs)
+        return d
+
     def setUp(self):
         self.save_file = 'tests/saved-models/test-save-load'
-
+        random.seed(42)
+        np.random.seed(42)
         with open(self.processed_path, 'rt') as fp:
             self.texts, self.labels = json.load(fp)
 
         self.model = SequenceLabeler(
-            batch_size=2,
-            max_length=256,
-            lm_loss_coef=0.0,
-            interpolate_pos_embed=False
+            **self.default_config()
         )
 
     def test_fit_lm_only(self):
@@ -161,10 +172,7 @@ class TestSequenceLabeler(unittest.TestCase):
         self.model.save(self.save_file)
 
         reweighted_model = SequenceLabeler(
-            batch_size=2,
-            max_length=256,
-            lm_loss_coef=0.0,
-            class_weights={'Named Entity': 5.},
+            **self.default_config(class_weights={'Named Entity': 5.})
         )
         reweighted_model.fit(train_texts, train_annotations)
         reweighted_predictions = reweighted_model.predict(test_texts)
@@ -193,13 +201,6 @@ class TestSequenceLabeler(unittest.TestCase):
     def test_reasonable_predictions(self):
         test_sequence = ["I am a dog. A dog that's incredibly bright. I can talk, read, and write!"]
         path = os.path.join(os.path.dirname(__file__), "testdata.json")
-
-        self.model = SequenceLabeler(
-            batch_size=2,
-            max_length=256,
-            lm_loss_coef=0.0,
-            interpolate_pos_embed=False
-        )
 
         # test ValueError raised when raw text is passed along with character idxs and doesn't match
         with self.assertRaises(ValueError):

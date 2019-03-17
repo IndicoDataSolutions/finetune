@@ -24,7 +24,7 @@ class TestOrdinal(unittest.TestCase):
         d = dict(
             batch_size=2,
             max_length=16,
-            n_epochs=3,
+            n_epochs=5,
             val_size=0.,
             l2_reg=0.,
             interpolate_pos_embed=False,
