@@ -143,8 +143,16 @@ class TestClassifier(unittest.TestCase):
         predictions = model.predict_proba(valid_sample.Text[:1].values)
         predictions2 = model.predict_proba(valid_sample.Text[1:2].values)
         with model.cached_predict():
-            np.testing.assert_allclose(list(model.predict_proba(valid_sample.Text[:1].values)[0].values()), list(predictions[0].values()), rtol=1e-5)
-            np.testing.assert_allclose(list(model.predict_proba(valid_sample.Text[1:2].values)[0].values()), list(predictions2[0].values()), rtol=1e-5)
+            np.testing.assert_allclose(
+                list(model.predict_proba(valid_sample.Text[:1].values)[0].values()), 
+                list(predictions[0].values()),
+                rtol=1e-4
+            )
+            np.testing.assert_allclose(
+                list(model.predict_proba(valid_sample.Text[1:2].values)[0].values()),
+                list(predictions2[0].values()),
+                rtol=1e-4
+            )
 
     def test_fit_predict(self):
         """
@@ -228,7 +236,7 @@ class TestClassifier(unittest.TestCase):
         # reducing floating point precision
         model.saver.save_dtype = np.float16
         model.save(save_file)
-        self.assertLess(os.stat(save_file).st_size, 250000000)
+        self.assertLess(os.stat(save_file).st_size, 251000000)
 
         model = Classifier.load(save_file)
         new_predictions = model.predict(valid_sample.Text)
@@ -287,7 +295,9 @@ class TestClassifier(unittest.TestCase):
         self.assertEqual(type(lm_out), str)
         lm_out_2 = model.generate_text("Indico RULE").lower()
         self.assertEqual(type(lm_out_2), str)
-        self.assertIn('_start_Indico RULE'.lower(), lm_out_2)
+        start_id = model.input_pipeline.text_encoder.start
+        start_token = model.input_pipeline.text_encoder.decoder[start_id]
+        self.assertIn('{}Indico RULE'.format(start_token).lower(), lm_out_2.lower())
 
     def test_save_load_language_model(self):
         """
@@ -304,7 +314,9 @@ class TestClassifier(unittest.TestCase):
         model = Classifier.load(save_file)
         lm_out_2 = model.generate_text("Indico RULE")
         self.assertEqual(type(lm_out_2), str)
-        self.assertIn('_start_Indico RULE'.lower(), lm_out_2)
+        start_id = model.input_pipeline.text_encoder.start
+        start_token = model.input_pipeline.text_encoder.decoder[start_id]
+        self.assertIn('{}Indico RULE'.format(start_token).lower(), lm_out_2.lower())
 
     def test_generate_text_stop_early(self):
         model = Classifier()
@@ -320,9 +332,10 @@ class TestClassifier(unittest.TestCase):
                 }
             ])
         )
-
+        start_id = model.input_pipeline.text_encoder.start
+        start_token = model.input_pipeline.text_encoder.decoder[start_id]
         lm_out = model.generate_text()
-        self.assertEqual(lm_out, '_start__classify_')
+        self.assertEqual(lm_out, '{}_classify_'.format(start_token))
 
     def test_validation(self):
         """

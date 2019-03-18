@@ -71,7 +71,7 @@ class TestComparison(unittest.TestCase):
         animals = ["dog", "cat", "horse", "cow", "pig", "sheep", "goat", "chicken", "guinea pig", "donkey", "turkey", "duck", "camel", "goose", "llama", "rabbit", "fox"]
         numbers = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen"]
 
-        n_per = 50
+        n_per = 100
         similar = []
         different = []
         for dataset in [animals, numbers]:

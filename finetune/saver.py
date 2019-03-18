@@ -97,7 +97,9 @@ class Saver:
         if self.variables is None:
             raise FinetuneError("Cowardly refusing to save default model.")
         if self.exclude_matches is not None:
-            variables = {k: v for k, v in self.variables.items() if self.exclude_matches not in k}
+            variables = {
+                k: v for k, v in self.variables.items() if self.exclude_matches not in k
+            }
         else:
             variables = self.variables
 
@@ -148,6 +150,12 @@ class Saver:
         init_vals = []
         default_init = []
         for var in all_vars:
+
+            # always re-initialize global_step
+            if 'global_step' in var.name:
+                init_vals.append(tf.train.get_or_create_global_step().initializer)
+                continue
+
             var_init = None
             for saved_var_name, saved_var in itertools.chain(variables_sv.items(), self.fallback.items()):
                 if saved_var_name == var.name:
@@ -162,6 +170,7 @@ class Saver:
                     saved_var = func(var.name, saved_var)
 
                 init_vals.append(assign(var, pyfunc_assign(saved_var, var.dtype)))
+
         init_vals.append(tf.variables_initializer(default_init))
         return tf.group(init_vals)
 
