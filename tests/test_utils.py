@@ -3,6 +3,7 @@ import unittest
 import numpy as np
 import tensorflow as tf
 
+import finetune
 from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_sequence, get_grad_accumulation_optimizer
 from finetune.imbalance import compute_class_weights
 from finetune.errors import FinetuneError
@@ -169,7 +170,25 @@ class TestGradientAccumulation(unittest.TestCase):
 
             self.assertEqual(val_before - (grad_before + grad_after1) * lr, val_after2)  # check 2 steps of update have been made.
             self.assertEqual(val_before, val_after1)  # first step should not actually do anything
-            self.assertNotEqual(val_after1, val_after2)  # this should have applied a step and should be different.
+
+
+    def test_gradient_accumulation_activates(self):
+        model = Classifier()
+        self.called = False
+
+        def mock_grad_accum(x, accum_steps):
+            self.assertEqual(accum_steps, 10)
+            self.called = True
+            return x
+
+        finetune.utils.get_grad_accumulation_optimizer = mock_grad_accum
+        model.fit(["Hello"] * 6, ["1", "2"] * 3)
+
+        self.assertFalse(self.called)
+
+        model = Classifier(accum_steps=10)
+        model.fit(["Hello"] * 6, ["1", "2"] * 3)
+        self.assertTrue(self.called)
 
 
 
