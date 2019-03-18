@@ -5,6 +5,7 @@ from copy import copy
 from pathlib import Path
 import codecs
 import json
+import random
 
 # required for tensorflow logging control
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -79,17 +80,26 @@ class TestSequenceLabeler(unittest.TestCase):
     def setUpClass(cls):
         cls._download_reuters()
 
+    def default_config(self, **kwargs):
+        d = dict(
+            batch_size=2,
+            max_length=256,
+            lm_loss_coef=0.0,
+            val_size=0,
+            interpolate_pos_embed=False,
+        )
+        d.update(**kwargs)
+        return d
+
     def setUp(self):
         self.save_file = 'tests/saved-models/test-save-load'
-
+        random.seed(42)
+        np.random.seed(42)
         with open(self.processed_path, 'rt') as fp:
             self.texts, self.labels = json.load(fp)
 
         self.model = SequenceLabeler(
-            batch_size=2,
-            max_length=256,
-            lm_loss_coef=0.0,
-            interpolate_pos_embed=False
+            **self.default_config()
         )
 
     def test_fit_lm_only(self):
@@ -143,32 +153,35 @@ class TestSequenceLabeler(unittest.TestCase):
         train_texts, test_texts, train_annotations, test_annotations = train_test_split(
             texts, annotations, test_size=0.1
         )
-        self.model.fit(train_texts, train_annotations)
-        predictions = self.model.predict(test_texts)
-        probas = self.model.predict_proba(test_texts)
-        self.assertIsInstance(probas, list)
-        self.assertIsInstance(probas[0], list)
-        self.assertIsInstance(probas[0][0], dict)
-        self.assertIsInstance(probas[0][0]['confidence'], dict)
-        token_precision = sequence_labeling_token_precision(test_annotations, predictions)
-        token_recall = sequence_labeling_token_recall(test_annotations, predictions)
-        overlap_precision = sequence_labeling_overlap_precision(test_annotations, predictions)
-        overlap_recall = sequence_labeling_overlap_recall(test_annotations, predictions)
-        self.assertIn('Named Entity', token_precision)
-        self.assertIn('Named Entity', token_recall)
-        self.assertIn('Named Entity', overlap_precision)
-        self.assertIn('Named Entity', overlap_recall)
-        self.model.save(self.save_file)
 
         reweighted_model = SequenceLabeler(
-            batch_size=2,
-            max_length=256,
-            lm_loss_coef=0.0,
-            class_weights={'Named Entity': 5.},
+            **self.default_config(class_weights={'Named Entity': 10.})
         )
         reweighted_model.fit(train_texts, train_annotations)
         reweighted_predictions = reweighted_model.predict(test_texts)
         reweighted_token_recall = sequence_labeling_token_recall(test_annotations, reweighted_predictions)
+
+        self.model.fit(train_texts, train_annotations)
+        predictions = self.model.predict(test_texts)
+        probas = self.model.predict_proba(test_texts)
+
+        self.assertIsInstance(probas, list)
+        self.assertIsInstance(probas[0], list)
+        self.assertIsInstance(probas[0][0], dict)
+        self.assertIsInstance(probas[0][0]['confidence'], dict)
+
+        token_precision = sequence_labeling_token_precision(test_annotations, predictions)
+        token_recall = sequence_labeling_token_recall(test_annotations, predictions)
+        overlap_precision = sequence_labeling_overlap_precision(test_annotations, predictions)
+        overlap_recall = sequence_labeling_overlap_recall(test_annotations, predictions)
+
+        self.assertIn('Named Entity', token_precision)
+        self.assertIn('Named Entity', token_recall)
+        self.assertIn('Named Entity', overlap_precision)
+        self.assertIn('Named Entity', overlap_recall)
+
+        self.model.save(self.save_file)
+
         self.assertGreater(reweighted_token_recall['Named Entity'], token_recall['Named Entity'])
 
     def test_cached_predict(self):
@@ -194,13 +207,6 @@ class TestSequenceLabeler(unittest.TestCase):
         test_sequence = ["I am a dog. A dog that's incredibly bright. I can talk, read, and write!"]
         path = os.path.join(os.path.dirname(__file__), "testdata.json")
 
-        self.model = SequenceLabeler(
-            batch_size=2,
-            max_length=256,
-            lm_loss_coef=0.0,
-            interpolate_pos_embed=False
-        )
-
         # test ValueError raised when raw text is passed along with character idxs and doesn't match
         with self.assertRaises(ValueError):
             self.model.fit(["Text about a dog."], [[{"start": 0, "end": 5, "text": "cat", "label": "dog"}]])
@@ -220,7 +226,7 @@ class TestSequenceLabeler(unittest.TestCase):
         self.assertTrue(any(pred["text"].strip() == "dog" for pred in predictions[0]))
 
     def test_chunk_long_sequences(self):
-        test_sequence = ["I am a dog. A dog that's incredibly bright. I can talk, read, and write!" * 10]
+        test_sequence = ["I am a dog. A dog that's incredibly bright. I can talk, read, and write! " * 10]
         path = os.path.join(os.path.dirname(__file__), "testdata.json")
 
         # test ValueError raised when raw text is passed along with character idxs and doesn't match

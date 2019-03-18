@@ -66,7 +66,7 @@ class TestMultiLabelClassifier(unittest.TestCase):
         return dict(
             batch_size=2,
             max_length=128,
-            n_epochs=3,
+            n_epochs=5,
             l2_reg=0.,
             clf_p_drop=0.,
             **kwargs
@@ -89,7 +89,6 @@ class TestMultiLabelClassifier(unittest.TestCase):
 
         predictions = model.predict(valid_sample.Text)
         for prediction in predictions:
-            print(prediction)
             self.assertIsInstance(prediction[0], (str, np.int, np.int64))
             self.assertIn(3, prediction)
             self.assertIn(6, prediction)

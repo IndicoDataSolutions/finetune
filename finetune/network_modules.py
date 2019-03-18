@@ -255,12 +255,14 @@ def ordinal_regressor(hidden, targets, n_targets, config, shared_threshold_weigh
             'losses': loss
         }
 
+
 def class_reweighting(class_weights):
     @tf.custom_gradient
     def custom_grad(logits):
         def grad(g):
             new_g = g * class_weights
-            return new_g * tf.reduce_sum(g) / tf.reduce_sum(new_g)
+            ratio = tf.norm(g) / tf.norm(new_g)
+            return new_g * ratio
         return tf.identity(logits), grad
     return custom_grad
 
@@ -303,8 +305,11 @@ def sequence_labeler(hidden, targets, n_targets, config, pad_id, multilabel=Fals
             logits = seq_lab_internal(hidden)
 
         class_weights = kwargs.get('class_weights')
-        if class_weights is not None:
-            logits = class_reweighting(class_weights)(logits)
+        if class_weights is not None and train:
+            class_weights = tf.reshape(class_weights, [1, 1, -1])
+            one_hot_class_weights = class_weights * tf.one_hot(targets, depth=n_targets)
+            per_token_weights = tf.reduce_sum(one_hot_class_weights, axis=-1, keep_dims=True)
+            logits = class_reweighting(per_token_weights)(logits)
 
         log_likelihood = 0.0
 
