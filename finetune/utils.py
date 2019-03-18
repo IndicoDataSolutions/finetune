@@ -462,7 +462,7 @@ def get_grad_accumulation_optimizer(optimizer_class, accum_steps):
 
                 grads_and_accumulated_vars.append((accum_grad, v))
 
-            global_step = global_step or tf.train.get_or_create_global_step()
+            global_step = global_step if global_step is not None else tf.train.get_or_create_global_step()
                 
             with tf.control_dependencies(add_gradients_ops):
                 def apply_grads():
