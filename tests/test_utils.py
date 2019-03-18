@@ -172,25 +172,6 @@ class TestGradientAccumulation(unittest.TestCase):
             self.assertEqual(val_before, val_after1)  # first step should not actually do anything
 
 
-    def test_gradient_accumulation_activates(self):
-        model = Classifier()
-        self.called = False
-
-        def mock_grad_accum(x, accum_steps):
-            self.assertEqual(accum_steps, 10)
-            self.called = True
-            return x
-
-        finetune.utils.get_grad_accumulation_optimizer = mock_grad_accum
-        model.fit(["Hello"] * 6, ["1", "2"] * 3)
-
-        self.assertFalse(self.called)
-
-        model = Classifier(accum_steps=10)
-        model.fit(["Hello"] * 6, ["1", "2"] * 3)
-        self.assertTrue(self.called)
-
-
 
 if __name__ == '__main__':
     unittest.main()

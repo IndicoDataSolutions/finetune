@@ -134,6 +134,7 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
             lr_decay = lambda lr, global_step: lr * schedules[params.lr_schedule](
                 tf.to_float(global_step) / total_num_steps
             )
+
             def optimizer(lr):
                 if params.accum_steps > 1:
                     Optimizer = get_grad_accumulation_optimizer(AdamWOptimizer, params.accum_steps)
