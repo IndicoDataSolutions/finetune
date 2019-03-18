@@ -51,7 +51,7 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
     def test_overlapping_gpt2(self):
         raw = ["Indico Is the best hey"]
         finetunex = [
-            ["Indico ", "Is the", " best", " hey"]
+            ["Indico", " Is the", " best", " hey"]
         ]
         finetuney = [
             [("1",), ("1", "2"), ("2", ), ("<PAD>")]
@@ -64,7 +64,7 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
         indicoy = [
             [
                 {'start': 0, 'end': 13, 'label': '1', 'text': 'Indico Is the'},
-                {'start': 7, 'end': 18, 'label': '2', 'text': 'Is the best'},
+                {'start': 6, 'end': 18, 'label': '2', 'text': ' Is the best'},
             ]
         ]
         self.assertEqual(indicoy, indicoy_pred)
@@ -170,25 +170,6 @@ class TestGradientAccumulation(unittest.TestCase):
 
             self.assertEqual(val_before - (grad_before + grad_after1) * lr, val_after2)  # check 2 steps of update have been made.
             self.assertEqual(val_before, val_after1)  # first step should not actually do anything
-
-
-    def test_gradient_accumulation_activates(self):
-        model = Classifier()
-        self.called = False
-
-        def mock_grad_accum(x, accum_steps):
-            self.assertEqual(accum_steps, 10)
-            self.called = True
-            return x
-
-        finetune.utils.get_grad_accumulation_optimizer = mock_grad_accum
-        model.fit(["Hello"] * 6, ["1", "2"] * 3)
-
-        self.assertFalse(self.called)
-
-        model = Classifier(accum_steps=10)
-        model.fit(["Hello"] * 6, ["1", "2"] * 3)
-        self.assertTrue(self.called)
 
 
 

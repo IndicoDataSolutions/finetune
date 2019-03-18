@@ -20,11 +20,12 @@ class TestComparisonRegression(unittest.TestCase):
     def default_config(self, **kwargs):
         d = dict(
             batch_size=2,
-            max_length=128,
-            n_epochs=1,
-            l2_reg=0,
-            lm_loss_coef=0.,
+            max_length=16,
+            n_epochs=3,
             val_size=0.,
+            l2_reg=0.,
+            interpolate_pos_embed=False,
+            low_memory_mode=True,
         )
         d.update(kwargs)
         return d
@@ -39,13 +40,13 @@ class TestComparisonRegression(unittest.TestCase):
         Ensure model returns predictions of the right type
         Test model loss at least outperforms naive baseline
         """
-        model = ComparisonRegressor(n_epochs=2, low_memory_mode=True)
+        model = ComparisonRegressor(**self.default_config())
 
         # fake dataset generation
         animals = ["dog", "cat", "horse", "cow", "pig", "sheep", "goat", "chicken", "guinea pig", "donkey", "turkey", "duck", "camel", "goose", "llama", "rabbit", "fox"]
         numbers = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen"]
 
-        n_per = 50
+        n_per = 150
         similar = []
         different = []
         for dataset in [animals, numbers]:
