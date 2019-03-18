@@ -87,7 +87,6 @@ class TestSequenceLabeler(unittest.TestCase):
             lm_loss_coef=0.0,
             val_size=0,
             interpolate_pos_embed=False,
-            debugging_logs=True
         )
         d.update(**kwargs)
         return d
@@ -154,29 +153,35 @@ class TestSequenceLabeler(unittest.TestCase):
         train_texts, test_texts, train_annotations, test_annotations = train_test_split(
             texts, annotations, test_size=0.1
         )
-        self.model.fit(train_texts, train_annotations)
-        predictions = self.model.predict(test_texts)
-        probas = self.model.predict_proba(test_texts)
-        self.assertIsInstance(probas, list)
-        self.assertIsInstance(probas[0], list)
-        self.assertIsInstance(probas[0][0], dict)
-        self.assertIsInstance(probas[0][0]['confidence'], dict)
-        token_precision = sequence_labeling_token_precision(test_annotations, predictions)
-        token_recall = sequence_labeling_token_recall(test_annotations, predictions)
-        overlap_precision = sequence_labeling_overlap_precision(test_annotations, predictions)
-        overlap_recall = sequence_labeling_overlap_recall(test_annotations, predictions)
-        self.assertIn('Named Entity', token_precision)
-        self.assertIn('Named Entity', token_recall)
-        self.assertIn('Named Entity', overlap_precision)
-        self.assertIn('Named Entity', overlap_recall)
-        self.model.save(self.save_file)
 
         reweighted_model = SequenceLabeler(
-            **self.default_config(class_weights={'Named Entity': 5.})
+            **self.default_config(class_weights={'Named Entity': 10.})
         )
         reweighted_model.fit(train_texts, train_annotations)
         reweighted_predictions = reweighted_model.predict(test_texts)
         reweighted_token_recall = sequence_labeling_token_recall(test_annotations, reweighted_predictions)
+
+        self.model.fit(train_texts, train_annotations)
+        predictions = self.model.predict(test_texts)
+        probas = self.model.predict_proba(test_texts)
+
+        self.assertIsInstance(probas, list)
+        self.assertIsInstance(probas[0], list)
+        self.assertIsInstance(probas[0][0], dict)
+        self.assertIsInstance(probas[0][0]['confidence'], dict)
+
+        token_precision = sequence_labeling_token_precision(test_annotations, predictions)
+        token_recall = sequence_labeling_token_recall(test_annotations, predictions)
+        overlap_precision = sequence_labeling_overlap_precision(test_annotations, predictions)
+        overlap_recall = sequence_labeling_overlap_recall(test_annotations, predictions)
+
+        self.assertIn('Named Entity', token_precision)
+        self.assertIn('Named Entity', token_recall)
+        self.assertIn('Named Entity', overlap_precision)
+        self.assertIn('Named Entity', overlap_recall)
+
+        self.model.save(self.save_file)
+
         self.assertGreater(reweighted_token_recall['Named Entity'], token_recall['Named Entity'])
 
     def test_cached_predict(self):
