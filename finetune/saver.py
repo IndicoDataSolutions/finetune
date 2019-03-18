@@ -67,14 +67,18 @@ def pyfunc_assign(a, dtype):
     return tf.py_func(func, (), tf.as_dtype(dtype), stateful=False)
 
 class Saver:
-    def __init__(self, fallback_filename, exclude_matches=None, variable_transforms=None, save_dtype=None):
+    def __init__(self, fallback_filename=None, exclude_matches=None, variable_transforms=None, save_dtype=None):
         self.variable_transforms = variable_transforms or []
-        self.fallback_filename = fallback_filename
         self.exclude_matches = exclude_matches
-        self.tpe = ThreadPoolExecutor()
-        self.fallback_future = self.tpe.submit(joblib.load, fallback_filename)
         self.variables = None
         self.save_dtype = save_dtype
+        if fallback_filename is not None:
+            self.set_fallback(fallback_filename)
+
+    def set_fallback(self, fallback_filename):
+        self.tpe = ThreadPoolExecutor()
+        self.fallback_filename = fallback_filename
+        self.fallback_future = self.tpe.submit(joblib.load, fallback_filename)
         self.fallback_ = None
 
     @property
@@ -93,7 +97,9 @@ class Saver:
         if self.variables is None:
             raise FinetuneError("Cowardly refusing to save default model.")
         if self.exclude_matches is not None:
-            variables = {k: v for k, v in self.variables.items() if self.exclude_matches not in k}
+            variables = {
+                k: v for k, v in self.variables.items() if self.exclude_matches not in k
+            }
         else:
             variables = self.variables
 
@@ -106,8 +112,6 @@ class Saver:
             values = [a.astype(self.save_dtype) for a in values]
 
         var_names_reduced, vals_reduced = self.remove_unchanged(names, values, self.fallback)
-
-
         var_dict = dict(zip(var_names_reduced, vals_reduced))
         assert len(vals_reduced) == len(var_names_reduced) == len(var_dict)
         joblib.dump((var_dict, finetune_obj), path)
@@ -146,6 +150,12 @@ class Saver:
         init_vals = []
         default_init = []
         for var in all_vars:
+
+            # always re-initialize global_step
+            if 'global_step' in var.name:
+                init_vals.append(tf.train.get_or_create_global_step().initializer)
+                continue
+
             var_init = None
             for saved_var_name, saved_var in itertools.chain(variables_sv.items(), self.fallback.items()):
                 if saved_var_name == var.name:
@@ -160,6 +170,7 @@ class Saver:
                     saved_var = func(var.name, saved_var)
 
                 init_vals.append(assign(var, pyfunc_assign(saved_var, var.dtype)))
+
         init_vals.append(tf.variables_initializer(default_init))
         return tf.group(init_vals)
 

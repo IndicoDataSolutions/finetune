@@ -6,12 +6,13 @@ import tensorflow as tf
 from tensorflow.train import Scaffold
 from tensorflow.contrib.opt.python.training.weight_decay_optimizers import AdamWOptimizer
 
-from finetune.network_modules import featurizer, language_model
+from finetune.network_modules import language_model
 from finetune.utils import sample_with_temperature
 from finetune.optimizers import schedules
 from finetune.imbalance import class_weight_tensor
 
 LOGGER = logging.getLogger('finetune')
+
 
 class PredictMode:
     FEATURIZE = "FEAT"
@@ -59,7 +60,7 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                 featurizer_state=featurizer_state,
                 targets=Y,
                 n_outputs=target_dim,
-                train=mode == tf.estimator.ModeKeys.TRAIN,
+                train=(mode == tf.estimator.ModeKeys.TRAIN),
                 max_length=params.max_length,
                 class_weights=weighted_tensor
             )
@@ -84,7 +85,13 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
 
         with tf.variable_scope(tf.get_variable_scope()):
             train_loss = 0.0
-            featurizer_state = featurizer(X, config=params, encoder=encoder, train=train)
+
+            featurizer_state = params.base_model.get_featurizer(
+                X,
+                encoder=encoder,
+                config=params,
+                train=train
+            )
             predictions = {PredictMode.FEATURIZE: featurizer_state["features"]}
 
             if build_target_model:
@@ -123,11 +130,10 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                     predictions[PredictMode.LM_PERPLEXITY] = language_model_state["perplexity"]
 
         if mode == tf.estimator.ModeKeys.TRAIN:
-            total_num_steps = params.n_epochs * params.dataset_size//params.batch_size
+            total_num_steps = params.n_epochs * params.dataset_size // params.batch_size
             lr_decay = lambda lr, global_step: lr * schedules[params.lr_schedule](
                 tf.to_float(global_step) / total_num_steps
             )
-
             def optimizer(lr):
                 opt = AdamWOptimizer(
                     learning_rate=lr,

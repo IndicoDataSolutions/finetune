@@ -14,7 +14,6 @@ class MultipleChoicePipeline(BasePipeline):
         super().__init__(*args, **kwargs)
         self.num_answers = None
 
-
     def _text_to_ids(self, Xs, Y=None, pad_token=None):
         """
         Format multi question examples as a list of IDs
@@ -46,7 +45,7 @@ class MultipleChoicePipeline(BasePipeline):
 class MultipleChoice(BaseModel):
     """
     Multi choice question finetune model.
-    
+
     :param config: A :py:class:`finetune.config.Settings` object or None (for default config).
     """
 
@@ -71,7 +70,7 @@ class MultipleChoice(BaseModel):
             raise ValueError("Answers, questions and corrext_answer are not all the same length, {},{},{}".format(
                 len(questions), len(correct_answer), len(answers)
             ))
-     
+
         for correct, others in zip(correct_answer, answers):
             if isinstance(correct, int):
                 if 0 > correct > len(others):
