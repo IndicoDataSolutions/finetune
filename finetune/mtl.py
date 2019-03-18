@@ -22,6 +22,12 @@ def reshape_to_rank_4(t):
     return tf.reshape(t, [s[0], -1, s[-2], s[-1]])
 
 
+def get_train_eval_dataset(input_fn, val_size):
+    def fn():
+        return input_fn().take(val_size)
+    return fn
+
+
 class MultiTaskPipeline(BasePipeline):
 
     def __init__(self, *args, **kwargs):
@@ -59,7 +65,7 @@ class MultiTaskPipeline(BasePipeline):
             input_func_normalised, val_func_normalised = get_input_fns(task_id, input_func, val_func)
             input_funcs.append(input_func_normalised)
             val_funcs[task_name] = val_func_normalised
-            val_funcs[task_name + "_train"] = lambda: input_func_normalised().take(val_sizes[task_name])
+            val_funcs[task_name + "_train"] = get_train_eval_dataset(input_func_normalised, val_sizes[task_name])
 
         sum_frequencies = sum(frequencies)
         weights = [float(w) / sum_frequencies for w in frequencies]
