@@ -66,7 +66,7 @@ class TestMultiLabelClassifier(unittest.TestCase):
         return dict(
             batch_size=2,
             max_length=128,
-            n_epochs=2,
+            n_epochs=5,
             l2_reg=0.,
             clf_p_drop=0.,
             **kwargs

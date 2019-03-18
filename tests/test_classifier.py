@@ -21,7 +21,6 @@ from sklearn.metrics import accuracy_score, recall_score
 
 from finetune import Classifier
 from finetune.datasets import generic_download
-from finetune.input_pipeline import ENCODER
 from finetune.config import get_config, get_small_model_config
 from finetune.errors import FinetuneError
 
@@ -144,8 +143,16 @@ class TestClassifier(unittest.TestCase):
         predictions = model.predict_proba(valid_sample.Text[:1].values)
         predictions2 = model.predict_proba(valid_sample.Text[1:2].values)
         with model.cached_predict():
-            np.testing.assert_allclose(list(model.predict_proba(valid_sample.Text[:1].values)[0].values()), list(predictions[0].values()), rtol=1e-5)
-            np.testing.assert_allclose(list(model.predict_proba(valid_sample.Text[1:2].values)[0].values()), list(predictions2[0].values()), rtol=1e-5)
+            np.testing.assert_allclose(
+                list(model.predict_proba(valid_sample.Text[:1].values)[0].values()), 
+                list(predictions[0].values()),
+                rtol=1e-4
+            )
+            np.testing.assert_allclose(
+                list(model.predict_proba(valid_sample.Text[1:2].values)[0].values()),
+                list(predictions2[0].values()),
+                rtol=1e-4
+            )
 
     def test_fit_predict(self):
         """
@@ -182,12 +189,10 @@ class TestClassifier(unittest.TestCase):
 
     def test_class_weights(self):
         # testing class weights
+        train_sample = self.dataset.sample(n=self.n_sample * 3)
+        valid_sample = self.dataset.sample(n=self.n_sample * 3)
         model = Classifier(**self.default_config())
-        train_sample = self.dataset.sample(n=self.n_sample)
-        valid_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text.values, train_sample.Target.values)
-        train_sample = self.dataset.sample(n=self.n_sample)
-        valid_sample = self.dataset.sample(n=(3 * self.n_sample))
         predictions = model.predict(valid_sample.Text.values)
         recall = recall_score(valid_sample.Target.values, predictions, pos_label=1)
         model = Classifier(**self.default_config(class_weights={1: 100}))
@@ -231,7 +236,7 @@ class TestClassifier(unittest.TestCase):
         # reducing floating point precision
         model.saver.save_dtype = np.float16
         model.save(save_file)
-        self.assertLess(os.stat(save_file).st_size, 250000000)
+        self.assertLess(os.stat(save_file).st_size, 251000000)
 
         model = Classifier.load(save_file)
         new_predictions = model.predict(valid_sample.Text)
@@ -259,8 +264,8 @@ class TestClassifier(unittest.TestCase):
         n_per_class = (self.n_sample * 5)
         trX = ['cat'] * n_per_class + ['finance'] * n_per_class
         trY = copy(trX)
-        teX = ['feline'] * n_per_class + ['investment'] * n_per_class
-        teY = ['cat'] * n_per_class + ['finance'] * n_per_class
+        teX = ['feline'] + ['investment']
+        teY = ['cat'] + ['finance']
         model.fit(trX, trY)
         predY = model.predict(teX)
         self.assertEqual(accuracy_score(teY, predY), 1.00)
@@ -288,9 +293,11 @@ class TestClassifier(unittest.TestCase):
         model = Classifier()
         lm_out = model.generate_text("", max_length=5)
         self.assertEqual(type(lm_out), str)
-        lm_out_2 = model.generate_text("Indico RULE")
+        lm_out_2 = model.generate_text("Indico RULE").lower()
         self.assertEqual(type(lm_out_2), str)
-        self.assertIn('_start_Indico RULE'.lower(), lm_out_2)
+        start_id = model.input_pipeline.text_encoder.start
+        start_token = model.input_pipeline.text_encoder.decoder[start_id]
+        self.assertIn('{}Indico RULE'.format(start_token).lower(), lm_out_2.lower())
 
     def test_save_load_language_model(self):
         """
@@ -307,7 +314,9 @@ class TestClassifier(unittest.TestCase):
         model = Classifier.load(save_file)
         lm_out_2 = model.generate_text("Indico RULE")
         self.assertEqual(type(lm_out_2), str)
-        self.assertIn('_start_Indico RULE'.lower(), lm_out_2)
+        start_id = model.input_pipeline.text_encoder.start
+        start_token = model.input_pipeline.text_encoder.decoder[start_id]
+        self.assertIn('{}Indico RULE'.format(start_token).lower(), lm_out_2.lower())
 
     def test_generate_text_stop_early(self):
         model = Classifier()
@@ -315,10 +324,18 @@ class TestClassifier(unittest.TestCase):
         # A dirty mock to make all model inferences output a hundred _classify_ tokens
         fake_estimator = MagicMock()
         model.get_estimator = lambda *args, **kwargs: fake_estimator
-        fake_estimator.predict = MagicMock(return_value=iter([{"GEN_TEXT" :100 * [ENCODER['_classify_']]}]))
-
+        model.input_pipeline.text_encoder._lazy_init()
+        fake_estimator.predict = MagicMock(
+            return_value=iter([
+                {
+                    "GEN_TEXT": 100 * [model.input_pipeline.text_encoder['_classify_']]
+                }
+            ])
+        )
+        start_id = model.input_pipeline.text_encoder.start
+        start_token = model.input_pipeline.text_encoder.decoder[start_id]
         lm_out = model.generate_text()
-        self.assertEqual(lm_out, '_start__classify_')
+        self.assertEqual(lm_out, '{}_classify_'.format(start_token))
 
     def test_validation(self):
         """

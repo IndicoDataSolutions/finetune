@@ -15,6 +15,7 @@ def compute_class_weights(class_weights, Y):
     """
     if class_weights is None:
         return
+
     if isinstance(Y, np.ndarray):
         Y = Y.tolist()
 
@@ -25,7 +26,7 @@ def compute_class_weights(class_weights, Y):
         max_count = max(counts.values())
         computed_weights = {}
         for class_name, count in counts.items():
-            ratio =  max_count / count
+            ratio = max_count / count
             if class_weights == 'linear':
                 computed_weights[class_name] = ratio
             elif class_weights == 'sqrt':
@@ -33,7 +34,7 @@ def compute_class_weights(class_weights, Y):
             elif class_weights == 'log':
                 computed_weights[class_name] = np.log(ratio) + 1
         class_weights = computed_weights
-    
+
     if not isinstance(class_weights, dict):
         raise FinetuneError(
             "Invalid value for config.class_weights: {}. "
@@ -42,7 +43,6 @@ def compute_class_weights(class_weights, Y):
                 list(options)
             )
         )
-    
     return class_weights
 
 
@@ -54,4 +54,5 @@ def class_weight_tensor(class_weights, target_dim, label_encoder):
     for class_name, class_weight in class_weights.items():
         idx = LabelEncoder.transform(label_encoder, [class_name])[0]
         class_weight_arr[idx] = class_weight
-    return tf.convert_to_tensor(class_weight_arr)
+    class_weight_tensor = tf.convert_to_tensor(class_weight_arr)
+    return class_weight_tensor

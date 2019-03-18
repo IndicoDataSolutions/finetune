@@ -56,18 +56,18 @@ class TestAssociation(unittest.TestCase):
                 self.assertIn(p_i["label"], ["verb", "noun_phrase"])
 
                 if p_i["label"] == "noun_phrase" and pred_has_verb:
-                    self.assertIn("association", p_i)
+                    self.assertIn("associations", p_i)
                     # a noun_phrase MUST have a verb by the above schema.
 
-                    self.assertEqual(p_i["association"]["relatiobship"], "has_verb")
+                    self.assertEqual(p_i["associations"]["relationship"], "has_verb")
                     # has_verb is the only viable edge for a noun_phrase.
 
-                    self.assertIn("prob", p_i["association"]["relatiobship"])
-                    self.assertTrue(0.0 < p_i["association"]["relatiobship"]["prob"] < 1.0)
-                    self.assertEqual(pred[p_i["association"]["relatiobship"]["index"]]["label"], "verb")
+                    self.assertIn("prob", p_i["associations"])
+                    self.assertTrue(0.0 < p_i["associations"]["prob"] < 1.0)
+                    self.assertEqual(pred[p_i["associations"]["index"]]["label"], "verb")
                     # check it is associated with a verb
                 else:
-                    self.assertNotIn("association", p_i)
-                    #Verbs cannot have any associations by the above schema
+                    self.assertNotIn("associations", p_i)
+                    # Verbs cannot have any associations by the above schema
 
             self.model.predict(test_texts)

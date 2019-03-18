@@ -65,13 +65,13 @@ class TestComparison(unittest.TestCase):
             self.assertIsInstance(proba, dict)
 
     def test_reasonable_predictions(self):
-        model = Comparison(**self.default_config(n_epochs=5))
+        model = Comparison(**self.default_config())
 
         # fake dataset generation
         animals = ["dog", "cat", "horse", "cow", "pig", "sheep", "goat", "chicken", "guinea pig", "donkey", "turkey", "duck", "camel", "goose", "llama", "rabbit", "fox"]
         numbers = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen"]
 
-        n_per = 50
+        n_per = 100
         similar = []
         different = []
         for dataset in [animals, numbers]:

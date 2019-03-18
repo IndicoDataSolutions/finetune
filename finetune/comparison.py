@@ -34,13 +34,13 @@ class ComparisonPipeline(ClassificationPipeline):
             TS([self.target_dim]))
 
 class Comparison(Classifier):
-    """ 
-    Compares two documents to solve a classification task.  
-    
+    """
+    Compares two documents to solve a classification task.
+
     :param config: A :py:class:`finetune.config.Settings` object or None (for default config).
     :param \**kwargs: key-value pairs of config items to override.
     """
-    
+
     def _get_input_pipeline(self):
         return ComparisonPipeline(self.config)
 
