@@ -48,7 +48,7 @@ def language_model(*, X, M, embed_weights, hidden, config, reuse=None, train=Fal
     hidden = merge_leading_dims(hidden, 3)
 
     batch, seq, _ = shape_list(X)
-    hidden_dim, vocab_size = shape_list(embed_weights)
+    vocab_size, hidden_dim = shape_list(embed_weights)
 
     with tf.variable_scope('model/language-model', reuse=reuse):
         # language model ignores last hidden state because we don't have a target
@@ -56,14 +56,16 @@ def language_model(*, X, M, embed_weights, hidden, config, reuse=None, train=Fal
         lm_h = tf.reshape(sliced_hidden, [-1, config.n_embed])  # [batch, seq_len, embed] --> [batch * seq_len, embed]
         
         if train and config.sampled_softmax and config.sampled_softmax > 0:
+            targets = tf.reshape(X[:, 1:, 0], [-1, 1])
             lm_losses = tf.nn.sampled_softmax_loss(
                 embed_weights,
                 tf.zeros([vocab_size]), 
-                tf.reshape(X[:, 1:, 0], [-1, 1]),
+                targets,
                 lm_h,
                 config.sampled_softmax,
                 vocab_size,
-                partition_strategy="div"
+                partition_strategy="div",
+                sampled_values=tf.nn.learned_unigram_candidate_sampler(tf.to_int64(targets), 1, config.sampled_softmax, True, vocab_size)
             )
             logits = None
 

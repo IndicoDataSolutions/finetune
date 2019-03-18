@@ -296,7 +296,7 @@ def get_default_config():
 
         # For experimental conv model
         use_conv=False,
-        kernel_width=5,
+        kernel_width=2,
         use_fp16=True,
         use_timing=False,
         scale_loss=True,

@@ -7,92 +7,153 @@ from finetune.transformer import dropout, embed, block, attn, norm, conv1d
 from finetune.optimizers.recompute_grads import recompute_grad
 from finetune.utils import shape_list
 import functools
+from tensorflow.python.framework import function
 from finetune.recompute_grads import recompute_grad
+
 
 def embed_no_timing(X, we):
     return tf.gather(we, X[:, :, 0])
 
-def gated_linear_unit(X, kernel_width, layer_name, use_fp16, training, backwards=False, mask=None):
-    # layer_input shape = #batch, seq, embed_dim or batch, channels, seq, embed_dim
+def _swish_shape(op):
+    """Shape helper function for swish and _swish_grad function below."""
+    return [op.inputs[0].shape]
 
-    with tf.variable_scope(layer_name, reuse=backwards):
+
+@function.Defun(shape_func=_swish_shape, func_name="swish_grad", noinline=True)
+def _swish_grad(features, grad):
+    sigmoid_features = tf.nn.sigmoid(features)
+    activation_grad = (sigmoid_features * (1.0 + features * (1.0 - sigmoid_features)))
+    return grad * activation_grad
+
+
+@function.Defun(grad_func=_swish_grad, shape_func=_swish_shape, func_name="swish", noinline=True)
+def swish(features):
+    return features * tf.nn.sigmoid(features)
+
+def separable_conv1d(x, depthwise_filter, pointwise_filter):
+    x = tf.expand_dims(x, 1)
+    depthwise_filter = tf.expand_dims(depthwise_filter, 0)
+    pointwise_filter = tf.expand_dims(pointwise_filter, 0)
+    out = tf.nn.separable_conv2d(
+        x,
+        depthwise_filter,
+        pointwise_filter,
+        [1,1,1,1],
+        "VALID"
+    )
+    return tf.squeeze(out, 1)
+    
+
+def time_to_batch(value, dilation, name=None):
+    with tf.name_scope('time_to_batch'):
+        shape = tf.shape(value)
+        pad_elements = dilation - 1 - (shape[1] + dilation - 1) % dilation
+        padded = tf.pad(value, [[0, 0], [0, pad_elements], [0, 0]])
+        reshaped = tf.reshape(padded, [-1, dilation, shape[2]])
+        transposed = tf.transpose(reshaped, perm=[1, 0, 2])
+        return tf.reshape(transposed, [shape[0] * dilation, -1, shape[2]])
+
+
+def batch_to_time(value, dilation, name=None):
+    with tf.name_scope('batch_to_time'):
+        shape = tf.shape(value)
+        prepared = tf.reshape(value, [dilation, -1, shape[2]])
+        transposed = tf.transpose(prepared, perm=[1, 0, 2])
+        return tf.reshape(transposed,
+                          [tf.div(shape[0], dilation), -1, shape[2]])
+
+
+def causal_conv(value, filter_, dilation, name='causal_conv'):
+    if type(filter_) == tuple:
+        conv_op = lambda x: separable_conv1d(x, *filter_)
+    else:
+        conv_op = lambda x: tf.nn.conv1d(x, filter_, stride=1, padding='VALID')
+        
+    with tf.name_scope(name):
+        if dilation > 1:
+            transformed = time_to_batch(value, dilation)
+            conv = conv_op(transformed)
+            restored = batch_to_time(conv, dilation)
+        else:
+            restored = conv_op(value)
+        return restored
+
+def separable_conv_block(X, kernel_width, layer_name, use_fp16, training, mask=None, dilation=1, channel_mult=1):
+    with tf.variable_scope("sep_" + layer_name):
+
+        left_pad = (kernel_width - 1) * dilation
+        paddings = [[0, 0], [left_pad, 0], [0, 0]]
+
+        padded_input = tf.pad(X, paddings, "CONSTANT")
+
+        nx = shape_list(X)[-1]
+        depth_W = tf.get_variable(name="depth_W", shape=[kernel_width, nx, channel_mult], initializer=tf.initializers.random_normal(stddev=0.00001))
+        point_W = tf.get_variable(name="point_W", shape=[1, nx * channel_mult, nx], initializer=tf.initializers.random_normal(stddev=0.00001))
+        b = tf.get_variable(name="B", shape=[nx], initializer=tf.initializers.random_normal(stddev=0.001))
+
+        if use_fp16:
+            depth_W = tf.cast(depth_W, tf.float16)
+            point_W = tf.cast(point_W, tf.float16)
+            b = tf.cast(b, tf.float16)
+            
+        W = (depth_W, point_W)
+        conv = causal_conv(padded_input, W, dilation)
+        conv = tf.nn.bias_add(conv, b)
+        out = norm(conv, "norm2", fp16=use_fp16, debug=False, e=1e-1)
+
+    return out
+
+    
+def normal_1d_conv_block(X, kernel_width, layer_name, use_fp16, training, mask=None, dilation=1):
+    # layer_input shape = #batch, seq, embed_dim or batch, channels, seq, embed_dim
+    with tf.variable_scope(layer_name):
 
         # Pad kernel_width (word_wise) - 1 to stop future viewing.
-        left_pad = kernel_width - 1
-        if backwards:
-            paddings = [[0, 0], [0, left_pad], [0, 0]]
-        else:
-            paddings = [[0, 0], [left_pad, 0], [0, 0]]
+        left_pad = (kernel_width - 1) * dilation
+        paddings = [[0, 0], [left_pad, 0], [0, 0]]
             
-        if mask is not None:
-            X *= mask
         padded_input = tf.pad(X, paddings, "CONSTANT")
 
         nx = shape_list(X)[-1]
         W = tf.get_variable(name="W", shape=[kernel_width, nx, nx], initializer=tf.initializers.random_normal(stddev=0.00001))
         b = tf.get_variable(name="B", shape=[nx], initializer=tf.initializers.random_normal(stddev=0.001))
-        W_gate = tf.get_variable(name="W_gate", shape=[kernel_width, nx, nx], initializer=tf.initializers.random_normal(stddev=0.00001))
-        b_gate = tf.get_variable(name="B_gate", shape=[nx], initializer=tf.initializers.random_normal(stddev=0.001))
-
-        if backwards:
-            W = tf.reverse(W, [0])
-            W_gate = tf.reverse(W_gate, [0])
 
         if use_fp16:
             W = tf.cast(W, tf.float16)
             b = tf.cast(b, tf.float16)
-            W_gate = tf.cast(W_gate, tf.float16)
-            b_gate = tf.cast(b_gate, tf.float16)
 
-        conv = tf.nn.conv1d(
-            padded_input,
-            W,
-            stride=1,
-            padding="VALID",
-            name="conv"
-        )
-        
+        conv = causal_conv(padded_input, W, dilation)
         conv = tf.nn.bias_add(conv, b)
-        conv = tf.nn.relu(norm(conv, "norm", fp16=use_fp16))
-        # Second gating sigmoid layer
-
-        if mask is not None:
-            conv *=mask
             
-        conv = tf.pad(conv, paddings, "CONSTANT")
-        conv_gate = tf.nn.conv1d(
-            conv,
-            W_gate,
-            stride=1,
-            padding="VALID",
-            name="conv"
-        )
-        conv_gate = tf.nn.bias_add(conv_gate, b_gate)
+        out = norm(conv, "norm2", fp16=use_fp16, debug=False, e=1e-1)
 
-        out = norm(conv_gate + X, "norm2", fp16=use_fp16, debug=False)
-    return out#tf.Print(out, [out])
+    return out
 
 def block(X, kernel_width, block_name, use_fp16, training, pdrop, backwards=False, seq_lens=None):
     with tf.variable_scope(block_name, reuse=backwards):
-        if seq_lens is not None:
-            mask = tf.cast(tf.expand_dims(tf.sequence_mask(seq_lens, maxlen=tf.shape(X)[1], dtype=tf.float32), axis=-1), X.dtype)
-        else:
-            mask = None
-
-        h0 = gated_linear_unit(X, kernel_width, "0",use_fp16, training, backwards, mask)
-        h0 = attention_layer(h0, backwards, seq_lens, block_name + "_1")
-        h0 = tf.nn.relu(h0)
-                          
-#        h1 = gated_linear_unit(h0, kernel_width, "1",use_fp16, training, backwards, mask)
-#        h1 = tf.nn.relu(h1)
-        h1 = h0
-        
-        h2 = gated_linear_unit(h1, kernel_width, "2",use_fp16, training, backwards, mask)
-        h2 = attention_layer(h2, backwards, seq_lens, block_name + "_2")
-        h2 = tf.nn.relu(h2)
-        
-        h4 = gated_linear_unit(h2, kernel_width, "4", use_fp16, training, backwards, mask)
-    return h4
+        mask = None
+        h0 = normal_1d_conv_block(X , kernel_width, "0", use_fp16, training, mask, dilation=1)
+        h0 = swish(h0)
+        h1 = separable_conv_block(h0, 5, "1", use_fp16, training, mask, dilation=1, channel_mult=1)
+        h1 = swish(h1)
+        h2 = normal_1d_conv_block(h1, kernel_width, "2", use_fp16, training, mask, dilation=1)
+        h2 = swish(h2)
+        h3 = separable_conv_block(h2, 10, "3", use_fp16, training, mask, dilation=1, channel_mult=1) + X
+        h3 = swish(h3)
+        h4 = normal_1d_conv_block(h3, kernel_width, "4", use_fp16, training, mask, dilation=1)
+        h4 = swish(h4)
+        h5 = separable_conv_block(h4, 20, "5", use_fp16, training, mask, dilation=1, channel_mult=1)
+        h5 = swish(h5)
+        h6 = normal_1d_conv_block(h5, kernel_width, "6", use_fp16, training, mask, dilation=1)
+        h6 = swish(h6)
+        h7 = separable_conv_block(h6, 40, "7", use_fp16, training, mask, dilation=1, channel_mult=1) + X
+        h7 = swish(h7)
+        h8 = normal_1d_conv_block(h7, kernel_width, "8", use_fp16, training, mask, dilation=1)
+        h8 = swish(h8)
+        h9 = separable_conv_block(h8, 60, "9", use_fp16, training, mask, dilation=1, channel_mult=1)
+        h9 = swish(h9)
+        h10 = normal_1d_conv_block(h9, 1, "12", use_fp16, training, mask, dilation=1) + X
+    return h10
 
 
 def attention_layer(X, backwards, seq_lens, layer):
@@ -165,48 +226,23 @@ def featurizer(X, encoder, config, train=False, reuse=None):
         else:
             h = embed_no_timing(X, embed_weights)
 
-        fe = tf.get_variable(name="forward_embed", shape=[1, 1, embed_size])
-        be = tf.get_variable(name="backwards_embed", shape=[1, 1, embed_size])
-        f_b_combine_w = tf.get_variable(name="f_b_combine", shape=[1, embed_size * 2, embed_size], initializer=tf.initializers.random_normal(stddev=0.00001))
-        if config.use_fp16:
-            fe = tf.cast(fe, tf.float16)
-            be = tf.cast(be, tf.float16)
-            f_b_combine_w = tf.cast(f_b_combine_w, tf.float16)
-
-        h_back = h + be
-        h += fe 
         for layer in range(config.n_layer):
             with tf.variable_scope('h%d_' % layer):
                 if (config.n_layer - layer) == config.num_layers_trained and config.num_layers_trained != config.n_layer:
                     h = tf.stop_gradient(h)
 
                 block_fn_fwd = functools.partial(block, block_name='block%d_' % layer, kernel_width=config.kernel_width, use_fp16=config.use_fp16, training=train, pdrop=config.resid_p_drop)
-                block_fn_bwd = functools.partial(block, block_name='block%d_' % layer, kernel_width=config.kernel_width, use_fp16=config.use_fp16, training=train, pdrop=config.resid_p_drop, backwards=True, seq_lens=pool_idx)
                 if config.low_memory_mode and train:
                     block_fn_fwd = recompute_grad(block_fn_fwd, use_entire_scope=True)
-                    block_fn_bwd = recompute_grad(block_fn_bwd, use_entire_scope=True)
                 h = block_fn_fwd(h)
-            with tf.variable_scope('h%d_' % layer, reuse=True):
-                h_back = block_fn_bwd(h_back)
-#            h = block(h, block_name='block%d_' % layer, kernel_width=config.kernel_width, use_fp16=config.use_fp16, training=train, pdrop=config.resid_p_drop)
-#            h_back = block(h_back, block_name='block%d_' % layer, kernel_width=config.kernel_width, use_fp16=config.use_fp16, training=train, pdrop=config.resid_p_drop, backwards=True, seq_lens=pool_idx)
-
-        h = tf.concat((h, tf.concat((h_back[:, 2:], tf.zeros_like(h_back[:,:2])), axis=1)), axis=-1)
-        embed_size = shape_list(h_back)[-1]
-
-        h = tf.nn.conv1d(
-                        h,
-                        f_b_combine_w,
-                        stride=1,
-                        padding="VALID",
-                        name="conv"
-        )
-        
+                if config.n_layer != (layer + 1):
+                    h = swish(h)
+                    
         if config.use_fp16:
             h = tf.cast(h, tf.float32)
 
         mask = tf.expand_dims(tf.sequence_mask(pool_idx, maxlen=tf.shape(h)[1], dtype=tf.float32), -1)
-        h = tf.Print(h, (tf.shape(h), tf.shape(mask)))
+        
         max_pooled = tf.reduce_max(h + (1.0 -  mask) * -1e9, 1)
         mean_pool = tf.reduce_sum(h * mask, 1) / (tf.reduce_sum(mask) + 1e-9)
         clf_h = tf.concat((max_pooled, mean_pool), axis=1)
