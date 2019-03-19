@@ -18,7 +18,6 @@ def textcnn_featurizer(X, encoder, config, train=False, reuse=None):
     """
     initial_shape = [a or -1 for a in X.get_shape().as_list()]
     X = tf.reshape(X, shape=[-1] + initial_shape[-2:])
-
     with tf.variable_scope('model/featurizer', reuse=reuse):
         embed_weights = tf.get_variable(
             name="we",
@@ -35,6 +34,8 @@ def textcnn_featurizer(X, encoder, config, train=False, reuse=None):
         # we remove positional embeddings from the model
         h = embed(X[:, :, :1], embed_weights)
 
+        # keep track of the classify token
+        clf_token = encoder['_classify_']
         # Convolutional Layer (this is all the same layer, just different filter sizes)
         pool_layers = []
         conv_layers = []
@@ -49,24 +50,25 @@ def textcnn_featurizer(X, encoder, config, train=False, reuse=None):
                 kernel_initializer=tf.initializers.glorot_normal
             )
             conv_layers.append(conv)
-            pool = tf.reduce_max(conv, axis=1)
+            # mask out the values past the classify token before performing pooling
+            pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
+            # mask is past the classify token (i.e. make those results extremely negative)
+            mask = tf.expand_dims(1.0 - tf.sequence_mask(pool_idx, maxlen=tf.shape(conv)[1], dtype=tf.float32), -1)
+            pool = tf.reduce_max(conv + mask * -1e9, 1)
             pool_layers.append(pool)
 
         # Concat the output of the convolutional layers for use in sequence embedding
         conv_seq = tf.concat(conv_layers, axis=2)
-        clf_token = encoder['_classify_']
-        pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
-        seq_feats = tf.reshape(conv_seq, shape=[-1, 1, config.max_length, config.n_embed])
-
-        # Concatenate the univariate vectors
+        seq_feats = tf.reshape(conv_seq, shape=[-1, config.max_length, config.n_embed])
+        # Concatenate the univariate vectors as features for classification
         clf_h = tf.concat(pool_layers, axis=1)
-        clf_h = tf.reshape(clf_h, shape=[-1, 1, config.n_embed])
+        clf_h = tf.reshape(clf_h, shape=initial_shape[: -2] + [config.n_embed])
 
         # note that, due to convolution and pooling, the dimensionality of the features is much smaller than in the
         # transformer base models
         return {
             'embed_weights': embed_weights,
-            'features': clf_h,  # [batch_size, n_embed]
+            'features': clf_h,  # [batch_size, n_embed] for classify, [batch_size, 1, n_embed] for comparison, etc.
             'sequence_features': seq_feats,  # [batch_size, seq_len, n_embed]
             'pool_idx': pool_idx  # [batch_size]
         }

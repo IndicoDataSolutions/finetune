@@ -1,3 +1,4 @@
+import os
 from finetune.base_models import SourceModel
 from finetune.base_models.gpt.encoder import GPTEncoder
 from finetune.base_models.textcnn.featurizer import textcnn_featurizer
@@ -17,5 +18,7 @@ class TextCNNModel(SourceModel):
         'act_fn': "gelu",
         'train_embeddings': False,
         'lr': .01,
-        'seq_num_heads': len(kernel_sizes) * 2
+        'seq_num_heads': len(kernel_sizes) * 2,
+        'base_model_path': os.path.join("gpt", "model-lg.jl")
+
     }
