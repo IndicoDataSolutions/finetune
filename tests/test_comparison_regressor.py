@@ -15,7 +15,6 @@ from finetune import ComparisonRegressor
 
 class TestComparisonRegression(unittest.TestCase):
     n_sample = 100
-    n_hidden = 768
 
     def default_config(self, **kwargs):
         d = dict(
