@@ -313,14 +313,15 @@ class Association(BaseModel):
         :returns: list of class labels.
         """
         return self.predict(X)
-
-    def _target_model(self, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
+    
+    @staticmethod
+    def _target_model(config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
         return association(
             hidden=featurizer_state['sequence_features'],
             pool_idx=featurizer_state['pool_idx'],
             targets=targets,
             n_targets=n_outputs,
-            config=self.config,
+            config=config,
             train=train,
             reuse=reuse,
             **kwargs

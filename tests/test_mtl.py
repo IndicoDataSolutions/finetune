@@ -47,6 +47,15 @@ class TestMTL(unittest.TestCase):
             }
         )
 
+        preds = model.predict(
+            {
+                "sst": testX,
+                "qqp": list(zip(q_X1, q_X2))[:10],
+            }
+        )
+        self.assertIn("sst", preds)
+        self.assertIn("qqp", preds)
+
         model.create_base_model("./test_base_mtl.jl", exists_ok=True)
         model = Classifier(base_model_path="./test_base_mtl.jl")
         model.fit(trainX, trainY)

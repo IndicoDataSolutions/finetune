@@ -12,13 +12,17 @@ from finetune.utils import list_transpose
 class MultipleChoicePipeline(BasePipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.num_answers = None
+
+    def _post_data_initialization(self, Y):
+        super()._post_data_initialization(Y)
+        self.target_dim = self.target_dim_
 
     def _text_to_ids(self, Xs, Y=None, pad_token=None):
         """
         Format multi question examples as a list of IDs
         """
         q, answer_list = Xs
+
         pairs = [[q, answer_list[idx]] for idx in range(len(answer_list))]
         arrays = []
         for pair in pairs:
@@ -36,7 +40,7 @@ class MultipleChoicePipeline(BasePipeline):
     def feed_shape_type_def(self):
         TS = tf.TensorShape
         return ({"tokens": tf.int32, "mask": tf.float32}, tf.int32), (
-            {"tokens": TS([self.num_answers, self.config.max_length, 2]), "mask": TS([self.num_answers, self.config.max_length])}, TS([]))
+            {"tokens": TS([self.target_dim, self.config.max_length, 2]), "mask": TS([self.target_dim, self.config.max_length])}, TS([]))
 
     def _target_encoder(self):
         return IDEncoder()
@@ -86,17 +90,17 @@ class MultipleChoice(BaseModel):
                     raise ValueError(
                         "Correct answer {} is not contained in possible answers {}".format(correct, others))
 
-        self.num_answers = len(answers[0])
-        self.input_pipeline.num_answers = self.num_answers #TODO(BEN) factor this inside the post_data_init
         labels = None if fit_lm_only else answer_idx
+        self.input_pipeline.target_dim_ = len(answers[0])
         return super().finetune(list(zip(questions, answers)), Y=labels)
 
-    def _target_model(self, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
+    @staticmethod
+    def _target_model(config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
         return multi_choice_question(
             hidden=featurizer_state['features'],
             targets=targets,
-            n_targets=self.num_answers,
-            config=self.config,
+            n_targets=n_outputs,
+            config=config,
             train=train,
             reuse=reuse,
             **kwargs

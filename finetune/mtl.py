@@ -1,3 +1,5 @@
+import logging
+
 import tensorflow as tf
 from finetune.base import BaseModel
 from finetune.input_pipeline import BasePipeline
@@ -6,15 +8,20 @@ from finetune.errors import FinetuneError
 from finetune.sequence_labeling import SequenceLabeler
 from finetune.utils import indico_to_finetune_sequence
 
+LOGGER = logging.getLogger('finetune')
 
-def get_input_fns(tid, i_fn, v_fn):
+def get_input_fns(task_id, input_fn, validation_fn):
     def fn(x, y):
         return (
-            {"tokens": reshape_to_rank_4(x["tokens"]), "mask": x["mask"]},
-            {"target": y,"task_id": tid}
+            {
+                "tokens": reshape_to_rank_4(x["tokens"]),
+                "mask": x["mask"],
+                "task_id": task_id
+            },
+            y
         )
 
-    return lambda: i_fn().map(fn), lambda: v_fn().map(fn)
+    return lambda: input_fn().map(fn), lambda: validation_fn().map(fn)
 
 
 def reshape_to_rank_4(t):
@@ -35,6 +42,7 @@ class MultiTaskPipeline(BasePipeline):
         self.dataset_size_ = 0
         self.loss_weights = None
         self.target_dim = -1
+        self.input_pipelines = None
 
     @property
     def dataset_size(self):
@@ -47,7 +55,7 @@ class MultiTaskPipeline(BasePipeline):
         input_pipelines = {}
         frequencies = []
         input_funcs = []
-        
+
         for task_name in self.config.tasks:
             input_pipelines[task_name] = self.config.tasks[task_name]._get_input_pipeline(self)
             task_tuple = input_pipelines[task_name].get_train_input_fns(
@@ -60,8 +68,8 @@ class MultiTaskPipeline(BasePipeline):
             frequencies.append(self.config.dataset_size)
 
             (val_func, input_func, val_sizes[task_name], val_intervals[task_name]) = task_tuple
-            task_id =  self.config.task_name_to_id[task_name]
-            
+            task_id = self.config.task_name_to_id[task_name]
+
             input_func_normalised, val_func_normalised = get_input_fns(task_id, input_func, val_func)
             input_funcs.append(input_func_normalised)
             val_funcs[task_name] = val_func_normalised
@@ -79,31 +87,30 @@ class MultiTaskPipeline(BasePipeline):
         raise FinetuneError("This should never be used??")
 
 
-def get_loss_fn(task, featurizer_state, config, targets_i, train, reuse, task_id_i):
-    def loss():
+def get_loss_logits_fn(task, featurizer_state, config, targets_i, train, reuse, task_id_i):
+    def loss_logits():
         with tf.variable_scope("target_model_{}".format(task)):
-            with tf.control_dependencies([tf.print(tf.shape(featurizer_state["features"]))]):
-                loss_tensor = config.tasks[task]._target_model(
-                    config=config,
-                    featurizer_state=featurizer_state,
-                    targets=targets_i,
-                    n_outputs=config.task_input_pipelines[task].target_dim,
-                    train=train,
-                    reuse=reuse
-                )["losses"]
+            target_model_out = config.tasks[task]._target_model(
+                config=config,
+                featurizer_state=featurizer_state,
+                targets=targets_i,
+                n_outputs=config.task_input_pipelines[task].target_dim,
+                train=train,
+                reuse=reuse
+            )
+            logits = target_model_out["logits"]
+            logits.set_shape(None)
+            return target_model_out["losses"], logits
 
-            return loss_tensor
-    return tf.equal(task_id_i, config.task_name_to_id[task]), loss
+    return tf.equal(task_id_i, config.task_name_to_id[task]), loss_logits
 
 
 class MultiTask(BaseModel):
 
     def __init__(self, tasks, **kwargs):
         super().__init__(**kwargs)
-        self._is_seq_task = [task_name for task_name, t in tasks.items() if t == SequenceLabeler]
-        self.config.tasks = {task_name: t for task_name, t in tasks.items()}
+        self.config.tasks = tasks
         self.config.task_name_to_id = dict(zip(self.config.tasks.keys(), range(len(self.config.tasks))))
-        print(self.config.task_name_to_id)
 
     def _get_input_pipeline(self):
         return MultiTaskPipeline(self.config)
@@ -111,19 +118,51 @@ class MultiTask(BaseModel):
     def featurize(self, X):
         return super().featurize(X)
 
+    def cached_predict(self):
+        raise FinetuneError("cached_predict is not supported yet for MTL")
+
     def predict(self, X):
-        raise FinetuneError("Predict is not implemented yet for MTL")
+        predictions = {}
+        for name, ModelClass in self.config.tasks.items():
+            if name not in X:
+                continue
+            pred_model = ModelClass()
+            pred_model.input_pipeline = self.config.task_input_pipelines[name]
+            pred_model.saver.variables = {
+                k.replace("/target_model_{}".format(name), ""): v for k, v in self.saver.variables.items()
+            }
+            predictions[name] = pred_model.predict(X[name])
+        return predictions
 
     def predict_proba(self, X):
-        raise FinetuneError("Predict is not implemented yet for MTL")
+        predictions = {}
+        for name, ModelClass in self.config.tasks.items():
+            if name not in X:
+                continue
+            pred_model = ModelClass()
+            pred_model.input_pipeline = self.config.task_input_pipelines[name]
+            pred_model.saver.variables = {
+                k.replace("/target_model_{}".format(name), ""): v for k, v in self.saver.variables.items()
+            }
+            try:
+                predictions[name] = pred_model.predict_proba(X[name])
+            except FinetuneError as e:
+                LOGGER.warning(
+                    (
+                        "Probabilities are not available for {} and failed with exception {}."
+                        "Falling back to regular predictions for this task."
+                    ).format(name, e)
+                )
+                predictions[name] = pred_model.predict(X[name])
+        return predictions
 
     def finetune(self, X, Y=None, batch_size=None):
-        for t in self._is_seq_task:
+        for t in [task_name for task_name, t in self.config.tasks.items() if t == SequenceLabeler]:
             X[t], Y[t], *_ = indico_to_finetune_sequence(X[t], labels=Y[t], multi_label=False, none_value="<PAD>")
         return super().finetune(X, Y=Y, batch_size=batch_size)
 
     @staticmethod
-    def _target_model(config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
+    def _target_model(config, featurizer_state, targets, n_outputs, train=False, reuse=None, task_id=None, **kwargs):
         pred_fn_pairs = []
         featurizer_state["features"] = tf.cond(
             tf.equal(tf.shape(featurizer_state["features"])[1], 1),
@@ -131,22 +170,23 @@ class MultiTask(BaseModel):
             false_fn=lambda: featurizer_state["features"]
         )
 
-        task_id_i = targets["task_id"]
-        targets_i = targets["target"]
-        
+        targets_i = targets
+
         for task in config.tasks:
-            pred, loss = get_loss_fn(task, featurizer_state, config, targets_i, train, reuse, task_id_i)
-            pred_fn_pairs.append((pred, loss))
+            pred, loss_logits = get_loss_logits_fn(task, featurizer_state, config, targets_i, train, reuse, task_id)
+            pred_fn_pairs.append((pred, loss_logits))
+
+        losses_logits = tf.case(
+            pred_fn_pairs,
+            default=None,
+            exclusive=True,
+            strict=True,
+            name='top_selection'
+        )
 
         return {
-            "logits": tf.no_op(),
-            "losses": tf.case(
-                pred_fn_pairs,
-                default=None,
-                exclusive=True,
-                strict=True,
-                name='top_selection'
-            )
+            "logits": losses_logits[1],
+            "losses": losses_logits[0]
         }
 
     def _predict_op(self, logits, **kwargs):

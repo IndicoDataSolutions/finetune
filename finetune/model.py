@@ -48,7 +48,7 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
         lm_predict_op = sample_with_temperature(lm_logits, params.lm_temp)
         return lm_predict_op, language_model_state
 
-    def target_model_op(featurizer_state, Y, params, mode):
+    def target_model_op(featurizer_state, Y, params, mode, **kwargs):
         weighted_tensor = None
         if params.class_weights is not None:
             weighted_tensor = class_weight_tensor(
@@ -64,15 +64,12 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                 n_outputs=target_dim,
                 train=(mode == tf.estimator.ModeKeys.TRAIN),
                 max_length=params.max_length,
-                class_weights=weighted_tensor
+                class_weights=weighted_tensor,
+                **kwargs
             )
         return target_model_state
 
     def _model_fn(features, labels, mode, params):
-        if "labels" in features:
-            assert labels is None, "For some reason distributed tensorflow doesnt let us use labels argument"
-            labels = features["labels"]
-
         if not build_target_model:
             lm_loss_coef = 1.
         else:
@@ -82,6 +79,7 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
         train = estimator_mode == tf.estimator.ModeKeys.TRAIN
         X = features["tokens"]
         M = features["mask"]
+        task_id = features.get("task_id", None)
         Y = labels
         pred_op = None
 
@@ -97,7 +95,13 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
             predictions = {PredictMode.FEATURIZE: featurizer_state["features"]}
 
             if build_target_model:
-                target_model_state = target_model_op(featurizer_state=featurizer_state, Y=Y, params=params, mode=mode)
+                target_model_state = target_model_op(
+                    featurizer_state=featurizer_state,
+                    Y=Y,
+                    params=params,
+                    mode=mode,
+                    task_id=task_id
+                )
                 if (mode == tf.estimator.ModeKeys.TRAIN or mode == tf.estimator.ModeKeys.EVAL) and Y is not None:
                     target_loss = tf.reduce_mean(target_model_state["losses"])
                     train_loss += (1 - lm_loss_coef) * target_loss

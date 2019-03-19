@@ -28,8 +28,8 @@ class OrdinalRegressor(BaseModel):
     """
 
     def __init__(self, shared_threshold_weights=True, **kwargs):
-        self.config.shared_threshold_weights = shared_threshold_weights
         super().__init__(**kwargs)
+        self.config.shared_threshold_weights = shared_threshold_weights
 
     def _get_input_pipeline(self):
         return OrdinalRegressionPipeline(self.config)
@@ -79,7 +79,7 @@ class OrdinalRegressor(BaseModel):
             config=config,
             train=train,
             reuse=reuse,
-            shared_threshold_weights=config.config.shared_threshold_weights,
+            shared_threshold_weights=config.shared_threshold_weights,
             **kwargs
         )
 

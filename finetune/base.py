@@ -178,17 +178,10 @@ class BaseModel(object, metaclass=ABCMeta):
         )
         num_steps = steps_per_epoch * self.config.n_epochs
 
-        train_hooks = [
-            self.saver.get_saver_hook(
-                estimator=estimator,
-                keep_best_model=self.config.keep_best_model,
-                steps_per_epoch=steps_per_epoch,
-                early_stopping_steps=self.config.early_stopping_steps,
-                eval_frequency=val_interval if not isinstance(val_interval, dict) else sys.maxsize
-            ),
-        ]
+        train_hooks = []
 
         if self.config.tasks is not None:
+            # Validation with MTL tasks
             for task in self.config.tasks:
                 if val_size[task] > 0:
                     train_hooks.append(
@@ -200,13 +193,28 @@ class BaseModel(object, metaclass=ABCMeta):
                         tf.contrib.estimator.InMemoryEvaluatorHook(
                             estimator, val_input_fn[task + "_train"], every_n_iter=val_interval[task], steps=val_size[task] // batch_size, name=task + "_train"
                         )
-                )
+                    )
+            early_stopping_interval = sys.maxsize  # turn off early stopping for mtl.
         elif val_size > 0:
+            # Validation with all other tasks.
             train_hooks.append(
                 tf.contrib.estimator.InMemoryEvaluatorHook(
                     estimator, val_input_fn, every_n_iter=val_interval, steps=val_size // batch_size
                 )
             )
+            early_stopping_interval = val_interval
+        else:
+            early_stopping_interval = sys.maxsize
+
+        train_hooks.append(
+            self.saver.get_saver_hook(
+                estimator=estimator,
+                keep_best_model=self.config.keep_best_model,
+                steps_per_epoch=steps_per_epoch,
+                early_stopping_steps=self.config.early_stopping_steps,
+                eval_frequency=early_stopping_interval
+            )
+        )
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
