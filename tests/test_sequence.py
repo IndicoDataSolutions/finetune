@@ -28,7 +28,6 @@ from finetune.metrics import (
 class TestSequenceLabeler(unittest.TestCase):
 
     n_sample = 100
-    n_hidden = 768
     dataset_path = os.path.join(
         'Data', 'Sequence', 'reuters.xml'
     )

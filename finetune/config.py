@@ -289,6 +289,10 @@ def get_default_config():
         n_layer=None,
         act_fn=None,
         n_embed=None,
+        # for TextCNN SourceModel only
+        kernel_sizes=None,
+        num_filters_per_size=None,
+        n_embed_featurizer=None, # needed because the dimensions CNN output are different from the embedding dimensions
     )
     return settings
 

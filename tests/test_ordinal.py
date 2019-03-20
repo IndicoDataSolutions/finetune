@@ -18,7 +18,6 @@ NUMBERS = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine
 
 class TestOrdinal(unittest.TestCase):
     n_sample = 100
-    n_hidden = 768
 
     def default_config(self, **kwargs):
         d = dict(

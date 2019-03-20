@@ -20,7 +20,6 @@ SST_FILENAME = "SST-binary.csv"
 
 class TestComparison(unittest.TestCase):
     n_sample = 20
-    n_hidden = 768
     dataset_path = os.path.join(
         'Data', 'Classify', 'SST-binary.csv'
     )

@@ -163,7 +163,8 @@ class BaseModel(object, metaclass=ABCMeta):
             tf.logging.warning(
                 "Early stopping / keeping best model with a validation size of {} is likely to case undesired results".format(val_size))
 
-        estimator = self.get_estimator()
+        force_build_lm = (Y is None)
+        estimator = self.get_estimator(force_build_lm=force_build_lm)
 
         steps_per_epoch = self._n_steps(
             n_examples=self.config.dataset_size,
@@ -259,7 +260,7 @@ class BaseModel(object, metaclass=ABCMeta):
             predict_op=self._predict_op,
             predict_proba_op=self._predict_proba_op,
             build_target_model=self.input_pipeline.target_dim is not None,
-            build_lm=force_build_lm or self.config.lm_loss_coef > 0.0 or self.input_pipeline.target_dim is None,
+            build_lm=force_build_lm or self.config.lm_loss_coef > 0.0,
             encoder=self.input_pipeline.text_encoder,
             target_dim=self.input_pipeline.target_dim,
             label_encoder=self.input_pipeline.label_encoder,

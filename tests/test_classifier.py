@@ -29,7 +29,6 @@ SST_FILENAME = "SST-binary.csv"
 
 class TestClassifier(unittest.TestCase):
     n_sample = 20
-    n_hidden = 768
     dataset_path = os.path.join(
         'Data', 'Classify', 'SST-binary.csv'
     )
@@ -251,10 +250,10 @@ class TestClassifier(unittest.TestCase):
         model = Classifier(**self.default_config())
         train_sample = self.dataset.sample(n=self.n_sample)
         features = model.featurize(train_sample.Text)
-        self.assertEqual(features.shape, (self.n_sample, self.n_hidden))
+        self.assertEqual(features.shape, (self.n_sample, model.config.n_embed))
         model.fit(train_sample.Text, train_sample.Target)
         features = model.featurize(train_sample.Text)
-        self.assertEqual(features.shape, (self.n_sample, self.n_hidden))
+        self.assertEqual(features.shape, (self.n_sample, model.config.n_embed))
 
     def test_reasonable_predictions(self):
         """
