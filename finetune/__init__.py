@@ -16,7 +16,8 @@ from finetune.ordinal_regressor import OrdinalRegressor, ComparisonOrdinalRegres
 from finetune.language_model import LanguageModel
 from finetune.mtl import MultiTask
 
-__version__, VERSION, version = ("0.5.15",) * 3
+
+__version__, VERSION, version = ("0.6.0",) * 3
 
 # Logging configuration
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"

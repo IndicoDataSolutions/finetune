@@ -148,6 +148,9 @@ class BaseEncoder(object):
 
         return joined
 
+    def _token_length(self, token):
+        return len(token)
+
     def encode_multi_input(self, Xs, Y=None, max_length=None, pad_token=None):
         """
         Encodes the text for passing to the model, also tracks the location of each token to allow reconstruction.

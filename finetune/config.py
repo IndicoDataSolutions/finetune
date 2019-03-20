@@ -11,8 +11,7 @@ from nltk.metrics.distance import edit_distance
 
 import finetune
 from finetune.errors import FinetuneError
-from finetune.base_models.gpt.model import GPTModel
-from finetune.base_models.gpt2.model import GPT2Model
+from finetune.base_models import GPTModel, GPT2Model
 from finetune.utils import finetune_model_path
 
 LOGGER = logging.getLogger('finetune')
@@ -161,7 +160,7 @@ class Settings(dict):
             full_path = finetune_model_path(self["base_model_path"])
             if os.path.exists(full_path):
                 return full_path
-            
+
         return self[attr]
 
     def __setitem__(self, key, value):
@@ -300,20 +299,6 @@ def get_default_config():
         n_embed_featurizer=None, # needed because the dimensions CNN output are different from the embedding dimensions
     )
     return settings
-
-
-def get_small_model_config(**kwargs):
-    kwargs.update({
-        'base_model': GPTModel,
-        'base_model_path': finetune_model_path(
-            os.path.join("gpt", "model-sm.jl")
-        ),
-        'n_heads': 8,
-        'n_embed': 512,
-        'n_layer': 6,
-        'num_layers_trained': 6
-    })
-    return get_config(**kwargs)
 
 
 def get_config(**kwargs):

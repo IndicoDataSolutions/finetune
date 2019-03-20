@@ -77,6 +77,9 @@ class GPTEncoder(BaseEncoder):
         self.clf_token = self.encoder['_classify_']
         self.initialized = True
 
+    def _token_length(self, token):
+        return len(token.strip().replace('</w>', ''))
+
     def bpe(self, token):
         word = tuple(token[:-1]) + (token[-1] + '</w>',)
         if token in self.cache:

@@ -18,13 +18,14 @@ REQUIREMENTS = [
     "h5py>=2.8.0",
     "joblib>=0.12.0",
     "bs4>=0.0.1",
-    "imblearn>=0.0"
+    "imblearn>=0.0",
+    "nltk>=3.2.4"
 ]
 
 setup(
     name="finetune",
     packages=find_packages(),
-    version="0.5.15",
+    version="0.6.0",
     install_requires=REQUIREMENTS,
     extras_require={
         "tf": ["tensorflow>=1.12.0"],
