@@ -6,14 +6,19 @@ import tensorflow as tf
 from tensorflow.train import Scaffold
 from tensorflow.contrib.opt.python.training.weight_decay_optimizers import AdamWOptimizer
 
-from finetune.network_modules import featurizer, language_model
+from finetune.network_modules import language_model
 from finetune.utils import sample_with_temperature, dont_optimize_zeros, get_grad_accumulation_optimizer
 from finetune.optimizers import schedules
 from finetune.imbalance import class_weight_tensor
 from finetune.adamax import AdamaxWOptimizer
+from finetune.errors import FinetuneError
 
 LOGGER = logging.getLogger('finetune')
 
+OPTIMIZERS = {
+    "AdamW": AdamWOptimizer,
+    "AdamaxW": AdamaxWOptimizer
+}
 
 class PredictMode:
     FEATURIZE = "FEAT"
@@ -144,14 +149,15 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
             )
 
             def optimizer(lr):
+
+                Optimizer = OPTIMIZERS.get(params.optimizer, None)
+                if Optimizer is None:
+                    raise FinetuneError(
+                        "Optimizer must be in {}, not {}".format(list(OPTIMIZERS.keys()), params.optimizer)
+                    )
+
                 if params.accum_steps > 1:
-                    Optimizer = get_grad_accumulation_optimizer(AdamWOptimizer, params.accum_steps)
-                else:
-                    Optimizer = AdamWOptimizer
-
-#                Optimizer = AdamWOptimizer
-
-                Optimizer = AdamaxWOptimizer
+                    Optimizer = get_grad_accumulation_optimizer(Optimizer, params.accum_steps)
 
                 opt = Optimizer(
                     learning_rate=lr,

@@ -137,7 +137,6 @@ def embed(X, we):
 
 def gpt2_featurizer(X, encoder, config, train=False, reuse=None):
     initial_shape = tf.shape(X)
-    X = tf.reshape(X, shape=[-1] + initial_shape[-2:])
     X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-2:]), 0))
 
     with tf.variable_scope('model/featurizer', reuse=reuse):
