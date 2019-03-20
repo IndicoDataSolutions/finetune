@@ -99,7 +99,7 @@ def separable_conv_block(X, kernel_width, layer_name, use_fp16, training, mask=N
         W = (depth_W, point_W)
         conv = causal_conv(padded_input, W, dilation)
         conv = tf.nn.bias_add(conv, b)
-        out = norm(conv, "norm2", fp16=use_fp16, debug=False, e=1e-1)
+        out = conv
 
     return out
 
@@ -125,8 +125,7 @@ def normal_1d_conv_block(X, kernel_width, layer_name, use_fp16, training, mask=N
         conv = causal_conv(padded_input, W, dilation)
         conv = tf.nn.bias_add(conv, b)
             
-        out = norm(conv, "norm2", fp16=use_fp16, debug=False, e=1e-1)
-
+        out = conv
     return out
 
 def block(X, kernel_width, block_name, use_fp16, training, pdrop, backwards=False, seq_lens=None):
@@ -134,26 +133,22 @@ def block(X, kernel_width, block_name, use_fp16, training, pdrop, backwards=Fals
         mask = None
         h0 = normal_1d_conv_block(X , kernel_width, "0", use_fp16, training, mask, dilation=1)
         h0 = swish(h0)
-        h1 = separable_conv_block(h0, 5, "1", use_fp16, training, mask, dilation=1, channel_mult=1)
+        h1 = normal_1d_conv_block(h0, 5, "1", use_fp16, training, mask, dilation=1)
         h1 = swish(h1)
         h2 = normal_1d_conv_block(h1, kernel_width, "2", use_fp16, training, mask, dilation=1)
         h2 = swish(h2)
-        h3 = separable_conv_block(h2, 10, "3", use_fp16, training, mask, dilation=1, channel_mult=1) + X
+        h3 = norm(normal_1d_conv_block(h2, 5, "3", use_fp16, training, mask, dilation=2) + X, "norm1", fp16=use_fp16, debug=False, e=1e-5)
         h3 = swish(h3)
         h4 = normal_1d_conv_block(h3, kernel_width, "4", use_fp16, training, mask, dilation=1)
         h4 = swish(h4)
-        h5 = separable_conv_block(h4, 20, "5", use_fp16, training, mask, dilation=1, channel_mult=1)
+        h5 = normal_1d_conv_block(h4, 5, "5", use_fp16, training, mask, dilation=4)
         h5 = swish(h5)
         h6 = normal_1d_conv_block(h5, kernel_width, "6", use_fp16, training, mask, dilation=1)
         h6 = swish(h6)
-        h7 = separable_conv_block(h6, 40, "7", use_fp16, training, mask, dilation=1, channel_mult=1) + X
+        h7 = normal_1d_conv_block(h6, 5, "7", use_fp16, training, mask, dilation=8)
         h7 = swish(h7)
-        h8 = normal_1d_conv_block(h7, kernel_width, "8", use_fp16, training, mask, dilation=1)
-        h8 = swish(h8)
-        h9 = separable_conv_block(h8, 60, "9", use_fp16, training, mask, dilation=1, channel_mult=1)
-        h9 = swish(h9)
-        h10 = normal_1d_conv_block(h9, 1, "12", use_fp16, training, mask, dilation=1) + X
-    return h10
+        h8 = norm(normal_1d_conv_block(h7, 1, "8", use_fp16, training, mask, dilation=1) + X, "norm2", fp16=use_fp16, debug=False, e=1e-5) 
+    return h8
 
 
 def attention_layer(X, backwards, seq_lens, layer):
