@@ -3,8 +3,8 @@ import logging
 
 import tqdm
 import tensorflow as tf
-from tensorflow.python.training import training, device_util
-from tensorflow.contrib.distribute.python import cross_tower_ops as cross_tower_ops_lib
+from tensorflow.python.training import training
+from tensorflow.python.distribute import device_util
 from tensorflow.contrib.distribute import ParameterServerStrategy
 
 from finetune.errors import FinetuneError
@@ -15,7 +15,7 @@ _LOCAL_GPU_0 = "/device:GPU:0"
 
 
 class ProgressHook(training.SessionRunHook):
-  
+
     def __init__(self, n_batches, n_epochs=None, mode='train'):
         if mode not in ('train', 'predict'):
             raise FinetuneError("Invalid value for `ProgressHook` mode: {}".format(mode))
@@ -30,13 +30,13 @@ class ProgressHook(training.SessionRunHook):
 
     def epoch_descr(self, current_epoch):
         return "Epoch {}/{}".format(current_epoch, self.n_epochs)
-    
+
     def write_description(self, current_epoch):
         if self.mode == 'train':
             self.progress_bar.set_description(self.epoch_descr(current_epoch))
         else:
             self.progress_bar.set_description("Inference")
-    
+
     def log_progress(self):
         self.iterations += 1
         current_epoch = self.iterations // self.batches_per_epoch + 1
@@ -76,19 +76,10 @@ class PatchedParameterServerStrategy(ParameterServerStrategy):
             not.
         """
         super(ParameterServerStrategy, self).__init__()
-        
+
         self._visible_gpus = visible_gpus
         self._num_gpus_per_worker = len(visible_gpus)
         self._initialize_local(self._num_gpus_per_worker)
-
-        # We typically don't need to do all-reduce in this strategy.
-        self._cross_tower_ops = (
-            cross_tower_ops_lib.ReductionToOneDeviceCrossTowerOps(
-                reduce_to_device=_LOCAL_CPU))
-        
-    def _verify_destinations_not_different_worker(self, *args, **kwargs):
-        # this is currently broken in tf 1.11.0 -- mock this for now
-        pass
 
     def _initialize_local(self, num_gpus_per_worker=0):
         """Initialize internal devices for local training."""

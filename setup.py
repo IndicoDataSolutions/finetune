@@ -19,7 +19,8 @@ REQUIREMENTS = [
     "joblib>=0.12.0",
     "bs4>=0.0.1",
     "imblearn>=0.0",
-    "nltk>=3.2.4"
+    "nltk>=3.2.4",
+    "regex>=2019.03.12"
 ]
 
 setup(

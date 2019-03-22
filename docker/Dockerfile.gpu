@@ -1,4 +1,4 @@
-FROM tensorflow/tensorflow:1.13.0-gpu-py3
+FROM tensorflow/tensorflow:1.13.1-gpu-py3
 LABEL Author="Ben Townsend, Madison May"
 
 # tensorboard
@@ -13,7 +13,8 @@ ENV NVIDIA_VISIBLE_DEVICES=all \
     NVIDIA_DRIVER_CAPABILITIES=compute,utility \
     NVIDIA_REQUIRE_CUDA="cuda>=8.0" \
     LANG=C.UTF-8 \
-    CUDA_DEVICE_ORDER=PCI_BUS_ID
+    CUDA_DEVICE_ORDER=PCI_BUS_ID \
+    NLTK_DATA=/usr/local/nltk-data
 
 RUN apt-get update && mkdir /Finetune
 ADD requirements.txt /Finetune/requirements.txt
