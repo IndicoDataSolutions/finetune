@@ -75,9 +75,18 @@ If you'd prefer you can also run `finetune` in a docker container. The bash scri
 
 ```
 git clone https://github.com/IndicoDataSolutions/finetune && cd finetune
-./docker/build_docker.sh      # builds a docker image
-./docker/start_docker.sh      # starts a docker container in the background, forwards $PWD to /finetune
+
+# For usage with NVIDIA GPUs
+./docker/build_gpu_docker.sh      # builds a docker image
+./docker/start_gpu_docker.sh      # starts a docker container in the background, forwards $PWD to /finetune
+
 docker exec -it finetune bash # starts a bash session in the docker container
+```
+
+For CPU-only usage:
+```
+./docker/build_cpu_docker.sh
+./docker/start_cpu_docker.sh
 ```
 
 

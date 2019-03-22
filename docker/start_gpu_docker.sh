@@ -7,4 +7,4 @@ get_abs_filename() {
 DOCKER_DIR=`dirname $0`
 PROJECT_ROOT=$(get_abs_filename "$( dirname $DOCKER_DIR )")
 echo "Forwaring host folder $PROJECT_ROOT to container folder /Finetune"
-docker run -u $(id -u):$(id -g) --runtime=nvidia -d -v $PROJECT_ROOT:/Finetune $@ --name finetune-0.6.0 -p 0.0.0.0:6006:6006 finetune
+docker run --runtime=nvidia -d -v $PROJECT_ROOT:/Finetune $@ --name finetune -p 0.0.0.0:6006:6006 finetune

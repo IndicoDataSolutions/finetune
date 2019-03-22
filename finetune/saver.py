@@ -132,7 +132,7 @@ class Saver:
         else:
             variables_sv = dict()
 
-        if tf.contrib.distribute.get_tower_context():
+        if tf.contrib.distribute.in_cross_replica_context():
             def assign(var, val):
                 def update(var_):
                     return var_.assign(val)
@@ -140,8 +140,8 @@ class Saver:
                 def merge_fn(dist, vm):
                     return dist.group(dist.update(vm, update))
 
-                tower_context = tf.contrib.distribute.get_tower_context()
-                return tower_context.merge_call(merge_fn, var)
+                replica_context = tf.contrib.distribute.get_replica_context()
+                return replica_context.merge_call(merge_fn, var)
         else:
             def assign(var, val):
                 return var.assign(val)
