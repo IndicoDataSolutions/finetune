@@ -99,6 +99,7 @@ class Settings(dict):
     :param clf_p_drop: Classifier dropout probability.  Defaults to `0.1`.
     :param l2_reg: L2 regularization coefficient. Defaults to `0.01`.
     :param vector_l2: Whether to apply weight decay regularization to vectors (biases, normalization etc..). Defaults to False.
+    :param optimizer: Optimizer to use, current options include AdamW or AdamaxW.
     :param b1: Adam b1 parameter.  Defaults to `0.9`.
     :param b2: Adam b2 parameter.  Defaults to `0.999`.
     :param epsilon: Adam epsilon parameter: Defaults to `1e-8`.
@@ -249,6 +250,7 @@ def get_default_config():
         params_device="cpu",
 
         # Optimization Params
+        optimizer="AdamW",
         b1=0.9,
         b2=0.999,
         epsilon=1e-8,
@@ -259,6 +261,9 @@ def get_default_config():
         prefit_init=False,
         accum_steps=1,
 
+        # MTL
+        tasks=None,
+        dont_optimize_zero_gradients=False,
 
         # Language Model Settings
         lm_loss_coef=0.0,

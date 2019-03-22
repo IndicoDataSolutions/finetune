@@ -16,8 +16,9 @@ def textcnn_featurizer(X, encoder, config, train=False, reuse=None):
         features: The output of the featurizer_final state.
         sequence_features: The output of the featurizer at each timestep.
     """
-    initial_shape = [a or -1 for a in X.get_shape().as_list()]
-    X = tf.reshape(X, shape=[-1] + initial_shape[-2:])
+    initial_shape = tf.shape(X)
+    X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-2:]), 0))
+
     with tf.variable_scope('model/featurizer', reuse=reuse):
         embed_weights = tf.get_variable(
             name="we",
@@ -62,7 +63,7 @@ def textcnn_featurizer(X, encoder, config, train=False, reuse=None):
         seq_feats = tf.reshape(conv_seq, shape=[-1, config.max_length, config.n_embed])
         # Concatenate the univariate vectors as features for classification
         clf_h = tf.concat(pool_layers, axis=1)
-        clf_h = tf.reshape(clf_h, shape=initial_shape[: -2] + [config.n_embed])
+        clf_h = tf.reshape(clf_h, shape=tf.concat((initial_shape[: -2], [config.n_embed]), 0))
 
         # note that, due to convolution and pooling, the dimensionality of the features is much smaller than in the
         # transformer base models

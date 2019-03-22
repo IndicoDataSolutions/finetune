@@ -24,8 +24,6 @@ LOGGER = logging.getLogger('finetune')
 class BasePipeline(metaclass=ABCMeta):
     def __init__(self, config):
         self.config = config
-
-        finetune_base_folder = os.path.dirname(finetune.__file__)
         self.text_encoder = self.config.base_model.get_encoder()
 
         self.label_encoder = None
@@ -33,6 +31,10 @@ class BasePipeline(metaclass=ABCMeta):
         self.pad_idx_ = None
         self.rebuild = False
         self.epoch = 0
+
+    @property
+    def dataset_size(self):
+        return self.config.dataset_size
 
     @abstractmethod
     def _target_encoder(self):
@@ -112,6 +114,7 @@ class BasePipeline(metaclass=ABCMeta):
         else:
             Y_fit = list(itertools.islice(Y(), 10000))
             self.label_encoder.fit(Y_fit)
+        self.config.pad_idx = self.pad_idx
 
         target_dim = self.label_encoder.target_dim
         self.lm_loss_coef = self.config.lm_loss_coef if target_dim is not None else 1.0
@@ -217,7 +220,7 @@ class BasePipeline(metaclass=ABCMeta):
             for _, i in zip(range(self._skip_tqdm), it):
                 yield i
 
-            for i in tqdm.tqdm(it, desc=desc, total=total, miniters=1, leave=current_epoch  == self.config.n_epochs and train):
+            for i in tqdm.tqdm(it, desc=desc, total=total, miniters=1, leave=current_epoch == self.config.n_epochs and train):
                 yield i
 
             if train:
@@ -293,7 +296,12 @@ class BasePipeline(metaclass=ABCMeta):
     @property
     def pad_idx(self):
         if self.pad_idx_ is None:
-            self.pad_idx_ = list(self.label_encoder.classes_).index(self.config.pad_token)
+            if hasattr(self.label_encoder, "classes_"):
+                classes = list(self.label_encoder.classes_)
+                if self.config.pad_token in classes:
+                    self.pad_idx_ = classes.index(self.config.pad_token)
+                else:
+                    self.pad_idx_ = None
         return self.pad_idx_
 
     def _format_for_encoding(self, X):

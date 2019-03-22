@@ -7,12 +7,18 @@ from tensorflow.train import Scaffold
 from tensorflow.contrib.opt.python.training.weight_decay_optimizers import AdamWOptimizer
 
 from finetune.network_modules import language_model
-from finetune.utils import sample_with_temperature, get_grad_accumulation_optimizer
+from finetune.utils import sample_with_temperature, dont_optimize_zeros, get_grad_accumulation_optimizer
 from finetune.optimizers import schedules
 from finetune.imbalance import class_weight_tensor
+from finetune.adamax import AdamaxWOptimizer
+from finetune.errors import FinetuneError
 
 LOGGER = logging.getLogger('finetune')
 
+OPTIMIZERS = {
+    "AdamW": AdamWOptimizer,
+    "AdamaxW": AdamaxWOptimizer
+}
 
 class PredictMode:
     FEATURIZE = "FEAT"
@@ -47,7 +53,7 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
         lm_predict_op = sample_with_temperature(lm_logits, params.lm_temp)
         return lm_predict_op, language_model_state
 
-    def target_model_op(featurizer_state, Y, params, mode):
+    def target_model_op(featurizer_state, Y, params, mode, **kwargs):
         weighted_tensor = None
         if params.class_weights is not None:
             weighted_tensor = class_weight_tensor(
@@ -57,20 +63,18 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
             )
         with tf.variable_scope('model/target'):
             target_model_state = target_model_fn(
+                config=params,
                 featurizer_state=featurizer_state,
                 targets=Y,
                 n_outputs=target_dim,
                 train=(mode == tf.estimator.ModeKeys.TRAIN),
                 max_length=params.max_length,
-                class_weights=weighted_tensor
+                class_weights=weighted_tensor,
+                **kwargs
             )
         return target_model_state
 
     def _model_fn(features, labels, mode, params):
-        if "labels" in features:
-            assert labels is None, "For some reason distributed tensorflow doesnt let us use labels argument"
-            labels = features["labels"]
-
         if not build_target_model:
             lm_loss_coef = 1.
         else:
@@ -80,6 +84,7 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
         train = estimator_mode == tf.estimator.ModeKeys.TRAIN
         X = features["tokens"]
         M = features["mask"]
+        task_id = features.get("task_id", None)
         Y = labels
         pred_op = None
 
@@ -95,7 +100,13 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
             predictions = {PredictMode.FEATURIZE: featurizer_state["features"]}
 
             if build_target_model:
-                target_model_state = target_model_op(featurizer_state=featurizer_state, Y=Y, params=params, mode=mode)
+                target_model_state = target_model_op(
+                    featurizer_state=featurizer_state,
+                    Y=Y,
+                    params=params,
+                    mode=mode,
+                    task_id=task_id
+                )
                 if (mode == tf.estimator.ModeKeys.TRAIN or mode == tf.estimator.ModeKeys.EVAL) and Y is not None:
                     target_loss = tf.reduce_mean(target_model_state["losses"])
                     train_loss += (1 - lm_loss_coef) * target_loss
@@ -106,6 +117,7 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                     if "_threshold" in params:
                         predict_params["threshold"] = params._threshold
                     pred_op = predict_op(logits, **predict_params)
+
                     if type(pred_op) == tuple:
                         pred_op, pred_proba_op = pred_op
                     else:
@@ -130,17 +142,23 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                     predictions[PredictMode.LM_PERPLEXITY] = language_model_state["perplexity"]
 
         if mode == tf.estimator.ModeKeys.TRAIN:
-            total_num_steps = params.n_epochs * params.dataset_size // params.batch_size
-            lr_decay = lambda lr, global_step: lr * schedules[params.lr_schedule](
-                tf.to_float(global_step) / total_num_steps
+            total_num_steps = params.n_epochs * params.dataset_size//params.batch_size
+            lr_decay = lambda lr, global_step: tf.maximum(
+                0.0,
+                lr * schedules[params.lr_schedule](tf.to_float(global_step) / total_num_steps)
             )
 
             def optimizer(lr):
+
+                Optimizer = OPTIMIZERS.get(params.optimizer, None)
+                if Optimizer is None:
+                    raise FinetuneError(
+                        "Optimizer must be in {}, not {}".format(list(OPTIMIZERS.keys()), params.optimizer)
+                    )
+
                 if params.accum_steps > 1:
-                    Optimizer = get_grad_accumulation_optimizer(AdamWOptimizer, params.accum_steps)
-                else:
-                    Optimizer = AdamWOptimizer
-                
+                    Optimizer = get_grad_accumulation_optimizer(Optimizer, params.accum_steps)
+
                 opt = Optimizer(
                     learning_rate=lr,
                     beta1=params.b1,
@@ -148,8 +166,13 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                     epsilon=params.epsilon,
                     weight_decay=params.l2_reg * lr
                 )
+                
                 decay_var_list = [v for v in tf.global_variables() if len(v.get_shape()) > 1 or params.vector_l2]
                 opt.apply_gradients = functools.partial(opt.apply_gradients, decay_var_list=decay_var_list)
+
+                if params.dont_optimize_zero_gradients:
+                    opt = dont_optimize_zeros(opt)
+                
                 return opt
 
             summaries = tf.contrib.layers.OPTIMIZER_SUMMARIES if params.summarize_grads else None

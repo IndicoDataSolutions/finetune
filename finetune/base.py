@@ -136,8 +136,9 @@ class BaseModel(object, metaclass=ABCMeta):
     def _predict_proba_op(self, logits, **kwargs):
         raise NotImplementedError
 
+    @staticmethod
     @abstractmethod
-    def _target_model(self, *, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
+    def _target_model(*, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
         # Overridden by subclass to attach a target model onto the shared base featurizer.
         raise NotImplementedError
 
@@ -159,36 +160,61 @@ class BaseModel(object, metaclass=ABCMeta):
         batch_size = batch_size or self.config.batch_size
 
         val_input_fn, train_input_fn, val_size, val_interval = self.input_pipeline.get_train_input_fns(Xs, Y, batch_size=batch_size)
-        if val_size <= 10 and self.config.keep_best_model:
-            tf.logging.warning(
-                "Early stopping / keeping best model with a validation size of {} is likely to case undesired results".format(val_size))
+        if self.config.keep_best_model:
+            if isinstance(val_size, dict):
+                tf.logging.warning("Cannot early stop or keep best model with MTL")
+            elif val_size <= 10:
+                tf.logging.warning(
+                "Early stopping / keeping best model with a validation size of {} is likely to case undesired results".format(val_size)
+                )
 
         force_build_lm = (Y is None)
         estimator = self.get_estimator(force_build_lm=force_build_lm)
 
         steps_per_epoch = self._n_steps(
-            n_examples=self.config.dataset_size,
+            n_examples=self.input_pipeline.dataset_size,
             batch_size=batch_size,
             n_gpus=max(1, len(self.resolved_gpus))
         )
         num_steps = steps_per_epoch * self.config.n_epochs
 
-        train_hooks = [
-            self.saver.get_saver_hook(
-                estimator=estimator,
-                keep_best_model=self.config.keep_best_model,
-                steps_per_epoch=steps_per_epoch,
-                early_stopping_steps=self.config.early_stopping_steps,
-                eval_frequency=val_interval
-            ),
+        train_hooks = []
 
-        ]
-        if val_size > 0:
+        if self.config.tasks is not None:
+            # Validation with MTL tasks
+            for task in self.config.tasks:
+                if val_size[task] > 0:
+                    train_hooks.append(
+                        tf.contrib.estimator.InMemoryEvaluatorHook(
+                            estimator, val_input_fn[task], every_n_iter=val_interval[task], steps=val_size[task] // batch_size, name=task
+                        )
+                    )
+                    train_hooks.append(
+                        tf.contrib.estimator.InMemoryEvaluatorHook(
+                            estimator, val_input_fn[task + "_train"], every_n_iter=val_interval[task], steps=val_size[task] // batch_size, name=task + "_train"
+                        )
+                    )
+            early_stopping_interval = sys.maxsize  # turn off early stopping for mtl.
+        elif val_size > 0:
+            # Validation with all other tasks.
             train_hooks.append(
                 tf.contrib.estimator.InMemoryEvaluatorHook(
                     estimator, val_input_fn, every_n_iter=val_interval, steps=val_size // batch_size
                 )
             )
+            early_stopping_interval = val_interval
+        else:
+            early_stopping_interval = sys.maxsize
+
+        train_hooks.append(
+            self.saver.get_saver_hook(
+                estimator=estimator,
+                keep_best_model=self.config.keep_best_model,
+                steps_per_epoch=steps_per_epoch,
+                early_stopping_steps=self.config.early_stopping_steps,
+                eval_frequency=early_stopping_interval
+            )
+        )
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -321,7 +347,7 @@ class BaseModel(object, metaclass=ABCMeta):
             self._predictions = _estimator.predict(input_fn=input_fn, predict_keys=mode)
 
         for _ in range(self._to_pull):
-            next(self._predictions) # collect the null predictions from the queue
+            next(self._predictions)  # collect the null predictions from the queue
 
         predictions = [None] * n
         for i in tqdm.tqdm(range(n), total=n, desc="Inference"):

@@ -30,14 +30,15 @@ class ComparisonRegressor(BaseModel):
     def _get_input_pipeline(self):
         return ComparisonRegressionPipeline(self.config)
 
-    def _target_model(self, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
+    @staticmethod
+    def _target_model(config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
         featurizer_state["sequence_features"] = tf.abs(tf.reduce_sum(featurizer_state["sequence_features"], 1))
         featurizer_state["features"] = tf.abs(tf.reduce_sum(featurizer_state["features"], 1))
         return regressor(
             hidden=featurizer_state['features'],
             targets=targets, 
             n_targets=n_outputs,
-            config=self.config,
+            config=config,
             train=train, 
             reuse=reuse, 
             **kwargs

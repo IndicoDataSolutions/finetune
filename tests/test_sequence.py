@@ -150,7 +150,7 @@ class TestSequenceLabeler(unittest.TestCase):
             none_value=self.model.config.pad_token
         )
         train_texts, test_texts, train_annotations, test_annotations = train_test_split(
-            texts, annotations, test_size=0.1
+            texts, annotations, test_size=0.1, random_state=42
         )
 
         reweighted_model = SequenceLabeler(
