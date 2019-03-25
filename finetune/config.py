@@ -298,7 +298,7 @@ def get_default_config():
         use_conv=False,
         kernel_width=2,
         use_fp16=True,
-        use_timing=False,
+        use_timing=True,
         scale_loss=True,
         loss_scale_every_n_steps=2,
         in_memory_finetune=None,

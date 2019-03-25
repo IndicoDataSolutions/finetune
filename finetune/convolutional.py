@@ -30,6 +30,32 @@ def _swish_grad(features, grad):
 def swish(features):
     return features * tf.nn.sigmoid(features)
 
+def mock_separable_conv(x, depthwise_filter, pointwise_filter):
+    effective_filters = tf.einsum('hcm,cmn->hcn', depthwise_filter, pointwise_filter)
+    return  tf.nn.conv1d(x,
+                         effective_filters,
+                         padding="VALID",
+                         stride=1
+    )
+
+def super_duper_separable_conv1d(x, depthwise_filter, pointwise_filter):
+    # depthwise_filter [kernel_width, 1, channel_mult]
+    # pointwise filter [1, channel_mult, nx]
+    # x [batch, seq, feats]
+    
+    depthwise_out = tf.nn.conv2d(
+        tf.expand_dims(x, 3), #[batch, seq, feats, 1]
+        tf.expand_dims(depthwise_filter, 2), #[kernel_width, 1, 1, feat_out]
+        strides=[1, 1, 1, 1],
+        padding="VALID"
+    )
+    batch, seq, feat, channel_mult = shape_list(depthwise_out)
+
+    depthwise_out = tf.reshape(depthwise_out, [batch, seq, feat * channel_mult])
+    pointwise_out = tf.nn.conv1d(depthwise_out, pointwise_filter, stride=1, padding='VALID')    
+    return pointwise_out
+        
+    
 def separable_conv1d(x, depthwise_filter, pointwise_filter):
     x = tf.expand_dims(x, 1)
     depthwise_filter = tf.expand_dims(depthwise_filter, 0)
@@ -65,7 +91,7 @@ def batch_to_time(value, dilation, name=None):
 
 def causal_conv(value, filter_, dilation, name='causal_conv'):
     if type(filter_) == tuple:
-        conv_op = lambda x: separable_conv1d(x, *filter_)
+        conv_op = lambda x: mock_separable_conv(x, *filter_)
     else:
         conv_op = lambda x: tf.nn.conv1d(x, filter_, stride=1, padding='VALID')
         
@@ -78,7 +104,7 @@ def causal_conv(value, filter_, dilation, name='causal_conv'):
             restored = conv_op(value)
         return restored
 
-def separable_conv_block(X, kernel_width, layer_name, use_fp16, training, mask=None, dilation=1, channel_mult=1):
+def semi_separable_conv_block(X, kernel_width, layer_name, use_fp16, training, mask=None, dilation=1, separation=8):
     with tf.variable_scope("sep_" + layer_name):
 
         left_pad = (kernel_width - 1) * dilation
@@ -87,17 +113,20 @@ def separable_conv_block(X, kernel_width, layer_name, use_fp16, training, mask=N
         padded_input = tf.pad(X, paddings, "CONSTANT")
 
         nx = shape_list(X)[-1]
-        depth_W = tf.get_variable(name="depth_W", shape=[kernel_width, nx, channel_mult], initializer=tf.initializers.random_normal(stddev=0.00001))
-        point_W = tf.get_variable(name="point_W", shape=[1, nx * channel_mult, nx], initializer=tf.initializers.random_normal(stddev=0.00001))
+        channels_per_slice = nx // separation
         b = tf.get_variable(name="B", shape=[nx], initializer=tf.initializers.random_normal(stddev=0.001))
-
         if use_fp16:
-            depth_W = tf.cast(depth_W, tf.float16)
-            point_W = tf.cast(point_W, tf.float16)
             b = tf.cast(b, tf.float16)
-            
-        W = (depth_W, point_W)
-        conv = causal_conv(padded_input, W, dilation)
+
+        conv_out = []
+
+        s = tf.concat(tf.split(padded_input, separation, axis=-1), 0)
+        W = tf.get_variable(name="W", shape=[kernel_width, channels_per_slice, channels_per_slice], initializer=tf.initializers.random_normal(stddev=0.00001))
+        if use_fp16:
+            W = tf.cast(W, tf.float16)           
+        conv = causal_conv(s, W, dilation)
+        conv = tf.concat(tf.split(conv, separation, axis=0), -1)
+        
         conv = tf.nn.bias_add(conv, b)
         out = conv
 
@@ -131,24 +160,26 @@ def normal_1d_conv_block(X, kernel_width, layer_name, use_fp16, training, mask=N
 def block(X, kernel_width, block_name, use_fp16, training, pdrop, backwards=False, seq_lens=None):
     with tf.variable_scope(block_name, reuse=backwards):
         mask = None
-        h0 = normal_1d_conv_block(X , kernel_width, "0", use_fp16, training, mask, dilation=1)
-        h0 = swish(h0)
-        h1 = normal_1d_conv_block(h0, 5, "1", use_fp16, training, mask, dilation=1)
-        h1 = swish(h1)
-        h2 = normal_1d_conv_block(h1, kernel_width, "2", use_fp16, training, mask, dilation=1)
-        h2 = swish(h2)
-        h3 = norm(normal_1d_conv_block(h2, 5, "3", use_fp16, training, mask, dilation=2) + X, "norm1", fp16=use_fp16, debug=False, e=1e-5)
-        h3 = swish(h3)
-        h4 = normal_1d_conv_block(h3, kernel_width, "4", use_fp16, training, mask, dilation=1)
-        h4 = swish(h4)
-        h5 = normal_1d_conv_block(h4, 5, "5", use_fp16, training, mask, dilation=4)
-        h5 = swish(h5)
-        h6 = normal_1d_conv_block(h5, kernel_width, "6", use_fp16, training, mask, dilation=1)
-        h6 = swish(h6)
-        h7 = normal_1d_conv_block(h6, 5, "7", use_fp16, training, mask, dilation=8)
-        h7 = swish(h7)
-        h8 = norm(normal_1d_conv_block(h7, 1, "8", use_fp16, training, mask, dilation=1) + X, "norm2", fp16=use_fp16, debug=False, e=1e-5) 
-    return h8
+        h0 = semi_separable_conv_block(X , 5, "0", use_fp16, training, mask, dilation=1, separation=3)
+        h0 = tf.nn.relu(h0)
+        h1 = semi_separable_conv_block(h0, 5, "1", use_fp16, training, mask, dilation=2)
+        h1 = tf.nn.relu(h1)
+        h2 = semi_separable_conv_block(h1, 5, "2", use_fp16, training, mask, dilation=4)
+        h2 = tf.nn.relu(h2)
+        h3 = semi_separable_conv_block(h2, 5, "3", use_fp16, training, mask, dilation=8)
+        h3 = tf.squeeze(tf.contrib.layers.batch_norm(tf.expand_dims(h3 + X, 1), is_training=training), 1)#, "norm1", fp16=use_fp16, debug=False, e=1e-4)
+        h3 = tf.nn.relu(h3)
+        h4 = semi_separable_conv_block(h3, 5, "4", use_fp16, training, mask, dilation=1, separation=3)
+        h4 = tf.nn.relu(h4)
+        h5 = semi_separable_conv_block(h4, 5, "5", use_fp16, training, mask, dilation=2)
+        h5 = tf.nn.relu(h5)
+        h6 = semi_separable_conv_block(h5, 5, "6", use_fp16, training, mask, dilation=4)
+        h6 = tf.nn.relu(h6)
+        h7 = semi_separable_conv_block(h6, 5, "7", use_fp16, training, mask, dilation=8)
+        h7 = tf.nn.relu(h7)
+        h8 = normal_1d_conv_block(h7, 1, "8", use_fp16, training, mask, dilation=1)#, "norm2", fp16=use_fp16, debug=False, e=1e-4)
+        h8 = tf.squeeze(tf.contrib.layers.batch_norm(tf.expand_dims(h8 + X, 1),  is_training=training), 1)#, "norm1", fp16=use_fp16, debug=False, e=1e-4)
+    return tf.nn.relu(h8)
 
 
 def attention_layer(X, backwards, seq_lens, layer):
@@ -163,15 +194,13 @@ def attention_layer(X, backwards, seq_lens, layer):
         b = tf.matrix_band_part(tf.ones([seq, seq]), -1, 0)
     if backwards and seq_lens is not None:
         b = tf.expand_dims(tf.sequence_mask(seq_lens, maxlen=tf.shape(X)[1], dtype=tf.float32), 1) * b
-
-
         
     b = tf.reshape(b, [1, seq, seq])
     if dtype == tf.float16:
         b = tf.cast(b, tf.float16)
     weight = weight * b + (-1e4 if dtype == tf.float16 else -1e9) * (1 - b)
     weight = tf.nn.softmax(weight, -1) * b
-#    weight = tf.Print(weight, [weight[0,2,:]])
+
 
     tf.summary.image("attns_{}_at_{}".format("f" if not backwards else "b", layer), tf.expand_dims(tf.pow(weight, 0.2), -1))
 
@@ -203,7 +232,7 @@ def featurizer(X, encoder, config, train=False, reuse=None):
         encoder._lazy_init()
         clf_token = encoder['_classify_']
         pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
-        embed_weights_orig = embed_weights = tf.get_variable("we", [encoder.vocab_size + config.max_length, config.n_embed],
+        embed_weights = tf.get_variable("we", [encoder.vocab_size + config.max_length, config.n_embed],
                                         initializer=tf.random_normal_initializer(stddev=config.weight_stddev))
         if config.use_fp16:
             embed_weights = tf.cast(embed_weights, tf.float16)
@@ -230,24 +259,21 @@ def featurizer(X, encoder, config, train=False, reuse=None):
                 if config.low_memory_mode and train:
                     block_fn_fwd = recompute_grad(block_fn_fwd, use_entire_scope=True)
                 h = block_fn_fwd(h)
-                if config.n_layer != (layer + 1):
-                    h = swish(h)
-                    
-        if config.use_fp16:
-            h = tf.cast(h, tf.float32)
+                if config.n_layer == (layer + 1):
+                    h = normal_1d_conv_block(h, 1, "output", config.use_fp16, train, None, dilation=1)
 
-        mask = tf.expand_dims(tf.sequence_mask(pool_idx, maxlen=tf.shape(h)[1], dtype=tf.float32), -1)
+        mask = tf.expand_dims(tf.sequence_mask(pool_idx, maxlen=tf.shape(h)[1], dtype=h.dtype), -1)
         
         max_pooled = tf.reduce_max(h + (1.0 -  mask) * -1e9, 1)
         mean_pool = tf.reduce_sum(h * mask, 1) / (tf.reduce_sum(mask) + 1e-9)
         clf_h = tf.concat((max_pooled, mean_pool), axis=1)
         
         clf_h = tf.reshape(clf_h, shape=initial_shape[: -2] + [config.n_embed * 2])
-        seq_feats = tf.reshape(h, shape=initial_shape[:-1] + [config.n_embed * 2])
+        seq_feats = tf.reshape(h, shape=initial_shape[:-1] + [config.n_embed])
 
         return {
-            'embed_weights': embed_weights_orig,
-            'features': clf_h,
+            'embed_weights': embed_weights,
+            'features': tf.cast(clf_h, tf.float32),
             'sequence_features': seq_feats,
             'pool_idx': pool_idx
         }

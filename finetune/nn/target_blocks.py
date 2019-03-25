@@ -58,10 +58,10 @@ def language_model(*, X, M, embed_weights, hidden, config, reuse=None, train=Fal
         if train and config.sampled_softmax and config.sampled_softmax > 0:
             targets = tf.reshape(X[:, 1:, 0], [-1, 1])
             lm_losses = tf.nn.sampled_softmax_loss(
-                embed_weights,
+                tf.cast(embed_weights, tf.float32),
                 tf.zeros([vocab_size]), 
                 targets,
-                lm_h,
+                tf.cast(lm_h, tf.float32),
                 config.sampled_softmax,
                 vocab_size,
                 partition_strategy="div",
@@ -71,6 +71,7 @@ def language_model(*, X, M, embed_weights, hidden, config, reuse=None, train=Fal
 
         else:
             lm_logits = tf.matmul(lm_h, embed_weights, transpose_b=True)  # tied weights
+            lm_logits = tf.cast(lm_logits, tf.float32)
             lm_losses = tf.losses.sparse_softmax_cross_entropy(
                 logits=lm_logits,
                 labels=tf.reshape(X[:, 1:, 0], [-1]),
