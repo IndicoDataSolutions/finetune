@@ -10,7 +10,7 @@ from tensorflow.python.eager import context
 
 def warmup_cosine(x, warmup=0.002, *args):
     s = tf.cast(x <= warmup, tf.float32)
-    return s*(x/warmup) + (1-s)*(0.5 * (1 + tf.cos(math.pi * x)))
+    return s*(x/warmup) + (1-s)*(0.5 * (1 + tf.cos(math.pi * x * 100)))
 
 def warmup_constant(x, warmup=0.002, *args):
     s = tf.cast(x <= warmup, tf.float32)

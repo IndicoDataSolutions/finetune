@@ -167,7 +167,8 @@ def block(X, kernel_width, block_name, use_fp16, training, pdrop, backwards=Fals
         h2 = semi_separable_conv_block(h1, 5, "2", use_fp16, training, mask, dilation=4)
         h2 = tf.nn.relu(h2)
         h3 = semi_separable_conv_block(h2, 5, "3", use_fp16, training, mask, dilation=8)
-        h3 = tf.squeeze(tf.contrib.layers.batch_norm(tf.expand_dims(h3 + X, 1), is_training=training), 1)#, "norm1", fp16=use_fp16, debug=False, e=1e-4)
+#        h3 = tf.squeeze(tf.contrib.layers.batch_norm(tf.expand_dims(h3 + X, 1), is_training=training), 1)#, "norm1", fp16=use_fp16, debug=False, e=1e-4)
+        h3 += X
         h3 = tf.nn.relu(h3)
         h4 = semi_separable_conv_block(h3, 5, "4", use_fp16, training, mask, dilation=1, separation=3)
         h4 = tf.nn.relu(h4)
@@ -178,7 +179,8 @@ def block(X, kernel_width, block_name, use_fp16, training, pdrop, backwards=Fals
         h7 = semi_separable_conv_block(h6, 5, "7", use_fp16, training, mask, dilation=8)
         h7 = tf.nn.relu(h7)
         h8 = normal_1d_conv_block(h7, 1, "8", use_fp16, training, mask, dilation=1)#, "norm2", fp16=use_fp16, debug=False, e=1e-4)
-        h8 = tf.squeeze(tf.contrib.layers.batch_norm(tf.expand_dims(h8 + X, 1),  is_training=training), 1)#, "norm1", fp16=use_fp16, debug=False, e=1e-4)
+#        h8 = tf.squeeze(tf.contrib.layers.batch_norm(tf.expand_dims(h8 + X, 1),  is_training=training), 1)#, "norm1", fp16=use_fp16, debug=False, e=1e-4)
+        h8 += X
     return tf.nn.relu(h8)
 
 
