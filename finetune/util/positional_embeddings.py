@@ -10,7 +10,7 @@ def interpolate_pos_embed(positional_embed, new_len):
 
 
 def embedding_preprocessor(input_pipeline, config):
-    
+
     def process_embeddings(name, value):
         if "/we:0" not in name:
             return value
@@ -24,11 +24,12 @@ def embedding_preprocessor(input_pipeline, config):
             positional_embed = interpolate_pos_embed(positional_embed, config.max_length)
 
         elif config.max_length > len(positional_embed):
-            raise ValueError("Max Length cannot be greater than {} if interploate_pos_embed is turned off".format(
+            raise ValueError("Max Length cannot be greater than {} if interpolate_pos_embed is turned off".format(
                 len(positional_embed)))
         else:
             positional_embed = positional_embed[:config.max_length]
 
         embeddings = np.concatenate((word_embeddings, special_embed, positional_embed), axis=0)
         return embeddings
+        
     return process_embeddings

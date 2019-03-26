@@ -102,7 +102,6 @@ class BaseModel(object, metaclass=ABCMeta):
             self.cleanup_glob = self.estimator_dir
             LOGGER.info("Saving tensorboard output to {}".format(self.estimator_dir))
 
-        
         self.saver = Saver(
             fallback_filename=self.config.base_model_path,
             exclude_matches=None if self.config.save_adam_vars else "Adam",

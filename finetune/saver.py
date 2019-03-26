@@ -7,8 +7,10 @@ import sys
 import joblib
 import numpy as np
 import tensorflow as tf
+from tensorflow.python.training import distribution_strategy_context
 from tensorflow.contrib.estimator.python.estimator.early_stopping import _StopOnPredicateHook, _get_or_create_stop_var
 
+from finetune.util.estimator import PatchedParameterServerStrategy
 from finetune.errors import FinetuneError
 
 LOGGER = logging.getLogger('finetune')
@@ -132,15 +134,16 @@ class Saver:
         else:
             variables_sv = dict()
 
-        if tf.contrib.distribute.in_cross_replica_context():
+        distribution_strategy = tf.distribute.get_strategy()
+        if isinstance(distribution_strategy, PatchedParameterServerStrategy):
             def assign(var, val):
                 def update(var_):
                     return var_.assign(val)
 
                 def merge_fn(dist, vm):
-                    return dist.group(dist.update(vm, update))
+                    return dist.update(vm, update)
 
-                replica_context = tf.contrib.distribute.get_replica_context()
+                replica_context = distribution_strategy_context.get_replica_context()
                 return replica_context.merge_call(merge_fn, var)
         else:
             def assign(var, val):
