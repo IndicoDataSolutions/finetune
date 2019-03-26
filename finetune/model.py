@@ -8,7 +8,7 @@ from tensorflow.contrib.opt.python.training.weight_decay_optimizers import AdamW
 
 from finetune.network_modules import language_model
 from finetune.utils import sample_with_temperature, dont_optimize_zeros, get_grad_accumulation_optimizer
-from finetune.optimizers import schedules
+from finetune.optimizers.learning_rate_schedules import schedules
 from finetune.imbalance import class_weight_tensor
 from finetune.adamax import AdamaxWOptimizer
 from finetune.errors import FinetuneError

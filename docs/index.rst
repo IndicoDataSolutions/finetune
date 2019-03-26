@@ -160,6 +160,9 @@ Finetune API Reference
 .. autoclass:: finetune.ComparisonOrdinalRegressor
     :inherited-members:
 
+.. autoclass:: finetune.MultiTask
+    :inherited-members:
+
 
 Finetune Model Configuration Options
 ====================================
