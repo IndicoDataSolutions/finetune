@@ -4,8 +4,8 @@ from imblearn.over_sampling import RandomOverSampler
 from sklearn.utils import shuffle
 
 from finetune.base import BaseModel
-from finetune.target_encoders import OneHotLabelEncoder
-from finetune.network_modules import classifier
+from finetune.encoding.target_encoders import OneHotLabelEncoder
+from finetune.nn.target_blocks import classifier
 from finetune.input_pipeline import BasePipeline
 
 

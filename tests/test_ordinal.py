@@ -10,7 +10,7 @@ import random
 import numpy as np
 
 from sklearn.model_selection import train_test_split
-from finetune.ordinal_regressor import ComparisonOrdinalRegressor, OrdinalRegressor
+from finetune import ComparisonOrdinalRegressor, OrdinalRegressor
 
 ANIMALS = ["dog", "cat", "horse", "cow", "pig", "sheep", "goat", "chicken", "guinea pig", "donkey", "turkey", "duck", "camel", "goose", "llama", "rabbit", "fox"]
 NUMBERS = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen"]

@@ -25,14 +25,15 @@ from sklearn.model_selection import train_test_split
 import joblib as jl
 
 import finetune
-from finetune.utils import interpolate_pos_embed, list_transpose
-from finetune.encoding import EncodedOutput
+from finetune.util import list_transpose
+from finetune.encoding.input_encoder import EncodedOutput
 from finetune.config import get_config, all_gpus, assert_valid_config
 from finetune.saver import Saver
 from finetune.errors import FinetuneError
 from finetune.model import get_model_fn, PredictMode
-from finetune.download import download_data_if_required
-from finetune.estimator_utils import PatchedParameterServerStrategy
+from finetune.util.download import download_data_if_required
+from finetune.util.estimator import PatchedParameterServerStrategy
+from finetune.util.positional_embeddings import embedding_preprocessor
 
 
 LOGGER = logging.getLogger('finetune')
@@ -101,30 +102,11 @@ class BaseModel(object, metaclass=ABCMeta):
             self.cleanup_glob = self.estimator_dir
             LOGGER.info("Saving tensorboard output to {}".format(self.estimator_dir))
 
-        def process_embeddings(name, value):
-            if "/we:0" not in name:
-                return value
-            vocab_size = self.input_pipeline.text_encoder.vocab_size
-            word_embeddings = value[:vocab_size - len(self.input_pipeline.text_encoder.special_tokens)]
-            special_embed = value[len(word_embeddings): vocab_size]
-            positional_embed = value[vocab_size:]
-
-            if self.config.interpolate_pos_embed and self.config.max_length != len(positional_embed):
-                positional_embed = interpolate_pos_embed(positional_embed, self.config.max_length)
-
-            elif self.config.max_length > len(positional_embed):
-                raise ValueError("Max Length cannot be greater than {} if interploate_pos_embed is turned off".format(
-                    len(positional_embed)))
-            else:
-                positional_embed = positional_embed[:self.config.max_length]
-
-            embeddings = np.concatenate((word_embeddings, special_embed, positional_embed), axis=0)
-            return embeddings
-
+        
         self.saver = Saver(
             fallback_filename=self.config.base_model_path,
             exclude_matches=None if self.config.save_adam_vars else "Adam",
-            variable_transforms=[process_embeddings],
+            variable_transforms=[embedding_preprocessor(self.input_pipeline, self.config)],
             save_dtype=self.config.save_dtype
         )
 
@@ -185,12 +167,12 @@ class BaseModel(object, metaclass=ABCMeta):
             for task in self.config.tasks:
                 if val_size[task] > 0:
                     train_hooks.append(
-                        tf.contrib.estimator.InMemoryEvaluatorHook(
+                        tf.estimator.experimental.InMemoryEvaluatorHook(
                             estimator, val_input_fn[task], every_n_iter=val_interval[task], steps=val_size[task] // batch_size, name=task
                         )
                     )
                     train_hooks.append(
-                        tf.contrib.estimator.InMemoryEvaluatorHook(
+                        tf.estimator.experimental.InMemoryEvaluatorHook(
                             estimator, val_input_fn[task + "_train"], every_n_iter=val_interval[task], steps=val_size[task] // batch_size, name=task + "_train"
                         )
                     )
@@ -198,7 +180,7 @@ class BaseModel(object, metaclass=ABCMeta):
         elif val_size > 0:
             # Validation with all other tasks.
             train_hooks.append(
-                tf.contrib.estimator.InMemoryEvaluatorHook(
+                tf.estimator.experimental.InMemoryEvaluatorHook(
                     estimator, val_input_fn, every_n_iter=val_interval, steps=val_size // batch_size
                 )
             )

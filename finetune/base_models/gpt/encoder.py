@@ -15,7 +15,7 @@ import numpy as np
 import tensorflow as tf
 
 import finetune
-from finetune.encoding import NLP, EncodedOutput, BaseEncoder, get_pairs
+from finetune.encoding.input_encoder import NLP, EncodedOutput, BaseEncoder, get_pairs
 
 
 FINETUNE_FOLDER = os.path.dirname(finetune.__file__)

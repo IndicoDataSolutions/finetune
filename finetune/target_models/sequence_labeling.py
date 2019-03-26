@@ -5,10 +5,10 @@ import tensorflow as tf
 import numpy as np
 
 from finetune.base import BaseModel, PredictMode
-from finetune.target_encoders import SequenceLabelingEncoder, SequenceMultiLabelingEncoder
-from finetune.network_modules import sequence_labeler
-from finetune.crf import sequence_decode
-from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_sequence
+from finetune.encoding.target_encoders import SequenceLabelingEncoder, SequenceMultiLabelingEncoder
+from finetune.nn.target_blocks import sequence_labeler
+from finetune.nn.crf import sequence_decode
+from finetune.encoding.sequence_encoder import indico_to_finetune_sequence, finetune_to_indico_sequence
 
 from finetune.input_pipeline import BasePipeline
 

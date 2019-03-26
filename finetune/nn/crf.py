@@ -1,7 +1,12 @@
 import numpy as np
 import tensorflow as tf
 
-from finetune.utils import np_softmax
+
+def np_softmax(x, t=1, axis=-1):
+    x = x / t
+    x = x - np.max(x, axis=axis, keepdims=True)
+    ex = np.exp(x)
+    return ex / np.sum(ex, axis=axis, keepdims=True)
 
 
 def viterbi_decode(score, transition_params):

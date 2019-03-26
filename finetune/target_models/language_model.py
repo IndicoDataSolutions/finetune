@@ -1,5 +1,5 @@
 from finetune.base import PredictMode
-from finetune.classifier import Classifier
+from finetune.target_models.classifier import Classifier
 
 
 class LanguageModel(Classifier):

@@ -2,8 +2,6 @@ import numpy as np
 from sklearn.preprocessing import LabelEncoder, MultiLabelBinarizer, OrdinalEncoder
 from abc import ABCMeta
 
-from finetune.utils import flatten
-
 
 class BaseEncoder(metaclass=ABCMeta):
     @property

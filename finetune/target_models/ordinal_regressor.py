@@ -1,10 +1,10 @@
 import tensorflow as tf
 
 from finetune.base import BaseModel
-from finetune.target_encoders import OrdinalRegressionEncoder
-from finetune.network_modules import ordinal_regressor
+from finetune.encoding.target_encoders import OrdinalRegressionEncoder
+from finetune.nn.target_blocks import ordinal_regressor
 from finetune.input_pipeline import BasePipeline
-from finetune.comparison_regressor import ComparisonRegressionPipeline
+from finetune.target_models.comparison_regressor import ComparisonRegressionPipeline
 
 
 class OrdinalRegressionPipeline(BasePipeline):

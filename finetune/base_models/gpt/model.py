@@ -3,7 +3,7 @@ import os
 from finetune.base_models import SourceModel
 from finetune.base_models.gpt.encoder import GPTEncoder
 from finetune.base_models.gpt.featurizer import gpt_featurizer
-from finetune.utils import finetune_model_path
+
 
 class GPTModel(SourceModel):
     encoder = GPTEncoder

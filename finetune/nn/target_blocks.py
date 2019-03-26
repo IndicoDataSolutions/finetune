@@ -4,8 +4,8 @@ import tensorflow as tf
 from tensorflow.contrib.crf import crf_log_likelihood
 
 from finetune.base_models.gpt.featurizer import attn, dropout, norm
-from finetune.utils import shape_list, merge_leading_dims
-from finetune.recompute_grads import recompute_grad
+from finetune.util.shapes import shape_list, merge_leading_dims
+from finetune.optimizers.recompute_grads import recompute_grad
 from finetune.errors import FinetuneError
 
 
@@ -18,9 +18,7 @@ def perceptron(x, ny, config, w_init=None, b_init=None):
     :param w_init: Weight initializer.
     :param b_init: Bias initializer.
     :return: The output of the perceptron model.
-    """
-#    x = tf.reshape(x, [-1, shape_list(x)[-1]])
-        
+    """        
     w_init = w_init or tf.random_normal_initializer(stddev=config.weight_stddev)
     b_init = b_init or tf.constant_initializer(0)
     with tf.variable_scope('perceptron'):

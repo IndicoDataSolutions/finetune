@@ -3,7 +3,7 @@ from collections import defaultdict
 from sklearn.metrics import accuracy_score, recall_score, precision_score
 import numpy as np
 
-from finetune.encoding import NLP
+from finetune.encoding.input_encoder import NLP
 
 
 def _convert_to_token_list(annotations, doc_idx=None):

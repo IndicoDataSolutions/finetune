@@ -1,5 +1,5 @@
-from finetune.classifier import Classifier, ClassificationPipeline
-from finetune.regressor import Regressor, RegressionPipeline
+from finetune.target_models.classifier import Classifier, ClassificationPipeline
+from finetune.target_models.regressor import Regressor, RegressionPipeline
 from finetune.base import BaseModel
 
 class MultiFieldClassificationPipeline(ClassificationPipeline):

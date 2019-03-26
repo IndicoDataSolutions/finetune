@@ -13,8 +13,8 @@ from sklearn.model_selection import train_test_split
 
 from finetune.datasets import Dataset
 from finetune import SequenceLabeler
-from finetune.utils import finetune_to_indico_sequence
-from finetune.metrics import annotation_report
+from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
+from finetune.util.metrics import annotation_report
 
 XML_PATH = os.path.join("Data", "Sequence", "reuters.xml")
 DATA_PATH = os.path.join("Data", "Sequence", "reuters.json")

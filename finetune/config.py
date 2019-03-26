@@ -12,9 +12,19 @@ from nltk.metrics.distance import edit_distance
 import finetune
 from finetune.errors import FinetuneError
 from finetune.base_models import GPTModel, GPT2Model
-from finetune.utils import finetune_model_path
 
 LOGGER = logging.getLogger('finetune')
+
+
+def finetune_model_path(path):
+    return os.path.abspath(
+        os.path.join(
+            os.path.dirname(finetune.__file__),
+            'model',
+            path
+        )
+    )
+
 
 @lru_cache()
 def all_gpus(visible_gpus=None):

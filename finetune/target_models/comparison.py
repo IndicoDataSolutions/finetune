@@ -2,8 +2,8 @@ import numpy as np
 import tensorflow as tf
 
 from finetune.base import BaseModel
-from finetune.classifier import Classifier, ClassificationPipeline
-from finetune.encoding import ArrayEncodedOutput
+from finetune.target_models.classifier import Classifier, ClassificationPipeline
+from finetune.encoding.input_encoder import ArrayEncodedOutput
 
 class ComparisonPipeline(ClassificationPipeline):
 

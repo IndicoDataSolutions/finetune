@@ -1,8 +1,8 @@
 import tensorflow as tf
 
 from finetune.base import BaseModel
-from finetune.target_encoders import RegressionEncoder
-from finetune.network_modules import regressor
+from finetune.encoding.target_encoders import RegressionEncoder
+from finetune.nn.target_blocks import regressor
 from finetune.input_pipeline import BasePipeline
 
 

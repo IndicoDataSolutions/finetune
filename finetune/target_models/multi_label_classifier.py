@@ -3,8 +3,8 @@ import warnings
 import tensorflow as tf
 
 from finetune.base import BaseModel
-from finetune.target_encoders import MultilabelClassificationEncoder
-from finetune.network_modules import multi_classifier
+from finetune.encoding.target_encoders import MultilabelClassificationEncoder
+from finetune.nn.target_blocks import multi_classifier
 
 from finetune.input_pipeline import BasePipeline
 

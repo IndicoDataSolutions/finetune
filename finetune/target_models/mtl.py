@@ -5,8 +5,8 @@ from finetune.base import BaseModel
 from finetune.input_pipeline import BasePipeline
 from finetune.errors import FinetuneError
 
-from finetune.sequence_labeling import SequenceLabeler
-from finetune.utils import indico_to_finetune_sequence
+from finetune.target_models.sequence_labeling import SequenceLabeler
+from finetune.encoding.sequence_encoder import indico_to_finetune_sequence
 
 LOGGER = logging.getLogger('finetune')
 
