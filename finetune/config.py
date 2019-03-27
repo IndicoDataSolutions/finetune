@@ -296,11 +296,10 @@ def get_default_config():
 
         # For experimental conv model
         use_conv=False,
-        kernel_width=2,
-        use_fp16=True,
+        use_fp16=False,
         use_timing=True,
-        scale_loss=True,
-        loss_scale_every_n_steps=2,
+        scale_loss=False,
+        loss_scale_every_n_steps=2500,
         in_memory_finetune=None,
         sampled_softmax=None,
 

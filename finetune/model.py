@@ -14,7 +14,7 @@ from finetune.optimizers.adamax import AdamaxWOptimizer
 from finetune.util.imbalance import class_weight_tensor
 from finetune.errors import FinetuneError
 from finetune.convolutional import featurizer as conv_featurizer
-from finetune.adafactor import AdafactorWOptimizer, AdafactorOptimizer
+from finetune.optimizers.adafactor import AdafactorWOptimizer, AdafactorOptimizer
 LOGGER = logging.getLogger('finetune')
 
 OPTIMIZERS = {
