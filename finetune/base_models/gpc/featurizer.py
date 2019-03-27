@@ -131,8 +131,29 @@ def semi_separable_conv_block(X, kernel_width, layer_name, use_fp16, training, m
 
     return out
 
+def cummax(x, dim):
+    def align_to_0(tensor):
+        ranks = list(range(len(shape_list(tensor))))
+        if dim != 0:
+            ranks[0], ranks[dim] = ranks[dim], ranks[0]
+            return tf.transpose(tensor, ranks)
+        else:
+            return tensor
+    return align_to_0(tf.scan(lambda a, b: tf.maximum(a, b), align_to_0(x)))
 
-def normal_1d_conv_block(X, kernel_width, layer_name, use_fp16,dilation=1, layer_num=1):
+def cumulative_state_net(X, name, use_fp16):
+    outputs = []
+    nx = shape_list(X)[-1]
+    output_sz = nx // 6
+    with tf.variable_scope(name):
+        for kernel in [1, 2, 3, 4, 5, 6]:
+            outputs.append(normal_1d_conv_block(X, kernel, str(kernel), use_fp16, output_dim=output_sz))
+    outputs_concat = tf.nn.relu(tf.concat(outputs, -1))
+    outputs_cum_pooled = tf.concat([cummax(outputs_concat, 1), X], -1)
+    return normal_1d_conv_block(outputs_cum_pooled, 1, "output_reproject", use_fp16, output_dim=nx)
+
+
+def normal_1d_conv_block(X, kernel_width, layer_name, use_fp16, dilation=1, layer_num=1, output_dim=None):
     # layer_input shape = #batch, seq, embed_dim or batch, channels, seq, embed_dim
     with tf.variable_scope(layer_name):
         # Pad kernel_width (word_wise) - 1 to stop future viewing.
@@ -142,10 +163,12 @@ def normal_1d_conv_block(X, kernel_width, layer_name, use_fp16,dilation=1, layer
         padded_input = tf.pad(X, paddings, "CONSTANT")
 
         nx = shape_list(X)[-1]
-        W = tf.get_variable(name="W", shape=[kernel_width, nx, nx],
+        if output_dim is None:
+            output_dim = nx
+        W = tf.get_variable(name="W", shape=[kernel_width, nx, output_dim],
                             initializer=tf.initializers.random_normal(stddev=0.001 / (layer_num ** 0.5)))
-        b = tf.get_variable(name="B", shape=[nx], initializer=tf.initializers.constant(0.0))
-        m = tf.get_variable(name="M", shape=[nx], initializer=tf.initializers.constant(1.0))
+        b = tf.get_variable(name="B", shape=[output_dim], initializer=tf.initializers.constant(0.0))
+        m = tf.get_variable(name="M", shape=[output_dim], initializer=tf.initializers.constant(1.0))
 
         if use_fp16:
             W = tf.cast(W, tf.float16)
@@ -161,27 +184,15 @@ def normal_1d_conv_block(X, kernel_width, layer_name, use_fp16,dilation=1, layer
 
 def block(X, block_name, use_fp16, layer_num=None):
     with tf.variable_scope(block_name):
-        print(X)
-        h0 = normal_1d_conv_block(X, 5, "0", use_fp16, dilation=1, layer_num=layer_num * 2 + 1)
+        c = cumulative_state_net(X, "cumulative_state_net", use_fp16)
+        h0 = normal_1d_conv_block(c, 4, "0", use_fp16, dilation=1, layer_num=layer_num * 2 + 1)
         h0 = tf.nn.relu(h0)
-        h1 = normal_1d_conv_block(h0, 5, "1", use_fp16, dilation=2)
+        h1 = normal_1d_conv_block(h0, 4, "1", use_fp16, dilation=1)
         h1 = tf.nn.relu(h1)
-        h2 = normal_1d_conv_block(h1, 5, "2", use_fp16,dilation=4)
+        h2 = normal_1d_conv_block(h1, 4, "2", use_fp16,dilation=1)
         h2 = tf.nn.relu(h2)
-        h3 = normal_1d_conv_block(h2, 5, "3", use_fp16, dilation=8)
-        h3 += X
-        h3 = tf.nn.relu(h3)
-        h4 = normal_1d_conv_block(h3, 5, "4", use_fp16, dilation=1, layer_num=layer_num * 2 + 2)
-        h4 = tf.nn.relu(h4)
-        h5 = normal_1d_conv_block(h4, 5, "5", use_fp16, dilation=2)
-        h5 = tf.nn.relu(h5)
-        h6 = normal_1d_conv_block(h5, 5, "6", use_fp16, dilation=4)
-        h6 = tf.nn.relu(h6)
-        h7 = normal_1d_conv_block(h6, 5, "7", use_fp16, dilation=8)
-        h7 = tf.nn.relu(h7)
-        h8 = normal_1d_conv_block(h7, 1, "8", use_fp16, dilation=1)
-
-     return tf.nn.relu(h8 + X)
+        h3 = normal_1d_conv_block(h2, 4, "3", use_fp16, dilation=1)
+        return norm(tf.nn.relu(h3 + X), "norm", fp16=use_fp16, e=1e-3)
 
 
 def attention_layer(X, backwards, seq_lens, layer):

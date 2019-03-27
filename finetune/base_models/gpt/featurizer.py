@@ -10,7 +10,7 @@ from finetune.nn.activations import act_fns
 
 def norm(x, scope, axis=[-1], e=None, fp16=False, debug=False):
     with tf.variable_scope(scope):
-        e = e or (1e-5 if not fp16 else 1e-1)
+        e = e or 1e-5
         n_state = shape_list(x)[-1]
         g = tf.get_variable("g", [n_state], initializer=tf.constant_initializer(1))
         b = tf.get_variable("b", [n_state], initializer=tf.constant_initializer(0))
@@ -107,8 +107,7 @@ def attn(x, scope, n_state, n_head, resid_pdrop, attn_pdrop, train=False, scale=
         q = split_heads(q, n_head)
         k = split_heads(k, n_head, k=True)
         v = split_heads(v, n_head)
-        a = _attn(q, k, v, attn_pdrop=attn_pdrop, train=train, scale=scale,
-                  mask=mask, fp16=fp16)
+        a = _attn(q, k, v, attn_pdrop=attn_pdrop, train=train, scale=scale, mask=mask, fp16=fp16)
         a = merge_heads(a)
         a = conv1d(a, 'c_proj', n_state, 1, train=train, fp16=fp16)
         a = dropout(a, resid_pdrop, train)
@@ -129,9 +128,9 @@ def block(x, n_head, act_fn, resid_pdrop, attn_pdrop, scope, train=False, scale=
     with tf.variable_scope(scope):
         nx = shape_list(x)[-1]
         a = attn(x, 'attn', nx, n_head, resid_pdrop, attn_pdrop, train=train, scale=scale, fp16=fp16)
-        n = norm(x + a, 'ln_1', e=1e-3 if fp16 else 1e-5, fp16=fp16)
+        n = norm(x + a, 'ln_1', fp16=fp16)
         m = mlp(n, 'mlp', nx * 4, act_fn, resid_pdrop, train=train, fp16=fp16)
-        h = norm(n + m, 'ln_2', e=1e-3 if fp16 else 1e-5, fp16=fp16)
+        h = norm(n + m, 'ln_2', fp16=fp16)
         return h
 
 
