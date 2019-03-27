@@ -3,7 +3,6 @@ import functools
 
 import numpy as np
 import tensorflow as tf
-from tensorflow.train import Scaffold
 from tensorflow.contrib.opt.python.training.weight_decay_optimizers import AdamWOptimizer
 
 from finetune.nn.target_blocks import language_model
@@ -189,18 +188,14 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                 summaries=summaries
             )
 
-        init_op = saver.get_scaffold_init_op()
-        scaffold = Scaffold(init_op=init_op)
-
         if mode == tf.estimator.ModeKeys.PREDICT:
             return tf.estimator.EstimatorSpec(
                 mode=mode,
-                predictions=predictions,
-                scaffold=scaffold
+                predictions=predictions
             )
 
         if mode == tf.estimator.ModeKeys.TRAIN:
-            return tf.estimator.EstimatorSpec(mode=mode, loss=train_loss, train_op=train_op, scaffold=scaffold)
+            return tf.estimator.EstimatorSpec(mode=mode, loss=train_loss, train_op=train_op)
 
         assert mode == tf.estimator.ModeKeys.EVAL, "The mode is actually {}".format(mode)
         if params.eval_acc and pred_op is not None:
@@ -212,6 +207,6 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
         else:
             metrics = None
 
-        return tf.estimator.EstimatorSpec(mode=mode, loss=train_loss, scaffold=scaffold, eval_metric_ops=metrics)
+        return tf.estimator.EstimatorSpec(mode=mode, loss=train_loss, eval_metric_ops=metrics)
 
     return _model_fn
