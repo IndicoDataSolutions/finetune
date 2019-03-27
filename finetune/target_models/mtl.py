@@ -10,6 +10,7 @@ from finetune.encoding.sequence_encoder import indico_to_finetune_sequence
 
 LOGGER = logging.getLogger('finetune')
 
+
 def get_input_fns(task_id, input_fn, validation_fn):
     def fn(x, y):
         return (
@@ -32,6 +33,7 @@ def reshape_to_rank_4(t):
 def get_train_eval_dataset(input_fn, val_size):
     def fn():
         return input_fn().take(val_size)
+
     return fn
 
 
@@ -106,6 +108,14 @@ def get_loss_logits_fn(task, featurizer_state, config, targets_i, train, reuse, 
 
 
 class MultiTask(BaseModel):
+    """
+    Target model for multi task learning. The approach used is to sample mini-batches from each task proportional to
+    the size of the task for each dataset.
+
+    :param tasks: A dictionary of pairs mapping string task names to model classes.
+        eg. `{"sst": Classifier, "ner": SequenceLabeler}`
+    :param \**kwargs: key-value pairs of config items to override. Note: The same config is used for each base task.
+    """
 
     def __init__(self, tasks, **kwargs):
         super().__init__(**kwargs)
@@ -119,9 +129,22 @@ class MultiTask(BaseModel):
         return super().featurize(X)
 
     def cached_predict(self):
+        """
+        Context manager that prevents the recreation of the tensorflow graph on every call to BaseModel.predict().
+
+        Not supported for MultiTask.
+        """
         raise FinetuneError("cached_predict is not supported yet for MTL")
 
     def predict(self, X):
+        """
+        Runs inference on the trained model for any of the tasks the model was trained for. Input and output formats
+        are the same as for each of the individial tasks.
+
+
+        :param X: A dictionary mapping from task name to data, in the format required by the task type.
+        :return: A dictionary mapping from task name to the predictions for that task.
+        """
         predictions = {}
         for name, ModelClass in self.config.tasks.items():
             if name not in X:
@@ -135,6 +158,15 @@ class MultiTask(BaseModel):
         return predictions
 
     def predict_proba(self, X):
+        """
+        Runs probability inference on the trained model for any of the tasks the model was trained for. Falls back
+        to normal predict when probabilities are not available for a task, eg Regression.
+
+        Input and output formats are the same as for each of the individial tasks.
+
+        :param X: A dictionary mapping from task name to data, in the format required by the task type.
+        :return: A dictionary mapping from task name to the predictions for that task.
+        """
         predictions = {}
         for name, ModelClass in self.config.tasks.items():
             if name not in X:
@@ -157,6 +189,14 @@ class MultiTask(BaseModel):
         return predictions
 
     def finetune(self, X, Y=None, batch_size=None):
+        """
+
+        :param X: A dictionary mapping from task name to inputs in the same format required for each of the models.
+        :param Y: A dictionary mapping from task name to targets in the same format required for each of the models.
+        :param batch_size: Number of examples per batch. When N_GPUS > 1, this number
+                           corresponds to the number of training examples provided to each GPU.
+        :return:
+        """
         for t in [task_name for task_name, t in self.config.tasks.items() if t == SequenceLabeler]:
             X[t], Y[t], *_ = indico_to_finetune_sequence(X[t], labels=Y[t], multi_label=False, none_value="<PAD>")
         return super().finetune(X, Y=Y, batch_size=batch_size)
