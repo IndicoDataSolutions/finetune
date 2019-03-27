@@ -14,13 +14,14 @@ from finetune.optimizers.adamax import AdamaxWOptimizer
 from finetune.util.imbalance import class_weight_tensor
 from finetune.errors import FinetuneError
 from finetune.convolutional import featurizer as conv_featurizer
-from finetune.adafactor import AdafactorWOptimizer
+from finetune.adafactor import AdafactorWOptimizer, AdafactorOptimizer
 LOGGER = logging.getLogger('finetune')
 
 OPTIMIZERS = {
     "AdamW": AdamWOptimizer,
     "AdamaxW": AdamaxWOptimizer,
-    "AdafactorW": AdafactorWOptimizer
+    "AdafactorW": AdafactorWOptimizer,
+    "Adafactor": AdafactorOptimizer
 }
 
 class PredictMode:
@@ -161,7 +162,6 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
             )
 
             def optimizer(lr):
-
                 Optimizer = OPTIMIZERS.get(params.optimizer, None)
                 if Optimizer is None:
                     raise FinetuneError(
@@ -189,7 +189,7 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                     loss_scale_manager = tf.contrib.mixed_precision.ExponentialUpdateLossScaleManager(
                         init_loss_scale=params.loss_scale_every_n_steps,
                         incr_every_n_steps=5000,
-                        decr_every_n_nan_or_inf=1,
+                        decr_every_n_nan_or_inf=2,
                         incr_ratio=1.5,
                         decr_ratio=0.5
                     )

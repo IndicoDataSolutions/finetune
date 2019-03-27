@@ -184,8 +184,7 @@ def block(X, kernel_width, block_name, use_fp16, training, pdrop, backwards=Fals
         h7 = tf.nn.relu(h7)
         h8 = normal_1d_conv_block(h7, 1, "8", use_fp16, training, mask, dilation=1)#, "norm2", fp16=use_fp16, debug=False, e=1e-4)
 #        h8 = tf.squeeze(tf.contrib.layers.batch_norm(tf.expand_dims(h8 + X, 1),  is_training=training), 1)#, "norm1", fp16=use_fp16, debug=False, e=1e-4)
-        h8 += X
-    return tf.nn.relu(h8)
+    return tf.nn.relu(h8 + X)
 
 
 def attention_layer(X, backwards, seq_lens, layer):
