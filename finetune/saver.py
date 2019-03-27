@@ -28,7 +28,6 @@ class SaverHook(_StopOnPredicateHook):
         self.early_stopping_steps = early_stopping_steps or sys.maxsize
         self.steps_per_epoch = steps_per_epoch
         self.estimator = estimator
-        self.initialized = None
 
     def stop_if_no_metric_improvement_fn(self):
         if not self.keep_best_model:
@@ -49,15 +48,7 @@ class SaverHook(_StopOnPredicateHook):
 
     def begin(self):
         super().begin()
-        self.initialized = False
         self.included = tf.global_variables()
-
-    def before_run(self, run_context):
-        if not self.initialized:
-            init_fn = self.saver.get_scaffold_init_fn()
-            init_fn(None, run_context.session)
-            self.initialized = True
-        return super().before_run(run_context)
 
     def after_run(self, run_context, run_values):
         super().after_run(run_context, run_values)
@@ -69,6 +60,15 @@ class SaverHook(_StopOnPredicateHook):
         self.stop_if_no_metric_improvement_fn()
         if not self.keep_best_model or self.saver.variables is None or self.get_current_weights:
             self.saver.variables = dict(zip((var.name for var in self.included), session.run(self.included)))
+
+
+class InitializeHook(tf.train.SessionRunHook):
+    def __init__(self, saver):
+        self.saver = saver
+
+    def after_create_session(self, session, coord):
+        init_fn = self.saver.get_scaffold_init_fn()
+        init_fn(None, session)
 
 
 class Saver:
