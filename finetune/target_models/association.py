@@ -186,9 +186,11 @@ class Association(BaseModel):
             self.input_pipeline._text_to_ids([x], pad_token=(pad_token, pad_token, -1, -2))
             for x in X
         ))
+        lens = [len(a.char_locs) for a in arr_encoded]
         labels, batch_probas, associations = [], [], []
-        for pred in self._inference(X, mode=None):
+        for l, pred in zip(lens, self._inference(X, mode=None)):
             pred_labels = self.input_pipeline.label_encoder.inverse_transform(pred["sequence"])
+            pred_labels = [label if i < l else self.config.pad_token for i, label in enumerate(pred_labels)]
             labels.append(pred_labels)
             batch_probas.append(pred["sequence_probs"])
             pred["association_probs"] = self.prune_probs(pred["association_probs"], pred_labels)
