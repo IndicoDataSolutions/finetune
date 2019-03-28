@@ -309,7 +309,7 @@ class TestSequenceLabeler(unittest.TestCase):
                 fp.write(r.content)
 
         with codecs.open(cls.dataset_path, "r", "utf-8") as infile:
-            soup = bs(infile, "html5lib")
+            soup = bs(infile, "html.parser")
 
         docs = []
         docs_labels = []

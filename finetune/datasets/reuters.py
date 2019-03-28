@@ -30,7 +30,7 @@ class Reuters(Dataset):
         return CHECKSUM
 
     def download(self):
-           
+
         url = "https://raw.githubusercontent.com/dice-group/n3-collection/master/reuters.xml"
         r = requests.get(url)
 
@@ -38,7 +38,7 @@ class Reuters(Dataset):
             fd.write(r.content)
 
         fd = open(XML_PATH)
-        soup = bs(fd, "html5lib")
+        soup = bs(fd, "html.parser")
         docs = []
         docs_labels = []
         for elem in soup.find_all("document"):
@@ -71,8 +71,8 @@ if __name__ == "__main__":
     dataset = Reuters().dataframe
     dataset['annotations'] = [json.loads(annotation) for annotation in dataset['annotations']]
     trainX, testX, trainY, testY = train_test_split(
-        dataset.texts.values, 
-        dataset.annotations.values, 
+        dataset.texts.values,
+        dataset.annotations.values,
         test_size=0.3,
         random_state=42
     )
