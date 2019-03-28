@@ -3,7 +3,7 @@
 **Scikit-learn style model finetuning for NLP**
 
 `Finetune` ships with pre-trained language models
-from ["Improving Language Understanding by Generative Pre-Training"](https://s3-us-west-2.amazonaws.com/openai-assets/research-covers/language-unsupervised/language_understanding_paper.pdf)
+from ["Improving Language Understanding by Generative Pre-Training"](https://s3-us-west-2.amazonaws.com/openai-assets/research-covers/language-unsupervised/language_understanding_paper.pdf) (GPT)
 and ["Language Models are Unsupervised Multitask Learners"](https://d4mucfpksywv.cloudfront.net/better-language-models/language-models.pdf) (GPT-2). Base model code has been adapated from the [GPT](https://github.com/openai/finetune-transformer-lm) and [GPT-2](https://github.com/openai/gpt-2) github repos.
 
 Huge thanks to Alec Radford and Jeff Wu for their hard work and quality research.

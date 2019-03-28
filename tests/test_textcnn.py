@@ -20,7 +20,7 @@ import requests
 from bs4 import BeautifulSoup as bs
 from bs4.element import Tag
 
-from finetune.base_models.textcnn.model import TextCNNModel
+from finetune.base_models import TextCNN
 from finetune import Classifier, Comparison, SequenceLabeler
 from finetune.datasets import generic_download
 from finetune.config import get_config
@@ -37,7 +37,7 @@ SST_FILENAME = "SST-binary.csv"
 
 def default_config(**kwargs):
     return dict(get_config(
-        base_model=TextCNNModel,
+        base_model=TextCNN,
         batch_size=2,
         max_length=128,
         n_epochs=1,
