@@ -169,13 +169,13 @@ class BaseModel(object, metaclass=ABCMeta):
                     train_hooks.append(
                         tf.estimator.experimental.InMemoryEvaluatorHook(
                             estimator, val_input_fn[task], every_n_iter=val_interval[task],
-                            steps=val_size[task] // batch_size, name=task, hooks=hooks
+                            steps=val_size[task] // batch_size, name=task
                         )
                     )
                     train_hooks.append(
                         tf.estimator.experimental.InMemoryEvaluatorHook(
                             estimator, val_input_fn[task + "_train"], every_n_iter=val_interval[task],
-                            steps=val_size[task] // batch_size, name=task + "_train", hooks=hooks
+                            steps=val_size[task] // batch_size, name=task + "_train"
                         )
                     )
             early_stopping_interval = sys.maxsize  # turn off early stopping for mtl.
@@ -183,7 +183,7 @@ class BaseModel(object, metaclass=ABCMeta):
             # Validation with all other tasks.
             train_hooks.append(
                 tf.estimator.experimental.InMemoryEvaluatorHook(
-                    estimator, val_input_fn, every_n_iter=val_interval, steps=val_size // batch_size, hooks=hooks
+                    estimator, val_input_fn, every_n_iter=val_interval, steps=val_size // batch_size
                 )
             )
             early_stopping_interval = val_interval

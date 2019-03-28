@@ -128,7 +128,7 @@ def semi_separable_conv_block(X, kernel_width, layer_name, use_fp16, training, m
 
     return out
 
-def cummax(x, dim):
+def cummaxv1(x, dim):
     def align_to_0(tensor):
         ranks = list(range(len(shape_list(tensor))))
         if dim != 0:
@@ -137,6 +137,27 @@ def cummax(x, dim):
         else:
             return tensor
     return align_to_0(tf.scan(lambda a, b: tf.maximum(a, b), align_to_0(x)))
+
+def cummax(x, dim):
+    kernel_size = [1,1,1]
+    pool_len = shape_list(x)[dim]
+    kernel_size[dim] = pool_len
+    padding = [[0, 0], [0, 0], [0, 0]]
+    padding[dim] = [pool_len - 1, 0]
+    padded_x = tf.pad(x, padding, "CONSTANT", constant_values=-1e4)
+
+    kernel_size.insert(2, 1)    
+    
+    return tf.squeeze(
+        tf.nn.max_pool(
+            value=tf.expand_dims(padded_x, 2),
+            ksize=kernel_size,
+            strides=[1, 1, 1, 1],
+            padding="VALID"
+        ),
+        axis=2
+    )
+
 
 def cumulative_state_net(X, name, use_fp16):
     outputs = []
