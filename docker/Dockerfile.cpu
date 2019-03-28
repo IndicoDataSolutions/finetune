@@ -11,6 +11,8 @@ RUN pip3 install -r /Finetune/requirements.txt && \
 
 WORKDIR /Finetune
 ADD . /Finetune
+COPY docker/bashrc /etc/bash.bashrc
+RUN chmod a+rwx /etc/bash.bashrc
 RUN python3 setup.py develop
 
 CMD ["sleep","infinity"]

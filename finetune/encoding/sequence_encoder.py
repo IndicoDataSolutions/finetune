@@ -13,8 +13,9 @@ def assign_associations(labels, associations, none_value):
                 idx_lookups[i][bpe_idx] = active_label_idx
 
     all_candidates = []
+
     for idx_lookup, doc_label, doc_association in zip(idx_lookups, labels, associations):
-        candiates = {}
+        candidates = {}
         if doc_label == none_value:
             continue
 
@@ -23,13 +24,14 @@ def assign_associations(labels, associations, none_value):
                 if candidate_label == none_value or candidate_idx not in idx_lookup:
                     continue
 
-                if idx_lookup[bpe_idx] not in candiates:
-                    candiates[idx_lookup[bpe_idx]] = []
-                candiates[idx_lookup[bpe_idx]].append((idx_lookup[candidate_idx], candidate_label, candidate_prob))
+                if idx_lookup[bpe_idx] not in candidates:
+                    candidates[idx_lookup[bpe_idx]] = []
+
+                candidates[idx_lookup[bpe_idx]].append((idx_lookup[candidate_idx], candidate_label, candidate_prob))
 
         # TODO some how sample these candidates eg maximum probabilities, to fit some schema
-        candiates = {k: max(v, key=lambda x: x[2]) for k, v in candiates.items()} # for now just pick maximum prob
-        all_candidates.append(candiates)
+        candidates = {k: max(v, key=lambda x: x[2]) for k, v in candidates.items()} # for now just pick maximum prob
+        all_candidates.append(candidates)
     return all_candidates
 
 

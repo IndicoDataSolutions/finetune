@@ -11,7 +11,7 @@ LABEL com.nvidia.cuda.version="${CUDA_VERSION}"
 # nvidia-container-runtime
 ENV NVIDIA_VISIBLE_DEVICES=all \
     NVIDIA_DRIVER_CAPABILITIES=compute,utility \
-    NVIDIA_REQUIRE_CUDA="cuda>=8.0" \
+    NVIDIA_REQUIRE_CUDA="cuda>=10.0" \
     LANG=C.UTF-8 \
     CUDA_DEVICE_ORDER=PCI_BUS_ID \
     NLTK_DATA=/usr/local/nltk-data
@@ -23,6 +23,8 @@ RUN pip3 install -r /Finetune/requirements.txt && \
 
 WORKDIR /Finetune
 ADD . /Finetune
+COPY docker/bashrc /etc/bash.bashrc
+RUN chmod a+rwx /etc/bash.bashrc
 RUN python3 setup.py develop
 
 CMD ["sleep","infinity"]

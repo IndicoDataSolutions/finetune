@@ -150,17 +150,21 @@ class Association(BaseModel):
         association_types = list(self.input_pipeline.association_encoder.classes_)
         if viable_edges is None:
             return prob_matrix
+
         for i, l1 in enumerate(labels):
             if l1 not in viable_edges:
                 prob_matrix[i, :, :] = 0.0
+                continue
 
             elif None not in viable_edges[l1]:
                 prob_matrix[i, :, self.input_pipeline.association_pad_idx] = 0.0
+
             for cls in association_types:
                 for j, l2 in enumerate(labels):
                     if l1 not in viable_edges or l2 not in [c_t[0] for c_t in viable_edges[l1] if
                                                             c_t and c_t[1] == cls]:
                         prob_matrix[i, j, association_types.index(cls)] = 0.0  # this edge doesnt fit the schema
+                        
         return prob_matrix
 
     def predict(self, X):
@@ -196,10 +200,10 @@ class Association(BaseModel):
                 self.input_pipeline.association_encoder.inverse_transform(most_likely_class_id),
                 [
                     prob[idx, cls] for prob, idx, cls in zip(
-                    pred["association_probs"],
-                    most_likely_associations,
-                    most_likely_class_id
-                )
+                        pred["association_probs"],
+                        most_likely_associations,
+                        most_likely_class_id
+                    )
                 ]
             ))
         all_subseqs = []
@@ -283,6 +287,7 @@ class Association(BaseModel):
                 all_labels.append(doc_labels)
                 all_probs.append(prob_dicts)
                 all_assocs.append(doc_assocs)
+
         _, doc_annotations = finetune_to_indico_sequence(
             raw_texts=X,
             encoder=self.input_pipeline.text_encoder,
@@ -293,7 +298,6 @@ class Association(BaseModel):
             subtoken_predictions=self.config.subtoken_predictions,
             none_value=self.config.pad_token
         )
-
         return doc_annotations
 
     def featurize(self, X):
