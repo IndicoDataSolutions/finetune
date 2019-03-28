@@ -64,10 +64,17 @@ If you'd prefer you can also run :mod:`finetune` in a docker container. The bash
 
 .. code-block:: bash
 
-    ./docker/build_docker.sh      # builds a docker image
-    ./docker/start_docker.sh      # starts a docker container in the background
+    # For usage with NVIDIA GPUs
+    ./docker/build_gpu_docker.sh  # builds a docker image
+    ./docker/start_gpu_docker.sh  # starts a docker container in the background
     docker exec -it finetune bash # starts a bash session in the docker container
 
+For CPU-only usage:
+
+.. code-block:: bash
+
+    ./docker/build_cpu_docker.sh
+    ./docker/start_cpu_docker.sh
 
 Dataset Loading
 ===============
