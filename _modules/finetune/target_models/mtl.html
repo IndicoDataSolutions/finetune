@@ -1,0 +1,456 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>finetune.target_models.mtl &mdash; finetune 0.6.0 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  
+  
+    <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  
+
+  
+
+  
+        <link rel="index" title="Index"
+              href="../../../genindex.html"/>
+        <link rel="search" title="Search" href="../../../search.html"/>
+    <link rel="top" title="finetune 0.6.0 documentation" href="../../../index.html"/>
+        <link rel="up" title="Module code" href="../../index.html"/> 
+
+  
+  <script src="../../../_static/js/modernizr.min.js"></script>
+
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+   
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search">
+          
+
+          
+            <a href="../../../index.html" class="icon icon-home"> finetune
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0.6
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <!-- Local TOC -->
+              <div class="local-toc"></div>
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">finetune</a>
+        
+      </nav>
+
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../../index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="../../index.html">Module code</a> &raquo;</li>
+        
+      <li>finetune.target_models.mtl</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <h1>Source code for finetune.target_models.mtl</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">logging</span>
+
+<span class="kn">import</span> <span class="nn">tensorflow</span> <span class="k">as</span> <span class="nn">tf</span>
+<span class="kn">from</span> <span class="nn">finetune.base</span> <span class="k">import</span> <span class="n">BaseModel</span>
+<span class="kn">from</span> <span class="nn">finetune.input_pipeline</span> <span class="k">import</span> <span class="n">BasePipeline</span>
+<span class="kn">from</span> <span class="nn">finetune.errors</span> <span class="k">import</span> <span class="n">FinetuneError</span>
+
+<span class="kn">from</span> <span class="nn">finetune.target_models.sequence_labeling</span> <span class="k">import</span> <span class="n">SequenceLabeler</span>
+<span class="kn">from</span> <span class="nn">finetune.encoding.sequence_encoder</span> <span class="k">import</span> <span class="n">indico_to_finetune_sequence</span>
+
+<span class="n">LOGGER</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s1">&#39;finetune&#39;</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">get_input_fns</span><span class="p">(</span><span class="n">task_id</span><span class="p">,</span> <span class="n">input_fn</span><span class="p">,</span> <span class="n">validation_fn</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">fn</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;tokens&quot;</span><span class="p">:</span> <span class="n">reshape_to_rank_4</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="s2">&quot;tokens&quot;</span><span class="p">]),</span>
+                <span class="s2">&quot;mask&quot;</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="s2">&quot;mask&quot;</span><span class="p">],</span>
+                <span class="s2">&quot;task_id&quot;</span><span class="p">:</span> <span class="n">task_id</span>
+            <span class="p">},</span>
+            <span class="n">y</span>
+        <span class="p">)</span>
+
+    <span class="k">return</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">input_fn</span><span class="p">()</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">fn</span><span class="p">),</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">validation_fn</span><span class="p">()</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">reshape_to_rank_4</span><span class="p">(</span><span class="n">t</span><span class="p">):</span>
+    <span class="n">s</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">shape</span><span class="p">(</span><span class="n">t</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">tf</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="p">[</span><span class="n">s</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">s</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">],</span> <span class="n">s</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]])</span>
+
+
+<span class="k">def</span> <span class="nf">get_train_eval_dataset</span><span class="p">(</span><span class="n">input_fn</span><span class="p">,</span> <span class="n">val_size</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">fn</span><span class="p">():</span>
+        <span class="k">return</span> <span class="n">input_fn</span><span class="p">()</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">val_size</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">fn</span>
+
+
+<span class="k">class</span> <span class="nc">MultiTaskPipeline</span><span class="p">(</span><span class="n">BasePipeline</span><span class="p">):</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">MultiTaskPipeline</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dataset_size_</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">loss_weights</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">target_dim</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">input_pipelines</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">dataset_size</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">dataset_size_</span>
+
+    <span class="k">def</span> <span class="nf">get_train_input_fns</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">val_size</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="n">val_funcs</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">val_sizes</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">val_intervals</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">input_pipelines</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">frequencies</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">input_funcs</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="k">for</span> <span class="n">task_name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">tasks</span><span class="p">:</span>
+            <span class="n">input_pipelines</span><span class="p">[</span><span class="n">task_name</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">tasks</span><span class="p">[</span><span class="n">task_name</span><span class="p">]</span><span class="o">.</span><span class="n">_get_input_pipeline</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+            <span class="n">task_tuple</span> <span class="o">=</span> <span class="n">input_pipelines</span><span class="p">[</span><span class="n">task_name</span><span class="p">]</span><span class="o">.</span><span class="n">get_train_input_fns</span><span class="p">(</span>
+                <span class="n">Xs</span><span class="p">[</span><span class="n">task_name</span><span class="p">],</span>
+                <span class="n">Y</span><span class="p">[</span><span class="n">task_name</span><span class="p">],</span>
+                <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
+                <span class="n">val_size</span><span class="o">=</span><span class="n">val_size</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">dataset_size_</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">dataset_size</span>
+            <span class="n">frequencies</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">dataset_size</span><span class="p">)</span>
+
+            <span class="p">(</span><span class="n">val_func</span><span class="p">,</span> <span class="n">input_func</span><span class="p">,</span> <span class="n">val_sizes</span><span class="p">[</span><span class="n">task_name</span><span class="p">],</span> <span class="n">val_intervals</span><span class="p">[</span><span class="n">task_name</span><span class="p">])</span> <span class="o">=</span> <span class="n">task_tuple</span>
+            <span class="n">task_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">task_name_to_id</span><span class="p">[</span><span class="n">task_name</span><span class="p">]</span>
+
+            <span class="n">input_func_normalised</span><span class="p">,</span> <span class="n">val_func_normalised</span> <span class="o">=</span> <span class="n">get_input_fns</span><span class="p">(</span><span class="n">task_id</span><span class="p">,</span> <span class="n">input_func</span><span class="p">,</span> <span class="n">val_func</span><span class="p">)</span>
+            <span class="n">input_funcs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">input_func_normalised</span><span class="p">)</span>
+            <span class="n">val_funcs</span><span class="p">[</span><span class="n">task_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">val_func_normalised</span>
+            <span class="n">val_funcs</span><span class="p">[</span><span class="n">task_name</span> <span class="o">+</span> <span class="s2">&quot;_train&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">get_train_eval_dataset</span><span class="p">(</span><span class="n">input_func_normalised</span><span class="p">,</span> <span class="n">val_sizes</span><span class="p">[</span><span class="n">task_name</span><span class="p">])</span>
+
+        <span class="n">sum_frequencies</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">frequencies</span><span class="p">)</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">w</span><span class="p">)</span> <span class="o">/</span> <span class="n">sum_frequencies</span> <span class="k">for</span> <span class="n">w</span> <span class="ow">in</span> <span class="n">frequencies</span><span class="p">]</span>
+        <span class="n">train_dataset</span> <span class="o">=</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">tf</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">experimental</span><span class="o">.</span><span class="n">sample_from_datasets</span><span class="p">([</span><span class="n">f</span><span class="p">()</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">input_funcs</span><span class="p">],</span> <span class="n">weights</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">task_input_pipelines</span> <span class="o">=</span> <span class="n">input_pipelines</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">dataset_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dataset_size_</span>
+        <span class="k">return</span> <span class="n">val_funcs</span><span class="p">,</span> <span class="n">train_dataset</span><span class="p">,</span> <span class="n">val_sizes</span><span class="p">,</span> <span class="n">val_intervals</span>
+
+    <span class="k">def</span> <span class="nf">_target_encoder</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">FinetuneError</span><span class="p">(</span><span class="s2">&quot;This should never be used??&quot;</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">get_loss_logits_fn</span><span class="p">(</span><span class="n">task</span><span class="p">,</span> <span class="n">featurizer_state</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">targets_i</span><span class="p">,</span> <span class="n">train</span><span class="p">,</span> <span class="n">reuse</span><span class="p">,</span> <span class="n">task_id_i</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">loss_logits</span><span class="p">():</span>
+        <span class="k">with</span> <span class="n">tf</span><span class="o">.</span><span class="n">variable_scope</span><span class="p">(</span><span class="s2">&quot;target_model_</span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">task</span><span class="p">)):</span>
+            <span class="n">target_model_out</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">tasks</span><span class="p">[</span><span class="n">task</span><span class="p">]</span><span class="o">.</span><span class="n">_target_model</span><span class="p">(</span>
+                <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span>
+                <span class="n">featurizer_state</span><span class="o">=</span><span class="n">featurizer_state</span><span class="p">,</span>
+                <span class="n">targets</span><span class="o">=</span><span class="n">targets_i</span><span class="p">,</span>
+                <span class="n">n_outputs</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">task_input_pipelines</span><span class="p">[</span><span class="n">task</span><span class="p">]</span><span class="o">.</span><span class="n">target_dim</span><span class="p">,</span>
+                <span class="n">train</span><span class="o">=</span><span class="n">train</span><span class="p">,</span>
+                <span class="n">reuse</span><span class="o">=</span><span class="n">reuse</span>
+            <span class="p">)</span>
+            <span class="n">logits</span> <span class="o">=</span> <span class="n">target_model_out</span><span class="p">[</span><span class="s2">&quot;logits&quot;</span><span class="p">]</span>
+            <span class="n">logits</span><span class="o">.</span><span class="n">set_shape</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">target_model_out</span><span class="p">[</span><span class="s2">&quot;losses&quot;</span><span class="p">],</span> <span class="n">logits</span>
+
+    <span class="k">return</span> <span class="n">tf</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">task_id_i</span><span class="p">,</span> <span class="n">config</span><span class="o">.</span><span class="n">task_name_to_id</span><span class="p">[</span><span class="n">task</span><span class="p">]),</span> <span class="n">loss_logits</span>
+
+
+<div class="viewcode-block" id="MultiTask"><a class="viewcode-back" href="../../../index.html#finetune.MultiTask">[docs]</a><span class="k">class</span> <span class="nc">MultiTask</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Target model for multi task learning. The approach used is to sample mini-batches from each task proportional to</span>
+<span class="sd">    the size of the task for each dataset.</span>
+
+<span class="sd">    :param tasks: A dictionary of pairs mapping string task names to model classes.</span>
+<span class="sd">        eg. `{&quot;sst&quot;: Classifier, &quot;ner&quot;: SequenceLabeler}`</span>
+<span class="sd">    :param \**kwargs: key-value pairs of config items to override. Note: The same config is used for each base task.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tasks</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">tasks</span> <span class="o">=</span> <span class="n">tasks</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">task_name_to_id</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">tasks</span><span class="o">.</span><span class="n">keys</span><span class="p">(),</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">tasks</span><span class="p">))))</span>
+
+    <span class="k">def</span> <span class="nf">_get_input_pipeline</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">MultiTaskPipeline</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">)</span>
+
+<div class="viewcode-block" id="MultiTask.featurize"><a class="viewcode-back" href="../../../index.html#finetune.MultiTask.featurize">[docs]</a>    <span class="k">def</span> <span class="nf">featurize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">featurize</span><span class="p">(</span><span class="n">X</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="MultiTask.cached_predict"><a class="viewcode-back" href="../../../index.html#finetune.MultiTask.cached_predict">[docs]</a>    <span class="k">def</span> <span class="nf">cached_predict</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Context manager that prevents the recreation of the tensorflow graph on every call to BaseModel.predict().</span>
+
+<span class="sd">        Not supported for MultiTask.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="n">FinetuneError</span><span class="p">(</span><span class="s2">&quot;cached_predict is not supported yet for MTL&quot;</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="MultiTask.predict"><a class="viewcode-back" href="../../../index.html#finetune.MultiTask.predict">[docs]</a>    <span class="k">def</span> <span class="nf">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Runs inference on the trained model for any of the tasks the model was trained for. Input and output formats</span>
+<span class="sd">        are the same as for each of the individial tasks.</span>
+
+
+<span class="sd">        :param X: A dictionary mapping from task name to data, in the format required by the task type.</span>
+<span class="sd">        :return: A dictionary mapping from task name to the predictions for that task.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">predictions</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">ModelClass</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">tasks</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">X</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">pred_model</span> <span class="o">=</span> <span class="n">ModelClass</span><span class="p">()</span>
+            <span class="n">pred_model</span><span class="o">.</span><span class="n">input_pipeline</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">task_input_pipelines</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+            <span class="n">pred_model</span><span class="o">.</span><span class="n">saver</span><span class="o">.</span><span class="n">variables</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="n">k</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;/target_model_</span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">name</span><span class="p">),</span> <span class="s2">&quot;&quot;</span><span class="p">):</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">saver</span><span class="o">.</span><span class="n">variables</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+            <span class="p">}</span>
+            <span class="n">predictions</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">pred_model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">X</span><span class="p">[</span><span class="n">name</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">predictions</span></div>
+
+<div class="viewcode-block" id="MultiTask.predict_proba"><a class="viewcode-back" href="../../../index.html#finetune.MultiTask.predict_proba">[docs]</a>    <span class="k">def</span> <span class="nf">predict_proba</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Runs probability inference on the trained model for any of the tasks the model was trained for. Falls back</span>
+<span class="sd">        to normal predict when probabilities are not available for a task, eg Regression.</span>
+
+<span class="sd">        Input and output formats are the same as for each of the individial tasks.</span>
+
+<span class="sd">        :param X: A dictionary mapping from task name to data, in the format required by the task type.</span>
+<span class="sd">        :return: A dictionary mapping from task name to the predictions for that task.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">predictions</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">ModelClass</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">tasks</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">X</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">pred_model</span> <span class="o">=</span> <span class="n">ModelClass</span><span class="p">()</span>
+            <span class="n">pred_model</span><span class="o">.</span><span class="n">input_pipeline</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">task_input_pipelines</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+            <span class="n">pred_model</span><span class="o">.</span><span class="n">saver</span><span class="o">.</span><span class="n">variables</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="n">k</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;/target_model_</span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">name</span><span class="p">),</span> <span class="s2">&quot;&quot;</span><span class="p">):</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">saver</span><span class="o">.</span><span class="n">variables</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+            <span class="p">}</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">predictions</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">pred_model</span><span class="o">.</span><span class="n">predict_proba</span><span class="p">(</span><span class="n">X</span><span class="p">[</span><span class="n">name</span><span class="p">])</span>
+            <span class="k">except</span> <span class="n">FinetuneError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="n">LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                    <span class="p">(</span>
+                        <span class="s2">&quot;Probabilities are not available for </span><span class="si">{}</span><span class="s2"> and failed with exception </span><span class="si">{}</span><span class="s2">.&quot;</span>
+                        <span class="s2">&quot;Falling back to regular predictions for this task.&quot;</span>
+                    <span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+                <span class="p">)</span>
+                <span class="n">predictions</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">pred_model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">X</span><span class="p">[</span><span class="n">name</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">predictions</span></div>
+
+<div class="viewcode-block" id="MultiTask.finetune"><a class="viewcode-back" href="../../../index.html#finetune.MultiTask.finetune">[docs]</a>    <span class="k">def</span> <span class="nf">finetune</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+
+<span class="sd">        :param X: A dictionary mapping from task name to inputs in the same format required for each of the models.</span>
+<span class="sd">        :param Y: A dictionary mapping from task name to targets in the same format required for each of the models.</span>
+<span class="sd">        :param batch_size: Number of examples per batch. When N_GPUS &gt; 1, this number</span>
+<span class="sd">                           corresponds to the number of training examples provided to each GPU.</span>
+<span class="sd">        :return:</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="p">[</span><span class="n">task_name</span> <span class="k">for</span> <span class="n">task_name</span><span class="p">,</span> <span class="n">t</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">tasks</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">t</span> <span class="o">==</span> <span class="n">SequenceLabeler</span><span class="p">]:</span>
+            <span class="n">X</span><span class="p">[</span><span class="n">t</span><span class="p">],</span> <span class="n">Y</span><span class="p">[</span><span class="n">t</span><span class="p">],</span> <span class="o">*</span><span class="n">_</span> <span class="o">=</span> <span class="n">indico_to_finetune_sequence</span><span class="p">(</span><span class="n">X</span><span class="p">[</span><span class="n">t</span><span class="p">],</span> <span class="n">labels</span><span class="o">=</span><span class="n">Y</span><span class="p">[</span><span class="n">t</span><span class="p">],</span> <span class="n">multi_label</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">none_value</span><span class="o">=</span><span class="s2">&quot;&lt;PAD&gt;&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">finetune</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="n">Y</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">)</span></div>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_target_model</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">featurizer_state</span><span class="p">,</span> <span class="n">targets</span><span class="p">,</span> <span class="n">n_outputs</span><span class="p">,</span> <span class="n">train</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">reuse</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">task_id</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="n">pred_fn_pairs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">featurizer_state</span><span class="p">[</span><span class="s2">&quot;features&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">cond</span><span class="p">(</span>
+            <span class="n">tf</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">shape</span><span class="p">(</span><span class="n">featurizer_state</span><span class="p">[</span><span class="s2">&quot;features&quot;</span><span class="p">])[</span><span class="mi">1</span><span class="p">],</span> <span class="mi">1</span><span class="p">),</span>
+            <span class="n">true_fn</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="n">tf</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">featurizer_state</span><span class="p">[</span><span class="s2">&quot;features&quot;</span><span class="p">],</span> <span class="p">[</span><span class="mi">1</span><span class="p">]),</span>
+            <span class="n">false_fn</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="n">featurizer_state</span><span class="p">[</span><span class="s2">&quot;features&quot;</span><span class="p">]</span>
+        <span class="p">)</span>
+
+        <span class="n">targets_i</span> <span class="o">=</span> <span class="n">targets</span>
+
+        <span class="k">for</span> <span class="n">task</span> <span class="ow">in</span> <span class="n">config</span><span class="o">.</span><span class="n">tasks</span><span class="p">:</span>
+            <span class="n">pred</span><span class="p">,</span> <span class="n">loss_logits</span> <span class="o">=</span> <span class="n">get_loss_logits_fn</span><span class="p">(</span><span class="n">task</span><span class="p">,</span> <span class="n">featurizer_state</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">targets_i</span><span class="p">,</span> <span class="n">train</span><span class="p">,</span> <span class="n">reuse</span><span class="p">,</span> <span class="n">task_id</span><span class="p">)</span>
+            <span class="n">pred_fn_pairs</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">pred</span><span class="p">,</span> <span class="n">loss_logits</span><span class="p">))</span>
+
+        <span class="n">losses_logits</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">case</span><span class="p">(</span>
+            <span class="n">pred_fn_pairs</span><span class="p">,</span>
+            <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">exclusive</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="s1">&#39;top_selection&#39;</span>
+        <span class="p">)</span>
+
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;logits&quot;</span><span class="p">:</span> <span class="n">losses_logits</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+            <span class="s2">&quot;losses&quot;</span><span class="p">:</span> <span class="n">losses_logits</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="p">}</span>
+
+    <span class="k">def</span> <span class="nf">_predict_op</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">logits</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">tf</span><span class="o">.</span><span class="n">no_op</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_predict_proba_op</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">logits</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">tf</span><span class="o">.</span><span class="n">no_op</span><span class="p">()</span></div>
+</pre></div>
+
+           </div>
+           <div class="articleComments">
+            
+           </div>
+          </div>
+          <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2018, Madison May, Ben Townsend.
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'../../../',
+            VERSION:'0.6.0',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true,
+            SOURCELINK_SUFFIX: '.txt'
+        };
+    </script>
+      <script type="text/javascript" src="../../../_static/jquery.js"></script>
+      <script type="text/javascript" src="../../../_static/underscore.js"></script>
+      <script type="text/javascript" src="../../../_static/doctools.js"></script>
+
+  
+
+  
+  
+    <script type="text/javascript" src="../../../_static/js/theme.js"></script>
+  
+
+  
+  
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.StickyNav.enable();
+      });
+  </script>
+   
+
+</body>
+</html>

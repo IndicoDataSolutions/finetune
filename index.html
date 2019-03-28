@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Finetune Quickstart Guide &mdash; finetune 0.5.13 documentation</title>
+  <title>Finetune Quickstart Guide &mdash; finetune 0.6.0 documentation</title>
   
 
   
@@ -35,7 +35,7 @@
         <link rel="index" title="Index"
               href="genindex.html"/>
         <link rel="search" title="Search" href="search.html"/>
-    <link rel="top" title="finetune 0.5.13 documentation" href="#"/> 
+    <link rel="top" title="finetune 0.6.0 documentation" href="#"/> 
 
   
   <script src="_static/js/modernizr.min.js"></script>
@@ -64,7 +64,7 @@
             
             
               <div class="version">
-                0.5
+                0.6
               </div>
             
           
@@ -205,9 +205,15 @@ pytest
 <div class="section" id="docker">
 <h1>Docker<a class="headerlink" href="#docker" title="Permalink to this headline">¶</a></h1>
 <p>If you’d prefer you can also run <a class="reference internal" href="#module-finetune" title="finetune"><code class="xref py py-mod docutils literal notranslate"><span class="pre">finetune</span></code></a> in a docker container. The bash scripts provided assume you have a functional install of <a class="reference external" href="https://docs.docker.com/install">docker</a> and <a class="reference external" href="https://github.com/nvidia/nvidia-docker/wiki/Installation-(version-2.0)">nvidia-docker</a>.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>./docker/build_docker.sh      <span class="c1"># builds a docker image</span>
-./docker/start_docker.sh      <span class="c1"># starts a docker container in the background</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># For usage with NVIDIA GPUs</span>
+./docker/build_gpu_docker.sh  <span class="c1"># builds a docker image</span>
+./docker/start_gpu_docker.sh  <span class="c1"># starts a docker container in the background</span>
 docker <span class="nb">exec</span> -it finetune bash <span class="c1"># starts a bash session in the docker container</span>
+</pre></div>
+</div>
+<p>For CPU-only usage:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>./docker/build_cpu_docker.sh
+./docker/start_cpu_docker.sh
 </pre></div>
 </div>
 </div>
@@ -263,7 +269,7 @@ use the <code class="xref py py-func docutils literal notranslate"><span class="
 <h1>Finetune API Reference<a class="headerlink" href="#finetune-api-reference" title="Permalink to this headline">¶</a></h1>
 <dl class="class">
 <dt id="finetune.Classifier">
-<em class="property">class </em><code class="descclassname">finetune.</code><code class="descname">Classifier</code><span class="sig-paren">(</span><em>config=None</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/classifier.html#Classifier"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Classifier" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="descclassname">finetune.</code><code class="descname">Classifier</code><span class="sig-paren">(</span><em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/classifier.html#Classifier"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Classifier" title="Permalink to this definition">¶</a></dt>
 <dd><p>Classifies a single document into 1 of N categories.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -293,7 +299,7 @@ use the <code class="xref py py-func docutils literal notranslate"><span class="
 
 <dl class="method">
 <dt id="finetune.Classifier.featurize">
-<code class="descname">featurize</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/classifier.html#Classifier.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Classifier.featurize" title="Permalink to this definition">¶</a></dt>
+<code class="descname">featurize</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/classifier.html#Classifier.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Classifier.featurize" title="Permalink to this definition">¶</a></dt>
 <dd><p>Embeds inputs in learned feature space. Can be called before or after calling <a class="reference internal" href="#module-finetune" title="finetune"><code class="xref py py-meth docutils literal notranslate"><span class="pre">finetune()</span></code></a>.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -309,7 +315,7 @@ use the <code class="xref py py-func docutils literal notranslate"><span class="
 
 <dl class="method">
 <dt id="finetune.Classifier.finetune">
-<code class="descname">finetune</code><span class="sig-paren">(</span><em>X</em>, <em>Y=None</em>, <em>batch_size=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/classifier.html#Classifier.finetune"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Classifier.finetune" title="Permalink to this definition">¶</a></dt>
+<code class="descname">finetune</code><span class="sig-paren">(</span><em>X</em>, <em>Y=None</em>, <em>batch_size=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/classifier.html#Classifier.finetune"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Classifier.finetune" title="Permalink to this definition">¶</a></dt>
 <dd><table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -328,7 +334,7 @@ corresponds to the number of training examples provided to each GPU.</li>
 
 <dl class="classmethod">
 <dt id="finetune.Classifier.finetune_grid_search">
-<em class="property">classmethod </em><code class="descname">finetune_grid_search</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>test_size</em>, <em>config=None</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Classifier.finetune_grid_search" title="Permalink to this definition">¶</a></dt>
+<em class="property">classmethod </em><code class="descname">finetune_grid_search</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>test_size</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Classifier.finetune_grid_search" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs grid search over config items defined using “GridSearchable” objects and returns either full results or
 the config object that relates to the best results. The default config contains grid searchable objects for the
 most important parameters to search over.</p>
@@ -341,10 +347,10 @@ most important parameters to search over.</p>
 <li><strong>Y</strong> – Targets, A list of targets, [num_samples] that correspond to each sample in Xs.</li>
 <li><strong>test_size</strong> – Int or float. If an int is given this number of samples is used to validate, if a float is
 given then that fraction of samples is used.</li>
-<li><strong>config</strong> – A config object, or None to use the default config.</li>
 <li><strong>eval_fn</strong> – An eval function that takes 2 inputs (prediction, truth) and returns a float, with a max value being desired.</li>
 <li><strong>probs</strong> – If true, eval_fn is passed probability outputs from predict_proba, otherwise the output of predict is used.</li>
 <li><strong>return_all</strong> – If True, all results are returned, if False, only the best config is returned.</li>
+<li><strong>kwargs</strong> – Keyword arguments to pass to get_config()</li>
 </ul>
 </td>
 </tr>
@@ -358,7 +364,7 @@ form [(config, eval_fn output), … ]</p>
 
 <dl class="classmethod">
 <dt id="finetune.Classifier.finetune_grid_search_cv">
-<em class="property">classmethod </em><code class="descname">finetune_grid_search_cv</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>n_splits</em>, <em>test_size</em>, <em>config=None</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Classifier.finetune_grid_search_cv" title="Permalink to this definition">¶</a></dt>
+<em class="property">classmethod </em><code class="descname">finetune_grid_search_cv</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>n_splits</em>, <em>test_size</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Classifier.finetune_grid_search_cv" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs cross validated grid search over config items defined using “GridSearchable” objects and returns either full results or
 the config object that relates to the best results. The default config contains grid searchable objects for the
 most important parameters to search over.</p>
@@ -373,11 +379,11 @@ most important parameters to search over.</p>
 <li><strong>n_splits</strong> – Number of CV splits to do.</li>
 <li><strong>test_size</strong> – Int or float. If an int is given this number of samples is used to validate, if a float is
 given then that fraction of samples is used.</li>
-<li><strong>config</strong> – A config object, or None to use the default config.</li>
 <li><strong>eval_fn</strong> – An eval function that takes 2 batches of outputs and returns a float, with a max value being
 desired. An arithmetic mean must make sense for this metric.</li>
 <li><strong>probs</strong> – If true, eval_fn is passed probability outputs from predict_proba, otherwise the output of predict is used.</li>
 <li><strong>return_all</strong> – If True, all results are returned, if False, only the best config is returned.</li>
+<li><strong>kwargs</strong> – Keyword arguments to pass to get_config()</li>
 </ul>
 </td>
 </tr>
@@ -426,7 +432,7 @@ Temperature parameter for decoding is set in the config.
 
 <dl class="method">
 <dt id="finetune.Classifier.predict">
-<code class="descname">predict</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/classifier.html#Classifier.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Classifier.predict" title="Permalink to this definition">¶</a></dt>
+<code class="descname">predict</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/classifier.html#Classifier.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Classifier.predict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces a list of most likely class labels as determined by the fine-tuned model.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -442,7 +448,7 @@ Temperature parameter for decoding is set in the config.
 
 <dl class="method">
 <dt id="finetune.Classifier.predict_proba">
-<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/classifier.html#Classifier.predict_proba"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Classifier.predict_proba" title="Permalink to this definition">¶</a></dt>
+<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/classifier.html#Classifier.predict_proba"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Classifier.predict_proba" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces a probability distribution over classes for each example in X.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -483,7 +489,7 @@ Should not be used to save / restore a training model.</dd>
 
 <dl class="class">
 <dt id="finetune.Regressor">
-<em class="property">class </em><code class="descclassname">finetune.</code><code class="descname">Regressor</code><span class="sig-paren">(</span><em>config=None</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/regressor.html#Regressor"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Regressor" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="descclassname">finetune.</code><code class="descname">Regressor</code><span class="sig-paren">(</span><em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/regressor.html#Regressor"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Regressor" title="Permalink to this definition">¶</a></dt>
 <dd><p>Regresses one or more floating point values given a single document.</p>
 <p>For a full list of configuration options, see <cite>finetune.config</cite>.</p>
 <table class="docutils field-list" frame="void" rules="none">
@@ -514,7 +520,7 @@ Should not be used to save / restore a training model.</dd>
 
 <dl class="method">
 <dt id="finetune.Regressor.featurize">
-<code class="descname">featurize</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/regressor.html#Regressor.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Regressor.featurize" title="Permalink to this definition">¶</a></dt>
+<code class="descname">featurize</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/regressor.html#Regressor.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Regressor.featurize" title="Permalink to this definition">¶</a></dt>
 <dd><p>Embeds inputs in learned feature space. Can be called before or after calling <a class="reference internal" href="#module-finetune" title="finetune"><code class="xref py py-meth docutils literal notranslate"><span class="pre">finetune()</span></code></a>.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -530,7 +536,7 @@ Should not be used to save / restore a training model.</dd>
 
 <dl class="method">
 <dt id="finetune.Regressor.finetune">
-<code class="descname">finetune</code><span class="sig-paren">(</span><em>X</em>, <em>Y=None</em>, <em>batch_size=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/regressor.html#Regressor.finetune"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Regressor.finetune" title="Permalink to this definition">¶</a></dt>
+<code class="descname">finetune</code><span class="sig-paren">(</span><em>X</em>, <em>Y=None</em>, <em>batch_size=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/regressor.html#Regressor.finetune"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Regressor.finetune" title="Permalink to this definition">¶</a></dt>
 <dd><table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -549,7 +555,7 @@ corresponds to the number of training examples provided to each GPU.</li>
 
 <dl class="classmethod">
 <dt id="finetune.Regressor.finetune_grid_search">
-<em class="property">classmethod </em><code class="descname">finetune_grid_search</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>test_size</em>, <em>config=None</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Regressor.finetune_grid_search" title="Permalink to this definition">¶</a></dt>
+<em class="property">classmethod </em><code class="descname">finetune_grid_search</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>test_size</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Regressor.finetune_grid_search" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs grid search over config items defined using “GridSearchable” objects and returns either full results or
 the config object that relates to the best results. The default config contains grid searchable objects for the
 most important parameters to search over.</p>
@@ -562,10 +568,10 @@ most important parameters to search over.</p>
 <li><strong>Y</strong> – Targets, A list of targets, [num_samples] that correspond to each sample in Xs.</li>
 <li><strong>test_size</strong> – Int or float. If an int is given this number of samples is used to validate, if a float is
 given then that fraction of samples is used.</li>
-<li><strong>config</strong> – A config object, or None to use the default config.</li>
 <li><strong>eval_fn</strong> – An eval function that takes 2 inputs (prediction, truth) and returns a float, with a max value being desired.</li>
 <li><strong>probs</strong> – If true, eval_fn is passed probability outputs from predict_proba, otherwise the output of predict is used.</li>
 <li><strong>return_all</strong> – If True, all results are returned, if False, only the best config is returned.</li>
+<li><strong>kwargs</strong> – Keyword arguments to pass to get_config()</li>
 </ul>
 </td>
 </tr>
@@ -579,7 +585,7 @@ form [(config, eval_fn output), … ]</p>
 
 <dl class="classmethod">
 <dt id="finetune.Regressor.finetune_grid_search_cv">
-<em class="property">classmethod </em><code class="descname">finetune_grid_search_cv</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>n_splits</em>, <em>test_size</em>, <em>config=None</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Regressor.finetune_grid_search_cv" title="Permalink to this definition">¶</a></dt>
+<em class="property">classmethod </em><code class="descname">finetune_grid_search_cv</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>n_splits</em>, <em>test_size</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Regressor.finetune_grid_search_cv" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs cross validated grid search over config items defined using “GridSearchable” objects and returns either full results or
 the config object that relates to the best results. The default config contains grid searchable objects for the
 most important parameters to search over.</p>
@@ -594,11 +600,11 @@ most important parameters to search over.</p>
 <li><strong>n_splits</strong> – Number of CV splits to do.</li>
 <li><strong>test_size</strong> – Int or float. If an int is given this number of samples is used to validate, if a float is
 given then that fraction of samples is used.</li>
-<li><strong>config</strong> – A config object, or None to use the default config.</li>
 <li><strong>eval_fn</strong> – An eval function that takes 2 batches of outputs and returns a float, with a max value being
 desired. An arithmetic mean must make sense for this metric.</li>
 <li><strong>probs</strong> – If true, eval_fn is passed probability outputs from predict_proba, otherwise the output of predict is used.</li>
 <li><strong>return_all</strong> – If True, all results are returned, if False, only the best config is returned.</li>
+<li><strong>kwargs</strong> – Keyword arguments to pass to get_config()</li>
 </ul>
 </td>
 </tr>
@@ -647,7 +653,7 @@ Temperature parameter for decoding is set in the config.
 
 <dl class="method">
 <dt id="finetune.Regressor.predict">
-<code class="descname">predict</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/regressor.html#Regressor.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Regressor.predict" title="Permalink to this definition">¶</a></dt>
+<code class="descname">predict</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/regressor.html#Regressor.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Regressor.predict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces a list of most likely class labels as determined by the fine-tuned model.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -663,7 +669,7 @@ Temperature parameter for decoding is set in the config.
 
 <dl class="method">
 <dt id="finetune.Regressor.predict_proba">
-<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/regressor.html#Regressor.predict_proba"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Regressor.predict_proba" title="Permalink to this definition">¶</a></dt>
+<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/regressor.html#Regressor.predict_proba"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Regressor.predict_proba" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces a probability distribution over classes for each example in X.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -704,7 +710,7 @@ Should not be used to save / restore a training model.</dd>
 
 <dl class="class">
 <dt id="finetune.MultiFieldClassifier">
-<em class="property">class </em><code class="descclassname">finetune.</code><code class="descname">MultiFieldClassifier</code><span class="sig-paren">(</span><em>config=None</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultiFieldClassifier"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiFieldClassifier" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="descclassname">finetune.</code><code class="descname">MultiFieldClassifier</code><span class="sig-paren">(</span><em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/multifield.html#MultiFieldClassifier"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiFieldClassifier" title="Permalink to this definition">¶</a></dt>
 <dd><p>Classifies a set of documents into 1 of N classes.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -734,7 +740,7 @@ Should not be used to save / restore a training model.</dd>
 
 <dl class="method">
 <dt id="finetune.MultiFieldClassifier.featurize">
-<code class="descname">featurize</code><span class="sig-paren">(</span><em>Xs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultiFieldClassifier.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiFieldClassifier.featurize" title="Permalink to this definition">¶</a></dt>
+<code class="descname">featurize</code><span class="sig-paren">(</span><em>Xs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/multifield.html#MultiFieldClassifier.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiFieldClassifier.featurize" title="Permalink to this definition">¶</a></dt>
 <dd><p>Embeds inputs in learned feature space. Can be called before or after calling <a class="reference internal" href="#module-finetune" title="finetune"><code class="xref py py-meth docutils literal notranslate"><span class="pre">finetune()</span></code></a>.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -750,7 +756,7 @@ Should not be used to save / restore a training model.</dd>
 
 <dl class="method">
 <dt id="finetune.MultiFieldClassifier.finetune">
-<code class="descname">finetune</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y=None</em>, <em>batch_size=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultiFieldClassifier.finetune"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiFieldClassifier.finetune" title="Permalink to this definition">¶</a></dt>
+<code class="descname">finetune</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y=None</em>, <em>batch_size=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/multifield.html#MultiFieldClassifier.finetune"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiFieldClassifier.finetune" title="Permalink to this definition">¶</a></dt>
 <dd><table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -769,7 +775,7 @@ corresponds to the number of training examples provided to each GPU.</li>
 
 <dl class="classmethod">
 <dt id="finetune.MultiFieldClassifier.finetune_grid_search">
-<em class="property">classmethod </em><code class="descname">finetune_grid_search</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>test_size</em>, <em>config=None</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldClassifier.finetune_grid_search" title="Permalink to this definition">¶</a></dt>
+<em class="property">classmethod </em><code class="descname">finetune_grid_search</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>test_size</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldClassifier.finetune_grid_search" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs grid search over config items defined using “GridSearchable” objects and returns either full results or
 the config object that relates to the best results. The default config contains grid searchable objects for the
 most important parameters to search over.</p>
@@ -782,10 +788,10 @@ most important parameters to search over.</p>
 <li><strong>Y</strong> – Targets, A list of targets, [num_samples] that correspond to each sample in Xs.</li>
 <li><strong>test_size</strong> – Int or float. If an int is given this number of samples is used to validate, if a float is
 given then that fraction of samples is used.</li>
-<li><strong>config</strong> – A config object, or None to use the default config.</li>
 <li><strong>eval_fn</strong> – An eval function that takes 2 inputs (prediction, truth) and returns a float, with a max value being desired.</li>
 <li><strong>probs</strong> – If true, eval_fn is passed probability outputs from predict_proba, otherwise the output of predict is used.</li>
 <li><strong>return_all</strong> – If True, all results are returned, if False, only the best config is returned.</li>
+<li><strong>kwargs</strong> – Keyword arguments to pass to get_config()</li>
 </ul>
 </td>
 </tr>
@@ -799,7 +805,7 @@ form [(config, eval_fn output), … ]</p>
 
 <dl class="classmethod">
 <dt id="finetune.MultiFieldClassifier.finetune_grid_search_cv">
-<em class="property">classmethod </em><code class="descname">finetune_grid_search_cv</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>n_splits</em>, <em>test_size</em>, <em>config=None</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldClassifier.finetune_grid_search_cv" title="Permalink to this definition">¶</a></dt>
+<em class="property">classmethod </em><code class="descname">finetune_grid_search_cv</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>n_splits</em>, <em>test_size</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldClassifier.finetune_grid_search_cv" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs cross validated grid search over config items defined using “GridSearchable” objects and returns either full results or
 the config object that relates to the best results. The default config contains grid searchable objects for the
 most important parameters to search over.</p>
@@ -814,11 +820,11 @@ most important parameters to search over.</p>
 <li><strong>n_splits</strong> – Number of CV splits to do.</li>
 <li><strong>test_size</strong> – Int or float. If an int is given this number of samples is used to validate, if a float is
 given then that fraction of samples is used.</li>
-<li><strong>config</strong> – A config object, or None to use the default config.</li>
 <li><strong>eval_fn</strong> – An eval function that takes 2 batches of outputs and returns a float, with a max value being
 desired. An arithmetic mean must make sense for this metric.</li>
 <li><strong>probs</strong> – If true, eval_fn is passed probability outputs from predict_proba, otherwise the output of predict is used.</li>
 <li><strong>return_all</strong> – If True, all results are returned, if False, only the best config is returned.</li>
+<li><strong>kwargs</strong> – Keyword arguments to pass to get_config()</li>
 </ul>
 </td>
 </tr>
@@ -867,7 +873,7 @@ Temperature parameter for decoding is set in the config.
 
 <dl class="method">
 <dt id="finetune.MultiFieldClassifier.predict">
-<code class="descname">predict</code><span class="sig-paren">(</span><em>Xs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultiFieldClassifier.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiFieldClassifier.predict" title="Permalink to this definition">¶</a></dt>
+<code class="descname">predict</code><span class="sig-paren">(</span><em>Xs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/multifield.html#MultiFieldClassifier.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiFieldClassifier.predict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces list of most likely class labels as determined by the fine-tuned model.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -883,7 +889,7 @@ Temperature parameter for decoding is set in the config.
 
 <dl class="method">
 <dt id="finetune.MultiFieldClassifier.predict_proba">
-<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>Xs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultiFieldClassifier.predict_proba"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiFieldClassifier.predict_proba" title="Permalink to this definition">¶</a></dt>
+<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>Xs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/multifield.html#MultiFieldClassifier.predict_proba"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiFieldClassifier.predict_proba" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces probability distribution over classes for each example in X.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -924,7 +930,7 @@ Should not be used to save / restore a training model.</dd>
 
 <dl class="class">
 <dt id="finetune.MultiFieldRegressor">
-<em class="property">class </em><code class="descclassname">finetune.</code><code class="descname">MultiFieldRegressor</code><span class="sig-paren">(</span><em>config=None</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultiFieldRegressor"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiFieldRegressor" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="descclassname">finetune.</code><code class="descname">MultiFieldRegressor</code><span class="sig-paren">(</span><em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/multifield.html#MultiFieldRegressor"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiFieldRegressor" title="Permalink to this definition">¶</a></dt>
 <dd><p>Regresses one or more floating point values given a set of documents per example.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -954,7 +960,7 @@ Should not be used to save / restore a training model.</dd>
 
 <dl class="method">
 <dt id="finetune.MultiFieldRegressor.featurize">
-<code class="descname">featurize</code><span class="sig-paren">(</span><em>Xs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultiFieldRegressor.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiFieldRegressor.featurize" title="Permalink to this definition">¶</a></dt>
+<code class="descname">featurize</code><span class="sig-paren">(</span><em>Xs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/multifield.html#MultiFieldRegressor.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiFieldRegressor.featurize" title="Permalink to this definition">¶</a></dt>
 <dd><p>Embeds inputs in learned feature space. Can be called before or after calling <a class="reference internal" href="#module-finetune" title="finetune"><code class="xref py py-meth docutils literal notranslate"><span class="pre">finetune()</span></code></a>.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -970,7 +976,7 @@ Should not be used to save / restore a training model.</dd>
 
 <dl class="method">
 <dt id="finetune.MultiFieldRegressor.finetune">
-<code class="descname">finetune</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y=None</em>, <em>batch_size=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultiFieldRegressor.finetune"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiFieldRegressor.finetune" title="Permalink to this definition">¶</a></dt>
+<code class="descname">finetune</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y=None</em>, <em>batch_size=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/multifield.html#MultiFieldRegressor.finetune"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiFieldRegressor.finetune" title="Permalink to this definition">¶</a></dt>
 <dd><table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -989,7 +995,7 @@ corresponds to the number of training examples provided to each GPU.</li>
 
 <dl class="classmethod">
 <dt id="finetune.MultiFieldRegressor.finetune_grid_search">
-<em class="property">classmethod </em><code class="descname">finetune_grid_search</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>test_size</em>, <em>config=None</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldRegressor.finetune_grid_search" title="Permalink to this definition">¶</a></dt>
+<em class="property">classmethod </em><code class="descname">finetune_grid_search</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>test_size</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldRegressor.finetune_grid_search" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs grid search over config items defined using “GridSearchable” objects and returns either full results or
 the config object that relates to the best results. The default config contains grid searchable objects for the
 most important parameters to search over.</p>
@@ -1002,10 +1008,10 @@ most important parameters to search over.</p>
 <li><strong>Y</strong> – Targets, A list of targets, [num_samples] that correspond to each sample in Xs.</li>
 <li><strong>test_size</strong> – Int or float. If an int is given this number of samples is used to validate, if a float is
 given then that fraction of samples is used.</li>
-<li><strong>config</strong> – A config object, or None to use the default config.</li>
 <li><strong>eval_fn</strong> – An eval function that takes 2 inputs (prediction, truth) and returns a float, with a max value being desired.</li>
 <li><strong>probs</strong> – If true, eval_fn is passed probability outputs from predict_proba, otherwise the output of predict is used.</li>
 <li><strong>return_all</strong> – If True, all results are returned, if False, only the best config is returned.</li>
+<li><strong>kwargs</strong> – Keyword arguments to pass to get_config()</li>
 </ul>
 </td>
 </tr>
@@ -1019,7 +1025,7 @@ form [(config, eval_fn output), … ]</p>
 
 <dl class="classmethod">
 <dt id="finetune.MultiFieldRegressor.finetune_grid_search_cv">
-<em class="property">classmethod </em><code class="descname">finetune_grid_search_cv</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>n_splits</em>, <em>test_size</em>, <em>config=None</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldRegressor.finetune_grid_search_cv" title="Permalink to this definition">¶</a></dt>
+<em class="property">classmethod </em><code class="descname">finetune_grid_search_cv</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>n_splits</em>, <em>test_size</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldRegressor.finetune_grid_search_cv" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs cross validated grid search over config items defined using “GridSearchable” objects and returns either full results or
 the config object that relates to the best results. The default config contains grid searchable objects for the
 most important parameters to search over.</p>
@@ -1034,11 +1040,11 @@ most important parameters to search over.</p>
 <li><strong>n_splits</strong> – Number of CV splits to do.</li>
 <li><strong>test_size</strong> – Int or float. If an int is given this number of samples is used to validate, if a float is
 given then that fraction of samples is used.</li>
-<li><strong>config</strong> – A config object, or None to use the default config.</li>
 <li><strong>eval_fn</strong> – An eval function that takes 2 batches of outputs and returns a float, with a max value being
 desired. An arithmetic mean must make sense for this metric.</li>
 <li><strong>probs</strong> – If true, eval_fn is passed probability outputs from predict_proba, otherwise the output of predict is used.</li>
 <li><strong>return_all</strong> – If True, all results are returned, if False, only the best config is returned.</li>
+<li><strong>kwargs</strong> – Keyword arguments to pass to get_config()</li>
 </ul>
 </td>
 </tr>
@@ -1087,7 +1093,7 @@ Temperature parameter for decoding is set in the config.
 
 <dl class="method">
 <dt id="finetune.MultiFieldRegressor.predict">
-<code class="descname">predict</code><span class="sig-paren">(</span><em>Xs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultiFieldRegressor.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiFieldRegressor.predict" title="Permalink to this definition">¶</a></dt>
+<code class="descname">predict</code><span class="sig-paren">(</span><em>Xs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/multifield.html#MultiFieldRegressor.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiFieldRegressor.predict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces list of most likely class labels as determined by the fine-tuned model.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -1103,7 +1109,7 @@ Temperature parameter for decoding is set in the config.
 
 <dl class="method">
 <dt id="finetune.MultiFieldRegressor.predict_proba">
-<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>Xs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multifield.html#MultiFieldRegressor.predict_proba"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiFieldRegressor.predict_proba" title="Permalink to this definition">¶</a></dt>
+<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>Xs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/multifield.html#MultiFieldRegressor.predict_proba"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiFieldRegressor.predict_proba" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces probability distribution over classes for each example in X.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -1144,7 +1150,7 @@ Should not be used to save / restore a training model.</dd>
 
 <dl class="class">
 <dt id="finetune.MultiLabelClassifier">
-<em class="property">class </em><code class="descclassname">finetune.</code><code class="descname">MultiLabelClassifier</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multi_label_classifier.html#MultiLabelClassifier"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiLabelClassifier" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="descclassname">finetune.</code><code class="descname">MultiLabelClassifier</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/multi_label_classifier.html#MultiLabelClassifier"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiLabelClassifier" title="Permalink to this definition">¶</a></dt>
 <dd><p>Classifies a single document into upto N of N categories.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -1174,7 +1180,7 @@ Should not be used to save / restore a training model.</dd>
 
 <dl class="method">
 <dt id="finetune.MultiLabelClassifier.featurize">
-<code class="descname">featurize</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multi_label_classifier.html#MultiLabelClassifier.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiLabelClassifier.featurize" title="Permalink to this definition">¶</a></dt>
+<code class="descname">featurize</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/multi_label_classifier.html#MultiLabelClassifier.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiLabelClassifier.featurize" title="Permalink to this definition">¶</a></dt>
 <dd><p>Embeds inputs in learned feature space. Can be called before or after calling <a class="reference internal" href="#module-finetune" title="finetune"><code class="xref py py-meth docutils literal notranslate"><span class="pre">finetune()</span></code></a>.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -1190,7 +1196,7 @@ Should not be used to save / restore a training model.</dd>
 
 <dl class="method">
 <dt id="finetune.MultiLabelClassifier.finetune">
-<code class="descname">finetune</code><span class="sig-paren">(</span><em>X</em>, <em>Y=None</em>, <em>batch_size=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multi_label_classifier.html#MultiLabelClassifier.finetune"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiLabelClassifier.finetune" title="Permalink to this definition">¶</a></dt>
+<code class="descname">finetune</code><span class="sig-paren">(</span><em>X</em>, <em>Y=None</em>, <em>batch_size=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/multi_label_classifier.html#MultiLabelClassifier.finetune"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiLabelClassifier.finetune" title="Permalink to this definition">¶</a></dt>
 <dd><table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -1209,7 +1215,7 @@ corresponds to the number of training examples provided to each GPU.</li>
 
 <dl class="classmethod">
 <dt id="finetune.MultiLabelClassifier.finetune_grid_search">
-<em class="property">classmethod </em><code class="descname">finetune_grid_search</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>test_size</em>, <em>config=None</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiLabelClassifier.finetune_grid_search" title="Permalink to this definition">¶</a></dt>
+<em class="property">classmethod </em><code class="descname">finetune_grid_search</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>test_size</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiLabelClassifier.finetune_grid_search" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs grid search over config items defined using “GridSearchable” objects and returns either full results or
 the config object that relates to the best results. The default config contains grid searchable objects for the
 most important parameters to search over.</p>
@@ -1222,10 +1228,10 @@ most important parameters to search over.</p>
 <li><strong>Y</strong> – Targets, A list of targets, [num_samples] that correspond to each sample in Xs.</li>
 <li><strong>test_size</strong> – Int or float. If an int is given this number of samples is used to validate, if a float is
 given then that fraction of samples is used.</li>
-<li><strong>config</strong> – A config object, or None to use the default config.</li>
 <li><strong>eval_fn</strong> – An eval function that takes 2 inputs (prediction, truth) and returns a float, with a max value being desired.</li>
 <li><strong>probs</strong> – If true, eval_fn is passed probability outputs from predict_proba, otherwise the output of predict is used.</li>
 <li><strong>return_all</strong> – If True, all results are returned, if False, only the best config is returned.</li>
+<li><strong>kwargs</strong> – Keyword arguments to pass to get_config()</li>
 </ul>
 </td>
 </tr>
@@ -1239,7 +1245,7 @@ form [(config, eval_fn output), … ]</p>
 
 <dl class="classmethod">
 <dt id="finetune.MultiLabelClassifier.finetune_grid_search_cv">
-<em class="property">classmethod </em><code class="descname">finetune_grid_search_cv</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>n_splits</em>, <em>test_size</em>, <em>config=None</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiLabelClassifier.finetune_grid_search_cv" title="Permalink to this definition">¶</a></dt>
+<em class="property">classmethod </em><code class="descname">finetune_grid_search_cv</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>n_splits</em>, <em>test_size</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiLabelClassifier.finetune_grid_search_cv" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs cross validated grid search over config items defined using “GridSearchable” objects and returns either full results or
 the config object that relates to the best results. The default config contains grid searchable objects for the
 most important parameters to search over.</p>
@@ -1254,11 +1260,11 @@ most important parameters to search over.</p>
 <li><strong>n_splits</strong> – Number of CV splits to do.</li>
 <li><strong>test_size</strong> – Int or float. If an int is given this number of samples is used to validate, if a float is
 given then that fraction of samples is used.</li>
-<li><strong>config</strong> – A config object, or None to use the default config.</li>
 <li><strong>eval_fn</strong> – An eval function that takes 2 batches of outputs and returns a float, with a max value being
 desired. An arithmetic mean must make sense for this metric.</li>
 <li><strong>probs</strong> – If true, eval_fn is passed probability outputs from predict_proba, otherwise the output of predict is used.</li>
 <li><strong>return_all</strong> – If True, all results are returned, if False, only the best config is returned.</li>
+<li><strong>kwargs</strong> – Keyword arguments to pass to get_config()</li>
 </ul>
 </td>
 </tr>
@@ -1307,7 +1313,7 @@ Temperature parameter for decoding is set in the config.
 
 <dl class="method">
 <dt id="finetune.MultiLabelClassifier.predict">
-<code class="descname">predict</code><span class="sig-paren">(</span><em>X</em>, <em>threshold=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multi_label_classifier.html#MultiLabelClassifier.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiLabelClassifier.predict" title="Permalink to this definition">¶</a></dt>
+<code class="descname">predict</code><span class="sig-paren">(</span><em>X</em>, <em>threshold=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/multi_label_classifier.html#MultiLabelClassifier.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiLabelClassifier.predict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces a list of most likely class labels as determined by the fine-tuned model.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -1323,7 +1329,7 @@ Temperature parameter for decoding is set in the config.
 
 <dl class="method">
 <dt id="finetune.MultiLabelClassifier.predict_proba">
-<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/multi_label_classifier.html#MultiLabelClassifier.predict_proba"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiLabelClassifier.predict_proba" title="Permalink to this definition">¶</a></dt>
+<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/multi_label_classifier.html#MultiLabelClassifier.predict_proba"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiLabelClassifier.predict_proba" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces a probability distribution over classes for each example in X.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -1364,7 +1370,7 @@ Should not be used to save / restore a training model.</dd>
 
 <dl class="class">
 <dt id="finetune.SequenceLabeler">
-<em class="property">class </em><code class="descclassname">finetune.</code><code class="descname">SequenceLabeler</code><span class="sig-paren">(</span><em>config=None</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/sequence_labeling.html#SequenceLabeler"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.SequenceLabeler" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="descclassname">finetune.</code><code class="descname">SequenceLabeler</code><span class="sig-paren">(</span><em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/sequence_labeling.html#SequenceLabeler"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.SequenceLabeler" title="Permalink to this definition">¶</a></dt>
 <dd><p>Labels each token in a sequence as belonging to 1 of N token classes.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -1394,7 +1400,7 @@ Should not be used to save / restore a training model.</dd>
 
 <dl class="method">
 <dt id="finetune.SequenceLabeler.featurize">
-<code class="descname">featurize</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/sequence_labeling.html#SequenceLabeler.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.SequenceLabeler.featurize" title="Permalink to this definition">¶</a></dt>
+<code class="descname">featurize</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/sequence_labeling.html#SequenceLabeler.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.SequenceLabeler.featurize" title="Permalink to this definition">¶</a></dt>
 <dd><p>Embeds inputs in learned feature space. Can be called before or after calling <a class="reference internal" href="#module-finetune" title="finetune"><code class="xref py py-meth docutils literal notranslate"><span class="pre">finetune()</span></code></a>.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -1410,7 +1416,7 @@ Should not be used to save / restore a training model.</dd>
 
 <dl class="classmethod">
 <dt id="finetune.SequenceLabeler.finetune_grid_search">
-<em class="property">classmethod </em><code class="descname">finetune_grid_search</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>test_size</em>, <em>config=None</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.SequenceLabeler.finetune_grid_search" title="Permalink to this definition">¶</a></dt>
+<em class="property">classmethod </em><code class="descname">finetune_grid_search</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>test_size</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.SequenceLabeler.finetune_grid_search" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs grid search over config items defined using “GridSearchable” objects and returns either full results or
 the config object that relates to the best results. The default config contains grid searchable objects for the
 most important parameters to search over.</p>
@@ -1423,10 +1429,10 @@ most important parameters to search over.</p>
 <li><strong>Y</strong> – Targets, A list of targets, [num_samples] that correspond to each sample in Xs.</li>
 <li><strong>test_size</strong> – Int or float. If an int is given this number of samples is used to validate, if a float is
 given then that fraction of samples is used.</li>
-<li><strong>config</strong> – A config object, or None to use the default config.</li>
 <li><strong>eval_fn</strong> – An eval function that takes 2 inputs (prediction, truth) and returns a float, with a max value being desired.</li>
 <li><strong>probs</strong> – If true, eval_fn is passed probability outputs from predict_proba, otherwise the output of predict is used.</li>
 <li><strong>return_all</strong> – If True, all results are returned, if False, only the best config is returned.</li>
+<li><strong>kwargs</strong> – Keyword arguments to pass to get_config()</li>
 </ul>
 </td>
 </tr>
@@ -1440,7 +1446,7 @@ form [(config, eval_fn output), … ]</p>
 
 <dl class="classmethod">
 <dt id="finetune.SequenceLabeler.finetune_grid_search_cv">
-<em class="property">classmethod </em><code class="descname">finetune_grid_search_cv</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>n_splits</em>, <em>test_size</em>, <em>config=None</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.SequenceLabeler.finetune_grid_search_cv" title="Permalink to this definition">¶</a></dt>
+<em class="property">classmethod </em><code class="descname">finetune_grid_search_cv</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>n_splits</em>, <em>test_size</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.SequenceLabeler.finetune_grid_search_cv" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs cross validated grid search over config items defined using “GridSearchable” objects and returns either full results or
 the config object that relates to the best results. The default config contains grid searchable objects for the
 most important parameters to search over.</p>
@@ -1455,11 +1461,11 @@ most important parameters to search over.</p>
 <li><strong>n_splits</strong> – Number of CV splits to do.</li>
 <li><strong>test_size</strong> – Int or float. If an int is given this number of samples is used to validate, if a float is
 given then that fraction of samples is used.</li>
-<li><strong>config</strong> – A config object, or None to use the default config.</li>
 <li><strong>eval_fn</strong> – An eval function that takes 2 batches of outputs and returns a float, with a max value being
 desired. An arithmetic mean must make sense for this metric.</li>
 <li><strong>probs</strong> – If true, eval_fn is passed probability outputs from predict_proba, otherwise the output of predict is used.</li>
 <li><strong>return_all</strong> – If True, all results are returned, if False, only the best config is returned.</li>
+<li><strong>kwargs</strong> – Keyword arguments to pass to get_config()</li>
 </ul>
 </td>
 </tr>
@@ -1508,7 +1514,7 @@ Temperature parameter for decoding is set in the config.
 
 <dl class="method">
 <dt id="finetune.SequenceLabeler.predict">
-<code class="descname">predict</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/sequence_labeling.html#SequenceLabeler.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.SequenceLabeler.predict" title="Permalink to this definition">¶</a></dt>
+<code class="descname">predict</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/sequence_labeling.html#SequenceLabeler.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.SequenceLabeler.predict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces a list of most likely class labels as determined by the fine-tuned model.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -1524,7 +1530,7 @@ Temperature parameter for decoding is set in the config.
 
 <dl class="method">
 <dt id="finetune.SequenceLabeler.predict_proba">
-<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/sequence_labeling.html#SequenceLabeler.predict_proba"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.SequenceLabeler.predict_proba" title="Permalink to this definition">¶</a></dt>
+<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/sequence_labeling.html#SequenceLabeler.predict_proba"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.SequenceLabeler.predict_proba" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces a list of most likely class labels as determined by the fine-tuned model.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -1565,7 +1571,7 @@ Should not be used to save / restore a training model.</dd>
 
 <dl class="class">
 <dt id="finetune.Comparison">
-<em class="property">class </em><code class="descclassname">finetune.</code><code class="descname">Comparison</code><span class="sig-paren">(</span><em>config=None</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/comparison.html#Comparison"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Comparison" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="descclassname">finetune.</code><code class="descname">Comparison</code><span class="sig-paren">(</span><em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/comparison.html#Comparison"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Comparison" title="Permalink to this definition">¶</a></dt>
 <dd><p>Compares two documents to solve a classification task.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -1595,7 +1601,7 @@ Should not be used to save / restore a training model.</dd>
 
 <dl class="method">
 <dt id="finetune.Comparison.featurize">
-<code class="descname">featurize</code><span class="sig-paren">(</span><em>pairs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/comparison.html#Comparison.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Comparison.featurize" title="Permalink to this definition">¶</a></dt>
+<code class="descname">featurize</code><span class="sig-paren">(</span><em>pairs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/comparison.html#Comparison.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Comparison.featurize" title="Permalink to this definition">¶</a></dt>
 <dd><p>Embeds inputs in learned feature space. Can be called before or after calling <a class="reference internal" href="#module-finetune" title="finetune"><code class="xref py py-meth docutils literal notranslate"><span class="pre">finetune()</span></code></a>.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -1630,7 +1636,7 @@ corresponds to the number of training examples provided to each GPU.</li>
 
 <dl class="classmethod">
 <dt id="finetune.Comparison.finetune_grid_search">
-<em class="property">classmethod </em><code class="descname">finetune_grid_search</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>test_size</em>, <em>config=None</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Comparison.finetune_grid_search" title="Permalink to this definition">¶</a></dt>
+<em class="property">classmethod </em><code class="descname">finetune_grid_search</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>test_size</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Comparison.finetune_grid_search" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs grid search over config items defined using “GridSearchable” objects and returns either full results or
 the config object that relates to the best results. The default config contains grid searchable objects for the
 most important parameters to search over.</p>
@@ -1643,10 +1649,10 @@ most important parameters to search over.</p>
 <li><strong>Y</strong> – Targets, A list of targets, [num_samples] that correspond to each sample in Xs.</li>
 <li><strong>test_size</strong> – Int or float. If an int is given this number of samples is used to validate, if a float is
 given then that fraction of samples is used.</li>
-<li><strong>config</strong> – A config object, or None to use the default config.</li>
 <li><strong>eval_fn</strong> – An eval function that takes 2 inputs (prediction, truth) and returns a float, with a max value being desired.</li>
 <li><strong>probs</strong> – If true, eval_fn is passed probability outputs from predict_proba, otherwise the output of predict is used.</li>
 <li><strong>return_all</strong> – If True, all results are returned, if False, only the best config is returned.</li>
+<li><strong>kwargs</strong> – Keyword arguments to pass to get_config()</li>
 </ul>
 </td>
 </tr>
@@ -1660,7 +1666,7 @@ form [(config, eval_fn output), … ]</p>
 
 <dl class="classmethod">
 <dt id="finetune.Comparison.finetune_grid_search_cv">
-<em class="property">classmethod </em><code class="descname">finetune_grid_search_cv</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>n_splits</em>, <em>test_size</em>, <em>config=None</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Comparison.finetune_grid_search_cv" title="Permalink to this definition">¶</a></dt>
+<em class="property">classmethod </em><code class="descname">finetune_grid_search_cv</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>n_splits</em>, <em>test_size</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Comparison.finetune_grid_search_cv" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs cross validated grid search over config items defined using “GridSearchable” objects and returns either full results or
 the config object that relates to the best results. The default config contains grid searchable objects for the
 most important parameters to search over.</p>
@@ -1675,11 +1681,11 @@ most important parameters to search over.</p>
 <li><strong>n_splits</strong> – Number of CV splits to do.</li>
 <li><strong>test_size</strong> – Int or float. If an int is given this number of samples is used to validate, if a float is
 given then that fraction of samples is used.</li>
-<li><strong>config</strong> – A config object, or None to use the default config.</li>
 <li><strong>eval_fn</strong> – An eval function that takes 2 batches of outputs and returns a float, with a max value being
 desired. An arithmetic mean must make sense for this metric.</li>
 <li><strong>probs</strong> – If true, eval_fn is passed probability outputs from predict_proba, otherwise the output of predict is used.</li>
 <li><strong>return_all</strong> – If True, all results are returned, if False, only the best config is returned.</li>
+<li><strong>kwargs</strong> – Keyword arguments to pass to get_config()</li>
 </ul>
 </td>
 </tr>
@@ -1728,7 +1734,7 @@ Temperature parameter for decoding is set in the config.
 
 <dl class="method">
 <dt id="finetune.Comparison.predict">
-<code class="descname">predict</code><span class="sig-paren">(</span><em>pairs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/comparison.html#Comparison.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Comparison.predict" title="Permalink to this definition">¶</a></dt>
+<code class="descname">predict</code><span class="sig-paren">(</span><em>pairs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/comparison.html#Comparison.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Comparison.predict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces a list of most likely class labels as determined by the fine-tuned model.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -1744,7 +1750,7 @@ Temperature parameter for decoding is set in the config.
 
 <dl class="method">
 <dt id="finetune.Comparison.predict_proba">
-<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>pairs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/comparison.html#Comparison.predict_proba"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Comparison.predict_proba" title="Permalink to this definition">¶</a></dt>
+<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>pairs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/comparison.html#Comparison.predict_proba"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Comparison.predict_proba" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces a probability distribution over classes for each example in X.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -1785,7 +1791,7 @@ Should not be used to save / restore a training model.</dd>
 
 <dl class="class">
 <dt id="finetune.OrdinalRegressor">
-<em class="property">class </em><code class="descclassname">finetune.</code><code class="descname">OrdinalRegressor</code><span class="sig-paren">(</span><em>shared_threshold_weights=True</em>, <em>config=None</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/ordinal_regressor.html#OrdinalRegressor"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.OrdinalRegressor" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="descclassname">finetune.</code><code class="descname">OrdinalRegressor</code><span class="sig-paren">(</span><em>shared_threshold_weights=True</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/ordinal_regressor.html#OrdinalRegressor"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.OrdinalRegressor" title="Permalink to this definition">¶</a></dt>
 <dd><p>Classifies a document into two or more ordered categories.</p>
 <p>For a full list of configuration options, see <cite>finetune.config</cite>.</p>
 <table class="docutils field-list" frame="void" rules="none">
@@ -1816,7 +1822,7 @@ Should not be used to save / restore a training model.</dd>
 
 <dl class="method">
 <dt id="finetune.OrdinalRegressor.featurize">
-<code class="descname">featurize</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/ordinal_regressor.html#OrdinalRegressor.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.OrdinalRegressor.featurize" title="Permalink to this definition">¶</a></dt>
+<code class="descname">featurize</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/ordinal_regressor.html#OrdinalRegressor.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.OrdinalRegressor.featurize" title="Permalink to this definition">¶</a></dt>
 <dd><p>Embeds inputs in learned feature space. Can be called before or after calling <a class="reference internal" href="#module-finetune" title="finetune"><code class="xref py py-meth docutils literal notranslate"><span class="pre">finetune()</span></code></a>.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -1832,7 +1838,7 @@ Should not be used to save / restore a training model.</dd>
 
 <dl class="method">
 <dt id="finetune.OrdinalRegressor.finetune">
-<code class="descname">finetune</code><span class="sig-paren">(</span><em>X</em>, <em>Y=None</em>, <em>batch_size=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/ordinal_regressor.html#OrdinalRegressor.finetune"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.OrdinalRegressor.finetune" title="Permalink to this definition">¶</a></dt>
+<code class="descname">finetune</code><span class="sig-paren">(</span><em>X</em>, <em>Y=None</em>, <em>batch_size=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/ordinal_regressor.html#OrdinalRegressor.finetune"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.OrdinalRegressor.finetune" title="Permalink to this definition">¶</a></dt>
 <dd><table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
@@ -1851,7 +1857,7 @@ corresponds to the number of training examples provided to each GPU.</li>
 
 <dl class="classmethod">
 <dt id="finetune.OrdinalRegressor.finetune_grid_search">
-<em class="property">classmethod </em><code class="descname">finetune_grid_search</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>test_size</em>, <em>config=None</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.OrdinalRegressor.finetune_grid_search" title="Permalink to this definition">¶</a></dt>
+<em class="property">classmethod </em><code class="descname">finetune_grid_search</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>test_size</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.OrdinalRegressor.finetune_grid_search" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs grid search over config items defined using “GridSearchable” objects and returns either full results or
 the config object that relates to the best results. The default config contains grid searchable objects for the
 most important parameters to search over.</p>
@@ -1864,10 +1870,10 @@ most important parameters to search over.</p>
 <li><strong>Y</strong> – Targets, A list of targets, [num_samples] that correspond to each sample in Xs.</li>
 <li><strong>test_size</strong> – Int or float. If an int is given this number of samples is used to validate, if a float is
 given then that fraction of samples is used.</li>
-<li><strong>config</strong> – A config object, or None to use the default config.</li>
 <li><strong>eval_fn</strong> – An eval function that takes 2 inputs (prediction, truth) and returns a float, with a max value being desired.</li>
 <li><strong>probs</strong> – If true, eval_fn is passed probability outputs from predict_proba, otherwise the output of predict is used.</li>
 <li><strong>return_all</strong> – If True, all results are returned, if False, only the best config is returned.</li>
+<li><strong>kwargs</strong> – Keyword arguments to pass to get_config()</li>
 </ul>
 </td>
 </tr>
@@ -1881,7 +1887,7 @@ form [(config, eval_fn output), … ]</p>
 
 <dl class="classmethod">
 <dt id="finetune.OrdinalRegressor.finetune_grid_search_cv">
-<em class="property">classmethod </em><code class="descname">finetune_grid_search_cv</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>n_splits</em>, <em>test_size</em>, <em>config=None</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.OrdinalRegressor.finetune_grid_search_cv" title="Permalink to this definition">¶</a></dt>
+<em class="property">classmethod </em><code class="descname">finetune_grid_search_cv</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>n_splits</em>, <em>test_size</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.OrdinalRegressor.finetune_grid_search_cv" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs cross validated grid search over config items defined using “GridSearchable” objects and returns either full results or
 the config object that relates to the best results. The default config contains grid searchable objects for the
 most important parameters to search over.</p>
@@ -1896,11 +1902,11 @@ most important parameters to search over.</p>
 <li><strong>n_splits</strong> – Number of CV splits to do.</li>
 <li><strong>test_size</strong> – Int or float. If an int is given this number of samples is used to validate, if a float is
 given then that fraction of samples is used.</li>
-<li><strong>config</strong> – A config object, or None to use the default config.</li>
 <li><strong>eval_fn</strong> – An eval function that takes 2 batches of outputs and returns a float, with a max value being
 desired. An arithmetic mean must make sense for this metric.</li>
 <li><strong>probs</strong> – If true, eval_fn is passed probability outputs from predict_proba, otherwise the output of predict is used.</li>
 <li><strong>return_all</strong> – If True, all results are returned, if False, only the best config is returned.</li>
+<li><strong>kwargs</strong> – Keyword arguments to pass to get_config()</li>
 </ul>
 </td>
 </tr>
@@ -1949,7 +1955,7 @@ Temperature parameter for decoding is set in the config.
 
 <dl class="method">
 <dt id="finetune.OrdinalRegressor.predict">
-<code class="descname">predict</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/ordinal_regressor.html#OrdinalRegressor.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.OrdinalRegressor.predict" title="Permalink to this definition">¶</a></dt>
+<code class="descname">predict</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/ordinal_regressor.html#OrdinalRegressor.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.OrdinalRegressor.predict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces a list of most likely class labels as determined by the fine-tuned model.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -1965,7 +1971,7 @@ Temperature parameter for decoding is set in the config.
 
 <dl class="method">
 <dt id="finetune.OrdinalRegressor.predict_proba">
-<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/ordinal_regressor.html#OrdinalRegressor.predict_proba"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.OrdinalRegressor.predict_proba" title="Permalink to this definition">¶</a></dt>
+<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/ordinal_regressor.html#OrdinalRegressor.predict_proba"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.OrdinalRegressor.predict_proba" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces a probability distribution over classes for each example in X.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -2006,7 +2012,7 @@ Should not be used to save / restore a training model.</dd>
 
 <dl class="class">
 <dt id="finetune.ComparisonOrdinalRegressor">
-<em class="property">class </em><code class="descclassname">finetune.</code><code class="descname">ComparisonOrdinalRegressor</code><span class="sig-paren">(</span><em>shared_threshold_weights=True</em>, <em>config=None</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/ordinal_regressor.html#ComparisonOrdinalRegressor"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.ComparisonOrdinalRegressor" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="descclassname">finetune.</code><code class="descname">ComparisonOrdinalRegressor</code><span class="sig-paren">(</span><em>shared_threshold_weights=True</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/ordinal_regressor.html#ComparisonOrdinalRegressor"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.ComparisonOrdinalRegressor" title="Permalink to this definition">¶</a></dt>
 <dd><p>Compares two documents and classifies into two or more ordered categories.</p>
 <p>For a full list of configuration options, see <cite>finetune.config</cite>.</p>
 <table class="docutils field-list" frame="void" rules="none">
@@ -2072,7 +2078,7 @@ corresponds to the number of training examples provided to each GPU.</li>
 
 <dl class="classmethod">
 <dt id="finetune.ComparisonOrdinalRegressor.finetune_grid_search">
-<em class="property">classmethod </em><code class="descname">finetune_grid_search</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>test_size</em>, <em>config=None</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.ComparisonOrdinalRegressor.finetune_grid_search" title="Permalink to this definition">¶</a></dt>
+<em class="property">classmethod </em><code class="descname">finetune_grid_search</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>test_size</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.ComparisonOrdinalRegressor.finetune_grid_search" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs grid search over config items defined using “GridSearchable” objects and returns either full results or
 the config object that relates to the best results. The default config contains grid searchable objects for the
 most important parameters to search over.</p>
@@ -2085,10 +2091,10 @@ most important parameters to search over.</p>
 <li><strong>Y</strong> – Targets, A list of targets, [num_samples] that correspond to each sample in Xs.</li>
 <li><strong>test_size</strong> – Int or float. If an int is given this number of samples is used to validate, if a float is
 given then that fraction of samples is used.</li>
-<li><strong>config</strong> – A config object, or None to use the default config.</li>
 <li><strong>eval_fn</strong> – An eval function that takes 2 inputs (prediction, truth) and returns a float, with a max value being desired.</li>
 <li><strong>probs</strong> – If true, eval_fn is passed probability outputs from predict_proba, otherwise the output of predict is used.</li>
 <li><strong>return_all</strong> – If True, all results are returned, if False, only the best config is returned.</li>
+<li><strong>kwargs</strong> – Keyword arguments to pass to get_config()</li>
 </ul>
 </td>
 </tr>
@@ -2102,7 +2108,7 @@ form [(config, eval_fn output), … ]</p>
 
 <dl class="classmethod">
 <dt id="finetune.ComparisonOrdinalRegressor.finetune_grid_search_cv">
-<em class="property">classmethod </em><code class="descname">finetune_grid_search_cv</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>n_splits</em>, <em>test_size</em>, <em>config=None</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.ComparisonOrdinalRegressor.finetune_grid_search_cv" title="Permalink to this definition">¶</a></dt>
+<em class="property">classmethod </em><code class="descname">finetune_grid_search_cv</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>n_splits</em>, <em>test_size</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.ComparisonOrdinalRegressor.finetune_grid_search_cv" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs cross validated grid search over config items defined using “GridSearchable” objects and returns either full results or
 the config object that relates to the best results. The default config contains grid searchable objects for the
 most important parameters to search over.</p>
@@ -2117,11 +2123,11 @@ most important parameters to search over.</p>
 <li><strong>n_splits</strong> – Number of CV splits to do.</li>
 <li><strong>test_size</strong> – Int or float. If an int is given this number of samples is used to validate, if a float is
 given then that fraction of samples is used.</li>
-<li><strong>config</strong> – A config object, or None to use the default config.</li>
 <li><strong>eval_fn</strong> – An eval function that takes 2 batches of outputs and returns a float, with a max value being
 desired. An arithmetic mean must make sense for this metric.</li>
 <li><strong>probs</strong> – If true, eval_fn is passed probability outputs from predict_proba, otherwise the output of predict is used.</li>
 <li><strong>return_all</strong> – If True, all results are returned, if False, only the best config is returned.</li>
+<li><strong>kwargs</strong> – Keyword arguments to pass to get_config()</li>
 </ul>
 </td>
 </tr>
@@ -2225,6 +2231,226 @@ Should not be used to save / restore a training model.</dd>
 
 </dd></dl>
 
+<dl class="class">
+<dt id="finetune.MultiTask">
+<em class="property">class </em><code class="descclassname">finetune.</code><code class="descname">MultiTask</code><span class="sig-paren">(</span><em>tasks</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/mtl.html#MultiTask"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiTask" title="Permalink to this definition">¶</a></dt>
+<dd><p>Target model for multi task learning. The approach used is to sample mini-batches from each task proportional to
+the size of the task for each dataset.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>tasks</strong> – A dictionary of pairs mapping string task names to model classes.
+eg. <cite>{“sst”: Classifier, “ner”: SequenceLabeler}</cite></li>
+<li><strong>**kwargs</strong> – key-value pairs of config items to override. Note: The same config is used for each base task.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+<dl class="method">
+<dt id="finetune.MultiTask.cached_predict">
+<code class="descname">cached_predict</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/mtl.html#MultiTask.cached_predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiTask.cached_predict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Context manager that prevents the recreation of the tensorflow graph on every call to BaseModel.predict().</p>
+<p>Not supported for MultiTask.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.MultiTask.create_base_model">
+<code class="descname">create_base_model</code><span class="sig-paren">(</span><em>filename</em>, <em>exists_ok=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiTask.create_base_model" title="Permalink to this definition">¶</a></dt>
+<dd><p>Saves the current weights into the correct file format to be used as a base model.
+:param filename: the path to save the base model relative to finetune’s base model filestore.
+:param exists_ok: Whether to replace the model if it exists.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.MultiTask.featurize">
+<code class="descname">featurize</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/mtl.html#MultiTask.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiTask.featurize" title="Permalink to this definition">¶</a></dt>
+<dd><p>Base method to get raw features out of the model.
+These features are the same that are fed into the target_model.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.MultiTask.finetune">
+<code class="descname">finetune</code><span class="sig-paren">(</span><em>X</em>, <em>Y=None</em>, <em>batch_size=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/mtl.html#MultiTask.finetune"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiTask.finetune" title="Permalink to this definition">¶</a></dt>
+<dd><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>X</strong> – A dictionary mapping from task name to inputs in the same format required for each of the models.</li>
+<li><strong>Y</strong> – A dictionary mapping from task name to targets in the same format required for each of the models.</li>
+<li><strong>batch_size</strong> – Number of examples per batch. When N_GPUS &gt; 1, this number
+corresponds to the number of training examples provided to each GPU.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last"></p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="classmethod">
+<dt id="finetune.MultiTask.finetune_grid_search">
+<em class="property">classmethod </em><code class="descname">finetune_grid_search</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>test_size</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiTask.finetune_grid_search" title="Permalink to this definition">¶</a></dt>
+<dd><p>Performs grid search over config items defined using “GridSearchable” objects and returns either full results or
+the config object that relates to the best results. The default config contains grid searchable objects for the
+most important parameters to search over.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>Xs</strong> – Input text. Either [num_samples] or [sequence, num_samples] for single or multi input models respectively.</li>
+<li><strong>Y</strong> – Targets, A list of targets, [num_samples] that correspond to each sample in Xs.</li>
+<li><strong>test_size</strong> – Int or float. If an int is given this number of samples is used to validate, if a float is
+given then that fraction of samples is used.</li>
+<li><strong>eval_fn</strong> – An eval function that takes 2 inputs (prediction, truth) and returns a float, with a max value being desired.</li>
+<li><strong>probs</strong> – If true, eval_fn is passed probability outputs from predict_proba, otherwise the output of predict is used.</li>
+<li><strong>return_all</strong> – If True, all results are returned, if False, only the best config is returned.</li>
+<li><strong>kwargs</strong> – Keyword arguments to pass to get_config()</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">default is to return the best config object. If return_all is true, it returns a list of tuples of the
+form [(config, eval_fn output), … ]</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="classmethod">
+<dt id="finetune.MultiTask.finetune_grid_search_cv">
+<em class="property">classmethod </em><code class="descname">finetune_grid_search_cv</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>n_splits</em>, <em>test_size</em>, <em>eval_fn=None</em>, <em>probs=False</em>, <em>return_all=False</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiTask.finetune_grid_search_cv" title="Permalink to this definition">¶</a></dt>
+<dd><p>Performs cross validated grid search over config items defined using “GridSearchable” objects and returns either full results or
+the config object that relates to the best results. The default config contains grid searchable objects for the
+most important parameters to search over.</p>
+<p>It should be noted that the cv splits are not guaranteed unique, but each split is given to each set of hparams.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>Xs</strong> – Input text. Either [num_samples] or [sequence, num_samples] for single or multi input models respectively.</li>
+<li><strong>Y</strong> – Targets, A list of targets, [num_samples] that correspond to each sample in Xs.</li>
+<li><strong>n_splits</strong> – Number of CV splits to do.</li>
+<li><strong>test_size</strong> – Int or float. If an int is given this number of samples is used to validate, if a float is
+given then that fraction of samples is used.</li>
+<li><strong>eval_fn</strong> – An eval function that takes 2 batches of outputs and returns a float, with a max value being
+desired. An arithmetic mean must make sense for this metric.</li>
+<li><strong>probs</strong> – If true, eval_fn is passed probability outputs from predict_proba, otherwise the output of predict is used.</li>
+<li><strong>return_all</strong> – If True, all results are returned, if False, only the best config is returned.</li>
+<li><strong>kwargs</strong> – Keyword arguments to pass to get_config()</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">default is to return the best config object. If return_all is true, it returns a list of tuples of the
+form [(config, eval_fn output), … ]</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.MultiTask.fit">
+<code class="descname">fit</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiTask.fit" title="Permalink to this definition">¶</a></dt>
+<dd><p>An alias for finetune.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.MultiTask.generate_text">
+<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=True</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiTask.generate_text" title="Permalink to this definition">¶</a></dt>
+<dd><p>Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
+Temperature parameter for decoding is set in the config.
+:param max_length: The maximum length to decode to.
+:param seed_text: Defaults to the empty string. This will form the starting point to begin modelling
+:return: A string containing the generated text.</p>
+</dd></dl>
+
+<dl class="classmethod">
+<dt id="finetune.MultiTask.load">
+<em class="property">classmethod </em><code class="descname">load</code><span class="sig-paren">(</span><em>path</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiTask.load" title="Permalink to this definition">¶</a></dt>
+<dd><p>Load a saved fine-tuned model from disk.  Path provided should be a folder which contains .pkl and tf.Saver() files</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>path</strong> – string path name to load model from.  Same value as previously provided to <a class="reference internal" href="#finetune.MultiTask.save" title="finetune.MultiTask.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a>. Must be a folder.</li>
+<li><strong>**kwargs</strong> – <p>key-value pairs of config items to override.</p>
+</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.MultiTask.predict">
+<code class="descname">predict</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/mtl.html#MultiTask.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiTask.predict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Runs inference on the trained model for any of the tasks the model was trained for. Input and output formats
+are the same as for each of the individial tasks.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>X</strong> – A dictionary mapping from task name to data, in the format required by the task type.</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">A dictionary mapping from task name to the predictions for that task.</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.MultiTask.predict_proba">
+<code class="descname">predict_proba</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/mtl.html#MultiTask.predict_proba"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiTask.predict_proba" title="Permalink to this definition">¶</a></dt>
+<dd><p>Runs probability inference on the trained model for any of the tasks the model was trained for. Falls back
+to normal predict when probabilities are not available for a task, eg Regression.</p>
+<p>Input and output formats are the same as for each of the individial tasks.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>X</strong> – A dictionary mapping from task name to data, in the format required by the task type.</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">A dictionary mapping from task name to the predictions for that task.</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.MultiTask.save">
+<code class="descname">save</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiTask.save" title="Permalink to this definition">¶</a></dt>
+<dd><p>Saves the state of the model to disk to the folder specific by <cite>path</cite>.  If <cite>path</cite> does not exist, it will be auto-created.</p>
+<dl class="docutils">
+<dt>Save is performed in two steps:</dt>
+<dd><ul class="first last simple">
+<li>Serialize tf graph to disk using tf.Saver</li>
+<li>Serialize python model using pickle</li>
+</ul>
+</dd>
+<dt>Note:</dt>
+<dd>Does not serialize state of Adam optimizer.
+Should not be used to save / restore a training model.</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="finetune.MultiTask.transform">
+<code class="descname">transform</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiTask.transform" title="Permalink to this definition">¶</a></dt>
+<dd><p>An alias for <cite>featurize</cite>.</p>
+</dd></dl>
+
+</dd></dl>
+
 </div>
 <div class="section" id="finetune-model-configuration-options">
 <h1>Finetune Model Configuration Options<a class="headerlink" href="#finetune-model-configuration-options" title="Permalink to this headline">¶</a></h1>
@@ -2241,14 +2467,14 @@ Should not be used to save / restore a training model.</dd>
 <li><strong>visible_gpus</strong> – List of integer GPU ids to spread out computation across, defaults to all available GPUs.</li>
 <li><strong>n_epochs</strong> – Number of iterations through training data, defaults to <cite>3</cite>.</li>
 <li><strong>random_seed</strong> – Random seed to use for repeatability purposes, defaults to <cite>42</cite>.</li>
-<li><strong>max_length</strong> – Maximum number of subtokens per sequence. Examples longer than this number will be truncated 
+<li><strong>max_length</strong> – Maximum number of subtokens per sequence. Examples longer than this number will be truncated
 (unless <cite>chunk_long_sequences=True</cite> for SequenceLabeler models). Defaults to <cite>512</cite>.</li>
 <li><strong>weight_stddev</strong> – Standard deviation of initial weights.  Defaults to <cite>0.02</cite>.</li>
-<li><strong>chunk_long_sequences</strong> – When True, use a sliding window approach to predict on 
+<li><strong>chunk_long_sequences</strong> – When True, use a sliding window approach to predict on
 examples that are longer than max length.  Defaults to <cite>False</cite>.</li>
 <li><strong>low_memory_mode</strong> – When True, only store partial gradients on forward pass
 and recompute remaining gradients incrementally in order to save memory.  Defaults to <cite>False</cite>.</li>
-<li><strong>interpolate_pos_embed</strong> – Interpolate positional embeddings when <cite>max_length</cite> differs from it’s original value of 
+<li><strong>interpolate_pos_embed</strong> – Interpolate positional embeddings when <cite>max_length</cite> differs from it’s original value of
 <cite>512</cite>. Defaults to <cite>False</cite>.</li>
 <li><strong>embed_p_drop</strong> – Embedding dropout probability.  Defaults to <cite>0.1</cite>.</li>
 <li><strong>attn_p_drop</strong> – Attention dropout probability.  Defaults to <cite>0.1</cite>.</li>
@@ -2256,6 +2482,7 @@ and recompute remaining gradients incrementally in order to save memory.  Defaul
 <li><strong>clf_p_drop</strong> – Classifier dropout probability.  Defaults to <cite>0.1</cite>.</li>
 <li><strong>l2_reg</strong> – L2 regularization coefficient. Defaults to <cite>0.01</cite>.</li>
 <li><strong>vector_l2</strong> – Whether to apply weight decay regularization to vectors (biases, normalization etc..). Defaults to False.</li>
+<li><strong>optimizer</strong> – Optimizer to use, current options include AdamW or AdamaxW.</li>
 <li><strong>b1</strong> – Adam b1 parameter.  Defaults to <cite>0.9</cite>.</li>
 <li><strong>b2</strong> – Adam b2 parameter.  Defaults to <cite>0.999</cite>.</li>
 <li><strong>epsilon</strong> – Adam epsilon parameter: Defaults to <cite>1e-8</cite>.</li>
@@ -2263,25 +2490,25 @@ and recompute remaining gradients incrementally in order to save memory.  Defaul
 <li><strong>lr</strong> – Learning rate.  Defaults to <cite>6.25e-5</cite>.</li>
 <li><strong>lr_warmup</strong> – Learning rate warmup (percentage of all batches to warmup for).  Defaults to <cite>0.002</cite>.</li>
 <li><strong>max_grad_norm</strong> – Clip gradients larger than this norm. Defaults to <cite>1.0</cite>.</li>
+<li><strong>accum_steps</strong> – Number of updates to accumulate before applying. This is used to simulate a higher batch size.</li>
 <li><strong>lm_loss_coef</strong> – Language modeling loss coefficient – a value between <cite>0.0</cite> - <cite>1.0</cite>
 that indicates how to trade off between language modeling loss
-and target model loss.  Usually not beneficial to turn on unless 
+and target model loss.  Usually not beneficial to turn on unless
 dataset size exceeds a few thousand examples.  Defaults to <cite>0.0</cite>.</li>
 <li><strong>summarize_grads</strong> – Include gradient summary information in tensorboard.  Defaults to <cite>False</cite>.</li>
-<li><strong>verbose</strong> – Print TQDM logs?  Defaults to <cite>True</cite>.</li>
 <li><strong>val_size</strong> – Validation set size as a percentage of all training data.  Validation will not be run by default if n_examples &lt; 50.
 If n_examples &gt; 50, defaults to max(5, min(100, 0.05 * n_examples))</li>
-<li><strong>val_interval</strong> – Evaluate on validation set after <cite>val_interval</cite> batches.  
+<li><strong>val_interval</strong> – Evaluate on validation set after <cite>val_interval</cite> batches.
 Defaults to 4 * val_size / batch_size to ensure that too much time is not spent on validation.</li>
 <li><strong>lm_temp</strong> – Language model temperature – a value of <cite>0.0</cite> corresponds to greedy maximum likelihood predictions
 while a value of <cite>1.0</cite> corresponds to random predictions. Defaults to <cite>0.2</cite>.</li>
 <li><strong>seq_num_heads</strong> – Number of attention heads of final attention layer. Defaults to <cite>16</cite>.</li>
 <li><strong>subtoken_predictions</strong> – Return predictions at subtoken granularity or token granularity?  Defaults to <cite>False</cite>.</li>
 <li><strong>multi_label_sequences</strong> – Use a multi-labeling approach to sequence labeling to allow overlapping labels.</li>
-<li><strong>multi_label_threshold</strong> – Threshold of sigmoid unit in multi label classifier. 
+<li><strong>multi_label_threshold</strong> – Threshold of sigmoid unit in multi label classifier.
 Can be increased or lowered to trade off precision / recall. Defaults to <cite>0.5</cite>.</li>
 <li><strong>autosave_path</strong> – Save current best model (as measured by validation loss) to this location. Defaults to <cite>None</cite>.</li>
-<li><strong>tensorboard_folder</strong> – Directory for tensorboard logs. Tensorboard logs will not be written 
+<li><strong>tensorboard_folder</strong> – Directory for tensorboard logs. Tensorboard logs will not be written
 unless tensorboard_folder is explicitly provided. Defaults to <cite>None</cite>.</li>
 <li><strong>log_device_placement</strong> – Log which device each operation is placed on for debugging purposes.  Defaults to <cite>False</cite>.</li>
 <li><strong>allow_soft_placement</strong> – Allow tf to allocate an operation to a different device if a device is unavailable.  Defaults to <cite>True</cite>.</li>
@@ -2294,7 +2521,10 @@ unless tensorboard_folder is explicitly provided. Defaults to <cite>None</cite>.
 If you are using a single GPU and have more than 4Gb of GPU memory you should set this to GPU PCI number (0, 1, 2, etc.). Defaults to <cite>“cpu”</cite>.</li>
 <li><strong>eval_acc</strong> – if True, calculates accuracy and writes it to the tensorboard summary files for valudation runs.</li>
 <li><strong>save_dtype</strong> – specifies what precision to save model weights with.  Defaults to <cite>np.float32</cite>.</li>
-<li><strong>regression_loss</strong> – the loss to use for regression models L1 or L2, defaults to L2.</li>
+<li><strong>regression_loss</strong> – the loss to use for regression models. One of <cite>L1</cite> or <cite>L2</cite>, defaults to <cite>L2</cite>.</li>
+<li><strong>prefit_init</strong> – if True, fit target model weigths before finetuning the entire model. Defaults to <cite>False</cite>.</li>
+<li><strong>debugging_logs</strong> – if True, output tensorflow logs and turn off TQDM logging. Defaults to <cite>False</cite>.</li>
+<li><strong>val_set</strong> – Where it is neccessary to use an explicit validation set, provide it here as a tuple (text, labels)</li>
 </ul>
 </td>
 </tr>
@@ -2339,7 +2569,7 @@ If you are using a single GPU and have more than 4Gb of GPU memory you should se
     <script type="text/javascript">
         var DOCUMENTATION_OPTIONS = {
             URL_ROOT:'./',
-            VERSION:'0.5.13',
+            VERSION:'0.6.0',
             COLLAPSE_INDEX:false,
             FILE_SUFFIX:'.html',
             HAS_SOURCE:  true,

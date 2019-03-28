@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>finetune.sequence_labeling &mdash; finetune 0.6.0 documentation</title>
+  <title>finetune.target_models.sequence_labeling &mdash; finetune 0.6.0 documentation</title>
   
 
   
@@ -26,20 +26,20 @@
 
   
   
-    <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
   
 
   
 
   
         <link rel="index" title="Index"
-              href="../../genindex.html"/>
-        <link rel="search" title="Search" href="../../search.html"/>
-    <link rel="top" title="finetune 0.6.0 documentation" href="../../index.html"/>
-        <link rel="up" title="Module code" href="../index.html"/> 
+              href="../../../genindex.html"/>
+        <link rel="search" title="Search" href="../../../search.html"/>
+    <link rel="top" title="finetune 0.6.0 documentation" href="../../../index.html"/>
+        <link rel="up" title="Module code" href="../../index.html"/> 
 
   
-  <script src="../../_static/js/modernizr.min.js"></script>
+  <script src="../../../_static/js/modernizr.min.js"></script>
 
 </head>
 
@@ -55,7 +55,7 @@
           
 
           
-            <a href="../../index.html" class="icon icon-home"> finetune
+            <a href="../../../index.html" class="icon icon-home"> finetune
           
 
           
@@ -72,7 +72,7 @@
 
           
 <div role="search">
-  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
     <input type="text" name="q" placeholder="Search docs" />
     <input type="hidden" name="check_keywords" value="yes" />
     <input type="hidden" name="area" value="default" />
@@ -103,7 +103,7 @@
       <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
         
           <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
-          <a href="../../index.html">finetune</a>
+          <a href="../../../index.html">finetune</a>
         
       </nav>
 
@@ -131,11 +131,11 @@
 
   <ul class="wy-breadcrumbs">
     
-      <li><a href="../../index.html">Docs</a> &raquo;</li>
+      <li><a href="../../../index.html">Docs</a> &raquo;</li>
         
-          <li><a href="../index.html">Module code</a> &raquo;</li>
+          <li><a href="../../index.html">Module code</a> &raquo;</li>
         
-      <li>finetune.sequence_labeling</li>
+      <li>finetune.target_models.sequence_labeling</li>
     
     
       <li class="wy-breadcrumbs-aside">
@@ -152,22 +152,20 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
             
-  <h1>Source code for finetune.sequence_labeling</h1><div class="highlight"><pre>
+  <h1>Source code for finetune.target_models.sequence_labeling</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">itertools</span>
-<span class="kn">import</span> <span class="nn">math</span>
-<span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">import</span> <span class="nn">copy</span>
 
 <span class="kn">import</span> <span class="nn">tensorflow</span> <span class="k">as</span> <span class="nn">tf</span>
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 
 <span class="kn">from</span> <span class="nn">finetune.base</span> <span class="k">import</span> <span class="n">BaseModel</span><span class="p">,</span> <span class="n">PredictMode</span>
-<span class="kn">from</span> <span class="nn">finetune.target_encoders</span> <span class="k">import</span> <span class="n">SequenceLabelingEncoder</span><span class="p">,</span> <span class="n">SequenceMultiLabelingEncoder</span>
-<span class="kn">from</span> <span class="nn">finetune.network_modules</span> <span class="k">import</span> <span class="n">sequence_labeler</span>
-<span class="kn">from</span> <span class="nn">finetune.crf</span> <span class="k">import</span> <span class="n">sequence_decode</span>
-<span class="kn">from</span> <span class="nn">finetune.utils</span> <span class="k">import</span> <span class="n">indico_to_finetune_sequence</span><span class="p">,</span> <span class="n">finetune_to_indico_sequence</span>
-<span class="kn">from</span> <span class="nn">finetune.input_pipeline</span> <span class="k">import</span> <span class="n">BasePipeline</span><span class="p">,</span> <span class="n">ENCODER</span>
-<span class="kn">from</span> <span class="nn">finetune.estimator_utils</span> <span class="k">import</span> <span class="n">ProgressHook</span>
+<span class="kn">from</span> <span class="nn">finetune.encoding.target_encoders</span> <span class="k">import</span> <span class="n">SequenceLabelingEncoder</span><span class="p">,</span> <span class="n">SequenceMultiLabelingEncoder</span>
+<span class="kn">from</span> <span class="nn">finetune.nn.target_blocks</span> <span class="k">import</span> <span class="n">sequence_labeler</span>
+<span class="kn">from</span> <span class="nn">finetune.nn.crf</span> <span class="k">import</span> <span class="n">sequence_decode</span>
+<span class="kn">from</span> <span class="nn">finetune.encoding.sequence_encoder</span> <span class="k">import</span> <span class="n">indico_to_finetune_sequence</span><span class="p">,</span> <span class="n">finetune_to_indico_sequence</span>
+
+<span class="kn">from</span> <span class="nn">finetune.input_pipeline</span> <span class="k">import</span> <span class="n">BasePipeline</span>
 
 
 <span class="k">class</span> <span class="nc">SequencePipeline</span><span class="p">(</span><span class="n">BasePipeline</span><span class="p">):</span>
@@ -198,7 +196,7 @@
     <span class="k">def</span> <span class="nf">feed_shape_type_def</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">TS</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">TensorShape</span>
         <span class="n">target_shape</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">label_encoder</span><span class="o">.</span><span class="n">target_dim</span><span class="p">]</span> 
+            <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">label_encoder</span><span class="o">.</span><span class="n">target_dim</span><span class="p">]</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">multi_label</span> <span class="k">else</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span><span class="p">]</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="p">(</span>
@@ -208,12 +206,12 @@
                     <span class="s2">&quot;mask&quot;</span><span class="p">:</span> <span class="n">tf</span><span class="o">.</span><span class="n">float32</span>
                 <span class="p">},</span>
                 <span class="n">tf</span><span class="o">.</span><span class="n">int32</span>
-            <span class="p">),</span> 
+            <span class="p">),</span>
             <span class="p">(</span>
                 <span class="p">{</span>
-                    <span class="s2">&quot;tokens&quot;</span><span class="p">:</span> <span class="n">TS</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span><span class="p">,</span> <span class="mi">2</span><span class="p">]),</span> 
+                    <span class="s2">&quot;tokens&quot;</span><span class="p">:</span> <span class="n">TS</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span><span class="p">,</span> <span class="mi">2</span><span class="p">]),</span>
                     <span class="s2">&quot;mask&quot;</span><span class="p">:</span> <span class="n">TS</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span><span class="p">])</span>
-                <span class="p">},</span> 
+                <span class="p">},</span>
                 <span class="n">TS</span><span class="p">(</span><span class="n">target_shape</span><span class="p">)</span>
             <span class="p">)</span>
         <span class="p">)</span>
@@ -224,10 +222,10 @@
         <span class="k">return</span> <span class="n">SequenceLabelingEncoder</span><span class="p">()</span>
 
 
-<div class="viewcode-block" id="SequenceLabeler"><a class="viewcode-back" href="../../index.html#finetune.SequenceLabeler">[docs]</a><span class="k">class</span> <span class="nc">SequenceLabeler</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot; </span>
+<div class="viewcode-block" id="SequenceLabeler"><a class="viewcode-back" href="../../../index.html#finetune.SequenceLabeler">[docs]</a><span class="k">class</span> <span class="nc">SequenceLabeler</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Labels each token in a sequence as belonging to 1 of N token classes.</span>
-<span class="sd">    </span>
+
 <span class="sd">    :param config: A :py:class:`finetune.config.Settings` object or None (for default config).</span>
 <span class="sd">    :param \**kwargs: key-value pairs of config items to override.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
@@ -239,10 +237,10 @@
         <span class="s2">&quot;chunk_long_sequences&quot;</span><span class="p">:</span> <span class="kc">True</span>
     <span class="p">}</span>
 
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot; </span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        For a full list of configuration options, see `finetune.config`.</span>
-<span class="sd">        </span>
+
 <span class="sd">        :param config: A config object generated by `finetune.config.get_config` or None (for default config).</span>
 <span class="sd">        :param n_epochs: defaults to `5`.</span>
 <span class="sd">        :param lr_warmup: defaults to `0.1`,</span>
@@ -252,7 +250,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">d</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">SequenceLabeler</span><span class="o">.</span><span class="n">defaults</span><span class="p">)</span>
         <span class="n">d</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span> <span class="o">**</span><span class="n">d</span><span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">**</span><span class="n">d</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_get_input_pipeline</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">SequencePipeline</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">,</span> <span class="n">multi_label</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">multi_label_sequences</span><span class="p">)</span>
@@ -262,11 +260,17 @@
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_initialize</span><span class="p">()</span>
 
     <span class="k">def</span> <span class="nf">finetune</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
-        <span class="n">Xs</span><span class="p">,</span> <span class="n">Y_new</span> <span class="o">=</span> <span class="n">indico_to_finetune_sequence</span><span class="p">(</span><span class="n">Xs</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="n">Y</span><span class="p">,</span> <span class="n">multi_label</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">multi_label</span><span class="p">,</span> <span class="n">none_value</span><span class="o">=</span><span class="s2">&quot;&lt;PAD&gt;&quot;</span><span class="p">)</span>
+        <span class="n">Xs</span><span class="p">,</span> <span class="n">Y_new</span><span class="p">,</span> <span class="o">*</span><span class="n">_</span> <span class="o">=</span> <span class="n">indico_to_finetune_sequence</span><span class="p">(</span>
+            <span class="n">Xs</span><span class="p">,</span>
+            <span class="n">encoder</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">text_encoder</span><span class="p">,</span>
+            <span class="n">labels</span><span class="o">=</span><span class="n">Y</span><span class="p">,</span>
+            <span class="n">multi_label</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">multi_label</span><span class="p">,</span>
+            <span class="n">none_value</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">pad_token</span>
+        <span class="p">)</span>
         <span class="n">Y</span> <span class="o">=</span> <span class="n">Y_new</span> <span class="k">if</span> <span class="n">Y</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">finetune</span><span class="p">(</span><span class="n">Xs</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="n">Y</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">)</span>
 
-<div class="viewcode-block" id="SequenceLabeler.predict"><a class="viewcode-back" href="../../index.html#finetune.SequenceLabeler.predict">[docs]</a>    <span class="k">def</span> <span class="nf">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
+<div class="viewcode-block" id="SequenceLabeler.predict"><a class="viewcode-back" href="../../../index.html#finetune.SequenceLabeler.predict">[docs]</a>    <span class="k">def</span> <span class="nf">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Produces a list of most likely class labels as determined by the fine-tuned model.</span>
 
@@ -289,10 +293,10 @@
         <span class="k">for</span> <span class="n">chunk_idx</span><span class="p">,</span> <span class="p">(</span><span class="n">label_seq</span><span class="p">,</span> <span class="n">proba_seq</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">labels</span><span class="p">,</span> <span class="n">batch_probas</span><span class="p">)):</span>
 
             <span class="n">position_seq</span> <span class="o">=</span> <span class="n">arr_encoded</span><span class="p">[</span><span class="n">chunk_idx</span><span class="p">]</span><span class="o">.</span><span class="n">char_locs</span>
-            <span class="n">start_of_doc</span> <span class="o">=</span> <span class="n">arr_encoded</span><span class="p">[</span><span class="n">chunk_idx</span><span class="p">]</span><span class="o">.</span><span class="n">token_ids</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">ENCODER</span><span class="o">.</span><span class="n">start</span>
+            <span class="n">start_of_doc</span> <span class="o">=</span> <span class="n">arr_encoded</span><span class="p">[</span><span class="n">chunk_idx</span><span class="p">]</span><span class="o">.</span><span class="n">token_ids</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">text_encoder</span><span class="o">.</span><span class="n">start</span>
             <span class="n">end_of_doc</span> <span class="o">=</span> <span class="p">(</span>
                     <span class="n">chunk_idx</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">&gt;=</span> <span class="nb">len</span><span class="p">(</span><span class="n">arr_encoded</span><span class="p">)</span> <span class="ow">or</span>
-                    <span class="n">arr_encoded</span><span class="p">[</span><span class="n">chunk_idx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">token_ids</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">ENCODER</span><span class="o">.</span><span class="n">start</span>
+                    <span class="n">arr_encoded</span><span class="p">[</span><span class="n">chunk_idx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">token_ids</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">text_encoder</span><span class="o">.</span><span class="n">start</span>
             <span class="p">)</span>
             <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">            Chunk idx for prediction.  Dividers at `step_size` increments.</span>
@@ -315,7 +319,7 @@
                 <span class="k">else</span><span class="p">:</span>
                     <span class="c1"># predict only on middle third</span>
                     <span class="n">start</span><span class="p">,</span> <span class="n">end</span> <span class="o">=</span> <span class="n">step_size</span><span class="p">,</span> <span class="n">step_size</span> <span class="o">*</span> <span class="mi">2</span>
-            
+
             <span class="n">label_seq</span> <span class="o">=</span> <span class="n">label_seq</span><span class="p">[</span><span class="n">start</span><span class="p">:</span><span class="n">end</span><span class="p">]</span>
             <span class="n">position_seq</span> <span class="o">=</span> <span class="n">position_seq</span><span class="p">[</span><span class="n">start</span><span class="p">:</span><span class="n">end</span><span class="p">]</span>
             <span class="n">proba_seq</span> <span class="o">=</span> <span class="n">proba_seq</span><span class="p">[</span><span class="n">start</span><span class="p">:</span><span class="n">end</span><span class="p">]</span>
@@ -354,15 +358,17 @@
                 <span class="n">all_probs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">prob_dicts</span><span class="p">)</span>
         <span class="n">_</span><span class="p">,</span> <span class="n">doc_annotations</span> <span class="o">=</span> <span class="n">finetune_to_indico_sequence</span><span class="p">(</span>
             <span class="n">raw_texts</span><span class="o">=</span><span class="n">X</span><span class="p">,</span>
+            <span class="n">encoder</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">text_encoder</span><span class="p">,</span>
             <span class="n">subseqs</span><span class="o">=</span><span class="n">all_subseqs</span><span class="p">,</span>
             <span class="n">labels</span><span class="o">=</span><span class="n">all_labels</span><span class="p">,</span>
             <span class="n">probs</span><span class="o">=</span><span class="n">all_probs</span><span class="p">,</span>
-            <span class="n">subtoken_predictions</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">subtoken_predictions</span>
+            <span class="n">subtoken_predictions</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">subtoken_predictions</span><span class="p">,</span>
+            <span class="n">none_value</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">pad_token</span>
         <span class="p">)</span>
 
         <span class="k">return</span> <span class="n">doc_annotations</span></div>
 
-<div class="viewcode-block" id="SequenceLabeler.featurize"><a class="viewcode-back" href="../../index.html#finetune.SequenceLabeler.featurize">[docs]</a>    <span class="k">def</span> <span class="nf">featurize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
+<div class="viewcode-block" id="SequenceLabeler.featurize"><a class="viewcode-back" href="../../../index.html#finetune.SequenceLabeler.featurize">[docs]</a>    <span class="k">def</span> <span class="nf">featurize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.</span>
 
@@ -371,7 +377,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_featurize</span><span class="p">(</span><span class="n">X</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="SequenceLabeler.predict_proba"><a class="viewcode-back" href="../../index.html#finetune.SequenceLabeler.predict_proba">[docs]</a>    <span class="k">def</span> <span class="nf">predict_proba</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
+<div class="viewcode-block" id="SequenceLabeler.predict_proba"><a class="viewcode-back" href="../../../index.html#finetune.SequenceLabeler.predict_proba">[docs]</a>    <span class="k">def</span> <span class="nf">predict_proba</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Produces a list of most likely class labels as determined by the fine-tuned model.</span>
 
@@ -380,15 +386,16 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">X</span><span class="p">)</span></div>
 
-    <span class="k">def</span> <span class="nf">_target_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">featurizer_state</span><span class="p">,</span> <span class="n">targets</span><span class="p">,</span> <span class="n">n_outputs</span><span class="p">,</span> <span class="n">train</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">reuse</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_target_model</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">featurizer_state</span><span class="p">,</span> <span class="n">targets</span><span class="p">,</span> <span class="n">n_outputs</span><span class="p">,</span> <span class="n">train</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">reuse</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">sequence_labeler</span><span class="p">(</span>
             <span class="n">hidden</span><span class="o">=</span><span class="n">featurizer_state</span><span class="p">[</span><span class="s1">&#39;sequence_features&#39;</span><span class="p">],</span>
             <span class="n">targets</span><span class="o">=</span><span class="n">targets</span><span class="p">,</span>
             <span class="n">n_targets</span><span class="o">=</span><span class="n">n_outputs</span><span class="p">,</span>
-            <span class="n">pad_id</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">pad_idx</span><span class="p">,</span>
-            <span class="n">config</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">,</span>
+            <span class="n">pad_id</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">pad_idx</span><span class="p">,</span>
+            <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span>
             <span class="n">train</span><span class="o">=</span><span class="n">train</span><span class="p">,</span>
-            <span class="n">multilabel</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">multi_label</span><span class="p">,</span>
+            <span class="n">multilabel</span><span class="o">=</span><span class="n">config</span><span class="o">.</span><span class="n">multi_label_sequences</span><span class="p">,</span>
             <span class="n">reuse</span><span class="o">=</span><span class="n">reuse</span><span class="p">,</span>
             <span class="o">**</span><span class="n">kwargs</span>
         <span class="p">)</span>
@@ -446,7 +453,7 @@
 
     <script type="text/javascript">
         var DOCUMENTATION_OPTIONS = {
-            URL_ROOT:'../../',
+            URL_ROOT:'../../../',
             VERSION:'0.6.0',
             COLLAPSE_INDEX:false,
             FILE_SUFFIX:'.html',
@@ -454,15 +461,15 @@
             SOURCELINK_SUFFIX: '.txt'
         };
     </script>
-      <script type="text/javascript" src="../../_static/jquery.js"></script>
-      <script type="text/javascript" src="../../_static/underscore.js"></script>
-      <script type="text/javascript" src="../../_static/doctools.js"></script>
+      <script type="text/javascript" src="../../../_static/jquery.js"></script>
+      <script type="text/javascript" src="../../../_static/underscore.js"></script>
+      <script type="text/javascript" src="../../../_static/doctools.js"></script>
 
   
 
   
   
-    <script type="text/javascript" src="../../_static/js/theme.js"></script>
+    <script type="text/javascript" src="../../../_static/js/theme.js"></script>
   
 
   

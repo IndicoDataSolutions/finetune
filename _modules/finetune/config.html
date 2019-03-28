@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>finetune.config &mdash; finetune 0.5.13 documentation</title>
+  <title>finetune.config &mdash; finetune 0.6.0 documentation</title>
   
 
   
@@ -35,7 +35,7 @@
         <link rel="index" title="Index"
               href="../../genindex.html"/>
         <link rel="search" title="Search" href="../../search.html"/>
-    <link rel="top" title="finetune 0.5.13 documentation" href="../../index.html"/>
+    <link rel="top" title="finetune 0.6.0 documentation" href="../../index.html"/>
         <link rel="up" title="Module code" href="../index.html"/> 
 
   
@@ -65,7 +65,7 @@
             
             
               <div class="version">
-                0.5
+                0.6
               </div>
             
           
@@ -154,23 +154,35 @@
             
   <h1>Source code for finetune.config</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">logging</span>
-
 <span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">os.path</span>
 <span class="kn">import</span> <span class="nn">subprocess</span>
-<span class="kn">import</span> <span class="nn">traceback</span>
 <span class="kn">import</span> <span class="nn">warnings</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="k">import</span> <span class="n">namedtuple</span>
+<span class="kn">from</span> <span class="nn">functools</span> <span class="k">import</span> <span class="n">lru_cache</span>
 
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
-<span class="kn">import</span> <span class="nn">tensorflow</span> <span class="k">as</span> <span class="nn">tf</span>
-<span class="kn">from</span> <span class="nn">functools</span> <span class="k">import</span> <span class="n">lru_cache</span>
-<span class="kn">from</span> <span class="nn">collections</span> <span class="k">import</span> <span class="n">namedtuple</span>
+<span class="kn">from</span> <span class="nn">nltk.metrics.distance</span> <span class="k">import</span> <span class="n">edit_distance</span>
+
+<span class="kn">import</span> <span class="nn">finetune</span>
+<span class="kn">from</span> <span class="nn">finetune.errors</span> <span class="k">import</span> <span class="n">FinetuneError</span>
+<span class="kn">from</span> <span class="nn">finetune.base_models</span> <span class="k">import</span> <span class="n">GPTModel</span><span class="p">,</span> <span class="n">GPT2Model</span>
 
 <span class="n">LOGGER</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s1">&#39;finetune&#39;</span><span class="p">)</span>
-<span class="n">PAD_TOKEN</span> <span class="o">=</span> <span class="s1">&#39;&lt;PAD&gt;&#39;</span>
+
+
+<span class="k">def</span> <span class="nf">finetune_model_path</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">abspath</span><span class="p">(</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+            <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">finetune</span><span class="o">.</span><span class="vm">__file__</span><span class="p">),</span>
+            <span class="s1">&#39;model&#39;</span><span class="p">,</span>
+            <span class="n">path</span>
+        <span class="p">)</span>
+    <span class="p">)</span>
 
 
 <span class="nd">@lru_cache</span><span class="p">()</span>
-<span class="k">def</span> <span class="nf">all_gpus</span><span class="p">():</span>
+<span class="k">def</span> <span class="nf">all_gpus</span><span class="p">(</span><span class="n">visible_gpus</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Get integer ids of all available GPUs.</span>
 
@@ -179,6 +191,8 @@
 <span class="sd">        GPU 1: GeForce GTX 980 (UUID: GPU-7b8496dc-3eaf-8db7-01e7-c4a884f66acf)</span>
 <span class="sd">        GPU 2: GeForce GTX TITAN X (UUID: GPU-9e01f108-e7de-becd-2589-966dcc1c778f)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">visible_gpus</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">visible_gpus</span> <span class="o">=</span> <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">gpu</span><span class="p">)</span> <span class="k">for</span> <span class="n">gpu</span> <span class="ow">in</span> <span class="n">visible_gpus</span><span class="p">]</span>
     <span class="k">try</span><span class="p">:</span>
         <span class="n">sp</span> <span class="o">=</span> <span class="n">subprocess</span><span class="o">.</span><span class="n">Popen</span><span class="p">([</span><span class="s1">&#39;nvidia-smi&#39;</span><span class="p">,</span> <span class="s1">&#39;-L&#39;</span><span class="p">],</span> <span class="n">stdout</span><span class="o">=</span><span class="n">subprocess</span><span class="o">.</span><span class="n">PIPE</span><span class="p">,</span> <span class="n">stderr</span><span class="o">=</span><span class="n">subprocess</span><span class="o">.</span><span class="n">PIPE</span><span class="p">)</span>
         <span class="n">response</span> <span class="o">=</span> <span class="n">sp</span><span class="o">.</span><span class="n">communicate</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
@@ -191,18 +205,31 @@
             <span class="n">device_ids</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">description</span>
 
         <span class="n">cuda_visible_devices</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;CUDA_VISIBLE_DEVICES&quot;</span><span class="p">)</span>
+
+        <span class="c1"># restricting GPUs based on env vars</span>
         <span class="k">if</span> <span class="n">cuda_visible_devices</span><span class="p">:</span>
             <span class="n">device_ids</span> <span class="o">=</span> <span class="p">{</span>
-                <span class="n">device_id</span><span class="p">:</span> <span class="n">description</span> 
+                <span class="n">device_id</span><span class="p">:</span> <span class="n">description</span>
                 <span class="k">for</span> <span class="n">device_id</span><span class="p">,</span> <span class="n">description</span> <span class="ow">in</span> <span class="n">device_ids</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
                 <span class="k">if</span> <span class="nb">str</span><span class="p">(</span><span class="n">device_id</span><span class="p">)</span> <span class="ow">in</span> <span class="n">cuda_visible_devices</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;,&#39;</span><span class="p">)</span>
             <span class="p">}</span>
-        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot; Visible Devices: {{</span><span class="si">{}</span><span class="s2">}}&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+
+        <span class="c1"># restricting GPUs based on config</span>
+        <span class="k">if</span> <span class="n">visible_gpus</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">device_ids</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="n">device_id</span><span class="p">:</span> <span class="n">description</span>
+                <span class="k">for</span> <span class="n">device_id</span><span class="p">,</span> <span class="n">description</span> <span class="ow">in</span> <span class="n">device_ids</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+                <span class="k">if</span> <span class="n">device_id</span> <span class="ow">in</span> <span class="n">visible_gpus</span>
+            <span class="p">}</span>
+
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot; Visible GPUs: {{</span><span class="si">{}</span><span class="s2">}}&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
             <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span>
                 <span class="s2">&quot;</span><span class="si">{}</span><span class="s2">:</span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">device_id</span><span class="p">,</span> <span class="n">description</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;(&#39;</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
                 <span class="k">for</span> <span class="n">device_id</span><span class="p">,</span> <span class="n">description</span> <span class="ow">in</span> <span class="n">device_ids</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
             <span class="p">])</span>
         <span class="p">))</span>
+
+        <span class="n">device_ids</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">device_ids</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
     <span class="k">except</span><span class="p">:</span>
         <span class="c1"># Failed to parse out available GPUs properly</span>
         <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;Failed to find available GPUS.  Falling back to CPU only mode.&quot;</span><span class="p">)</span>
@@ -221,14 +248,14 @@
 <span class="sd">    :param visible_gpus: List of integer GPU ids to spread out computation across, defaults to all available GPUs.</span>
 <span class="sd">    :param n_epochs: Number of iterations through training data, defaults to `3`.</span>
 <span class="sd">    :param random_seed: Random seed to use for repeatability purposes, defaults to `42`.</span>
-<span class="sd">    :param max_length:  Maximum number of subtokens per sequence. Examples longer than this number will be truncated </span>
+<span class="sd">    :param max_length:  Maximum number of subtokens per sequence. Examples longer than this number will be truncated</span>
 <span class="sd">        (unless `chunk_long_sequences=True` for SequenceLabeler models). Defaults to `512`.</span>
 <span class="sd">    :param weight_stddev: Standard deviation of initial weights.  Defaults to `0.02`.</span>
-<span class="sd">    :param chunk_long_sequences: When True, use a sliding window approach to predict on </span>
+<span class="sd">    :param chunk_long_sequences: When True, use a sliding window approach to predict on</span>
 <span class="sd">        examples that are longer than max length.  Defaults to `False`.</span>
 <span class="sd">    :param low_memory_mode: When True, only store partial gradients on forward pass</span>
 <span class="sd">        and recompute remaining gradients incrementally in order to save memory.  Defaults to `False`.</span>
-<span class="sd">    :param interpolate_pos_embed: Interpolate positional embeddings when `max_length` differs from it&#39;s original value of </span>
+<span class="sd">    :param interpolate_pos_embed: Interpolate positional embeddings when `max_length` differs from it&#39;s original value of</span>
 <span class="sd">        `512`. Defaults to `False`.</span>
 <span class="sd">    :param embed_p_drop: Embedding dropout probability.  Defaults to `0.1`.</span>
 <span class="sd">    :param attn_p_drop: Attention dropout probability.  Defaults to `0.1`.</span>
@@ -236,6 +263,7 @@
 <span class="sd">    :param clf_p_drop: Classifier dropout probability.  Defaults to `0.1`.</span>
 <span class="sd">    :param l2_reg: L2 regularization coefficient. Defaults to `0.01`.</span>
 <span class="sd">    :param vector_l2: Whether to apply weight decay regularization to vectors (biases, normalization etc..). Defaults to False.</span>
+<span class="sd">    :param optimizer: Optimizer to use, current options include AdamW or AdamaxW.</span>
 <span class="sd">    :param b1: Adam b1 parameter.  Defaults to `0.9`.</span>
 <span class="sd">    :param b2: Adam b2 parameter.  Defaults to `0.999`.</span>
 <span class="sd">    :param epsilon: Adam epsilon parameter: Defaults to `1e-8`.</span>
@@ -243,26 +271,25 @@
 <span class="sd">    :param lr: Learning rate.  Defaults to `6.25e-5`.</span>
 <span class="sd">    :param lr_warmup: Learning rate warmup (percentage of all batches to warmup for).  Defaults to `0.002`.</span>
 <span class="sd">    :param max_grad_norm: Clip gradients larger than this norm. Defaults to `1.0`.</span>
+<span class="sd">    :param accum_steps: Number of updates to accumulate before applying. This is used to simulate a higher batch size.</span>
 <span class="sd">    :param lm_loss_coef: Language modeling loss coefficient -- a value between `0.0` - `1.0`</span>
 <span class="sd">        that indicates how to trade off between language modeling loss</span>
-<span class="sd">        and target model loss.  Usually not beneficial to turn on unless </span>
+<span class="sd">        and target model loss.  Usually not beneficial to turn on unless</span>
 <span class="sd">        dataset size exceeds a few thousand examples.  Defaults to `0.0`.</span>
 <span class="sd">    :param summarize_grads: Include gradient summary information in tensorboard.  Defaults to `False`.</span>
-<span class="sd">    :param verbose: Print TQDM logs?  Defaults to `True`.</span>
-
 <span class="sd">    :param val_size: Validation set size as a percentage of all training data.  Validation will not be run by default if n_examples &lt; 50.</span>
 <span class="sd">        If n_examples &gt; 50, defaults to max(5, min(100, 0.05 * n_examples))</span>
-<span class="sd">    :param val_interval: Evaluate on validation set after `val_interval` batches.  </span>
+<span class="sd">    :param val_interval: Evaluate on validation set after `val_interval` batches.</span>
 <span class="sd">        Defaults to 4 * val_size / batch_size to ensure that too much time is not spent on validation.</span>
 <span class="sd">    :param lm_temp: Language model temperature -- a value of `0.0` corresponds to greedy maximum likelihood predictions</span>
-<span class="sd">        while a value of `1.0` corresponds to random predictions. Defaults to `0.2`. </span>
+<span class="sd">        while a value of `1.0` corresponds to random predictions. Defaults to `0.2`.</span>
 <span class="sd">    :param seq_num_heads: Number of attention heads of final attention layer. Defaults to `16`.</span>
 <span class="sd">    :param subtoken_predictions: Return predictions at subtoken granularity or token granularity?  Defaults to `False`.</span>
 <span class="sd">    :param multi_label_sequences: Use a multi-labeling approach to sequence labeling to allow overlapping labels.</span>
-<span class="sd">    :param multi_label_threshold: Threshold of sigmoid unit in multi label classifier. </span>
+<span class="sd">    :param multi_label_threshold: Threshold of sigmoid unit in multi label classifier.</span>
 <span class="sd">        Can be increased or lowered to trade off precision / recall. Defaults to `0.5`.</span>
 <span class="sd">    :param autosave_path: Save current best model (as measured by validation loss) to this location. Defaults to `None`.</span>
-<span class="sd">    :param tensorboard_folder: Directory for tensorboard logs. Tensorboard logs will not be written </span>
+<span class="sd">    :param tensorboard_folder: Directory for tensorboard logs. Tensorboard logs will not be written</span>
 <span class="sd">        unless tensorboard_folder is explicitly provided. Defaults to `None`.</span>
 <span class="sd">    :param log_device_placement: Log which device each operation is placed on for debugging purposes.  Defaults to `False`.</span>
 <span class="sd">    :param allow_soft_placement: Allow tf to allocate an operation to a different device if a device is unavailable.  Defaults to `True`.</span>
@@ -275,8 +302,12 @@
 <span class="sd">        If you are using a single GPU and have more than 4Gb of GPU memory you should set this to GPU PCI number (0, 1, 2, etc.). Defaults to `&quot;cpu&quot;`.</span>
 <span class="sd">    :param eval_acc: if True, calculates accuracy and writes it to the tensorboard summary files for valudation runs.</span>
 <span class="sd">    :param save_dtype: specifies what precision to save model weights with.  Defaults to `np.float32`.</span>
-<span class="sd">    :param regression_loss: the loss to use for regression models L1 or L2, defaults to L2.</span>
+<span class="sd">    :param regression_loss: the loss to use for regression models. One of `L1` or `L2`, defaults to `L2`.</span>
+<span class="sd">    :param prefit_init: if True, fit target model weigths before finetuning the entire model. Defaults to `False`.</span>
+<span class="sd">    :param debugging_logs: if True, output tensorflow logs and turn off TQDM logging. Defaults to `False`.</span>
+<span class="sd">    :param val_set: Where it is neccessary to use an explicit validation set, provide it here as a tuple (text, labels)</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+
     <span class="k">def</span> <span class="nf">get_grid_searchable</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">grid_searchable</span>
 
@@ -289,6 +320,12 @@
     <span class="k">def</span> <span class="nf">__getattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">attr</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">attr</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;__&#39;</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">AttributeError</span>
+
+        <span class="k">if</span> <span class="n">attr</span> <span class="o">==</span> <span class="s2">&quot;base_model_path&quot;</span><span class="p">:</span>
+            <span class="n">full_path</span> <span class="o">=</span> <span class="n">finetune_model_path</span><span class="p">(</span><span class="bp">self</span><span class="p">[</span><span class="s2">&quot;base_model_path&quot;</span><span class="p">])</span>
+            <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">full_path</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">full_path</span>
+
         <span class="k">return</span> <span class="bp">self</span><span class="p">[</span><span class="n">attr</span><span class="p">]</span>
 
     <span class="k">def</span> <span class="nf">__setitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
@@ -303,82 +340,130 @@
     <span class="fm">__delattr__</span> <span class="o">=</span> <span class="nb">dict</span><span class="o">.</span><span class="fm">__delitem__</span></div>
 
 
+<span class="k">def</span> <span class="nf">did_you_mean</span><span class="p">(</span><span class="n">keyword</span><span class="p">,</span> <span class="n">keyword_pool</span><span class="p">):</span>
+    <span class="n">candidates</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">keyword_pool</span><span class="p">)</span>
+    <span class="n">closest_match_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argmin</span><span class="p">([</span>
+        <span class="n">edit_distance</span><span class="p">(</span><span class="n">keyword</span><span class="p">,</span> <span class="n">candidate</span><span class="p">)</span> <span class="k">for</span> <span class="n">candidate</span> <span class="ow">in</span> <span class="n">candidates</span>
+    <span class="p">])</span>
+    <span class="k">return</span> <span class="n">candidates</span><span class="p">[</span><span class="n">closest_match_idx</span><span class="p">]</span>
+
+
+<span class="k">def</span> <span class="nf">assert_valid_config</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="n">expected_keys</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">get_default_config</span><span class="p">()</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+    <span class="k">for</span> <span class="n">kwarg</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">kwarg</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">expected_keys</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">FinetuneError</span><span class="p">(</span>
+                <span class="s2">&quot;Unexpected setting configuration: `</span><span class="si">{}</span><span class="s2">` is an invalid keyword. &quot;</span>
+                <span class="s2">&quot;Did you mean `</span><span class="si">{}</span><span class="s2">`?&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">kwarg</span><span class="p">,</span> <span class="n">did_you_mean</span><span class="p">(</span><span class="n">kwarg</span><span class="p">,</span> <span class="n">expected_keys</span><span class="p">))</span>
+            <span class="p">)</span>
+
+
 <span class="k">def</span> <span class="nf">get_default_config</span><span class="p">():</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Gets a config object containing all the default parameters for each variant of the model.</span>
 
 <span class="sd">    :return: Config object.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">return</span> <span class="n">Settings</span><span class="p">(</span>
+    <span class="n">settings</span> <span class="o">=</span> <span class="n">Settings</span><span class="p">(</span>
+        <span class="c1"># General Settings</span>
+        <span class="n">low_memory_mode</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">interpolate_pos_embed</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">save_adam_vars</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">shuffle_buffer_size</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
         <span class="n">dataset_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">batch_size</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
-        <span class="n">visible_gpus</span><span class="o">=</span><span class="n">all_gpus</span><span class="p">(),</span>
+        <span class="n">visible_gpus</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="c1"># defaults to all available</span>
         <span class="n">n_epochs</span><span class="o">=</span><span class="n">GridSearchable</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">]),</span>
         <span class="n">seed</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
         <span class="n">max_length</span><span class="o">=</span><span class="mi">512</span><span class="p">,</span>
         <span class="n">weight_stddev</span><span class="o">=</span><span class="mf">0.02</span><span class="p">,</span>
-        <span class="n">chunk_long_sequences</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="n">low_memory_mode</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="n">interpolate_pos_embed</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">save_dtype</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">val_set</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+
+        <span class="c1"># Regularization</span>
         <span class="n">embed_p_drop</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
         <span class="n">attn_p_drop</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
         <span class="n">resid_p_drop</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
         <span class="n">clf_p_drop</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
         <span class="n">l2_reg</span><span class="o">=</span><span class="n">GridSearchable</span><span class="p">(</span><span class="mf">0.01</span><span class="p">,</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.001</span><span class="p">]),</span>
         <span class="n">vector_l2</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="n">b1</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span> 
+
+        <span class="c1"># Early Stopping and Validation</span>
+        <span class="n">autosave_path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">keep_best_model</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">early_stopping_steps</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">min_secs_between_eval</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span>
+        <span class="n">eval_acc</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">val_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">val_interval</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+
+        <span class="c1"># Debugging</span>
+        <span class="n">log_device_placement</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">soft_device_placement</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">tensorboard_folder</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">summarize_grads</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">debugging_logs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+
+        <span class="c1"># Partial Fitting</span>
+        <span class="n">num_layers_trained</span><span class="o">=</span><span class="mi">12</span><span class="p">,</span>
+        <span class="n">train_embeddings</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+
+        <span class="c1"># Class Imbalance</span>
+        <span class="n">class_weights</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">oversample</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">params_device</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span>
+
+        <span class="c1"># Optimization Params</span>
+        <span class="n">optimizer</span><span class="o">=</span><span class="s2">&quot;AdamW&quot;</span><span class="p">,</span>
+        <span class="n">b1</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span>
         <span class="n">b2</span><span class="o">=</span><span class="mf">0.999</span><span class="p">,</span>
         <span class="n">epsilon</span><span class="o">=</span><span class="mf">1e-8</span><span class="p">,</span>
         <span class="n">lr_schedule</span><span class="o">=</span><span class="s1">&#39;warmup_linear&#39;</span><span class="p">,</span>
         <span class="n">lr</span><span class="o">=</span><span class="n">GridSearchable</span><span class="p">(</span><span class="mf">6.25e-5</span><span class="p">,</span> <span class="p">[</span><span class="mf">6.25e-4</span><span class="p">,</span> <span class="mf">6.25e-5</span><span class="p">,</span> <span class="mf">6.25e-6</span><span class="p">]),</span>
         <span class="n">lr_warmup</span><span class="o">=</span><span class="mf">0.002</span><span class="p">,</span>
-        <span class="n">max_grad_norm</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">max_grad_norm</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">prefit_init</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">accum_steps</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+
+        <span class="c1"># MTL</span>
+        <span class="n">tasks</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">dont_optimize_zero_gradients</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+
+        <span class="c1"># Language Model Settings</span>
         <span class="n">lm_loss_coef</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
-        <span class="n">summarize_grads</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-        <span class="n">val_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">val_interval</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">lm_temp</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+
+        <span class="c1"># Sequence Labeling</span>
         <span class="n">seq_num_heads</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span>
         <span class="n">pad_token</span><span class="o">=</span><span class="s2">&quot;&lt;PAD&gt;&quot;</span><span class="p">,</span>
         <span class="n">subtoken_predictions</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
         <span class="n">multi_label_sequences</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
         <span class="n">multi_label_threshold</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
-        <span class="n">autosave_path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">keep_best_model</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="n">early_stopping_steps</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">tensorboard_folder</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">shuffle_buffer_size</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
-        <span class="n">min_secs_between_eval</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span>
-        <span class="n">log_device_placement</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="n">soft_device_placement</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-        <span class="n">save_adam_vars</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-        <span class="n">num_layers_trained</span><span class="o">=</span><span class="mi">12</span><span class="p">,</span>
-        <span class="n">train_embeddings</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-        <span class="n">class_weights</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">oversample</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="n">params_device</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span>
-        <span class="n">eval_acc</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="n">save_dtype</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">chunk_long_sequences</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+
+        <span class="c1"># Regression Params</span>
         <span class="n">regression_loss</span><span class="o">=</span><span class="s2">&quot;L2&quot;</span><span class="p">,</span>
 
-        <span class="c1"># Must remain fixed</span>
-        <span class="n">n_heads</span><span class="o">=</span><span class="mi">12</span><span class="p">,</span>
-        <span class="n">n_layer</span><span class="o">=</span><span class="mi">12</span><span class="p">,</span>
-        <span class="n">act_fn</span><span class="o">=</span><span class="s2">&quot;gelu&quot;</span><span class="p">,</span>
-        <span class="n">n_embed</span><span class="o">=</span><span class="mi">768</span><span class="p">,</span>
-        <span class="n">base_model_path</span><span class="o">=</span><span class="s2">&quot;Base_model.jl&quot;</span>
+        <span class="c1"># Association Params</span>
+        <span class="n">viable_edges</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">association_types</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">assocation_loss_weight</span><span class="o">=</span><span class="mf">100.0</span><span class="p">,</span>
+
+        <span class="c1"># Location of model weights</span>
+        <span class="n">base_model</span><span class="o">=</span><span class="n">GPTModel</span><span class="p">,</span>
+        <span class="n">base_model_path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+
+        <span class="c1"># Possible `SourceModel` specific settings</span>
+        <span class="n">n_heads</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">n_layer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">act_fn</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">n_embed</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="c1"># for TextCNN SourceModel only</span>
+        <span class="n">kernel_sizes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_filters_per_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">n_embed_featurizer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="c1"># needed because the dimensions CNN output are different from the embedding dimensions</span>
     <span class="p">)</span>
-
-
-<span class="k">def</span> <span class="nf">get_small_model_config</span><span class="p">():</span>
-    <span class="n">conf</span> <span class="o">=</span> <span class="n">get_default_config</span><span class="p">()</span>
-    <span class="n">conf</span><span class="o">.</span><span class="n">n_heads</span> <span class="o">=</span> <span class="mi">8</span>
-    <span class="n">conf</span><span class="o">.</span><span class="n">n_embed</span> <span class="o">=</span> <span class="mi">512</span>
-    <span class="n">conf</span><span class="o">.</span><span class="n">n_layer</span> <span class="o">=</span> <span class="mi">6</span>
-    <span class="n">conf</span><span class="o">.</span><span class="n">num_layers_trained</span> <span class="o">=</span> <span class="mi">6</span>
-    <span class="n">conf</span><span class="o">.</span><span class="n">base_model_path</span> <span class="o">=</span> <span class="s2">&quot;SmallBaseModel.jl&quot;</span>
-    <span class="k">return</span> <span class="n">conf</span>
+    <span class="k">return</span> <span class="n">settings</span>
 
 
 <span class="k">def</span> <span class="nf">get_config</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
@@ -387,14 +472,18 @@
 
 <span class="sd">    :param **kwargs: Keyword arguments to override default values.</span>
 <span class="sd">    :return: Config object.    &quot;&quot;&quot;</span>
+    <span class="n">assert_valid_config</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
     <span class="n">config</span> <span class="o">=</span> <span class="n">get_default_config</span><span class="p">()</span>
+    <span class="n">config</span><span class="o">.</span><span class="n">base_model</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;base_model&#39;</span><span class="p">,</span> <span class="n">config</span><span class="o">.</span><span class="n">base_model</span><span class="p">)</span>
+    <span class="n">config</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">base_model</span><span class="o">.</span><span class="n">settings</span><span class="p">)</span>
     <span class="n">config</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">config</span>
 
 
-<span class="k">def</span> <span class="nf">cpu_config</span><span class="p">():</span>
-    <span class="n">config</span> <span class="o">=</span> <span class="n">get_default_config</span><span class="p">()</span>
+<span class="k">def</span> <span class="nf">cpu_config</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="n">config</span> <span class="o">=</span> <span class="n">get_config</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
     <span class="n">config</span><span class="o">.</span><span class="n">visible_gpus</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">config</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">config</span>
 </pre></div>
 
@@ -432,7 +521,7 @@
     <script type="text/javascript">
         var DOCUMENTATION_OPTIONS = {
             URL_ROOT:'../../',
-            VERSION:'0.5.13',
+            VERSION:'0.6.0',
             COLLAPSE_INDEX:false,
             FILE_SUFFIX:'.html',
             HAS_SOURCE:  true,

@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>finetune.base &mdash; finetune 0.5.13 documentation</title>
+  <title>finetune.base &mdash; finetune 0.6.0 documentation</title>
   
 
   
@@ -35,7 +35,7 @@
         <link rel="index" title="Index"
               href="../../genindex.html"/>
         <link rel="search" title="Search" href="../../search.html"/>
-    <link rel="top" title="finetune 0.5.13 documentation" href="../../index.html"/>
+    <link rel="top" title="finetune 0.6.0 documentation" href="../../index.html"/>
         <link rel="up" title="Module code" href="../index.html"/> 
 
   
@@ -65,7 +65,7 @@
             
             
               <div class="version">
-                0.5
+                0.6
               </div>
             
           
@@ -175,28 +175,31 @@
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 <span class="kn">import</span> <span class="nn">tensorflow</span> <span class="k">as</span> <span class="nn">tf</span>
 <span class="kn">from</span> <span class="nn">tensorflow.data</span> <span class="k">import</span> <span class="n">Dataset</span>
+<span class="kn">from</span> <span class="nn">tensorflow.contrib.distribute</span> <span class="k">import</span> <span class="n">OneDeviceStrategy</span>
 <span class="kn">from</span> <span class="nn">sklearn.model_selection</span> <span class="k">import</span> <span class="n">train_test_split</span>
 <span class="kn">import</span> <span class="nn">joblib</span> <span class="k">as</span> <span class="nn">jl</span>
 
-<span class="kn">from</span> <span class="nn">finetune.utils</span> <span class="k">import</span> <span class="n">interpolate_pos_embed</span><span class="p">,</span> <span class="n">list_transpose</span>
-<span class="kn">from</span> <span class="nn">finetune.encoding</span> <span class="k">import</span> <span class="n">EncodedOutput</span>
-<span class="kn">from</span> <span class="nn">finetune.input_pipeline</span> <span class="k">import</span> <span class="n">ENCODER</span>
-<span class="kn">from</span> <span class="nn">finetune.config</span> <span class="k">import</span> <span class="n">get_default_config</span>
-<span class="kn">from</span> <span class="nn">finetune.saver</span> <span class="k">import</span> <span class="n">Saver</span>
+<span class="kn">import</span> <span class="nn">finetune</span>
+<span class="kn">from</span> <span class="nn">finetune.util</span> <span class="k">import</span> <span class="n">list_transpose</span>
+<span class="kn">from</span> <span class="nn">finetune.encoding.input_encoder</span> <span class="k">import</span> <span class="n">EncodedOutput</span>
+<span class="kn">from</span> <span class="nn">finetune.config</span> <span class="k">import</span> <span class="n">get_config</span><span class="p">,</span> <span class="n">all_gpus</span><span class="p">,</span> <span class="n">assert_valid_config</span>
+<span class="kn">from</span> <span class="nn">finetune.saver</span> <span class="k">import</span> <span class="n">Saver</span><span class="p">,</span> <span class="n">InitializeHook</span>
 <span class="kn">from</span> <span class="nn">finetune.errors</span> <span class="k">import</span> <span class="n">FinetuneError</span>
 <span class="kn">from</span> <span class="nn">finetune.model</span> <span class="k">import</span> <span class="n">get_model_fn</span><span class="p">,</span> <span class="n">PredictMode</span>
-<span class="kn">from</span> <span class="nn">finetune.download</span> <span class="k">import</span> <span class="n">download_data_if_required</span>
-<span class="kn">from</span> <span class="nn">finetune.estimator_utils</span> <span class="k">import</span> <span class="n">PatchedParameterServerStrategy</span>
+<span class="kn">from</span> <span class="nn">finetune.util.download</span> <span class="k">import</span> <span class="n">download_data_if_required</span>
+<span class="kn">from</span> <span class="nn">finetune.util.estimator</span> <span class="k">import</span> <span class="n">PatchedParameterServerStrategy</span>
+<span class="kn">from</span> <span class="nn">finetune.util.positional_embeddings</span> <span class="k">import</span> <span class="n">embedding_preprocessor</span>
 
-<span class="n">JL_BASE</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="vm">__file__</span><span class="p">),</span> <span class="s2">&quot;model&quot;</span><span class="p">,</span> <span class="s2">&quot;Base_model.jl&quot;</span><span class="p">)</span>
+
 <span class="n">LOGGER</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s1">&#39;finetune&#39;</span><span class="p">)</span>
+
 
 <span class="k">class</span> <span class="nc">BaseModel</span><span class="p">(</span><span class="nb">object</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">ABCMeta</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    A sklearn-style task agnostic base class for finetuning a Transformer language model.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        For a full list of configuration options, see `finetune.config`.</span>
 
@@ -212,15 +215,19 @@
 
         <span class="n">atexit</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">cleanup</span><span class="p">)</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="o">=</span> <span class="n">config</span> <span class="ow">or</span> <span class="n">get_default_config</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">num_layers_trained</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">n_layer</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">train_embeddings</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;If you are only finetuning a subset of the layers, you cannot finetune embeddings.&quot;</span><span class="p">)</span>
-
+        <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="o">=</span> <span class="n">get_config</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">resolved_gpus</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">validate_config</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_input_pipeline</span><span class="p">()</span>
         <span class="n">download_data_if_required</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_initialize</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">debugging_logs</span><span class="p">:</span>
+            <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;TF_CPP_MIN_LOG_LEVEL&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;0&quot;</span>
+            <span class="n">tf</span><span class="o">.</span><span class="n">logging</span><span class="o">.</span><span class="n">set_verbosity</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">logging</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">validate_config</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">num_layers_trained</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">n_layer</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">train_embeddings</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;If you are only finetuning a subset of the layers, you cannot finetune embeddings.&quot;</span><span class="p">)</span>
 
     <span class="nd">@abstractmethod</span>
     <span class="k">def</span> <span class="nf">_get_input_pipeline</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -250,30 +257,10 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">cleanup_glob</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">estimator_dir</span>
             <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Saving tensorboard output to </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">estimator_dir</span><span class="p">))</span>
 
-        <span class="k">def</span> <span class="nf">process_embeddings</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
-            <span class="k">if</span> <span class="s2">&quot;/we:0&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">name</span><span class="p">:</span>
-                <span class="k">return</span> <span class="n">value</span>
-
-            <span class="n">vocab_size</span> <span class="o">=</span> <span class="n">ENCODER</span><span class="o">.</span><span class="n">vocab_size</span>
-            <span class="n">word_embeddings</span> <span class="o">=</span> <span class="n">value</span><span class="p">[:</span><span class="n">vocab_size</span> <span class="o">-</span> <span class="nb">len</span><span class="p">(</span><span class="n">ENCODER</span><span class="o">.</span><span class="n">special_tokens</span><span class="p">)]</span>
-            <span class="n">special_embed</span> <span class="o">=</span> <span class="n">value</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">word_embeddings</span><span class="p">):</span> <span class="n">vocab_size</span><span class="p">]</span>
-            <span class="n">positional_embed</span> <span class="o">=</span> <span class="n">value</span><span class="p">[</span><span class="n">vocab_size</span><span class="p">:]</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">interpolate_pos_embed</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">positional_embed</span><span class="p">):</span>
-                <span class="n">positional_embed</span> <span class="o">=</span> <span class="n">interpolate_pos_embed</span><span class="p">(</span><span class="n">positional_embed</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span><span class="p">)</span>
-            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span> <span class="o">&gt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">positional_embed</span><span class="p">):</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Max Length cannot be greater than </span><span class="si">{}</span><span class="s2"> if interploate_pos_embed is turned off&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
-                    <span class="nb">len</span><span class="p">(</span><span class="n">positional_embed</span><span class="p">)))</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">positional_embed</span> <span class="o">=</span> <span class="n">positional_embed</span><span class="p">[:</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span><span class="p">]</span>
-
-            <span class="n">embeddings</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">((</span><span class="n">word_embeddings</span><span class="p">,</span> <span class="n">special_embed</span><span class="p">,</span> <span class="n">positional_embed</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">embeddings</span>
-
-        <span class="n">base_model_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="vm">__file__</span><span class="p">),</span> <span class="s2">&quot;model&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">base_model_path</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">saver</span> <span class="o">=</span> <span class="n">Saver</span><span class="p">(</span>
-            <span class="n">fallback_filename</span><span class="o">=</span><span class="n">base_model_path</span><span class="p">,</span>
+            <span class="n">fallback_filename</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">base_model_path</span><span class="p">,</span>
             <span class="n">exclude_matches</span><span class="o">=</span><span class="kc">None</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">save_adam_vars</span> <span class="k">else</span> <span class="s2">&quot;Adam&quot;</span><span class="p">,</span>
-            <span class="n">variable_transforms</span><span class="o">=</span><span class="p">[</span><span class="n">process_embeddings</span><span class="p">],</span>
+            <span class="n">variable_transforms</span><span class="o">=</span><span class="p">[</span><span class="n">embedding_preprocessor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">)],</span>
             <span class="n">save_dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">save_dtype</span>
         <span class="p">)</span>
 
@@ -285,8 +272,9 @@
     <span class="k">def</span> <span class="nf">_predict_proba_op</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">logits</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span>
 
+    <span class="nd">@staticmethod</span>
     <span class="nd">@abstractmethod</span>
-    <span class="k">def</span> <span class="nf">_target_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">featurizer_state</span><span class="p">,</span> <span class="n">targets</span><span class="p">,</span> <span class="n">n_outputs</span><span class="p">,</span> <span class="n">train</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">reuse</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_target_model</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">featurizer_state</span><span class="p">,</span> <span class="n">targets</span><span class="p">,</span> <span class="n">n_outputs</span><span class="p">,</span> <span class="n">train</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">reuse</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="c1"># Overridden by subclass to attach a target model onto the shared base featurizer.</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span>
 
@@ -304,52 +292,120 @@
                     <span class="nb">len</span><span class="p">(</span><span class="n">Y</span><span class="p">)</span>
                 <span class="p">)</span>
             <span class="p">)</span>
+
         <span class="n">batch_size</span> <span class="o">=</span> <span class="n">batch_size</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">batch_size</span>
 
         <span class="n">val_input_fn</span><span class="p">,</span> <span class="n">train_input_fn</span><span class="p">,</span> <span class="n">val_size</span><span class="p">,</span> <span class="n">val_interval</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">get_train_input_fns</span><span class="p">(</span><span class="n">Xs</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">val_size</span> <span class="o">&lt;=</span> <span class="mi">10</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">keep_best_model</span><span class="p">:</span>
-            <span class="n">tf</span><span class="o">.</span><span class="n">logging</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
-                <span class="s2">&quot;Early stopping / keeping best model with a validation size of </span><span class="si">{}</span><span class="s2"> is likely to case undesired results&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">val_size</span><span class="p">))</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">keep_best_model</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">val_size</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+                <span class="n">tf</span><span class="o">.</span><span class="n">logging</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Cannot early stop or keep best model with MTL&quot;</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">val_size</span> <span class="o">&lt;=</span> <span class="mi">10</span><span class="p">:</span>
+                <span class="n">tf</span><span class="o">.</span><span class="n">logging</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                <span class="s2">&quot;Early stopping / keeping best model with a validation size of </span><span class="si">{}</span><span class="s2"> is likely to case undesired results&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">val_size</span><span class="p">)</span>
+                <span class="p">)</span>
+
+        <span class="n">force_build_lm</span> <span class="o">=</span> <span class="p">(</span><span class="n">Y</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">estimator</span><span class="p">,</span> <span class="n">hooks</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_estimator</span><span class="p">(</span><span class="n">force_build_lm</span><span class="o">=</span><span class="n">force_build_lm</span><span class="p">)</span>
+        <span class="n">train_hooks</span> <span class="o">=</span> <span class="n">hooks</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
 
         <span class="n">steps_per_epoch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_n_steps</span><span class="p">(</span>
-            <span class="n">n_examples</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">dataset_size</span><span class="p">,</span>
+            <span class="n">n_examples</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">dataset_size</span><span class="p">,</span>
             <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
-            <span class="n">n_gpus</span><span class="o">=</span><span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">visible_gpus</span><span class="p">))</span>
+            <span class="n">n_gpus</span><span class="o">=</span><span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">resolved_gpus</span><span class="p">))</span>
         <span class="p">)</span>
         <span class="n">num_steps</span> <span class="o">=</span> <span class="n">steps_per_epoch</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">n_epochs</span>
-        <span class="n">estimator</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_estimator</span><span class="p">()</span>
-        <span class="n">train_hooks</span> <span class="o">=</span> <span class="p">[</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">tasks</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Validation with MTL tasks</span>
+            <span class="k">for</span> <span class="n">task</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">tasks</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">val_size</span><span class="p">[</span><span class="n">task</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">train_hooks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="n">tf</span><span class="o">.</span><span class="n">estimator</span><span class="o">.</span><span class="n">experimental</span><span class="o">.</span><span class="n">InMemoryEvaluatorHook</span><span class="p">(</span>
+                            <span class="n">estimator</span><span class="p">,</span> <span class="n">val_input_fn</span><span class="p">[</span><span class="n">task</span><span class="p">],</span> <span class="n">every_n_iter</span><span class="o">=</span><span class="n">val_interval</span><span class="p">[</span><span class="n">task</span><span class="p">],</span>
+                            <span class="n">steps</span><span class="o">=</span><span class="n">val_size</span><span class="p">[</span><span class="n">task</span><span class="p">]</span> <span class="o">//</span> <span class="n">batch_size</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">task</span><span class="p">,</span> <span class="n">hooks</span><span class="o">=</span><span class="n">hooks</span>
+                        <span class="p">)</span>
+                    <span class="p">)</span>
+                    <span class="n">train_hooks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="n">tf</span><span class="o">.</span><span class="n">estimator</span><span class="o">.</span><span class="n">experimental</span><span class="o">.</span><span class="n">InMemoryEvaluatorHook</span><span class="p">(</span>
+                            <span class="n">estimator</span><span class="p">,</span> <span class="n">val_input_fn</span><span class="p">[</span><span class="n">task</span> <span class="o">+</span> <span class="s2">&quot;_train&quot;</span><span class="p">],</span> <span class="n">every_n_iter</span><span class="o">=</span><span class="n">val_interval</span><span class="p">[</span><span class="n">task</span><span class="p">],</span>
+                            <span class="n">steps</span><span class="o">=</span><span class="n">val_size</span><span class="p">[</span><span class="n">task</span><span class="p">]</span> <span class="o">//</span> <span class="n">batch_size</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">task</span> <span class="o">+</span> <span class="s2">&quot;_train&quot;</span><span class="p">,</span> <span class="n">hooks</span><span class="o">=</span><span class="n">hooks</span>
+                        <span class="p">)</span>
+                    <span class="p">)</span>
+            <span class="n">early_stopping_interval</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">maxsize</span>  <span class="c1"># turn off early stopping for mtl.</span>
+        <span class="k">elif</span> <span class="n">val_size</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="c1"># Validation with all other tasks.</span>
+            <span class="n">train_hooks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="n">tf</span><span class="o">.</span><span class="n">estimator</span><span class="o">.</span><span class="n">experimental</span><span class="o">.</span><span class="n">InMemoryEvaluatorHook</span><span class="p">(</span>
+                    <span class="n">estimator</span><span class="p">,</span> <span class="n">val_input_fn</span><span class="p">,</span> <span class="n">every_n_iter</span><span class="o">=</span><span class="n">val_interval</span><span class="p">,</span> <span class="n">steps</span><span class="o">=</span><span class="n">val_size</span> <span class="o">//</span> <span class="n">batch_size</span><span class="p">,</span> <span class="n">hooks</span><span class="o">=</span><span class="n">hooks</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+            <span class="n">early_stopping_interval</span> <span class="o">=</span> <span class="n">val_interval</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">early_stopping_interval</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">maxsize</span>
+
+        <span class="n">train_hooks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">saver</span><span class="o">.</span><span class="n">get_saver_hook</span><span class="p">(</span>
                 <span class="n">estimator</span><span class="o">=</span><span class="n">estimator</span><span class="p">,</span>
                 <span class="n">keep_best_model</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">keep_best_model</span><span class="p">,</span>
                 <span class="n">steps_per_epoch</span><span class="o">=</span><span class="n">steps_per_epoch</span><span class="p">,</span>
                 <span class="n">early_stopping_steps</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">early_stopping_steps</span><span class="p">,</span>
-                <span class="n">eval_frequency</span><span class="o">=</span><span class="n">val_interval</span>
-            <span class="p">),</span>
-
-        <span class="p">]</span>
-        <span class="k">if</span> <span class="n">val_size</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="n">train_hooks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                <span class="n">tf</span><span class="o">.</span><span class="n">contrib</span><span class="o">.</span><span class="n">estimator</span><span class="o">.</span><span class="n">InMemoryEvaluatorHook</span><span class="p">(</span>
-                    <span class="n">estimator</span><span class="p">,</span> <span class="n">val_input_fn</span><span class="p">,</span> <span class="n">every_n_iter</span><span class="o">=</span><span class="n">val_interval</span><span class="p">,</span> <span class="n">steps</span><span class="o">=</span><span class="n">val_size</span> <span class="o">//</span> <span class="n">batch_size</span>
-                <span class="p">)</span>
+                <span class="n">eval_frequency</span><span class="o">=</span><span class="n">early_stopping_interval</span>
             <span class="p">)</span>
+        <span class="p">)</span>
 
         <span class="k">with</span> <span class="n">warnings</span><span class="o">.</span><span class="n">catch_warnings</span><span class="p">():</span>
             <span class="n">warnings</span><span class="o">.</span><span class="n">simplefilter</span><span class="p">(</span><span class="s2">&quot;ignore&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">prefit_init</span><span class="p">:</span>
+                <span class="n">tf</span><span class="o">.</span><span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Starting pre-fit initialisation...&quot;</span><span class="p">)</span>
+                <span class="n">num_layers_trained</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">num_layers_trained</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">num_layers_trained</span> <span class="o">=</span> <span class="mi">0</span>
+                <span class="n">estimator</span><span class="o">.</span><span class="n">train</span><span class="p">(</span><span class="n">train_input_fn</span><span class="p">,</span> <span class="n">hooks</span><span class="o">=</span><span class="n">train_hooks</span><span class="p">,</span> <span class="n">steps</span><span class="o">=</span><span class="n">num_steps</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">num_layers_trained</span> <span class="o">=</span> <span class="n">num_layers_trained</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">saver</span><span class="o">.</span><span class="n">variables</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">saver</span><span class="o">.</span><span class="n">variables</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="s2">&quot;adam&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">k</span> <span class="ow">and</span> <span class="s2">&quot;global_step&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">k</span><span class="p">}</span>
+                <span class="k">for</span> <span class="n">weight</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">saver</span><span class="o">.</span><span class="n">variables</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">weight</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;model/target/&quot;</span><span class="p">):</span>
+                        <span class="n">w</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">saver</span><span class="o">.</span><span class="n">variables</span><span class="p">[</span><span class="n">weight</span><span class="p">]</span>
+                        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">w</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                            <span class="k">continue</span>
+                        <span class="n">w_flat</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">w</span><span class="p">,</span> <span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">w</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]])</span>
+                        <span class="n">expectation_of_norm</span> <span class="o">=</span> <span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">weight_stddev</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span> <span class="o">*</span> <span class="n">w_flat</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">**</span> <span class="mf">0.5</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">saver</span><span class="o">.</span><span class="n">variables</span><span class="p">[</span><span class="n">weight</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">expectation_of_norm</span> <span class="o">*</span> <span class="n">w_flat</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">w_flat</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span> <span class="n">w</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+
+                <span class="n">tf</span><span class="o">.</span><span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Finishing pre-fit initialisation...&quot;</span><span class="p">)</span>
             <span class="n">estimator</span><span class="o">.</span><span class="n">train</span><span class="p">(</span><span class="n">train_input_fn</span><span class="p">,</span> <span class="n">hooks</span><span class="o">=</span><span class="n">train_hooks</span><span class="p">,</span> <span class="n">steps</span><span class="o">=</span><span class="n">num_steps</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_distribute_strategy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">visible_gpus</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Select a distribution strategy based on available devices.</span>
+
+<span class="sd">        Side effect: sets self.resolved_gpus for future use in computing steps per epoch</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">visible_gpus</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)):</span>
+            <span class="n">resolved_gpus</span> <span class="o">=</span> <span class="n">all_gpus</span><span class="p">(</span><span class="n">visible_gpus</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">visible_gpus</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">resolved_gpus</span> <span class="o">=</span> <span class="n">all_gpus</span><span class="p">()</span>
+
+        <span class="n">num_gpus</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">resolved_gpus</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">num_gpus</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">distribute_strategy</span> <span class="o">=</span> <span class="n">PatchedParameterServerStrategy</span><span class="p">(</span>
+                <span class="n">visible_gpus</span><span class="o">=</span><span class="n">resolved_gpus</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">num_gpus</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">gpu</span> <span class="o">=</span> <span class="n">resolved_gpus</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">distribute_strategy</span> <span class="o">=</span> <span class="n">OneDeviceStrategy</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="s1">&#39;/gpu:</span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">gpu</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">distribute_strategy</span> <span class="o">=</span> <span class="n">OneDeviceStrategy</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="s1">&#39;/cpu:0&#39;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">resolved_gpus</span> <span class="o">=</span> <span class="n">resolved_gpus</span>
+        <span class="k">return</span> <span class="n">distribute_strategy</span>
 
     <span class="k">def</span> <span class="nf">get_estimator</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">force_build_lm</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
         <span class="n">conf</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">ConfigProto</span><span class="p">(</span>
             <span class="n">allow_soft_placement</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">soft_device_placement</span><span class="p">,</span>
             <span class="n">log_device_placement</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">log_device_placement</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="n">num_gpus</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">visible_gpus</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">num_gpus</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
-            <span class="n">distribute_strategy</span> <span class="o">=</span> <span class="n">PatchedParameterServerStrategy</span><span class="p">(</span><span class="n">num_gpus_per_worker</span><span class="o">=</span><span class="n">num_gpus</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">distribute_strategy</span> <span class="o">=</span> <span class="kc">None</span>
 
+        <span class="n">distribute_strategy</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_distribute_strategy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">visible_gpus</span><span class="p">)</span>
         <span class="n">config</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">estimator</span><span class="o">.</span><span class="n">RunConfig</span><span class="p">(</span>
             <span class="n">tf_random_seed</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">seed</span><span class="p">,</span>
             <span class="n">save_summary_steps</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">val_interval</span><span class="p">,</span>
@@ -367,18 +423,20 @@
             <span class="n">predict_op</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_predict_op</span><span class="p">,</span>
             <span class="n">predict_proba_op</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_predict_proba_op</span><span class="p">,</span>
             <span class="n">build_target_model</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">target_dim</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">,</span>
-            <span class="n">build_lm</span><span class="o">=</span><span class="n">force_build_lm</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">lm_loss_coef</span> <span class="o">&gt;</span> <span class="mf">0.0</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">target_dim</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">,</span>
-            <span class="n">encoder</span><span class="o">=</span><span class="n">ENCODER</span><span class="p">,</span>
+            <span class="n">build_lm</span><span class="o">=</span><span class="n">force_build_lm</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">lm_loss_coef</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">,</span>
+            <span class="n">encoder</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">text_encoder</span><span class="p">,</span>
             <span class="n">target_dim</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">target_dim</span><span class="p">,</span>
             <span class="n">label_encoder</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">label_encoder</span><span class="p">,</span>
             <span class="n">saver</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">saver</span>
         <span class="p">)</span>
-        <span class="k">return</span> <span class="n">tf</span><span class="o">.</span><span class="n">estimator</span><span class="o">.</span><span class="n">Estimator</span><span class="p">(</span>
+        <span class="n">hooks</span> <span class="o">=</span> <span class="p">[</span><span class="n">InitializeHook</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">saver</span><span class="p">)]</span>
+        <span class="n">est</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">estimator</span><span class="o">.</span><span class="n">Estimator</span><span class="p">(</span>
             <span class="n">model_dir</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">estimator_dir</span><span class="p">,</span>
             <span class="n">model_fn</span><span class="o">=</span><span class="n">model_fn</span><span class="p">,</span>
             <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span>
             <span class="n">params</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span>
         <span class="p">)</span>
+        <span class="k">return</span> <span class="n">est</span><span class="p">,</span> <span class="n">hooks</span>
 
     <span class="k">def</span> <span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_closed</span> <span class="o">=</span> <span class="kc">True</span>
@@ -423,12 +481,12 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_closed</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_predictions</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">_estimator</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_estimator</span><span class="p">()</span>
+            <span class="n">_estimator</span><span class="p">,</span> <span class="n">hooks</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_estimator</span><span class="p">()</span>
             <span class="n">input_fn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">get_predict_input_fn</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_data_generator</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_predictions</span> <span class="o">=</span> <span class="n">_estimator</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">input_fn</span><span class="o">=</span><span class="n">input_fn</span><span class="p">,</span> <span class="n">predict_keys</span><span class="o">=</span><span class="n">mode</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_predictions</span> <span class="o">=</span> <span class="n">_estimator</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">input_fn</span><span class="o">=</span><span class="n">input_fn</span><span class="p">,</span> <span class="n">predict_keys</span><span class="o">=</span><span class="n">mode</span><span class="p">,</span> <span class="n">hooks</span><span class="o">=</span><span class="n">hooks</span><span class="p">)</span>
 
         <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_to_pull</span><span class="p">):</span>
-            <span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_predictions</span><span class="p">)</span> <span class="c1"># collect the null predictions from the queue</span>
+            <span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_predictions</span><span class="p">)</span>  <span class="c1"># collect the null predictions from the queue</span>
 
         <span class="n">predictions</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="n">n</span>
         <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">tqdm</span><span class="o">.</span><span class="n">tqdm</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">),</span> <span class="n">total</span><span class="o">=</span><span class="n">n</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s2">&quot;Inference&quot;</span><span class="p">):</span>
@@ -443,13 +501,13 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cached_predict</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cached_inference</span><span class="p">(</span><span class="n">Xs</span><span class="o">=</span><span class="n">Xs</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="n">mode</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">estimator</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_estimator</span><span class="p">()</span>
+            <span class="n">estimator</span><span class="p">,</span> <span class="n">hooks</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_estimator</span><span class="p">()</span>
             <span class="n">input_fn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">get_predict_input_fn</span><span class="p">(</span><span class="n">Xs</span><span class="p">)</span>
             <span class="n">length</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">Xs</span><span class="p">)</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">callable</span><span class="p">(</span><span class="n">Xs</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span>
 
             <span class="n">predictions</span> <span class="o">=</span> <span class="n">tqdm</span><span class="o">.</span><span class="n">tqdm</span><span class="p">(</span>
                 <span class="n">estimator</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span>
-                    <span class="n">input_fn</span><span class="o">=</span><span class="n">input_fn</span><span class="p">,</span> <span class="n">predict_keys</span><span class="o">=</span><span class="n">mode</span>
+                    <span class="n">input_fn</span><span class="o">=</span><span class="n">input_fn</span><span class="p">,</span> <span class="n">predict_keys</span><span class="o">=</span><span class="n">mode</span><span class="p">,</span> <span class="n">hooks</span><span class="o">=</span><span class="n">hooks</span>
                 <span class="p">),</span>
                 <span class="n">total</span><span class="o">=</span><span class="n">length</span><span class="p">,</span>
                 <span class="n">desc</span><span class="o">=</span><span class="s2">&quot;Inference&quot;</span>
@@ -536,16 +594,16 @@
             <span class="k">return</span> <span class="n">tf_dataset</span><span class="o">.</span><span class="n">batch</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">use_extra_toks</span> <span class="o">=</span> <span class="n">use_extra_toks</span>
-        <span class="n">encoded</span> <span class="o">=</span> <span class="n">ENCODER</span><span class="o">.</span><span class="n">_encode</span><span class="p">([</span><span class="n">seed_text</span><span class="p">])</span>
+        <span class="n">encoded</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">text_encoder</span><span class="o">.</span><span class="n">_encode</span><span class="p">([</span><span class="n">seed_text</span><span class="p">])</span>
         <span class="k">if</span> <span class="n">encoded</span> <span class="o">==</span> <span class="p">[]</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">use_extra_toks</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;If you are not using the extra tokens, you must provide some non-empty seed text&quot;</span><span class="p">)</span>
-        <span class="n">start</span> <span class="o">=</span> <span class="p">[</span><span class="n">ENCODER</span><span class="o">.</span><span class="n">start</span><span class="p">]</span> <span class="k">if</span> <span class="n">use_extra_toks</span> <span class="k">else</span> <span class="p">[]</span>
+        <span class="n">start</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">text_encoder</span><span class="o">.</span><span class="n">start</span><span class="p">]</span> <span class="k">if</span> <span class="n">use_extra_toks</span> <span class="k">else</span> <span class="p">[]</span>
         <span class="n">encoded</span> <span class="o">=</span> <span class="n">EncodedOutput</span><span class="p">(</span><span class="n">token_ids</span><span class="o">=</span><span class="n">start</span> <span class="o">+</span> <span class="n">encoded</span><span class="o">.</span><span class="n">token_ids</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
 
-        <span class="n">estimator</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_estimator</span><span class="p">(</span><span class="n">force_build_lm</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-        <span class="n">predict</span> <span class="o">=</span> <span class="n">estimator</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">input_fn</span><span class="o">=</span><span class="n">get_input_fn</span><span class="p">,)</span>
+        <span class="n">estimator</span><span class="p">,</span> <span class="n">hooks</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_estimator</span><span class="p">(</span><span class="n">force_build_lm</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">predict</span> <span class="o">=</span> <span class="n">estimator</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">input_fn</span><span class="o">=</span><span class="n">get_input_fn</span><span class="p">,</span> <span class="n">hooks</span><span class="o">=</span><span class="n">hooks</span><span class="p">)</span>
 
-        <span class="n">EOS</span> <span class="o">=</span> <span class="n">ENCODER</span><span class="o">.</span><span class="n">clf_token</span>
+        <span class="n">EOS</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">text_encoder</span><span class="o">.</span><span class="n">clf_token</span>
         <span class="k">with</span> <span class="n">warnings</span><span class="o">.</span><span class="n">catch_warnings</span><span class="p">():</span>
             <span class="n">warnings</span><span class="o">.</span><span class="n">filterwarnings</span><span class="p">(</span><span class="s2">&quot;ignore&quot;</span><span class="p">)</span>
             <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">encoded</span><span class="o">.</span><span class="n">token_ids</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="p">(</span><span class="n">max_length</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span><span class="p">)</span> <span class="o">-</span> <span class="mi">2</span><span class="p">):</span>
@@ -558,7 +616,7 @@
 
         <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s2">&quot;use_extra_toks&quot;</span><span class="p">]</span>
 
-        <span class="k">return</span> <span class="n">ENCODER</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="n">encoded</span><span class="o">.</span><span class="n">token_ids</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">text_encoder</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="n">encoded</span><span class="o">.</span><span class="n">token_ids</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -619,16 +677,18 @@
 <span class="sd">        :param path: string path name to load model from.  Same value as previously provided to :meth:`save`. Must be a folder.</span>
 <span class="sd">        :param **kwargs: key-value pairs of config items to override.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">assert_valid_config</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="n">download_data_if_required</span><span class="p">()</span>
-        <span class="n">saver</span> <span class="o">=</span> <span class="n">Saver</span><span class="p">(</span><span class="n">JL_BASE</span><span class="p">)</span>
+        <span class="n">saver</span> <span class="o">=</span> <span class="n">Saver</span><span class="p">()</span>
         <span class="n">model</span> <span class="o">=</span> <span class="n">saver</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
         <span class="n">model</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">saver</span><span class="o">.</span><span class="n">set_fallback</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">base_model_path</span><span class="p">)</span>
         <span class="n">model</span><span class="o">.</span><span class="n">_initialize</span><span class="p">()</span>
         <span class="n">model</span><span class="o">.</span><span class="n">saver</span><span class="o">.</span><span class="n">variables</span> <span class="o">=</span> <span class="n">saver</span><span class="o">.</span><span class="n">variables</span>
         <span class="k">return</span> <span class="n">model</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">finetune_grid_search</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">Xs</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">test_size</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">eval_fn</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">probs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">return_all</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">finetune_grid_search</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">Xs</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">test_size</span><span class="p">,</span> <span class="n">eval_fn</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">probs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">return_all</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Performs grid search over config items defined using &quot;GridSearchable&quot; objects and returns either full results or</span>
 <span class="sd">        the config object that relates to the best results. The default config contains grid searchable objects for the</span>
@@ -638,16 +698,16 @@
 <span class="sd">        :param Y: Targets, A list of targets, [num_samples] that correspond to each sample in Xs.</span>
 <span class="sd">        :param test_size: Int or float. If an int is given this number of samples is used to validate, if a float is</span>
 <span class="sd">         given then that fraction of samples is used.</span>
-<span class="sd">        :param config: A config object, or None to use the default config.</span>
 <span class="sd">        :param eval_fn: An eval function that takes 2 inputs (prediction, truth) and returns a float, with a max value being desired.</span>
 <span class="sd">        :param probs: If true, eval_fn is passed probability outputs from predict_proba, otherwise the output of predict is used.</span>
 <span class="sd">        :param return_all: If True, all results are returned, if False, only the best config is returned.</span>
+<span class="sd">        :param kwargs: Keyword arguments to pass to get_config()</span>
 <span class="sd">        :return: default is to return the best config object. If return_all is true, it returns a list of tuples of the</span>
 <span class="sd">            form [(config, eval_fn output), ... ]</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">Xs</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="nb">str</span><span class="p">):</span>
             <span class="n">Xs</span> <span class="o">=</span> <span class="p">[</span><span class="n">Xs</span><span class="p">]</span>
-        <span class="n">config</span> <span class="o">=</span> <span class="n">config</span> <span class="ow">or</span> <span class="n">get_default_config</span><span class="p">()</span>
+        <span class="n">config</span> <span class="o">=</span> <span class="n">get_config</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="n">config</span><span class="o">.</span><span class="n">val_size</span> <span class="o">=</span> <span class="mf">0.0</span>
         <span class="n">eval_fn</span> <span class="o">=</span> <span class="n">eval_fn</span> <span class="ow">or</span> <span class="bp">cls</span><span class="o">.</span><span class="n">get_eval_fn</span><span class="p">()</span>
 
@@ -676,8 +736,8 @@
         <span class="k">return</span> <span class="nb">max</span><span class="p">(</span><span class="n">results</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">finetune_grid_search_cv</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">Xs</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">n_splits</span><span class="p">,</span> <span class="n">test_size</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">eval_fn</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">probs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-                                <span class="n">return_all</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">finetune_grid_search_cv</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">Xs</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">n_splits</span><span class="p">,</span> <span class="n">test_size</span><span class="p">,</span> <span class="n">eval_fn</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">probs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                                <span class="n">return_all</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Performs cross validated grid search over config items defined using &quot;GridSearchable&quot; objects and returns either full results or</span>
 <span class="sd">        the config object that relates to the best results. The default config contains grid searchable objects for the</span>
@@ -690,18 +750,25 @@
 <span class="sd">        :param n_splits: Number of CV splits to do.</span>
 <span class="sd">        :param test_size: Int or float. If an int is given this number of samples is used to validate, if a float is</span>
 <span class="sd">            given then that fraction of samples is used.</span>
-<span class="sd">        :param config: A config object, or None to use the default config.</span>
 <span class="sd">        :param eval_fn: An eval function that takes 2 batches of outputs and returns a float, with a max value being</span>
 <span class="sd">            desired. An arithmetic mean must make sense for this metric.</span>
 <span class="sd">        :param probs: If true, eval_fn is passed probability outputs from predict_proba, otherwise the output of predict is used.</span>
 <span class="sd">        :param return_all: If True, all results are returned, if False, only the best config is returned.</span>
+<span class="sd">        :param kwargs: Keyword arguments to pass to get_config()</span>
 <span class="sd">        :return: default is to return the best config object. If return_all is true, it returns a list of tuples of the</span>
 <span class="sd">            form [(config, eval_fn output), ... ]</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">results</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_splits</span><span class="p">):</span>
-            <span class="n">res</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">finetune_grid_search</span><span class="p">(</span><span class="n">Xs</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="n">test_size</span><span class="o">=</span><span class="n">test_size</span><span class="p">,</span> <span class="n">probs</span><span class="o">=</span><span class="n">probs</span><span class="p">,</span> <span class="n">eval_fn</span><span class="o">=</span><span class="n">eval_fn</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span>
-                                           <span class="n">return_all</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">res</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">finetune_grid_search</span><span class="p">(</span>
+                <span class="n">Xs</span><span class="p">,</span>
+                <span class="n">Y</span><span class="p">,</span>
+                <span class="n">test_size</span><span class="o">=</span><span class="n">test_size</span><span class="p">,</span>
+                <span class="n">probs</span><span class="o">=</span><span class="n">probs</span><span class="p">,</span>
+                <span class="n">eval_fn</span><span class="o">=</span><span class="n">eval_fn</span><span class="p">,</span>
+                <span class="n">return_all</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">kwargs</span>
+            <span class="p">)</span>
             <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">res</span><span class="p">)</span>
         <span class="n">results</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="n">results</span><span class="p">))</span>
         <span class="n">aggregated_results</span> <span class="o">=</span> <span class="p">[]</span>
@@ -765,7 +832,7 @@
     <script type="text/javascript">
         var DOCUMENTATION_OPTIONS = {
             URL_ROOT:'../../',
-            VERSION:'0.5.13',
+            VERSION:'0.6.0',
             COLLAPSE_INDEX:false,
             FILE_SUFFIX:'.html',
             HAS_SOURCE:  true,
