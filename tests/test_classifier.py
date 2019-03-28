@@ -20,8 +20,9 @@ import numpy as np
 from sklearn.metrics import accuracy_score, recall_score
 
 from finetune import Classifier
+from finetune.base_models import GPTModelSmall
 from finetune.datasets import generic_download
-from finetune.config import get_config, get_small_model_config
+from finetune.config import get_config
 from finetune.errors import FinetuneError
 
 SST_FILENAME = "SST-binary.csv"
@@ -143,7 +144,7 @@ class TestClassifier(unittest.TestCase):
         predictions2 = model.predict_proba(valid_sample.Text[1:2].values)
         with model.cached_predict():
             np.testing.assert_allclose(
-                list(model.predict_proba(valid_sample.Text[:1].values)[0].values()), 
+                list(model.predict_proba(valid_sample.Text[:1].values)[0].values()),
                 list(predictions[0].values()),
                 rtol=1e-4
             )
@@ -273,7 +274,7 @@ class TestClassifier(unittest.TestCase):
         """
         Ensure model converges to a reasonable solution for a trivial problem
         """
-        model = Classifier(**get_small_model_config())
+        model = Classifier(base_model=GPTModelSmall)
         n_per_class = (self.n_sample * 5)
         trX = ['cat'] * n_per_class + ['finance'] * n_per_class
         np.random.shuffle(trX)
@@ -322,7 +323,7 @@ class TestClassifier(unittest.TestCase):
 
         # A dirty mock to make all model inferences output a hundred _classify_ tokens
         fake_estimator = MagicMock()
-        model.get_estimator = lambda *args, **kwargs: fake_estimator
+        model.get_estimator = lambda *args, **kwargs: (fake_estimator, [])
         model.input_pipeline.text_encoder._lazy_init()
         fake_estimator.predict = MagicMock(
             return_value=iter([

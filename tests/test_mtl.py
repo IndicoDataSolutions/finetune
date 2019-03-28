@@ -11,7 +11,7 @@ from sklearn.model_selection import train_test_split
 from finetune import MultiTask, Classifier, Comparison
 from finetune.datasets.stanford_sentiment_treebank import StanfordSentimentTreebank
 from finetune.datasets.quora_similarity import QuoraDuplicate
-from finetune.utils import finetune_model_path
+from finetune.config import finetune_model_path
 SST_FILENAME = "SST-binary.csv"
 
 

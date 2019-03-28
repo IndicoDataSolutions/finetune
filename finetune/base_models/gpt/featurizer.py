@@ -3,9 +3,9 @@ import functools
 import numpy as np
 import tensorflow as tf
 
-from finetune.recompute_grads import recompute_grad
-from finetune.utils import shape_list
-from finetune.activations import act_fns
+from finetune.optimizers.recompute_grads import recompute_grad
+from finetune.util.shapes import shape_list
+from finetune.nn.activations import act_fns
 
 
 def norm(x, scope, axis=[-1], e=1e-5):

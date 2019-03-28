@@ -3,14 +3,15 @@ import functools
 
 import numpy as np
 import tensorflow as tf
-from tensorflow.train import Scaffold
 from tensorflow.contrib.opt.python.training.weight_decay_optimizers import AdamWOptimizer
 
-from finetune.network_modules import language_model
-from finetune.utils import sample_with_temperature, dont_optimize_zeros, get_grad_accumulation_optimizer
-from finetune.optimizers import schedules
-from finetune.imbalance import class_weight_tensor
-from finetune.adamax import AdamaxWOptimizer
+from finetune.nn.target_blocks import language_model
+from finetune.util.text_generation import sample_with_temperature
+from finetune.optimizers.zero_grad import dont_optimize_zeros
+from finetune.optimizers.gradient_accumulation import get_grad_accumulation_optimizer
+from finetune.optimizers.learning_rate_schedules import schedules
+from finetune.optimizers.adamax import AdamaxWOptimizer
+from finetune.util.imbalance import class_weight_tensor
 from finetune.errors import FinetuneError
 
 LOGGER = logging.getLogger('finetune')
@@ -187,18 +188,14 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                 summaries=summaries
             )
 
-        init_op = saver.get_scaffold_init_op()
-        scaffold = Scaffold(init_op=init_op)
-
         if mode == tf.estimator.ModeKeys.PREDICT:
             return tf.estimator.EstimatorSpec(
                 mode=mode,
-                predictions=predictions,
-                scaffold=scaffold
+                predictions=predictions
             )
 
         if mode == tf.estimator.ModeKeys.TRAIN:
-            return tf.estimator.EstimatorSpec(mode=mode, loss=train_loss, train_op=train_op, scaffold=scaffold)
+            return tf.estimator.EstimatorSpec(mode=mode, loss=train_loss, train_op=train_op)
 
         assert mode == tf.estimator.ModeKeys.EVAL, "The mode is actually {}".format(mode)
         if params.eval_acc and pred_op is not None:
@@ -210,6 +207,6 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
         else:
             metrics = None
 
-        return tf.estimator.EstimatorSpec(mode=mode, loss=train_loss, scaffold=scaffold, eval_metric_ops=metrics)
+        return tf.estimator.EstimatorSpec(mode=mode, loss=train_loss, eval_metric_ops=metrics)
 
     return _model_fn

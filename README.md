@@ -2,9 +2,11 @@
 
 **Scikit-learn style model finetuning for NLP**
 
-`Finetune` ships with a pre-trained language model
-from ["Improving Language Understanding by Generative Pre-Training"](https://s3-us-west-2.amazonaws.com/openai-assets/research-covers/language-unsupervised/language_understanding_paper.pdf)
-and builds off the [OpenAI/finetune-language-model repository](https://github.com/openai/finetune-transformer-lm). Huge thanks to Alec Radford for his hard work and quality research.
+`Finetune` ships with pre-trained language models
+from ["Improving Language Understanding by Generative Pre-Training"](https://s3-us-west-2.amazonaws.com/openai-assets/research-covers/language-unsupervised/language_understanding_paper.pdf) (GPT)
+and ["Language Models are Unsupervised Multitask Learners"](https://d4mucfpksywv.cloudfront.net/better-language-models/language-models.pdf) (GPT-2). Base model code has been adapated from the [GPT](https://github.com/openai/finetune-transformer-lm) and [GPT-2](https://github.com/openai/gpt-2) github repos.
+
+Huge thanks to Alec Radford and Jeff Wu for their hard work and quality research.
 
 Finetune Quickstart Guide
 =========================
@@ -75,9 +77,18 @@ If you'd prefer you can also run `finetune` in a docker container. The bash scri
 
 ```
 git clone https://github.com/IndicoDataSolutions/finetune && cd finetune
-./docker/build_docker.sh      # builds a docker image
-./docker/start_docker.sh      # starts a docker container in the background, forwards $PWD to /finetune
+
+# For usage with NVIDIA GPUs
+./docker/build_gpu_docker.sh      # builds a docker image
+./docker/start_gpu_docker.sh      # starts a docker container in the background, forwards $PWD to /finetune
+
 docker exec -it finetune bash # starts a bash session in the docker container
+```
+
+For CPU-only usage:
+```
+./docker/build_cpu_docker.sh
+./docker/start_cpu_docker.sh
 ```
 
 
@@ -90,6 +101,11 @@ Model Types
 - `SequenceLabeler`
 - `MultiFieldClassifier`
 - `MultiFieldRegressor`
+- `MultiLabelClassifier`
+- `Comparison`
+- `OrdinalRegressor`
+- `ComparisonOrdinalRegressor`
+- `MultiTask`
 
 For example usage of each of these model types, see the [finetune/datasets directory](https://github.com/IndicoDataSolutions/finetune/tree/master/finetune/datasets).
 For purposes of simplicity and runtime these examples use smaller versions of the published datasets.

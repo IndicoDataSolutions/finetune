@@ -15,8 +15,8 @@ from sklearn.model_selection import train_test_split
 
 import finetune
 from finetune.errors import FinetuneError
-from finetune.encoding import ArrayEncodedOutput, EncodedOutput
-from finetune.imbalance import compute_class_weights
+from finetune.encoding.input_encoder import ArrayEncodedOutput, EncodedOutput
+from finetune.util.imbalance import compute_class_weights
 
 LOGGER = logging.getLogger('finetune')
 

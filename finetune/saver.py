@@ -7,8 +7,10 @@ import sys
 import joblib
 import numpy as np
 import tensorflow as tf
+from tensorflow.python.training import distribution_strategy_context
 from tensorflow.contrib.estimator.python.estimator.early_stopping import _StopOnPredicateHook, _get_or_create_stop_var
 
+from finetune.util.estimator import PatchedParameterServerStrategy
 from finetune.errors import FinetuneError
 
 LOGGER = logging.getLogger('finetune')
@@ -60,11 +62,14 @@ class SaverHook(_StopOnPredicateHook):
             self.saver.variables = dict(zip((var.name for var in self.included), session.run(self.included)))
 
 
-def pyfunc_assign(a, dtype):
-    def func():
-        return a.astype(dtype=dtype.as_numpy_dtype)
+class InitializeHook(tf.train.SessionRunHook):
+    def __init__(self, saver):
+        self.saver = saver
 
-    return tf.py_func(func, (), tf.as_dtype(dtype), stateful=False)
+    def after_create_session(self, session, coord):
+        init_fn = self.saver.get_scaffold_init_fn()
+        init_fn(None, session)
+
 
 class Saver:
     def __init__(self, fallback_filename=None, exclude_matches=None, variable_transforms=None, save_dtype=None):
@@ -120,59 +125,25 @@ class Saver:
         self.variables, finetune_obj = joblib.load(path)
         return finetune_obj
 
-    def get_scaffold_init_op(self):
-        """
-        Assumes a default init op will be run, this function should be called after all variables are instantiated
-        and then the callback run after the graph is finalized
-        """
-        _get_or_create_stop_var()  # TODO(BEN): This is currently required to force the stop var to get initialized.
-
-        if self.variables is not None:
-            variables_sv = self.variables
-        else:
-            variables_sv = dict()
-
-        if tf.contrib.distribute.get_tower_context():
-            def assign(var, val):
-                def update(var_):
-                    return var_.assign(val)
-
-                def merge_fn(dist, vm):
-                    return dist.group(dist.update(vm, update))
-
-                tower_context = tf.contrib.distribute.get_tower_context()
-                return tower_context.merge_call(merge_fn, var)
-        else:
-            def assign(var, val):
-                return var.assign(val)
-
-        all_vars = tf.global_variables()
-        init_vals = []
-        default_init = []
-        for var in all_vars:
-
-            # always re-initialize global_step
-            if 'global_step' in var.name:
-                init_vals.append(tf.train.get_or_create_global_step().initializer)
-                continue
-
-            var_init = None
-            for saved_var_name, saved_var in itertools.chain(variables_sv.items(), self.fallback.items()):
-                if saved_var_name == var.name:
-                    var_init = (var, saved_var)
-                    break
-
-            if var_init is None:
-                default_init.append(var)
+    def get_scaffold_init_fn(self):
+        
+        def init_fn(scaffold, session):
+            if self.variables is not None:
+                variables_sv = self.variables
             else:
-                var, saved_var = var_init
-                for func in self.variable_transforms:
-                    saved_var = func(var.name, saved_var)
-
-                init_vals.append(assign(var, pyfunc_assign(saved_var, var.dtype)))
-
-        init_vals.append(tf.variables_initializer(default_init))
-        return tf.group(init_vals)
+                variables_sv = dict()
+            all_vars = tf.global_variables()
+            init_vals = []
+            default_init = []
+            self.var_val = []
+            for var in all_vars:
+                for saved_var_name, saved_var in itertools.chain(variables_sv.items(), self.fallback.items()):
+                    if saved_var_name == var.name:
+                        for func in self.variable_transforms:
+                            saved_var = func(var.name, saved_var)
+                        var_init = var.load(saved_var, session)
+                        break
+        return init_fn
 
     def remove_unchanged(self, variable_names, variable_values, fallback_vars):
         skips = []

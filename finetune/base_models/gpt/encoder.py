@@ -15,7 +15,7 @@ import numpy as np
 import tensorflow as tf
 
 import finetune
-from finetune.encoding import NLP, EncodedOutput, BaseEncoder, get_pairs
+from finetune.encoding.input_encoder import NLP, EncodedOutput, BaseEncoder, get_pairs
 
 
 FINETUNE_FOLDER = os.path.dirname(finetune.__file__)
@@ -76,6 +76,9 @@ class GPTEncoder(BaseEncoder):
         self.delimiter = self.encoder['_delimiter_']
         self.clf_token = self.encoder['_classify_']
         self.initialized = True
+
+    def _token_length(self, token):
+        return len(token.strip().replace('</w>', ''))
 
     def bpe(self, token):
         word = tuple(token[:-1]) + (token[-1] + '</w>',)

@@ -25,14 +25,15 @@ from sklearn.model_selection import train_test_split
 import joblib as jl
 
 import finetune
-from finetune.utils import interpolate_pos_embed, list_transpose
-from finetune.encoding import EncodedOutput
+from finetune.util import list_transpose
+from finetune.encoding.input_encoder import EncodedOutput
 from finetune.config import get_config, all_gpus, assert_valid_config
-from finetune.saver import Saver
+from finetune.saver import Saver, InitializeHook
 from finetune.errors import FinetuneError
 from finetune.model import get_model_fn, PredictMode
-from finetune.download import download_data_if_required
-from finetune.estimator_utils import PatchedParameterServerStrategy
+from finetune.util.download import download_data_if_required
+from finetune.util.estimator import PatchedParameterServerStrategy
+from finetune.util.positional_embeddings import embedding_preprocessor
 
 
 LOGGER = logging.getLogger('finetune')
@@ -101,30 +102,10 @@ class BaseModel(object, metaclass=ABCMeta):
             self.cleanup_glob = self.estimator_dir
             LOGGER.info("Saving tensorboard output to {}".format(self.estimator_dir))
 
-        def process_embeddings(name, value):
-            if "/we:0" not in name:
-                return value
-            vocab_size = self.input_pipeline.text_encoder.vocab_size
-            word_embeddings = value[:vocab_size - len(self.input_pipeline.text_encoder.special_tokens)]
-            special_embed = value[len(word_embeddings): vocab_size]
-            positional_embed = value[vocab_size:]
-
-            if self.config.interpolate_pos_embed and self.config.max_length != len(positional_embed):
-                positional_embed = interpolate_pos_embed(positional_embed, self.config.max_length)
-
-            elif self.config.max_length > len(positional_embed):
-                raise ValueError("Max Length cannot be greater than {} if interploate_pos_embed is turned off".format(
-                    len(positional_embed)))
-            else:
-                positional_embed = positional_embed[:self.config.max_length]
-
-            embeddings = np.concatenate((word_embeddings, special_embed, positional_embed), axis=0)
-            return embeddings
-
         self.saver = Saver(
             fallback_filename=self.config.base_model_path,
             exclude_matches=None if self.config.save_adam_vars else "Adam",
-            variable_transforms=[process_embeddings],
+            variable_transforms=[embedding_preprocessor(self.input_pipeline, self.config)],
             save_dtype=self.config.save_dtype
         )
 
@@ -169,7 +150,8 @@ class BaseModel(object, metaclass=ABCMeta):
                 )
 
         force_build_lm = (Y is None)
-        estimator = self.get_estimator(force_build_lm=force_build_lm)
+        estimator, hooks = self.get_estimator(force_build_lm=force_build_lm)
+        train_hooks = hooks.copy()
 
         steps_per_epoch = self._n_steps(
             n_examples=self.input_pipeline.dataset_size,
@@ -178,28 +160,28 @@ class BaseModel(object, metaclass=ABCMeta):
         )
         num_steps = steps_per_epoch * self.config.n_epochs
 
-        train_hooks = []
-
         if self.config.tasks is not None:
             # Validation with MTL tasks
             for task in self.config.tasks:
                 if val_size[task] > 0:
                     train_hooks.append(
-                        tf.contrib.estimator.InMemoryEvaluatorHook(
-                            estimator, val_input_fn[task], every_n_iter=val_interval[task], steps=val_size[task] // batch_size, name=task
+                        tf.estimator.experimental.InMemoryEvaluatorHook(
+                            estimator, val_input_fn[task], every_n_iter=val_interval[task],
+                            steps=val_size[task] // batch_size, name=task, hooks=hooks
                         )
                     )
                     train_hooks.append(
-                        tf.contrib.estimator.InMemoryEvaluatorHook(
-                            estimator, val_input_fn[task + "_train"], every_n_iter=val_interval[task], steps=val_size[task] // batch_size, name=task + "_train"
+                        tf.estimator.experimental.InMemoryEvaluatorHook(
+                            estimator, val_input_fn[task + "_train"], every_n_iter=val_interval[task],
+                            steps=val_size[task] // batch_size, name=task + "_train", hooks=hooks
                         )
                     )
             early_stopping_interval = sys.maxsize  # turn off early stopping for mtl.
         elif val_size > 0:
             # Validation with all other tasks.
             train_hooks.append(
-                tf.contrib.estimator.InMemoryEvaluatorHook(
-                    estimator, val_input_fn, every_n_iter=val_interval, steps=val_size // batch_size
+                tf.estimator.experimental.InMemoryEvaluatorHook(
+                    estimator, val_input_fn, every_n_iter=val_interval, steps=val_size // batch_size, hooks=hooks
                 )
             )
             early_stopping_interval = val_interval
@@ -292,12 +274,14 @@ class BaseModel(object, metaclass=ABCMeta):
             label_encoder=self.input_pipeline.label_encoder,
             saver=self.saver
         )
-        return tf.estimator.Estimator(
+        hooks = [InitializeHook(self.saver)]
+        est = tf.estimator.Estimator(
             model_dir=self.estimator_dir,
             model_fn=model_fn,
             config=config,
             params=self.config
         )
+        return est, hooks
 
     def close(self):
         self._closed = True
@@ -342,9 +326,9 @@ class BaseModel(object, metaclass=ABCMeta):
         self._closed = False
         n = len(self._data)
         if self._predictions is None:
-            _estimator = self.get_estimator()
+            _estimator, hooks = self.get_estimator()
             input_fn = self.input_pipeline.get_predict_input_fn(self._data_generator)
-            self._predictions = _estimator.predict(input_fn=input_fn, predict_keys=mode)
+            self._predictions = _estimator.predict(input_fn=input_fn, predict_keys=mode, hooks=hooks)
 
         for _ in range(self._to_pull):
             next(self._predictions)  # collect the null predictions from the queue
@@ -362,13 +346,13 @@ class BaseModel(object, metaclass=ABCMeta):
         if self._cached_predict:
             return self._cached_inference(Xs=Xs, mode=mode)
         else:
-            estimator = self.get_estimator()
+            estimator, hooks = self.get_estimator()
             input_fn = self.input_pipeline.get_predict_input_fn(Xs)
             length = len(Xs) if not callable(Xs) else None
 
             predictions = tqdm.tqdm(
                 estimator.predict(
-                    input_fn=input_fn, predict_keys=mode
+                    input_fn=input_fn, predict_keys=mode, hooks=hooks
                 ),
                 total=length,
                 desc="Inference"
@@ -461,8 +445,8 @@ class BaseModel(object, metaclass=ABCMeta):
         start = [self.input_pipeline.text_encoder.start] if use_extra_toks else []
         encoded = EncodedOutput(token_ids=start + encoded.token_ids[0])
 
-        estimator = self.get_estimator(force_build_lm=True)
-        predict = estimator.predict(input_fn=get_input_fn,)
+        estimator, hooks = self.get_estimator(force_build_lm=True)
+        predict = estimator.predict(input_fn=get_input_fn, hooks=hooks)
 
         EOS = self.input_pipeline.text_encoder.clf_token
         with warnings.catch_warnings():

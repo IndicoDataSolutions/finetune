@@ -20,13 +20,13 @@ import requests
 from bs4 import BeautifulSoup as bs
 from bs4.element import Tag
 
-from finetune.base_models.textcnn.model import TextCNNModel
+from finetune.base_models import TextCNN
 from finetune import Classifier, Comparison, SequenceLabeler
 from finetune.datasets import generic_download
 from finetune.config import get_config
 from finetune.errors import FinetuneError
-from finetune.utils import finetune_to_indico_sequence
-from finetune.metrics import (
+from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
+from finetune.util.metrics import (
     sequence_labeling_token_precision, sequence_labeling_token_recall,
     sequence_labeling_overlap_precision, sequence_labeling_overlap_recall
 )
@@ -37,7 +37,7 @@ SST_FILENAME = "SST-binary.csv"
 
 def default_config(**kwargs):
     return dict(get_config(
-        base_model=TextCNNModel,
+        base_model=TextCNN,
         batch_size=2,
         max_length=128,
         n_epochs=1,
@@ -309,7 +309,7 @@ class TestSequenceLabeler(unittest.TestCase):
                 fp.write(r.content)
 
         with codecs.open(cls.dataset_path, "r", "utf-8") as infile:
-            soup = bs(infile, "html5lib")
+            soup = bs(infile, "html.parser")
 
         docs = []
         docs_labels = []

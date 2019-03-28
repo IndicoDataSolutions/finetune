@@ -6,7 +6,7 @@ from functools import lru_cache
 import numpy as np
 
 import finetune
-from finetune.encoding import BaseEncoder, EncodedOutput, get_pairs
+from finetune.encoding.input_encoder import BaseEncoder, EncodedOutput, get_pairs
 
 FINETUNE_FOLDER = os.path.dirname(finetune.__file__)
 ENCODER_PATH = os.path.join(FINETUNE_FOLDER, 'model', 'gpt2', 'encoder.json')

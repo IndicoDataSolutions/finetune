@@ -29,7 +29,6 @@ if __name__ == "__main__":
         test_size=0.3,
         random_state=42
     )
-            
     
     model = MultiTask(tasks={
         "sst": Classifier,

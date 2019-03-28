@@ -4,9 +4,9 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.contrib.training import HParams
 
-from finetune.utils import shape_list
-from finetune.recompute_grads import recompute_grad
-from finetune.activations import gelu
+from finetune.util.shapes import shape_list
+from finetune.optimizers.recompute_grads import recompute_grad
+from finetune.nn.activations import gelu
 from finetune.base_models.gpt.featurizer import norm, dropout
 
 

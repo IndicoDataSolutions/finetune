@@ -1,0 +1,18 @@
+FROM tensorflow/tensorflow:1.13.1-py3
+LABEL Author="Ben Townsend, Madison May"
+
+# tensorboard
+EXPOSE 6006
+
+RUN apt-get update && mkdir /Finetune
+ADD requirements.txt /Finetune/requirements.txt
+RUN pip3 install -r /Finetune/requirements.txt && \
+    python3 -m spacy download en
+
+WORKDIR /Finetune
+ADD . /Finetune
+COPY docker/bashrc /etc/bash.bashrc
+RUN chmod a+rwx /etc/bash.bashrc
+RUN python3 setup.py develop
+
+CMD ["sleep","infinity"]

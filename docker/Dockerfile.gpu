@@ -1,0 +1,30 @@
+FROM tensorflow/tensorflow:1.13.1-gpu-py3
+LABEL Author="Ben Townsend, Madison May"
+
+# tensorboard
+EXPOSE 6006
+
+# nvidia-docker 1.0
+LABEL com.nvidia.volumes.needed="nvidia_driver"
+LABEL com.nvidia.cuda.version="${CUDA_VERSION}"
+
+# nvidia-container-runtime
+ENV NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility \
+    NVIDIA_REQUIRE_CUDA="cuda>=10.0" \
+    LANG=C.UTF-8 \
+    CUDA_DEVICE_ORDER=PCI_BUS_ID \
+    NLTK_DATA=/usr/local/nltk-data
+
+RUN apt-get update && mkdir /Finetune
+ADD requirements.txt /Finetune/requirements.txt
+RUN pip3 install -r /Finetune/requirements.txt && \
+    python3 -m spacy download en
+
+WORKDIR /Finetune
+ADD . /Finetune
+COPY docker/bashrc /etc/bash.bashrc
+RUN chmod a+rwx /etc/bash.bashrc
+RUN python3 setup.py develop
+
+CMD ["sleep","infinity"]

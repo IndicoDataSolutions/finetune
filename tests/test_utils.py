@@ -4,8 +4,9 @@ import numpy as np
 import tensorflow as tf
 
 import finetune
-from finetune.utils import indico_to_finetune_sequence, finetune_to_indico_sequence, get_grad_accumulation_optimizer
-from finetune.imbalance import compute_class_weights
+from finetune.encoding.sequence_encoder import indico_to_finetune_sequence, finetune_to_indico_sequence
+from finetune.optimizers.gradient_accumulation import get_grad_accumulation_optimizer
+from finetune.util.imbalance import compute_class_weights
 from finetune.errors import FinetuneError
 from finetune import Classifier
 from finetune.base_models.gpt.encoder import GPTEncoder
