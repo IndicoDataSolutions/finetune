@@ -253,7 +253,7 @@ class BaseModel(object, metaclass=ABCMeta):
             )
         elif num_gpus == 1:
             gpu = resolved_gpus[0]
-            distribute_strategy = OneDeviceStrategy(device='/gpu:{}'.format(gpu))
+            distribute_strategy = None #OneDeviceStrategy(device='/gpu:{}'.format(gpu))
         else:
             distribute_strategy = OneDeviceStrategy(device='/cpu:0')
 

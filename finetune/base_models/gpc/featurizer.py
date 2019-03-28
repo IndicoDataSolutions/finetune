@@ -3,12 +3,9 @@ import tensorflow as tf
 from finetune.base_models.gpt.featurizer import dropout, embed, block, norm
 from finetune.util.shapes import shape_list
 
-from finetune.transformer import dropout, embed, block, attn, norm, conv1d
 from finetune.optimizers.recompute_grads import recompute_grad
-from finetune.utils import shape_list
 import functools
 from tensorflow.python.framework import function
-from finetune.recompute_grads import recompute_grad
 
 
 def embed_no_timing(X, we):
@@ -144,9 +141,9 @@ def cummax(x, dim):
 def cumulative_state_net(X, name, use_fp16):
     outputs = []
     nx = shape_list(X)[-1]
-    output_sz = nx // 6
+    output_sz = nx // 8
     with tf.variable_scope(name):
-        for kernel in [1, 2, 3, 4, 5, 6]:
+        for kernel in [1, 2, 3, 4]:
             outputs.append(normal_1d_conv_block(X, kernel, str(kernel), use_fp16, output_dim=output_sz))
     outputs_concat = tf.nn.relu(tf.concat(outputs, -1))
     outputs_cum_pooled = tf.concat([cummax(outputs_concat, 1), X], -1)

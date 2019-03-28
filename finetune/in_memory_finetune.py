@@ -44,7 +44,7 @@ class InMemoryFinetune(tf.train.SessionRunHook):
 
     def _evaluate(self, session):
         try:
-            from finetune.classifier import Classifier
+            from finetune import Classifier
             model = Classifier(**self._config_to_finetune)
 
             if self._current_finetune.saver.variables:

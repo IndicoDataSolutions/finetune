@@ -44,13 +44,13 @@ if __name__ == "__main__":
     # Train and evaluate on SST
     dataset = StanfordSentimentTreebank(nrows=1000).dataframe
     model = Classifier(
-        interpolate_pos_embed=False, 
+#        interpolate_pos_embed=False, 
         n_epochs=3, 
         batch_size=2, 
         lr_warmup=0.1,
         val_size=0, 
-        max_length=64, 
-        base_model=GPT2Model, 
+#        max_length=64, 
+        base_model=GPTModel, 
         tensorboard_folder="./sst"
     )
 

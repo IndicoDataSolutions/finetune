@@ -13,8 +13,8 @@ from finetune.optimizers.learning_rate_schedules import schedules
 from finetune.optimizers.adamax import AdamaxWOptimizer
 from finetune.util.imbalance import class_weight_tensor
 from finetune.errors import FinetuneError
-from finetune.convolutional import featurizer as conv_featurizer
 from finetune.optimizers.adafactor import AdafactorWOptimizer, AdafactorOptimizer
+
 LOGGER = logging.getLogger('finetune')
 
 OPTIMIZERS = {
@@ -99,15 +99,12 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
         with tf.variable_scope(tf.get_variable_scope()):
             train_loss = 0.0
 
-            if params.use_conv:
-                featurizer_state = conv_featurizer(X, config=params, encoder=encoder, train=train)
-            else:
-                featurizer_state = params.base_model.get_featurizer(
-                    X,
-                    encoder=encoder,
-                    config=params,
-                    train=train
-                )
+            featurizer_state = params.base_model.get_featurizer(
+                X,
+                encoder=encoder,
+                config=params,
+                train=train
+            )
 
             predictions = {PredictMode.FEATURIZE: featurizer_state["features"]}
 

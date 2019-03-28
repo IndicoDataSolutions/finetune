@@ -10,7 +10,7 @@ class GPCModel(SourceModel):
     featurizer = featurizer
     settings = {
         'n_embed': 256,
-        "base_model_path": os.path.join("gpt", "model-lg.jl"),
+        "base_model_path": "fresh_start.jl",
         'n_layer': 12,
     }
 
@@ -20,7 +20,7 @@ class GPCModelFP16(SourceModel):
     featurizer = featurizer
     settings = {
         'n_embed': 256,
-        "base_model_path": os.path.join("gpt", "model-lg.jl"),
+        "base_model_path": "fresh_start.jl",
         "optimizer": "Adafactor",
         "use_fp16": True,
         "scale_loss": True,
