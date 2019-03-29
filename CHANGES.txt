@@ -1,10 +1,14 @@
 2019
+v0.6.1 Fri Mar 29th
+  - MTL bug fix
+  - Validation / early-stopping bug fix
 v0.6.0 Thu Mar 28th
   - Support for new base models
   - GPT2 support
   - Multi-task learning support
   - Word CNN Baseline
   - Code base refactor
+
 
 2018
 v0.5.9 Wed Oct 24th -- Resolve issues with running multiple concurrent finetune models
