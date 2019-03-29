@@ -125,9 +125,6 @@ class MultiTask(BaseModel):
     def _get_input_pipeline(self):
         return MultiTaskPipeline(self.config)
 
-    def featurize(self, X):
-        return super().featurize(X)
-
     def cached_predict(self):
         """
         Context manager that prevents the recreation of the tensorflow graph on every call to BaseModel.predict().
@@ -135,6 +132,28 @@ class MultiTask(BaseModel):
         Not supported for MultiTask.
         """
         raise FinetuneError("cached_predict is not supported yet for MTL")
+
+    def featurize(self, X):
+        """                                                                                                                                                                        
+        Runs featurization on the trained model for any of the tasks the model was trained for. Input and output formats  
+        are the same as for each of the individial tasks.
+
+        :param X: A dictionary mapping from task name to data, in the format required by the task type.
+        :return: A dictionary mapping from task name to the features for that task.
+        """
+        features = {}
+        for name, ModelClass in self.config.tasks.items():
+            if name not in X:
+                continue
+            pred_model = ModelClass()
+            pred_model.config = self.config
+            pred_model.input_pipeline = self.config.task_input_pipelines[name]
+            pred_model._initialize()
+            pred_model.saver.variables = {
+                k.replace("/target_model_{}".format(name), ""): v for k, v in self.saver.variables.items()
+            }
+            features[name] = pred_model.featurize(X[name])
+        return features
 
     def predict(self, X):
         """
@@ -150,7 +169,9 @@ class MultiTask(BaseModel):
             if name not in X:
                 continue
             pred_model = ModelClass()
+            pred_model.config = self.config
             pred_model.input_pipeline = self.config.task_input_pipelines[name]
+            pred_model._initialize()
             pred_model.saver.variables = {
                 k.replace("/target_model_{}".format(name), ""): v for k, v in self.saver.variables.items()
             }
@@ -172,7 +193,9 @@ class MultiTask(BaseModel):
             if name not in X:
                 continue
             pred_model = ModelClass()
+            pred_model.config = self.config
             pred_model.input_pipeline = self.config.task_input_pipelines[name]
+            pred_model._initialize()
             pred_model.saver.variables = {
                 k.replace("/target_model_{}".format(name), ""): v for k, v in self.saver.variables.items()
             }

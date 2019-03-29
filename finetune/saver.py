@@ -133,15 +133,13 @@ class Saver:
             else:
                 variables_sv = dict()
             all_vars = tf.global_variables()
-            init_vals = []
-            default_init = []
             self.var_val = []
             for var in all_vars:
                 for saved_var_name, saved_var in itertools.chain(variables_sv.items(), self.fallback.items()):
                     if saved_var_name == var.name:
                         for func in self.variable_transforms:
                             saved_var = func(var.name, saved_var)
-                        var_init = var.load(saved_var, session)
+                        var.load(saved_var, session)
                         break
         return init_fn
 

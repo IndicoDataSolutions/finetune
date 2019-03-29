@@ -27,7 +27,8 @@ class TestMTL(unittest.TestCase):
                 "qqp": Comparison
             },
             n_epochs=2,
-            optimizer="AdamaxW"
+            optimizer="AdamaxW",
+            max_length=200,
         )
 
         q_X1, q_X2, q_Y = q_dataset.Text1.values, q_dataset.Text2.values, q_dataset.Target.values
@@ -47,6 +48,12 @@ class TestMTL(unittest.TestCase):
             }
         )
 
+        model.featurize(
+            {
+                "sst":["Test 12 12 123"]
+            }
+        )
+
         preds = model.predict(
             {
                 "sst": testX,
@@ -57,7 +64,7 @@ class TestMTL(unittest.TestCase):
         self.assertIn("qqp", preds)
 
         model.create_base_model("./test_base_mtl.jl", exists_ok=True)
-        model = Classifier(base_model_path="./test_base_mtl.jl")
+        model = Classifier(base_model_path="./test_base_mtl.jl", max_length=200)
         model.fit(trainX, trainY)
 
         os.remove(finetune_model_path("./test_base_mtl.jl"))
