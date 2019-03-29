@@ -186,15 +186,13 @@ def normal_1d_conv_block(X, kernel_width, layer_name, use_fp16, dilation=1, laye
         W = tf.get_variable(name="W", shape=[kernel_width, nx, output_dim],
                             initializer=tf.initializers.random_normal(stddev=0.001 / (layer_num ** 0.5)))
         b = tf.get_variable(name="B", shape=[output_dim], initializer=tf.initializers.constant(0.0))
-        m = tf.get_variable(name="M", shape=[output_dim], initializer=tf.initializers.constant(1.0))
 
         if use_fp16:
             W = tf.cast(W, tf.float16)
             b = tf.cast(b, tf.float16)
-            m = tf.cast(m, tf.float16)
 
         conv = causal_conv(padded_input, W, dilation)
-        conv = tf.nn.bias_add(conv * m, b)
+        conv = tf.nn.bias_add(conv, b)
 
         out = conv
     return out
@@ -210,7 +208,7 @@ def block(X, block_name, use_fp16, layer_num=None):
         h2 = normal_1d_conv_block(h1, 4, "2", use_fp16,dilation=1)
         h2 = tf.nn.relu(h2)
         h3 = normal_1d_conv_block(h2, 4, "3", use_fp16, dilation=1)
-        return norm(tf.nn.relu(h3 + X), "norm", fp16=use_fp16, e=1e-3)
+        return tf.nn.relu(norm(h3 + X, "norm", fp16=use_fp16, e=1e-2))
 
 
 def attention_layer(X, backwards, seq_lens, layer):
