@@ -139,20 +139,36 @@ class TestClassifier(unittest.TestCase):
         model = Classifier(**self.default_config())
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
+
+        # Test with different sizes to make sure we handle cases where
+        # the data doesn't divide evenly into batches
+        half_sample = int(self.n_sample / 2)
+        quarter_sample = int(half_sample / 2)
+
         model.fit(train_sample.Text.values, train_sample.Target.values)
-        predictions = model.predict_proba(valid_sample.Text[:1].values)
-        predictions2 = model.predict_proba(valid_sample.Text[1:2].values)
+
+        # Predictions w/o cached predict
+        preds = [
+            model.predict_proba(valid_sample.Text.values[:half_sample]),
+            model.predict_proba(valid_sample.Text.values[half_sample:]),
+            model.predict_proba(valid_sample.Text.values[:quarter_sample]),
+            model.predict_proba(valid_sample.Text.values[quarter_sample:])
+        ]
+
+        # Predictions w/ cached predict
         with model.cached_predict():
-            np.testing.assert_allclose(
-                list(model.predict_proba(valid_sample.Text[:1].values)[0].values()),
-                list(predictions[0].values()),
-                rtol=1e-4
-            )
-            np.testing.assert_allclose(
-                list(model.predict_proba(valid_sample.Text[1:2].values)[0].values()),
-                list(predictions2[0].values()),
-                rtol=1e-4
-            )
+            cached_preds = [
+                model.predict_proba(valid_sample.Text.values[:half_sample]),
+                model.predict_proba(valid_sample.Text.values[half_sample:]),
+                model.predict_proba(valid_sample.Text.values[:quarter_sample]),
+                model.predict_proba(valid_sample.Text.values[quarter_sample:])
+            ]
+
+        for batch_preds, batch_cached_preds in zip(preds, cached_preds):
+            for pred, cached_pred in zip(batch_preds, batch_cached_preds):
+                assert list(pred.keys()) == list(cached_pred.keys())
+                for pred_val, cached_pred_val in zip(pred.values(), cached_pred.values()):
+                    np.testing.assert_almost_equal(pred_val, cached_pred_val, decimal=4)
 
     def test_fit_predict(self):
         """
