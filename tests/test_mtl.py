@@ -50,7 +50,8 @@ class TestMTL(unittest.TestCase):
 
         model.featurize(
             {
-                "sst":["Test 12 12 123"]
+                "sst": testX,
+                "qqp": list(zip(q_X1, q_X2))[:10],
             }
         )
 
