@@ -297,13 +297,27 @@ class BaseModel(object, metaclass=ABCMeta):
 
             self._predictions = None
 
+    def _clear_prediction_queue(self):
+        # Flush examples used to pad the last batch
+        # of previous call to predict()
+        for i in range(self._to_pull):
+            next(self._predictions)
+
+        # Reset counter
+        self._to_pull = 0
+
     def _data_generator(self):
         self._cached_example = None
+        self._to_pull = 0
         while not self._closed:
             try:
                 self._cached_example = self._data.pop(0)
                 yield self._cached_example
             except IndexError:
+                # _data_generator was asked for more examples than we had
+                # Feed a cached example through the input_pipeline
+                # to fill out the batch, but remember to clear it
+                # out of the queue later
                 self._to_pull += 1
                 yield self._cached_example
 
@@ -316,7 +330,6 @@ class BaseModel(object, metaclass=ABCMeta):
         yield self
         self._cached_predict = False
         self.close()
-        self._to_pull = 0
 
     def _cached_inference(self, Xs, mode=None):
         """
@@ -330,8 +343,7 @@ class BaseModel(object, metaclass=ABCMeta):
             input_fn = self.input_pipeline.get_predict_input_fn(self._data_generator)
             self._predictions = _estimator.predict(input_fn=input_fn, predict_keys=mode, hooks=hooks)
 
-        for _ in range(self._to_pull):
-            next(self._predictions)  # collect the null predictions from the queue
+        self._clear_prediction_queue()
 
         predictions = [None] * n
         for i in tqdm.tqdm(range(n), total=n, desc="Inference"):
