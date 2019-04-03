@@ -16,11 +16,11 @@ def download_data_if_required():
     file_list = [
         {
             'file': os.path.join(finetune_base_folder, 'model', 'gpt', 'encoder.json'),
-            'url': urljoin(github_base_url, "encoder_bpe_40000.json")
+            'url': urljoin(github_base_url, "gpt/encoder.json")
         },
         {
             'file': os.path.join(finetune_base_folder, 'model', 'gpt', 'vocab.bpe'),
-            'url': urljoin(github_base_url, "vocab_40000.bpe")
+            'url': urljoin(github_base_url, "gpt/vocab.bpe")
         },
         {
             'file': os.path.join(finetune_base_folder, 'model', 'gpt', 'model-lg.jl'),
