@@ -1,4 +1,7 @@
 2019
+v0.6.2 Thu Apr 4th
+  - Cached predict fix
+  - Model download fix
 v0.6.1 Fri Mar 29th
   - MTL bug fix
   - Validation / early-stopping bug fix
