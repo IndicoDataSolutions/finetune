@@ -261,10 +261,10 @@ class BasePipeline(metaclass=ABCMeta):
             self._skip_tqdm = val_size
             dataset = self._make_dataset(Xs, Y, train=True)
             val_dataset_unbatched = lambda: dataset().shuffle(
-                shuffle_buffer_size, seed=self.config.seed
+                shuffle_buffer_size, seed=self.config.seed, reshuffle_each_iteration=False
             ).take(self.config.val_size)
             train_dataset_unbatched = lambda: dataset().shuffle(
-                shuffle_buffer_size, seed=self.config.seed
+                shuffle_buffer_size, seed=self.config.seed, reshuffle_each_iteration=False
             ).skip(self.config.val_size)
         else:
             self._skip_tqdm = 0
