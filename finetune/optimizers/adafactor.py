@@ -282,7 +282,7 @@ class AdafactorOptimizer(tf.train.Optimizer):
         return adafactor_decay_rate_pow(0.8)
 
     def _learning_rate_default(self, multiply_by_parameter_scale):
-        learning_rate = tf.minimum(tf.rsqrt(step_num() + 1.0), 0.01)
+        learning_rate = tf.minimum(tf.rsqrt(step_num() + 1.0), 0.001)
         if not multiply_by_parameter_scale:
             learning_rate *= 0.05
         return learning_rate

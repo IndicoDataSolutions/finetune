@@ -265,6 +265,9 @@ class BaseModel(object, metaclass=ABCMeta):
             allow_soft_placement=self.config.soft_device_placement,
             log_device_placement=self.config.log_device_placement,
         )
+        optimizer_options = conf.graph_options.optimizer_options               
+        if self.config.xla:                                                     
+            optimizer_options.global_jit_level = tf.OptimizerOptions.ON_1 
 
         distribute_strategy = self._distribute_strategy(self.config.visible_gpus)
         config = tf.estimator.RunConfig(

@@ -91,7 +91,7 @@ class BaseEncoder(object):
     def __setitem__(self, key, value):
         self.encoder[key] = value
 
-    def _encode(self, texts, labels=None):
+    def _encode(self, texts, labels=None, stochastic=None):
         """
         Convert a batch of raw text to a batch of byte-pair encoded token indices.
         """
@@ -151,7 +151,7 @@ class BaseEncoder(object):
     def _token_length(self, token):
         return len(token)
 
-    def encode_multi_input(self, Xs, Y=None, max_length=None, pad_token=None):
+    def encode_multi_input(self, Xs, Y=None, max_length=None, pad_token=None, stochastic=False):
         """
         Encodes the text for passing to the model, also tracks the location of each token to allow reconstruction.
         It can also, optionally, construct a per-token labels as required for training.
@@ -171,7 +171,7 @@ class BaseEncoder(object):
             assert isinstance(field, (list, tuple)), "This should be a list of strings, instead it's {}".format(
                 tf.contrib.framework.nest.map_structure(type, field)
             )
-            encoded = self._encode(field, labels=Y)
+            encoded = self._encode(field, labels=Y, stochastic=stochastic)
             token_ids.append(_flatten(encoded.token_ids))
             tokens.append(_flatten(encoded.tokens))
             positions.append(_flatten(encoded.char_locs))

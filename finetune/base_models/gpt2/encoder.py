@@ -121,10 +121,14 @@ class GPT2Encoder(BaseEncoder):
         self.cache[token] = word
         return word
 
-    def _encode(self, texts, labels=None):
+    def _encode(self, texts, labels=None, stochastic=None):
+        """                                                                                                                                                                          
+        Convert a batch of raw text to a batch of byte-pair encoded token indices.                                                                                                   
         """
-        Convert a batch of raw text to a batch of byte-pair encoded token indices.
-        """
+        if stochastic:
+            pass
+            #TODO error handle this where it is not supported     
+ 
         self._lazy_init()
 
         batch_tokens = []

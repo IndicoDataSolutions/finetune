@@ -1,12 +1,11 @@
 import tensorflow as tf
-
+import math
 from finetune.base_models.gpt.featurizer import dropout, embed, block, norm
 from finetune.util.shapes import shape_list
 
 from finetune.optimizers.recompute_grads import recompute_grad
 import functools
 from tensorflow.python.framework import function
-
 
 def embed_no_timing(X, we):
     return tf.gather(we, X[:, :, 0])
@@ -66,11 +65,11 @@ def separable_conv1d(x, depthwise_filter, pointwise_filter):
     return tf.squeeze(out, 1)
 
 
-def time_to_batch(value, dilation):
+def time_to_batch(value, dilation, pad_with=0):
     with tf.name_scope('time_to_batch'):
         shape = tf.shape(value)
         pad_elements = dilation - 1 - (shape[1] + dilation - 1) % dilation
-        padded = tf.pad(value, [[0, 0], [0, pad_elements], [0, 0]])
+        padded = tf.pad(value, [[0, 0], [0, pad_elements], [0, 0]], constant_values=pad_with)
         reshaped = tf.reshape(padded, [-1, dilation, shape[2]])
         transposed = tf.transpose(reshaped, perm=[1, 0, 2])
         return tf.reshape(transposed, [shape[0] * dilation, -1, shape[2]])
@@ -84,7 +83,29 @@ def batch_to_time(value, dilation):
         return tf.reshape(transposed,
                           [tf.div(shape[0], dilation), -1, shape[2]])
 
+def dilated_causal_max_pool(value, kernel_size, dilation, dim=1):
+    pool_op = lambda x: causalmax(x, dim=1, pool_len=kernel_size)
+    with tf.name_scope("causal_pool"):
+        if dilation > 1:
+            transformed = time_to_batch(value, dilation, pad_with=-1e4)
+            pooled = pool_op(transformed)
+            restored = batch_to_time(pooled, dilation)
+        else:
+            restored = pool_op(value)
+        return restored
 
+def cascaded_pool(value, kernel_size, dim=1, pool_len=None):
+    shape = shape_list(value)
+    full_pool_len = pool_len or shape[dim]
+    intermediate_vals = []
+    for i in range(math.ceil(math.log(full_pool_len, kernel_size))):
+        value = dilated_causal_max_pool(value, kernel_size=kernel_size, dilation=kernel_size ** i, dim=dim)
+        w = tf.get_variable("weighted_mean_max_pool_{}".format(i), shape=[shape[-1]], dtype=tf.float32)
+        if w.dtype != value.dtype:
+            w = tf.cast(w, value.dtype)
+        intermediate_vals.append(value * w)
+    return tf.reduce_mean(intermediate_vals, 0)
+    
 def causal_conv(value, filter_, dilation, name='causal_conv'):
     if type(filter_) == tuple:
         conv_op = lambda x: mock_separable_conv(x, *filter_)
@@ -111,7 +132,7 @@ def semi_separable_conv_block(X, kernel_width, layer_name, use_fp16, training, m
 
         nx = shape_list(X)[-1]
         channels_per_slice = nx // separation
-        b = tf.get_variable(name="B", shape=[nx], initializer=tf.initializers.random_normal(stddev=0.001))
+        b = tf.get_variable(name="B", shape=[nx], initializer=tf.zeros_initializer())
         if use_fp16:
             b = tf.cast(b, tf.float16)
 
@@ -138,16 +159,16 @@ def cummaxv1(x, dim):
             return tensor
     return align_to_0(tf.scan(lambda a, b: tf.maximum(a, b), align_to_0(x)))
 
-def cummax(x, dim):
+def causalmax(x, dim, pool_len=None):
     kernel_size = [1,1,1]
-    pool_len = shape_list(x)[dim]
+    pool_len = pool_len or shape_list(x)[dim]
     kernel_size[dim] = pool_len
     padding = [[0, 0], [0, 0], [0, 0]]
     padding[dim] = [pool_len - 1, 0]
     padded_x = tf.pad(x, padding, "CONSTANT", constant_values=-1e4)
 
-    kernel_size.insert(2, 1)    
-    
+    kernel_size.insert(2, 1)
+
     return tf.squeeze(
         tf.nn.max_pool(
             value=tf.expand_dims(padded_x, 2),
@@ -158,17 +179,28 @@ def cummax(x, dim):
         axis=2
     )
 
+def cummax(x, dim):
+    return causalmax(x, dim, pool_len=None)
 
-def cumulative_state_net(X, name, use_fp16):
+
+
+def cumulative_state_net(X, name, use_fp16, pool_idx):
     outputs = []
     nx = shape_list(X)[-1]
-    output_sz = nx // 8
+    output_sz = nx // 4
     with tf.variable_scope(name):
-        for kernel in [1, 2, 3, 4]:
+        for kernel in [1, 2, 4, 8]:
             outputs.append(normal_1d_conv_block(X, kernel, str(kernel), use_fp16, output_dim=output_sz))
     outputs_concat = tf.nn.relu(tf.concat(outputs, -1))
-    outputs_cum_pooled = tf.concat([cummax(outputs_concat, 1), X], -1)
-    return normal_1d_conv_block(outputs_cum_pooled, 1, "output_reproject", use_fp16, output_dim=nx)
+    cum_pooled = cascaded_pool(outputs_concat, kernel_size=8, pool_len=512) #cummax(outputs_concat, 1)
+    outputs_cum_pooled = tf.concat([cum_pooled, X], -1)
+    print(pool_idx)
+    feats = tf.gather_nd(cum_pooled, pool_idx)
+    feats_weight = tf.get_variable(name="featweights", shape=[nx], initializer=tf.ones_initializer())
+    if use_fp16:
+        feats_weight = tf.cast(feats_weight, tf.float16)
+    feats  = tf.stop_gradient(feats) * feats_weight
+    return normal_1d_conv_block(outputs_cum_pooled, 1, "output_reproject", use_fp16, output_dim=nx), feats
 
 
 def normal_1d_conv_block(X, kernel_width, layer_name, use_fp16, dilation=1, layer_num=1, output_dim=None):
@@ -183,8 +215,7 @@ def normal_1d_conv_block(X, kernel_width, layer_name, use_fp16, dilation=1, laye
         nx = shape_list(X)[-1]
         if output_dim is None:
             output_dim = nx
-        W = tf.get_variable(name="W", shape=[kernel_width, nx, output_dim],
-                            initializer=tf.initializers.random_normal(stddev=0.001 / (layer_num ** 0.5)))
+        W = tf.get_variable(name="W", shape=[kernel_width, nx, output_dim], initializer=tf.initializers.glorot_normal())
         b = tf.get_variable(name="B", shape=[output_dim], initializer=tf.initializers.constant(0.0))
 
         if use_fp16:
@@ -198,17 +229,17 @@ def normal_1d_conv_block(X, kernel_width, layer_name, use_fp16, dilation=1, laye
     return out
 
 
-def block(X, block_name, use_fp16, layer_num=None):
+def block(X, block_name, use_fp16, layer_num=None, pool_idx=None):
     with tf.variable_scope(block_name):
-        c = cumulative_state_net(X, "cumulative_state_net", use_fp16)
-        h0 = normal_1d_conv_block(c, 4, "0", use_fp16, dilation=1, layer_num=layer_num * 2 + 1)
+        c, feats = cumulative_state_net(X, "cumulative_state_net", use_fp16, pool_idx)
+        h0 = normal_1d_conv_block(c, 2, "0", use_fp16, dilation=1, layer_num=layer_num * 2 + 1)
         h0 = tf.nn.relu(h0)
-        h1 = normal_1d_conv_block(h0, 4, "1", use_fp16, dilation=1)
+        h1 = normal_1d_conv_block(h0, 2, "1", use_fp16, dilation=1)
         h1 = tf.nn.relu(h1)
-        h2 = normal_1d_conv_block(h1, 4, "2", use_fp16,dilation=1)
+        h2 = normal_1d_conv_block(h1, 2, "2", use_fp16,dilation=1)
         h2 = tf.nn.relu(h2)
-        h3 = normal_1d_conv_block(h2, 4, "3", use_fp16, dilation=1)
-        return tf.nn.relu(norm(h3 + X, "norm", fp16=use_fp16, e=1e-2))
+        h3 = normal_1d_conv_block(h2, 2, "3", use_fp16, dilation=1)
+        return tf.nn.relu(norm(h3 + X, "norm", fp16=use_fp16, e=1e-2)), feats
 
 
 def attention_layer(X, backwards, seq_lens, layer):
@@ -236,6 +267,8 @@ def attention_layer(X, backwards, seq_lens, layer):
     attn_size = feats // 3 - 1
     attention_bit = X[:, :, 1: attn_size + 1]
     other_bit = X[:, :, attn_size + 1:]
+    print(weight_orig)
+    exit()
     out = tf.concat([tf.expand_dims(weight_orig, -1), tf.matmul(weight, attention_bit), other_bit], axis=-1)
     return out
 
@@ -277,7 +310,7 @@ def featurizer(X, encoder, config, train=False, reuse=None):
             h = embed(X, embed_weights)
         else:
             h = embed_no_timing(X, embed_weights)
-
+        feats = []
         for layer in range(config.n_layer):
             with tf.variable_scope('h%d_' % layer):
                 if (
@@ -287,21 +320,21 @@ def featurizer(X, encoder, config, train=False, reuse=None):
                     h = tf.stop_gradient(h)
 
                 block_fn_fwd = functools.partial(block, block_name='block%d_' % layer, use_fp16=config.use_fp16,
-                                                 layer_num=layer + 1)
+                                                 layer_num=layer + 1, pool_idx=tf.stack([tf.range(shape_list(X)[0]), pool_idx], 1))
                 if config.low_memory_mode and train:
                     block_fn_fwd = recompute_grad(block_fn_fwd, use_entire_scope=True)
-                h = block_fn_fwd(h)
-
+                h, feats_i = block_fn_fwd(h)
+                feats.append(feats_i)
                 if config.n_layer == (layer + 1):
                     h = normal_1d_conv_block(h, 1, "output", config.use_fp16, dilation=1, layer_num=(config.n_layer + 1) * 2 + 1)
 
         mask = tf.expand_dims(tf.sequence_mask(pool_idx, maxlen=tf.shape(h)[1], dtype=h.dtype), -1)
 
-        max_pooled = tf.reduce_max(h + (1.0 - mask) * -1e9, 1)
-        mean_pool = tf.reduce_sum(h * mask, 1) / (tf.reduce_sum(mask) + 1e-9)
-        clf_h = tf.concat((max_pooled, mean_pool), axis=1)
+#        max_pooled = tf.reduce_max(h + (1.0 - mask) * -1e9, 1)
+#        mean_pool = tf.reduce_sum(h * mask, 1) / (tf.reduce_sum(mask) + 1e-9)
+#        clf_h = tf.concat((max_pooled, mean_pool), axis=1)
 
-        clf_h = tf.reshape(clf_h, shape=initial_shape[: -2] + [config.n_embed * 2])
+        clf_h = tf.reshape(tf.reduce_sum(feats, 0), shape=initial_shape[: -2] + [config.n_embed])
         seq_feats = tf.reshape(h, shape=initial_shape[:-1] + [config.n_embed])
 
         return {

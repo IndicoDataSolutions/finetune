@@ -202,7 +202,8 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                 def clip_gradients(grads_n_vars):
                     clipped = []
                     for g, v in grads_n_vars:
-                        clipped.append((tf.clip_by_norm(g, float(params.max_grad_norm)), v))
+                        if g is not None:
+                            clipped.append((tf.clip_by_norm(g, float(params.max_grad_norm)), v))
                     return clipped
                 
             train_op = tf.contrib.layers.optimize_loss(

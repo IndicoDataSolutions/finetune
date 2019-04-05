@@ -16,8 +16,7 @@ def embedding_preprocessor(input_pipeline, config):
             return value
 
         vocab_size = input_pipeline.text_encoder.vocab_size
-        word_embeddings = value[:vocab_size - len(input_pipeline.text_encoder.special_tokens)]
-        special_embed = value[len(word_embeddings): vocab_size]
+        word_embeddings = value[:vocab_size]
         positional_embed = value[vocab_size:]
 
         if config.interpolate_pos_embed and config.max_length != len(positional_embed):
@@ -29,7 +28,7 @@ def embedding_preprocessor(input_pipeline, config):
         else:
             positional_embed = positional_embed[:config.max_length]
 
-        embeddings = np.concatenate((word_embeddings, special_embed, positional_embed), axis=0)
+        embeddings = np.concatenate((word_embeddings, positional_embed), axis=0)
         return embeddings
         
     return process_embeddings

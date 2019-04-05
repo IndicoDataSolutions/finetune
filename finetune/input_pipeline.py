@@ -97,8 +97,8 @@ class BasePipeline(metaclass=ABCMeta):
         )
         return output
 
-    def text_to_tokens_mask(self, X, Y=None):
-        out_gen = self._text_to_ids(X, pad_token=self.config.pad_token)
+    def text_to_tokens_mask(self, X, Y=None, stochastic_tokens=False):
+        out_gen = self._text_to_ids(X, pad_token=self.config.pad_token, stochastic=stochastic_tokens)
         for out in out_gen:
             feats = {"tokens": out.token_ids, "mask": out.mask}
             if Y is None:
@@ -132,7 +132,7 @@ class BasePipeline(metaclass=ABCMeta):
             raise ValueError("Either neither or both of Xs and Y should be callable, not a mixture")
 
         dataset_encoded = lambda: itertools.chain.from_iterable(
-            map(lambda xy: self.text_to_tokens_mask(*xy), dataset()))
+            map(lambda xy: self.text_to_tokens_mask(*xy, stochastic_tokens=self.config.stochastic_tokens and train), dataset()))
         shape_def = self.feed_shape_type_def()
         if not callable(Y) and self.config.chunk_long_sequences:
             dataset_encoded_list = list(dataset_encoded())  # come up with a more principled way to do this .
@@ -145,7 +145,7 @@ class BasePipeline(metaclass=ABCMeta):
         else:
             Xs_fn = lambda: self.wrap_tqdm(Xs(), train)
 
-        dataset_encoded = lambda: itertools.chain.from_iterable(map(self.text_to_tokens_mask, Xs_fn()))
+        dataset_encoded = lambda: itertools.chain.from_iterable(map(lambda x: self.text_to_tokens_mask(x, stochastic_tokens=self.config.stochastic_tokens and train), Xs_fn()))
         types, shapes = self.feed_shape_type_def()
         return Dataset.from_generator(dataset_encoded, types[0], shapes[0])  # 0s cut out the targets
 
@@ -319,7 +319,7 @@ class BasePipeline(metaclass=ABCMeta):
     def _format_for_inference(self, X):
         return list(X)
 
-    def _text_to_ids(self, Xs, Y=None, pad_token=None):
+    def _text_to_ids(self, Xs, Y=None, pad_token=None, stochastic=False):
         Xs = self._format_for_encoding(Xs)
         if self.config.chunk_long_sequences and len(Xs) == 1:
             # can only chunk single sequence inputs
@@ -329,7 +329,8 @@ class BasePipeline(metaclass=ABCMeta):
                 Xs,
                 Y=Y,
                 max_length=sys.maxsize,
-                pad_token=(pad_token or self.config.pad_token)
+                pad_token=(pad_token or self.config.pad_token),
+                stochastic=stochastic
             )
             length = len(encoded.token_ids)
             starts = list(range(0, length, step_size))
