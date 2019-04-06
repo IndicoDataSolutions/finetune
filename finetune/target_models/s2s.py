@@ -1,24 +1,36 @@
 import tensorflow as tf
-import numpy as np
-from imblearn.over_sampling import RandomOverSampler
-from sklearn.utils import shuffle
 
 from finetune.base import BaseModel
-from finetune.encoding.target_encoders import OneHotLabelEncoder
-from finetune.nn.target_blocks import classifier
+from finetune.encoding.target_encoders import Seq2SeqLabelEncoder
 from finetune.input_pipeline import BasePipeline
+from finetune.util.shapes import shape_list
+from finetune.nn.target_blocks import language_model
+from finetune.util.beam_search import beam_search
 
 
 class S2SPipeline(BasePipeline):
 
-    def resampling(self, Xs, Y):
-        if self.config.oversample:
-            idxs, Ys = shuffle(*RandomOverSampler().fit_sample([[i] for i in range(len(Xs))], Y))
-            return [Xs[i[0]] for i in idxs], Ys
-        return Xs, Y
+    def feed_shape_type_def(self):
+        TS = tf.TensorShape
+        return (
+            (
+                {
+                    "tokens": tf.int32,
+                    "mask": tf.float32
+                },
+                tf.int32
+            ),
+            (
+                {
+                    "tokens": TS([self.config.max_length, 2]),
+                    "mask": TS([self.config.max_length])
+                },
+                TS([self.config.max_length, 2])
+            )
+        )
 
     def _target_encoder(self):
-        return OneHotLabelEncoder()
+        return Seq2SeqLabelEncoder(self.text_encoder)
 
 
 class S2S(BaseModel):
@@ -30,7 +42,9 @@ class S2S(BaseModel):
     """
 
     def _get_input_pipeline(self):
-        return S2SPipeline(self.config)
+        pipeline = S2SPipeline(self.config)
+        self.config.pipeline = pipeline
+        return pipeline
 
     def featurize(self, X):
         """
@@ -70,18 +84,66 @@ class S2S(BaseModel):
 
     @staticmethod
     def _target_model(config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
-        return classifier(
-            hidden=featurizer_state['features'], 
-            targets=targets, 
-            n_targets=n_outputs, 
-            config=config,
-            train=train,
-            reuse=reuse,
-            **kwargs
-        )
+        encoder = config.pipeline.text_encoder
+        if targets is not None:
+            target_feat_state = config.base_model.get_featurizer(
+                targets,
+                encoder=encoder,
+                config=config,
+                train=train,
+                encoder_state=featurizer_state
+            )
+            embed_weights = target_feat_state["embed_weights"]
+            return language_model(
+                X=target_feat_state["sequence_features"],
+                M=target_feat_state["mask"],
+                embed_weights=embed_weights,
+                config=config,
+                reuse=reuse, train=train,
+                hidden=shape_list(target_feat_state["sequence_features"][-1])
+            )
+        else:
+            # returns (decoded beams [batch_size, beam_size, decode_length]
+            #          decoding probabilities [batch_size, beam_size])
+
+            def symbols_to_logits_fn(input_symbols): #[batch_size, decoded_ids] to [batch_size, vocab_size]
+                target_feat_state = config.base_model.get_featurizer(
+                    input_symbols,
+                    encoder=encoder,
+                    config=config,
+                    train=train,
+                    encoder_state=featurizer_state
+                )
+                embed_weights = target_feat_state["embed_weights"]
+                output_state = language_model(
+                    X=target_feat_state["sequence_features"],
+                    M=target_feat_state["mask"],
+                    embed_weights=embed_weights,
+                    config=config,
+                    reuse=reuse, train=train,
+                    hidden=shape_list(target_feat_state["sequence_features"][-1])
+                )
+                return output_state["logits"][:, -1, :]
+
+            beams, probs = beam_search(
+                symbols_to_logits_fn=symbols_to_logits_fn,
+                initial_ids=tf.constant([encoder.start for _ in config.batch_size], dtype=tf.int32),
+                beam_size=config.beam_size,
+                decode_length=config.max_length,
+                vocab_size=encoder.vocab_size,
+                alpha=config.beam_search_alpha,
+                states=None,
+                eos_id=encoder.clf_token,
+                stop_early=True,
+                use_top_k_with_unique=True
+            )
+            return {
+                "logits": beams[:, 0, :],  # TODO, currently just takes the first beam
+                "losses": -1.0
+            }
 
     def _predict_op(self, logits, **kwargs):
-        return tf.argmax(logits, -1)
+        return logits
 
     def _predict_proba_op(self, logits, **kwargs):
-        return tf.nn.softmax(logits, -1)
+        return tf.no_op()

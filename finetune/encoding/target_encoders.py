@@ -66,6 +66,20 @@ class OneHotLabelEncoder(LabelEncoder, BaseEncoder):
         labels = super().transform(y)
         return self._make_one_hot(labels)
 
+class Seq2SeqLabelEncoder(BaseEncoder):
+    def __init__(self, encoder, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.encoder = encoder
+
+    def fit_transform(self, y):
+        return self.encoder.encode_multi_input(y).token_ids
+
+    def transform(self, y):
+        return self.encoder.encode_multi_input(y).token_ids
+
+    def inverse_transform(self, y):
+        return self.encoder.decode(y)
+
 class OrdinalRegressionEncoder(OrdinalEncoder, BaseEncoder):
 
     def __init__(self):

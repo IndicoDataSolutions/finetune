@@ -238,7 +238,7 @@ def enc_dec_mix(enc, dec, enc_mask, dec_mask):
     enc_mask = tf.reshape(1.0 - tf.sequence_mask(enc_mask, max_len=enc_seq), [batch, enc_seq, 1, 1]) * -1e4
     
     dec_proj = tf.expand_dims(normal_1d_conv_block(dec, 1, "dec_proj", use_fp16=enc.dtype==tf.float16, output_dim=feats), 1) #batch, 1, seq, feats
-    enc_mask = tf.reshape(1.0 - tf.sequence_mask(dec_mask, max_len=dec_seq), [batch, 1, dec_seq, 1]) * -1e4
+    dec_mask = tf.reshape(1.0 - tf.sequence_mask(dec_mask, max_len=dec_seq), [batch, 1, dec_seq, 1]) * -1e4
     
     enc_dec = tf.nn.relu(enc_proj + dec_proj) + enc_mask + dec_mask  # batch, seq_enc, seq_dec, feats
 
@@ -257,7 +257,7 @@ def block(X, block_name, use_fp16, layer_num=None, pool_idx=None, encoder_state=
         if encoder_state is not None:
             mixed = enc_dec_mix(encoder_state["sequence_features"], h1, encoder_state["pool_idx"], pool_idx)
             mixed *= tf.get_variable("mix_weight", shape=[shape_list(h1)[-1]], initalizer=tf.zeros_initializer())
-            h1 = norm(h1 + mixed, "mix_norm", fp16=use_fp16, e=1e-2)
+            h1 = h1 + mixed
         h2 = normal_1d_conv_block(h1, 2, "2", use_fp16,dilation=1)
         h2 = tf.nn.relu(h2)
         h3 = normal_1d_conv_block(h2, 2, "3", use_fp16, dilation=1)
