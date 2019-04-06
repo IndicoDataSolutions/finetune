@@ -228,14 +228,36 @@ def normal_1d_conv_block(X, kernel_width, layer_name, use_fp16, dilation=1, laye
         out = conv
     return out
 
+def enc_dec_mix(enc, dec, enc_mask, dec_mask):
+    # enc = batch, seq, feats
+    # dec = batch, seq, feats
+    batch, dec_seq, feats = shape_list(dec)
+    enc_seq = shape_list(enc)[1]
+    
+    enc_proj = tf.expand_dims(normal_1d_conv_block(enc, 1, "enc_proj", use_fp16=enc.dtype==tf.float16), 2) #batch, seq, 1, feats
+    enc_mask = tf.reshape(1.0 - tf.sequence_mask(enc_mask, max_len=enc_seq), [batch, enc_seq, 1, 1]) * -1e4
+    
+    dec_proj = tf.expand_dims(normal_1d_conv_block(dec, 1, "dec_proj", use_fp16=enc.dtype==tf.float16, output_dim=feats), 1) #batch, 1, seq, feats
+    enc_mask = tf.reshape(1.0 - tf.sequence_mask(dec_mask, max_len=dec_seq), [batch, 1, dec_seq, 1]) * -1e4
+    
+    enc_dec = tf.nn.relu(enc_proj + dec_proj) + enc_mask + dec_mask  # batch, seq_enc, seq_dec, feats
 
-def block(X, block_name, use_fp16, layer_num=None, pool_idx=None):
+    mixed = tf.nn.reduce_max(enc_dec, 1) # batch, seq_dec, feats
+    return tf.nn.relu(normal_1d_conv_block(tf.concat([enc, mixed], 2), 1, "mixing", use_fp16=enc.dtype==tf.float16))
+
+
+def block(X, block_name, use_fp16, layer_num=None, pool_idx=None, encoder_state=None):
     with tf.variable_scope(block_name):
         c, feats = cumulative_state_net(X, "cumulative_state_net", use_fp16, pool_idx)
         h0 = normal_1d_conv_block(c, 2, "0", use_fp16, dilation=1, layer_num=layer_num * 2 + 1)
         h0 = tf.nn.relu(h0)
         h1 = normal_1d_conv_block(h0, 2, "1", use_fp16, dilation=1)
         h1 = tf.nn.relu(h1)
+        #TODO write encoder_decoder interface
+        if encoder_state is not None:
+            mixed = enc_dec_mix(encoder_state["sequence_features"], h1, encoder_state["pool_idx"], pool_idx)
+            mixed *= tf.get_variable("mix_weight", shape=[shape_list(h1)[-1]], initalizer=tf.zeros_initializer())
+            h1 = norm(h1 + mixed, "mix_norm", fp16=use_fp16, e=1e-2)
         h2 = normal_1d_conv_block(h1, 2, "2", use_fp16,dilation=1)
         h2 = tf.nn.relu(h2)
         h3 = normal_1d_conv_block(h2, 2, "3", use_fp16, dilation=1)
@@ -273,7 +295,7 @@ def attention_layer(X, backwards, seq_lens, layer):
     return out
 
 
-def featurizer(X, encoder, config, train=False, reuse=None):
+def featurizer(X, encoder, config, train=False, reuse=None, encoder_state=None):
     """
     The transformer element of the finetuning model. Maps from tokens ids to a dense, embedding of the sequence.
 
@@ -294,8 +316,12 @@ def featurizer(X, encoder, config, train=False, reuse=None):
         encoder._lazy_init()
         clf_token = encoder['_classify_']
         pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
-        embed_weights = tf.get_variable("we", [encoder.vocab_size + config.max_length, config.n_embed],
-                                        initializer=tf.random_normal_initializer(stddev=config.weight_stddev))
+        if encoder_state is None:
+            embed_weights = tf.get_variable("we", [encoder.vocab_size + config.max_length, config.n_embed],
+                                            initializer=tf.random_normal_initializer(stddev=config.weight_stddev))
+        else:
+            embed_weights = encoder_state["embed_weights"]
+            
         if config.use_fp16:
             embed_weights = tf.cast(embed_weights, tf.float16)
 
@@ -320,7 +346,7 @@ def featurizer(X, encoder, config, train=False, reuse=None):
                     h = tf.stop_gradient(h)
 
                 block_fn_fwd = functools.partial(block, block_name='block%d_' % layer, use_fp16=config.use_fp16,
-                                                 layer_num=layer + 1, pool_idx=tf.stack([tf.range(shape_list(X)[0]), pool_idx], 1))
+                                                 layer_num=layer + 1, pool_idx=tf.stack([tf.range(shape_list(X)[0]), pool_idx], 1), encoder_state=encoder_state)
                 if config.low_memory_mode and train:
                     block_fn_fwd = recompute_grad(block_fn_fwd, use_entire_scope=True)
                 h, feats_i = block_fn_fwd(h)
