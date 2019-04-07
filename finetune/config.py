@@ -304,6 +304,8 @@ def get_default_config():
         sampled_softmax=None,
         xla=True,
         stochastic_tokens=False,
+        beam_search_alpha=0.1,
+        beam_size=2,
 
         # Location of model weights
         base_model=GPTModel,

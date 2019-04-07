@@ -72,7 +72,7 @@ def time_to_batch(value, dilation, pad_with=0):
         padded = tf.pad(value, [[0, 0], [0, pad_elements], [0, 0]], constant_values=pad_with)
         reshaped = tf.reshape(padded, [-1, dilation, shape[2]])
         transposed = tf.transpose(reshaped, perm=[1, 0, 2])
-        return tf.reshape(transposed, [shape[0] * dilation, -1, shape[2]])
+        return tf.reshape(transposed, [shape[0] * dilation, -1, shape[2]]), pad_elements
 
 
 def batch_to_time(value, dilation):
@@ -87,9 +87,10 @@ def dilated_causal_max_pool(value, kernel_size, dilation, dim=1):
     pool_op = lambda x: causalmax(x, dim=1, pool_len=kernel_size)
     with tf.name_scope("causal_pool"):
         if dilation > 1:
-            transformed = time_to_batch(value, dilation, pad_with=-1e4)
+            transformed, pad_elements = time_to_batch(value, dilation, pad_with=-1e4)
             pooled = pool_op(transformed)
             restored = batch_to_time(pooled, dilation)
+            restored = restored[:, :tf.shape(restored)[1] -pad_elements, :]
         else:
             restored = pool_op(value)
         return restored
@@ -103,6 +104,7 @@ def cascaded_pool(value, kernel_size, dim=1, pool_len=None):
         w = tf.get_variable("weighted_mean_max_pool_{}".format(i), shape=[shape[-1]], dtype=tf.float32)
         if w.dtype != value.dtype:
             w = tf.cast(w, value.dtype)
+        print(value)
         intermediate_vals.append(value * w)
     return tf.reduce_mean(intermediate_vals, 0)
     
@@ -114,9 +116,11 @@ def causal_conv(value, filter_, dilation, name='causal_conv'):
 
     with tf.name_scope(name):
         if dilation > 1:
-            transformed = time_to_batch(value, dilation)
+            transformed, pad_elements = time_to_batch(value, dilation)
+            pad_elements = tf.Print(pad_elements, ["PAD ELEMENTS:", pad_elements])
             conv = conv_op(transformed)
             restored = batch_to_time(conv, dilation)
+            restored = restored[:, :tf.shape(restored)[1] - pad_elements, :]
         else:
             restored = conv_op(value)
         return restored
@@ -195,7 +199,7 @@ def cumulative_state_net(X, name, use_fp16, pool_idx):
     cum_pooled = cascaded_pool(outputs_concat, kernel_size=8, pool_len=512) #cummax(outputs_concat, 1)
     outputs_cum_pooled = tf.concat([cum_pooled, X], -1)
     print(pool_idx)
-    feats = tf.gather_nd(cum_pooled, pool_idx)
+    feats = tf.gather_nd(cum_pooled, tf.stack([tf.range(shape_list(X)[0]), pool_idx], 1))
     feats_weight = tf.get_variable(name="featweights", shape=[nx], initializer=tf.ones_initializer())
     if use_fp16:
         feats_weight = tf.cast(feats_weight, tf.float16)
@@ -233,17 +237,19 @@ def enc_dec_mix(enc, dec, enc_mask, dec_mask):
     # dec = batch, seq, feats
     batch, dec_seq, feats = shape_list(dec)
     enc_seq = shape_list(enc)[1]
+
+    enc = tf.Print(enc, ["Shapes", tf.shape(enc), tf.shape(dec), tf.shape(enc_mask), tf.shape(dec_mask)])
     
     enc_proj = tf.expand_dims(normal_1d_conv_block(enc, 1, "enc_proj", use_fp16=enc.dtype==tf.float16), 2) #batch, seq, 1, feats
-    enc_mask = tf.reshape(1.0 - tf.sequence_mask(enc_mask, max_len=enc_seq), [batch, enc_seq, 1, 1]) * -1e4
+    enc_mask = tf.reshape(1.0 - tf.sequence_mask(enc_mask, maxlen=enc_seq, dtype=enc.dtype), [batch, enc_seq, 1, 1]) * -1e4
     
     dec_proj = tf.expand_dims(normal_1d_conv_block(dec, 1, "dec_proj", use_fp16=enc.dtype==tf.float16, output_dim=feats), 1) #batch, 1, seq, feats
-    dec_mask = tf.reshape(1.0 - tf.sequence_mask(dec_mask, max_len=dec_seq), [batch, 1, dec_seq, 1]) * -1e4
+    dec_mask = tf.reshape(1.0 - tf.sequence_mask(dec_mask, maxlen=dec_seq, dtype=enc.dtype), [batch, 1, dec_seq, 1]) * -1e4
     
     enc_dec = tf.nn.relu(enc_proj + dec_proj) + enc_mask + dec_mask  # batch, seq_enc, seq_dec, feats
 
-    mixed = tf.nn.reduce_max(enc_dec, 1) # batch, seq_dec, feats
-    return tf.nn.relu(normal_1d_conv_block(tf.concat([enc, mixed], 2), 1, "mixing", use_fp16=enc.dtype==tf.float16))
+    mixed = tf.reduce_max(enc_dec, 1) # batch, seq_dec, feats
+    return tf.nn.relu(normal_1d_conv_block(tf.concat([dec, mixed], 2), 1, "mixing", use_fp16=enc.dtype==tf.float16, output_dim=feats))
 
 
 def block(X, block_name, use_fp16, layer_num=None, pool_idx=None, encoder_state=None):
@@ -256,7 +262,7 @@ def block(X, block_name, use_fp16, layer_num=None, pool_idx=None, encoder_state=
         #TODO write encoder_decoder interface
         if encoder_state is not None:
             mixed = enc_dec_mix(encoder_state["sequence_features"], h1, encoder_state["pool_idx"], pool_idx)
-            mixed *= tf.get_variable("mix_weight", shape=[shape_list(h1)[-1]], initalizer=tf.zeros_initializer())
+            mixed *= tf.get_variable("mix_weight", shape=[shape_list(h1)[-1]], initializer=tf.zeros_initializer())
             h1 = h1 + mixed
         h2 = normal_1d_conv_block(h1, 2, "2", use_fp16,dilation=1)
         h2 = tf.nn.relu(h2)
@@ -310,7 +316,10 @@ def featurizer(X, encoder, config, train=False, reuse=None, encoder_state=None):
         sequence_features: The output of the featurizer at each timestep.
     """
     initial_shape = [a or -1 for a in X.get_shape().as_list()]
-    X = tf.reshape(X, shape=[-1] + initial_shape[-2:])
+    if len(initial_shape) != 3:
+        X = tf.reshape(X, shape=[-1] + initial_shape[-2:])
+
+    x_shape = tf.shape(X)
 
     with tf.variable_scope('model/featurizer', reuse=reuse):
         encoder._lazy_init()
@@ -330,7 +339,7 @@ def featurizer(X, encoder, config, train=False, reuse=None, encoder_state=None):
         else:
             embed_weights = tf.stop_gradient(embed_weights)
 
-        X = tf.reshape(X, [-1, config.max_length, 2])
+        X = tf.reshape(X, [-1, x_shape[1], 2])
 
         if config.use_timing:
             h = embed(X, embed_weights)
@@ -338,6 +347,7 @@ def featurizer(X, encoder, config, train=False, reuse=None, encoder_state=None):
             h = embed_no_timing(X, embed_weights)
         feats = []
         for layer in range(config.n_layer):
+            print("H is ", h)
             with tf.variable_scope('h%d_' % layer):
                 if (
                         (config.n_layer - layer) == config.num_layers_trained and
@@ -346,7 +356,7 @@ def featurizer(X, encoder, config, train=False, reuse=None, encoder_state=None):
                     h = tf.stop_gradient(h)
 
                 block_fn_fwd = functools.partial(block, block_name='block%d_' % layer, use_fp16=config.use_fp16,
-                                                 layer_num=layer + 1, pool_idx=tf.stack([tf.range(shape_list(X)[0]), pool_idx], 1), encoder_state=encoder_state)
+                                                 layer_num=layer + 1, pool_idx=pool_idx, encoder_state=encoder_state)
                 if config.low_memory_mode and train:
                     block_fn_fwd = recompute_grad(block_fn_fwd, use_entire_scope=True)
                 h, feats_i = block_fn_fwd(h)

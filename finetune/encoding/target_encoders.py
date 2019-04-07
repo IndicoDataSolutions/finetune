@@ -67,18 +67,35 @@ class OneHotLabelEncoder(LabelEncoder, BaseEncoder):
         return self._make_one_hot(labels)
 
 class Seq2SeqLabelEncoder(BaseEncoder):
-    def __init__(self, encoder, *args, **kwargs):
+    def __init__(self, encoder, max_len, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.encoder = encoder
+        self.max_len = max_len
+
+    def fit(self, y):
+        return
+    
+    @property
+    def target_dim(self):
+        return self.encoder.vocab_size
 
     def fit_transform(self, y):
-        return self.encoder.encode_multi_input(y).token_ids
+        return self.transform(y)
 
     def transform(self, y):
-        return self.encoder.encode_multi_input(y).token_ids
+        output = []
+        for y_i in y:
+            out = self.encoder.encode_multi_input([[y_i]], max_length=self.max_len).token_ids
+            seq_length = len(out)
+            x = np.zeros((self.max_len, 2), dtype=np.int32)
+        
+            x[:seq_length, 0] = out
+            x[:, 1] = np.arange(self.encoder.vocab_size, self.encoder.vocab_size + self.max_len)
+            output.append(x)
+        return output
 
     def inverse_transform(self, y):
-        return self.encoder.decode(y)
+        return [self.encoder.decode(y_i.tolist()) for y_i in y]
 
 class OrdinalRegressionEncoder(OrdinalEncoder, BaseEncoder):
 

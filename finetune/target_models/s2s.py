@@ -30,7 +30,7 @@ class S2SPipeline(BasePipeline):
         )
 
     def _target_encoder(self):
-        return Seq2SeqLabelEncoder(self.text_encoder)
+        return Seq2SeqLabelEncoder(self.text_encoder, self.config.max_length)
 
 
 class S2S(BaseModel):
@@ -43,7 +43,7 @@ class S2S(BaseModel):
 
     def _get_input_pipeline(self):
         pipeline = S2SPipeline(self.config)
-        self.config.pipeline = pipeline
+#        self.config.pipeline = pipeline
         return pipeline
 
     def featurize(self, X):
@@ -83,8 +83,8 @@ class S2S(BaseModel):
         return super().finetune(X, Y=Y, batch_size=batch_size)
 
     @staticmethod
-    def _target_model(config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
-        encoder = config.pipeline.text_encoder
+    def _target_model(config, featurizer_state, targets, n_outputs, train=False, reuse=None, label_encoder=None, **kwargs):
+        encoder = label_encoder.encoder
         if targets is not None:
             target_feat_state = config.base_model.get_featurizer(
                 targets,
@@ -95,50 +95,56 @@ class S2S(BaseModel):
             )
             embed_weights = target_feat_state["embed_weights"]
             return language_model(
-                X=target_feat_state["sequence_features"],
-                M=target_feat_state["mask"],
+                X=targets,
+                M=tf.sequence_mask(target_feat_state["pool_idx"] + 1, maxlen=shape_list(embed_weights)[1], dtype=tf.float32), # +1 because we want to predict the clf token as an eos token
                 embed_weights=embed_weights,
                 config=config,
                 reuse=reuse, train=train,
-                hidden=shape_list(target_feat_state["sequence_features"][-1])
+                hidden=target_feat_state["sequence_features"]
             )
         else:
             # returns (decoded beams [batch_size, beam_size, decode_length]
             #          decoding probabilities [batch_size, beam_size])
-
-            def symbols_to_logits_fn(input_symbols): #[batch_size, decoded_ids] to [batch_size, vocab_size]
+            embed_weights = featurizer_state.pop("embed_weights")
+            
+            def symbols_to_logits_fn(input_symbols, i, state): #[batch_size, decoded_ids] to [batch_size, vocab_size]
+                leng = shape_list(input_symbols)[1]
+                leng = tf.Print(leng, ["INPUT SIZE IS", tf.shape(input_symbols)])
+                pos_embed = encoder.vocab_size + tf.range(leng)
+                pos_embed = tf.tile([pos_embed], [shape_list(input_symbols)[0], 1])
+                inp = tf.pad(tf.stack([input_symbols, pos_embed], -1), [[0,0], [0, 1], [0, 0]] )
                 target_feat_state = config.base_model.get_featurizer(
-                    input_symbols,
+                    inp,
                     encoder=encoder,
                     config=config,
                     train=train,
-                    encoder_state=featurizer_state
+                    encoder_state={**state["featurizer_state"], "embed_weights":embed_weights}
                 )
-                embed_weights = target_feat_state["embed_weights"]
                 output_state = language_model(
-                    X=target_feat_state["sequence_features"],
-                    M=target_feat_state["mask"],
-                    embed_weights=embed_weights,
+                    X=inp,
+                    M=tf.sequence_mask(target_feat_state["pool_idx"] + 1, maxlen=leng + 1, dtype=tf.float32), # +1 because we want to predict the clf token as an eos token
+                    embed_weights=embed_weights[:encoder.vocab_size, :],
                     config=config,
                     reuse=reuse, train=train,
-                    hidden=shape_list(target_feat_state["sequence_features"][-1])
+                    hidden=target_feat_state["sequence_features"] # deal with state
                 )
-                return output_state["logits"][:, -1, :]
+                output_state["logits"] = tf.Print(output_state["logits"], [tf.argmax(output_state["logits"][:, i, :], -1)])
+                return output_state["logits"][:, i, :], state
 
-            beams, probs = beam_search(
+            beams, probs, _ = beam_search(
                 symbols_to_logits_fn=symbols_to_logits_fn,
-                initial_ids=tf.constant([encoder.start for _ in config.batch_size], dtype=tf.int32),
+                initial_ids=tf.constant([encoder.start for _ in range(config.batch_size)], dtype=tf.int32),
                 beam_size=config.beam_size,
                 decode_length=config.max_length,
                 vocab_size=encoder.vocab_size,
                 alpha=config.beam_search_alpha,
-                states=None,
+                states={"featurizer_state": featurizer_state},
                 eos_id=encoder.clf_token,
                 stop_early=True,
                 use_top_k_with_unique=True
             )
             return {
-                "logits": beams[:, 0, :],  # TODO, currently just takes the first beam
+                "logits": beams[:, -1, :],  # TODO, currently just takes the first beam
                 "losses": -1.0
             }
 
@@ -146,4 +152,4 @@ class S2S(BaseModel):
         return logits
 
     def _predict_proba_op(self, logits, **kwargs):
-        return tf.no_op()
+        return logits

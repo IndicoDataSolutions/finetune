@@ -79,8 +79,10 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                 train=(mode == tf.estimator.ModeKeys.TRAIN),
                 max_length=params.max_length,
                 class_weights=weighted_tensor,
+                label_encoder=label_encoder,
                 **kwargs
             )
+            
         return target_model_state
 
     def _model_fn(features, labels, mode, params):
