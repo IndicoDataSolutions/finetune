@@ -108,6 +108,7 @@ class S2S(BaseModel):
             embed_weights = featurizer_state.pop("embed_weights")
             
             def symbols_to_logits_fn(input_symbols, i, state): #[batch_size, decoded_ids] to [batch_size, vocab_size]
+                input_symbols = tf.Print(input_symbols, [input_symbols])
                 leng = shape_list(input_symbols)[1]
                 leng = tf.Print(leng, ["INPUT SIZE IS", tf.shape(input_symbols)])
                 pos_embed = encoder.vocab_size + tf.range(leng)
@@ -143,8 +144,11 @@ class S2S(BaseModel):
                 stop_early=True,
                 use_top_k_with_unique=True
             )
+
+            best_beams_i = tf.argmax(probs, -1, output_type=tf.int32)
+            best_beam = tf.gather_nd(beams, tf.stack([tf.range(tf.shape(beams)[0]), best_beams_i], -1))
             return {
-                "logits": beams[:, -1, :],  # TODO, currently just takes the first beam
+                "logits": best_beam,
                 "losses": -1.0
             }
 

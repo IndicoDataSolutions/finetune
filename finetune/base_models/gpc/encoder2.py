@@ -59,7 +59,7 @@ class GPCEncoder(BaseEncoder):
             tok_pos = []
             token_start = 0
             if stochastic:
-                encoded = sp.sample_encode_as_pieces(text, -1, 0.1)
+                encoded = self.encoder.sample_encode_as_pieces(text, -1, 0.1)
             else:
                 encoded = self.encoder.encode_as_pieces(text)
 
@@ -88,3 +88,10 @@ class GPCEncoder(BaseEncoder):
         Convert a batch of ids [batch_size, id] into text(ish).
         """
         return self.encoder.decode_ids(token_ids)
+
+    def __getstate__(self):
+        return {"Encoder": None}
+
+    def __setstate__(self, state):
+        self.__init__()
+        self._lazy_init()

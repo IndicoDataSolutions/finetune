@@ -73,13 +73,14 @@ class InitializeHook(tf.train.SessionRunHook):
 
 
 class Saver:
-    def __init__(self, fallback_filename=None, exclude_matches=None, variable_transforms=None, save_dtype=None):
+    def __init__(self, fallback_filename=None, exclude_matches=None, variable_transforms=None, save_dtype=None, target_model_init_from_base_model=False):
         self.variable_transforms = variable_transforms or []
         self.exclude_matches = exclude_matches
         self.variables = None
         self.save_dtype = save_dtype
         if fallback_filename is not None:
             self.set_fallback(fallback_filename)
+        self.target_model_init_from_base_model = target_model_init_from_base_model
 
     def set_fallback(self, fallback_filename):
         self.tpe = ThreadPoolExecutor()
@@ -93,6 +94,11 @@ class Saver:
             self.fallback_ = self.fallback_future.result()
             self.fallback_future = None
             self.tpe.shutdown()
+            if self.target_model_init_from_base_model:
+                self.variables = dict()
+                for k, v in self.fallback_.items():
+                    self.variables['model/target/' + k] = v
+                
         return self.fallback_
 
     def get_saver_hook(self, estimator, keep_best_model, steps_per_epoch, early_stopping_steps, eval_frequency):

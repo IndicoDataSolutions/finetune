@@ -108,7 +108,8 @@ class BaseModel(object, metaclass=ABCMeta):
             fallback_filename=self.config.base_model_path,
             exclude_matches=None if self.config.save_adam_vars else "Adam",
             variable_transforms=[embedding_preprocessor(self.input_pipeline, self.config)],
-            save_dtype=self.config.save_dtype
+            save_dtype=self.config.save_dtype,
+            target_model_init_from_base_model=self.config.target_model_init_from_base_model
         )
 
     @abstractmethod
