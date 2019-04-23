@@ -151,6 +151,7 @@ class Settings(dict):
     :param prefit_init: if True, fit target model weigths before finetuning the entire model. Defaults to `False`.
     :param debugging_logs: if True, output tensorflow logs and turn off TQDM logging. Defaults to `False`.
     :param val_set: Where it is neccessary to use an explicit validation set, provide it here as a tuple (text, labels)
+    :param per_process_gpu_memory_fraction: fraction of the overall amount of memory that each visible GPU should be allocated, defaults to `1.0`.
     """
 
     def get_grid_searchable(self):
@@ -224,6 +225,7 @@ def get_default_config():
         weight_stddev=0.02,
         save_dtype=None,
         val_set=None,
+        per_process_gpu_memory_fraction=1.0,
 
         # Regularization
         embed_p_drop=0.1,
