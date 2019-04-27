@@ -136,11 +136,14 @@ class Saver:
             self.var_val = []
             for var in all_vars:
                 for saved_var_name, saved_var in itertools.chain(variables_sv.items(), self.fallback.items()):
-                    if saved_var_name == var.name:
+                    if saved_var_name == var.name or saved_var_name == var.name[:-2]: # change this back and fix bert base :
                         for func in self.variable_transforms:
                             saved_var = func(var.name, saved_var)
                         var.load(saved_var, session)
                         break
+                else:
+                    print("Uninitialized var: {}".format(var.name))
+                            
         return init_fn
 
     def remove_unchanged(self, variable_names, variable_values, fallback_vars):
