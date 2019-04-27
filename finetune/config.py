@@ -307,6 +307,9 @@ def get_default_config():
         kernel_sizes=None,
         num_filters_per_size=None,
         n_embed_featurizer=None, # needed because the dimensions CNN output are different from the embedding dimensions
+
+        #Bert only
+        bert_intermediate_size=None
     )
     return settings
 

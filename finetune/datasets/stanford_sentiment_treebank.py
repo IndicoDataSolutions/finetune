@@ -9,7 +9,7 @@ from sklearn.model_selection import train_test_split
 from finetune import Classifier
 from finetune.datasets import Dataset, generic_download
 from finetune.base_models.gpt.model import GPTModel
-from finetune.base_models.gpt2.model import GPT2Model
+from finetune.base_models.bert.model import BERTModelCased
 import joblib as jl
 logging.basicConfig(level=logging.DEBUG)
 
@@ -50,7 +50,7 @@ if __name__ == "__main__":
         lr_warmup=0.1,
         val_size=0, 
         max_length=64, 
-        base_model=GPT2Model, 
+        base_model=BERTModelCased,
         tensorboard_folder="./sst"
     )
     print(model.config.base_model_path)

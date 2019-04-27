@@ -8,6 +8,7 @@ import finetune
 
 
 def download_data_if_required():
+    return
     """ Pulls the pre-trained model weights from Github if required. """
     github_base_url = "https://raw.githubusercontent.com/IndicoDataSolutions/finetune/master/finetune/model/"
     s3_base_url = "https://s3.amazonaws.com/bendropbox/"
