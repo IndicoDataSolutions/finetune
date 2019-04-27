@@ -151,7 +151,7 @@ class BaseEncoder(object):
     def _token_length(self, token):
         return len(token)
 
-    def encode_multi_input(self, Xs, Y=None, max_length=None, pad_token=None, stochastic=False):
+    def encode_multi_input(self, Xs, Y=None, max_length=None, pad_token=None, stochastic=None):
         """
         Encodes the text for passing to the model, also tracks the location of each token to allow reconstruction.
         It can also, optionally, construct a per-token labels as required for training.
@@ -160,7 +160,6 @@ class BaseEncoder(object):
         :param max_length: Max length of the sequences.
         :return: A Labeled Sequence Object.
         """
-
         token_ids = []
         tokens = []
         positions = []

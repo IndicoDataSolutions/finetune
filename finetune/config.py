@@ -306,7 +306,9 @@ def get_default_config():
         stochastic_tokens=False,
         beam_search_alpha=0.6,
         beam_size=10,
-        target_model_init_from_base_model=True, 
+        target_model_init_from_base_model=True,
+        feat_mode="final_state",
+
 
         # Location of model weights
         base_model=GPTModel,

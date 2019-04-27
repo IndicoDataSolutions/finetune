@@ -10,6 +10,7 @@ from finetune import Classifier
 from finetune.datasets import Dataset, generic_download
 from finetune.base_models.gpt.model import GPTModel
 from finetune.base_models.gpt2.model import GPT2Model
+from finetune.base_models.gpc.model import GPCModel
 import joblib as jl
 logging.basicConfig(level=logging.DEBUG)
 
@@ -43,18 +44,61 @@ class StanfordSentimentTreebank(Dataset):
 if __name__ == "__main__":
     # Train and evaluate on SST
     dataset = StanfordSentimentTreebank(nrows=1000).dataframe
-    model = Classifier(
-#        interpolate_pos_embed=False, 
-        n_epochs=3, 
-        batch_size=2, 
-        lr_warmup=0.1,
-        val_size=0, 
-#        max_length=64, 
-        base_model=GPTModel, 
-        tensorboard_folder="./sst"
-    )
-
     trainX, testX, trainY, testY = train_test_split(dataset.Text.values, dataset.Target.values, test_size=0.3, random_state=42)
-    model.fit(trainX, trainY)
-    accuracy = np.mean(model.predict(testX) == testY)
-    print('Test Accuracy: {:0.2f}'.format(accuracy))
+    feat_modes = ["final_state", "clf_tok", "mean_state", "mean_tok", "max_state", "max_tok"] 
+
+    for l2 in [0.0, 0.001, 0.01, 0.1]:
+        for prefit_init in [True, False]:
+            for lr_warmup in [0.0, 0.1, 0.3]:
+                for batch_size in [2, 4, 8]:
+                    for lr in [1e-5, 1e-4, 1e-3, 1e-2, 1e-1]:
+                        for epoch in [2, 4, 8, 16]:
+                            for feat_mode in feat_modes:
+                                model = Classifier(
+                                    max_length=64,
+                                    n_epochs=epoch, 
+                                    batch_size=batch_size, 
+                                    lr_warmup=lr_warmup,
+                                    val_size=0,
+                                    lr=lr,
+                                    base_model=GPCModel,
+                                    base_model_path="Conv1Base.jl",
+                                    xla=False,
+                                    keep_best_model=False,#True,
+                                    l2_reg=l2,
+                                    prefit_init=prefit_init,
+                                    feat_mode=feat_mode
+                                )
+                                print(dict(
+                                    n_epochs=epoch,
+                                    batch_size=batch_size,
+                                    lr_warmup=lr_warmup,
+                                    val_size=0,
+                                    lr=lr,
+                                    l2_reg=l2,
+                                    prefit_init=prefit_init,
+                                    feat_mode=feat_mode
+                                )
+                                )
+
+                                model.fit(trainX, trainY)
+                                accuracy = np.mean(model.predict(testX) == testY)
+
+                                model = Classifier(
+                                    max_length=64,
+                                    n_epochs=epoch,
+                                    batch_size=batch_size,
+                                    lr_warmup=lr_warmup,
+                                    val_size=0,
+                                    lr=lr,
+                                    base_model=GPCModel,
+                                    base_model_path="Conv1Base.jl",
+                                    xla=False,
+                                    keep_best_model=False,#True,
+                                    l2_reg=l2,
+                                    prefit_init=prefit_init,
+                                    feat_mode=feat_mode
+                                )
+                                model.fit(trainX[:100], trainY[:100])
+                                accuracy_100 = np.mean(model.predict(testX) == testY)
+                                print('Test Accuracy 1000: {:0.2f}, 100: {:0.2f}'.format(accuracy, accuracy_100))

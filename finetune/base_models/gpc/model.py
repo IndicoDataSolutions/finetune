@@ -11,8 +11,15 @@ class GPCModel(SourceModel):
     settings = {
         'n_embed': 512,
         "base_model_path": "fresh_start.jl",
-        'n_layer': 4,
-        'num_layers_trained':4
+        'n_layer': 12,
+        'num_layers_trained':12,
+        'n_epochs': 8,
+        'prefit_init': True,
+        'batch_size': 8,
+        'feat_mode': 'max_state',
+        'l2_reg': 0.0,
+        'lr': 0.001,
+        'lr_warmup': 0.0
     }
 
 
@@ -25,7 +32,7 @@ class GPCModelFP16(SourceModel):
         "optimizer": "Adafactor",
         "use_fp16": True,
         "scale_loss": True,
-        'n_layer': 4,
-        'num_layers_trained':4,
+        'n_layer': 12,
+        'num_layers_trained':12,
         "stochastic_tokens":True
     }

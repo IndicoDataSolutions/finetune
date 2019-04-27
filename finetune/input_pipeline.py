@@ -347,7 +347,8 @@ class BasePipeline(metaclass=ABCMeta):
                 Xs,
                 Y=Y,
                 max_length=self.config.max_length,
-                pad_token=(pad_token or self.config.pad_token)
+                pad_token=(pad_token or self.config.pad_token),
+                stochastic=stochastic
             )
 
             yield self._array_format(encoder_out, pad_token=(pad_token or self.config.pad_token))
