@@ -7,6 +7,7 @@ from finetune.base_models.bert.tokenizer import FullTokenizer
 FINETUNE_FOLDER = os.path.dirname(finetune.__file__)
 VOCAB_PATH = os.path.join(FINETUNE_FOLDER, 'model', 'bert', 'vocab.txt')
 VOCAB_PATH_MULTILINGUAL = os.path.join(FINETUNE_FOLDER, 'model', 'bert', 'vocab_multi.txt')
+VOCAB_PATH_LARGE = os.path.join(FINETUNE_FOLDER, 'model', 'bert', 'vocab_large.txt')
 
 
 class BERTEncoder(BaseEncoder):
@@ -84,6 +85,10 @@ class BERTEncoder(BaseEncoder):
 
         raise NotImplementedError("We cannot model language with BERT.")
 
+class BERTEncoderLarge(BERTEncoder):
+
+    def __init__(self, encoder_path=None, vocab_path=VOCAB_PATH_LARGE, lower_case=False):
+        super().__init__(encoder_path=encoder_path, vocab_path=vocab_path, lower_case=lower_case)
 
 class BERTEncoderMultuilingal(BERTEncoder):
 
