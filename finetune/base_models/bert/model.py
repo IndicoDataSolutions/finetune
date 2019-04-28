@@ -26,6 +26,7 @@ class BERTModelLargeCased(SourceModel):
         'n_embed': 1024,
         'n_heads': 16,
         'n_layer': 24,
+        'num_layers_trained': 24,
         'act_fn': "gelu",
         "lr": 5e-6,
         'bert_intermediate_size': 4096,
