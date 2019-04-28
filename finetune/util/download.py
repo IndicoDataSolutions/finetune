@@ -8,11 +8,11 @@ import finetune
 
 
 def download_data_if_required():
-    return
     """ Pulls the pre-trained model weights from Github if required. """
     github_base_url = "https://raw.githubusercontent.com/IndicoDataSolutions/finetune/master/finetune/model/"
     s3_base_url = "https://s3.amazonaws.com/bendropbox/"
     gpt2_base_url = "https://s3.amazonaws.com/bendropbox/gpt2/"
+    bert_base_url = "https://s3.amazonaws.com/bendropbox/bert/"
     finetune_base_folder = os.path.dirname(finetune.__file__)
     file_list = [
         {
@@ -45,7 +45,17 @@ def download_data_if_required():
         }
     ]
 
-    for file_obj in file_list:
+    bert_file_list = [
+        {
+            'file': os.path.join(finetune_base_folder, 'model', ' bert', file),
+            'url': urljoin(bert_base_url, "bert/{}".format(file))
+        } for file in [
+            "bert_large_cased.jl", "bert_small_cased.jl", "bert_small_mutli_cased.jl",
+            "vocab.txt", "vocab_large.txt", "vocab_multi.txt"
+        ]
+    ]
+
+    for file_obj in file_list + bert_file_list:
         path = Path(file_obj['file'])
         if not path.exists():
             path.parent.mkdir(parents=True, exist_ok=True)
