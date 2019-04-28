@@ -47,10 +47,10 @@ def download_data_if_required():
 
     bert_file_list = [
         {
-            'file': os.path.join(finetune_base_folder, 'model', ' bert', file),
-            'url': urljoin(bert_base_url, "bert/{}".format(file))
+            'file': os.path.join(finetune_base_folder, 'model', 'bert', file),
+            'url': urljoin(bert_base_url, file)
         } for file in [
-            "bert_large_cased.jl", "bert_small_cased.jl", "bert_small_mutli_cased.jl",
+            "bert_large_cased.jl", "bert_small_cased.jl", "bert_small_multi_cased.jl",
             "vocab.txt", "vocab_large.txt", "vocab_multi.txt"
         ]
     ]
