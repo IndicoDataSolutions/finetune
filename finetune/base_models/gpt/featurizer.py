@@ -82,8 +82,8 @@ def attn(x, scope, n_state, n_head, resid_pdrop, attn_pdrop, train=False, scale=
         w = tf.matmul(q, k)
 
         if scale:
-            n_state = shape_list(v)[-1]
-            w = w * tf.rsqrt(tf.cast(n_state, tf.float32))
+            n_state_scale = shape_list(v)[-1]
+            w = w * tf.rsqrt(tf.cast(n_state_scale, tf.float32))
 
         if mask:
             w = mask_attn_weights(w)
