@@ -75,10 +75,10 @@ def attn(x, scope, n_state, *, past, hparams, train=False):
         w = w * tf.rsqrt(tf.cast(v.shape[-1].value, w.dtype))
 
         w = mask_attn_weights(w)
-        w = softmax(w)
-        w = dropout(w, attn_p_drop, train)
+        attn_weights = softmax(w)
+        w = dropout(attn_weights, attn_p_drop, train)
         a = tf.matmul(w, v)
-        return a
+        return {'output': a, 'weights': attn_weights}
 
     with tf.variable_scope(scope):
         c = conv1d(x, 'c_attn', n_state * 3)
@@ -105,11 +105,13 @@ def mlp(x, scope, n_state, *, hparams, train=False):
 
 def block(x, *, past, hparams, train=False):
     nx = x.shape[-1].value
-    a = attn(norm(x, 'ln_1'), 'attn', nx, past=past, hparams=hparams, train=train)
+    attn_dict = attn(norm(x, 'ln_1'), 'attn', nx, past=past, hparams=hparams, train=train)
+    a = attn_dict['output']
     x = x + a
     m = mlp(norm(x, 'ln_2'), 'mlp', nx * 4, hparams=hparams, train=train)
     x = x + m
-    return x
+    # TODO fix
+    return {'attn': attn_dict['weights'], 'output': x}
 
 
 def past_shape(*, hparams, batch_size=None, sequence=None):
@@ -166,7 +168,8 @@ def gpt2_featurizer(X, encoder, config, train=False, reuse=None):
                 block_fn = functools.partial(block, past=past, hparams=config, train=train)
                 if config.low_memory_mode and train_layer:
                     block_fn = recompute_grad(block_fn, use_entire_scope=True)
-                h = block_fn(h)
+                transformer_block = block_fn(h)
+                h = transformer_block['output']
 
         h = norm(h, 'ln_f')
 
@@ -182,5 +185,6 @@ def gpt2_featurizer(X, encoder, config, train=False, reuse=None):
             'embed_weights': embed_weights,
             'features': clf_h,
             'sequence_features': seq_feats,
-            'pool_idx': pool_idx
+            'pool_idx': pool_idx,
+            'attention_weights': transformer_block['weights']
         }
