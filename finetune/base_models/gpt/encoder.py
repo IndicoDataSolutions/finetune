@@ -186,3 +186,33 @@ class GPTEncoder(BaseEncoder):
         """
 
         return "".join([self.decoder.get(word_idx, '<unk>') for word_idx in ids]).replace("</w>", " ")
+
+
+def finetune_to_indico_attention_weights(raw_texts, attn_weights, encoder):
+    """
+    Maps the attention weights one-to-one with the raw text tokens.
+    
+    :param raw_texts: A list of segmented text of the form list(list(str))
+    :param attn_weights: An array of attention weights of shape [batch, seq_len]
+    :param encoder: The encoder used in the model that output the attention weights
+    :return: A list of updated attention weights, each of which is the same length as
+    the number of tokens in the raw text.
+    """
+    updated_attention_weights = []
+
+    encoded_docs = encoder._encode(raw_texts)
+
+    for doc_idx, (raw_text) in enumerate(raw_texts):
+        tokens = encoded_docs.tokens[doc_idx]
+        clf_token_idx = len(tokens)
+        token_ends = encoded_docs.char_locs[doc_idx]
+        token_lengths = [encoder._token_length(token) for token in tokens]
+        token_starts = [end - length for end, length in zip(token_ends, token_lengths)]
+
+        # take the average values over the attention heads for the classify token
+        attn = tf.reduce_mean(attn_weights[doc_idx], axis=0)[clf_token_idx]
+        attn = [max(attn[token_start:token_end])
+                for token_start, token_end in zip(token_starts, token_ends)]
+
+        updated_attention_weights.append(attn/sum(attn))
+        return updated_attention_weights
