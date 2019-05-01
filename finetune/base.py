@@ -409,8 +409,6 @@ class BaseModel(object, metaclass=ABCMeta):
 
     def _featurize(self, Xs):
         raw_preds = self._inference(Xs, PredictMode.FEATURIZE)
-        print("****", [p.shape for p in raw_preds])
-        print(len(raw_preds))
         return np.asarray(raw_preds)
 
     @abstractmethod
