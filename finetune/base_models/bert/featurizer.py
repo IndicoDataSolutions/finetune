@@ -45,6 +45,8 @@ def bert_featurizer(X, encoder, config, train=False, reuse=None):
     )
 
     mask = tf.sequence_mask(lengths, maxlen=seq_length, dtype=tf.float32)
+    if config.num_layers_trained not in [config.n_layer, 0]:
+        raise ValueError("Bert base model does not support num_layers_trained not equal to 0 or n_layer")
 
     with tf.variable_scope('model/featurizer', reuse=reuse):
         bert = BertModel(
@@ -56,10 +58,15 @@ def bert_featurizer(X, encoder, config, train=False, reuse=None):
             use_one_hot_embeddings=False,
             scope=None
         )
-
-        return {
+        output_state = {
             'embed_weights': bert.get_embedding_table(),
             'features': bert.get_pooled_output(),
             'sequence_features': bert.get_sequence_output(),
             'pool_idx': lengths
         }
+        if config.num_layers_trained == 0:
+            print("STOPPING ALL THE GRADIENTS")
+            exit()
+            output_state = {k: tf.stop_gradient(v) for k, v in output_state.items()}
+
+        return output_state
