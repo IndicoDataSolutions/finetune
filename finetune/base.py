@@ -34,6 +34,7 @@ from finetune.model import get_model_fn, PredictMode
 from finetune.util.download import download_data_if_required
 from finetune.util.estimator import PatchedParameterServerStrategy
 from finetune.util.positional_embeddings import embedding_preprocessor
+from finetune.base_models import GPTModel, GPTModelSmall
 
 
 LOGGER = logging.getLogger('finetune')
@@ -406,8 +407,10 @@ class BaseModel(object, metaclass=ABCMeta):
         return formatted_predictions
 
     def attention_weights(self, Xs):
-        raw_preds = self._inference(Xs, PredictMode.ATTENTION)
-        return raw_preds
+        if self.config.base_model in [GPTModel, GPTModelSmall]:
+            raw_preds = self._inference(Xs, PredictMode.ATTENTION)
+            return raw_preds
+        raise NotImplementedError("'attention_weights' only supported for GPTModel and GPTModelSmall base models.")
 
     def _featurize(self, Xs):
         raw_preds = self._inference(Xs, PredictMode.FEATURIZE)
