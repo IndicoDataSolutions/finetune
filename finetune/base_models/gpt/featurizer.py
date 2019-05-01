@@ -185,11 +185,9 @@ def gpt_featurizer(X, encoder, config, train=False, reuse=None):
 
             # get the attention weights from the last layer
             if layer == config.n_layer - 1:
-                with tf.variable_scope('h%d_' % layer, reuse=True):
-                    with tf.variable_scope('h%d' % layer, reuse=True):
-                        with tf.variable_scope('attn', reuse=True):
-                            q, k, v = multihead_qkv(h, n_state=shape_list(h)[-1], n_head=config.n_heads, train=train)
-                            w = attn_weights(q, k, v, attn_pdrop=config.attn_p_drop, train=train_layer, scale=True)
+                with tf.variable_scope('h%d_/h%d/attn' % (layer, layer), reuse=True):
+                    q, k, v = multihead_qkv(h, n_state=shape_list(h)[-1], n_head=config.n_heads, train=train)
+                    w = attn_weights(q, k, v, attn_pdrop=config.attn_p_drop, train=train_layer, scale=True)
 
 
         # Use hidden state at classifier token as input to final proj. + softmax

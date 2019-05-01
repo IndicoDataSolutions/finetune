@@ -13,6 +13,7 @@ from finetune.optimizers.learning_rate_schedules import schedules
 from finetune.optimizers.adamax import AdamaxWOptimizer
 from finetune.util.imbalance import class_weight_tensor
 from finetune.errors import FinetuneError
+from finetune.base_models import GPTModel, GPTModelSmall
 
 LOGGER = logging.getLogger('finetune')
 
@@ -100,7 +101,8 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                 train=train
             )
             predictions = {PredictMode.FEATURIZE: featurizer_state["features"]}
-            predictions[PredictMode.ATTENTION] = featurizer_state["attention_weights"]
+            if params.base_model in [GPTModel, GPTModelSmall]:
+                predictions[PredictMode.ATTENTION] = featurizer_state["attention_weights"]
 
             if build_target_model:
                 target_model_state = target_model_op(
