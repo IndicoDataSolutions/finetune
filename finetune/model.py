@@ -200,7 +200,7 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
         assert mode == tf.estimator.ModeKeys.EVAL, "The mode is actually {}".format(mode)
         if params.eval_acc and pred_op is not None:
             LOGGER.info("Adding evaluation metrics, Accuracy")
-            labels_dense = tf.argmax(labels)
+            labels_dense = tf.argmax(labels, -1)
             metrics = {
                 "Accuracy":  tf.metrics.accuracy(pred_op, labels_dense)
             }
