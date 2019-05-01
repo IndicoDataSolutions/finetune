@@ -27,6 +27,7 @@ class PredictMode:
     PROBAS = "PROBA"
     GENERATE_TEXT = "GEN_TEXT"
     LM_PERPLEXITY = "PERPLEXITY"
+    ATTENTION = "ATTENTION"
 
 
 def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_model, build_lm, encoder, target_dim,
@@ -99,6 +100,7 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                 train=train
             )
             predictions = {PredictMode.FEATURIZE: featurizer_state["features"]}
+            predictions[PredictMode.ATTENTION] = featurizer_state["attention_weights"]
 
             if build_target_model:
                 target_model_state = target_model_op(
