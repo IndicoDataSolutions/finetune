@@ -361,3 +361,12 @@ class TestClassifier(unittest.TestCase):
         model = Classifier(**config)
         train_sample = self.dataset.sample(n=20)
         model.fit(train_sample.Text, train_sample.Target)
+
+    def test_fit_predict(self):
+        """
+        Test issue #263
+        """
+
+        model = Classifier(**self.default_config(batch_size=3, eval_acc=True))
+        train_sample = self.dataset.sample(n=self.n_sample)
+        model.fit(train_sample.Text, train_sample.Target)
