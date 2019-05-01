@@ -186,3 +186,59 @@ class GPTEncoder(BaseEncoder):
         """
 
         return "".join([self.decoder.get(word_idx, '<unk>') for word_idx in ids]).replace("</w>", " ")
+
+
+def to_spacy_attn(attn, tokens, token_starts, token_ends):
+    to_combine = []
+    spacy_attn = []
+    spacy_token_starts = []
+    spacy_token_ends = []
+    spacy_start = None
+    for token, prob, start, end in zip(tokens, attn, token_starts, token_ends):
+        to_combine.append(prob)
+        if not spacy_start:
+            spacy_start = start
+        if token.endswith('</w>'):
+            spacy_attn.append(max(to_combine))
+            spacy_token_starts.append(spacy_start)
+            spacy_token_ends.append(end)
+            to_combine = []
+            spacy_start = None
+    spacy_attn = spacy_attn/sum(spacy_attn)
+    return {
+        'attention_weights': spacy_attn,
+        'token_starts': spacy_token_starts,
+        'token_ends': spacy_token_ends
+    }
+
+
+def finetune_to_indico_attention_weights(raw_texts, attn_weights, encoder):
+    """
+    Maps the attention weights one-to-one with the raw text tokens.
+    
+    :param raw_texts: A list of segmented text of the form list(list(str))
+    :param attn_weights: An array of attention weights of shape [batch, seq_len]
+    :param encoder: The encoder used in the model that output the attention weights
+    :return: A list of dictionaries, each with the following keys:
+    - 'attention_weights': A list of attention weights for each token in the text
+    - 'token_starts': A list of the start tokens for each spacy token in the text
+    - 'token_ends': A list of the end tokens for each spacy token in the text
+
+    """
+    spacy_outputs = []
+
+    encoded_docs = encoder._encode(raw_texts)
+
+    for doc_idx, (raw_text) in enumerate(raw_texts):
+        tokens = encoded_docs.tokens[doc_idx]
+        token_ends = encoded_docs.char_locs[doc_idx]
+        token_lengths = [encoder._token_length(token) for token in tokens]
+        token_starts = [end - length for end, length in zip(token_ends, token_lengths)]
+        # offset of one to take into account the start token
+        clf_token_idx = len(tokens) + 1
+        # take the average values over the attention heads for the attention weights of the classify token 
+        attn = np.mean(attn_weights[doc_idx], axis=0)[clf_token_idx][1:clf_token_idx]  # [num_tokens]
+        # map one-to-one with spacy tokenization
+        spacy_output = to_spacy_attn(attn, tokens, token_starts, token_ends)
+        spacy_outputs.append(spacy_output)
+    return spacy_outputs
