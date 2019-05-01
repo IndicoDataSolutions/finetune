@@ -34,7 +34,7 @@ def mask_attn_weights(w):
     return w
 
 
-def _attn(q, k, v, attn_pdrop, train=False, scale=False, mask=True):
+def attn_weights(q, k, v, attn_pdrop, train=False, scale=False, mask=True):
     w = tf.matmul(q, k)
 
     if scale:
@@ -44,11 +44,7 @@ def _attn(q, k, v, attn_pdrop, train=False, scale=False, mask=True):
     if mask:
         w = mask_attn_weights(w)
     w = tf.nn.softmax(w)
-
-    w = dropout(w, attn_pdrop, train)
-
-    a = tf.matmul(w, v)
-    return a
+    return w
 
 
 def split_states(x, n):
@@ -87,17 +83,25 @@ def conv1d(x, scope, nf, rf, w_init=tf.random_normal_initializer(stddev=0.02), b
             c = tf.nn.conv1d(x, w, stride=1, padding=pad) + b
         return c
 
+def multihead_qkv(x, n_state, n_head, train):
+    c = conv1d(x, 'c_attn', n_state * 3, 1, train=train)
+    q, k, v = tf.split(c, 3, 2)
+    q = split_heads(q, n_head)
+    k = split_heads(k, n_head, k=True)
+    v = split_heads(v, n_head)
+    return q, k, v
+
 
 def attn(x, scope, n_state, n_head, resid_pdrop, attn_pdrop, train=False, scale=False, mask=True):
     assert n_state % n_head == 0
     with tf.variable_scope(scope):
-        c = conv1d(x, 'c_attn', n_state * 3, 1, train=train)
-        q, k, v = tf.split(c, 3, 2)
-        q = split_heads(q, n_head)
-        k = split_heads(k, n_head, k=True)
-        v = split_heads(v, n_head)
-        a = _attn(q, k, v, attn_pdrop=attn_pdrop, train=train, scale=scale,
-                  mask=mask)
+        q, k, v = multihead_qkv(x, n_state, n_head, train)
+        w = attn_weights(q, k, v, attn_pdrop=attn_pdrop, train=train, scale=scale,
+                        mask=mask)
+        w = dropout(w, attn_pdrop, train)
+
+        a = tf.matmul(w, v)
+
         a = merge_heads(a)
         a = conv1d(a, 'c_proj', n_state, 1, train=train)
         a = dropout(a, resid_pdrop, train)
@@ -174,10 +178,22 @@ def gpt_featurizer(X, encoder, config, train=False, reuse=None):
                                              scope='h%d' % layer, train=train_layer, scale=True)
                 if config.low_memory_mode and train_layer:
                     block_fn = recompute_grad(block_fn, use_entire_scope=True)
-                h = block_fn(h)
+                if layer < config.n_layer - 1:
+                    h = block_fn(h)
+                else:
+                    h_out = block_fn(h)
+
+            # get the attention weights from the last layer
+            if layer == config.n_layer - 1:
+                with tf.variable_scope('h%d_' % layer, reuse=True):
+                    with tf.variable_scope('h%d' % layer, reuse=True):
+                        with tf.variable_scope('attn', reuse=True):
+                            q, k, v = multihead_qkv(h, n_state=shape_list(h)[-1], n_head=config.n_heads, train=train)
+                            w = attn_weights(q, k, v, attn_pdrop=config.attn_p_drop, train=train_layer, scale=True)
+
 
         # Use hidden state at classifier token as input to final proj. + softmax
-        clf_h = tf.reshape(h, [-1, config.n_embed])  # [batch * seq_len, embed]
+        clf_h = tf.reshape(h_out, [-1, config.n_embed])  # [batch * seq_len, embed]
         clf_token = encoder['_classify_']
         pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
         clf_h = tf.gather(clf_h, tf.range(shape_list(X)[0], dtype=tf.int32) * config.max_length + pool_idx)
@@ -188,5 +204,6 @@ def gpt_featurizer(X, encoder, config, train=False, reuse=None):
             'embed_weights': embed_weights,
             'features': clf_h,
             'sequence_features': seq_feats,
-            'pool_idx': pool_idx
+            'pool_idx': pool_idx,
+            'attention_weights': w  # [n_heads, seq_len, seq_len]
         }
