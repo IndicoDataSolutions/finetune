@@ -78,6 +78,8 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
         return target_model_state
 
     def _model_fn(features, labels, mode, params):
+        if "BERT" in params.base_model.__name__ and build_lm:
+            raise ValueError("Bert models do not support functions that require the language model.")
         if not build_target_model:
             lm_loss_coef = 1.
         else:
