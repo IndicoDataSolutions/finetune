@@ -67,12 +67,13 @@ class TestClassifier(unittest.TestCase):
         shutil.rmtree("tests/saved-models/")
 
     def default_config(self, **kwargs):
-        return dict(get_config(
-            batch_size=2,
-            max_length=128,
-            n_epochs=1,
-            **kwargs
-        ))
+        defaults = {
+            'batch_size': 2,
+            'max_length': 128,
+            'n_epochs': 1
+        }
+        defaults.update(kwargs)
+        return dict(get_config(**defaults))
 
     def test_fit_lm_only(self):
         """
