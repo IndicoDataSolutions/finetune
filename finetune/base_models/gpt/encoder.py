@@ -210,9 +210,9 @@ def finetune_to_indico_attention_weights(raw_texts, attn_weights, encoder):
         token_starts = [end - length for end, length in zip(token_ends, token_lengths)]
 
         # take the average values over the attention heads for the classify token
-        attn = tf.reduce_mean(attn_weights[doc_idx], axis=0)[clf_token_idx]
+        attn = np.mean(attn_weights[doc_idx], axis=0)[clf_token_idx]
         attn = [max(attn[token_start:token_end])
                 for token_start, token_end in zip(token_starts, token_ends)]
 
         updated_attention_weights.append(attn/sum(attn))
-        return updated_attention_weights
+    return updated_attention_weights
