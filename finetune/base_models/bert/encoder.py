@@ -56,14 +56,8 @@ class BERTEncoder(BaseEncoder):
             if labels is not None:
                 label = labels[i]
 
-            subtokens = self.tokenizer.tokenize(text)
-            subtoken_locs = [0]
-            for tok in subtokens:
-                if tok.startswith("##"):
-                    subtoken_locs.append(subtoken_locs[-1] + len(tok) - 2)
-                else:
-                    subtoken_locs.append(subtoken_locs[-1] + len(tok) + 1)
-            subtoken_locs = subtoken_locs[1:]
+            subtokens, token_idxs = self.tokenizer.tokenize(text)
+            subtoken_locs = [l[1] for l in token_idxs]
 
             batch_tokens.append(subtokens)
             batch_token_idxs.append(self.tokenizer.convert_tokens_to_ids(subtokens))
@@ -85,10 +79,12 @@ class BERTEncoder(BaseEncoder):
 
         raise NotImplementedError("We cannot model language with BERT.")
 
+
 class BERTEncoderLarge(BERTEncoder):
 
     def __init__(self, encoder_path=None, vocab_path=VOCAB_PATH_LARGE, lower_case=False):
         super().__init__(encoder_path=encoder_path, vocab_path=vocab_path, lower_case=lower_case)
+
 
 class BERTEncoderMultuilingal(BERTEncoder):
 
