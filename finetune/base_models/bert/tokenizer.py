@@ -149,13 +149,24 @@ def convert_ids_to_tokens(inv_vocab, ids):
   return convert_by_vocab(inv_vocab, ids)
 
 
-def whitespace_tokenize(text):
+def whitespace_tokenize(text, idxs=None):
   """Runs basic whitespace cleaning and splitting on a piece of text."""
-  text = text.strip()
-  if not text:
-    return []
-  tokens = text.split()
-  return tokens
+  tokens = [""]
+  idxs_out = [[]]
+  for i, char in zip(idxs or range(len(text)), text):
+    if _is_whitespace(char):
+      if tokens[-1] != "":
+        tokens.append("")
+        idxs_out.append([])
+    else:
+      idxs_out[-1].append(i)
+      tokens[-1] += char
+
+  if tokens[-1] == "":
+    tokens = tokens[:-1]
+    idxs_out = idxs_out[:-1]
+
+  return tokens, idxs_out
 
 
 class FullTokenizer(object):
@@ -169,11 +180,13 @@ class FullTokenizer(object):
 
   def tokenize(self, text):
     split_tokens = []
-    for token in self.basic_tokenizer.tokenize(text):
-      for sub_token in self.wordpiece_tokenizer.tokenize(token):
+    split_idxs = []
+    for token, token_idx in self.basic_tokenizer.tokenize(text):
+      for sub_token, sub_token_idx in self.wordpiece_tokenizer.tokenize(token, token_idx):
         split_tokens.append(sub_token)
+        split_idxs.append((sub_token_idx[0], sub_token_idx[-1]))
 
-    return split_tokens
+    return split_tokens, split_idxs
 
   def convert_tokens_to_ids(self, tokens):
     return convert_by_vocab(self.vocab, tokens)
@@ -196,7 +209,7 @@ class BasicTokenizer(object):
   def tokenize(self, text):
     """Tokenizes a piece of text."""
     text = convert_to_unicode(text)
-    text = self._clean_text(text)
+    text, idxs = self._clean_text(text)
 
     # This was added on November 1st, 2018 for the multilingual and Chinese
     # models. This is also applied to the English models now, but it doesn't
@@ -204,18 +217,26 @@ class BasicTokenizer(object):
     # and generally don't have any Chinese data in them (there are Chinese
     # characters in the vocabulary because Wikipedia does have some Chinese
     # words in the English Wikipedia.).
-    text = self._tokenize_chinese_chars(text)
+    text, idxs = self._tokenize_chinese_chars(text, idxs)
 
-    orig_tokens = whitespace_tokenize(text)
+    orig_tokens, idxs = whitespace_tokenize(text, idxs)
     split_tokens = []
-    for token in orig_tokens:
+    split_token_idxs = []
+    for token, idx in zip(orig_tokens, idxs):
       if self.do_lower_case:
         token = token.lower()
         token = self._run_strip_accents(token)
-      split_tokens.extend(self._run_split_on_punc(token))
+      toks, idx_offsets = self._run_split_on_punc(token)
+      split_tokens.extend(toks)
+      split_token_idxs.extend([[idx[0] + i for i in sub] for sub in idx_offsets if sub])
 
-    output_tokens = whitespace_tokenize(" ".join(split_tokens))
-    return output_tokens
+    output_tokens = []
+    output_idxs = []
+    for tok, idxs in zip(split_tokens, split_token_idxs):
+      if not (tok == "" or all(_is_whitespace(c) for c in tok)):
+        output_tokens.append(tok)
+        output_idxs.append(idxs)
+    return output_tokens, output_idxs
 
   def _run_strip_accents(self, text):
     """Strips accents from a piece of text."""
@@ -234,32 +255,39 @@ class BasicTokenizer(object):
     i = 0
     start_new_word = True
     output = []
+    idxs_out = [[]]
     while i < len(chars):
       char = chars[i]
       if _is_punctuation(char):
         output.append([char])
+        idxs_out.append([i])
         start_new_word = True
       else:
         if start_new_word:
           output.append([])
+          idxs_out.append([])
         start_new_word = False
         output[-1].append(char)
+        idxs_out[-1].append(i)
       i += 1
 
-    return ["".join(x) for x in output]
+    return ["".join(x) for x in output], idxs_out
 
-  def _tokenize_chinese_chars(self, text):
+  def _tokenize_chinese_chars(self, text, idxs):
     """Adds whitespace around any CJK character."""
     output = []
-    for char in text:
+    out_idxs = []
+    for i, char in zip(idxs, text):
       cp = ord(char)
       if self._is_chinese_char(cp):
         output.append(" ")
         output.append(char)
         output.append(" ")
+        out_idxs.extend([i] * 3)
       else:
         output.append(char)
-    return "".join(output)
+        out_idxs.append(i)
+    return "".join(output), out_idxs
 
   def _is_chinese_char(self, cp):
     """Checks whether CP is the codepoint of a CJK character."""
@@ -286,15 +314,18 @@ class BasicTokenizer(object):
   def _clean_text(self, text):
     """Performs invalid character removal and whitespace cleanup on text."""
     output = []
-    for char in text:
+    char_idx = []
+    for i, char in enumerate(text):
       cp = ord(char)
       if cp == 0 or cp == 0xfffd or _is_control(char):
         continue
       if _is_whitespace(char):
         output.append(" ")
+        char_idx.append(i)
       else:
         output.append(char)
-    return "".join(output)
+        char_idx.append(i)
+    return "".join(output), char_idx
 
 
 class WordpieceTokenizer(object):
@@ -305,7 +336,7 @@ class WordpieceTokenizer(object):
     self.unk_token = unk_token
     self.max_input_chars_per_word = max_input_chars_per_word
 
-  def tokenize(self, text):
+  def tokenize(self, text, idxs):
     """Tokenizes a piece of text into its word pieces.
 
     This uses a greedy longest-match-first algorithm to perform tokenization
@@ -326,15 +357,18 @@ class WordpieceTokenizer(object):
     text = convert_to_unicode(text)
 
     output_tokens = []
-    for token in whitespace_tokenize(text):
+    output_idxs = []
+    for token, idxs in whitespace_tokenize(text, idxs):
       chars = list(token)
       if len(chars) > self.max_input_chars_per_word:
         output_tokens.append(self.unk_token)
+        output_idxs.append(idxs)
         continue
 
       is_bad = False
       start = 0
       sub_tokens = []
+      sub_token_idx = []
       while start < len(chars):
         end = len(chars)
         cur_substr = None
@@ -349,14 +383,18 @@ class WordpieceTokenizer(object):
         if cur_substr is None:
           is_bad = True
           break
+        sub_token_idx.append(idxs[start:end])
         sub_tokens.append(cur_substr)
         start = end
 
       if is_bad:
         output_tokens.append(self.unk_token)
+        output_idxs.append(idxs)
       else:
         output_tokens.extend(sub_tokens)
-    return output_tokens
+        output_idxs.extend(sub_token_idx)
+
+    return output_tokens, output_idxs
 
 
 def _is_whitespace(char):
