@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Finetune Quickstart Guide &mdash; finetune 0.6.0 documentation</title>
+  <title>Finetune Quickstart Guide &mdash; finetune 0.6.3 documentation</title>
   
 
   
@@ -35,7 +35,7 @@
         <link rel="index" title="Index"
               href="genindex.html"/>
         <link rel="search" title="Search" href="search.html"/>
-    <link rel="top" title="finetune 0.6.0 documentation" href="#"/> 
+    <link rel="top" title="finetune 0.6.3 documentation" href="#"/> 
 
   
   <script src="_static/js/modernizr.min.js"></script>
@@ -2267,8 +2267,18 @@ eg. <cite>{“sst”: Classifier, “ner”: SequenceLabeler}</cite></li>
 <dl class="method">
 <dt id="finetune.MultiTask.featurize">
 <code class="descname">featurize</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/mtl.html#MultiTask.featurize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.MultiTask.featurize" title="Permalink to this definition">¶</a></dt>
-<dd><p>Base method to get raw features out of the model.
-These features are the same that are fed into the target_model.</p>
+<dd><p>Runs featurization on the trained model for any of the tasks the model was trained for. Input and output formats  
+are the same as for each of the individial tasks.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>X</strong> – A dictionary mapping from task name to data, in the format required by the task type.</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">A dictionary mapping from task name to the features for that task.</td>
+</tr>
+</tbody>
+</table>
 </dd></dl>
 
 <dl class="method">
@@ -2525,6 +2535,7 @@ If you are using a single GPU and have more than 4Gb of GPU memory you should se
 <li><strong>prefit_init</strong> – if True, fit target model weigths before finetuning the entire model. Defaults to <cite>False</cite>.</li>
 <li><strong>debugging_logs</strong> – if True, output tensorflow logs and turn off TQDM logging. Defaults to <cite>False</cite>.</li>
 <li><strong>val_set</strong> – Where it is neccessary to use an explicit validation set, provide it here as a tuple (text, labels)</li>
+<li><strong>per_process_gpu_memory_fraction</strong> – fraction of the overall amount of memory that each visible GPU should be allocated, defaults to <cite>1.0</cite>.</li>
 </ul>
 </td>
 </tr>
@@ -2569,7 +2580,7 @@ If you are using a single GPU and have more than 4Gb of GPU memory you should se
     <script type="text/javascript">
         var DOCUMENTATION_OPTIONS = {
             URL_ROOT:'./',
-            VERSION:'0.6.0',
+            VERSION:'0.6.3',
             COLLAPSE_INDEX:false,
             FILE_SUFFIX:'.html',
             HAS_SOURCE:  true,
