@@ -181,11 +181,12 @@ class FullTokenizer(object):
   def tokenize(self, text):
     split_tokens = []
     split_idxs = []
-    for token, token_idx in self.basic_tokenizer.tokenize(text):
-      for sub_token, sub_token_idx in self.wordpiece_tokenizer.tokenize(token, token_idx):
+    for token, token_idx in zip(*self.basic_tokenizer.tokenize(text)):
+      for sub_token, sub_token_idx in zip(*self.wordpiece_tokenizer.tokenize(token, token_idx)):
         split_tokens.append(sub_token)
-        split_idxs.append((sub_token_idx[0], sub_token_idx[-1]))
+        split_idxs.append((sub_token_idx[0], sub_token_idx[-1] + 1))
 
+    print(text, split_tokens, split_idxs)
     return split_tokens, split_idxs
 
   def convert_tokens_to_ids(self, tokens):
@@ -358,7 +359,7 @@ class WordpieceTokenizer(object):
 
     output_tokens = []
     output_idxs = []
-    for token, idxs in whitespace_tokenize(text, idxs):
+    for token, idxs in zip(*whitespace_tokenize(text, idxs)):
       chars = list(token)
       if len(chars) > self.max_input_chars_per_word:
         output_tokens.append(self.unk_token)
