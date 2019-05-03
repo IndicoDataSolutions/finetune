@@ -31,6 +31,8 @@ def bert_featurizer(X, encoder, config, train=False, reuse=None):
         initializer_range=config.weight_stddev
     )
 
+    initial_shape = tf.shape(X)
+    X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-2:]), 0))
     # To fit the interface of finetune we are going to compute the mask and type id at runtime.
     input_ids = X[:, :, 0]  # slice of pos embed ids.
     delimeters = tf.cast(tf.equal(input_ids, encoder.delimiter), tf.int32)
@@ -60,8 +62,14 @@ def bert_featurizer(X, encoder, config, train=False, reuse=None):
         )
         output_state = {
             'embed_weights': bert.get_embedding_table(),
-            'features': bert.get_pooled_output(),
-            'sequence_features': bert.get_sequence_output(),
+            'features': tf.reshape(
+                bert.get_pooled_output(),
+                shape=tf.concat((initial_shape[: -2], [config.n_embed]), 0)
+            ),
+            'sequence_features': tf.reshape(
+                bert.get_sequence_output(),
+                shape=tf.concat((initial_shape[:-1], [config.n_embed]), 0)
+            ),
             'pool_idx': lengths
         }
         if config.num_layers_trained == 0:
