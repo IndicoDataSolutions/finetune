@@ -165,6 +165,10 @@ def gpt_featurizer(X, encoder, config, train=False, reuse=None):
         X = tf.reshape(X, [-1, config.max_length, 2])
 
         h = embed(X, embed_weights)
+        
+        # alias 
+        input_embedding = h
+
         for layer in range(config.n_layer):
             if (config.n_layer - layer) == config.num_layers_trained and config.num_layers_trained != config.n_layer:
                 h = tf.stop_gradient(h)
@@ -201,6 +205,7 @@ def gpt_featurizer(X, encoder, config, train=False, reuse=None):
         return {
             'embed_weights': embed_weights,
             'features': clf_h,
+            'input_features': input_embedding,
             'sequence_features': seq_feats,
             'pool_idx': pool_idx,
             'attention_weights': w  # [n_heads, seq_len, seq_len]

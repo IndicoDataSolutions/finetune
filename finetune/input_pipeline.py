@@ -288,6 +288,13 @@ class BasePipeline(metaclass=ABCMeta):
 
         return val_dataset, train_dataset, self.config.val_size, self.config.val_interval
 
+    def get_explain_input_fn(self, Xs, Y, batch_size=None, prefetch_buffer=2):
+        batch_size = batch_size or self.config.batch_size
+        self._post_data_initialization(Y)
+        dataset = lambda: self._dataset_with_targets(Xs, Y, train=False)
+        dataset_fn = lambda: dataset().batch(batch_size, drop_remainder=False).prefetch(prefetch_buffer)
+        return dataset_fn
+
     def get_predict_input_fn(self, Xs, batch_size=None):
         batch_size = batch_size or self.config.batch_size
         tf_dataset = lambda: self._dataset_without_targets(Xs, train=None).batch(batch_size)

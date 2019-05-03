@@ -29,6 +29,7 @@ class PredictMode:
     GENERATE_TEXT = "GEN_TEXT"
     LM_PERPLEXITY = "PERPLEXITY"
     ATTENTION = "ATTENTION"
+    EXPLAIN = "EXPLAIN"
 
 
 def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_model, build_lm, encoder, target_dim,
@@ -112,13 +113,14 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                     mode=mode,
                     task_id=task_id
                 )
-                if (mode == tf.estimator.ModeKeys.TRAIN or mode == tf.estimator.ModeKeys.EVAL) and Y is not None:
+                if Y is not None:
                     target_loss = tf.reduce_mean(target_model_state["losses"])
                     train_loss += (1 - lm_loss_coef) * target_loss
                     tf.summary.scalar("TargetModelLoss", target_loss)
                 if mode == tf.estimator.ModeKeys.PREDICT or tf.estimator.ModeKeys.EVAL:
                     logits = target_model_state["logits"]
                     predict_params = target_model_state.get("predict_params", {})
+
                     if "_threshold" in params:
                         predict_params["threshold"] = params._threshold
                     pred_op = predict_op(logits, **predict_params)
@@ -202,15 +204,27 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
             return tf.estimator.EstimatorSpec(mode=mode, loss=train_loss, train_op=train_op)
 
         assert mode == tf.estimator.ModeKeys.EVAL, "The mode is actually {}".format(mode)
+
+
+        def explain_op(*args, **kwargs):
+            vals = [
+                g * x for g, x in zip(
+                    tf.gradients(target_model_state["losses"], featurizer_state['input_features']), 
+                    [featurizer_state['input_features']]
+                )
+            ]
+
+            return vals, tf.no_op()
+
+        metrics = {}
         if params.eval_acc and pred_op is not None:
             LOGGER.info("Adding evaluation metrics, Accuracy")
             labels_dense = tf.argmax(labels, -1)
-            metrics = {
-                "Accuracy":  tf.metrics.accuracy(pred_op, labels_dense)
-            }
-        else:
-            metrics = None
+            metrics["Accuracy"] = tf.metrics.accuracy(pred_op, labels_dense)
 
+        metrics['Explanations'] = explain_op()
+            
+        
         return tf.estimator.EstimatorSpec(mode=mode, loss=train_loss, eval_metric_ops=metrics)
 
     return _model_fn

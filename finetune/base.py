@@ -374,6 +374,23 @@ class BaseModel(object, metaclass=ABCMeta):
             )
             return [pred[mode] if mode else pred for pred in predictions]
 
+    def explain(self, Xs, Y):
+        Xs = self.input_pipeline._format_for_inference(Xs)
+        estimator, hooks = self.get_estimator()
+        input_fn = self.input_pipeline.get_explain_input_fn(Xs, Y)
+        length = len(Xs) if not callable(Xs) else None
+
+        predictions = tqdm.tqdm(
+            estimator.evaluate(
+                input_fn=input_fn, hooks=hooks
+            ),
+            total=length,
+            desc="Explanations"
+        )
+        return [
+            pred['Explanations'] for pred in predictions
+        ]
+
     def fit(self, *args, **kwargs):
         """ An alias for finetune. """
         return self.finetune(*args, **kwargs)
