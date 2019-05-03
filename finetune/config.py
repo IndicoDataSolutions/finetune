@@ -11,7 +11,7 @@ from nltk.metrics.distance import edit_distance
 
 import finetune
 from finetune.errors import FinetuneError
-from finetune.base_models import GPTModel, GPT2Model
+from finetune.base_models import GPTModel, GPT2Model, BERT
 
 LOGGER = logging.getLogger('finetune')
 
@@ -297,7 +297,7 @@ def get_default_config():
         assocation_loss_weight=100.0,
 
         # Location of model weights
-        base_model=GPTModel,
+        base_model=GPTModel, 
         base_model_path=None,
 
         # Possible `SourceModel` specific settings
