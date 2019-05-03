@@ -38,15 +38,22 @@ SST_FILENAME = "SST-binary.csv"
 
 class TestModelBase(unittest.TestCase):
     base_model = None
+    model_specific_config = {}
 
     def default_config(cls, **kwargs):
-        return dict(get_config(
+        defaults = dict(
             base_model=cls.base_model,
             batch_size=2,
             max_length=128,
-            lm_loss_coef=0,
             val_size=0,
-            **kwargs
+            lm_loss_coef=0.0,
+            **cls.model_specific_config
+        )
+        
+        
+        return dict(get_config(
+            **kwargs,
+            **{k:v for k, v in defaults.items() if k not in kwargs}
         ))
 
 
@@ -457,12 +464,24 @@ class TestSequenceLabelerTextCNN(TestModelBase):
 
 
 class TestSequenceLabelerBert(TestSequenceLabelerTextCNN):
+    model_specific_config = {
+        "n_epochs": 2,
+        "lr": 1e-4
+    }
     base_model = BERTModelCased
 
 
 class TestClassifierBert(TestClassifierTextCNN):
+    model_specific_config = {
+	"n_epochs": 2,	
+        "lr": 1e-4
+    }
     base_model = BERTModelCased
 
 
 class TestComparisonBert(TestComparisonTextCNN):
+    model_specific_config = {
+	"n_epochs": 2,	
+        "lr": 1e-4
+    }
     base_model = BERTModelCased
