@@ -14,6 +14,8 @@ import warnings
 warnings.filterwarnings('ignore')
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
+import pytest
+
 import tensorflow as tf
 import pandas as pd
 import numpy as np
@@ -27,6 +29,7 @@ from finetune.errors import FinetuneError
 
 SST_FILENAME = "SST-binary.csv"
 
+SKIP_LM_TESTS = get_config().base_model.is_bidirectional
 
 class TestClassifier(unittest.TestCase):
     n_sample = 20
@@ -75,6 +78,7 @@ class TestClassifier(unittest.TestCase):
         defaults.update(kwargs)
         return dict(get_config(**defaults))
 
+    @pytest.mark.skipif(SKIP_LM_TESTS, reason="Bidirectional models do not yet support LM functions")
     def test_fit_lm_only(self):
         """
         Ensure LM only training does not error out
@@ -302,6 +306,7 @@ class TestClassifier(unittest.TestCase):
         predY = model.predict(teX)
         self.assertEqual(accuracy_score(teY, predY), 1.00)
 
+    @pytest.mark.skipif(SKIP_LM_TESTS, reason="Bidirectional models do not yet support LM functions")
     def test_language_model(self):
         """
         Ensure saving + loading does not cause errors
@@ -316,6 +321,7 @@ class TestClassifier(unittest.TestCase):
         start_token = model.input_pipeline.text_encoder.decoder[start_id]
         self.assertIn('{}Indico RULE'.format(start_token).lower(), lm_out_2.lower())
 
+    @pytest.mark.skipif(SKIP_LM_TESTS, reason="Bidirectional models do not yet support LM functions")
     def test_save_load_language_model(self):
         """
         Ensure saving + loading does not cause errors
@@ -335,6 +341,7 @@ class TestClassifier(unittest.TestCase):
         start_token = model.input_pipeline.text_encoder.decoder[start_id]
         self.assertIn('{}Indico RULE'.format(start_token).lower(), lm_out_2.lower())
 
+    @pytest.mark.skipif(SKIP_LM_TESTS, reason="Bidirectional models do not yet support LM functions")
     def test_generate_text_stop_early(self):
         model = Classifier()
 

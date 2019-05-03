@@ -10,6 +10,7 @@ import random
 # required for tensorflow logging control
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
+import pytest
 import tensorflow as tf
 import numpy as np
 from sklearn.metrics import accuracy_score
@@ -19,11 +20,15 @@ from bs4 import BeautifulSoup as bs
 from bs4.element import Tag
 
 from finetune import SequenceLabeler
+from finetune.config import get_config
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
 from finetune.util.metrics import (
     sequence_labeling_token_precision, sequence_labeling_token_recall,
     sequence_labeling_overlap_precision, sequence_labeling_overlap_recall
 )
+
+SKIP_LM_TESTS = get_config().base_model.is_bidirectional
+
 
 class TestSequenceLabeler(unittest.TestCase):
 
@@ -101,6 +106,7 @@ class TestSequenceLabeler(unittest.TestCase):
             **self.default_config()
         )
 
+    @pytest.mark.skipif(SKIP_LM_TESTS, reason="Bidirectional models do not yet support LM functions")
     def test_fit_lm_only(self):
         """
         Ensure model training does not error out
