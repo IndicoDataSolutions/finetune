@@ -9,6 +9,7 @@ import pytest
 from sklearn.model_selection import train_test_split
 from finetune import Association
 
+from finetune.config import get_config
 from finetune.datasets.treebank_association import TreebankNounVP
 
 SKIP_LM_TESTS = get_config().base_model.is_bidirectional

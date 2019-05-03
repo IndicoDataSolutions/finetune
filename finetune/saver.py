@@ -141,8 +141,6 @@ class Saver:
                             saved_var = func(var.name, saved_var)
                         var.load(saved_var, session)
                         break
-                else:
-                    print("Uninitialized var: {}".format(var.name))
                             
         return init_fn
 
