@@ -21,6 +21,7 @@ from bs4 import BeautifulSoup as bs
 from bs4.element import Tag
 
 from finetune.base_models import TextCNN
+from finetune.base_models import BERTModelCased
 from finetune import Classifier, Comparison, SequenceLabeler
 from finetune.datasets import generic_download
 from finetune.config import get_config
@@ -35,23 +36,27 @@ from finetune.util.metrics import (
 SST_FILENAME = "SST-binary.csv"
 
 
-def default_config(**kwargs):
-    return dict(get_config(
-        base_model=TextCNN,
-        batch_size=2,
-        max_length=128,
-        n_epochs=1,
-        lm_loss_coef=0,
-        val_size=0,
-        **kwargs
-    ))
+class TestModelBase(unittest.TestCase):
+    base_model = None
+
+    def default_config(cls, **kwargs):
+        return dict(get_config(
+            base_model=cls.base_model,
+            batch_size=2,
+            max_length=128,
+            lm_loss_coef=0,
+            val_size=0,
+            **kwargs
+        ))
 
 
-class TestClassifier(unittest.TestCase):
+class TestClassifierTextCNN(TestModelBase):
     n_sample = 20
     dataset_path = os.path.join(
         'Data', 'Classify', 'SST-binary.csv'
     )
+
+    base_model = TextCNN
 
     @classmethod
     def _download_sst(cls):
@@ -89,13 +94,13 @@ class TestClassifier(unittest.TestCase):
         """
         Ensure second call to predict is faster than first
         """
-        model = Classifier(**default_config())
+        model = Classifier(**self.default_config())
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text.values, train_sample.Target.values)
         model.predict(valid_sample.Text.values)
 
-        model2 = Classifier(**default_config())
+        model2 = Classifier(**self.default_config())
         model2.fit(train_sample.Text.values, train_sample.Target.values)
         model2.predict(valid_sample.Text.values)
 
@@ -104,7 +109,7 @@ class TestClassifier(unittest.TestCase):
         Ensure second call to predict is faster than first
         """
 
-        model = Classifier(**default_config())
+        model = Classifier(**self.default_config())
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text.values, train_sample.Target.values)
@@ -121,7 +126,7 @@ class TestClassifier(unittest.TestCase):
         self.assertLess(second_prediction_time, first_prediction_time / 2.)
 
     def test_correct_cached_predict(self):
-        model = Classifier(**default_config())
+        model = Classifier(**self.default_config())
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text.values, train_sample.Target.values)
@@ -145,7 +150,7 @@ class TestClassifier(unittest.TestCase):
         Ensure model returns predictions of the right type
         """
 
-        model = Classifier(**default_config())
+        model = Classifier(**self.default_config())
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
 
@@ -167,7 +172,7 @@ class TestClassifier(unittest.TestCase):
         Ensure model training does not error out when oversampling is set to True
         """
 
-        model = Classifier(**default_config())
+        model = Classifier(**self.default_config())
         model.config.oversample = True
         train_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text.values, train_sample.Target.values)
@@ -176,25 +181,25 @@ class TestClassifier(unittest.TestCase):
         # testing class weights
         train_sample = self.dataset.sample(n=self.n_sample * 3)
         valid_sample = self.dataset.sample(n=self.n_sample * 3)
-        model = Classifier(**default_config())
+        model = Classifier(**self.default_config())
         model.fit(train_sample.Text.values, train_sample.Target.values)
         predictions = model.predict(valid_sample.Text.values)
         recall = recall_score(valid_sample.Target.values, predictions, pos_label=1)
-        model = Classifier(**default_config(class_weights={1: 100}))
+        model = Classifier(**self.default_config(class_weights={1: 100}))
         model.fit(train_sample.Text.values, train_sample.Target.values)
         predictions = model.predict(valid_sample.Text.values)
         new_recall = recall_score(valid_sample.Target.values, predictions, pos_label=1)
         self.assertTrue(new_recall >= recall)
 
         # test auto-inferred class weights function
-        model = Classifier(**default_config(class_weights='log'))
+        model = Classifier(**self.default_config(class_weights='log'))
         model.fit(train_sample.Text.values, train_sample.Target.values)
 
     def test_fit_predict_batch_size_1(self):
         """
         Ensure training is possible with batch size of 1
         """
-        model = Classifier(**default_config())
+        model = Classifier(**self.default_config())
         model.config.batch_size = 1
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
@@ -207,7 +212,7 @@ class TestClassifier(unittest.TestCase):
         Ensure saving + loading does not change predictions
         """
         save_file = 'tests/saved-models/test-save-load'
-        config = default_config(save_adam_vars=False)
+        config = self.default_config(save_adam_vars=False)
         model = Classifier(**config)
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
@@ -233,7 +238,7 @@ class TestClassifier(unittest.TestCase):
         Ensure featurization returns an array of the right shape
         Ensure featurization is still possible after fit
         """
-        model = Classifier(**default_config())
+        model = Classifier(**self.default_config())
         train_sample = self.dataset.sample(n=self.n_sample)
         features = model.featurize(train_sample.Text)
         self.assertEqual(features.shape, (self.n_sample, model.config.n_embed))
@@ -245,18 +250,19 @@ class TestClassifier(unittest.TestCase):
         """
         Ensure validation settings do not result in an error
         """
-        config = default_config()
+        config = self.default_config()
         config.update({'val_interval': 10, 'val_size': 0})
         model = Classifier(**config)
         train_sample = self.dataset.sample(n=20)
         model.fit(train_sample.Text, train_sample.Target)
 
 
-class TestComparison(unittest.TestCase):
+class TestComparisonTextCNN(TestModelBase):
     n_sample = 20
     dataset_path = os.path.join(
         'Data', 'Classify', 'SST-binary.csv'
     )
+    base_model = TextCNN
 
     def setUp(self):
         random.seed(42)
@@ -268,7 +274,7 @@ class TestComparison(unittest.TestCase):
         Ensure model returns predictions of the right type
         """
 
-        model = Comparison(**default_config())
+        model = Comparison(**self.default_config())
         n_samples = 10
         model.fit(
             [["Transformers was a terrible movie but a great model", "Transformers are a great model but a terrible movie"]] * n_samples,
@@ -286,12 +292,14 @@ class TestComparison(unittest.TestCase):
             self.assertIsInstance(proba, dict)
 
 
-class TestSequenceLabeler(unittest.TestCase):
+class TestSequenceLabelerTextCNN(TestModelBase):
     n_sample = 100
     dataset_path = os.path.join(
         'Data', 'Sequence', 'reuters.xml'
     )
     processed_path = os.path.join('Data', 'Sequence', 'reuters.json')
+
+    base_model = TextCNN
 
     @classmethod
     def _download_reuters(cls):
@@ -339,17 +347,6 @@ class TestSequenceLabeler(unittest.TestCase):
     def setUpClass(cls):
         cls._download_reuters()
 
-    def default_config(self, **kwargs):
-        d = dict(
-            batch_size=2,
-            max_length=256,
-            lm_loss_coef=0.0,
-            val_size=0,
-            interpolate_pos_embed=False,
-        )
-        d.update(**kwargs)
-        return d
-
     def setUp(self):
         self.save_file = 'tests/saved-models/test-save-load'
         random.seed(42)
@@ -358,7 +355,7 @@ class TestSequenceLabeler(unittest.TestCase):
             self.texts, self.labels = json.load(fp)
 
         self.model = SequenceLabeler(
-            **default_config()
+            **self.default_config()
         )
 
     def test_fit_predict(self):
@@ -380,7 +377,7 @@ class TestSequenceLabeler(unittest.TestCase):
         )
 
         reweighted_model = SequenceLabeler(
-            **default_config(class_weights={'Named Entity': 10.})
+            **self.default_config(class_weights={'Named Entity': 10.})
         )
         reweighted_model.fit(train_texts, train_annotations)
         reweighted_predictions = reweighted_model.predict(test_texts)
@@ -433,7 +430,11 @@ class TestSequenceLabeler(unittest.TestCase):
         Ensure model training does not error out
         Ensure model returns predictions
         """
-        self.model = SequenceLabeler(batch_size=2, max_length=256, lm_loss_coef=0.0, multi_label_sequences=True)
+        self.model = SequenceLabeler(
+            **self.default_config(
+                batch_size=2, max_length=256, lm_loss_coef=0.0, multi_label_sequences=True
+            )
+        )
         raw_docs = ["".join(text) for text in self.texts]
         texts, annotations = finetune_to_indico_sequence(
             raw_docs,
@@ -453,3 +454,15 @@ class TestSequenceLabeler(unittest.TestCase):
         self.model.save(self.save_file)
         model = SequenceLabeler.load(self.save_file)
         model.predict(test_texts)
+
+
+class TestSequenceLabelerBert(TestSequenceLabelerTextCNN):
+    base_model = BERTModelCased
+
+
+class TestClassifierBert(TestClassifierTextCNN):
+    base_model = BERTModelCased
+
+
+class TestComparisonBert(TestComparisonTextCNN):
+    base_model = BERTModelCased
