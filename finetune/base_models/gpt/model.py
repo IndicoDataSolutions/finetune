@@ -6,6 +6,7 @@ from finetune.base_models.gpt.featurizer import gpt_featurizer
 
 
 class GPTModel(SourceModel):
+    is_bidirectional = False
     encoder = GPTEncoder
     featurizer = gpt_featurizer
     settings = {
@@ -13,10 +14,11 @@ class GPTModel(SourceModel):
         'n_heads': 12,
         'n_layer': 12,
         'act_fn': "gelu",
-        "base_model_path": os.path.join("gpt", "model-lg.jl")
+        "base_model_path": os.path.join("gpt", "model-lg.jl"),
     }
 
 class GPTModelSmall(GPTModel):
+    is_bidirectional = False
     settings = {
         'n_embed': 512,
         'n_heads': 8,
