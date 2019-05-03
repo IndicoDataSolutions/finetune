@@ -1,5 +1,5 @@
 import tensorflow as tf
-from finetune.base_models.bert.modelling import BertConfig, BertModel
+from finetune.base_models.bert.modeling import BertConfig, BertModel
 
 
 def bert_featurizer(X, encoder, config, train=False, reuse=None):
