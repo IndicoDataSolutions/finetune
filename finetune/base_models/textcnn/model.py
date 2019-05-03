@@ -3,8 +3,9 @@ from finetune.base_models import SourceModel
 from finetune.base_models.gpt.encoder import GPTEncoder
 from finetune.base_models.textcnn.featurizer import textcnn_featurizer
 
-class TextCNNModel(SourceModel):
 
+class TextCNNModel(SourceModel):
+    is_bidirectional = False
     encoder = GPTEncoder
     featurizer = textcnn_featurizer
     kernel_sizes = [2, 3, 4]
@@ -19,6 +20,5 @@ class TextCNNModel(SourceModel):
         'train_embeddings': False,
         'lr': .01,
         'seq_num_heads': len(kernel_sizes) * 2,
-        'base_model_path': os.path.join("gpt", "model-lg.jl")
-
+        'base_model_path': os.path.join("gpt", "model-lg.jl"),
     }

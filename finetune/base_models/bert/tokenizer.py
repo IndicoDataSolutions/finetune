@@ -186,7 +186,6 @@ class FullTokenizer(object):
         split_tokens.append(sub_token)
         split_idxs.append((sub_token_idx[0], sub_token_idx[-1] + 1))
 
-    print(text, split_tokens, split_idxs)
     return split_tokens, split_idxs
 
   def convert_tokens_to_ids(self, tokens):

@@ -290,11 +290,15 @@ def sequence_labeler(hidden, targets, n_targets, config, pad_id, multilabel=Fals
     """
     with tf.variable_scope('sequence-labeler', reuse=reuse):
         nx = config.n_embed
+
         def seq_lab_internal(hidden):
-            attn_fn = functools.partial(attn, scope="seq_label_attn", n_state=nx, n_head=config.seq_num_heads,
-                                            resid_pdrop=config.resid_p_drop, attn_pdrop=config.attn_p_drop,
-                                            train=train, scale=False, mask=False)
-            n = norm(attn_fn(hidden) + hidden, 'seq_label_residual')
+            if config.base_model.is_bidirectional:
+                n = hidden
+            else:
+                attn_fn = functools.partial(attn, scope="seq_label_attn", n_state=nx, n_head=config.seq_num_heads,
+                                                resid_pdrop=config.resid_p_drop, attn_pdrop=config.attn_p_drop,
+                                                train=train, scale=False, mask=False)
+                n = norm(attn_fn(hidden) + hidden, 'seq_label_residual')
             flat_logits = tf.layers.dense(n, n_targets)
             logits = tf.reshape(flat_logits, tf.concat([tf.shape(hidden)[:2], [n_targets]], 0))
             return logits

@@ -65,8 +65,6 @@ def bert_featurizer(X, encoder, config, train=False, reuse=None):
             'pool_idx': lengths
         }
         if config.num_layers_trained == 0:
-            print("STOPPING ALL THE GRADIENTS")
-            exit()
             output_state = {k: tf.stop_gradient(v) for k, v in output_state.items()}
 
         return output_state
