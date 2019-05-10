@@ -10,15 +10,15 @@ class GPCModel(SourceModel):
     featurizer = featurizer
     settings = {
         'n_embed': 512,
-        "base_model_path": "fresh_start.jl",
+        "base_model_path": "conv25days.jl",
         'n_layer': 12,
         'num_layers_trained':12,
         'n_epochs': 8,
         'prefit_init': True,
         'batch_size': 8,
-        'feat_mode': 'max_state',
+        'feat_mode': 'clf_tok',
         'l2_reg': 0.0,
-        'lr': 0.001,
+        'lr': 0.0001,
         'lr_warmup': 0.0
     }
 
@@ -34,5 +34,5 @@ class GPCModelFP16(SourceModel):
         "scale_loss": True,
         'n_layer': 12,
         'num_layers_trained':12,
-        "stochastic_tokens":True
+        "stochastic_tokens":False
     }

@@ -9,6 +9,10 @@ from finetune.util.beam_search import beam_search
 
 
 class S2SPipeline(BasePipeline):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.target_dim = 0
+        self.label_encoder = self._target_encoder()
 
     def feed_shape_type_def(self):
         TS = tf.TensorShape
@@ -105,7 +109,7 @@ class S2S(BaseModel):
         else:
             # returns (decoded beams [batch_size, beam_size, decode_length]
             #          decoding probabilities [batch_size, beam_size])
-            embed_weights = featurizer_state.pop("embed_weights")
+            embed_weights = kwargs.get("embed_weights") if "embed_weights" in kwargs else featurizer_state.pop("embed_weights")
             
             def symbols_to_logits_fn(input_symbols, i, state): #[batch_size, decoded_ids] to [batch_size, vocab_size]
                 input_symbols = tf.Print(input_symbols, [input_symbols])
@@ -119,7 +123,7 @@ class S2S(BaseModel):
                     encoder=encoder,
                     config=config,
                     train=train,
-                    encoder_state={**state["featurizer_state"], "embed_weights":embed_weights}
+                    encoder_state=({**state["featurizer_state"], "embed_weights":embed_weights} if state else None)
                 )
                 output_state = language_model(
                     X=inp,
@@ -129,20 +133,25 @@ class S2S(BaseModel):
                     reuse=reuse, train=train,
                     hidden=target_feat_state["sequence_features"] # deal with state
                 )
-                output_state["logits"] = tf.Print(output_state["logits"], [tf.argmax(output_state["logits"][:, i, :], -1)])
-                return output_state["logits"][:, i, :], state
-
+#                output_state["logits"] = tf.Print(output_state["logits"], [tf.argmax(output_state["logits"][:, i, :], -1)])
+                if state is None:
+                    return output_state["logits"][:, i, :]
+                else:
+                    return output_state["logits"][:, i, :], state
+            
             beams, probs, _ = beam_search(
                 symbols_to_logits_fn=symbols_to_logits_fn,
-                initial_ids=tf.constant([encoder.start for _ in range(config.batch_size)], dtype=tf.int32),
+                initial_ids=kwargs.get("start_tokens", tf.constant([encoder.start for _ in range(config.batch_size)], dtype=tf.int32)),
                 beam_size=config.beam_size,
                 decode_length=config.max_length,
                 vocab_size=encoder.vocab_size,
                 alpha=config.beam_search_alpha,
-                states={"featurizer_state": featurizer_state},
+                states={"featurizer_state": featurizer_state} if featurizer_state is not None else {},
                 eos_id=encoder.clf_token,
                 stop_early=True,
-                use_top_k_with_unique=True
+                use_top_k_with_unique=True,
+                temperature=config.sample_temp,
+                sample_from_top=config.decoder_sample_from
             )
 
             best_beams_i = tf.argmax(probs, -1, output_type=tf.int32)
@@ -157,3 +166,11 @@ class S2S(BaseModel):
 
     def _predict_proba_op(self, logits, **kwargs):
         return logits
+
+
+class LMPred(S2S):
+    @staticmethod
+    def _target_model(config, featurizer_state, targets, n_outputs, train=False, reuse=None, label_encoder=None, **kwargs):
+        print("Please use batch size of one its weird otherwise and your input is truncated")
+        start_tokens = featurizer_state["encoded_input"]
+        return S2S._target_model(config, None, targets, n_outputs, train=train, reuse=reuse, label_encoder=label_encoder, embed_weights=featurizer_state["embed_weights"], start_tokens=start_tokens)

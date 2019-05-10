@@ -81,7 +81,6 @@ def language_model(*, X, M, embed_weights, hidden, config, reuse=None, train=Fal
             lm_logits_shape = shape_list(lm_logits)
             sliced_hidden_shape = tf.shape(sliced_hidden)
             logits = tf.reshape(lm_logits, shape=tf.concat([sliced_hidden_shape[:-1], [vocab_size]], axis=0))
-            print(logits)
             perplexity = tf.reduce_sum(tf.exp(lm_losses) * M[:, 1:], 1) / tf.reduce_sum(M[:, 1:], 1)
 
         return {

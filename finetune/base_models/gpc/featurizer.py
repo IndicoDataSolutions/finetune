@@ -350,9 +350,6 @@ def featurizer(X, encoder, config, train=False, reuse=None, encoder_state=None):
                 ):
                     h = tf.stop_gradient(h)
 
-#                block_fn_fwd = functools.partial(block, block_name='block%d_' % layer, use_fp16=config.use_fp16,
-#                                                 layer_num=layer + 1, pool_idx=pool_idx, encoder_state=encoder_state, train=train, pdrop=config.resid_p_drop)
-
                 def block_fn_fwd(inp, pool_idxi):
                     return block(inp, block_name='block%d_' % layer, use_fp16=config.use_fp16,
                                  layer_num=layer + 1, pool_idx=pool_idxi, encoder_state=encoder_state, train=train, pdrop=config.resid_p_drop)
@@ -367,7 +364,7 @@ def featurizer(X, encoder, config, train=False, reuse=None, encoder_state=None):
         mask = tf.expand_dims(tf.sequence_mask(pool_idx, maxlen=tf.shape(h)[1], dtype=h.dtype), -1)
 
         if config.feat_mode == "final_state":
-            clf_h = tf.reshape(feats[-1], shape=initial_shape[: -2] + [config.n_embed * 4])
+            clf_h = tf.reshape(feats[-1], shape=initial_shape[: -2] + [config.n_embed])
         if config.feat_mode == "mean_state":
             clf_h = tf.reshape(tf.reduce_mean(feats, 0), shape=initial_shape[: -2] + [config.n_embed])
         if config.feat_mode == "max_state":
@@ -379,12 +376,16 @@ def featurizer(X, encoder, config, train=False, reuse=None, encoder_state=None):
             clf_h = tf.reduce_sum(h * mask, 1) / tf.reduce_sum(h)
         if config.feat_mode == "max_tok":
             clf_h = tf.reduce_max(h - (1e5 * (1.0 - mask)), 1)
-            
-        seq_feats = tf.reshape(h, shape=initial_shape[:-1] + [config.n_embed])
+
+        if len(initial_shape) != 3:
+            seq_feats = tf.reshape(h, shape=initial_shape[:-1] + [config.n_embed])
+        else:
+            seq_feats = h
 
         return {
             'embed_weights': embed_weights,
             'features': tf.cast(clf_h, tf.float32),
             'sequence_features': seq_feats,
-            'pool_idx': pool_idx
+            'pool_idx': pool_idx,
+            'encoded_input': X[:, :tf.reduce_min(pool_idx) -1, 0]
         }

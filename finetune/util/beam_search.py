@@ -14,6 +14,29 @@ EOS_ID = 1
 # Default value for INF
 INF = 1. * 1e7
 
+def top_k_logits(logits, k):
+    if k == 0:
+        # no truncation
+        return logits
+
+    def _top_k():
+        values, _ = tf.nn.top_k(logits, k=k)
+        min_values = values[:, -1, tf.newaxis]
+        return tf.where(
+            logits < min_values,
+            tf.ones_like(logits, dtype=logits.dtype) * -1e10,
+            logits,
+        )
+    return tf.cond(
+       tf.equal(k, 0),
+       lambda: logits,
+       lambda: _top_k(),
+    )
+
+def soft_top_k(flat_logits, temperature=1.0, sample_from=1, k=1):
+    flat_logits /= tf.to_float(temperature)
+    flat_logits = top_k_logits(flat_logits, k=sample_from)
+    return tf.random.categorical(flat_logits, num_samples=k, dtype=tf.int32)
 
 def log_prob_from_logits(logits, reduce_axis=-1):
     return logits - tf.reduce_logsumexp(logits, axis=reduce_axis, keepdims=True)
@@ -310,7 +333,10 @@ def beam_search(symbols_to_logits_fn,
                 states=None,
                 eos_id=EOS_ID,
                 stop_early=True,
-                use_top_k_with_unique=True):
+                use_top_k_with_unique=True,
+                temperature=1.0,
+                sample_from_top=1
+):
     """Beam search with length penalties.
 
     Requires a function that can take the currently decoded symbols and return
@@ -368,7 +394,11 @@ def beam_search(symbols_to_logits_fn,
 
     # Expand each batch and state to beam_size
     alive_seq = _expand_to_beam_size(initial_ids, beam_size)
-    alive_seq = tf.expand_dims(alive_seq, axis=2)  # (batch_size, beam_size, 1)
+    alive_shape = shape_list(alive_seq)
+    if len(alive_shape) != 3:
+        alive_seq = tf.expand_dims(alive_seq, axis=2)  # (batch_size, beam_size, 1)
+        alive_shape = shape_list(alive_seq)
+    i_offset = alive_shape[-1] - 1
 
     if states:
         states = nest.map_structure(
@@ -490,7 +520,7 @@ def beam_search(symbols_to_logits_fn,
             states = nest.map_structure(
                 lambda t: _unmerge_beam_dim(t, batch_size, beam_size), flat_states)
         else:
-            flat_logits = symbols_to_logits_fn(flat_ids)
+            flat_logits = symbols_to_logits_fn(flat_ids, i, None)
 
         logits = tf.reshape(flat_logits, [batch_size, beam_size, -1])
 
@@ -507,10 +537,10 @@ def beam_search(symbols_to_logits_fn,
         # Flatten out (beam_size, vocab_size) probs in to a list of possibilities
         flat_curr_scores = tf.reshape(curr_scores, [-1, beam_size * vocab_size])
 
-        topk_scores, topk_ids = tf.nn.top_k(flat_curr_scores, k=beam_size * 2)
-
-        # Recovering the log probs because we will need to send them back
-        topk_log_probs = topk_scores * length_penalty
+        topk_ids = soft_top_k(flat_curr_scores, temperature=temperature, sample_from=sample_from_top, k=beam_size * 2)
+#        _, topk_ids = tf.nn.top_k(flat_curr_scores, k=beam_size * 2)
+        top_k_idxs = tf.stack([compute_batch_indices(batch_size, beam_size * 2), topk_ids], axis=2)
+        topk_scores = tf.gather_nd(flat_curr_scores, top_k_idxs)
 
         # Work out what beam the top probs are in.
         topk_beam_index = topk_ids // vocab_size
@@ -526,6 +556,9 @@ def beam_search(symbols_to_logits_fn,
         # stacking will create a tensor of dimension batch * beam * 2, where the
         # last dimension contains the i,j gathering coordinates.
         topk_coordinates = tf.stack([batch_pos, topk_beam_index], axis=2)
+
+        # Recovering the log probs because we will need to send them back
+        topk_log_probs = topk_scores * length_penalty        
 
         # Gather up the most probable 2*beams both for the ids and
         # finished_in_alive bools
@@ -656,7 +689,7 @@ def beam_search(symbols_to_logits_fn,
      finished_flags, states) = tf.while_loop(
         _is_finished,
         inner_loop, [
-            tf.constant(0), alive_seq, alive_log_probs, finished_seq,
+            i_offset, alive_seq, alive_log_probs, finished_seq,
             finished_scores, finished_flags, states
         ],
         shape_invariants=[

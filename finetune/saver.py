@@ -135,6 +135,7 @@ class Saver:
     def get_scaffold_init_fn(self):
         
         def init_fn(scaffold, session):
+            self.fallback # force gathering the variables and populating self.variables, this is a hack
             if self.variables is not None:
                 variables_sv = self.variables
             else:
@@ -144,12 +145,14 @@ class Saver:
             default_init = []
             self.var_val = []
             for var in all_vars:
-                for saved_var_name, saved_var in itertools.chain(variables_sv.items(), self.fallback.items()):
-                    if saved_var_name == var.name:
-                        for func in self.variable_transforms:
-                            saved_var = func(var.name, saved_var)
-                        var_init = var.load(saved_var, session)
-                        break
+                saved_var = variables_sv.get(var.name, self.fallback.get(var.name, None))
+                if saved_var is not None:
+                    for func in self.variable_transforms:
+                        saved_var = func(var.name, saved_var)
+                    var_init = var.load(saved_var, session)
+                else:
+                    print("Uninitialized Var:",  var.name)
+                        
         return init_fn
 
     def remove_unchanged(self, variable_names, variable_values, fallback_vars):

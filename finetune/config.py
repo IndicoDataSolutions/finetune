@@ -306,6 +306,8 @@ def get_default_config():
         stochastic_tokens=False,
         beam_search_alpha=0.6,
         beam_size=10,
+        decoder_sample_from=40,
+        sample_temp=1.0,
         target_model_init_from_base_model=True,
         feat_mode="final_state",
 
