@@ -269,10 +269,15 @@ def class_reweighting(class_weights):
 
 def sequence_labeler(hidden, targets, n_targets, config, pad_id, multilabel=False, train=False, reuse=None, **kwargs):
     """
-    An Attention based sequence labeler model. Takes the output of the pre-trained model, applies an additional
-    randomly initialised multihead attention block, with residuals on top. The attention is not-future masked to allow
-    the model to label sequences based on context in both directions. The representations fed into this model are
-    necessarily future masked because a language modelling loss is the original objective of the featurizer.
+    An Attention based sequence labeler model.
+
+    In the case of unidirectional base models such as GPT this model takes the output of the pre-trained model,
+    applies an additional randomly initialised multihead attention block, with residuals on top.
+    The extra attention is not future masked to allow the model to label sequences based on context in both directions.
+    The representations fed into this model are necessarily future masked because a language modelling loss is the
+    original objective of the featurizer.
+
+    For bidirectional base models we apply the crf model directly to the output of the base model.
 
     :param hidden: The output of the featurizer. [batch_size, sequence_length, embed_dim]
     :param targets: The placeholder representing the sequence labeling targets. [batch_size, sequence_length]

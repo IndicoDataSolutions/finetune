@@ -297,7 +297,7 @@ def get_default_config():
         assocation_loss_weight=100.0,
 
         # Location of model weights
-        base_model=GPTModel, 
+        base_model=GPTModel,
         base_model_path=None,
 
         # Possible `SourceModel` specific settings
@@ -311,7 +311,7 @@ def get_default_config():
         num_filters_per_size=None,
         n_embed_featurizer=None, # needed because the dimensions CNN output are different from the embedding dimensions
 
-        #Bert only
+        # BERT only
         bert_intermediate_size=None
     )
     return settings

@@ -9,8 +9,6 @@ from sklearn.model_selection import train_test_split
 from finetune import Classifier
 from finetune.datasets import Dataset, generic_download
 from finetune.base_models.gpt.model import GPTModel
-from finetune.base_models.bert.model import BERTModelCased, BERTModelMultilingualCased, BERTModelLargeCased
-import joblib as jl
 logging.basicConfig(level=logging.DEBUG)
 
 SST_FILENAME = "SST-binary.csv"
@@ -45,19 +43,14 @@ if __name__ == "__main__":
     dataset = StanfordSentimentTreebank(nrows=1000).dataframe
     model = Classifier(
         interpolate_pos_embed=False, 
-        n_epochs=8, 
+        n_epochs=2,
         batch_size=2, 
         lr_warmup=0.1,
         val_size=0.0, 
         max_length=64,
-        l2_reg=0.01,
-        lr=1e-5,
         prefit_init=True,
-        base_model=BERTModelCased, 
-        tensorboard_folder="./sst",
-        debugging_logs=True
+        base_model=GPTModel
     )
-    print(model.config.base_model_path)
     trainX, testX, trainY, testY = train_test_split(dataset.Text.values, dataset.Target.values, test_size=0.3, random_state=42)
     model.fit(trainX, trainY)
     accuracy = np.mean(model.predict(testX) == testY)
