@@ -345,10 +345,8 @@ class TestSequenceLabelerTextCNN(TestModelBase):
             docs.append(texts)
             docs_labels.append(labels)
 
-
         with open(cls.processed_path, 'wt') as fp:
             json.dump((docs, docs_labels), fp)
-
 
     @classmethod
     def setUpClass(cls):

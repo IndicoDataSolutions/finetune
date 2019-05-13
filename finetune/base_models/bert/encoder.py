@@ -77,7 +77,9 @@ class BERTEncoder(BaseEncoder):
         Convert a batch of ids [batch_size, id] into text(ish).
         """
 
-        raise NotImplementedError("We cannot model language with BERT.")
+        raise NotImplementedError(
+            "The inverse of the BERT encoder is not implemented because we have not implemented generation with BERT"
+        )
 
 
 class BERTEncoderLarge(BERTEncoder):
