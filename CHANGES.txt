@@ -1,4 +1,6 @@
 2019
+v0.6.4 Tue May 14th
+  - Add BERT support
 v0.6.3 Thu May 2nd
   - Option to control maximum percentage of memory used
   - Attention weight visualization for GPT
