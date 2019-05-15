@@ -12,6 +12,7 @@ from tensorflow.contrib.estimator.python.estimator.early_stopping import _StopOn
 
 from finetune.util.estimator import PatchedParameterServerStrategy
 from finetune.errors import FinetuneError
+from finetune.config import get_config
 
 LOGGER = logging.getLogger('finetune')
 
@@ -123,6 +124,10 @@ class Saver:
 
     def load(self, path):
         self.variables, finetune_obj = joblib.load(path)
+
+        # Ensure adding new config keywords doesn't break backwards compatability
+        finetune_obj.config = get_config(**dict(finetune_obj.config))
+
         return finetune_obj
 
     def get_scaffold_init_fn(self):
