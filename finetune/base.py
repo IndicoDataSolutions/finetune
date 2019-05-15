@@ -245,7 +245,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self.resolved_gpus = resolved_gpus
         return distribute_strategy
 
-    def get_estimator(self, force_build_lm=False):
+    def get_estimator(self, force_build_lm=False, force_build_attn=False):
         conf = tf.ConfigProto(
             allow_soft_placement=self.config.soft_device_placement,
             log_device_placement=self.config.log_device_placement,
@@ -272,6 +272,7 @@ class BaseModel(object, metaclass=ABCMeta):
             predict_proba_op=self._predict_proba_op,
             build_target_model=self.input_pipeline.target_dim is not None,
             build_lm=force_build_lm or self.config.lm_loss_coef > 0.0,
+            build_attn=force_build_attn,
             encoder=self.input_pipeline.text_encoder,
             target_dim=self.input_pipeline.target_dim,
             label_encoder=self.input_pipeline.label_encoder,
@@ -342,7 +343,8 @@ class BaseModel(object, metaclass=ABCMeta):
         self._closed = False
         n = len(self._data)
         if self._predictions is None:
-            _estimator, hooks = self.get_estimator()
+            force_build_attn = (mode == PredictMode.ATTENTION)
+            _estimator, hooks = self.get_estimator(force_build_attn=force_build_attn)
             input_fn = self.input_pipeline.get_predict_input_fn(self._data_generator)
             self._predictions = _estimator.predict(input_fn=input_fn, predict_keys=mode, hooks=hooks)
 
@@ -358,10 +360,12 @@ class BaseModel(object, metaclass=ABCMeta):
 
     def _inference(self, Xs, mode=None):
         Xs = self.input_pipeline._format_for_inference(Xs)
+
         if self._cached_predict:
             return self._cached_inference(Xs=Xs, mode=mode)
         else:
-            estimator, hooks = self.get_estimator()
+            force_build_attn = (mode == PredictMode.ATTENTION)
+            estimator, hooks = self.get_estimator(force_build_attn=force_build_attn)
             input_fn = self.input_pipeline.get_predict_input_fn(Xs)
             length = len(Xs) if not callable(Xs) else None
 

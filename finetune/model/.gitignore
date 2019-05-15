@@ -1,2 +1,4 @@
 gpt/*.jl
 gpt2/*.jl
+bert/*.jl
+bert/*.txt
