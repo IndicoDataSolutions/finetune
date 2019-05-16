@@ -29,9 +29,13 @@ class PredictMode:
     GENERATE_TEXT = "GEN_TEXT"
     LM_PERPLEXITY = "PERPLEXITY"
     ATTENTION = "ATTENTION"
+    SEQUENCE = "SEQUENCE"
+    SEQUENCE_PROBAS = "SEQUENCE_PROBA"
+    ASSOCIATION = "ASSOCIATION"
+    ASSOCIATION_PROBAS = "ASSOCIATION_PROBA"
 
 
-def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_model, build_lm, build_attn, encoder, target_dim,
+def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_model, build_lm, encoder, target_dim,
                  label_encoder, saver):
     def language_model_op(X, M, params, featurizer_state):
         language_model_state = language_model(
@@ -103,7 +107,8 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                 train=train
             )
             predictions = {PredictMode.FEATURIZE: featurizer_state["features"]}
-            if params.base_model in [GPTModel, GPTModelSmall] and build_attn:
+
+            if params.base_model in [GPTModel, GPTModelSmall]:
                 predictions[PredictMode.ATTENTION] = featurizer_state["attention_weights"]
 
             if build_target_model:
