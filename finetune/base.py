@@ -335,7 +335,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self._cached_predict = False
         self.close()
 
-    def _cached_inference(self, Xs, mode=None):
+    def _cached_inference(self, Xs, Ys=None, mode=None):
         """
         Ensure graph is not rebuilt on subsequent calls to .predict()
         """
@@ -345,7 +345,12 @@ class BaseModel(object, metaclass=ABCMeta):
         if self._predictions is None:
             force_build_attn = (mode == PredictMode.ATTENTION)
             _estimator, hooks = self.get_estimator(force_build_attn=force_build_attn)
-            input_fn = self.input_pipeline.get_predict_input_fn(self._data_generator)
+            
+            if (mode == PredictMode.EXPLAIN):
+                input_fn = self.input_pipeline.get_explanations_input_fn(Xs, Ys)
+            else:
+                input_fn = self.input_pipeline.get_predict_input_fn(Xs)
+
             self._predictions = _estimator.predict(input_fn=input_fn, predict_keys=mode, hooks=hooks)
 
         self._clear_prediction_queue()
@@ -358,15 +363,20 @@ class BaseModel(object, metaclass=ABCMeta):
 
         return predictions
 
-    def _inference(self, Xs, mode=None):
+    def _inference(self, Xs, Ys=None, mode=None):
         Xs = self.input_pipeline._format_for_inference(Xs)
 
         if self._cached_predict:
-            return self._cached_inference(Xs=Xs, mode=mode)
+            return self._cached_inference(Xs=Xs, Ys=Ys, mode=mode)
         else:
             force_build_attn = (mode == PredictMode.ATTENTION)
             estimator, hooks = self.get_estimator(force_build_attn=force_build_attn)
-            input_fn = self.input_pipeline.get_predict_input_fn(Xs)
+
+            if (mode == PredictMode.EXPLAIN):
+                input_fn = self.input_pipeline.get_explanations_input_fn(Xs, Ys)
+            else:
+                input_fn = self.input_pipeline.get_predict_input_fn(Xs)
+
             length = len(Xs) if not callable(Xs) else None
 
             predictions = tqdm.tqdm(
@@ -388,6 +398,9 @@ class BaseModel(object, metaclass=ABCMeta):
 
     def predict(self, Xs):
         return self._predict(Xs)
+
+    def explain(self, Xs, Ys):
+        return self._inference(Xs, Ys, mode=PredictMode.EXPLAIN)
 
     def _predict_proba(self, Xs):
         """

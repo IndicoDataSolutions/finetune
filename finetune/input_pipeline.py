@@ -25,7 +25,6 @@ class BasePipeline(metaclass=ABCMeta):
     def __init__(self, config):
         self.config = config
         self.text_encoder = self.config.base_model.get_encoder()
-
         self.label_encoder = None
         self.target_dim = None
         self.pad_idx_ = None
@@ -43,7 +42,7 @@ class BasePipeline(metaclass=ABCMeta):
 
     def feed_shape_type_def(self, **extras):
         """
-        Extras: 
+        extras: 
             str --> {'dtype': tf.dtype, 'shape': tf.Tensorshape}
         """
         TS = tf.TensorShape
@@ -137,7 +136,7 @@ class BasePipeline(metaclass=ABCMeta):
         if Y_fit is not None:
             self.config.class_weights = compute_class_weights(class_weights=self.config.class_weights, Y=Y_fit)
 
-    def _standardize_inputs(Xs, Y):
+    def _standardize_inputs(self, Xs, Y):
         if not callable(Xs) and not callable(Y):
             dataset = lambda: zip(Xs, Y)
         elif callable(Xs) and callable(Y):
@@ -150,16 +149,16 @@ class BasePipeline(metaclass=ABCMeta):
         dataset = self._standardize_inputs(Xs, Y)
         dataset_encoded = lambda: itertools.chain.from_iterable(
             map(
-                lambda xy: self.text_to_tokens_mask(
-                    *xy, 
+                lambda x, y: self.text_to_tokens_mask(
+                    x,
                     extras={
-                        'targets': Y
+                        'targets': y
                     }
                 ), 
                 dataset()
             )
         )
-        shape_def = self.feed_shape_type_def(
+        type_def, shape_def = self.feed_shape_type_def(
             extras={
                 'targets': {
                     'dtype': tf.float32,
@@ -170,18 +169,18 @@ class BasePipeline(metaclass=ABCMeta):
         if not callable(Y) and self.config.chunk_long_sequences:
             dataset_encoded_list = list(dataset_encoded())  # come up with a more principled way to do this .
             self.config.dataset_size = len(dataset_encoded_list)
-        return Dataset.from_generator(lambda: self.wrap_tqdm(dataset_encoded(), train), *shape_def)
+        return Dataset.from_generator(lambda: self.wrap_tqdm(dataset_encoded(), train), type_def[0], shape_def[0])
 
     def _dataset_with_targets(self, Xs, Y, train):
         dataset = self._standardize_inputs(Xs, Y)
         dataset_encoded = lambda: itertools.chain.from_iterable(
             map(lambda xy: self.text_to_tokens_mask(*xy), dataset())
         )
-        shape_def = self.feed_shape_type_def()
+        type_def, shape_def = self.feed_shape_type_def()
         if not callable(Y) and self.config.chunk_long_sequences:
             dataset_encoded_list = list(dataset_encoded())  # come up with a more principled way to do this .
             self.config.dataset_size = len(dataset_encoded_list)
-        return Dataset.from_generator(lambda: self.wrap_tqdm(dataset_encoded(), train), *shape_def)
+        return Dataset.from_generator(lambda: self.wrap_tqdm(dataset_encoded(), train), type_def, shape_def)
 
     def _dataset_without_targets(self, Xs, train):
         if not callable(Xs):
@@ -331,6 +330,11 @@ class BasePipeline(metaclass=ABCMeta):
             self.config.n_epochs).prefetch(prefetch_buffer)
 
         return val_dataset, train_dataset, self.config.val_size, self.config.val_interval
+
+    def get_explanations_input_fn(self, Xs, Ys, batch_size=None):
+        batch_size = batch_size or self.config.batch_size
+        tf_dataset = lambda: self._dataset_for_explanations(Xs, Ys).batch(batch_size)
+        return tf_dataset
 
     def get_predict_input_fn(self, Xs, batch_size=None):
         batch_size = batch_size or self.config.batch_size

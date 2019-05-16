@@ -29,6 +29,7 @@ class PredictMode:
     GENERATE_TEXT = "GEN_TEXT"
     LM_PERPLEXITY = "PERPLEXITY"
     ATTENTION = "ATTENTION"
+    EXPLAIN = "EXPLAIN"
 
 
 def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_model, build_lm, build_attn, encoder, target_dim,
@@ -89,6 +90,7 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
         train = estimator_mode == tf.estimator.ModeKeys.TRAIN
         X = features["tokens"]
         M = features["mask"]
+
         task_id = features.get("task_id", None)
         Y = labels
         pred_op = None
@@ -103,6 +105,11 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                 train=train
             )
             predictions = {PredictMode.FEATURIZE: featurizer_state["features"]}
+
+            targets = features.get('targets')
+            if targets is not None:
+                predictions[PredictMode.EXPLAIN] = targets
+
             if params.base_model in [GPTModel, GPTModelSmall] and build_attn:
                 predictions[PredictMode.ATTENTION] = featurizer_state["attention_weights"]
 
@@ -118,6 +125,7 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                     target_loss = tf.reduce_mean(target_model_state["losses"])
                     train_loss += (1 - lm_loss_coef) * target_loss
                     tf.summary.scalar("TargetModelLoss", target_loss)
+
                 if mode == tf.estimator.ModeKeys.PREDICT or tf.estimator.ModeKeys.EVAL:
                     logits = target_model_state["logits"]
                     predict_params = target_model_state.get("predict_params", {})
