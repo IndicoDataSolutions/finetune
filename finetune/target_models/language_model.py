@@ -17,7 +17,7 @@ class LanguageModel(Classifier):
         :param X: list or array of text to embed.
         :returns: Perplexities of each of the input sentences.
         """
-        return self._inference(X, PredictMode.LM_PERPLEXITY)
+        return self._inference(X, predict_keys=[PredictMode.LM_PERPLEXITY])
 
     def predict_proba(self, X):
         raise ValueError("Predict Proba is not defined for the language model")

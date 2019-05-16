@@ -10,6 +10,8 @@ from finetune.encoding.sequence_encoder import indico_to_finetune_sequence, fine
 from finetune.input_pipeline import BasePipeline
 from finetune.errors import FinetuneError
 from finetune.base import LOGGER
+from finetune.model import PredictMode
+
 
 class AssociationPipeline(BasePipeline):
     def __init__(self, config, multi_label):
@@ -188,14 +190,20 @@ class Association(BaseModel):
         ))
         lens = [len(a.char_locs) for a in arr_encoded]
         labels, batch_probas, associations = [], [], []
-        for l, pred in zip(lens, self._inference(X, mode=None)):
-            pred_labels = self.input_pipeline.label_encoder.inverse_transform(pred["sequence"])
+        predict_keys = [
+            PredictMode.SEQUENCE,
+            PredictMode.SEQUENCE_PROBAS,
+            PredictMode.ASSOCIATION,
+            PredictMode.ASSOCIATION_PROBAS
+        ]
+        for l, pred in zip(lens, self._inference(X, predict_keys=predict_keys)):
+            pred_labels = self.input_pipeline.label_encoder.inverse_transform(pred[PredictMode.SEQUENCE])
             pred_labels = [label if i < l else self.config.pad_token for i, label in enumerate(pred_labels)]
             labels.append(pred_labels)
-            batch_probas.append(pred["sequence_probs"])
-            pred["association_probs"] = self.prune_probs(pred["association_probs"], pred_labels)
+            batch_probas.append(pred[PredictMode.SEQUENCE_PROBAS])
+            pred["association_probs"] = self.prune_probs(pred[PredictMode.ASSOCIATION_PROBAS], pred_labels)
             most_likely_associations, most_likely_class_id = zip(
-                *[np.unravel_index(np.argmax(a, axis=None), a.shape) for a in pred["association_probs"]]
+                *[np.unravel_index(np.argmax(a, axis=None), a.shape) for a in pred[PredictMode.ASSOCIATION_PROBAS]]
             )
             associations.append((
                 most_likely_associations,
@@ -357,12 +365,12 @@ class Association(BaseModel):
 
         return (
             {
-                "sequence": label_idxs,
-                "association": association_pred
+                PredictMode.SEQUENCE: label_idxs,
+                PredictMode.ASSOCIATION: association_pred
             },
             {
-                "sequence_probs": label_probas,
-                "association_probs": association_prob
+                PredictMode.SEQUENCE_PROBAS: label_probas,
+                PredictMode.ASSOCIATION_PROBAS: association_prob
             }
         )
 

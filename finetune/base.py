@@ -245,7 +245,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self.resolved_gpus = resolved_gpus
         return distribute_strategy
 
-    def get_estimator(self, force_build_lm=False, force_build_attn=False):
+    def get_estimator(self, force_build_lm=False):
         conf = tf.ConfigProto(
             allow_soft_placement=self.config.soft_device_placement,
             log_device_placement=self.config.log_device_placement,
@@ -272,7 +272,6 @@ class BaseModel(object, metaclass=ABCMeta):
             predict_proba_op=self._predict_proba_op,
             build_target_model=self.input_pipeline.target_dim is not None,
             build_lm=force_build_lm or self.config.lm_loss_coef > 0.0,
-            build_attn=force_build_attn,
             encoder=self.input_pipeline.text_encoder,
             target_dim=self.input_pipeline.target_dim,
             label_encoder=self.input_pipeline.label_encoder,
@@ -335,7 +334,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self._cached_predict = False
         self.close()
 
-    def _cached_inference(self, Xs, mode=None):
+    def _cached_inference(self, Xs, predict_keys=None):
         """
         Ensure graph is not rebuilt on subsequent calls to .predict()
         """
@@ -343,47 +342,48 @@ class BaseModel(object, metaclass=ABCMeta):
         self._closed = False
         n = len(self._data)
         if self._predictions is None:
-            force_build_attn = (mode == PredictMode.ATTENTION)
-            _estimator, hooks = self.get_estimator(force_build_attn=force_build_attn)
+            _estimator, hooks = self.get_estimator()
             input_fn = self.input_pipeline.get_predict_input_fn(self._data_generator)
-            self._predictions = _estimator.predict(input_fn=input_fn, predict_keys=mode, hooks=hooks)
+            self._predictions = _estimator.predict(input_fn=input_fn, predict_keys=predict_keys, hooks=hooks)
 
         self._clear_prediction_queue()
 
         predictions = [None] * n
         for i in tqdm.tqdm(range(n), total=n, desc="Inference"):
             y = next(self._predictions)
-            y = y[mode] if mode else y
+            y = y[predict_keys[0]] if len(predict_keys) == 1 else y
             predictions[i] = y
 
         return predictions
 
-    def _inference(self, Xs, mode=None):
+    def _inference(self, Xs, predict_keys=None):
         Xs = self.input_pipeline._format_for_inference(Xs)
 
         if self._cached_predict:
-            return self._cached_inference(Xs=Xs, mode=mode)
+            return self._cached_inference(Xs=Xs, predict_keys=predict_keys)
         else:
-            force_build_attn = (mode == PredictMode.ATTENTION)
-            estimator, hooks = self.get_estimator(force_build_attn=force_build_attn)
+            estimator, hooks = self.get_estimator()
             input_fn = self.input_pipeline.get_predict_input_fn(Xs)
             length = len(Xs) if not callable(Xs) else None
 
             predictions = tqdm.tqdm(
                 estimator.predict(
-                    input_fn=input_fn, predict_keys=mode, hooks=hooks
+                    input_fn=input_fn, predict_keys=predict_keys, hooks=hooks
                 ),
                 total=length,
                 desc="Inference"
             )
-            return [pred[mode] if mode else pred for pred in predictions]
+            return [
+                pred[predict_keys[0]] if len(predict_keys) == 1 
+                else pred for pred in predictions
+            ]
 
     def fit(self, *args, **kwargs):
         """ An alias for finetune. """
         return self.finetune(*args, **kwargs)
 
     def _predict(self, Xs):
-        raw_preds = self._inference(Xs, PredictMode.NORMAL)
+        raw_preds = self._inference(Xs, predict_keys=[PredictMode.NORMAL])
         return self.input_pipeline.label_encoder.inverse_transform(np.asarray(raw_preds))
 
     def predict(self, Xs):
@@ -393,7 +393,7 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         Produce raw numeric outputs for proba predictions
         """
-        raw_preds = self._inference(Xs, PredictMode.PROBAS)
+        raw_preds = self._inference(Xs, predict_keys=[PredictMode.PROBAS])
         return raw_preds
 
     def predict_proba(self, *args, **kwargs):
@@ -412,12 +412,12 @@ class BaseModel(object, metaclass=ABCMeta):
 
     def attention_weights(self, Xs):
         if self.config.base_model in [GPTModel, GPTModelSmall]:
-            raw_preds = self._inference(Xs, PredictMode.ATTENTION)
+            raw_preds = self._inference(Xs, predict_keys=[PredictMode.ATTENTION])
             return raw_preds
         raise NotImplementedError("'attention_weights' only supported for GPTModel and GPTModelSmall base models.")
 
     def _featurize(self, Xs):
-        raw_preds = self._inference(Xs, PredictMode.FEATURIZE)
+        raw_preds = self._inference(Xs, predict_keys=[PredictMode.FEATURIZE])
         return np.asarray(raw_preds)
 
     @abstractmethod
@@ -471,14 +471,14 @@ class BaseModel(object, metaclass=ABCMeta):
         encoded = EncodedOutput(token_ids=start + encoded.token_ids[0])
 
         estimator, hooks = self.get_estimator(force_build_lm=True)
-        predict = estimator.predict(input_fn=get_input_fn, hooks=hooks)
+        predict = estimator.predict(input_fn=get_input_fn, predict_keys=[PredictMode.GENERATE_TEXT], hooks=hooks)
 
         EOS = self.input_pipeline.text_encoder.clf_token
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
             for i in range(len(encoded.token_ids) - 1, (max_length or self.config.max_length) - 2):
                 arr_encoded = self.input_pipeline._array_format(encoded)
-                class_idx = next(predict)[PredictMode.GENERATE_TEXT]
+                class_idx = next(predict)
                 encoded.token_ids.append(class_idx[i])
                 if encoded.token_ids[-1] == EOS:
                     break
