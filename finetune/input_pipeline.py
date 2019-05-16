@@ -41,21 +41,33 @@ class BasePipeline(metaclass=ABCMeta):
         # Overridden by subclass to produce the right target encoding for a given target model.
         raise NotImplementedError
 
-    def feed_shape_type_def(self):
+    def feed_shape_type_def(self, **extras):
+        """
+        Extras: 
+            str --> {'dtype': tf.dtype, 'shape': tf.Tensorshape}
+        """
         TS = tf.TensorShape
+        dtypes = {
+            "tokens": tf.int32,
+            "mask": tf.float32
+        }
+        dtypes.update({
+            k: v['dtype'] for k, v in extras.items()
+        })
+        shapes = {
+            "tokens": TS([self.config.max_length, 2]),
+            "mask": TS([self.config.max_length])
+        }
+        shapes.update({
+            k: v['shape'] for k, v in extras.items()
+        })
         return (
             (
-                {
-                    "tokens": tf.int32,
-                    "mask": tf.float32
-                },
+                dtypes,
                 tf.float32
             ),
             (
-                {
-                    "tokens": TS([self.config.max_length, 2]),
-                    "mask": TS([self.config.max_length])
-                },
+                shapes,
                 TS([self.target_dim])
             )
         )
@@ -97,10 +109,12 @@ class BasePipeline(metaclass=ABCMeta):
         )
         return output
 
-    def text_to_tokens_mask(self, X, Y=None):
+    def text_to_tokens_mask(self, X, Y=None, extras=None):
         out_gen = self._text_to_ids(X, pad_token=self.config.pad_token)
-        for out in out_gen:
+        for i, out in enumerate(out_gen):
             feats = {"tokens": out.token_ids, "mask": out.mask}
+            if extras is not None:
+                feats.update({k: v[i] for k, v in extras.items()})
             if Y is None:
                 yield feats
             else:
@@ -123,16 +137,46 @@ class BasePipeline(metaclass=ABCMeta):
         if Y_fit is not None:
             self.config.class_weights = compute_class_weights(class_weights=self.config.class_weights, Y=Y_fit)
 
-    def _dataset_with_targets(self, Xs, Y, train):
+    def _standardize_inputs(Xs, Y):
         if not callable(Xs) and not callable(Y):
             dataset = lambda: zip(Xs, Y)
         elif callable(Xs) and callable(Y):
             dataset = lambda: zip(Xs(), Y())  # encode one sample at a time.
         else:
             raise ValueError("Either neither or both of Xs and Y should be callable, not a mixture")
-
+        return dataset
+    
+    def _dataset_for_explanations(self, Xs, Y):
+        dataset = self._standardize_inputs(Xs, Y)
         dataset_encoded = lambda: itertools.chain.from_iterable(
-            map(lambda xy: self.text_to_tokens_mask(*xy), dataset()))
+            map(
+                lambda xy: self.text_to_tokens_mask(
+                    *xy, 
+                    extras={
+                        'targets': Y
+                    }
+                ), 
+                dataset()
+            )
+        )
+        shape_def = self.feed_shape_type_def(
+            extras={
+                'targets': {
+                    'dtype': tf.float32,
+                    'shape': tf.TensorShape([self.target_dim])
+                }
+            }
+        )
+        if not callable(Y) and self.config.chunk_long_sequences:
+            dataset_encoded_list = list(dataset_encoded())  # come up with a more principled way to do this .
+            self.config.dataset_size = len(dataset_encoded_list)
+        return Dataset.from_generator(lambda: self.wrap_tqdm(dataset_encoded(), train), *shape_def)
+
+    def _dataset_with_targets(self, Xs, Y, train):
+        dataset = self._standardize_inputs(Xs, Y)
+        dataset_encoded = lambda: itertools.chain.from_iterable(
+            map(lambda xy: self.text_to_tokens_mask(*xy), dataset())
+        )
         shape_def = self.feed_shape_type_def()
         if not callable(Y) and self.config.chunk_long_sequences:
             dataset_encoded_list = list(dataset_encoded())  # come up with a more principled way to do this .
