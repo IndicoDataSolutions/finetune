@@ -115,11 +115,12 @@ class SequenceLabeler(BaseModel):
         Y = Y_new if Y is not None else None
         return super().finetune(Xs, Y=Y, batch_size=batch_size)
 
-    def predict(self, X):
+    def predict(self, X, per_token=False):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
         :param X: A list / array of text, shape [batch]
+        :param per_token: If True, return raw probabilities and labels on a per token basis
         :returns: list of class labels.
         """
         chunk_size = self.config.max_length - 2
@@ -133,10 +134,11 @@ class SequenceLabeler(BaseModel):
         all_subseqs = []
         all_labels = []
         all_probs = []
+        all_positions = []
 
         doc_idx = -1
         for chunk_idx, (label_seq, proba_seq) in enumerate(zip(labels, batch_probas)):
-
+            
             position_seq = arr_encoded[chunk_idx].char_locs
             start_of_doc = arr_encoded[chunk_idx].token_ids[0][0] == self.input_pipeline.text_encoder.start
             end_of_doc = (
@@ -153,6 +155,8 @@ class SequenceLabeler(BaseModel):
                 doc_subseqs = []
                 doc_labels = []
                 doc_probs = []
+                doc_positions = []
+
                 doc_idx += 1
                 start_of_token = 0
                 if not end_of_doc:
@@ -173,19 +177,19 @@ class SequenceLabeler(BaseModel):
                 if position == -1:
                     # indicates padding / special tokens
                     continue
-
+                
                 # if there are no current subsequence
                 # or the current subsequence has the wrong label
-                if not doc_subseqs or label != doc_labels[-1]:
+                if not doc_subseqs or label != doc_labels[-1] or per_token:
                     # start new subsequence
                     doc_subseqs.append(X[doc_idx][start_of_token:position])
                     doc_labels.append(label)
                     doc_probs.append([proba])
+                    doc_positions.append((start_of_token, position))
                 else:
                     # continue appending to current subsequence
                     doc_subseqs[-1] += X[doc_idx][start_of_token:position]
                     doc_probs[-1].append(proba)
-
                 start_of_token = position
 
             if end_of_doc:
@@ -201,17 +205,34 @@ class SequenceLabeler(BaseModel):
                 all_subseqs.append(doc_subseqs)
                 all_labels.append(doc_labels)
                 all_probs.append(prob_dicts)
-        _, doc_annotations = finetune_to_indico_sequence(
-            raw_texts=X,
-            encoder=self.input_pipeline.text_encoder,
-            subseqs=all_subseqs,
-            labels=all_labels,
-            probs=all_probs,
-            subtoken_predictions=self.config.subtoken_predictions,
-            none_value=self.config.pad_token
-        )
+                all_positions.append(doc_positions)
 
-        return doc_annotations
+        if per_token:
+            return [
+                [
+                    {
+                        'text': token,
+                        'label': label,
+                        'start': position[0],
+                        'end': position[1],
+                        'probabilities': proba,
+                        'confidence': max(proba.values())
+                    }
+                    for token, label, proba, position in zip(tokens, labels, probas, positions)
+                ]
+                for tokens, labels, probas, positions in zip(all_subseqs, all_labels, all_probs, all_positions)
+            ]
+        else:
+            _, doc_annotations = finetune_to_indico_sequence(
+                raw_texts=X,
+                encoder=self.input_pipeline.text_encoder,
+                subseqs=all_subseqs,
+                labels=all_labels,
+                probs=all_probs,
+                subtoken_predictions=self.config.subtoken_predictions,
+                none_value=self.config.pad_token
+            )
+            return doc_annotations
 
     def featurize(self, X):
         """

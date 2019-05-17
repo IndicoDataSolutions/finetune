@@ -131,8 +131,8 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, encoder=None, probs=
                 text = raw_text[annotation_start:annotation_end]
                 if label != none_value:
                     annotation = {
-                        "start": annotation_start,
-                        "end": annotation_end,
+                        "start": int(annotation_start),
+                        "end": int(annotation_end),
                         "label": label,
                         "text": text
                     }
