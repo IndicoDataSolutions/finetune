@@ -40,12 +40,15 @@ class BasePipeline(metaclass=ABCMeta):
         # Overridden by subclass to produce the right target encoding for a given target model.
         raise NotImplementedError
 
-    def feed_shape_type_def(self, **extras):
+    def feed_shape_type_def(self, extras=None):
         """
         extras: 
             str --> {'dtype': tf.dtype, 'shape': tf.Tensorshape}
         """
         TS = tf.TensorShape
+        if extras is None:
+            extras = {}
+            
         dtypes = {
             "tokens": tf.int32,
             "mask": tf.float32
@@ -113,7 +116,7 @@ class BasePipeline(metaclass=ABCMeta):
         for i, out in enumerate(out_gen):
             feats = {"tokens": out.token_ids, "mask": out.mask}
             if extras is not None:
-                feats.update({k: v[i] for k, v in extras.items()})
+                feats.update(extras)
             if Y is None:
                 yield feats
             else:
@@ -145,14 +148,14 @@ class BasePipeline(metaclass=ABCMeta):
             raise ValueError("Either neither or both of Xs and Y should be callable, not a mixture")
         return dataset
     
-    def _dataset_for_explanations(self, Xs, Y):
-        dataset = self._standardize_inputs(Xs, Y)
+    def _dataset_for_explanations(self, Xs, Ys):
+        dataset = self._standardize_inputs(Xs, Ys)
         dataset_encoded = lambda: itertools.chain.from_iterable(
             map(
-                lambda x, y: self.text_to_tokens_mask(
-                    x,
+                lambda xy: self.text_to_tokens_mask(
+                    xy[0],
                     extras={
-                        'targets': y
+                        'targets': self.label_encoder.transform([xy[1]])[0]
                     }
                 ), 
                 dataset()
@@ -166,10 +169,10 @@ class BasePipeline(metaclass=ABCMeta):
                 }
             }
         )
-        if not callable(Y) and self.config.chunk_long_sequences:
-            dataset_encoded_list = list(dataset_encoded())  # come up with a more principled way to do this .
+        if not callable(Ys) and self.config.chunk_long_sequences:
+            dataset_encoded_list = list(dataset_encoded())  # come up with a more principled way to do this
             self.config.dataset_size = len(dataset_encoded_list)
-        return Dataset.from_generator(lambda: self.wrap_tqdm(dataset_encoded(), train), type_def[0], shape_def[0])
+        return Dataset.from_generator(lambda: self.wrap_tqdm(dataset_encoded(), False), type_def[0], shape_def[0])
 
     def _dataset_with_targets(self, Xs, Y, train):
         dataset = self._standardize_inputs(Xs, Y)

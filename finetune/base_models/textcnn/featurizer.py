@@ -33,7 +33,8 @@ def textcnn_featurizer(X, encoder, config, train=False, reuse=None):
         X = tf.reshape(X, [-1, config.max_length, 2])
 
         # we remove positional embeddings from the model
-        h = embed(X[:, :, :1], embed_weights)
+        embed_features = embed(X[:, :, :1], embed_weights)
+        h = embed_features
 
         # keep track of the classify token
         clf_token = encoder['_classify_']
@@ -69,6 +70,7 @@ def textcnn_featurizer(X, encoder, config, train=False, reuse=None):
         # transformer base models
         return {
             'embed_weights': embed_weights,
+            'embed_features': embed_features,
             'features': clf_h,  # [batch_size, n_embed] for classify, [batch_size, 1, n_embed] for comparison, etc.
             'sequence_features': seq_feats,  # [batch_size, seq_len, n_embed]
             'pool_idx': pool_idx  # [batch_size]

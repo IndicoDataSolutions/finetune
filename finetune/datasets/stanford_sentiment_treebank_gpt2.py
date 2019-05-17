@@ -12,17 +12,23 @@ logging.basicConfig(level=logging.DEBUG)
 
 if __name__ == "__main__":
     # Train and evaluate on SST
-    dataset = StanfordSentimentTreebank(nrows=200).dataframe
-    model = Classifier(
-        batch_size=2,
-        val_size=0.0,
-        max_length=64,
-        prefit_init=True,
-        base_model=GPT2Model,
-    )
+    dataset = StanfordSentimentTreebank(nrows=1000).dataframe
+    # model = Classifier(
+        # batch_size=8,
+        # val_size=0.0,
+        # max_length=64,
+        # prefit_init=True,
+    #     # base_model=GPT2Model,
+    # )
     # print(model.config.base_model_path)
     trainX, testX, trainY, testY = train_test_split(dataset.Text.values, dataset.Target.values, test_size=0.3, random_state=42)
-    model.fit(trainX, trainY)
-    print(model.explain(testX, testY))
+    # model.fit(trainX, trainY)
+    # model.save('test-explain.jl')
+    model = Classifier.load('test-explain.jl')
+    N = 16
+    explanations = model.explain(testX[:N], testY[:N])
+    print(explanations)
+    import ipdb
+    ipdb.set_trace()
     # accuracy = np.mean(model.predict(testX) == testY)
     # print('Test Accuracy: {:0.2f}'.format(accuracy))

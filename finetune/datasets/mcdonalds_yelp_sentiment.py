@@ -1,7 +1,7 @@
 import os
 import logging
 from pathlib import Path
-
+from pprint import pprint
 import numpy as np
 
 from sklearn.model_selection import train_test_split
@@ -51,12 +51,17 @@ class MCDonaldsSentiment(Dataset):
 if __name__ == "__main__":
     # Train and evaluate on SST
     dataset = MCDonaldsSentiment().dataframe
-    model = MultiLabelClassifier(n_epochs=2)
+    # model = MultiLabelClassifier(n_epochs=2, batch_size=16, low_memory_mode=True)
     trainX, testX, trainY, testY = train_test_split(dataset.Text, dataset.Target, test_size=0.3, random_state=42)
-    model.fit(trainX, trainY)
-    for threshold in np.linspace(0, 1, 5):
-        print("Threshold = {}".format(threshold))
-        print(classification_report(
-            model.input_pipeline.label_encoder.transform(testY),
-            model.input_pipeline.label_encoder.transform(model.predict(testX, threshold=threshold))
-        ))
+    # model.fit(trainX, trainY)
+    MultiLabelClassifier.load("mcd-sentiment.jl")
+    explanations = model.explain(testX, testY)
+    pprint(explanations)
+    import ipdb
+    ipdb.set_trace()
+    # for threshold in np.linspace(0, 1, 5):
+        # print("Threshold = {}".format(threshold))
+        # print(classification_report(
+            # model.input_pipeline.label_encoder.transform(testY),
+            # model.input_pipeline.label_encoder.transform(model.predict(testX, threshold=threshold))
+        # ))

@@ -400,7 +400,22 @@ class BaseModel(object, metaclass=ABCMeta):
         return self._predict(Xs)
 
     def explain(self, Xs, Ys):
-        return self._inference(Xs, Ys, mode=PredictMode.EXPLAIN)
+        """
+        Produce a score per token that describes whether the to
+        """
+        raw_explanations = self._inference(Xs, Ys, mode=PredictMode.EXPLAIN)
+        encoded = self.input_pipeline.text_encoder._encode(Xs)
+        formatted_explanations = []
+        for encoded_doc, explanation, y in zip(encoded.tokens, raw_explanations, Ys):
+            # trim off _start_ token explanation
+            explanation = explanation[1:] 
+            formatted_explanations.append(
+                [
+                    {'token': token, 'influence': influence, 'target': y}
+                    for token, influence in zip(encoded_doc, explanation[1:])
+                ]
+            )
+        return formatted_explanations
 
     def _predict_proba(self, Xs):
         """

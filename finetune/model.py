@@ -107,8 +107,6 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
             predictions = {PredictMode.FEATURIZE: featurizer_state["features"]}
 
             targets = features.get('targets')
-            if targets is not None:
-                predictions[PredictMode.EXPLAIN] = targets
 
             if params.base_model in [GPTModel, GPTModelSmall] and build_attn:
                 predictions[PredictMode.ATTENTION] = featurizer_state["attention_weights"]
@@ -121,6 +119,21 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                     mode=mode,
                     task_id=task_id
                 )
+
+                if targets is not None:
+                    # Explanations: 
+                    #   uses gradient * input method described in https://arxiv.org/abs/1711.06104
+                    grads = tf.gradients(
+                        ys=target_model_state['logits'],
+                        xs=featurizer_state['embed_features'], 
+                        grad_ys=targets
+                    )[0]
+                    grad_input_product = grads * featurizer_state['embed_features']
+                    predictions[PredictMode.EXPLAIN] = tf.reduce_sum(
+                        grad_input_product,
+                        axis=-1
+                    )
+                    
                 if (mode == tf.estimator.ModeKeys.TRAIN or mode == tf.estimator.ModeKeys.EVAL) and Y is not None:
                     target_loss = tf.reduce_mean(target_model_state["losses"])
                     train_loss += (1 - lm_loss_coef) * target_loss

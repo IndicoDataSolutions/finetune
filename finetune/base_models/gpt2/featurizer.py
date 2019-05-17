@@ -151,8 +151,8 @@ def gpt2_featurizer(X, encoder, config, train=False, reuse=None):
             embed_weights = tf.stop_gradient(embed_weights)
 
         X = tf.reshape(X, [-1, config.max_length, 2])
-        h = embed(X, embed_weights)
-
+        embed_features = embed(X, embed_weights)
+        h = embed_features
         # Transformer
         pasts = [None] * config.n_layer
         for layer, past in enumerate(pasts):
@@ -180,6 +180,7 @@ def gpt2_featurizer(X, encoder, config, train=False, reuse=None):
 
         return {
             'embed_weights': embed_weights,
+            'embed_features': embed_features,
             'features': clf_h,
             'sequence_features': seq_feats,
             'pool_idx': pool_idx

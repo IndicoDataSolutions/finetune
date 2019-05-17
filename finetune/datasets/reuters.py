@@ -13,6 +13,7 @@ from sklearn.model_selection import train_test_split
 
 from finetune.datasets import Dataset
 from finetune import SequenceLabeler
+from finetune.base_models import GPT
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
 from finetune.util.metrics import annotation_report
 
@@ -62,7 +63,13 @@ class Reuters(Dataset):
         os.remove(XML_PATH)
 
         raw_texts = ["".join(doc) for doc in docs]
-        texts, annotations = finetune_to_indico_sequence(raw_texts, docs, docs_labels)
+        texts, annotations = finetune_to_indico_sequence(
+            raw_texts, 
+            docs, 
+            docs_labels, 
+            encoder=GPT.encoder(),
+            none_value='<PAD>'
+        )
         df = pd.DataFrame({'texts': texts, 'annotations': [json.dumps(annotation) for annotation in annotations]})
         df.to_csv(DATA_PATH)
 
@@ -78,5 +85,6 @@ if __name__ == "__main__":
     )
     model = SequenceLabeler(batch_size=2, val_size=0., chunk_long_sequences=True)
     model.fit(trainX, trainY)
-    predictions = model.predict(testX)
-    print(annotation_report(testY, predictions))
+    predictions = model.predict(testX, raw_tokens=True)
+    print(predictions)
+    # print(annotation_report(testY, predictions))
