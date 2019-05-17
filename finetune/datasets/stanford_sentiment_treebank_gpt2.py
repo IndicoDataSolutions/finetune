@@ -1,4 +1,6 @@
 import logging
+import json
+import joblib
 
 import numpy as np
 from sklearn.model_selection import train_test_split
@@ -27,6 +29,7 @@ if __name__ == "__main__":
     model = Classifier.load('test-explain.jl')
     N = 16
     explanations = model.explain(testX[:N], testY[:N])
+    joblib.dump(explanations, "sst-explanations.jl")
     print(explanations)
     import ipdb
     ipdb.set_trace()

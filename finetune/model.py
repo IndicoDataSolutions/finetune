@@ -123,10 +123,19 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                 if targets is not None:
                     # Explanations: 
                     #   uses gradient * input method described in https://arxiv.org/abs/1711.06104
+                    fake_target_state = target_model_op(
+                        featurizer_state=featurizer_state,
+                        Y=targets,
+                        params=params,
+                        mode=mode,
+                        task_id=task_id,
+                        reuse=True
+                    )
+
                     grads = tf.gradients(
-                        ys=target_model_state['logits'],
+                        ys=tf.reduce_mean(fake_target_state['logits']),
                         xs=featurizer_state['embed_features'], 
-                        grad_ys=targets
+                        grad_ys=[tf.constant(1.)]
                     )[0]
                     grad_input_product = grads * featurizer_state['embed_features']
                     predictions[PredictMode.EXPLAIN] = tf.reduce_sum(
