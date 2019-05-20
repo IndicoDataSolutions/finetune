@@ -408,11 +408,13 @@ class BaseModel(object, metaclass=ABCMeta):
         formatted_explanations = []
         for encoded_doc, explanation, y in zip(encoded.tokens, raw_explanations, Ys):
             # trim off _start_ token explanation
-            explanation = explanation[1:] 
+            encoded_doc = ['_start_'] + encoded_doc + ['_classify_']
+            # explanation = explanation
+            print(explanation)
             formatted_explanations.append(
                 [
                     {'token': token, 'influence': influence, 'target': y}
-                    for token, influence in zip(encoded_doc, explanation[1:])
+                    for token, influence in zip(encoded_doc, explanation)
                 ]
             )
         return formatted_explanations

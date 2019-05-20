@@ -131,11 +131,9 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                         task_id=task_id,
                         reuse=True
                     )
-
                     grads = tf.gradients(
-                        ys=tf.reduce_mean(fake_target_state['logits']),
+                        ys=fake_target_state['losses'],
                         xs=featurizer_state['embed_features'], 
-                        grad_ys=[tf.constant(1.)]
                     )[0]
                     grad_input_product = grads * featurizer_state['embed_features']
                     predictions[PredictMode.EXPLAIN] = tf.reduce_sum(

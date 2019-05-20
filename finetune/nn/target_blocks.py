@@ -112,7 +112,6 @@ def classifier(hidden, targets, n_targets, config, train=False, reuse=None, **kw
                 logits=clf_logits,
                 labels=tf.stop_gradient(targets)
             )
-
             clf_losses = _apply_class_weight(clf_losses, targets, kwargs.get('class_weights'))
 
         return {
