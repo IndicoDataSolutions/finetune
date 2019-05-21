@@ -107,6 +107,8 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                 train=train
             )
             predictions = {PredictMode.FEATURIZE: featurizer_state["features"]}
+            if params.base_model in [GPTModel, GPTModelSmall]:
+                predictions[PredictMode.ATTENTION] = featurizer_state["attention_weights"]
 
             if params.base_model in [GPTModel, GPTModelSmall]:
                 predictions[PredictMode.ATTENTION] = featurizer_state["attention_weights"]
