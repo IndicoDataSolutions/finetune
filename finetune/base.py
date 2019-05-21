@@ -478,7 +478,7 @@ class BaseModel(object, metaclass=ABCMeta):
             warnings.filterwarnings("ignore")
             for i in range(len(encoded.token_ids) - 1, (max_length or self.config.max_length) - 2):
                 arr_encoded = self.input_pipeline._array_format(encoded)
-                class_idx = next(predict)
+                class_idx = next(predict)[PredictMode.GENERATE_TEXT]
                 encoded.token_ids.append(class_idx[i])
                 if encoded.token_ids[-1] == EOS:
                     break
