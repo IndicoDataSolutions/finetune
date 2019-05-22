@@ -26,6 +26,19 @@ def finetune_model_path(path):
     )
 
 
+def nvidia_device_ids():
+    sp = subprocess.Popen(['nvidia-smi -L'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    response = sp.communicate()[0]
+    gpu_list = response.decode('utf-8').strip().split('\n')
+    device_ids = {}
+    for i, gpu in enumerate(gpu_list):
+        # May be worth logging GPU description
+        device_id_str, _, description = gpu.partition(':')
+        assert int(device_id_str.split(' ')[-1]) == i
+        device_ids[i] = description
+    return device_ids
+
+
 @lru_cache()
 def all_gpus(visible_gpus=None):
     """
@@ -39,17 +52,8 @@ def all_gpus(visible_gpus=None):
     if visible_gpus is not None:
         visible_gpus = [int(gpu) for gpu in visible_gpus]
     try:
-        sp = subprocess.Popen(['nvidia-smi', '-L'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        response = sp.communicate()[0]
-        gpu_list = response.decode('utf-8').strip().split('\n')
-        device_ids = {}
-        for i, gpu in enumerate(gpu_list):
-            # May be worth logging GPU description
-            device_id_str, _, description = gpu.partition(':')
-            assert int(device_id_str.split(' ')[-1]) == i
-            device_ids[i] = description
-
         cuda_visible_devices = os.getenv("CUDA_VISIBLE_DEVICES")
+        device_ids = nvidia_device_ids()
 
         # restricting GPUs based on env vars
         if cuda_visible_devices:
