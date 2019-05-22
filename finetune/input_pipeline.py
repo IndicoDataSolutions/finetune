@@ -269,7 +269,10 @@ class BasePipeline(metaclass=ABCMeta):
         else:
             self._skip_tqdm = 0
             if self.config.val_set is None:
-                Xs_tr, Xs_va, Y_tr, Y_va = train_test_split(Xs, Y, test_size=self.config.val_size, random_state=self.config.seed)
+                if self.config.val_size == 0:
+                    Xs_tr, Xs_va, Y_tr, Y_va = Xs, Y, [], []
+                else:
+                    Xs_tr, Xs_va, Y_tr, Y_va = train_test_split(Xs, Y, test_size=self.config.val_size, random_state=self.config.seed)
             else:
                 Xs_tr, Y_tr = Xs, Y
                 Xs_va, Y_va = self.config.val_set

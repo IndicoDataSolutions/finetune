@@ -11,7 +11,7 @@ REQUIREMENTS = [
     "tqdm>=4.0.0",
     "numpy>=1.13.0",
     "scipy>=1.1.0",
-    "scikit-learn>=0.18.0",
+    "scikit-learn>=0.20.2",
     "ftfy>=4.4.0",
     "spacy>=2.0.0",
     "msgpack-numpy==0.4.1",

@@ -580,7 +580,7 @@ class BaseModel(object, metaclass=ABCMeta):
         config = get_config(**kwargs)
         config.val_size = 0.0
         eval_fn = eval_fn or cls.get_eval_fn()
-
+    
         trainXs, testXs, trainY, testY = train_test_split(list_transpose(Xs), Y, test_size=test_size, shuffle=True)
         trainXs = list_transpose(trainXs)
         testXs = list_transpose(testXs)
