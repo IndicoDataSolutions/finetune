@@ -313,7 +313,9 @@ def get_default_config():
         n_embed_featurizer=None, # needed because the dimensions CNN output are different from the embedding dimensions
 
         # BERT only
-        bert_intermediate_size=None
+        bert_intermediate_size=None,
+
+        k_price_of_1 = True
     )
     return settings
 

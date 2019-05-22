@@ -155,6 +155,13 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                 lr * schedules[params.lr_schedule](tf.to_float(global_step) / total_num_steps)
             )
 
+            if params.k_price_of_1:
+                norm_variable_scopes = ['b:0', 'g:0']
+                norm_variables = [v for v in tf.global_variables() if v.name[-3:] in norm_variable_scopes or 'target' in v.name]
+                params.norm_variables = norm_variables
+            else:
+                norm_variables = None
+
             def optimizer(lr):
 
                 Optimizer = OPTIMIZERS.get(params.optimizer, None)
@@ -173,14 +180,20 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                     epsilon=params.epsilon,
                     weight_decay=params.l2_reg * lr
                 )
-                
+
                 decay_var_list = [v for v in tf.global_variables() if len(v.get_shape()) > 1 or params.vector_l2]
+
+                if params.k_price_of_1:
+                    decay_var_list = set(params.norm_variables).intersection(decay_var_list)
+
                 opt.apply_gradients = functools.partial(opt.apply_gradients, decay_var_list=decay_var_list)
 
                 if params.dont_optimize_zero_gradients:
                     opt = dont_optimize_zeros(opt)
                 
                 return opt
+
+            
 
             summaries = tf.contrib.layers.OPTIMIZER_SUMMARIES if params.summarize_grads else None
             train_op = tf.contrib.layers.optimize_loss(
@@ -191,7 +204,8 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                 clip_gradients=float(params.max_grad_norm),
                 learning_rate_decay_fn=lr_decay,
                 increment_global_step=True,
-                summaries=summaries
+                summaries=summaries,
+                variables = norm_variables
             )
 
         if mode == tf.estimator.ModeKeys.PREDICT:
