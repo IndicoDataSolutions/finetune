@@ -33,10 +33,11 @@ class PredictMode:
     SEQUENCE_PROBAS = "SEQUENCE_PROBA"
     ASSOCIATION = "ASSOCIATION"
     ASSOCIATION_PROBAS = "ASSOCIATION_PROBA"
+    EXPLAIN = "EXPLAIN"
 
 
 def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_model, build_lm, encoder, target_dim,
-                 label_encoder, saver):
+                 label_encoder, saver, build_explain):
     def language_model_op(X, M, params, featurizer_state):
         language_model_state = language_model(
             X=X,
@@ -104,7 +105,8 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                 X,
                 encoder=encoder,
                 config=params,
-                train=train
+                train=train,
+                explain=build_explain
             )
             predictions = {PredictMode.FEATURIZE: featurizer_state["features"]}
             if params.base_model in [GPTModel, GPTModelSmall]:
@@ -143,6 +145,9 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                     else:
                         predictions[PredictMode.NORMAL] = pred_op
                         predictions[PredictMode.PROBAS] = pred_proba_op
+
+                    if build_explain:
+                        predictions[PredictMode.EXPLAIN] = target_model_state["explanation"]
 
             if build_lm:
                 lm_predict_op, language_model_state = language_model_op(X=X, M=M, params=params,

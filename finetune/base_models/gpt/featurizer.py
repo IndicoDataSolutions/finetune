@@ -34,7 +34,26 @@ def mask_attn_weights(w):
     return w
 
 
-def attn_weights(q, k, v, attn_pdrop, train=False, scale=False, mask=True):
+def explain_mask_attn_weights(w, lengths):
+    # w is [batch, heads, n, n]
+    # lengths is [batch]
+    batch, _, _, n = shape_list(w)
+    seq = n//2
+    main_mask = tf.matrix_band_part(tf.ones([seq, seq]), -1, 0)
+    top = tf.expand_dims(tf.concat((main_mask, tf.zeros([seq, seq])), 1), 0) # 1, seq, 2 * seq
+    top_batched = tf.tile(top, [batch, 1, 1])
+    length_mask = tf.expand_dims(tf.sequence_mask(lengths, maxlen=seq, dtype=tf.float32), 1)  # batch, 1, seq_masked
+    length_mask_batched = tf.tile(length_mask, [1, seq, 1])
+    clf_to_clf_mask = tf.expand_dims(tf.eye(seq), 0)
+    clf_to_clf_mask_batched = tf.tile(clf_to_clf_mask, [batch, 1, 1])
+    bottom_batched = tf.concat((length_mask_batched, clf_to_clf_mask_batched), 2)
+    m = tf.concat((top_batched, bottom_batched), 1)
+    b = tf.expand_dims(m, 1)
+    w = w * b + -1e9 * (1 - b)
+    return w
+
+
+def attn_weights(q, k, v, attn_pdrop, train=False, scale=False, mask=True, explain=False, lengths=None):
     w = tf.matmul(q, k)
 
     if scale:
@@ -42,7 +61,10 @@ def attn_weights(q, k, v, attn_pdrop, train=False, scale=False, mask=True):
         w = w * tf.rsqrt(tf.cast(n_state, tf.float32))
 
     if mask:
-        w = mask_attn_weights(w)
+        if explain:
+            w = explain_mask_attn_weights(w, lengths)
+        else:
+            w = mask_attn_weights(w)
     w = tf.nn.softmax(w)
     return w
 
@@ -83,7 +105,8 @@ def conv1d(x, scope, nf, rf, w_init=tf.random_normal_initializer(stddev=0.02), b
             c = tf.nn.conv1d(x, w, stride=1, padding=pad) + b
         return c
 
-def multihead_qkv(x, n_state, n_head, train):
+
+def multihead_qkv(x, n_state, n_head, train, explain=False):
     c = conv1d(x, 'c_attn', n_state * 3, 1, train=train)
     q, k, v = tf.split(c, 3, 2)
     q = split_heads(q, n_head)
@@ -92,12 +115,13 @@ def multihead_qkv(x, n_state, n_head, train):
     return q, k, v
 
 
-def attn(x, scope, n_state, n_head, resid_pdrop, attn_pdrop, train=False, scale=False, mask=True):
+def attn(x, scope, n_state, n_head, resid_pdrop, attn_pdrop, train=False, scale=False, mask=True, explain=False, clf_pos=None):
+    assert (explain and clf_pos is not None) or (not explain and clf_pos is None), "If explain is true then clf_pos must be set."
     assert n_state % n_head == 0
     with tf.variable_scope(scope):
-        q, k, v = multihead_qkv(x, n_state, n_head, train)
-        w = attn_weights(q, k, v, attn_pdrop=attn_pdrop, train=train, scale=scale,
-                        mask=mask)
+        q, k, v = multihead_qkv(x, n_state, n_head, train, explain)
+
+        w = attn_weights(q, k, v, attn_pdrop=attn_pdrop, train=train, scale=scale, mask=mask, explain=explain, lengths=clf_pos)
         w = dropout(w, attn_pdrop, train)
 
         a = tf.matmul(w, v)
@@ -118,10 +142,12 @@ def mlp(x, scope, n_state, act_fn, resid_pdrop, train=False):
         return h2
 
 
-def block(x, n_head, act_fn, resid_pdrop, attn_pdrop, scope, train=False, scale=False):
+def block(x, n_head, act_fn, resid_pdrop, attn_pdrop, scope, train=False, scale=False, explain=False, clf_pos=None):
     with tf.variable_scope(scope):
         nx = shape_list(x)[-1]
-        a = attn(x, 'attn', nx, n_head, resid_pdrop, attn_pdrop, train=train, scale=scale)
+        a = attn(
+            x, 'attn', nx, n_head, resid_pdrop, attn_pdrop, train=train, scale=scale, explain=explain, clf_pos=clf_pos
+        )
         n = norm(x + a, 'ln_1')
         m = mlp(n, 'mlp', nx * 4, act_fn, resid_pdrop, train=train)
         h = norm(n + m, 'ln_2')
@@ -134,7 +160,7 @@ def embed(X, we):
     return h
 
 
-def gpt_featurizer(X, encoder, config, train=False, reuse=None):
+def gpt_featurizer(X, encoder, config, train=False, reuse=None, explain=False):
     """
     The transformer element of the finetuning model. Maps from tokens ids to a dense, embedding of the sequence.
 
@@ -164,6 +190,14 @@ def gpt_featurizer(X, encoder, config, train=False, reuse=None):
 
         X = tf.reshape(X, [-1, config.max_length, 2])
 
+        clf_token = encoder['_classify_']
+        pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
+        if explain:
+            flat_x = tf.reshape(X, [-1, 2])
+            clf_tok = tf.gather(flat_x, tf.range(shape_list(X)[0], dtype=tf.int32) * config.max_length + pool_idx)
+            clf_tok_x_seq = tf.tile(tf.expand_dims(clf_tok, 1), [1, initial_shape[1], 1])
+            X = tf.concat((X, clf_tok_x_seq), 1)
+
         h = embed(X, embed_weights)
         for layer in range(config.n_layer):
             if (config.n_layer - layer) == config.num_layers_trained and config.num_layers_trained != config.n_layer:
@@ -175,7 +209,8 @@ def gpt_featurizer(X, encoder, config, train=False, reuse=None):
             with tf.variable_scope('h%d_' % layer):
                 block_fn = functools.partial(block, n_head=config.n_heads, act_fn=config.act_fn,
                                              resid_pdrop=config.resid_p_drop, attn_pdrop=config.attn_p_drop,
-                                             scope='h%d' % layer, train=train_layer, scale=True)
+                                             scope='h%d' % layer, train=train_layer, scale=True, clf_token=pool_idx,
+                                             explain=explain)
                 if config.low_memory_mode and train_layer:
                     block_fn = recompute_grad(block_fn, use_entire_scope=True)
                 if layer < config.n_layer - 1:
@@ -189,19 +224,24 @@ def gpt_featurizer(X, encoder, config, train=False, reuse=None):
                     q, k, v = multihead_qkv(h, n_state=shape_list(h)[-1], n_head=config.n_heads, train=train)
                     w = attn_weights(q, k, v, attn_pdrop=config.attn_p_drop, train=train_layer, scale=True)
 
+        if explain:
+            explain_out = h_out[:, initial_shape[1]:]
+            explain_out = tf.reshape(explain_out, shape=tf.concat((initial_shape[:-1], [config.n_embed]), 0))
+            h_out = h_out[:, :initial_shape[1]]
 
         # Use hidden state at classifier token as input to final proj. + softmax
         clf_h = tf.reshape(h_out, [-1, config.n_embed])  # [batch * seq_len, embed]
-        clf_token = encoder['_classify_']
-        pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
         clf_h = tf.gather(clf_h, tf.range(shape_list(X)[0], dtype=tf.int32) * config.max_length + pool_idx)
         clf_h = tf.reshape(clf_h, shape=tf.concat((initial_shape[: -2], [config.n_embed]), 0))
         seq_feats = tf.reshape(h, shape=tf.concat((initial_shape[:-1], [config.n_embed]), 0))
 
-        return {
+        out = {
             'embed_weights': embed_weights,
             'features': clf_h,
             'sequence_features': seq_feats,
             'pool_idx': pool_idx,
             'attention_weights': w  # [n_heads, seq_len, seq_len]
         }
+
+        if explain:
+            out["explain_out"] = explain_out
