@@ -28,7 +28,8 @@ def bert_featurizer(X, encoder, config, train=False, reuse=None, **kwargs):
         attention_probs_dropout_prob=config.attn_p_drop,
         max_position_embeddings=config.max_length,
         type_vocab_size=2,
-        initializer_range=config.weight_stddev
+        initializer_range=config.weight_stddev,
+        bert_adapter_size=config.bert_adapter_size
     )
 
     initial_shape = tf.shape(X)
