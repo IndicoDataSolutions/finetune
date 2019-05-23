@@ -22,7 +22,7 @@ import tensorflow as tf
 from tensorflow.data import Dataset
 from tensorflow.contrib.distribute import OneDeviceStrategy
 from sklearn.model_selection import train_test_split
-import joblib as jl
+import joblib
 
 import finetune
 from finetune.util import list_transpose
@@ -65,7 +65,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self.resolved_gpus = None
         self.validate_config()
         self.input_pipeline = self._get_input_pipeline()
-        download_data_if_required()
+        download_data_if_required(self.config.base_model)
         self._initialize()
         if self.config.debugging_logs:
             os.environ["TF_CPP_MIN_LOG_LEVEL"] = "0"
@@ -537,7 +537,7 @@ class BaseModel(object, metaclass=ABCMeta):
             raise FinetuneError(
                 "Cannot save a base model with no weights changed. Call fit before creating a base model.")
         weights_stripped = {k: v for k, v in self.saver.variables.items() if "featurizer" in k and "Adam" not in k}
-        jl.dump(weights_stripped, base_model_path)
+        joblib.dump(weights_stripped, base_model_path)
 
     @classmethod
     def load(cls, path, **kwargs):
@@ -548,10 +548,10 @@ class BaseModel(object, metaclass=ABCMeta):
         :param **kwargs: key-value pairs of config items to override.
         """
         assert_valid_config(**kwargs)
-        download_data_if_required()
         saver = Saver()
         model = saver.load(path)
         model.config.update(kwargs)
+        download_data_if_required(model.config.base_model)
         saver.set_fallback(model.config.base_model_path)
         model._initialize()
         model.saver.variables = saver.variables
