@@ -1,6 +1,7 @@
 import warnings
 
 from finetune.util.logging import truncate_text
+from finetune.encoding.input_encoder import NLP
 
 
 def assign_associations(labels, associations, none_value):
@@ -75,10 +76,10 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, encoder=None, probs=
     loop_vals = zip(raw_texts, subseqs, labels, probs or [None] * len(raw_texts), assoc_cleaned)
     for doc_idx, (raw_text, doc_seq, label_seq, prob_seq, associations_seq) in enumerate(loop_vals):
         tokens = encoded_docs.tokens[doc_idx]
-        token_ends = encoded_docs.char_locs[doc_idx]
-        token_lengths = [encoder._token_length(token) for token in tokens]
-        token_starts = [end - length for end, length in zip(token_ends, token_lengths)]
-        n_tokens = len(tokens)
+        spacy_tokens = NLP(raw_text)
+        spacy_token_starts = [token.idx for token in spacy_tokens]
+        spacy_token_ends = [token.idx + len(token.text) for token in spacy_tokens]
+        n_spacy_tokens = len(spacy_tokens)
 
         doc_annotations = []
         annotation_ranges = set()
@@ -119,14 +120,15 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, encoder=None, probs=
                     if multi_label:
                         start_idx = 0
                         end_idx = 0
+
                     if label != none_value:
                         # round to nearest token
-                        while start_idx < n_tokens and annotation_start >= token_starts[start_idx]:
+                        while start_idx < n_spacy_tokens and annotation_start >= spacy_token_starts[start_idx]:
                             start_idx += 1
-                        annotation_start = token_starts[start_idx - 1]
-                        while end_idx < (n_tokens - 1) and annotation_end > token_ends[end_idx]:
+                        annotation_start = spacy_token_starts[start_idx - 1]
+                        while end_idx < (n_spacy_tokens - 1) and annotation_end > spacy_token_ends[end_idx]:
                             end_idx += 1
-                        annotation_end = token_ends[end_idx]
+                        annotation_end = spacy_token_ends[end_idx]
 
                 text = raw_text[annotation_start:annotation_end]
                 if label != none_value:

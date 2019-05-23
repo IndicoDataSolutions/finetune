@@ -9,7 +9,7 @@ from finetune.encoding.target_encoders import SequenceLabelingEncoder, SequenceM
 from finetune.nn.target_blocks import sequence_labeler
 from finetune.nn.crf import sequence_decode
 from finetune.encoding.sequence_encoder import indico_to_finetune_sequence, finetune_to_indico_sequence
-
+from finetune.encoding.input_encoder import NLP
 from finetune.input_pipeline import BasePipeline
 
 
@@ -65,6 +65,69 @@ class SequencePipeline(BasePipeline):
         if self.multi_label:
             return SequenceMultiLabelingEncoder()
         return SequenceLabelingEncoder()
+
+
+def _combine_and_format(subtokens, start, end, raw_text):
+    """
+    Combine predictions on many subtokens into a single token prediction.
+    Currently only valid for GPT.
+    """
+    result = {
+        'start': start, 
+        'end': end
+    }
+    result['text'] = raw_text[result['start']:result['end']]
+    probabilities = {}
+    keys = subtokens[0]['probabilities'].keys()
+    for k in keys:
+        probabilities[k] = np.mean([token['probabilities'][k] for token in subtokens])
+    result['probabilities'] = probabilities
+    max_response = max(probabilities.items(), key=lambda x: x[1])
+    result['label'] = max_response[0]
+    result['confidence'] = max_response[1]
+    return result
+
+
+def _spacy_token_predictions(raw_text, tokens, probas, positions):
+    """
+    Go from GPT subtoken level predictions, to spacy token predictions
+    """
+    to_combine = []
+    spacy_attn = []
+
+    starts, ends = zip(*[(token.idx, token.idx + len(token.text)) for token in NLP(raw_text)])
+    spacy_token_idx = 0
+
+    spacy_token_starts = []
+    spacy_token_ends = []
+    spacy_results = []
+
+    for token, prob, (start, end) in zip(tokens, probas, positions):
+        to_combine.append({
+            'start': start,
+            'end': end,
+            'token': token,
+            'probabilities': prob
+        })
+    
+        try:
+            end_match = ends.index(end, spacy_token_idx)
+            start, end = starts[end_match], end
+            spacy_token_idx = end_match
+        except ValueError:
+            continue
+
+        spacy_results.append(
+            _combine_and_format(
+                to_combine,
+                start=start, 
+                end=end,
+                raw_text=raw_text
+            )
+        )
+        to_combine = []
+
+    return spacy_results
 
 
 class SequenceLabeler(BaseModel):
@@ -209,18 +272,15 @@ class SequenceLabeler(BaseModel):
 
         if per_token:
             return [
-                [
-                    {
-                        'text': token,
-                        'label': label,
-                        'start': position[0],
-                        'end': position[1],
-                        'probabilities': proba,
-                        'confidence': max(proba.values())
-                    }
-                    for token, label, proba, position in zip(tokens, labels, probas, positions)
-                ]
-                for tokens, labels, probas, positions in zip(all_subseqs, all_labels, all_probs, all_positions)
+                _spacy_token_predictions(
+                    raw_text=raw_text,
+                    tokens=tokens,
+                    probas=probas, 
+                    positions=positions
+                )
+                for raw_text, tokens, labels, probas, positions in zip(
+                    X, all_subseqs, all_labels, all_probs, all_positions
+                )
             ]
         else:
             _, doc_annotations = finetune_to_indico_sequence(
