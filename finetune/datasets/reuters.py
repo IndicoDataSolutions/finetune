@@ -83,5 +83,6 @@ if __name__ == "__main__":
     )
     model = SequenceLabeler(batch_size=2, val_size=0., chunk_long_sequences=True)
     model.fit(trainX, trainY)
-    predictions = model.predict(testX)
-    annotation_report(testY, predictions))
+    model.save('Reuters.jl')
+    # predictions = model.predict(testX)
+    # annotation_report(testY, predictions)
