@@ -245,7 +245,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self.resolved_gpus = resolved_gpus
         return distribute_strategy
 
-    def get_estimator(self, force_build_lm=False):
+    def get_estimator(self, force_build_lm=False, build_explain=False):
         conf = tf.ConfigProto(
             allow_soft_placement=self.config.soft_device_placement,
             log_device_placement=self.config.log_device_placement,
@@ -275,7 +275,8 @@ class BaseModel(object, metaclass=ABCMeta):
             encoder=self.input_pipeline.text_encoder,
             target_dim=self.input_pipeline.target_dim,
             label_encoder=self.input_pipeline.label_encoder,
-            saver=self.saver
+            saver=self.saver,
+            build_explain=build_explain
         )
         hooks = [InitializeHook(self.saver)]
         est = tf.estimator.Estimator(
@@ -362,7 +363,7 @@ class BaseModel(object, metaclass=ABCMeta):
         if self._cached_predict:
             return self._cached_inference(Xs=Xs, predict_keys=predict_keys)
         else:
-            estimator, hooks = self.get_estimator()
+            estimator, hooks = self.get_estimator(build_explain=[PredictMode.EXPLAIN] == predict_keys)
             input_fn = self.input_pipeline.get_predict_input_fn(Xs)
             length = len(Xs) if not callable(Xs) else None
 
