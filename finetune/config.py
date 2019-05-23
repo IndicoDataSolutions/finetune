@@ -312,7 +312,7 @@ def get_default_config():
 
         # Location of model weights
         base_model=GPTModel,
-        base_model_path=None,
+        base_model_path='SummariesBase.jl',
 
         # Possible `SourceModel` specific settings
         n_heads=None,
@@ -326,7 +326,8 @@ def get_default_config():
         n_embed_featurizer=None, # needed because the dimensions CNN output are different from the embedding dimensions
 
         # BERT only
-        bert_intermediate_size=None
+        bert_intermediate_size=None,
+        bert_adapter_size = 64 #from Parameter Efficient Transfer Learning paper
     )
     return settings
 

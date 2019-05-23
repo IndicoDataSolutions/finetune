@@ -137,12 +137,32 @@ def mlp(x, scope, n_state, act_fn, resid_pdrop, train=False):
         return h2
 
 
-def block(x, n_head, act_fn, resid_pdrop, attn_pdrop, scope, train=False, scale=False, explain=False):
+def create_initializer(initializer_range=0.001):
+  """Creates a `truncated_normal_initializer` with the given range."""
+  return tf.truncated_normal_initializer(stddev=initializer_range)
+
+
+def adapter(input, adapter_size, train, nx, hidden_dropout_prob = 0.1):
+    down_projection = tf.layers.dense(input, adapter_size, activation = 'sigmoid',
+        kernel_initializer = create_initializer())
+    down_projection = dropout(down_projection, hidden_dropout_prob, train)
+    up_projection = tf.layers.dense(down_projection, nx,
+        kernel_initializer = create_initializer())
+    return up_projection + input
+
+
+def block(x, n_head, act_fn, adptr_size, resid_pdrop, attn_pdrop, scope, train=False, scale=False, explain=False):
     with tf.variable_scope(scope):
         nx = shape_list(x)[-1]
         a = attn(x, 'attn', nx, n_head, resid_pdrop, attn_pdrop, train=train, scale=scale, explain=explain)
+        if adptr_size is not None:
+            with tf.variable_scope('attn_adapter'):
+                a = adapter(a, adptr_size, train, nx)
         n = norm(x + a, 'ln_1')
         m = mlp(n, 'mlp', nx * 4, act_fn, resid_pdrop, train=train)
+        if adptr_size is not None:
+            with tf.variable_scope('dense_adapter'):
+                m = adapter(m, adptr_size, train, nx)
         h = norm(n + m, 'ln_2')
         return h
 
@@ -200,7 +220,7 @@ def gpt_featurizer(X, encoder, config, train=False, reuse=None, explain=False, *
 
         h = embed(X, embed_weights)
         for layer in range(config.n_layer):
-            if (config.n_layer - layer) == config.num_layers_trained and config.num_layers_trained != config.n_layer:
+            if (config.n_layer - layer) == config.num_layers_trained and config.num_layers_trained != config.n_layer and config.bert_adapter_size is not None:
                 h = tf.stop_gradient(h)
                 train_layer = False
             else:
@@ -208,8 +228,13 @@ def gpt_featurizer(X, encoder, config, train=False, reuse=None, explain=False, *
 
             with tf.variable_scope('h%d_' % layer):
                 block_fn = functools.partial(block, n_head=config.n_heads, act_fn=config.act_fn,
+<<<<<<< HEAD
                                              resid_pdrop=config.resid_p_drop, attn_pdrop=config.attn_p_drop,
                                              scope='h%d' % layer, train=train_layer, scale=True, explain=explain)
+=======
+                                            adptr_size = config.bert_adapter_size, resid_pdrop=config.resid_p_drop,
+                                            attn_pdrop=config.attn_p_drop, scope='h%d' % layer, train=train_layer, scale=True)
+>>>>>>> 8257f83... Implementation of Parameter Efficient Transfer Learning for NLP paper
                 if config.low_memory_mode and train_layer:
                     block_fn = recompute_grad(block_fn, use_entire_scope=True)
                 if layer < config.n_layer - 1:

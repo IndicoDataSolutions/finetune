@@ -42,7 +42,8 @@ class BertConfig(object):
                attention_probs_dropout_prob=0.1,
                max_position_embeddings=512,
                type_vocab_size=16,
-               initializer_range=0.02):
+               initializer_range=0.02,
+               bert_adapter_size=0):
     """Constructs BertConfig.
 
     Args:
@@ -78,6 +79,7 @@ class BertConfig(object):
     self.max_position_embeddings = max_position_embeddings
     self.type_vocab_size = type_vocab_size
     self.initializer_range = initializer_range
+    self.bert_adapter_size = bert_adapter_size
 
   @classmethod
   def from_dict(cls, json_object):
@@ -213,6 +215,7 @@ class BertModel(object):
             hidden_dropout_prob=config.hidden_dropout_prob,
             attention_probs_dropout_prob=config.attention_probs_dropout_prob,
             initializer_range=config.initializer_range,
+            adapter_size = config.bert_adapter_size,
             do_return_all_layers=True)
 
       self.sequence_output = self.all_encoder_layers[-1]
@@ -751,6 +754,15 @@ def attention_layer(from_tensor,
   return context_layer
 
 
+def adapter(input, adapter_size, input_size, hidden_dropout_prob = 0.1):
+    down_projection = tf.layers.dense(input, adapter_size, activation = 'sigmoid',
+        kernel_initializer = create_initializer(0.001))
+    down_projection = dropout(down_projection, hidden_dropout_prob)
+    up_projection = tf.layers.dense(down_projection, input_size,
+        kernel_initializer = create_initializer(0.001))
+    return up_projection + input
+
+
 def transformer_model(input_tensor,
                       attention_mask=None,
                       hidden_size=768,
@@ -761,7 +773,8 @@ def transformer_model(input_tensor,
                       hidden_dropout_prob=0.1,
                       attention_probs_dropout_prob=0.1,
                       initializer_range=0.02,
-                      do_return_all_layers=False):
+                      do_return_all_layers=False,
+                      adapter_size = 0):
   """Multi-headed, multi-layer Transformer from "Attention is All You Need".
 
   This is almost an exact implementation of the original Transformer encoder.
@@ -860,6 +873,10 @@ def transformer_model(input_tensor,
               hidden_size,
               kernel_initializer=create_initializer(initializer_range))
           attention_output = dropout(attention_output, hidden_dropout_prob)
+          # Insert an "adapter" layer from "Parameter Efficient Transfer Learning for NLP" paper
+          if adapter_size is not None:
+            with tf.variable_scope("attention_adapter"):
+              attention_output = adapter(attention_output, adapter_size, hidden_size)
           attention_output = layer_norm(attention_output + layer_input)
 
       # The activation is only applied to the "intermediate" hidden layer.
@@ -877,6 +894,10 @@ def transformer_model(input_tensor,
             hidden_size,
             kernel_initializer=create_initializer(initializer_range))
         layer_output = dropout(layer_output, hidden_dropout_prob)
+        # Insert an "adapter" layer from "Parameter Efficient Transfer Learning for NLP" paper
+        if adapter_size is not None:
+            with tf.variable_scope("dense_adapter"):
+                layer_output = adapter(layer_output, adapter_size, hidden_size)
         layer_output = layer_norm(layer_output + attention_output)
         prev_output = layer_output
         all_layer_outputs.append(layer_output)
