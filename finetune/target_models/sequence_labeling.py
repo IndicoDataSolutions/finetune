@@ -270,28 +270,32 @@ class SequenceLabeler(BaseModel):
                 all_probs.append(prob_dicts)
                 all_positions.append(doc_positions)
 
+        _, doc_annotations = finetune_to_indico_sequence(
+            raw_texts=X,
+            encoder=self.input_pipeline.text_encoder,
+            subseqs=all_subseqs,
+            labels=all_labels,
+            probs=all_probs,
+            subtoken_predictions=self.config.subtoken_predictions,
+            none_value=self.config.pad_token
+        )
+        
         if per_token:
             return [
-                _spacy_token_predictions(
-                    raw_text=raw_text,
-                    tokens=tokens,
-                    probas=probas, 
-                    positions=positions
-                )
-                for raw_text, tokens, labels, probas, positions in zip(
-                    X, all_subseqs, all_labels, all_probs, all_positions
+                {
+                    'tokens': _spacy_token_predictions(
+                        raw_text=raw_text,
+                        tokens=tokens,
+                        probas=probas, 
+                        positions=positions
+                    ),
+                    'prediction': predictions,
+                }
+                for raw_text, tokens, labels, probas, positions, predictions in zip(
+                    X, all_subseqs, all_labels, all_probs, all_positions, doc_annotations
                 )
             ]
         else:
-            _, doc_annotations = finetune_to_indico_sequence(
-                raw_texts=X,
-                encoder=self.input_pipeline.text_encoder,
-                subseqs=all_subseqs,
-                labels=all_labels,
-                probs=all_probs,
-                subtoken_predictions=self.config.subtoken_predictions,
-                none_value=self.config.pad_token
-            )
             return doc_annotations
 
     def featurize(self, X):
