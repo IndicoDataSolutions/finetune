@@ -112,7 +112,7 @@ def _spacy_token_predictions(raw_text, tokens, probas, positions):
     
         try:
             end_match = ends.index(end, spacy_token_idx)
-            start, end = starts[end_match], end
+            start = starts[end_match]
             spacy_token_idx = end_match
         except ValueError:
             continue
@@ -279,7 +279,7 @@ class SequenceLabeler(BaseModel):
             subtoken_predictions=self.config.subtoken_predictions,
             none_value=self.config.pad_token
         )
-        
+
         if per_token:
             return [
                 {
