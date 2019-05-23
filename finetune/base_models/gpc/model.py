@@ -1,5 +1,8 @@
 import os
-
+#import tensorflow as tf
+#from finetune.base_models.gpc import  memory_saving_gradients
+# monkey patch tf.gradients to point to our custom version, with automatic checkpoint selection
+#tf.__dict__["gradients"] = memory_saving_gradients.gradients_memory
 from finetune.base_models import SourceModel
 from finetune.base_models.gpc.encoder2 import GPCEncoder
 from finetune.base_models.gpc.featurizer import featurizer
@@ -9,13 +12,13 @@ class GPCModel(SourceModel):
     encoder = GPCEncoder
     featurizer = featurizer
     settings = {
-        'n_embed': 512,
-        "base_model_path": "conv25days.jl",
+        'n_embed': 1024,
+        "base_model_path": "conv37days.jl",
         'n_layer': 12,
         'num_layers_trained':12,
         'n_epochs': 8,
         'prefit_init': True,
-        'batch_size': 8,
+        'batch_size': 4,
         'feat_mode': 'clf_tok',
         'l2_reg': 0.0,
         'lr': 0.0001,
@@ -27,7 +30,7 @@ class GPCModelFP16(SourceModel):
     encoder = GPCEncoder
     featurizer = featurizer
     settings = {
-        'n_embed': 512,
+        'n_embed': 1024,
         "base_model_path": "fresh_start.jl",
         "optimizer": "Adafactor",
         "use_fp16": True,

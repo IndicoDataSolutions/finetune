@@ -95,7 +95,8 @@ class Saver:
             self.fallback_future = None
             self.tpe.shutdown()
             if self.target_model_init_from_base_model:
-                self.variables = dict()
+                if self.variables is None:
+                    self.variables = dict()
                 for k, v in self.fallback_.items():
                     self.variables['model/target/' + k] = v
                 
