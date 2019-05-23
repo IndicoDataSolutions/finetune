@@ -1,7 +1,10 @@
 import os
+from urllib.parse import urljoin
+
 from finetune.base_models import SourceModel
 from finetune.base_models.gpt.encoder import GPTEncoder
 from finetune.base_models.textcnn.featurizer import textcnn_featurizer
+from finetune.util.download import GPT_BASE_URL, FINETUNE_BASE_FOLDER
 
 
 class TextCNNModel(SourceModel):
@@ -22,3 +25,10 @@ class TextCNNModel(SourceModel):
         'seq_num_heads': len(kernel_sizes) * 2,
         'base_model_path': os.path.join("gpt", "model-lg.jl"),
     }
+    required_files = [
+        {
+            'file': os.path.join(FINETUNE_BASE_FOLDER, 'model', 'gpt', filename),
+            'url': urljoin(GPT_BASE_URL, filename)
+        }
+        for filename in ['encoder.json', 'vocab.bpe', 'model-lg.jl']
+    ]

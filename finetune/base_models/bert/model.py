@@ -1,8 +1,10 @@
 import os
+from urllib.parse import urljoin
 
 from finetune.base_models import SourceModel
 from finetune.base_models.bert.encoder import BERTEncoder, BERTEncoderMultuilingal, BERTEncoderLarge
 from finetune.base_models.bert.featurizer import bert_featurizer
+from finetune.util.download import BERT_BASE_URL, FINETUNE_BASE_FOLDER
 
 
 class BERTModelCased(SourceModel):
@@ -21,6 +23,14 @@ class BERTModelCased(SourceModel):
         'bert_intermediate_size': 3072,
         "base_model_path": os.path.join("bert", "bert_small_cased.jl"),
     }
+    required_files = [
+        {
+            'file': os.path.join(FINETUNE_BASE_FOLDER, 'model', 'bert', filename),
+            'url': urljoin(BERT_BASE_URL, filename)
+        } for filename in [
+            "bert_small_cased.jl", "vocab.txt"
+        ]
+    ]
 
 
 class BERTModelLargeCased(SourceModel):
@@ -40,6 +50,14 @@ class BERTModelLargeCased(SourceModel):
         'bert_intermediate_size': 4096,
         "base_model_path": os.path.join("bert", "bert_large_cased.jl"),
     }
+    required_files = [
+        {
+            'file': os.path.join(FINETUNE_BASE_FOLDER, 'model', 'bert', filename),
+            'url': urljoin(BERT_BASE_URL, filename)
+        } for filename in [
+            "bert_large_cased.jl", "vocab_large.txt"
+        ]
+    ]
 
 
 class BERTModelMultilingualCased(SourceModel):
@@ -58,3 +76,11 @@ class BERTModelMultilingualCased(SourceModel):
         'bert_intermediate_size': 3072,
         "base_model_path": os.path.join("bert", "bert_small_multi_cased.jl"),
     }
+    required_files = [
+        {
+            'file': os.path.join(FINETUNE_BASE_FOLDER, 'model', 'bert', filename),
+            'url': urljoin(BERT_BASE_URL, filename)
+        } for filename in [
+            "bert_small_multi_cased.jl", "vocab_multi.txt"
+        ]
+    ]

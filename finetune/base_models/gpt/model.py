@@ -1,8 +1,10 @@
 import os
+from urllib.parse import urljoin
 
 from finetune.base_models import SourceModel
 from finetune.base_models.gpt.encoder import GPTEncoder
 from finetune.base_models.gpt.featurizer import gpt_featurizer
+from finetune.util.download import GPT_BASE_URL, FINETUNE_BASE_FOLDER
 
 
 class GPTModel(SourceModel):
@@ -16,6 +18,14 @@ class GPTModel(SourceModel):
         'act_fn': "gelu",
         "base_model_path": os.path.join("gpt", "model-lg.jl"),
     }
+    required_files = [
+        {
+            'file': os.path.join(FINETUNE_BASE_FOLDER, 'model', 'gpt', filename),
+            'url': urljoin(GPT_BASE_URL, filename)
+        }
+        for filename in ['encoder.json', 'vocab.bpe', 'model-lg.jl']
+    ]
+
 
 class GPTModelSmall(GPTModel):
     is_bidirectional = False
@@ -27,3 +37,11 @@ class GPTModelSmall(GPTModel):
         'num_layers_trained': 6,
         'base_model_path': os.path.join("gpt", "model-sm.jl"),
     }
+    required_files = [
+        {
+            'file': os.path.join(FINETUNE_BASE_FOLDER, 'model', 'gpt', filename),
+            'url': urljoin(GPT_BASE_URL, filename)
+        }
+        for filename in ['encoder.json', 'vocab.bpe', 'model-sm.jl']
+    ]
+
