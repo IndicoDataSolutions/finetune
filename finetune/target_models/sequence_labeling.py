@@ -95,11 +95,8 @@ def _spacy_token_predictions(raw_text, tokens, probas, positions):
     to_combine = []
     spacy_attn = []
 
-    starts, ends = zip(*[(token.idx, token.idx + len(token.text)) for token in NLP(raw_text)])
+    spacy_token_starts, spacy_token_ends = zip(*[(token.idx, token.idx + len(token.text)) for token in NLP(raw_text)])
     spacy_token_idx = 0
-
-    spacy_token_starts = []
-    spacy_token_ends = []
     spacy_results = []
 
     for token, prob, (start, end) in zip(tokens, probas, positions):
@@ -111,8 +108,8 @@ def _spacy_token_predictions(raw_text, tokens, probas, positions):
         })
     
         try:
-            end_match = ends.index(end, spacy_token_idx)
-            start = starts[end_match]
+            end_match = spacy_token_ends.index(end, spacy_token_idx)
+            start = spacy_token_starts[end_match]
             spacy_token_idx = end_match
         except ValueError:
             continue

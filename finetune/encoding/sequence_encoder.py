@@ -99,13 +99,6 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, encoder=None, probs=
                 raw_annotation_start = raw_text.find(stripped_text, raw_annotation_start)
                 raw_annotation_end = raw_annotation_start + len(stripped_text)
 
-                if multi_label:
-                    for i, item in enumerate(doc_annotations):
-                        if item["label"] == label and raw_annotation_start - item["end"] <= 1:
-                            raw_annotation_start = item["start"]
-                            doc_annotations.pop(i)
-                            break
-
                 if raw_annotation_start == -1:
                     warnings.warn("Failed to find predicted sequence in text: {}.".format(
                         truncate_text(stripped_text)
