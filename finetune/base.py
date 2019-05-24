@@ -363,7 +363,7 @@ class BaseModel(object, metaclass=ABCMeta):
         if self._cached_predict:
             return self._cached_inference(Xs=Xs, predict_keys=predict_keys)
         else:
-            estimator, hooks = self.get_estimator(build_explain=[PredictMode.EXPLAIN] == predict_keys)
+            estimator, hooks = self.get_estimator(build_explain=PredictMode.EXPLAIN in predict_keys)
             input_fn = self.input_pipeline.get_predict_input_fn(Xs)
             length = len(Xs) if not callable(Xs) else None
 

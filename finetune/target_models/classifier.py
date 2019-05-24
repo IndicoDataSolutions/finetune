@@ -103,21 +103,25 @@ class Classifier(BaseModel):
         return clf_out
 
     def explain(self, Xs):
-        explanation = self._inference(Xs, predict_keys=[PredictMode.EXPLAIN])
+        explanation = self._inference(Xs, predict_keys=[PredictMode.EXPLAIN, PredictMode.NORMAL])
         out = []
         bases = []
-        for sample in explanation:
-            out.append(sample[1:])
-            bases.append(sample[0])
+        preds = []
+        for values in explanation:
+            explain_sample = values[PredictMode.EXPLAIN]
+            preds.append(values[PredictMode.NORMAL])
+            out.append(explain_sample[1:])
+            bases.append(explain_sample[0])
         processed = finetune_to_indico_attention_weights(Xs, out, self.input_pipeline.text_encoder, attention=False)
 
-        for base, sample in zip(bases, processed):
-            print(base, sample)
+        for base, sample, cls in zip(bases, processed, preds):
             weights = sample["attention_weights"]
             weights = np.array([base] + weights[:-1]) - weights
+            weights *= np.sqrt(np.expand_dims(np.arange(len(weights)), -1) + 1)
             n_classes = weights.shape[-1]
             norm = np.max([np.abs(np.max(weights, 0)), abs(np.min(weights, 0))], 0) * n_classes
             sample["attention_weights"] = weights / norm + 1 / n_classes
+            sample["prediction"] = cls
             
         return processed
 
