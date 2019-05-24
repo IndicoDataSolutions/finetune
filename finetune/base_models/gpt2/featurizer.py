@@ -135,7 +135,7 @@ def embed(X, we):
     return h
 
 
-def gpt2_featurizer(X, encoder, config, train=False, reuse=None):
+def gpt2_featurizer(X, encoder, config, train=False, reuse=None, **kwargs):
     initial_shape = tf.shape(X)
     X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-2:]), 0))
 

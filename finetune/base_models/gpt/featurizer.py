@@ -34,14 +34,13 @@ def mask_attn_weights(w):
     return w
 
 
-def explain_mask_attn_weights(w, lengths):
+def explain_mask_attn_weights(w):
     # w is [batch, heads, n, n]
     # lengths is [batch]
     batch, _, _, n = shape_list(w)
     seq = n//2
     main_mask = tf.matrix_band_part(tf.ones([seq, seq]), -1, 0)
     top = tf.expand_dims(tf.concat((main_mask, tf.zeros([seq, seq])), 1), 0) # 1, seq, 2 * seq
-    length_mask = tf.expand_dims(tf.sequence_mask(lengths, maxlen=seq, dtype=tf.float32), 1)  # batch, 1, seq_masked
     clf_to_clf_mask = tf.eye(seq)
     bottom = tf.expand_dims(tf.concat((main_mask, clf_to_clf_mask), 1), 0) # 1, seq, 2 * seq
     m = tf.concat((top, bottom), 1)
@@ -50,7 +49,7 @@ def explain_mask_attn_weights(w, lengths):
     return w
 
 
-def attn_weights(q, k, v, attn_pdrop, train=False, scale=False, mask=True, explain=False, lengths=None):
+def attn_weights(q, k, v, scale=False, mask=True, explain=False):
     w = tf.matmul(q, k)
 
     if scale:
@@ -59,7 +58,7 @@ def attn_weights(q, k, v, attn_pdrop, train=False, scale=False, mask=True, expla
 
     if mask:
         if explain:
-            w = explain_mask_attn_weights(w, lengths)
+            w = explain_mask_attn_weights(w)
         else:
             w = mask_attn_weights(w)
     w = tf.nn.softmax(w)
@@ -112,13 +111,12 @@ def multihead_qkv(x, n_state, n_head, train, explain=False):
     return q, k, v
 
 
-def attn(x, scope, n_state, n_head, resid_pdrop, attn_pdrop, train=False, scale=False, mask=True, explain=False, clf_pos=None):
-    assert (explain and clf_pos is not None) or not explain, "If explain is true then clf_pos must be set."
+def attn(x, scope, n_state, n_head, resid_pdrop, attn_pdrop, train=False, scale=False, mask=True, explain=False):
     assert n_state % n_head == 0
     with tf.variable_scope(scope):
         q, k, v = multihead_qkv(x, n_state, n_head, train, explain)
 
-        w = attn_weights(q, k, v, attn_pdrop=attn_pdrop, train=train, scale=scale, mask=mask, explain=explain, lengths=clf_pos)
+        w = attn_weights(q, k, v, scale=scale, mask=mask, explain=explain)
         w = dropout(w, attn_pdrop, train)
 
         a = tf.matmul(w, v)
@@ -139,12 +137,10 @@ def mlp(x, scope, n_state, act_fn, resid_pdrop, train=False):
         return h2
 
 
-def block(x, n_head, act_fn, resid_pdrop, attn_pdrop, scope, train=False, scale=False, explain=False, clf_pos=None):
+def block(x, n_head, act_fn, resid_pdrop, attn_pdrop, scope, train=False, scale=False, explain=False):
     with tf.variable_scope(scope):
         nx = shape_list(x)[-1]
-        a = attn(
-            x, 'attn', nx, n_head, resid_pdrop, attn_pdrop, train=train, scale=scale, explain=explain, clf_pos=clf_pos
-        )
+        a = attn(x, 'attn', nx, n_head, resid_pdrop, attn_pdrop, train=train, scale=scale, explain=explain)
         n = norm(x + a, 'ln_1')
         m = mlp(n, 'mlp', nx * 4, act_fn, resid_pdrop, train=train)
         h = norm(n + m, 'ln_2')
@@ -157,7 +153,16 @@ def embed(X, we):
     return h
 
 
-def gpt_featurizer(X, encoder, config, train=False, reuse=None, explain=False):
+def add_explain_tokens(X, max_length, pool_idx):
+    flat_x = tf.reshape(X[:, :, :1], [-1, 1])
+    flat_pos = tf.minimum(X[:, :, 1:] + 1, max_length - 1)  # + 1 to offset for start token
+    clf_tok = tf.gather(flat_x, tf.range(shape_list(X)[0], dtype=tf.int32) * max_length + pool_idx)
+    clf_tok_x_seq = tf.tile(tf.expand_dims(clf_tok, 1), [1, max_length, 1])
+    clf_tok_x_seq_w_pos = tf.concat((clf_tok_x_seq, flat_pos), -1)
+    return tf.concat((X, clf_tok_x_seq_w_pos), 1)
+
+
+def gpt_featurizer(X, encoder, config, train=False, reuse=None, explain=False, **kwargs):
     """
     The transformer element of the finetuning model. Maps from tokens ids to a dense, embedding of the sequence.
 
@@ -189,13 +194,9 @@ def gpt_featurizer(X, encoder, config, train=False, reuse=None, explain=False):
 
         clf_token = encoder['_classify_']
         pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
+
         if explain:
-            flat_x = tf.reshape(X[:,:,:1], [-1, 1])
-            flat_pos = tf.minimum(X[:,:,1:] + 1, config.max_length - 1) # + 1 to offset for start token
-            clf_tok = tf.gather(flat_x, tf.range(shape_list(X)[0], dtype=tf.int32) * config.max_length + pool_idx)
-            clf_tok_x_seq = tf.tile(tf.expand_dims(clf_tok, 1), [1, initial_shape[1], 1])
-            clf_tok_x_seq_w_pos = tf.concat((clf_tok_x_seq, flat_pos), -1)
-            X = tf.concat((X, clf_tok_x_seq_w_pos), 1)
+            X = add_explain_tokens(X, config.max_length, pool_idx)
 
         h = embed(X, embed_weights)
         for layer in range(config.n_layer):
@@ -208,8 +209,7 @@ def gpt_featurizer(X, encoder, config, train=False, reuse=None, explain=False):
             with tf.variable_scope('h%d_' % layer):
                 block_fn = functools.partial(block, n_head=config.n_heads, act_fn=config.act_fn,
                                              resid_pdrop=config.resid_p_drop, attn_pdrop=config.attn_p_drop,
-                                             scope='h%d' % layer, train=train_layer, scale=True, clf_pos=pool_idx,
-                                             explain=explain)
+                                             scope='h%d' % layer, train=train_layer, scale=True, explain=explain)
                 if config.low_memory_mode and train_layer:
                     block_fn = recompute_grad(block_fn, use_entire_scope=True)
                 if layer < config.n_layer - 1:
@@ -221,7 +221,7 @@ def gpt_featurizer(X, encoder, config, train=False, reuse=None, explain=False):
             if layer == config.n_layer - 1:
                 with tf.variable_scope('h%d_/h%d/attn' % (layer, layer), reuse=True):
                     q, k, v = multihead_qkv(h, n_state=shape_list(h)[-1], n_head=config.n_heads, train=train)
-                    w = attn_weights(q, k, v, attn_pdrop=config.attn_p_drop, train=train_layer, scale=True)
+                    w = attn_weights(q, k, v, scale=True)
 
         if explain:
             explain_out = h_out[:, initial_shape[1]:]
