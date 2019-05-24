@@ -32,7 +32,7 @@ def sentences_heatmap(sentences, probs, clf):
             ax.text(word_pos, 0.5, word,
                     horizontalalignment='left',
                     verticalalignment='center',
-                    fontsize=8, color=cmap(norm(prob[0])),
+                    fontsize=8, color=cmap(norm(prob)),
                     transform=ax.transAxes, fontweight=700)
             word_pos += .0036 * (len(word) + 1)  # to move the word for the next iter
         ax.axis('off')
@@ -65,7 +65,7 @@ if __name__ == "__main__":
     for sample, text in zip(samples, testX):
         sample_words = []
         sample_probs = []
-        for s, e, p in zip(sample["token_starts"], sample["token_ends"], sample['explanation']):
+        for s, e, p in zip(sample["token_starts"], sample["token_ends"], sample['explanation'][1]):
             sample_words.append(text[s:e])
             sample_probs.append(p)
         print(list(zip(sample_words, sample_probs)), text)
