@@ -122,7 +122,7 @@ class Classifier(BaseModel):
             norm = np.max([np.abs(np.max(weights, 0)), abs(np.min(weights, 0))], 0) * n_classes
             explanation = weights / norm + 1 / n_classes
 
-            sample['explanation'] = {c: explanation[i, :] for i, c in enumerate(classes)}
+            sample['explanation'] = {c: explanation[:, i] for i, c in enumerate(classes)}
             sample["prediction"] = self.input_pipeline.label_encoder.inverse_transform([cls])[0]
             
         return processed
