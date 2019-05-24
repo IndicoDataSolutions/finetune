@@ -41,14 +41,11 @@ def explain_mask_attn_weights(w, lengths):
     seq = n//2
     main_mask = tf.matrix_band_part(tf.ones([seq, seq]), -1, 0)
     top = tf.expand_dims(tf.concat((main_mask, tf.zeros([seq, seq])), 1), 0) # 1, seq, 2 * seq
-    top_batched = tf.tile(top, [batch, 1, 1])
     length_mask = tf.expand_dims(tf.sequence_mask(lengths, maxlen=seq, dtype=tf.float32), 1)  # batch, 1, seq_masked
-    length_mask_batched = tf.tile(length_mask, [1, seq, 1])
-    clf_to_clf_mask = tf.expand_dims(tf.eye(seq), 0)
-    clf_to_clf_mask_batched = tf.tile(clf_to_clf_mask, [batch, 1, 1])
-    bottom_batched = tf.concat((length_mask_batched, clf_to_clf_mask_batched), 2)
-    m = tf.concat((top_batched, bottom_batched), 1)
-    b = tf.expand_dims(m, 1)
+    clf_to_clf_mask = tf.eye(seq)
+    bottom = tf.expand_dims(tf.concat((main_mask, clf_to_clf_mask), 1), 0) # 1, seq, 2 * seq
+    m = tf.concat((top, bottom), 1)
+    b = tf.reshape(m, [1, 1, n, n])
     w = w * b + -1e9 * (1 - b)
     return w
 
@@ -116,7 +113,7 @@ def multihead_qkv(x, n_state, n_head, train, explain=False):
 
 
 def attn(x, scope, n_state, n_head, resid_pdrop, attn_pdrop, train=False, scale=False, mask=True, explain=False, clf_pos=None):
-    assert (explain and clf_pos is not None) or (not explain and clf_pos is None), "If explain is true then clf_pos must be set."
+    assert (explain and clf_pos is not None) or not explain, "If explain is true then clf_pos must be set."
     assert n_state % n_head == 0
     with tf.variable_scope(scope):
         q, k, v = multihead_qkv(x, n_state, n_head, train, explain)
@@ -209,7 +206,7 @@ def gpt_featurizer(X, encoder, config, train=False, reuse=None, explain=False):
             with tf.variable_scope('h%d_' % layer):
                 block_fn = functools.partial(block, n_head=config.n_heads, act_fn=config.act_fn,
                                              resid_pdrop=config.resid_p_drop, attn_pdrop=config.attn_p_drop,
-                                             scope='h%d' % layer, train=train_layer, scale=True, clf_token=pool_idx,
+                                             scope='h%d' % layer, train=train_layer, scale=True, clf_pos=pool_idx,
                                              explain=explain)
                 if config.low_memory_mode and train_layer:
                     block_fn = recompute_grad(block_fn, use_entire_scope=True)
@@ -245,3 +242,4 @@ def gpt_featurizer(X, encoder, config, train=False, reuse=None, explain=False):
 
         if explain:
             out["explain_out"] = explain_out
+        return out

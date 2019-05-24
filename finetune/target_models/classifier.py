@@ -7,6 +7,8 @@ from finetune.base import BaseModel
 from finetune.encoding.target_encoders import OneHotLabelEncoder
 from finetune.nn.target_blocks import classifier
 from finetune.input_pipeline import BasePipeline
+from finetune.model import PredictMode
+from finetune.base_models.gpt.encoder import finetune_to_indico_attention_weights
 
 
 class ClassificationPipeline(BasePipeline):
@@ -93,20 +95,31 @@ class Classifier(BaseModel):
         if "explain_out" in featurizer_state:
             logits = clf_out["logits"]
             clf_out["logits"] = logits[: shape[0]]
-            clf_out["explanation"] = tf.reshape(
-                logits[shape[0]:], tf.concat((shape[:2], [tf.shape(logits)[-1]]), 0)
-            )
+            clf_out["explanation"] = tf.nn.softmax(
+                tf.reshape(
+                    logits[shape[0]:], tf.concat((shape[:2], [tf.shape(logits)[-1]]), 0)
+                ),
+            -1)
+        return clf_out
 
     def explain(self, Xs):
-        if self.config.base_model in [GPTModel, GPTModelSmall]:
-            explanation = self._inference(Xs, predict_keys=[PredictMode.EXPLAIN])
-            out = []
-            for sample in explanation:
-                sample_deriv = sample[:-1] - sample[0:]
-                out.append(sample_deriv)
-                finetune_to_indico_attention_weights
-            return out
-        raise NotImplementedError("'attention_weights' only supported for GPTModel and GPTModelSmall base models.")
+        explanation = self._inference(Xs, predict_keys=[PredictMode.EXPLAIN])
+        out = []
+        bases = []
+        for sample in explanation:
+            out.append(sample[1:])
+            bases.append(sample[0])
+        processed = finetune_to_indico_attention_weights(Xs, out, self.input_pipeline.text_encoder, attention=False)
+
+        for base, sample in zip(bases, processed):
+            print(base, sample)
+            weights = sample["attention_weights"]
+            weights = np.array([base] + weights[:-1]) - weights
+            n_classes = weights.shape[-1]
+            norm = np.max([np.abs(np.max(weights, 0)), abs(np.min(weights, 0))], 0) * n_classes
+            sample["attention_weights"] = weights / norm + 1 / n_classes
+            
+        return processed
 
     def _predict_op(self, logits, **kwargs):
         return tf.argmax(logits, -1)
