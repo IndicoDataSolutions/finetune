@@ -190,10 +190,12 @@ def gpt_featurizer(X, encoder, config, train=False, reuse=None, explain=False):
         clf_token = encoder['_classify_']
         pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
         if explain:
-            flat_x = tf.reshape(X, [-1, 2])
+            flat_x = tf.reshape(X[:,:,:1], [-1, 1])
+            flat_pos = tf.minimum(X[:,:,1:] + 1, config.max_length - 1) # + 1 to offset for start token
             clf_tok = tf.gather(flat_x, tf.range(shape_list(X)[0], dtype=tf.int32) * config.max_length + pool_idx)
             clf_tok_x_seq = tf.tile(tf.expand_dims(clf_tok, 1), [1, initial_shape[1], 1])
-            X = tf.concat((X, clf_tok_x_seq), 1)
+            clf_tok_x_seq_w_pos = tf.concat((clf_tok_x_seq, flat_pos), -1)
+            X = tf.concat((X, clf_tok_x_seq_w_pos), 1)
 
         h = embed(X, embed_weights)
         for layer in range(config.n_layer):
