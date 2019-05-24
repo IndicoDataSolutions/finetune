@@ -188,7 +188,7 @@ class GPTEncoder(BaseEncoder):
         return "".join([self.decoder.get(word_idx, '<unk>') for word_idx in ids]).replace("</w>", " ")
 
 
-def to_spacy_attn(attn, tokens, token_starts, token_ends):
+def to_spacy_attn(attn, tokens, token_starts, token_ends, normalize=True):
     to_combine = []
     spacy_attn = []
     spacy_token_starts = []
@@ -196,15 +196,20 @@ def to_spacy_attn(attn, tokens, token_starts, token_ends):
     spacy_start = None
     for token, prob, start, end in zip(tokens, attn, token_starts, token_ends):
         to_combine.append(prob)
-        if not spacy_start:
+        if spacy_start is None:
             spacy_start = start
         if token.endswith('</w>'):
-            spacy_attn.append(max(to_combine))
+            if normalize:
+                spacy_attn.append(np.max(to_combine, 0))
+            else:
+                spacy_attn.append(to_combine[-1])
             spacy_token_starts.append(spacy_start)
             spacy_token_ends.append(end)
             to_combine = []
             spacy_start = None
-    spacy_attn = spacy_attn/sum(spacy_attn)
+            
+    if normalize:
+        spacy_attn = spacy_attn/sum(spacy_attn)
     return {
         'attention_weights': spacy_attn,
         'token_starts': spacy_token_starts,
@@ -212,7 +217,7 @@ def to_spacy_attn(attn, tokens, token_starts, token_ends):
     }
 
 
-def finetune_to_indico_attention_weights(raw_texts, attn_weights, encoder):
+def finetune_to_indico_attention_weights(raw_texts, attn_weights, encoder, attention=True):
     """
     Maps the attention weights one-to-one with the raw text tokens.
     
@@ -234,11 +239,16 @@ def finetune_to_indico_attention_weights(raw_texts, attn_weights, encoder):
         token_ends = encoded_docs.char_locs[doc_idx]
         token_lengths = [encoder._token_length(token) for token in tokens]
         token_starts = [end - length for end, length in zip(token_ends, token_lengths)]
-        # offset of one to take into account the start token
-        clf_token_idx = len(tokens) + 1
-        # take the average values over the attention heads for the attention weights of the classify token 
-        attn = np.mean(attn_weights[doc_idx], axis=0)[clf_token_idx][1:clf_token_idx]  # [num_tokens]
+        if attention:
+            # offset of one to take into account the start token
+            clf_token_idx = len(tokens) + 1
+            # take the average values over the attention heads for the attention weights of the classify token
+            attn = np.mean(attn_weights[doc_idx], axis=0)[clf_token_idx][1:clf_token_idx]  # [num_tokens]
+        else:
+            # There is no start token
+            clf_token_idx = len(tokens)
+            attn = attn_weights[doc_idx][:clf_token_idx]
         # map one-to-one with spacy tokenization
-        spacy_output = to_spacy_attn(attn, tokens, token_starts, token_ends)
+        spacy_output = to_spacy_attn(attn, tokens, token_starts, token_ends, normalize=attention)
         spacy_outputs.append(spacy_output)
     return spacy_outputs
