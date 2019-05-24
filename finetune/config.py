@@ -165,6 +165,7 @@ class Settings(dict):
     :param debugging_logs: if True, output tensorflow logs and turn off TQDM logging. Defaults to `False`.
     :param val_set: Where it is neccessary to use an explicit validation set, provide it here as a tuple (text, labels)
     :param per_process_gpu_memory_fraction: fraction of the overall amount of memory that each visible GPU should be allocated, defaults to `1.0`.
+    :param adapter_size: width of adapter module from 'Parameter Efficient Transfer Learning' paper, if defined. defaults to 'None'.
     """
 
     def get_grid_searchable(self):
@@ -225,7 +226,7 @@ def get_default_config():
     """
     settings = Settings(
         # General Settings
-        low_memory_mode=False,
+        low_memory_mode=True,
         interpolate_pos_embed=False,
         save_adam_vars=True,
         shuffle_buffer_size=100,
@@ -282,7 +283,7 @@ def get_default_config():
         lr=GridSearchable(6.25e-5, [6.25e-4, 6.25e-5, 6.25e-6]),
         lr_warmup=0.002,
         max_grad_norm=1.0,
-        prefit_init=False,
+        prefit_init=True,
         accum_steps=1,
 
         # MTL
@@ -312,7 +313,7 @@ def get_default_config():
 
         # Location of model weights
         base_model=GPTModel,
-        base_model_path='SummariesBase.jl',
+        bath_model_path=None,
 
         # Possible `SourceModel` specific settings
         n_heads=None,
