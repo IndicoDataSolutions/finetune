@@ -370,7 +370,7 @@ class TestClassifier(unittest.TestCase):
         train_sample = self.dataset.sample(n=20)
         model.fit(train_sample.Text, train_sample.Target)
 
-    def test_fit_predict(self):
+    def test_fit_with_eval_acc(self):
         """
         Test issue #263
         """
@@ -378,3 +378,33 @@ class TestClassifier(unittest.TestCase):
         model = Classifier(**self.default_config(batch_size=3, eval_acc=True))
         train_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text, train_sample.Target)
+
+    def test_explain(self):
+        model = Classifier(**self.default_config())
+        train_sample = self.dataset.sample(n=self.n_sample)
+        valid_sample = self.dataset.sample(n=self.n_sample)
+        model.fit(train_sample.Text, train_sample.Target)
+        explanations = model.explain(valid_sample.Text)
+        normal_predictions = model.predict(valid_sample.Text)
+        explanation_preds = [e["prediction"] for e in explanations]
+
+        # check that the process of turning on explain does not change the preds
+        self.assertEqual(explanation_preds, list(normal_predictions))
+        self.assertEqual(len(explanation_preds), len(train_sample.Text))
+        self.assertEqual(type(explanations[0]["token_ends"]), list)
+        self.assertEqual(type(explanations[0]["token_starts"]), list)
+        self.assertEqual(type(explanations[0]["explanation"]), dict)
+        self.assertEqual(len(explanations[0]["token_starts"]), len(explanations[0]["explanation"][0]))
+        self.assertEqual(len(explanations[0]["token_ends"]), len(explanations[0]["explanation"][0]))
+
+
+
+
+
+
+
+
+
+
+
+

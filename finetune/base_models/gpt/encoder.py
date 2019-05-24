@@ -188,7 +188,7 @@ class GPTEncoder(BaseEncoder):
         return "".join([self.decoder.get(word_idx, '<unk>') for word_idx in ids]).replace("</w>", " ")
 
 
-def to_spacy_attn(attn, tokens, token_starts, token_ends, normalize=True):
+def aggregate_to_full_tokens(attn, tokens, token_starts, token_ends, attention=True):
     to_combine = []
     spacy_attn = []
     spacy_token_starts = []
@@ -199,7 +199,7 @@ def to_spacy_attn(attn, tokens, token_starts, token_ends, normalize=True):
         if spacy_start is None:
             spacy_start = start
         if token.endswith('</w>'):
-            if normalize:
+            if attention:
                 spacy_attn.append(np.max(to_combine, 0))
             else:
                 spacy_attn.append(to_combine[-1])
@@ -208,22 +208,27 @@ def to_spacy_attn(attn, tokens, token_starts, token_ends, normalize=True):
             to_combine = []
             spacy_start = None
             
-    if normalize:
-        spacy_attn = spacy_attn/sum(spacy_attn)
+    if attention:
+        spacy_attn = spacy_attn / sum(spacy_attn)
+        key = 'attention_weights'
+    else:
+        key = 'explanation'
+
     return {
-        'attention_weights': spacy_attn,
+        key: spacy_attn,
         'token_starts': spacy_token_starts,
         'token_ends': spacy_token_ends
     }
 
 
-def finetune_to_indico_attention_weights(raw_texts, attn_weights, encoder, attention=True):
+def finetune_to_indico_explain(raw_texts, attn_weights, encoder, attention=True):
     """
-    Maps the attention weights one-to-one with the raw text tokens.
+    Maps the attention weights or explain probability values one-to-one with the raw text tokens.
     
     :param raw_texts: A list of segmented text of the form list(list(str))
     :param attn_weights: An array of attention weights of shape [batch, seq_len]
     :param encoder: The encoder used in the model that output the attention weights
+    :param attention: A boolean flag, true for inputting attention matrices, false for explain probabilities.
     :return: A list of dictionaries, each with the following keys:
     - 'attention_weights': A list of attention weights for each token in the text
     - 'token_starts': A list of the start tokens for each spacy token in the text
@@ -249,6 +254,6 @@ def finetune_to_indico_attention_weights(raw_texts, attn_weights, encoder, atten
             clf_token_idx = len(tokens)
             attn = attn_weights[doc_idx][:clf_token_idx]
         # map one-to-one with spacy tokenization
-        spacy_output = to_spacy_attn(attn, tokens, token_starts, token_ends, normalize=attention)
+        spacy_output = aggregate_to_full_tokens(attn, tokens, token_starts, token_ends, attention=attention)
         spacy_outputs.append(spacy_output)
     return spacy_outputs

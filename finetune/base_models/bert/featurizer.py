@@ -2,7 +2,7 @@ import tensorflow as tf
 from finetune.base_models.bert.modeling import BertConfig, BertModel
 
 
-def bert_featurizer(X, encoder, config, train=False, reuse=None):
+def bert_featurizer(X, encoder, config, train=False, reuse=None, **kwargs):
     """
     The transformer element of the finetuning model. Maps from tokens ids to a dense, embedding of the sequence.
 

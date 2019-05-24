@@ -8,7 +8,7 @@ from finetune.encoding.target_encoders import OneHotLabelEncoder
 from finetune.nn.target_blocks import classifier
 from finetune.input_pipeline import BasePipeline
 from finetune.model import PredictMode
-from finetune.base_models.gpt.encoder import finetune_to_indico_attention_weights
+from finetune.base_models.gpt.encoder import finetune_to_indico_explain
 
 
 class ClassificationPipeline(BasePipeline):
@@ -99,11 +99,12 @@ class Classifier(BaseModel):
                 tf.reshape(
                     logits[shape[0]:], tf.concat((shape[:2], [tf.shape(logits)[-1]]), 0)
                 ),
-            -1)
+                -1)
         return clf_out
 
     def explain(self, Xs):
         explanation = self._inference(Xs, predict_keys=[PredictMode.EXPLAIN, PredictMode.NORMAL])
+        classes = self.input_pipeline.label_encoder.target_labels
         out = []
         bases = []
         preds = []
@@ -112,16 +113,17 @@ class Classifier(BaseModel):
             preds.append(values[PredictMode.NORMAL])
             out.append(explain_sample[1:])
             bases.append(explain_sample[0])
-        processed = finetune_to_indico_attention_weights(Xs, out, self.input_pipeline.text_encoder, attention=False)
+        processed = finetune_to_indico_explain(Xs, out, self.input_pipeline.text_encoder, attention=False)
 
         for base, sample, cls in zip(bases, processed, preds):
-            weights = sample["attention_weights"]
+            weights = sample['explanation']
             weights = np.array([base] + weights[:-1]) - weights
-            weights *= np.sqrt(np.expand_dims(np.arange(len(weights)), -1) + 1)
             n_classes = weights.shape[-1]
             norm = np.max([np.abs(np.max(weights, 0)), abs(np.min(weights, 0))], 0) * n_classes
-            sample["attention_weights"] = weights / norm + 1 / n_classes
-            sample["prediction"] = cls
+            explanation = weights / norm + 1 / n_classes
+
+            sample['explanation'] = {c: explanation[i, :] for i, c in enumerate(classes)}
+            sample["prediction"] = self.input_pipeline.label_encoder.inverse_transform([cls])[0]
             
         return processed
 
