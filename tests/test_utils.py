@@ -106,12 +106,9 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
             raw, indicoy, encoder=encoder, none_value="<PAD>"
         )
         self.assertEqual(finetunex_pred, finetunex)
-        print(finetuney)
-        print(finetuney_pred)
         self.assertCountEqual(finetuney[0][0], finetuney_pred[0][0])
         self.assertCountEqual(finetuney[0][1], finetuney_pred[0][1])
         self.assertCountEqual(finetuney[0][2], finetuney_pred[0][2])
-
 
     def test_three_overlapping_labels(self):
         raw = ["Indico Is the very best"]
