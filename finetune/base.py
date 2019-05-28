@@ -287,10 +287,18 @@ class BaseModel(object, metaclass=ABCMeta):
         )
         return est, hooks
     
-    def get_separate_estimators(self, target_model_fn, predict_op, predict_proba_op, build_target_model, build_lm, encoder, target_dim,
-                 label_encoder, saver):
-        fns = get_separate_model_fns(target_model_fn, predict_op, predict_proba_op, build_target_model, build_lm, encoder, target_dim,
-                 label_encoder, saver)
+    def get_separate_estimators(self, force_build_lm = False):
+        fns = get_separate_model_fns(
+            target_model_fn=self._target_model, 
+            predict_op=self._predict_op,
+            predict_proba_op=self._predict_proba_op,
+            build_target_model=self.input_pipeline.target_dim is not None,
+            build_lm=force_build_lm or self.config.lm_loss_coef > 0.0,
+            encoder=self.input_pipeline.text_encoder,
+            target_dim=self.input_pipeline.target_dim,
+            label_encoder=self.input_pipeline.label_encoder,
+            saver=self.saver
+        )
 
         featurizer_est = tf.estimator.Estimator(
             model_dir=self.estimator_dir,
@@ -305,8 +313,10 @@ class BaseModel(object, metaclass=ABCMeta):
             config=config,
             params=self.config
         )
-        
-        return {'featurizer_estimator': featurizer_est, 'target_estimator':target_est}
+
+        hooks = [InitializeHook(self.saver)]
+
+        return featurizer_est, target_est, hooks
 
 
     def close(self):
@@ -365,9 +375,18 @@ class BaseModel(object, metaclass=ABCMeta):
         self._closed = False
         n = n_examples or len(self._data)
         if self._predictions is None:
-            _estimator, hooks = self.get_estimator()
             input_fn = self.input_pipeline.get_predict_input_fn(self._data_generator)
-            self._predictions = _estimator.predict(input_fn=input_fn, predict_keys=predict_keys, hooks=hooks)
+            if self.config.build_separate_estimators:
+                featurizer_est, target_est, hooks = self.get_separate_estimators()
+                features = featurizer_est.predict(input_fn=input_fn, predict_keys=predict_keys, hooks=hooks)
+                #features = tf.data.Dataset.from_tensor_slices(features)
+
+                target_fn = self.input_pipeline.get_target_input_fn(features)
+
+                self._predictions = target_est.predict(input_fn=target_fn, predict_keys=predict_keys, hooks=hooks)
+            else:
+                _estimator, hooks = self.get_estimator()
+                self._predictions = _estimator.predict(input_fn=input_fn, predict_keys=predict_keys, hooks=hooks)
 
         self._clear_prediction_queue()
 
@@ -388,18 +407,26 @@ class BaseModel(object, metaclass=ABCMeta):
         if self._cached_predict:
             return self._cached_inference(Xs=Xs, predict_keys=predict_keys, n_examples=n_examples)
         else:
-            estimator, hooks = self.get_estimator(build_explain=PredictMode.EXPLAIN in predict_keys)
             input_fn = self.input_pipeline.get_predict_input_fn(Xs)
-            length = len(Xs) if not callable(Xs) else None
+            if self.config.build_separate_estimators:
+                featurizer_est, target_est, hooks = self.get_separate_estimators()
+                features = featurizer_est.predict(input_fn=input_fn, predict_keys=predict_keys, hooks=hooks)
+                #features = tf.data.Dataset.from_tensor_slices(features)
 
-            predictions = tqdm.tqdm(
-                estimator.predict(
-                    input_fn=input_fn, predict_keys=predict_keys, hooks=hooks
-                ),
-                total=length,
-                desc="Inference"
-            )
-            
+                target_fn = self.input_pipeline.get_target_input_fn(features)
+
+                self._predictions = target_est.predict(input_fn=target_fn, predict_keys=predict_keys, hooks=hooks)
+            else:
+                estimator, hooks = self.get_estimator(build_explain=PredictMode.EXPLAIN in predict_keys)
+                length = len(Xs) if not callable(Xs) else None
+
+                predictions = tqdm.tqdm(
+                    estimator.predict(
+                        input_fn=input_fn, predict_keys=predict_keys, hooks=hooks
+                    ),
+                    total=length,
+                    desc="Inference"
+                )
             try:
                 return [
                     pred[predict_keys[0]] if len(predict_keys) == 1 

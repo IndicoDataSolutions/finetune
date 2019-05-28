@@ -311,6 +311,11 @@ class BasePipeline(metaclass=ABCMeta):
         tf_dataset = lambda: self._dataset_without_targets(Xs, train=None).batch(batch_size)
         return tf_dataset
 
+    def get_target_input_fn(self,features,batch_size=None):
+        batch_size = batch_size or self.config.batch_size
+        tf_dataset = lambda: tf.data.Dataset.from_tensor_slices(dict(features)).batch(batch_size)
+        return tf_dataset
+
     @property
     def pad_idx(self):
         if self.pad_idx_ is None:
