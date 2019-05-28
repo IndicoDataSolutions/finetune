@@ -9,6 +9,7 @@ from finetune.optimizers.gradient_accumulation import get_grad_accumulation_opti
 from finetune.util.imbalance import compute_class_weights
 from finetune.errors import FinetuneError
 from finetune import Classifier
+from finetune.base_models import GPT2
 from finetune.base_models.gpt.encoder import GPTEncoder
 from finetune.base_models.gpt2.encoder import GPT2Encoder
 
@@ -57,15 +58,14 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
         finetuney = [
             [("1",), ("1", "2"), ("2", ), ("<PAD>")]
         ]
-        encoder = GPT2Encoder()
+        encoder = Classifier(base_model=GPT2).input_pipeline.text_encoder
         indicox_pred, indicoy_pred = finetune_to_indico_sequence(
             raw, finetunex, finetuney, encoder=encoder, none_value="<PAD>"
         )
-
         indicoy = [
             [
                 {'start': 0, 'end': 13, 'label': '1', 'text': 'Indico Is the'},
-                {'start': 6, 'end': 18, 'label': '2', 'text': ' Is the best'},
+                {'start': 7, 'end': 18, 'label': '2', 'text': 'Is the best'},
             ]
         ]
         self.assertEqual(indicoy, indicoy_pred)

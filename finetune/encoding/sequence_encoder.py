@@ -1,5 +1,7 @@
 import warnings
 
+import numpy as np
+
 from finetune.util.logging import truncate_text
 from finetune.encoding.input_encoder import NLP
 
@@ -37,6 +39,21 @@ def assign_associations(labels, associations, none_value):
         all_candidates.append(candidates)
     return all_candidates
 
+
+def _merge_confidences(annotation):
+    """
+    Collapse list of confidences down to a single mean confidence.
+    """
+    if not 'confidence' in annotation or not len(annotation['confidence']):
+        return 
+
+    labels = annotation['confidence'][0].keys()
+    annotation['confidence'] = {
+        label: np.mean([
+            confidences[label] for confidences in annotation['confidence']
+        ])
+        for label in labels
+    }
 
 def finetune_to_indico_sequence(raw_texts, subseqs, labels, encoder=None, probs=None, none_value=None,
                                 subtoken_predictions=False, associations=None):
@@ -93,7 +110,7 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, encoder=None, probs=
                 multi_label = True
                 label_list = raw_label
 
-            for label in label_list:
+            for label in sorted(label_list):
                 stripped_text = sub_str.strip()
 
                 raw_annotation_start = raw_text.find(stripped_text, raw_annotation_start)
@@ -103,6 +120,26 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, encoder=None, probs=
                     warnings.warn("Failed to find predicted sequence in text: {}.".format(
                         truncate_text(stripped_text)
                     ))
+                    continue
+                
+                extended_existing_label = False
+                for i, item in enumerate(doc_annotations):
+                    # handle case where we extend existing annotation
+                    if (
+                        # same label
+                        item["label"] == label 
+                        # and only separated by whitespace
+                        and item['end'] <= raw_annotation_start
+                        and not raw_text[item["end"]:raw_annotation_start].strip()
+                    ):
+                        item['end'] = raw_annotation_end
+                        item['text'] = raw_text[item['start']:raw_annotation_end]
+                        if 'confidence' in item and confidences is not None:
+                            item['confidence'].append(confidences)
+                        extended_existing_label = True
+                        break
+                
+                if extended_existing_label:
                     continue
 
                 annotation_start = raw_annotation_start
@@ -140,7 +177,7 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, encoder=None, probs=
                             "prob": prob
                         }
                     if confidences is not None:
-                        annotation["confidence"] = confidences
+                        annotation["confidence"] = [confidences]
 
                     # prevent duplicate annotation edge case
                     if (annotation_start, annotation_end, label) not in annotation_ranges:
@@ -148,6 +185,10 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, encoder=None, probs=
                         doc_annotations.append(annotation)
 
         doc_annotations = sorted([dict(items) for items in doc_annotations], key=lambda x: x['start'])
+
+        for annotation in doc_annotations:
+            _merge_confidences(annotation)
+  
         annotations.append(doc_annotations)
     return raw_texts, annotations
 
