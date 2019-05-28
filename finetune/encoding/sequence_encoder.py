@@ -112,9 +112,10 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, encoder=None, probs=
 
             for label in sorted(label_list):
                 stripped_text = sub_str.strip()
-
-                raw_annotation_start = raw_text.find(stripped_text, raw_annotation_start)
-                raw_annotation_end = raw_annotation_start + len(stripped_text)
+                raw_annotation_start = raw_text.find(sub_str, raw_annotation_start)
+                raw_annotation_end = raw_annotation_start + len(sub_str)
+                stripped_annotation_start = raw_text.find(stripped_text, raw_annotation_start)
+                stripped_annotation_end = stripped_annotation_start + len(stripped_text)
 
                 if raw_annotation_start == -1:
                     warnings.warn("Failed to find predicted sequence in text: {}.".format(
@@ -129,7 +130,7 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, encoder=None, probs=
                         # same label
                         item["label"] == label 
                         # and only separated by whitespace
-                        and item['end'] <= raw_annotation_start
+                        and item['end'] <= raw_annotation_end
                         and not raw_text[item["end"]:raw_annotation_start].strip()
                     ):
                         item['end'] = raw_annotation_end
@@ -142,9 +143,12 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, encoder=None, probs=
                 if extended_existing_label:
                     continue
 
-                annotation_start = raw_annotation_start
-                annotation_end = raw_annotation_end
-
+                if subtoken_predictions:
+                    annotation_start = raw_annotation_start
+                    annotation_end = raw_annotation_end
+                else:
+                    annotation_start = stripped_annotation_start
+                    annotation_end = stripped_annotation_end
                 # if we don't want to allow subtoken predictions, adjust start and end to match
                 # the start and ends of the nearest full tokens
                 if not subtoken_predictions:
