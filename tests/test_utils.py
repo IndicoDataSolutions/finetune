@@ -106,14 +106,17 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
             raw, indicoy, encoder=encoder, none_value="<PAD>"
         )
         self.assertEqual(finetunex_pred, finetunex)
+        print(finetuney)
+        print(finetuney_pred)
         self.assertCountEqual(finetuney[0][0], finetuney_pred[0][0])
         self.assertCountEqual(finetuney[0][1], finetuney_pred[0][1])
         self.assertCountEqual(finetuney[0][2], finetuney_pred[0][2])
 
+
     def test_three_overlapping_labels(self):
-        raw = ["Indico Is the best"]
+        raw = ["Indico Is the very best"]
         finetunex = [
-            ["Indico ", "Is the", " best"]
+            ["Indico ", "Is the very", " best"]
         ]
         finetuney = [
             [("<PAD>", ), ("1", "2", "3"), ("1", "3")]
@@ -122,12 +125,16 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
         indicox_pred, indicoy_pred = finetune_to_indico_sequence(
             raw, finetunex, finetuney, encoder=encoder, none_value="<PAD>"
         )
+        indicoy_pred = [sorted(seq, key=lambda x: x['label']) for seq in indicoy_pred]
         indicoy = [
-            [
-                {'start': 7, 'end': 13, 'label': '2', 'text': 'Is the'},
-                {'start': 7, 'end': 18, 'label': '1', 'text': 'Is the best'},
-                {'start': 7, 'end': 18, 'label': '3', 'text': 'Is the best'}
-            ]
+            sorted(
+                [
+                    {'start': 7, 'end': 18, 'label': '2', 'text': 'Is the very'},
+                    {'start': 7, 'end': 23, 'label': '1', 'text': 'Is the very best'},
+                    {'start': 7, 'end': 23, 'label': '3', 'text': 'Is the very best'}
+                ],
+                key=lambda x: x['label']
+            )
         ]
         self.assertEqual(indicoy, indicoy_pred)
         self.assertEqual(raw, indicox_pred)
