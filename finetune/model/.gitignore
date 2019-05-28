@@ -1,4 +1,4 @@
-gpt/*.jl
-gpt2/*.jl
-bert/*.jl
-bert/*.txt
+gpt/*
+gpt2/*
+bert/*
+
