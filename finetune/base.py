@@ -30,7 +30,7 @@ from finetune.encoding.input_encoder import EncodedOutput
 from finetune.config import get_config, all_gpus, assert_valid_config
 from finetune.saver import Saver, InitializeHook
 from finetune.errors import FinetuneError
-from finetune.model import get_model_fn, PredictMode
+from finetune.model import get_model_fn, get_separate_model_fns, PredictMode
 from finetune.util.download import download_data_if_required
 from finetune.util.estimator import PatchedParameterServerStrategy
 from finetune.util.positional_embeddings import embedding_preprocessor
@@ -286,6 +286,28 @@ class BaseModel(object, metaclass=ABCMeta):
             params=self.config
         )
         return est, hooks
+    
+    def get_separate_estimators(self, target_model_fn, predict_op, predict_proba_op, build_target_model, build_lm, encoder, target_dim,
+                 label_encoder, saver):
+        fns = get_separate_model_fns(target_model_fn, predict_op, predict_proba_op, build_target_model, build_lm, encoder, target_dim,
+                 label_encoder, saver)
+
+        featurizer_est = tf.estimator.Estimator(
+            model_dir=self.estimator_dir,
+            model_fn=fns['featurizer_model_fn'],
+            config=config,
+            params=self.config
+        )
+
+        target_est = tf.estimator.Estimator(
+            model_dir=self.estimator_dir,
+            model_fn=fns['target_model_fn'],
+            config=config,
+            params=self.config
+        )
+        
+        return {'featurizer_estimator': featurizer_est, 'target_estimator':target_est}
+
 
     def close(self):
         self._closed = True
