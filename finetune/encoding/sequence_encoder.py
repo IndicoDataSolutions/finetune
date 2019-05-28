@@ -1,7 +1,10 @@
 import warnings
 
+import ipdb
+
 from finetune.util.logging import truncate_text
 from finetune.encoding.input_encoder import NLP
+from finetune.errors import FinetuneError
 
 
 def assign_associations(labels, associations, none_value):
@@ -151,6 +154,58 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, encoder=None, probs=
         annotations.append(doc_annotations)
     return raw_texts, annotations
 
+        
+def sort_by_start(annotations):
+    return sorted(annotations, key=lambda annotation: annotation['start'])
+    
+
+def overlap(current_annotation, annotation):
+    return (
+        (current_annotation['start'] < annotation['end'] <= current_annotation['end']) or 
+        (annotation['start'] < current_annotation['end'] <= annotation['end'])
+    )
+
+
+def overlap_handler(current_annotation, annotation, text):
+    """
+    Scenarios:
+        <> --> current_annotation
+        [] --> annotation
+        
+    1) < [ > ]
+    2) [ < > ]
+    3) < [ ] >
+    """
+    if current_annotation['start'] <= annotation['start']:
+        first, second = current_annotation, annotation
+    else:
+        first, second = annotation, current_annotation
+    
+    final_delimiter = min(first['end'], second['end'])
+    final_label = second['label'] if (second['end'] > first['end']) else first['label']
+    end = max(first['end'], second['end'])
+
+    first_chunk = {
+        'start': first['start'],
+        'end': second['start'],
+        'label': first['label'],
+        'text': text[first['start']:second['start']]
+    }
+    second_chunk = {
+        'start': second['start'],
+        'end': final_delimiter,
+        'label': first['label'] | second['label'],
+        'text': text[second['start']:final_delimiter]
+    }
+    third_chunk = {
+        'start': final_delimiter,
+        'end': end,
+        'label': final_label,
+        'text': text[final_delimiter:end]
+    }
+    chunks = [first_chunk, second_chunk, third_chunk]
+    return chunks
+
 
 def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=True, none_value=None,
                                 subtoken_labels=False):
@@ -202,107 +257,89 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
 
         label_seq = sorted(label_seq, key=lambda x: x["start"])
         last_loc = 0
-        doc_subseqs = []
+        merged_annotations = []
         doc_labels = []
+
         doc_association_idx = []
         doc_association_type = []
         doc_current_label_idx = []
 
-        for i, annotation in enumerate(label_seq):
-            start = annotation["start"]
-            end = annotation["end"]
-            label = annotation["label"]
-            annotation_text = annotation.get("text")
-            if "association" in annotation:
-                association_idx = annotation["association"]["index"]
-                association_type = annotation["association"]["relationship"]
-            else:
-                association_idx = -1
-                association_type = none_value
+        # for each annotation
+        queue = sorted(label_seq, key=lambda x: x['start'])
+        for label in label_seq:
+            label['label'] = set([label['label']])
+        
+        while len(queue):
+            current_annotation = queue.pop(0)
 
-            if annotation_text is not None and text[start:end] != annotation_text:
-                raise ValueError(
-                    "Annotation text does not match text specified by `start` and `end` indexes. "
-                    "Text provided: `{}`.  Text extracted: `{}`.".format(
-                        annotation_text,
-                        text[start:end]
-                    )
-                )
-
-            if not subtoken_labels:
-                if label != none_value:
-                    # round to nearest token
-                    while start > 0 and start not in token_starts:
-                        start -= 1
-                    while end < len(text) and end not in token_ends:
-                        end += 1
-
-            if start > last_loc:
-                doc_subseqs.append(text[last_loc:start])
-                if multi_label:
-                    doc_labels.append([none_value])
-                else:
-                    doc_labels.append(none_value)
-                    doc_association_idx.append(-1)
-                    doc_association_type.append(none_value)
-                    doc_current_label_idx.append(-2)
-
-            j = len(doc_labels) - 1
-            split_dist = last_loc - end
-            skip_end = 0
-            if split_dist > 0:
-                j -= 1
-                if len(doc_subseqs[-1]) != split_dist:
-                    dual_label_sub_seq = doc_subseqs[-1][-split_dist:]
-                    doc_subseqs[-1] = doc_subseqs[-1][:-split_dist]
-                    doc_subseqs.append(dual_label_sub_seq)
-                    doc_labels.append(doc_labels[-1][:])
-                    j -= 1
-
-                skip_end = len(doc_subseqs[-1])
-
-            if start < last_loc - skip_end:
-                if not multi_label:
-                    raise ValueError("Overlapping annotations requires the multi-label model")
-                else:
-                    split_dist = last_loc - start - skip_end
-                    while split_dist >= len(doc_subseqs[j]):
-                        doc_labels[j].append(label)
-                        split_dist -= len(doc_subseqs[j])
-                        j -= 1
-
-                    if split_dist > 0:
-                        dual_label_sub_seq = doc_subseqs[j][-split_dist:]
-                        doc_subseqs[j] = doc_subseqs[j][:-split_dist]
-                        doc_subseqs.insert(j + 1, dual_label_sub_seq)
-                        doc_labels.insert(j + 1, doc_labels[j][:] + [label])
-
-                    start = last_loc
-            if start >= end:
-                # degenerate label
-                last_loc = max(start, end)
+            if current_annotation['start'] == current_annotation['end']:
+                # degenerate annotation, continue
                 continue
-
-            doc_subseqs.append(text[start:end])
-            if multi_label:
-                doc_labels.append([label])
+            
+            # for each existing merged annotation
+            for annotation in sort_by_start(merged_annotations):
+                # check if overlap is possible
+                if annotation['start'] > current_annotation['end']:
+                    # no overlap possible, append and move on to next item in queue 
+                    merged_annotations.append(current_annotation)
+                    break
+                # if the merged annotation overlaps, remove it and break it up
+                # into it's component parts.  process each component individually
+                elif overlap(current_annotation, annotation):
+                    merged_annotations.remove(annotation)
+                    split_annotations = overlap_handler(current_annotation, annotation, text)
+                    queue = split_annotations + queue
+                    break
             else:
-                doc_labels.append(label)
-                doc_association_idx.append(association_idx)
-                doc_association_type.append(association_type)
-                doc_current_label_idx.append(i)
+                # annotations can only be added to the list of merged annotations once all 
+                # of their conflicts have already been resolved
+                merged_annotations.append(current_annotation)
 
-            last_loc = end
+        for annotation in merged_annotations:
+            annotation['label'] = list(annotation['label'])
 
-        if last_loc != len(text):
-            doc_subseqs.append(text[last_loc:])
-            if multi_label:
-                doc_labels.append([none_value])
-            else:
-                doc_labels.append(none_value)
-                doc_association_idx.append(-1)
-                doc_association_type.append(none_value)
-                doc_current_label_idx.append(-2)
+        merged_annotations = sort_by_start(merged_annotations)
+        
+        # Add none labels
+        current_idx = 0
+        all_annotations = []
+        for annotation in merged_annotations:
+            if annotation['start'] > current_idx:
+                # Add none span
+                all_annotations.append({
+                    'start': current_idx,
+                    'end': annotation['start'],
+                    'text': text[current_idx:annotation['start']],
+                    'label': [none_value]
+                })
+            # Copy over labeled span
+            all_annotations.append(annotation)
+            current_idx = annotation['end']
+
+        # Add span for the rest of the document
+        end_idx = max([annotation['end'] for annotation in all_annotations])
+        if end_idx != len(text):
+            all_annotations.append({
+                'start': end_idx,
+                'end': len(text),
+                'text': text[end_idx:len(text)],
+                'label': [none_value]
+            })
+
+        if not multi_label:
+            # if `multi_label_sequences` is False, flatten labels
+            for annotation in all_annotations:
+                if len(annotation['label']) > 1:
+                    raise FinetuneError(
+                        "Found overlapping annotations: {}. \n"
+                        "Please set `multi_label_sequences` to `True` in your config.".format(
+                            annotation
+                        )
+                    )
+                annotation['label'] = annotation[0]
+
+        doc_subseqs = [annotation['text'] for annotation in all_annotations]
+        doc_labels = [tuple(annotation['label']) for annotation in all_annotations]
 
         all_subseqs.append(doc_subseqs)
         all_labels.append(doc_labels)
