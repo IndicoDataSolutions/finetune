@@ -328,7 +328,9 @@ def get_default_config():
 
         # BERT only
         bert_intermediate_size=None,
-        bert_adapter_size = 64 #from Parameter Efficient Transfer Learning paper
+        bert_adapter_size = 64, #from Parameter Efficient Transfer Learning paper
+
+        build_separate_estimators = False
     )
     return settings
 
