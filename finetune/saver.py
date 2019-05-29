@@ -64,13 +64,13 @@ class SaverHook(_StopOnPredicateHook):
 
 
 class InitializeHook(tf.train.SessionRunHook):
-    def __init__(self, saver):
+    def __init__(self, saver, model_portion = "entire_model"):
         self.saver = saver
+        self.model_portion = model_portion
 
     def after_create_session(self, session, coord):
-        init_fn = self.saver.get_scaffold_init_fn()
+        init_fn = self.saver.get_scaffold_init_fn(self.model_portion)
         init_fn(None, session)
-
 
 class Saver:
     def __init__(self, fallback_filename=None, exclude_matches=None, variable_transforms=None, save_dtype=None):
@@ -127,23 +127,45 @@ class Saver:
         finetune_obj.config = get_config(**dict(finetune_obj.config))
         return finetune_obj
 
-    def get_scaffold_init_fn(self):
+    def get_scaffold_init_fn(self, model_portion=None):
         
         def init_fn(scaffold, session):
+            self.var_val = []
             if self.variables is not None:
                 variables_sv = self.variables
             else:
                 variables_sv = dict()
             all_vars = tf.global_variables()
-            self.var_val = []
-            for var in all_vars:
-                for saved_var_name, saved_var in itertools.chain(variables_sv.items(), self.fallback.items()):
-                    if saved_var_name == var.name:
-                        for func in self.variable_transforms:
-                            saved_var = func(var.name, saved_var)
-                        var.load(saved_var, session)
-                        break
-                            
+            is_dict = False
+            if model_portion != 'entire_model': #we must be loading in the case of two separate estimators
+                is_dict = True
+                assert model_portion in ['featurizer','target'], "Must be using separate estimators if loading before graph creation"
+                trainables = variables_sv
+                if model_portion == 'featurizer':
+                    norm_variable_scopes = ['b:0', 'g:0']
+                    base = [v for v in trainables if 'target' not in v]
+                    trainables = [v for v in base if 'adapter' in v or v[-3:] in norm_variable_scopes]    
+                elif model_portion == 'target':
+                    trainables = [v for v in trainables if 'target' in v]
+                all_vars = [v for v in all_vars if v.name in trainables]
+                for var in all_vars:
+                    name = var.name
+                    for saved_var_name, saved_var in itertools.chain(variables_sv.items(), all_vars):
+                        if saved_var_name == name:
+                            for func in self.variable_transforms:
+                                saved_var = func(name, saved_var)
+                            var.load(saved_var, session)
+                            break
+            else:
+                for var in all_vars:
+                    name = var.name
+                    for saved_var_name, saved_var in itertools.chain(variables_sv.items(), self.fallback.items()):
+                        if saved_var_name == name:
+                            for func in self.variable_transforms:
+                                saved_var = func(name, saved_var)
+                            var.load(saved_var, session)
+                            break
+                                
         return init_fn
 
     def remove_unchanged(self, variable_names, variable_values, fallback_vars):
@@ -154,7 +176,7 @@ class Saver:
                 if fb_var_name == var_name:
                     for func in self.variable_transforms:
                         fb_var = func(var_name, fb_var)
-                    if np.allclose(fb_var, var_val):
+                    if np.allclose(fb_var, var_val) and False:
                         skip = True
                         break
             skips.append(skip)

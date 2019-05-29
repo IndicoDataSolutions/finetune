@@ -283,7 +283,7 @@ def get_default_config():
         lr=GridSearchable(6.25e-5, [6.25e-4, 6.25e-5, 6.25e-6]),
         lr_warmup=0.002,
         max_grad_norm=1.0,
-        prefit_init=True,
+        prefit_init=False,
         accum_steps=1,
 
         # MTL
@@ -313,7 +313,7 @@ def get_default_config():
 
         # Location of model weights
         base_model=GPTModel,
-        bath_model_path=None,
+        base_model_path=None,
 
         # Possible `SourceModel` specific settings
         n_heads=None,
