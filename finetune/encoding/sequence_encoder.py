@@ -58,6 +58,16 @@ def _merge_confidences(annotation):
     }
 
 
+def round_to_nearest_start_and_end(label, token_starts, token_ends, text):
+    # Update label start / end / text to align with nearest token start and end
+    # Applies in-place modification to `label` obj.
+    start_distances = np.abs(np.asarray(token_starts) - label['start'])
+    end_distances =  np.abs(np.asarray(token_ends) - label['end'])
+    label['start'] = token_starts[np.argmin(start_distances)]
+    label['end'] = token_ends[np.argmin(end_distances)]
+    label['text'] = text[label['start']:label['end']]
+
+
 def finetune_to_indico_sequence(raw_texts, subseqs, labels, encoder=None, probs=None, none_value=None,
                                 subtoken_predictions=False, associations=None):
     """
@@ -113,17 +123,19 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, encoder=None, probs=
                 multi_label = True
                 label_list = raw_label
 
-            for label in sorted(label_list):
+            for label_idx, label in enumerate(label_list):
                 stripped_text = sub_str.strip()
 
-                raw_annotation_start = raw_text.find(sub_str, raw_annotation_start)
-                raw_annotation_end = raw_annotation_start + len(sub_str)
-                stripped_annotation_start = raw_text.find(stripped_text, raw_annotation_start)
-                stripped_annotation_end = stripped_annotation_start + len(stripped_text)
+                if subtoken_predictions:
+                    raw_annotation_start = raw_text.find(sub_str, raw_annotation_start)
+                    raw_annotation_end = raw_annotation_start + len(sub_str)
+                else:
+                    raw_annotation_start = raw_text.find(stripped_text, raw_annotation_start)
+                    raw_annotation_end = raw_annotation_start + len(stripped_text)
 
                 if raw_annotation_start == -1:
                     warnings.warn("Failed to find predicted sequence in text: {}.".format(
-                        truncate_text(stripped_text)
+                        truncate_text(sub_str)
                     ))
                     continue
                 
@@ -147,62 +159,52 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, encoder=None, probs=
                 if extended_existing_label:
                     continue
 
-                if subtoken_predictions:
-                    annotation_start = raw_annotation_start
-                    annotation_end = raw_annotation_end
-                else:
-                    annotation_start = stripped_annotation_start
-                    annotation_end = stripped_annotation_end
+                if label == none_value:
+                    continue
+                
+                annotation_start, annotation_end = int(raw_annotation_start), int(raw_annotation_end)
+
+                annotation = {
+                    "start": int(annotation_start),
+                    "end": int(annotation_end),
+                    "label": label,
+                    "text": raw_text[annotation_start:annotation_end]
+                }
 
                 # if we don't want to allow subtoken predictions, adjust start and end to match
                 # the start and ends of the nearest full tokens
                 if not subtoken_predictions:
-                    if multi_label:
-                        start_idx = 0
-                        end_idx = 0
-
-                    if label != none_value:
-                        # round to nearest token
-                        while start_idx < n_spacy_tokens and annotation_start >= spacy_token_starts[start_idx]:
-                            start_idx += 1
-                        annotation_start = spacy_token_starts[start_idx - 1]
-                        while end_idx < (n_spacy_tokens - 1) and annotation_end > spacy_token_ends[end_idx]:
-                            end_idx += 1
-                        annotation_end = spacy_token_ends[end_idx]
-
-                text = raw_text[annotation_start:annotation_end]
-                if label != none_value:
-                    annotation = {
-                        "start": int(annotation_start),
-                        "end": int(annotation_end),
-                        "label": label,
-                        "text": text
+                    round_to_nearest_start_and_end(annotation, spacy_token_starts, spacy_token_ends, raw_text)
+                
+                if confidences is not None:
+                    annotation["confidence"] = [confidences]
+                
+                if associations_seq is not None and label_idx in associations_seq:
+                    index, relationship, prob = associations_seq[label_idx]
+                    annotation["associations"] = {
+                        "index": index,
+                        "relationship": relationship,
+                        "prob": prob
                     }
-                    if associations_seq is not None and len(doc_annotations) in associations_seq:
-                        index, relationship, prob = associations_seq[len(doc_annotations)]
-                        annotation["associations"] = {
-                            "index": index,
-                            "relationship": relationship,
-                            "prob": prob
-                        }
-                    if confidences is not None:
-                        annotation["confidence"] = [confidences]
 
-                    # prevent duplicate annotation edge case
-                    if (annotation_start, annotation_end, label) not in annotation_ranges:
-                        annotation_ranges.add((annotation_start, annotation_end, label))
-                        doc_annotations.append(annotation)
+                # prevent duplicate annotation edge case
+                annotation_tuple = (annotation['start'], annotation['end'], label)
+                if annotation_tuple not in annotation_ranges:
+                    annotation_ranges.add(annotation_tuple)
+                    doc_annotations.append(annotation)
 
-        doc_annotations = sorted([dict(items) for items in doc_annotations], key=lambda x: x['start'])
+        doc_annotations = sorted([dict(items) for items in doc_annotations], key=lambda x: span(x))
         
         for annotation in doc_annotations:
             _merge_confidences(annotation)
+
         annotations.append(doc_annotations)
     return raw_texts, annotations
 
 
 
 def span(annotation):
+    # represents annotation by its char start and end idx
     return (annotation['start'], annotation['end'])
 
 
@@ -266,8 +268,7 @@ def overlap_handler(current_annotation, annotation, text):
     return chunks
 
 
-def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=True, none_value=None,
-                                subtoken_labels=False):
+def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=True, none_value=None):
     """
     Maps from the 'indico' format sequence labeling data. Into a labeled substring format. This is the exact inverse of
     :meth finetune_to_indico_sequence:.
@@ -323,14 +324,25 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
         doc_association_type = []
         doc_current_label_idx = []
 
-        # for each annotation
+        for label in label_seq:
+            # Check user hasn't accidentally mislabeled something
+            if label.get('text') is not None and label['text'] != text[label['start']:label['end']]:
+                raise ValueError(
+                    "Annotation text does not match text specified by `start` and `end` indexes. "
+                    "Text provided: `{}`.  Text extracted: `{}`.".format(
+                        label.get('text'),
+                        text[label['start']:label['end']]
+                    )
+                )
+            round_to_nearest_start_and_end(label, token_starts, token_ends, text)
+
         queue = sorted(label_seq, key=lambda x: (x['start'], x['end']))
         for label in queue:
             label['label'] = set([label['label']])
         
         while len(queue):
             current_annotation = queue.pop(0)
-            
+
             # for each existing merged annotation
             for annotation in merged_annotations:
                 # no overlap possible, check next merged annotation
@@ -368,22 +380,27 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
                     'start': current_idx,
                     'end': annotation['start'],
                     'text': text[current_idx:annotation['start']],
-                    'label': tuple([none_value])
+                    'label': tuple([none_value]),
                 })
             # Copy over labeled span
             all_annotations.append(annotation)
             current_idx = annotation['end']
 
         # Add span for the rest of the document
-        end_idx = max([annotation['end'] for annotation in all_annotations])
-        if end_idx != len(text):
+        try:
+            # End is start of remaining span
+            last_chunk_end_idx = max([annotation['end'] for annotation in all_annotations])
+        except ValueError:
+            # No labels, entire document is one span
+            last_chunk_end_idx = 0
+
+        if last_chunk_end_idx != len(text):
             all_annotations.append({
-                'start': end_idx,
+                'start': last_chunk_end_idx,
                 'end': len(text),
-                'text': text[end_idx:len(text)],
+                'text': text[last_chunk_end_idx:len(text)],
                 'label': tuple([none_value])
             })
-
 
         if not multi_label:
             # if `multi_label_sequences` is False, flatten labels
@@ -396,6 +413,14 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
                         )
                     )
                 annotation['label'] = annotation['label'][0]
+
+        for annotation in all_annotations:
+            if 'association' not in annotation:
+                doc_association_idx.append(-1)
+                doc_association_type.append(none_value)
+            else:
+                doc_association_idx.append(annotation["association"]["index"])
+                doc_association_type.append(annotation["association"]["relationship"])
 
         doc_subseqs = [annotation['text'] for annotation in all_annotations]
         doc_labels = [annotation['label'] for annotation in all_annotations]
