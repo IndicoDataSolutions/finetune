@@ -73,6 +73,7 @@ class Reuters(Dataset):
 
 
 if __name__ == "__main__":
+    from finetune.base_models import GPT2
     dataset = Reuters().dataframe
     dataset['annotations'] = [json.loads(annotation) for annotation in dataset['annotations']]
     trainX, testX, trainY, testY = train_test_split(
