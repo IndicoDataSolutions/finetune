@@ -1,7 +1,7 @@
 import warnings
 import copy
 
-import ipdb
+import numpy as np
 
 from finetune.util.logging import truncate_text
 from finetune.encoding.input_encoder import NLP
@@ -262,6 +262,7 @@ def overlap_handler(current_annotation, annotation, text):
         'text': text[final_delimiter:end]
     }
     chunks = [first_chunk, second_chunk, third_chunk]
+    chunks = [c for c in chunks if c['start'] != c['end']]
     return chunks
 
 
@@ -323,24 +324,25 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
         doc_current_label_idx = []
 
         # for each annotation
-        queue = sorted(label_seq, key=lambda x: x['start'])
-        for label in label_seq:
+        queue = sorted(label_seq, key=lambda x: (x['start'], x['end']))
+        for label in queue:
             label['label'] = set([label['label']])
         
         while len(queue):
             current_annotation = queue.pop(0)
-
-            if current_annotation['start'] == current_annotation['end']:
-                # degenerate annotation, continue
-                continue
             
             # for each existing merged annotation
             for annotation in merged_annotations:
-                # check if overlap is possible
+                # no overlap possible, check next merged annotation
+                if annotation['end'] <= current_annotation['start']:
+                    continue
+                
+                # no overlap possible and no possibility of future overlap because of sorting
+                # append and move on to next item in queue
                 if annotation['start'] > current_annotation['end']:
-                    # no overlap possible, append and move on to next item in queue
                     sorted_insert(merged_annotations, current_annotation)
                     break
+                    
                 # if the merged annotation overlaps, remove it and break it up
                 # into it's component parts.  process each component individually
                 elif overlap(current_annotation, annotation):
