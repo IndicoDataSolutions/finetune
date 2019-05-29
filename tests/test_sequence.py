@@ -225,7 +225,6 @@ class TestSequenceLabeler(unittest.TestCase):
         self.assertTrue(1 <= len(predictions[0]) <= 3)
         self.assertTrue(any(pred["text"].strip() == "dog" for pred in predictions[0]))
 
-        self.model.config.subtoken_predictions = True
         predictions = self.model.predict(test_sequence)
         self.assertTrue(1 <= len(predictions[0]) <= 3)
         self.assertTrue(any(pred["text"].strip() == "dog" for pred in predictions[0]))

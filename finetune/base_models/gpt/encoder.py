@@ -133,7 +133,6 @@ class GPTEncoder(BaseEncoder):
         batch_label_idxs = []
         batch_character_locs = []
         label = None
-
         for i, text in enumerate(texts):
             if labels is not None:
                 label = labels[i]
@@ -257,3 +256,4 @@ def finetune_to_indico_explain(raw_texts, attn_weights, encoder, attention=True)
         spacy_output = aggregate_to_full_tokens(attn, tokens, token_starts, token_ends, attention=attention)
         spacy_outputs.append(spacy_output)
     return spacy_outputs
+
