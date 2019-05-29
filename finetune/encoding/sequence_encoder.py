@@ -42,6 +42,22 @@ def assign_associations(labels, associations, none_value):
     return all_candidates
 
 
+def _merge_confidences(annotation):
+    """
+    Collapse list of confidences down to a single mean confidence.
+    """
+    if not 'confidence' in annotation or not len(annotation['confidence']):
+        return 
+
+    labels = annotation['confidence'][0].keys()
+    annotation['confidence'] = {
+        label: np.mean([
+            confidences[label] for confidences in annotation['confidence']
+        ])
+        for label in labels
+    }
+
+
 def finetune_to_indico_sequence(raw_texts, subseqs, labels, encoder=None, probs=None, none_value=None,
                                 subtoken_predictions=False, associations=None):
     """
@@ -97,20 +113,46 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, encoder=None, probs=
                 multi_label = True
                 label_list = raw_label
 
-            for label in label_list:
+            for label in sorted(label_list):
                 stripped_text = sub_str.strip()
 
-                raw_annotation_start = raw_text.find(stripped_text, raw_annotation_start)
-                raw_annotation_end = raw_annotation_start + len(stripped_text)
+                raw_annotation_start = raw_text.find(sub_str, raw_annotation_start)
+                raw_annotation_end = raw_annotation_start + len(sub_str)
+                stripped_annotation_start = raw_text.find(stripped_text, raw_annotation_start)
+                stripped_annotation_end = stripped_annotation_start + len(stripped_text)
 
                 if raw_annotation_start == -1:
                     warnings.warn("Failed to find predicted sequence in text: {}.".format(
                         truncate_text(stripped_text)
                     ))
                     continue
+                
+                extended_existing_label = False
+                for i, item in enumerate(doc_annotations):
+                    # handle case where we extend existing annotation
+                    if (
+                        # same label
+                        item["label"] == label 
+                        # and only separated by whitespace
+                        and item['end'] <= raw_annotation_end
+                        and not raw_text[item["end"]:raw_annotation_start].strip()
+                    ):
+                        item['end'] = raw_annotation_end
+                        item['text'] = raw_text[item['start']:raw_annotation_end]
+                        if 'confidence' in item and confidences is not None:
+                            item['confidence'].append(confidences)
+                        extended_existing_label = True
+                        break
 
-                annotation_start = raw_annotation_start
-                annotation_end = raw_annotation_end
+                if extended_existing_label:
+                    continue
+
+                if subtoken_predictions:
+                    annotation_start = raw_annotation_start
+                    annotation_end = raw_annotation_end
+                else:
+                    annotation_start = stripped_annotation_start
+                    annotation_end = stripped_annotation_end
 
                 # if we don't want to allow subtoken predictions, adjust start and end to match
                 # the start and ends of the nearest full tokens
@@ -144,7 +186,7 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, encoder=None, probs=
                             "prob": prob
                         }
                     if confidences is not None:
-                        annotation["confidence"] = confidences
+                        annotation["confidence"] = [confidences]
 
                     # prevent duplicate annotation edge case
                     if (annotation_start, annotation_end, label) not in annotation_ranges:
@@ -152,6 +194,9 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, encoder=None, probs=
                         doc_annotations.append(annotation)
 
         doc_annotations = sorted([dict(items) for items in doc_annotations], key=lambda x: x['start'])
+        
+        for annotation in doc_annotations:
+            _merge_confidences(annotation)
         annotations.append(doc_annotations)
     return raw_texts, annotations
 
@@ -309,7 +354,7 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
                 sorted_insert(merged_annotations,  current_annotation)
 
         for annotation in merged_annotations:
-            annotation['label'] = list(annotation['label'])
+            annotation['label'] = tuple(annotation['label'])
 
         # Add none labels
         current_idx = 0
@@ -321,7 +366,7 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
                     'start': current_idx,
                     'end': annotation['start'],
                     'text': text[current_idx:annotation['start']],
-                    'label': [none_value]
+                    'label': tuple([none_value])
                 })
             # Copy over labeled span
             all_annotations.append(annotation)
@@ -334,8 +379,9 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
                 'start': end_idx,
                 'end': len(text),
                 'text': text[end_idx:len(text)],
-                'label': [none_value]
+                'label': tuple([none_value])
             })
+
 
         if not multi_label:
             # if `multi_label_sequences` is False, flatten labels
@@ -347,11 +393,10 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
                             annotation
                         )
                     )
-                annotation['label'] = annotation[0]
+                annotation['label'] = annotation['label'][0]
 
         doc_subseqs = [annotation['text'] for annotation in all_annotations]
-        doc_labels = [tuple(annotation['label']) for annotation in all_annotations]
-
+        doc_labels = [annotation['label'] for annotation in all_annotations]
         all_subseqs.append(doc_subseqs)
         all_labels.append(doc_labels)
         all_association_idx.append(doc_association_idx)
