@@ -61,7 +61,7 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
         ]
         encoder = GPT2Encoder()
         indicox_pred, indicoy_pred = finetune_to_indico_sequence(
-            raw, finetunex, finetuney, encoder=encoder, none_value="<PAD>"
+            raw, finetunex, finetuney, encoder=encoder, none_value="<PAD>", subtoken_predictions=False
         )
 
         indicoy = [
@@ -76,8 +76,36 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
         finetunex_pred, finetuney_pred, *_ = indico_to_finetune_sequence(
             raw, indicoy, encoder=encoder, none_value="<PAD>"
         )
-        print(finetunex)
-        print(finetunex_pred)
+        self.assertEqual(finetunex_pred, finetunex)
+        self.assertCountEqual(finetuney[0][0], finetuney_pred[0][0])
+        self.assertCountEqual(finetuney[0][1], finetuney_pred[0][1])
+        self.assertCountEqual(finetuney[0][2], finetuney_pred[0][2])
+
+    def test_overlapping_gpt2_subtokens(self):
+        raw = ["Indico Is the best hey"]
+        finetunex = [
+            ["Indico", " Is the", " best", " hey"]
+        ]
+        finetuney = [
+            [("1",), ("1", "2"), ("2", ), ("<PAD>")]
+        ]
+        encoder = GPT2Encoder()
+        indicox_pred, indicoy_pred = finetune_to_indico_sequence(
+            raw, finetunex, finetuney, encoder=encoder, none_value="<PAD>", subtoken_predictions=True
+        )
+
+        indicoy = [
+            [
+                {'start': 0, 'end': 13, 'label': '1', 'text': 'Indico Is the'},
+                {'start': 6, 'end': 18, 'label': '2', 'text': ' Is the best'},
+            ]
+        ]
+        self.assertEqual(indicoy, indicoy_pred)
+        self.assertEqual(raw, indicox_pred)
+
+        finetunex_pred, finetuney_pred, *_ = indico_to_finetune_sequence(
+            raw, indicoy, encoder=encoder, none_value="<PAD>"
+        )
         self.assertEqual(finetunex_pred, finetunex)
         self.assertCountEqual(finetuney[0][0], finetuney_pred[0][0])
         self.assertCountEqual(finetuney[0][1], finetuney_pred[0][1])

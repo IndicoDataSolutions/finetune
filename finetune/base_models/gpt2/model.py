@@ -18,7 +18,7 @@ class GPT2Model(SourceModel):
         'l2_reg': 0.001,
         'act_fn': "gelu",
         'interpolate_pos_embed': False,
-        'base_model_path':  os.path.join("gpt2", "model-sm.jl"),
+        'base_model_path':  os.path.join("gpt2", "model-sm.jl")
     }
     required_files = [
         {
