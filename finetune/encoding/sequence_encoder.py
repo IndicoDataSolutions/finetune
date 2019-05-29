@@ -1,4 +1,5 @@
 import warnings
+import copy
 
 import ipdb
 
@@ -154,10 +155,22 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, encoder=None, probs=
         annotations.append(doc_annotations)
     return raw_texts, annotations
 
-        
-def sort_by_start(annotations):
-    return sorted(annotations, key=lambda annotation: annotation['start'])
-    
+
+
+def span(annotation):
+    return (annotation['start'], annotation['end'])
+
+
+def sorted_insert(annotations, annotation):
+    # iterate in reverse order until you find the proper location to insert the new annotation
+    idx = 0
+    n = len(annotations)
+    while (idx < len(annotations) and span(annotation) < span(annotations[n - idx - 1])):
+        idx += 1
+
+    # mutate annotations list in place
+    annotations.insert(n - idx, annotation)
+
 
 def overlap(current_annotation, annotation):
     return (
@@ -277,11 +290,11 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
                 continue
             
             # for each existing merged annotation
-            for annotation in sort_by_start(merged_annotations):
+            for annotation in merged_annotations:
                 # check if overlap is possible
                 if annotation['start'] > current_annotation['end']:
-                    # no overlap possible, append and move on to next item in queue 
-                    merged_annotations.append(current_annotation)
+                    # no overlap possible, append and move on to next item in queue
+                    sorted_insert(merged_annotations, current_annotation)
                     break
                 # if the merged annotation overlaps, remove it and break it up
                 # into it's component parts.  process each component individually
@@ -293,13 +306,11 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
             else:
                 # annotations can only be added to the list of merged annotations once all 
                 # of their conflicts have already been resolved
-                merged_annotations.append(current_annotation)
+                sorted_insert(merged_annotations,  current_annotation)
 
         for annotation in merged_annotations:
             annotation['label'] = list(annotation['label'])
 
-        merged_annotations = sort_by_start(merged_annotations)
-        
         # Add none labels
         current_idx = 0
         all_annotations = []
