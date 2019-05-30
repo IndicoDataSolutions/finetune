@@ -324,7 +324,9 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
         doc_association_type = []
         doc_current_label_idx = []
 
-        for label in label_seq:
+        for i, label in enumerate(label_seq):
+            # Add the index to track for annotation
+            label["idx"] = i
             # Check user hasn't accidentally mislabeled something
             if label.get('text') is not None and label['text'] != text[label['start']:label['end']]:
                 raise ValueError(
@@ -418,9 +420,11 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
             if 'association' not in annotation:
                 doc_association_idx.append(-1)
                 doc_association_type.append(none_value)
+                doc_current_label_idx.append(-2)
             else:
                 doc_association_idx.append(annotation["association"]["index"])
                 doc_association_type.append(annotation["association"]["relationship"])
+                doc_current_label_idx.append(annotation["idx"])
 
         doc_subseqs = [annotation['text'] for annotation in all_annotations]
         doc_labels = [annotation['label'] for annotation in all_annotations]
