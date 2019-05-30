@@ -85,8 +85,7 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
         spacy_token_ends = [token.idx + len(token.text) for token in spacy_tokens]
         doc_annotations = []
         annotation_ranges = set()
-        raw_annotation_start_per_class = defaultdict(int)
-        raw_annotation_end_per_class = defaultdict(int)
+        raw_annotation_start = 0
         subtoken_to_label_idx = []
         for i, (sub_str, raw_label, confidences) in enumerate(zip(doc_seq, label_seq, prob_seq or [None] * len(doc_seq))):
             subtoken_to_label_idx.append(len(doc_annotations))
@@ -96,8 +95,6 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
                 label_list = raw_label
 
             for label_idx, label in enumerate(label_list):
-                raw_annotation_start = raw_annotation_start_per_class[label]
-                raw_annotation_end = raw_annotation_end_per_class[label]
                 stripped_text = sub_str.strip()
 
                 if subtoken_predictions:
@@ -155,8 +152,6 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
                 if annotation_tuple not in annotation_ranges:
                     annotation_ranges.add(annotation_tuple)
                     doc_annotations.append(annotation)
-                raw_annotation_start_per_class[label] = raw_annotation_start
-                raw_annotation_end_per_class[label] = raw_annotation_end
 
         if associations:
             associations_seq = assign_associations(associations[doc_idx], none_value, subtoken_to_label_idx)
