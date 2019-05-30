@@ -147,6 +147,9 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
                 if confidences is not None:
                     annotation["confidence"] = [confidences]
 
+                if annotation['start'] >= annotation['end']:
+                    continue
+                    
                 # prevent duplicate annotation edge case
                 annotation_tuple = (annotation['start'], annotation['end'], label)
                 if annotation_tuple not in annotation_ranges:
