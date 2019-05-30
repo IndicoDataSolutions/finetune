@@ -187,6 +187,10 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, encoder=None, probs=
                         "prob": prob
                     }
 
+                # TODO: look into this behavior
+                if annotation['start'] >= annotation['end']:
+                    continue
+
                 # prevent duplicate annotation edge case
                 annotation_tuple = (annotation['start'], annotation['end'], label)
                 if annotation_tuple not in annotation_ranges:
