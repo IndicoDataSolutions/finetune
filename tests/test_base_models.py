@@ -370,13 +370,8 @@ class TestSequenceLabelerTextCNN(TestModelBase):
         Ensure class reweighting behaves as intended
         """
         raw_docs = ["".join(text) for text in self.texts]
-        texts, annotations = finetune_to_indico_sequence(
-            raw_docs,
-            self.texts,
-            self.labels,
-            encoder=self.model.input_pipeline.text_encoder,
-            none_value=self.model.config.pad_token
-        )
+        texts, annotations = finetune_to_indico_sequence(raw_docs, self.texts, self.labels,
+                                                         none_value=self.model.config.pad_token)
         train_texts, test_texts, train_annotations, test_annotations = train_test_split(
             texts, annotations, test_size=0.1
         )
@@ -417,13 +412,8 @@ class TestSequenceLabelerTextCNN(TestModelBase):
         Ensure model returns predictions
         """
         raw_docs = ["".join(text) for text in self.texts]
-        texts, annotations = finetune_to_indico_sequence(
-            raw_docs,
-            self.texts,
-            self.labels,
-            encoder=self.model.input_pipeline.text_encoder,
-            none_value=self.model.config.pad_token
-        )
+        texts, annotations = finetune_to_indico_sequence(raw_docs, self.texts, self.labels,
+                                                         none_value=self.model.config.pad_token)
         train_texts, test_texts, train_annotations, _ = train_test_split(texts, annotations, test_size=0.1)
         self.model.fit(train_texts, train_annotations)
         with self.model.cached_predict():
@@ -441,13 +431,8 @@ class TestSequenceLabelerTextCNN(TestModelBase):
             )
         )
         raw_docs = ["".join(text) for text in self.texts]
-        texts, annotations = finetune_to_indico_sequence(
-            raw_docs,
-            self.texts,
-            self.labels,
-            encoder=self.model.input_pipeline.text_encoder,
-            none_value=self.model.config.pad_token
-        )
+        texts, annotations = finetune_to_indico_sequence(raw_docs, self.texts, self.labels,
+                                                         none_value=self.model.config.pad_token)
         train_texts, test_texts, train_annotations, _ = train_test_split(texts, annotations, test_size=0.1)
         self.model.fit(train_texts, train_annotations)
         self.model.predict(test_texts)
