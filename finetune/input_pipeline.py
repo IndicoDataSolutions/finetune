@@ -134,7 +134,7 @@ class BasePipeline(metaclass=ABCMeta):
         dataset_encoded = lambda: itertools.chain.from_iterable(
             map(lambda xy: self.text_to_tokens_mask(*xy), dataset()))
         shape_def = self.feed_shape_type_def()
-        if not callable(Y) and self.config.chunk_long_sequences:
+        if not callable(Y) and self.config.chunk_long_sequences and train:
             dataset_encoded_list = list(dataset_encoded())  # come up with a more principled way to do this .
             self.config.dataset_size = len(dataset_encoded_list)
         return Dataset.from_generator(lambda: self.wrap_tqdm(dataset_encoded(), train), *shape_def)
