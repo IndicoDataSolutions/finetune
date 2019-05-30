@@ -11,12 +11,10 @@ def assign_associations(associations, none_value, idx_lookup):
     candidates = dict()
     for association in associations:
         for bpe_idx, candidate_idx, candidate_label, candidate_prob in association:
-            if candidate_label == none_value or candidate_idx not in idx_lookup:
+            if candidate_label == none_value:
                 continue
-
             if idx_lookup[bpe_idx] not in candidates:
                 candidates[idx_lookup[bpe_idx]] = []
-
             candidates[idx_lookup[bpe_idx]].append((idx_lookup[candidate_idx], candidate_label, candidate_prob))
 
     # TODO some how sample these candidates eg maximum probabilities, to fit some schema
@@ -79,13 +77,8 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
     :return: Texts, annoatations both in the 'indico' format.
     """
     annotations = []
-    if associations is not None:
-        assoc_cleaned = assign_associations(labels, associations, none_value)
-    else:
-        assoc_cleaned = [None] * len(raw_texts)
-
-    loop_vals = zip(raw_texts, subseqs, labels, probs or [None] * len(raw_texts), assoc_cleaned)
-    for doc_idx, (raw_text, doc_seq, label_seq, prob_seq, associations_seq) in enumerate(loop_vals):
+    loop_vals = zip(raw_texts, subseqs, labels, probs or [None] * len(raw_texts))
+    for doc_idx, (raw_text, doc_seq, label_seq, prob_seq) in enumerate(loop_vals):
         spacy_tokens = NLP(raw_text)
         spacy_token_starts = [token.idx for token in spacy_tokens]
         spacy_token_ends = [token.idx + len(token.text) for token in spacy_tokens]
@@ -94,9 +87,9 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
         raw_annotation_start = 0
         subtoken_to_label_idx = []
         for i, (sub_str, raw_label, confidences) in enumerate(zip(doc_seq, label_seq, prob_seq or [None] * len(doc_seq))):
+            subtoken_to_label_idx.append(len(doc_annotations))
             if not isinstance(raw_label, tuple):
                 label_list = [raw_label]
-                subtoken_to_label_idx.append(len(doc_annotations))
             else:
                 label_list = raw_label
 
@@ -160,8 +153,8 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
                     doc_annotations.append(annotation)
 
         if associations:
-            associations_seq = assign_associations(associations, none_value, subtoken_to_label_idx)
-            for label_i, annotation in doc_annotations:
+            associations_seq = assign_associations(associations[doc_idx], none_value, subtoken_to_label_idx)
+            for label_i, annotation in enumerate(doc_annotations):
                 if label_i in associations_seq:
                     index, relationship, prob = associations_seq[label_i]
                     annotation["associations"] = {

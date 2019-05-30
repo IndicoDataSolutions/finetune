@@ -253,7 +253,7 @@ class Association(BaseModel):
             label_seq = label_seq[start:end]
             position_seq = position_seq[start:end]
             proba_seq = proba_seq[start:end]
-
+            tok_idx_to_subseq = dict()
             for tok_idx, (label, position, proba) in enumerate(zip(label_seq, position_seq, proba_seq)):
                 if position == -1:
                     # indicates padding / special tokens
@@ -264,23 +264,21 @@ class Association(BaseModel):
                 if not doc_subseqs or label != doc_labels[-1]:
                     # start new subsequence
                     doc_subseqs.append(X[doc_idx][start_of_token:position])
-                    doc_labels.append(label)
                     doc_probs.append([proba])
                     doc_assocs.append(
                         [
                             (tok_idx, association_idx[tok_idx], association_class[tok_idx], association_prob[tok_idx])
                         ]
                     )
+                    doc_labels.append(label)
                 else:
                     # continue appending to current subsequence
                     doc_subseqs[-1] += X[doc_idx][start_of_token:position]
                     doc_probs[-1].append(proba)
                     doc_assocs[-1].append(
-                        (
-                            tok_idx, association_idx[tok_idx], association_class[tok_idx], association_prob[tok_idx]
-                        )
+                        (tok_idx, association_idx[tok_idx], association_class[tok_idx], association_prob[tok_idx])
                     )
-
+                tok_idx_to_subseq[tok_idx] = len(doc_labels) - 1
                 start_of_token = position
 
             if end_of_doc:
@@ -293,10 +291,17 @@ class Association(BaseModel):
                     if self.multi_label:
                         del prob_dicts[-1][self.config.pad_token]
 
+                doc_assocs_by_idx = []
+                for assoc in doc_assocs:
+                    doc_assocs_by_idx.append([])
+                    for from_idx, to_idx, cls, prob in assoc:
+                        if from_idx in tok_idx_to_subseq and to_idx in tok_idx_to_subseq:
+                            doc_assocs_by_idx[-1].append((tok_idx_to_subseq[from_idx], tok_idx_to_subseq[to_idx], cls, prob))
+
                 all_subseqs.append(doc_subseqs)
                 all_labels.append(doc_labels)
                 all_probs.append(prob_dicts)
-                all_assocs.append(doc_assocs)
+                all_assocs.append(doc_assocs_by_idx)
 
         _, doc_annotations = finetune_to_indico_sequence(raw_texts=X, subseqs=all_subseqs, labels=all_labels,
                                                          probs=all_probs, none_value=self.config.pad_token,
