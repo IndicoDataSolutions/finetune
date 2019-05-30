@@ -12,10 +12,12 @@ def assign_associations(labels, associations, none_value):
     idx_lookups = [{} for _ in labels]
     for i, (doc_label, doc_association) in enumerate(zip(labels, associations)):
         active_label_idx = -1
+        last_label = none_value
         for label, association in zip(doc_label, doc_association):
-            if label == none_value:
+            if label == none_value or last_label == label:
                 continue
             active_label_idx += 1
+            last_label = label
             for bpe_idx, _, _, _ in association:
                 idx_lookups[i][bpe_idx] = active_label_idx
 
@@ -179,8 +181,8 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, encoder=None, probs=
                 if confidences is not None:
                     annotation["confidence"] = [confidences]
                 
-                if associations_seq is not None and label_idx in associations_seq:
-                    index, relationship, prob = associations_seq[label_idx]
+                if associations_seq is not None and len(doc_annotations) in associations_seq:
+                    index, relationship, prob = associations_seq[len(doc_annotations)]
                     annotation["associations"] = {
                         "index": index,
                         "relationship": relationship,
