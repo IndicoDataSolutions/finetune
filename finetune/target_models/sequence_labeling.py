@@ -216,6 +216,7 @@ class SequenceLabeler(BaseModel):
                 doc_labels = []
                 doc_probs = []
                 doc_positions = []
+                doc_starts = []
 
                 doc_idx += 1
                 start_of_token = 0
@@ -246,9 +247,10 @@ class SequenceLabeler(BaseModel):
                     doc_labels.append(label)
                     doc_probs.append([proba])
                     doc_positions.append((start_of_token, position))
+                    doc_starts.append(start_of_token)
                 else:
                     # continue appending to current subsequence
-                    doc_subseqs[-1] += X[doc_idx][start_of_token:position]
+                    doc_subseqs[-1] = X[doc_idx][doc_starts[-1]:position]
                     doc_probs[-1].append(proba)
                 start_of_token = position
 
