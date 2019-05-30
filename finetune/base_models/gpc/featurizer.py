@@ -93,18 +93,25 @@ def dilated_causal_max_pool(value, kernel_size, dilation, dim=1):
             restored = restored[:, :tf.shape(restored)[1] -pad_elements, :]
         else:
             restored = pool_op(value)
+
+        restored.set_shape(value.get_shape())
         return restored
 
 def cascaded_pool(value, kernel_size, dim=1, pool_len=None):
     shape = shape_list(value)
     full_pool_len = pool_len or shape[dim]
     intermediate_vals = []
+    w = tf.get_variable("weighted_mean_max_pool_identity", shape=[shape[-1]], dtype=tf.float32)
+    if w.dtype != value.dtype:
+        w = tf.cast(w, value.dtype)
+    intermediate_vals.append(value * w)
     for i in range(math.ceil(math.log(full_pool_len, kernel_size))):
         value = dilated_causal_max_pool(value, kernel_size=kernel_size, dilation=kernel_size ** i, dim=dim)
+        value_proj = normal_1d_conv_block(value, 1, "pool_project_{}".format(i), value.dtype==tf.float16)
         w = tf.get_variable("weighted_mean_max_pool_{}".format(i), shape=[shape[-1]], dtype=tf.float32)
         if w.dtype != value.dtype:
             w = tf.cast(w, value.dtype)
-        intermediate_vals.append(value * w)
+        intermediate_vals.append(value_proj * w)
     return tf.reduce_mean(intermediate_vals, 0)
     
 def causal_conv(value, filter_, dilation, name='causal_conv'):
@@ -187,18 +194,22 @@ def cummax(x, dim):
 
 
 def cumulative_state_net(X, name, use_fp16, pool_idx, pdrop, train):
+    #previously
+    # pool_kernel_size=8, conv_kernels=[1,2,4,8]
+    conv_kernels = [1, 4]
+    pool_kernel_size = conv_kernels[-1]
     outputs = []
     nx = shape_list(X)[-1]
-    output_sz = nx // 4
+    output_sz = nx // len(conv_kernels)
     with tf.variable_scope(name):
-        for kernel in [1, 2, 4, 8]:
+        for kernel in conv_kernels:
             outputs.append(normal_1d_conv_block(X, kernel, str(kernel), use_fp16, output_dim=output_sz))
     outputs_concat = tf.nn.relu(tf.concat(outputs, -1))
     outputs_concat = dropout(outputs_concat, pdrop, train)
-    cum_pooled = cascaded_pool(outputs_concat, kernel_size=8, pool_len=512) #cummax(outputs_concat, 1)
+    cum_pooled = cascaded_pool(outputs_concat, kernel_size=pool_kernel_size, pool_len=512) #cummax(outputs_concat, 1)
     outputs_cum_pooled = tf.concat([cum_pooled, X], -1)
     feats = tf.gather_nd(cum_pooled, tf.stack([tf.range(shape_list(X)[0]), pool_idx], 1))
-    feats_weight = tf.get_variable(name="featweights", shape=[output_sz * 4], initializer=tf.ones_initializer())
+    feats_weight = tf.get_variable(name="featweights", shape=[nx], initializer=tf.ones_initializer())
     if use_fp16:
         feats_weight = tf.cast(feats_weight, tf.float16)
     feats  = feats * feats_weight
@@ -249,22 +260,22 @@ def enc_dec_mix(enc, dec, enc_mask, dec_mask):
 
 def block(X, block_name, use_fp16, layer_num=None, pool_idx=None, encoder_state=None, train=False, pdrop=0.1):
     with tf.variable_scope(block_name):
-        c, feats = cumulative_state_net(X, "cumulative_state_net", use_fp16, pool_idx, pdrop, train)
-        h0 = normal_1d_conv_block(c, 2, "0", use_fp16, dilation=1, layer_num=layer_num * 2 + 1)
-        h0 = tf.nn.relu(h0)
-        h1 = normal_1d_conv_block(h0, 2, "1", use_fp16, dilation=1)
-        h1 = tf.nn.relu(h1)
-        h1 = dropout(h1, pdrop, train)
+        h1, feats = cumulative_state_net(X, "cumulative_state_net", use_fp16, pool_idx, pdrop, train)
+#        h0 = normal_1d_conv_block(c, 2, "0", use_fp16, dilation=1, layer_num=layer_num * 2 + 1)
+#        h0 = tf.nn.relu(h0)
+#        h1 = normal_1d_conv_block(h0, 2, "1", use_fp16, dilation=1)
+#        h1 = tf.nn.relu(h1)
+#        h1 = dropout(h1, pdrop, train)
         #TODO write encoder_decoder interface
         if encoder_state is not None:
             mixed = enc_dec_mix(encoder_state["sequence_features"], h1, encoder_state["pool_idx"], pool_idx)
             mixed *= tf.get_variable("mix_weight", shape=[shape_list(h1)[-1]], initializer=tf.zeros_initializer())
             h1 = h1 + mixed
-        h2 = normal_1d_conv_block(h1, 2, "2", use_fp16,dilation=1)
-        h2 = tf.nn.relu(h2)
-        h3 = normal_1d_conv_block(h2, 2, "3", use_fp16, dilation=1)
-        h3 = dropout(h3, pdrop, train)
-        return tf.nn.relu(norm(h3 + X, "norm", fp16=use_fp16, e=1e-2)), feats
+#        h2 = normal_1d_conv_block(h1, 2, "2", use_fp16,dilation=1)
+#        h2 = tf.nn.relu(h2)
+#        h3 = normal_1d_conv_block(h2, 1, "3", use_fp16, dilation=1)
+#        h3 = dropout(h3, pdrop, train)
+        return tf.nn.relu(norm(h1 + X, "norm", fp16=use_fp16, e=1e-2)), feats
 
 
 def attention_layer(X, backwards, seq_lens, layer):
