@@ -83,8 +83,8 @@ def _combine_and_format(subtokens, start, end, raw_text):
         probabilities[k] = np.mean([token['probabilities'][k] for token in subtokens])
     result['probabilities'] = probabilities
     max_response = max(probabilities.items(), key=lambda x: x[1])
-    result['label'] = max_response[0] if max_response[1] >= 0.5 else 'None'
-    result['confidence'] = max_response[1] if max_response[1] >= 0.5 else 1 - max_response[1]
+    result['label'] = max_response[0]
+    result['confidence'] = max_response[1]
     return result
 
 
