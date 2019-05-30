@@ -1,4 +1,7 @@
 2019
+v0.6.7 Thu May 30th
+  - Refactor sequence labeling functions
+  - Fix learning rate / tqdm issue for long documents
 v0.6.5 Thu May 23rd
   - Fix subtoken_predictions flag
   - Only download required subset of model files lazily
