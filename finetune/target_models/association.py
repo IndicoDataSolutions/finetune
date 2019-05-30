@@ -298,16 +298,10 @@ class Association(BaseModel):
                 all_probs.append(prob_dicts)
                 all_assocs.append(doc_assocs)
 
-        _, doc_annotations = finetune_to_indico_sequence(
-            raw_texts=X,
-            encoder=self.input_pipeline.text_encoder,
-            subseqs=all_subseqs,
-            labels=all_labels,
-            probs=all_probs,
-            associations=all_assocs,
-            subtoken_predictions=self.config.subtoken_predictions,
-            none_value=self.config.pad_token
-        )
+        _, doc_annotations = finetune_to_indico_sequence(raw_texts=X, subseqs=all_subseqs, labels=all_labels,
+                                                         probs=all_probs, none_value=self.config.pad_token,
+                                                         subtoken_predictions=self.config.subtoken_predictions,
+                                                         associations=all_assocs)
         return doc_annotations
 
     def featurize(self, X):
