@@ -28,9 +28,8 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
             [("1",), ("1", "2"), ("2", ), ("<PAD>")]
         ]
         encoder = GPTEncoder()
-        indicox_pred, indicoy_pred = finetune_to_indico_sequence(
-            raw, finetunex, finetuney, encoder=encoder, none_value="<PAD>", subtoken_predictions=True
-        )
+        indicox_pred, indicoy_pred = finetune_to_indico_sequence(raw, finetunex, finetuney, none_value="<PAD>",
+                                                                 subtoken_predictions=True)
 
         indicoy = [
             [
@@ -58,9 +57,8 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
             [("1",), ("1", "2"), ("2", ), ("<PAD>")]
         ]
         encoder = GPT2Encoder()
-        indicox_pred, indicoy_pred = finetune_to_indico_sequence(
-            raw, finetunex, finetuney, encoder=encoder, none_value="<PAD>", subtoken_predictions=False
-        )
+        indicox_pred, indicoy_pred = finetune_to_indico_sequence(raw, finetunex, finetuney, none_value="<PAD>",
+                                                                 subtoken_predictions=False)
 
         indicoy = [
             [
@@ -88,9 +86,8 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
             [("1",), ("1", "2"), ("2", ), ("<PAD>")]
         ]
         encoder = GPT2Encoder()
-        indicox_pred, indicoy_pred = finetune_to_indico_sequence(
-            raw, finetunex, finetuney, encoder=encoder, none_value="<PAD>", subtoken_predictions=True
-        )
+        indicox_pred, indicoy_pred = finetune_to_indico_sequence(raw, finetunex, finetuney, none_value="<PAD>",
+                                                                 subtoken_predictions=True)
 
         indicoy = [
             [
@@ -118,9 +115,7 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
             [("1", ), ("1", "2", "3"), ("1", )]
         ]
         encoder = GPTEncoder()
-        indicox_pred, indicoy_pred = finetune_to_indico_sequence(
-            raw, finetunex, finetuney, encoder=encoder, none_value="<PAD>"
-        )
+        indicox_pred, indicoy_pred = finetune_to_indico_sequence(raw, finetunex, finetuney, none_value="<PAD>")
 
         indicoy = [
             [
@@ -149,9 +144,7 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
             [("<PAD>", ), ("1", "2", "3"), ("1", "3")]
         ]
         encoder = GPTEncoder()
-        indicox_pred, indicoy_pred = finetune_to_indico_sequence(
-            raw, finetunex, finetuney, encoder=encoder, none_value="<PAD>"
-        )
+        indicox_pred, indicoy_pred = finetune_to_indico_sequence(raw, finetunex, finetuney, none_value="<PAD>")
         indicoy_pred = [sorted(seq, key=lambda x: x['label']) for seq in indicoy_pred]
         indicoy = [
             sorted(
