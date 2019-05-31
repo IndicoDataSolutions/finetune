@@ -95,6 +95,7 @@
 <li><a class="reference internal" href="#docker">Docker</a></li>
 <li><a class="reference internal" href="#dataset-loading">Dataset Loading</a></li>
 <li><a class="reference internal" href="#prediction">Prediction</a></li>
+<li><a class="reference internal" href="#saving-and-loading-models">Saving and Loading Models</a></li>
 <li><a class="reference internal" href="#using-different-base-models-e-g-bert-gpt2">Using Different Base Models (e.g. BERT, GPT2)</a></li>
 <li><a class="reference internal" href="#code-examples">Code Examples</a></li>
 <li><a class="reference internal" href="#finetune-api-reference">Finetune API Reference</a></li>
@@ -262,11 +263,30 @@ use the <code class="xref py py-func docutils literal notranslate"><span class="
 </pre></div>
 </div>
 </div>
+<div class="section" id="saving-and-loading-models">
+<h1>Saving and Loading Models<a class="headerlink" href="#saving-and-loading-models" title="Permalink to this headline">¶</a></h1>
+<p>You can use the <code class="xref py py-func docutils literal notranslate"><span class="pre">BaseModel.save()</span></code> and <code class="xref py py-func docutils literal notranslate"><span class="pre">load()</span></code> methods to serialize and deserialize trained models.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">model</span> <span class="o">=</span> <span class="n">Classifier</span><span class="p">()</span>
+<span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">train_data</span><span class="p">,</span> <span class="n">train_labels</span><span class="p">)</span>
+<span class="n">model</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">filepath</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">model</span> <span class="o">=</span> <span class="n">Classifier</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">filepath</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
 <div class="section" id="using-different-base-models-e-g-bert-gpt2">
 <h1>Using Different Base Models (e.g. BERT, GPT2)<a class="headerlink" href="#using-different-base-models-e-g-bert-gpt2" title="Permalink to this headline">¶</a></h1>
 <p>Finetune defaults to using OpenAI’s GPT base model, but also supports other base model options.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">finetune.base_models</span> <span class="kn">import</span> <span class="n">BERT</span><span class="p">,</span> <span class="n">GPT2</span> <span class="n">TextCNN</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">finetune.base_models</span> <span class="kn">import</span> <span class="n">BERT</span><span class="p">,</span> <span class="n">GPT2</span><span class="p">,</span> <span class="n">TextCNN</span>
 <span class="n">model</span> <span class="o">=</span> <span class="n">Classifier</span><span class="p">(</span><span class="n">base_model</span><span class="o">=</span><span class="n">BERT</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Some model architecture’s have multiple model sizes, which you can switch between using the
+<cite>base_model_path</cite> argument. BERT defaults to “bert_small_cased.jl”, but you can
+also pass “bert_small_multi_cased.jl” or “bert_large_cased.jl”.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">finetune.base_models</span> <span class="kn">import</span> <span class="n">BERT</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">Classifier</span><span class="p">(</span><span class="n">base_model</span><span class="o">=</span><span class="n">BERT</span><span class="p">,</span> <span class="n">base_model_path</span><span class="o">=</span><span class="s1">&#39;bert_large_cased.jl&#39;</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
