@@ -54,7 +54,7 @@ def all_gpus(visible_gpus=None):
     try:
         cuda_visible_devices = os.getenv("CUDA_VISIBLE_DEVICES")
         device_ids = nvidia_device_ids()
-
+        mapping = None
         # restricting GPUs based on env vars
         if cuda_visible_devices:
             device_ids = {
@@ -62,7 +62,8 @@ def all_gpus(visible_gpus=None):
                 for device_id, description in device_ids.items()
                 if str(device_id) in cuda_visible_devices.split(',')
             }
-
+            mapping = {dev_id: i for i, (dev_id, _) in enumerate(sorted(device_ids.items()))}
+            
         # restricting GPUs based on config
         if visible_gpus is not None:
             device_ids = {
@@ -77,6 +78,14 @@ def all_gpus(visible_gpus=None):
                 for device_id, description in device_ids.items()
             ])
         ))
+
+        if mapping is not None:
+            # Resolve these to internal tensorflow device ids.
+            # These are equivalent if no visible_devices masking is used
+            device_ids = {
+                mapping[device_id]: description
+                for device_id, description in device_ids.items()
+            }
 
         device_ids = list(device_ids.keys())
     except:
