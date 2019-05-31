@@ -157,7 +157,8 @@ Finetune defaults to using OpenAI's GPT base model, but also supports other base
 
 .. code-block:: python
     
-    from finetune.base_models import BERT, BERTModelLargeCased, GPT2, TextCNN
+    from finetune.base_models import BERT, GPT2, TextCNN
+    from finetune.base_models.bert.model import BERTModelLargeCased, BERTModelMultilingualCased
     model = Classifier(base_model=BERT)
 
 
