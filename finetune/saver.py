@@ -67,10 +67,15 @@ class InitializeHook(tf.train.SessionRunHook):
     def __init__(self, saver, model_portion = "entire_model"):
         self.saver = saver
         self.model_portion = model_portion
+        if model_portion != 'entire_model':
+            self.need_to_refresh = True
+        else:
+            self.need_to_refresh = False
 
-    def after_create_session(self, session, coord):
-        init_fn = self.saver.get_scaffold_init_fn(self.model_portion)
-        init_fn(None, session)
+    def after_create_session(self, session, coord):        
+        if self.need_to_refresh:
+            init_fn = self.saver.get_scaffold_init_fn(self.model_portion)
+            init_fn(None, session)
 
 class Saver:
     def __init__(self, fallback_filename=None, exclude_matches=None, variable_transforms=None, save_dtype=None):
@@ -147,10 +152,10 @@ class Saver:
                     trainables = [v for v in base if 'adapter' in v or v[-3:] in norm_variable_scopes]    
                 elif model_portion == 'target':
                     trainables = [v for v in trainables if 'target' in v]
-                all_vars = [v for v in all_vars if v.name in trainables]
-                for var in all_vars:
+                loaded_vars = [v for v in all_vars if v.name in trainables]
+                for var in loaded_vars:
                     name = var.name
-                    for saved_var_name, saved_var in itertools.chain(variables_sv.items(), all_vars):
+                    for saved_var_name, saved_var in itertools.chain(variables_sv.items(), loaded_vars):
                         if saved_var_name == name:
                             for func in self.variable_transforms:
                                 saved_var = func(name, saved_var)
