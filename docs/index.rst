@@ -157,17 +157,8 @@ Finetune defaults to using OpenAI's GPT base model, but also supports other base
 
 .. code-block:: python
     
-    from finetune.base_models import BERT, GPT2, TextCNN
+    from finetune.base_models import BERT, BERTModelLargeCased, GPT2, TextCNN
     model = Classifier(base_model=BERT)
-
-Some model architecture's have multiple model sizes, which you can switch between using the 
-`base_model_path` argument. BERT defaults to "bert_small_cased.jl", but you can
-also pass "bert_small_multi_cased.jl" or "bert_large_cased.jl".
-
-.. code-block:: python 
-
-    from finetune.base_models import BERT
-    model = Classifier(base_model=BERT, base_model_path='bert_large_cased.jl')
 
 
 Code Examples
