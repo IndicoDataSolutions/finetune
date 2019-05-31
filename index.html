@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Finetune Quickstart Guide &mdash; finetune 0.6.3 documentation</title>
+  <title>Finetune Quickstart Guide &mdash; finetune 0.6.7 documentation</title>
   
 
   
@@ -35,7 +35,7 @@
         <link rel="index" title="Index"
               href="genindex.html"/>
         <link rel="search" title="Search" href="search.html"/>
-    <link rel="top" title="finetune 0.6.3 documentation" href="#"/> 
+    <link rel="top" title="finetune 0.6.7 documentation" href="#"/> 
 
   
   <script src="_static/js/modernizr.min.js"></script>
@@ -95,6 +95,7 @@
 <li><a class="reference internal" href="#docker">Docker</a></li>
 <li><a class="reference internal" href="#dataset-loading">Dataset Loading</a></li>
 <li><a class="reference internal" href="#prediction">Prediction</a></li>
+<li><a class="reference internal" href="#using-different-base-models-e-g-bert-gpt2">Using Different Base Models (e.g. BERT, GPT2)</a></li>
 <li><a class="reference internal" href="#code-examples">Code Examples</a></li>
 <li><a class="reference internal" href="#finetune-api-reference">Finetune API Reference</a></li>
 <li><a class="reference internal" href="#finetune-model-configuration-options">Finetune Model Configuration Options</a></li>
@@ -258,6 +259,14 @@ use the <code class="xref py py-func docutils literal notranslate"><span class="
 <span class="k">with</span> <span class="n">model</span><span class="o">.</span><span class="n">cached_predict</span><span class="p">():</span>
     <span class="n">model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">test_data</span><span class="p">)</span> <span class="c1"># triggers prediction graph construction</span>
     <span class="n">model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">test_data</span><span class="p">)</span> <span class="c1"># graph is already cached, so subsequence calls are faster</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="using-different-base-models-e-g-bert-gpt2">
+<h1>Using Different Base Models (e.g. BERT, GPT2)<a class="headerlink" href="#using-different-base-models-e-g-bert-gpt2" title="Permalink to this headline">¶</a></h1>
+<p>Finetune defaults to using OpenAI’s GPT base model, but also supports other base model options.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">finetune.base_models</span> <span class="kn">import</span> <span class="n">BERT</span><span class="p">,</span> <span class="n">GPT2</span> <span class="n">TextCNN</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">Classifier</span><span class="p">(</span><span class="n">base_model</span><span class="o">=</span><span class="n">BERT</span><span class="p">)</span>
 </pre></div>
 </div>
 </div>
@@ -1514,15 +1523,20 @@ Temperature parameter for decoding is set in the config.
 
 <dl class="method">
 <dt id="finetune.SequenceLabeler.predict">
-<code class="descname">predict</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/sequence_labeling.html#SequenceLabeler.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.SequenceLabeler.predict" title="Permalink to this definition">¶</a></dt>
+<code class="descname">predict</code><span class="sig-paren">(</span><em>X</em>, <em>per_token=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/sequence_labeling.html#SequenceLabeler.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.SequenceLabeler.predict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces a list of most likely class labels as determined by the fine-tuned model.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>X</strong> – A list / array of text, shape [batch]</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>X</strong> – A list / array of text, shape [batch]</li>
+<li><strong>per_token</strong> – If True, return raw probabilities and labels on a per token basis</li>
+</ul>
+</td>
 </tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">list of class labels.</td>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">list of class labels.</p>
+</td>
 </tr>
 </tbody>
 </table>
@@ -2580,7 +2594,7 @@ If you are using a single GPU and have more than 4Gb of GPU memory you should se
     <script type="text/javascript">
         var DOCUMENTATION_OPTIONS = {
             URL_ROOT:'./',
-            VERSION:'0.6.3',
+            VERSION:'0.6.7',
             COLLAPSE_INDEX:false,
             FILE_SUFFIX:'.html',
             HAS_SOURCE:  true,

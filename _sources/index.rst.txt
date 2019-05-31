@@ -132,6 +132,17 @@ use the :py:func:`model.cached_predict()` context manager.
         model.predict(test_data) # graph is already cached, so subsequence calls are faster
 
 
+Using Different Base Models (e.g. BERT, GPT2)
+============================================
+
+Finetune defaults to using OpenAI's GPT base model, but also supports other base model options.
+
+.. code-block:: python
+    
+    from finetune.base_models import BERT, GPT2 TextCNN
+    model = Classifier(base_model=BERT)
+
+
 Code Examples
 =============
 For example usage of provided models, see the `finetune/datasets directory <https://github.com/IndicoDataSolutions/finetune/tree/master/finetune/datasets>`_.
