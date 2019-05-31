@@ -322,33 +322,33 @@ def sequence_labeler(hidden, targets, n_targets, config, pad_id, multilabel=Fals
 
         log_likelihood = 0.0
 
-        if multilabel:
-            transition_params = []
-            logits_individual = tf.unstack(logits, n_targets, axis=-1)
-            if targets is not None:
-                targets_individual = tf.unstack(targets, n_targets, axis=-1)
-            logits = []
-            for i in range(n_targets):
-                transition_params.append(tf.get_variable("Transition_matrix_{}".format(i), shape=[2, 2]))
-                logits.append(tf.stack((logits_individual[pad_id], logits_individual[i]), axis=-1))
-                if targets is not None and train and i != pad_id:
-                    log_likelihood += crf_log_likelihood(
-                        logits[-1],
-                        targets_individual[i],
+        with tf.device("CPU:0"):
+            if multilabel:
+                transition_params = []
+                logits_individual = tf.unstack(logits, n_targets, axis=-1)
+                if targets is not None:
+                    targets_individual = tf.unstack(targets, n_targets, axis=-1)
+                logits = []
+                for i in range(n_targets):
+                    transition_params.append(tf.get_variable("Transition_matrix_{}".format(i), shape=[2, 2]))
+                    logits.append(tf.stack((logits_individual[pad_id], logits_individual[i]), axis=-1))
+                    if targets is not None and train and i != pad_id:
+                        log_likelihood += crf_log_likelihood(
+                            logits[-1],
+                            targets_individual[i],
+                            kwargs.get('max_length') * tf.ones(tf.shape(targets)[0]),
+                            transition_params=transition_params[-1]
+                        )[0]
+                logits = tf.stack(logits, axis=-1)
+            else:
+                transition_params = tf.get_variable("Transition_matrix", shape=[n_targets, n_targets])
+                if train and targets is not None:
+                    log_likelihood, _ = crf_log_likelihood(
+                        logits,
+                        targets,
                         kwargs.get('max_length') * tf.ones(tf.shape(targets)[0]),
-                        transition_params=transition_params[-1]
-                    )[0]
-            logits = tf.stack(logits, axis=-1)
-        else:
-            transition_params = tf.get_variable("Transition_matrix", shape=[n_targets, n_targets])
-            if train and targets is not None:
-                log_likelihood, _ = crf_log_likelihood(
-                    logits,
-                    targets,
-                    kwargs.get('max_length') * tf.ones(tf.shape(targets)[0]),
-                    transition_params=transition_params
-                )
-
+                        transition_params=transition_params
+                    )
         return {
             'logits': logits,
             'losses': -log_likelihood,

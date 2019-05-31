@@ -203,7 +203,8 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                 clip_gradients=float(params.max_grad_norm),
                 learning_rate_decay_fn=lr_decay,
                 increment_global_step=True,
-                summaries=summaries
+                summaries=summaries,
+                colocate_gradients_with_ops=True
             )
 
         if mode == tf.estimator.ModeKeys.PREDICT:
