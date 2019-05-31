@@ -313,30 +313,56 @@ class BasePipeline(metaclass=ABCMeta):
         tf_dataset = lambda: self._dataset_without_targets(Xs, train=None).batch(batch_size)
         return tf_dataset
 
-    def get_target_input_fn(self,feature_gen,length,batch_size=None):
+    def get_target_input_fn(self,Xs,batch_size=None):
+
+        if not callable(Xs):
+            Xs_fn = lambda: self.wrap_tqdm(Xs, False)
+        else:
+            Xs_fn = lambda: self.wrap_tqdm(Xs(), False)
+
+        dataset_encoded = lambda: itertools.chain.from_iterable(map(self._encode_separate_inference, Xs_fn()))
+
+
         batch_size = batch_size or self.config.batch_size
-        #features = pd.DataFrame(features).to_dict('list')
-        #for key in features:
-        #    features[key] = np.array(features[key])
-        #tf_dataset = lambda: tf.data.Dataset.from_tensor_slices(features).batch(batch_size)
-        #list_of_dicts = list(feature_gen)
-        #features = pd.DataFrame(features).to_dict('list')
-        features = [None]*length
-        for i in tqdm.tqdm(range(length), total=length, desc="Featurization"):
-            y = next(feature_gen)
-            features[i] = y
+        TS = tf.TensorShape
+        shapes ={
+                    "features": TS([768,]),
+                    "sequence_features": TS([self.config.max_length,768]),
+                    "attention_weights": TS([12,512,512])
+                }
+
         if self.config.base_model in [GPTModel, GPTModelSmall]:
-            output_types = (tf.float32, tf.float32, tf.float32)
+            output_types = {"features":tf.float32, "sequence_features":tf.float32, "attention_weights":tf.float32}
         else:
             output_types = (tf.float32, tf.float32)
-        #tf_dataset = tf.data.Dataset.from_generator(feature_gen,output_types=output_types).batch(batch_size)
-        features = pd.DataFrame(features).to_dict('list')
-        for key in features:
-            features[key] = np.array(features[key])
-        tf_dataset = lambda: tf.data.Dataset.from_tensor_slices(features).batch(batch_size)
+        
+        tf_dataset = lambda: tf.data.Dataset.from_generator(dataset_encoded,output_types=output_types).batch(batch_size)
+        #tf_dataset = lambda: tf.data.Dataset.from_tensor_slices(features).batch(batch_size)
         return tf_dataset
                                                         
+    def _encode_separate_inference(self,Xs):
+        from collections import namedtuple
+        EncodedInput = namedtuple("EncodedInput", [
+        "features", # list of list of subtoken ids (ints)
+        "sequence_features",    # list of list of subtokens (strs)
+        "attention_weights",    # list of list of labels
+        "labels", # list of list of character locations (ints)
+        ])
 
+       
+        def encoded_gen(Xs):
+            examples= EncodedInput(features=Xs['features'],
+                            sequence_features=Xs['sequence_features'],
+                            attention_weights=Xs['attention_weights'],
+                            labels=None
+                            )
+            yield examples
+
+        out_gen = encoded_gen(Xs)
+        for out in out_gen:
+            feats = {"features": out.features, "sequence_features": out.sequence_features, 'attention_weights':out.attention_weights}
+            yield feats
+            
     @property
     def pad_idx(self):
         if self.pad_idx_ is None:

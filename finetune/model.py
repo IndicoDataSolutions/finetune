@@ -293,6 +293,7 @@ def get_separate_model_fns(target_model_fn, predict_op, predict_proba_op, build_
         return target_model_state
 
     def _featurizer_model_fn(features, labels, mode, params):
+        
         assert mode == tf.estimator.ModeKeys.PREDICT, "mode MUST be predict - model fns should not be separated on train"
         X = features["tokens"]
         featurizer_state = params.base_model.get_featurizer(
@@ -326,19 +327,21 @@ def get_separate_model_fns(target_model_fn, predict_op, predict_proba_op, build_
 
 
     def _target_model_fn(features,labels,mode,params):
-        assert mode == tf.estimator.ModeKeys.PREDICT, "mode MUST be predict - model fns should not be separated on train"
+        assert mode == tf.estimator.ModeKeys.PREDICT, "Separated estimators are only supported for inference."
         build_target_model = True
         if params.base_model.is_bidirectional and build_lm:
             raise ValueError("Bert models do not support functions that require the language model.")
-
         estimator_mode = mode
         pred_op = None
         predictions = {}
+        #featurizer_state = {'features':features[0],'attention_weights':features[1],'sequence_features':features[2]}
         featurizer_state = features
-        task_id = features.get("task_id", None)
+        task_id=None
+        #task_id = features.get("task_id", None)
         Y = labels
         if params.base_model in [GPTModel, GPTModelSmall]:
             predictions[PredictMode.ATTENTION] = featurizer_state['attention_weights']
+            
 
         if build_target_model:
             target_model_state = target_model_op(
