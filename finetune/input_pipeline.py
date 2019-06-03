@@ -13,7 +13,6 @@ import tensorflow as tf
 import pandas as pd
 from tensorflow.python.data import Dataset
 from sklearn.model_selection import train_test_split
-import gc
 
 import finetune
 from finetune.errors import FinetuneError
@@ -101,6 +100,8 @@ class BasePipeline(metaclass=ABCMeta):
         return output
 
     def text_to_tokens_mask(self, X, Y=None):
+        print('self in text to tokens mask')
+        print(self)
         out_gen = self._text_to_ids(X, pad_token=self.config.pad_token)
         for out in out_gen:
             feats = {"tokens": out.token_ids, "mask": out.mask}
@@ -152,6 +153,8 @@ class BasePipeline(metaclass=ABCMeta):
         return Dataset.from_generator(lambda: self.wrap_tqdm(dataset_encoded(), train), *shape_def)
 
     def _dataset_without_targets(self, Xs, train):
+        print('self in without targets')
+        print(self)
         if not callable(Xs):
             Xs_fn = lambda: self.wrap_tqdm(Xs, train)
         else:
@@ -309,59 +312,19 @@ class BasePipeline(metaclass=ABCMeta):
         return val_dataset, train_dataset, self.config.val_size, self.config.val_interval
 
     def get_predict_input_fn(self, Xs, batch_size=None):
+        print('self in get predict input fn')
+        print(self)
         batch_size = batch_size or self.config.batch_size
         tf_dataset = lambda: self._dataset_without_targets(Xs, train=None).batch(batch_size)
         return tf_dataset
 
-    def get_target_input_fn(self,Xs,batch_size=None):
-
-        if not callable(Xs):
-            Xs_fn = lambda: self.wrap_tqdm(Xs, False)
-        else:
-            Xs_fn = lambda: self.wrap_tqdm(Xs(), False)
-
-        dataset_encoded = lambda: itertools.chain.from_iterable(map(self._encode_separate_inference, Xs_fn()))
-
-
-        batch_size = batch_size or self.config.batch_size
-        TS = tf.TensorShape
-        shapes ={
-                    "features": TS([768,]),
-                    "sequence_features": TS([self.config.max_length,768]),
-                    "attention_weights": TS([12,512,512])
-                }
-
-        if self.config.base_model in [GPTModel, GPTModelSmall]:
-            output_types = {"features":tf.float32, "sequence_features":tf.float32, "attention_weights":tf.float32}
-        else:
-            output_types = (tf.float32, tf.float32)
-        
-        tf_dataset = lambda: tf.data.Dataset.from_generator(dataset_encoded,output_types=output_types).batch(batch_size)
-        #tf_dataset = lambda: tf.data.Dataset.from_tensor_slices(features).batch(batch_size)
+    def get_target_input_fn(self, features, batch_size=None):
+        batch_size = min(len(features),64)
+        features = pd.DataFrame(features).to_dict('list')
+        for key in features:
+            features[key] = np.array(features[key])
+        tf_dataset = lambda: tf.data.Dataset.from_tensor_slices(dict(features)).batch(batch_size)
         return tf_dataset
-                                                        
-    def _encode_separate_inference(self,Xs):
-        from collections import namedtuple
-        EncodedInput = namedtuple("EncodedInput", [
-        "features", # list of list of subtoken ids (ints)
-        "sequence_features",    # list of list of subtokens (strs)
-        "attention_weights",    # list of list of labels
-        "labels", # list of list of character locations (ints)
-        ])
-
-       
-        def encoded_gen(Xs):
-            examples= EncodedInput(features=Xs['features'],
-                            sequence_features=Xs['sequence_features'],
-                            attention_weights=Xs['attention_weights'],
-                            labels=None
-                            )
-            yield examples
-
-        out_gen = encoded_gen(Xs)
-        for out in out_gen:
-            feats = {"features": out.features, "sequence_features": out.sequence_features, 'attention_weights':out.attention_weights}
-            yield feats
             
     @property
     def pad_idx(self):
@@ -375,6 +338,7 @@ class BasePipeline(metaclass=ABCMeta):
         return self.pad_idx_
 
     def _format_for_encoding(self, X):
+        print("this is broken")
         """
         Most subclasses take in inputs as:
             List (batch) of list (docs)
@@ -390,6 +354,9 @@ class BasePipeline(metaclass=ABCMeta):
         return list(X)
 
     def _text_to_ids(self, Xs, Y=None, pad_token=None):
+        print(Xs)
+        print('self in text to ids')
+        print(self)
         Xs = self._format_for_encoding(Xs)
         if self.config.chunk_long_sequences and len(Xs) == 1:
             # can only chunk single sequence inputs

@@ -240,6 +240,7 @@ def get_default_config():
         save_dtype=None,
         val_set=None,
         per_process_gpu_memory_fraction=0.95,
+        adapter_size = 64, #from Parameter Efficient Transfer Learning paper
 
         # Regularization
         embed_p_drop=0.1,
@@ -328,9 +329,8 @@ def get_default_config():
 
         # BERT only
         bert_intermediate_size=None,
-        bert_adapter_size = 64, #from Parameter Efficient Transfer Learning paper
 
-        build_separate_estimators = True
+        build_separate_estimators = False
     )
     return settings
 

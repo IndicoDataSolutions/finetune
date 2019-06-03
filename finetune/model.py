@@ -168,12 +168,12 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                 lr * schedules[params.lr_schedule](tf.to_float(global_step) / total_num_steps)
             )
 
-            if params.bert_adapter_size is not None:
-                    norm_variable_scopes = ['b:0', 'g:0']
-                    #trained variables include: adapter dense layers, scaling/bias factors, target model, and
-                    #the bias values in 1dconv if this layer exists (since it also has a 'b' in its name/scope).
-                    params.trained_variables = [v for v in tf.global_variables()
-                    if 'adapter' in v.name or 'target' in v.name or v.name[-3:] in norm_variable_scopes]
+            if params.adapter_size is not None:
+                norm_variable_scopes = ['b:0', 'g:0']
+                #trained variables include: adapter dense layers, scaling/bias factors, target model, and
+                #the bias values in 1dconv if this layer exists (since it also has a 'b' in its name/scope).
+                params.trained_variables = [v for v in tf.global_variables()
+                if 'adapter' in v.name or 'target' in v.name or v.name[-3:] in norm_variable_scopes]
             else:
                 params.trained_variables = [v for v in tf.global_variables()]
                 
@@ -197,7 +197,7 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                 )
                 decay_var_list = [v for v in tf.global_variables() if len(v.get_shape()) > 1 or params.vector_l2]
 
-                if params.bert_adapter_size is not None:
+                if params.adapter_size is not None:
                     decay_var_list =  set(params.trained_variables).intersection(decay_var_list)
 
                 opt.apply_gradients = functools.partial(opt.apply_gradients, decay_var_list=decay_var_list)
@@ -245,8 +245,37 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
     return _model_fn
 
 
-def get_separate_model_fns(target_model_fn, predict_op, predict_proba_op, build_target_model, build_lm, encoder, target_dim,
-                 label_encoder, saver):
+def get_separate_model_fns(target_model_fn, predict_op, predict_proba_op, build_target_model, encoder, target_dim,
+                 label_encoder, saver, portion):
+
+    def _featurizer_model_fn(features, labels, mode, params):
+        assert mode == tf.estimator.ModeKeys.PREDICT, "mode MUST be predict - model fns should not be separated on train"
+        X = features["tokens"]
+        featurizer_state = params.base_model.get_featurizer(
+                X,
+                encoder=encoder,
+                config=params,
+                train=False
+        )
+        outputs = {}
+        for key in featurizer_state:
+            value = featurizer_state[key]
+            if isinstance(value, tf.Variable):
+                value = value.read_value()
+            outputs[key] = value
+
+        predictions = {'features':featurizer_state['features'],
+                    'sequence_features':featurizer_state['sequence_features']}
+        
+        if params.base_model in [GPTModel, GPTModelSmall]:
+            predictions['attention_weights'] = featurizer_state['attention_weights']
+        return tf.estimator.EstimatorSpec(
+                mode=mode,
+                predictions=predictions
+            )
+
+    if portion == 'featurizer':
+        return _featurizer_model_fn
 
     def language_model_op(X, M, params, featurizer_state):
         language_model_state = language_model(
@@ -292,56 +321,18 @@ def get_separate_model_fns(target_model_fn, predict_op, predict_proba_op, build_
             )
         return target_model_state
 
-    def _featurizer_model_fn(features, labels, mode, params):
-        
-        assert mode == tf.estimator.ModeKeys.PREDICT, "mode MUST be predict - model fns should not be separated on train"
-        X = features["tokens"]
-        featurizer_state = params.base_model.get_featurizer(
-                X,
-                encoder=encoder,
-                config=params,
-                train=False
-        )
-        #predictions = {PredictMode.FEATURIZE: featurizer_state["features"]}
-        #outputs = {'predictions': featurizer_state["features"]}
-
-        #generate all things from featurizer
-        outputs = {}
-        for key in featurizer_state:
-            value = featurizer_state[key]
-            #embed weights is a tf.Variable, must cast to Tensor to be passed by Estimator
-            if isinstance(value, tf.Variable):
-                value = value.read_value()
-            outputs[key] = value
-
-        predictions = {'features':featurizer_state['features'],
-                    'sequence_features':featurizer_state['sequence_features']}
-        
-        if params.base_model in [GPTModel, GPTModelSmall]:
-            predictions['attention_weights'] = featurizer_state['attention_weights']
-
-        return tf.estimator.EstimatorSpec(
-                mode=mode,
-                predictions=predictions
-            )
-
-
     def _target_model_fn(features,labels,mode,params):
         assert mode == tf.estimator.ModeKeys.PREDICT, "Separated estimators are only supported for inference."
         build_target_model = True
-        if params.base_model.is_bidirectional and build_lm:
-            raise ValueError("Bert models do not support functions that require the language model.")
         estimator_mode = mode
         pred_op = None
         predictions = {}
-        #featurizer_state = {'features':features[0],'attention_weights':features[1],'sequence_features':features[2]}
         featurizer_state = features
         task_id=None
-        #task_id = features.get("task_id", None)
+
         Y = labels
         if params.base_model in [GPTModel, GPTModelSmall]:
             predictions[PredictMode.ATTENTION] = featurizer_state['attention_weights']
-            
 
         if build_target_model:
             target_model_state = target_model_op(
@@ -369,24 +360,12 @@ def get_separate_model_fns(target_model_fn, predict_op, predict_proba_op, build_
             else:
                 predictions[PredictMode.NORMAL] = pred_op
                 predictions[PredictMode.PROBAS] = pred_proba_op
-        """
-        if build_lm:
-            lm_predict_op, language_model_state = language_model_op(X=X, M=M, params=params,
-                                                                    featurizer_state=featurizer_state)
-            if mode == tf.estimator.ModeKeys.TRAIN or mode == tf.estimator.ModeKeys.EVAL:
-                lm_loss = tf.reduce_mean(language_model_state["losses"])
-                train_loss += lm_loss_coef * lm_loss
-                tf.summary.scalar("LanguageModelLoss", lm_loss)
-            if mode == tf.estimator.ModeKeys.PREDICT:
-                predictions[PredictMode.GENERATE_TEXT] = lm_predict_op
-                predictions[PredictMode.LM_PERPLEXITY] = language_model_state["perplexity"]
-        """
+
         return tf.estimator.EstimatorSpec(
             mode=mode,
             predictions=predictions
         )
 
-    return {'target_model_fn':_target_model_fn,'featurizer_model_fn':_featurizer_model_fn}
-
+    return _target_model_fn
 
 
