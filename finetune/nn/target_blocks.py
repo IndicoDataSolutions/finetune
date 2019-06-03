@@ -267,7 +267,7 @@ def class_reweighting(class_weights):
     return custom_grad
 
 
-def sequence_labeler(hidden, targets, n_targets, config, pad_id, multilabel=False, train=False, reuse=None, **kwargs):
+def sequence_labeler(hidden, targets, n_targets, config, pad_id, multilabel=False, train=False, reuse=None, pool_idx=None, **kwargs):
     """
     An Attention based sequence labeler model.
 
@@ -321,6 +321,7 @@ def sequence_labeler(hidden, targets, n_targets, config, pad_id, multilabel=Fals
             logits = class_reweighting(per_token_weights)(logits)
 
         log_likelihood = 0.0
+        pool_idx = pool_idx if pool_idx is not None else kwargs.get('max_length') * tf.ones(tf.shape(targets)[0])
 
         with tf.device("CPU:0"):
             if multilabel:
@@ -336,7 +337,7 @@ def sequence_labeler(hidden, targets, n_targets, config, pad_id, multilabel=Fals
                         log_likelihood += crf_log_likelihood(
                             logits[-1],
                             targets_individual[i],
-                            kwargs.get('max_length') * tf.ones(tf.shape(targets)[0]),
+                            pool_idx,
                             transition_params=transition_params[-1]
                         )[0]
                 logits = tf.stack(logits, axis=-1)
@@ -346,9 +347,11 @@ def sequence_labeler(hidden, targets, n_targets, config, pad_id, multilabel=Fals
                     log_likelihood, _ = crf_log_likelihood(
                         logits,
                         targets,
-                        kwargs.get('max_length') * tf.ones(tf.shape(targets)[0]),
+                        pool_idx,
                         transition_params=transition_params
                     )
+        pool_idx = pool_idx if pool_idx is not None else kwargs.get('max_length') * tf.ones(tf.shape(targets)[0])
+
         return {
             'logits': logits,
             'losses': -log_likelihood,
