@@ -43,7 +43,7 @@ class BertConfig(object):
                max_position_embeddings=512,
                type_vocab_size=16,
                initializer_range=0.02,
-               bert_adapter_size=0):
+               adapter_size=0):
     """Constructs BertConfig.
 
     Args:
@@ -79,7 +79,7 @@ class BertConfig(object):
     self.max_position_embeddings = max_position_embeddings
     self.type_vocab_size = type_vocab_size
     self.initializer_range = initializer_range
-    self.bert_adapter_size = bert_adapter_size
+    self.adapter_size = adapter_size
 
   @classmethod
   def from_dict(cls, json_object):
@@ -215,7 +215,7 @@ class BertModel(object):
             hidden_dropout_prob=config.hidden_dropout_prob,
             attention_probs_dropout_prob=config.attention_probs_dropout_prob,
             initializer_range=config.initializer_range,
-            adapter_size = config.bert_adapter_size,
+            adapter_size = config.adapter_size,
             do_return_all_layers=True)
 
       self.sequence_output = self.all_encoder_layers[-1]
@@ -754,7 +754,7 @@ def attention_layer(from_tensor,
   return context_layer
 
 
-def adapter(input, adapter_size, input_size, hidden_dropout_prob = 0.1):
+def adapter(input, adapter_size, input_size, hidden_dropout_prob=0.1):
     down_projection = tf.layers.dense(input, adapter_size, activation = 'sigmoid',
         kernel_initializer = create_initializer(0.001))
     down_projection = dropout(down_projection, hidden_dropout_prob)
