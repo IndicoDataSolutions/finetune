@@ -122,6 +122,7 @@ class BasePipeline(metaclass=ABCMeta):
 
         if Y_fit is not None:
             self.config.class_weights = compute_class_weights(class_weights=self.config.class_weights, Y=Y_fit)
+            print(self.config.class_weights)
 
     def _dataset_with_targets(self, Xs, Y, train):
         if not callable(Xs) and not callable(Y):
