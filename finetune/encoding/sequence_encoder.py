@@ -49,6 +49,7 @@ def round_to_nearest_start_and_end(label, token_starts, token_ends, text):
     label['text'] = text[label['start']:label['end']]
 
 
+
 def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_value=None, subtoken_predictions=False,
                                 associations=None):
     """
@@ -199,7 +200,7 @@ def overlap(current_annotation, annotation):
     )
 
 
-def overlap_handler(current_annotation, annotation, text, multi_label):
+def overlap_handler(current_annotation, annotation, text, multi_label, ):
     """
     Scenarios:
         <> --> current_annotation
@@ -216,6 +217,7 @@ def overlap_handler(current_annotation, annotation, text, multi_label):
     
     final_delimiter = min(first['end'], second['end'])
     final_label = second['label'] if (second['end'] > first['end']) else first['label']
+    overlapping_text = text[second['start']:final_delimiter]
     end = max(first['end'], second['end'])
 
     first_chunk = {
@@ -228,12 +230,13 @@ def overlap_handler(current_annotation, annotation, text, multi_label):
     if multi_label:
         second_label = first['label'] | second['label']
     else:
-        warnings.warn(
-            "Found overlapping annotations: {} and {}. \n"
-            "Please set `multi_label_sequences` to `True` in your config.".format(
-                annotation, current_annotation
+        if first['label'] != second['label'] and (len(overlapping_text.strip()) > 1):
+            warnings.warn(
+                "Found overlapping annotations: {} and {}. \n"
+                "Consider setting `multi_label_sequences` to `True` in your config.".format(
+                    annotation, current_annotation
+                )
             )
-        )
         spacy_tokens = NLP(text)
         spacy_token_starts = [token.idx for token in spacy_tokens]
         if second['start'] in spacy_token_starts:
@@ -247,7 +250,7 @@ def overlap_handler(current_annotation, annotation, text, multi_label):
         'start': second['start'],
         'end': final_delimiter,
         'label': second_label,
-        'text': text[second['start']:final_delimiter]
+        'text': overlapping_text
     }
 
     third_chunk = {
@@ -306,7 +309,6 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
         token_ends = encoded_docs.char_locs[doc_idx]
         token_lengths = [encoder._token_length(token) for token in tokens]
         token_starts = [end - length for end, length in zip(token_ends, token_lengths)]
-
         label_seq = sorted(label_seq, key=lambda x: x["start"])
         merged_annotations = []
 
@@ -326,12 +328,12 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
                         text[label['start']:label['end']]
                     )
                 )
-            round_to_nearest_start_and_end(label, token_starts, token_ends, text)
-
+           
         queue = sorted(label_seq, key=lambda x: (x['start'], x['end']))
         for label in queue:
             label['label'] = {label['label']}
-        
+            round_to_nearest_start_and_end(label, token_starts, token_ends, text)
+
         while len(queue):
             current_annotation = queue.pop(0)
 
