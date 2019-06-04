@@ -199,14 +199,6 @@ def overlap(current_annotation, annotation):
     )
 
 
-def convert_to_single_label(annotations, i):
-    num_tokens = 0
-    for anno in annotations[i:]:
-        if len(anno["labels"]) < 1:
-            break
-        num_tokens += 1
-
-
 def overlap_handler(current_annotation, annotation, text, multi_label):
     """
     Scenarios:
