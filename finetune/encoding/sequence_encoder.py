@@ -229,9 +229,9 @@ def overlap_handler(current_annotation, annotation, text, multi_label):
         second_label = first['label'] | second['label']
     else:
         warnings.warn(
-            "Found overlapping annotations: {}. \n"
+            "Found overlapping annotations: {} and {}. \n"
             "Please set `multi_label_sequences` to `True` in your config.".format(
-                annotation
+                annotation, current_annotation
             )
         )
         spacy_tokens = NLP(text)
@@ -302,7 +302,6 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
     encoded_docs = encoder._encode(texts)
 
     for doc_idx, (text, label_seq) in enumerate(zip(texts, labels)):
-        spacy_tokens = None
         tokens = encoded_docs.tokens[doc_idx]
         token_ends = encoded_docs.char_locs[doc_idx]
         token_lengths = [encoder._token_length(token) for token in tokens]

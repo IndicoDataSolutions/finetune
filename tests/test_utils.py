@@ -135,6 +135,29 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
         self.assertCountEqual(finetuney[0][1], finetuney_pred[0][1])
         self.assertCountEqual(finetuney[0][2], finetuney_pred[0][2])
 
+    def test_overlapping_labels_with_single_label(self):
+        text = ["Indico Rules"]
+        finetunex = [
+            ["Indic", "o", " Rules"]
+        ]
+        finetuney = [
+            ["1", "1", "2"]
+        ]
+        indicoy = [
+            [
+                {'start': 0, 'end': 6, 'label': '1', 'text': 'Indico'},
+                {'start': 5, 'end': 12, 'label': '2', 'text': 'o Rules'},
+            ]
+        ]
+
+        finetunex_pred, finetuney_pred, *_ = indico_to_finetune_sequence(
+            text, indicoy, encoder=GPTEncoder(), none_value="<PAD>", multi_label=False
+        )
+        self.assertEqual(finetunex_pred, finetunex)
+        self.assertCountEqual(finetuney[0][0], finetuney_pred[0][0])
+        self.assertCountEqual(finetuney[0][1], finetuney_pred[0][1])
+        self.assertCountEqual(finetuney[0][2], finetuney_pred[0][2])
+
     def test_three_overlapping_labels(self):
         raw = ["Indico Is the very best"]
         finetunex = [
