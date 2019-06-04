@@ -199,7 +199,15 @@ def overlap(current_annotation, annotation):
     )
 
 
-def overlap_handler(current_annotation, annotation, text):
+def convert_to_single_label(annotations, i):
+    num_tokens = 0
+    for anno in annotations[i:]:
+        if len(anno["labels"]) < 1:
+            break
+        num_tokens += 1
+
+
+def overlap_handler(current_annotation, annotation, text, multi_label):
     """
     Scenarios:
         <> --> current_annotation
@@ -224,12 +232,32 @@ def overlap_handler(current_annotation, annotation, text):
         'label': first['label'],
         'text': text[first['start']:second['start']]
     }
+
+    if multi_label:
+        second_label = first['label'] | second['label']
+    else:
+        warnings.warn(
+            "Found overlapping annotations: {}. \n"
+            "Please set `multi_label_sequences` to `True` in your config.".format(
+                annotation
+            )
+        )
+        spacy_tokens = NLP(text)
+        spacy_token_starts = [token.idx for token in spacy_tokens]
+        if second['start'] in spacy_token_starts:
+            second_label = second['label']
+        elif final_delimiter in spacy_token_starts:
+            second_label = first['label']
+        else:
+            second_label = first['label']
+
     second_chunk = {
         'start': second['start'],
         'end': final_delimiter,
-        'label': first['label'] | second['label'],
+        'label': second_label,
         'text': text[second['start']:final_delimiter]
     }
+
     third_chunk = {
         'start': final_delimiter,
         'end': end,
@@ -282,6 +310,7 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
     encoded_docs = encoder._encode(texts)
 
     for doc_idx, (text, label_seq) in enumerate(zip(texts, labels)):
+        spacy_tokens = None
         tokens = encoded_docs.tokens[doc_idx]
         token_ends = encoded_docs.char_locs[doc_idx]
         token_lengths = [encoder._token_length(token) for token in tokens]
@@ -331,7 +360,7 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
                 # into it's component parts.  process each component individually
                 elif overlap(current_annotation, annotation):
                     merged_annotations.remove(annotation)
-                    split_annotations = overlap_handler(current_annotation, annotation, text)
+                    split_annotations = overlap_handler(current_annotation, annotation, text, multi_label)
                     queue = split_annotations + queue
                     break
             else:
@@ -377,13 +406,7 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
         if not multi_label:
             # if `multi_label_sequences` is False, flatten labels
             for annotation in all_annotations:
-                if len(annotation['label']) > 1:
-                    raise FinetuneError(
-                        "Found overlapping annotations: {}. \n"
-                        "Please set `multi_label_sequences` to `True` in your config.".format(
-                            annotation
-                        )
-                    )
+                assert len(annotation['label']) == 1
                 annotation['label'] = annotation['label'][0]
 
         for annotation in all_annotations:
