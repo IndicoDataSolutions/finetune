@@ -106,7 +106,7 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                 encoder=encoder,
                 config=params,
                 train=train,
-                explain=build_explain
+                explain=build_explain, 
             )
             predictions = {PredictMode.FEATURIZE: featurizer_state["features"]}
             if params.base_model in [GPTModel, GPTModelSmall]:
