@@ -13,6 +13,7 @@ import ftfy
 import spacy
 import numpy as np
 import tensorflow as tf
+from ftfy.fixes import uncurl_quotes
 
 import finetune
 from finetune.encoding.input_encoder import NLP, EncodedOutput, BaseEncoder, get_pairs
@@ -137,7 +138,8 @@ class GPTEncoder(BaseEncoder):
             if labels is not None:
                 label = labels[i]
             raw_text = text.lower()
-            ftfy_text = ftfy.fix_text(raw_text)
+            # Only fine to apply this fix because it preserves character locations
+            ftfy_text = uncurl_quotes(raw_text)
             tokens = NLP(_text_standardize(text))
             subtokens = []
             subtoken_idxs = []
@@ -151,7 +153,7 @@ class GPTEncoder(BaseEncoder):
                     if token.text.strip():
                         token_start = ftfy_text.index((token.text.strip()), token_start)
                 except ValueError:
-                    warnings.warn("Failed to find token `{}` in text.".format(token.text()))
+                    warnings.warn("Failed to find token `{}` in text.".format(token.text))
                     continue
 
                 subtokens.extend(bpe_toks)
