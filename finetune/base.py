@@ -374,6 +374,10 @@ class BaseModel(object, metaclass=ABCMeta):
                 total=length,
                 desc="Inference"
             )
+            try:
+                predictions = list(predictions)
+            except ValueError:
+                raise FinetuneError("The currently loaded model is not trained to run in {} mode".format(predict_keys))
             return [
                 pred[predict_keys[0]] if len(predict_keys) == 1 
                 else pred for pred in predictions
@@ -540,14 +544,15 @@ class BaseModel(object, metaclass=ABCMeta):
         weights_stripped = {k: v for k, v in self.saver.variables.items() if "featurizer" in k and "Adam" not in k}
         joblib.dump(weights_stripped, base_model_path)
 
-    @classmethod
-    def load(cls, path, **kwargs):
+    def load(path, *args, **kwargs):
         """
         Load a saved fine-tuned model from disk.  Path provided should be a folder which contains .pkl and tf.Saver() files
 
         :param path: string path name to load model from.  Same value as previously provided to :meth:`save`. Must be a folder.
         :param **kwargs: key-value pairs of config items to override.
         """
+        if type(path) != str:
+            raise FinetuneError("The load method can only be called on the class, not on an instance.")
         assert_valid_config(**kwargs)
         saver = Saver()
         model = saver.load(path)
