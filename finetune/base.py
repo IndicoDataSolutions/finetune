@@ -352,7 +352,10 @@ class BaseModel(object, metaclass=ABCMeta):
         predictions = [None] * n
         for i in tqdm.tqdm(range(n), total=n, desc="Inference"):
             y = next(self._predictions)
-            y = y[predict_keys[0]] if len(predict_keys) == 1 else y
+            try:
+                y = y[predict_keys[0]] if len(predict_keys) == 1 else y
+            except ValueError:
+                raise FinetuneError("Cannot call `predict()` on a model that has not been fit.")
             predictions[i] = y
 
         return predictions
@@ -374,14 +377,14 @@ class BaseModel(object, metaclass=ABCMeta):
                 total=length,
                 desc="Inference"
             )
+            
             try:
-                predictions = list(predictions)
+                return [
+                    pred[predict_keys[0]] if len(predict_keys) == 1 
+                    else pred for pred in predictions
+                ]
             except ValueError:
-                raise FinetuneError("The currently loaded model is not trained to run in {} mode".format(predict_keys))
-            return [
-                pred[predict_keys[0]] if len(predict_keys) == 1 
-                else pred for pred in predictions
-            ]
+                raise FinetuneError("Cannot call `predict()` on a model that has not been fit.")
 
     def fit(self, *args, **kwargs):
         """ An alias for finetune. """
@@ -552,7 +555,13 @@ class BaseModel(object, metaclass=ABCMeta):
         :param **kwargs: key-value pairs of config items to override.
         """
         if type(path) != str:
-            raise FinetuneError("The load method can only be called on the class, not on an instance.")
+            instance = path
+            raise FinetuneError(
+                "The .load() method can only be called on the class, not on an instance. Try `{}.load(\"{}\") instead.".format(
+                    instance.__class__.__name__, args[0]
+                )
+            )
+
         assert_valid_config(**kwargs)
         saver = Saver()
         model = saver.load(path)
