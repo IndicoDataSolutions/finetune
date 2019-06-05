@@ -137,6 +137,7 @@ class GPTEncoder(BaseEncoder):
             if labels is not None:
                 label = labels[i]
             raw_text = text.lower()
+            ftfy_text = ftfy.fix_text(raw_text)
             tokens = NLP(_text_standardize(text))
             subtokens = []
             subtoken_idxs = []
@@ -148,9 +149,9 @@ class GPTEncoder(BaseEncoder):
 
                 try:
                     if token.text.strip():
-                        token_start = raw_text.index(token.text.strip(), token_start)
+                        token_start = ftfy_text.index((token.text.strip()), token_start)
                 except ValueError:
-                    # text_standardization oddity
+                    warnings.warn("Failed to find token `{}` in text.".format(token.text()))
                     continue
 
                 subtokens.extend(bpe_toks)
