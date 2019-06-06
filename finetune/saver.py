@@ -173,6 +173,7 @@ class Saver:
                         for func in self.variable_transforms:
                             saved_var = func(name, saved_var)
                         var.load(saved_var, session)
+                print("Loaded " + str(model_portion))
             else:
                 for var in all_vars:
                     name = var.name
