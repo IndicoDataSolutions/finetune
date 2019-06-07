@@ -94,13 +94,13 @@ class BaseModel(object, metaclass=ABCMeta):
                 os.path.join(self.config.tensorboard_folder, str(int(time.time())))
             )
             pathlib.Path(self.estimator_dir).mkdir(parents=True, exist_ok=True)
-            self.cleanup_glob = None
+            self._tmp_dir = None
         except (TypeError, IOError):
             # TypeError --> tensorboard_folder is None
             # IOError --> user likely does not have permission to write to the tensorboard_folder directory
             # Both cases we can resolve by
-            self.estimator_dir = tempfile.mkdtemp(prefix="Finetune")
-            self.cleanup_glob = self.estimator_dir
+            self._tmp_dir = tempfile.TemporaryDirectory(prefix="Finetune")
+            self.estimator_dir = self._tmp_dir.name
             LOGGER.info("Saving tensorboard output to {}".format(self.estimator_dir))
 
         self.saver = Saver(
@@ -674,5 +674,5 @@ class BaseModel(object, metaclass=ABCMeta):
         return max(aggregated_results, key=lambda x: x[1])[0]
 
     def __del__(self):
-        if hasattr(self, 'cleanup_glob') and self.cleanup_glob is not None:
-            self.cleanup_glob.cleanup()
+        if hasattr(self, '_tmp_dir') and self._tmp_dir is not None:
+            self._tmp_dir.cleanup()
