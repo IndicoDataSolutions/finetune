@@ -661,9 +661,4 @@ class BaseModel(object, metaclass=ABCMeta):
 
     def __del__(self):
         if hasattr(self, 'cleanup_glob') and self.cleanup_glob is not None:
-            for file_or_folder in glob.glob(self.cleanup_glob):
-                try:
-                    ignore_errors = (sys.platform == 'win32')
-                    shutil.rmtree(file_or_folder, ignore_errors=ignore_errors)
-                except NotADirectoryError:
-                    os.remove(file_or_folder)
+            self.cleanup_glob.cleanup()
