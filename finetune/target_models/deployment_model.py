@@ -1,9 +1,11 @@
 import tensorflow as tf
 import numpy as np
 import tqdm
+import itertools
 from imblearn.over_sampling import RandomOverSampler
 from sklearn.utils import shuffle
 from collections import namedtuple
+from tensorflow.python.data import Dataset
 
 from finetune.config import get_config
 from finetune.saver import Saver, InitializeHook
@@ -22,6 +24,33 @@ from finetune.input_pipeline import BasePipeline
 class DeploymentPipeline(BasePipeline):
     def _target_encoder(self):
         raise NotImplementedError
+
+    def _dataset_without_targets(self, Xs, train):
+        if not callable(Xs):
+            Xs_fn = lambda: self.wrap_tqdm(Xs, train)
+        else:
+            Xs_fn = lambda: self.wrap_tqdm(Xs(), train)
+        
+        dataset_encoded = lambda: itertools.chain.from_iterable(map(self.get_text_token_mask, Xs_fn()))
+        return Dataset.from_generator(dataset_encoded, next(self.get_feed_shape_type_def())[0]) 
+        
+    def pipe_gen(self):
+        pipelines = {'Classification':ClassificationPipeline, 'Comparison':ComparisonPipeline, 'Sequence Labeling':SequencePipeline, 'Association':AssociationPipeline}
+        while True:
+            print("current pipe gen task: "+ str(self.task))
+            yield pipelines[self.task]
+
+    def get_text_token_mask(self, X):
+        pipe = next(self.pipe_gen())(self.config)
+        return pipe.text_to_tokens_mask(X)
+        #next(self.pipe_gen())(self.config).text_to_tokens_mask
+
+    def get_feed_shape_type_def(self):
+        while True:
+            print('in get feed shape')
+            pipe = next(self.pipe_gen())(self.config)
+            types, shapes = pipe.feed_shape_type_def()
+            yield types[0], shapes[0] # 0s cut out the targets
 
 class DeploymentModel(BaseModel):
     """ 
@@ -47,6 +76,7 @@ class DeploymentModel(BaseModel):
         self.config.base_model = base_model
         self.need_to_refresh = True
         self.task = 'Classification'
+        self.input_pipeline.task = self.task
 
     def load_featurizer(self):
         self.featurizer_est = self.get_estimator('featurizer')
@@ -61,8 +91,8 @@ class DeploymentModel(BaseModel):
         if original_model.config.adapter_size != self.config.adapter_size:
             raise FinetuneError("Model loaded from file and base_model have incompatible adapter_size in config")
         #self.input_pipeline = original_model.input_pipeline.__class__(self.config)
-        self._get_input_pipeline = original_model._get_input_pipeline
-        self.input_pipeline = original_model.input_pipeline
+        #self._get_input_pipeline = original_model._get_input_pipeline
+        #self.input_pipeline = original_model.input_pipeline
         self._target_model = original_model._target_model
         self._predict_op = original_model._predict_op
         self._predict_proba_op = original_model._predict_proba_op
@@ -72,17 +102,22 @@ class DeploymentModel(BaseModel):
             hook.need_to_refresh = True
         self._data = None
         self._to_pull = 0
-        self.task = None
-        if isinstance(self.input_pipeline, SequencePipeline) :
+        if isinstance(original_model.input_pipeline, SequencePipeline) :
             self.task = 'Sequence Labeling'
-        elif isinstance(self.input_pipeline, ComparisonPipeline):
+        elif isinstance(original_model.input_pipeline, ComparisonPipeline):
             self.task = 'Comparison'
-        elif isinstance(self.input_pipeline, BasePipeline):
+        elif isinstance(original_model.input_pipeline, BasePipeline):
             self.task = 'Classification'
-        elif isinstance(self.input_pipeline, AssociationPipeline):
+        elif isinstance(original_model.input_pipeline, AssociationPipeline):
             self.task = "Association"
         else:
             raise FinetuneError("Invalid pipeline in loaded file.")
+
+        self.input_pipeline.task = self.task
+        self.input_pipeline.target_dim = original_model.input_pipeline.target_dim
+        self.input_pipeline.label_encoder = original_model.input_pipeline.label_encoder
+        self.input_pipeline.text_encoder = original_model.input_pipeline.text_encoder
+
 
     def get_estimator(self, portion):
         assert portion in ['featurizer', 'target'], "Can only split model into featurizer and target."
@@ -158,21 +193,33 @@ class DeploymentModel(BaseModel):
         raise NotImplementedError
 
     def get_input_fn(self, gen):
-        return lambda: self.intermediate(gen)
+        print('in get input fn')
+        return self.input_pipeline.get_predict_input_fn(gen)
+    '''
+    def input_fns(self):
+        print('in input_fns')
+        while not self._closed:
+            print('yielding')
+            pipelines = {'Classification':ClassificationPipeline, 'Comparison':ComparisonPipeline, 'Sequence Labeling':SequencePipeline, 'Association':AssociationPipeline}
+            task = next(self._data_generator())
+            pipe = pipelines[self.task](self.config)
+            fn = pipe.get_predict_input_fn(self._data_generator)
+            yield fn()
     
-    def intermediate(self,gen):
-        x = lambda : self.select_pipeline(gen)
-        return x()
-
     def select_pipeline(self, gen):
         print('in select_pipeline')
-        #task = next(self._data_generator())
-        task = self._data.pop(0)
-        print(task)
-        print(self._data)
+        self.task = next(self._data_generator())
+        #self.task = self._data.pop(0)
+        #task = next(gen())
+        print(self.task)
+        #print(self._data)
         pipelines = {'Classification':ClassificationPipeline, 'Comparison':ComparisonPipeline, 'Sequence Labeling':SequencePipeline, 'Association':AssociationPipeline}
-        pipe = pipelines[task](self.config)
-        return (lambda : pipe.get_predict_input_fn(gen)())()
+        pipe = pipelines[self.task](self.config)
+        return lambda pipe=pipe: self.pipe_input_fn(gen, pipe)
+    '''
+    def pipe_input_fn(self, gen, pipe):
+        fn = pipe.get_predict_input_fn(gen)
+        return fn()
 
     def predict(self, Xs, mode=PredictMode.NORMAL, exclude_target = False):
         """
@@ -181,22 +228,16 @@ class DeploymentModel(BaseModel):
         :param X: list or array of text to embed.
         :returns: list of class labels.
         """
-        #print("TASK")
-        #print(self.task)
-        #print(Xs)
+        print(Xs)
         Xs = self.input_pipeline._format_for_inference(Xs)
-        Xs.insert(0, self.task)
         self._data = Xs
         self._closed = False
         n = len(self._data)
-        #print(self._data)
-
-
 
         if self._predictions is None:
             featurizer_est = self.get_estimator('featurizer')
             self._predictions =  featurizer_est.predict(
-                    input_fn=self.get_input_fn(self._data_generator), predict_keys=None, hooks=[self.predict_hooks.feat_hook])
+                    input_fn=self.get_input_fn(self._data_generator), predict_keys=None, hooks=[self.predict_hooks.feat_hook], yield_single_examples=False)
             self.predict_hooks.feat_hook.model_portion = 'featurizer'
 
         self._clear_prediction_queue()
@@ -204,12 +245,13 @@ class DeploymentModel(BaseModel):
         features = [None]*n
         for i in tqdm.tqdm(range(n), total=n, desc="Featurization"):
             y = next(self._predictions)
+            for key in y:
+                print(np.shape(y[key]))
             features[i] = y
 
         if exclude_target: #to initialize featurizer weights
             return features
 
-        self.target_est = self.get_estimator('target')
         preds = None
         if features is not None:
             target_est = self.get_estimator('target')
@@ -218,8 +260,8 @@ class DeploymentModel(BaseModel):
                     input_fn=target_fn, predict_keys=mode, hooks=[self.predict_hooks.target_hook])
             preds = [pred[mode] if mode else pred for pred in preds]
 
-        #if self._predictions is not None:
-        #    self._clear_prediction_queue()
+        if self._predictions is not None:
+            self._clear_prediction_queue()
         return self.input_pipeline.label_encoder.inverse_transform(np.asarray(preds))
 
 

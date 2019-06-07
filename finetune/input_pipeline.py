@@ -11,6 +11,7 @@ import tqdm
 import numpy as np
 import tensorflow as tf
 import pandas as pd
+import functools
 from tensorflow.python.data import Dataset
 from sklearn.model_selection import train_test_split
 
@@ -27,7 +28,6 @@ class BasePipeline(metaclass=ABCMeta):
     def __init__(self, config):
         self.config = config
         self.text_encoder = self.config.base_model.get_encoder()
-
         self.label_encoder = None
         self.target_dim = None
         self.pad_idx_ = None
@@ -100,8 +100,6 @@ class BasePipeline(metaclass=ABCMeta):
         return output
 
     def text_to_tokens_mask(self, X, Y=None):
-        print('self in text to tokens mask')
-        print(self)
         out_gen = self._text_to_ids(X, pad_token=self.config.pad_token)
         for out in out_gen:
             feats = {"tokens": out.token_ids, "mask": out.mask}
@@ -153,8 +151,6 @@ class BasePipeline(metaclass=ABCMeta):
         return Dataset.from_generator(lambda: self.wrap_tqdm(dataset_encoded(), train), *shape_def)
 
     def _dataset_without_targets(self, Xs, train):
-        print('self in without targets')
-        print(self)
         if not callable(Xs):
             Xs_fn = lambda: self.wrap_tqdm(Xs, train)
         else:
@@ -312,18 +308,16 @@ class BasePipeline(metaclass=ABCMeta):
         return val_dataset, train_dataset, self.config.val_size, self.config.val_interval
 
     def get_predict_input_fn(self, Xs, batch_size=None):
-        print('self in get predict input fn')
-        print(self)
         batch_size = batch_size or self.config.batch_size
-        tf_dataset = lambda: self._dataset_without_targets(Xs, train=None).batch(batch_size)
+        tf_dataset = lambda : self._dataset_without_targets(Xs, train=None).batch(batch_size)
         return tf_dataset
 
     def get_target_input_fn(self, features, batch_size=None):
-        batch_size = min(len(features),64)
+        batch_size = batch_size or self.config.batch_size
         features = pd.DataFrame(features).to_dict('list')
         for key in features:
             features[key] = np.array(features[key])
-        tf_dataset = lambda: tf.data.Dataset.from_tensor_slices(dict(features)).batch(batch_size)
+        tf_dataset = lambda : tf.data.Dataset.from_tensor_slices(dict(features)).batch(batch_size)
         return tf_dataset
             
     @property
@@ -338,7 +332,6 @@ class BasePipeline(metaclass=ABCMeta):
         return self.pad_idx_
 
     def _format_for_encoding(self, X):
-        print("this is broken")
         """
         Most subclasses take in inputs as:
             List (batch) of list (docs)
@@ -354,9 +347,6 @@ class BasePipeline(metaclass=ABCMeta):
         return list(X)
 
     def _text_to_ids(self, Xs, Y=None, pad_token=None):
-        print(Xs)
-        print('self in text to ids')
-        print(self)
         Xs = self._format_for_encoding(Xs)
         if self.config.chunk_long_sequences and len(Xs) == 1:
             # can only chunk single sequence inputs
