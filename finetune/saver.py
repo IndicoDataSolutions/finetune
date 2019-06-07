@@ -72,6 +72,7 @@ class InitializeHook(tf.train.SessionRunHook):
     def after_create_session(self, session, coord):        
         if self.model_portion != 'entire_model' and self.need_to_refresh:
             init_fn = self.saver.get_scaffold_init_fn()
+            #print("Loaded " + str(self.model_portion) + " in after_create_session")
             if self.model_portion == 'target':
                 init_fn(None, session,self.model_portion)
             else:
@@ -83,6 +84,7 @@ class InitializeHook(tf.train.SessionRunHook):
 
     def before_run(self, run_context):
         if self.model_portion=='featurizer' and self.need_to_refresh:
+            #print("Loaded " + str(self.model_portion) + " in before_run")
             init_fn = self.saver.get_scaffold_init_fn()
             init_fn(None, run_context.session,self.model_portion)
             self.need_to_refresh=False
@@ -173,7 +175,6 @@ class Saver:
                         for func in self.variable_transforms:
                             saved_var = func(name, saved_var)
                         var.load(saved_var, session)
-                print("Loaded " + str(model_portion))
             else:
                 for var in all_vars:
                     name = var.name
