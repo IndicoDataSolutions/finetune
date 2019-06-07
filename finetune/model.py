@@ -278,29 +278,6 @@ def get_separate_model_fns(target_model_fn, predict_op, predict_proba_op, build_
     if portion == 'featurizer':
         return _featurizer_model_fn
 
-    def language_model_op(X, M, params, featurizer_state):
-        language_model_state = language_model(
-            X=X,
-            M=M,
-            config=params,
-            embed_weights=featurizer_state['embed_weights'],
-            hidden=featurizer_state['sequence_features'],
-        )
-
-        lm_logits = language_model_state["logits"]
-
-        lm_logit_mask = np.zeros([1, lm_logits.get_shape().as_list()[-1]], dtype=np.float32)
-        lm_logit_mask[:, encoder.vocab_size:] = -np.inf
-
-        if "use_extra_toks" in params and not params.use_extra_toks:
-            lm_logit_mask[:, encoder.start] = -np.inf
-            lm_logit_mask[:, encoder.delimiter] = -np.inf
-            lm_logit_mask[:, encoder.clf_token] = -np.inf
-
-        lm_logits += lm_logit_mask
-        lm_predict_op = sample_with_temperature(lm_logits, params.lm_temp)
-        return lm_predict_op, language_model_state
-
     def target_model_op(featurizer_state, Y, params, mode, **kwargs):
         weighted_tensor = None
         if params.class_weights is not None:

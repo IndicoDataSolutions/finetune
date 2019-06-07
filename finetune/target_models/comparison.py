@@ -10,7 +10,6 @@ class ComparisonPipeline(ClassificationPipeline):
     def _format_for_encoding(self, X):
         return [X]
 
-
     def _text_to_ids(self, pair, Y=None, pad_token=None):
         """
         Format comparison examples as a list of IDs
