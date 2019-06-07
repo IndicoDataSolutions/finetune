@@ -324,43 +324,39 @@ def get_separate_model_fns(target_model_fn, predict_op, predict_proba_op, build_
 
     def _target_model_fn(features,labels,mode,params):
         assert mode == tf.estimator.ModeKeys.PREDICT, "Separated estimators are only supported for inference."
-        build_target_model = True
         estimator_mode = mode
         pred_op = None
         predictions = {}
         featurizer_state = features
-        task_id=None
 
-        Y = labels
         if params.base_model in [GPTModel, GPTModelSmall] and build_attn:
             predictions[PredictMode.ATTENTION] = featurizer_state['attention_weights']
 
-        if build_target_model:
-            target_model_state = target_model_op(
-                featurizer_state=featurizer_state,
-                Y=Y,
-                params=params,
-                mode=mode,
-                task_id=task_id
-            )
+        target_model_state = target_model_op(
+            featurizer_state=featurizer_state,
+            Y=None,
+            params=params,
+            mode=mode,
+            task_id=None
+        )
 
-            logits = target_model_state["logits"]
-            predict_params = target_model_state.get("predict_params", {})
-            if "_threshold" in params:
-                predict_params["threshold"] = params._threshold
-            pred_op = predict_op(logits, **predict_params)
+        logits = target_model_state["logits"]
+        predict_params = target_model_state.get("predict_params", {})
+        if "_threshold" in params:
+            predict_params["threshold"] = params._threshold
+        pred_op = predict_op(logits, **predict_params)
 
-            if type(pred_op) == tuple:
-                pred_op, pred_proba_op = pred_op
-            else:
-                pred_proba_op = predict_proba_op(logits, **predict_params)
+        if type(pred_op) == tuple:
+            pred_op, pred_proba_op = pred_op
+        else:
+            pred_proba_op = predict_proba_op(logits, **predict_params)
 
-            if type(pred_op) == dict:
-                predictions.update(pred_op)
-                predictions.update(pred_proba_op)
-            else:
-                predictions[PredictMode.NORMAL] = pred_op
-                predictions[PredictMode.PROBAS] = pred_proba_op
+        if type(pred_op) == dict:
+            predictions.update(pred_op)
+            predictions.update(pred_proba_op)
+        else:
+            predictions[PredictMode.NORMAL] = pred_op
+            predictions[PredictMode.PROBAS] = pred_proba_op
 
         return tf.estimator.EstimatorSpec(
             mode=mode,
