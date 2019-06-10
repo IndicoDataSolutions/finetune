@@ -226,7 +226,7 @@ def get_default_config():
     """
     settings = Settings(
         # General Settings
-        low_memory_mode=True,
+        low_memory_mode=False,
         interpolate_pos_embed=False,
         save_adam_vars=True,
         shuffle_buffer_size=100,
@@ -240,7 +240,7 @@ def get_default_config():
         save_dtype=None,
         val_set=None,
         per_process_gpu_memory_fraction=0.95,
-        adapter_size = 64, #from Parameter Efficient Transfer Learning paper
+        adapter_size = None, #from Parameter Efficient Transfer Learning paper
 
         # Regularization
         embed_p_drop=0.1,
@@ -328,9 +328,7 @@ def get_default_config():
         n_embed_featurizer=None, # needed because the dimensions CNN output are different from the embedding dimensions
 
         # BERT only
-        bert_intermediate_size=None,
-
-        build_separate_estimators = False
+        bert_intermediate_size=None
     )
     return settings
 

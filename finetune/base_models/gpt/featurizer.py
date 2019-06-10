@@ -142,13 +142,13 @@ def create_initializer(initializer_range=0.001):
   return tf.truncated_normal_initializer(stddev=initializer_range)
 
 
-def adapter(input, adapter_size, train, nx, hidden_dropout_prob = 0.1):
-    down_projection = tf.layers.dense(input, adapter_size, activation = 'sigmoid',
+def adapter(X, adapter_size, train, nx, hidden_dropout_prob=0.1):
+    down_projection = tf.layers.dense(X, adapter_size, activation = 'sigmoid',
         kernel_initializer = create_initializer())
     down_projection = dropout(down_projection, hidden_dropout_prob, train)
     up_projection = tf.layers.dense(down_projection, nx,
         kernel_initializer = create_initializer())
-    return up_projection + input
+    return up_projection + X
 
 
 def block(x, n_head, act_fn, adptr_size, resid_pdrop, attn_pdrop, scope, train=False, scale=False, explain=False):

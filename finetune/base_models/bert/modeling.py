@@ -754,13 +754,13 @@ def attention_layer(from_tensor,
   return context_layer
 
 
-def adapter(input, adapter_size, input_size, hidden_dropout_prob=0.1):
-    down_projection = tf.layers.dense(input, adapter_size, activation = 'sigmoid',
+def adapter(X, adapter_size, input_size, hidden_dropout_prob=0.1):
+    down_projection = tf.layers.dense(X, adapter_size, activation = 'sigmoid',
         kernel_initializer = create_initializer(0.001))
     down_projection = dropout(down_projection, hidden_dropout_prob)
     up_projection = tf.layers.dense(down_projection, input_size,
         kernel_initializer = create_initializer(0.001))
-    return up_projection + input
+    return up_projection + X
 
 
 def transformer_model(input_tensor,
@@ -774,7 +774,7 @@ def transformer_model(input_tensor,
                       attention_probs_dropout_prob=0.1,
                       initializer_range=0.02,
                       do_return_all_layers=False,
-                      adapter_size = 0):
+                      adapter_size=0):
   """Multi-headed, multi-layer Transformer from "Attention is All You Need".
 
   This is almost an exact implementation of the original Transformer encoder.
