@@ -1,4 +1,6 @@
 import itertools
+from collections import Counter
+
 import tensorflow as tf
 import numpy as np
 
@@ -47,6 +49,15 @@ class AssociationPipeline(BasePipeline):
 
                 yield feats, {"labels": self.label_encoder.transform(labels),
                               "associations": np.array(assoc_mat, dtype=np.int32)}
+
+    def _compute_class_counts(self, encoded_dataset):
+        counter = Counter()
+        for doc, target_arr in encoded_dataset:
+            targets = target_arr[doc['mask'].astype(np.bool)]
+            counter.update(
+                self.label_encoder.inverse_transform(targets)
+            )
+        return counter
 
     def _format_for_encoding(self, X):
         return [X]

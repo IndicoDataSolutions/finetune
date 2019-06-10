@@ -1,5 +1,6 @@
 import itertools
 import copy
+from collections import Counter
 
 import tensorflow as tf
 import numpy as np
@@ -32,6 +33,15 @@ class SequencePipeline(BasePipeline):
             else:
                 yield feats, self.label_encoder.transform(out.labels)
 
+    def _compute_class_counts(self, encoded_dataset):
+        counter = Counter()
+        for doc, target_arr in encoded_dataset:
+            targets = target_arr[doc['mask'].astype(np.bool)]
+            counter.update(
+                self.label_encoder.inverse_transform(targets)
+            )
+        return counter
+    
     def _format_for_encoding(self, X):
         return [X]
 

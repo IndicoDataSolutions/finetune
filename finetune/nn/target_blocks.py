@@ -321,11 +321,12 @@ def sequence_labeler(hidden, targets, n_targets, config, pad_id, multilabel=Fals
             logits = class_reweighting(per_token_weights)(logits)
 
         log_likelihood = 0.0
-        default_lengths = kwargs.get('max_length') * tf.ones(tf.shape(hidden)[0], dtype=tf.int64)
+        
+        default_lengths = kwargs.get('max_length') * tf.ones(tf.shape(hidden)[0], dtype=tf.int32)
         if pool_idx is None:
             pool_idx = default_lengths
         else:
-            pool_idx = tf.where(tf.equal(pool_idx, 0), default_lengths, pool_idx)
+            pool_idx = tf.where(tf.equal(pool_idx, 0), default_lengths, tf.cast(pool_idx, dtype=tf.int32))
 
         with tf.device("CPU:0"):
             if multilabel:
