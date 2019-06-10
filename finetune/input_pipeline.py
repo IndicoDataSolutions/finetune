@@ -3,6 +3,7 @@ import logging
 import sys
 import math
 import os
+from collections import Counter
 
 from abc import ABCMeta, abstractmethod
 
@@ -120,10 +121,6 @@ class BasePipeline(metaclass=ABCMeta):
         self.lm_loss_coef = self.config.lm_loss_coef if target_dim is not None else 1.0
         self.target_dim = target_dim
 
-        if Y_fit is not None:
-            self.config.class_weights = compute_class_weights(class_weights=self.config.class_weights, Y=Y_fit)
-            print(self.config.class_weights)
-
     def _dataset_with_targets(self, Xs, Y, train):
         if not callable(Xs) and not callable(Y):
             dataset = lambda: zip(Xs, Y)
@@ -135,8 +132,16 @@ class BasePipeline(metaclass=ABCMeta):
         dataset_encoded = lambda: itertools.chain.from_iterable(
             map(lambda xy: self.text_to_tokens_mask(*xy), dataset()))
         shape_def = self.feed_shape_type_def()
-        if not callable(Y) and self.config.chunk_long_sequences and train:
-            dataset_encoded_list = list(dataset_encoded())  # come up with a more principled way to do this .
+        if not callable(Y) and train:
+            dataset_encoded_list = list(dataset_encoded())
+            counter = Counter()
+            for doc, target_arr in dataset_encoded_list:
+                counter.update(target_arr[doc['mask'].astype(np.bool)])
+            class_counts = {
+                self.label_encoder.inverse_transform([target])[0]: count 
+                for target, count in counter.items()
+            }
+            self.config.class_weights = compute_class_weights(self.config.class_weights, class_counts=class_counts)
             self.config.dataset_size = len(dataset_encoded_list)
         return Dataset.from_generator(lambda: self.wrap_tqdm(dataset_encoded(), train), *shape_def)
 
@@ -147,6 +152,10 @@ class BasePipeline(metaclass=ABCMeta):
             Xs_fn = lambda: self.wrap_tqdm(Xs(), train)
 
         dataset_encoded = lambda: itertools.chain.from_iterable(map(self.text_to_tokens_mask, Xs_fn()))
+        if not callable(Xs) and self.config.chunk_long_sequences:
+            # Adjust dataset size to account for long documents being chunked
+            dataset_encoded_list = list(dataset_encoded())
+            self.config.dataset_size = len(dataset_encoded_list)
         types, shapes = self.feed_shape_type_def()
         return Dataset.from_generator(dataset_encoded, types[0], shapes[0])  # 0s cut out the targets
 
