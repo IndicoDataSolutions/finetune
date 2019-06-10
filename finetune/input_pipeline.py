@@ -121,6 +121,10 @@ class BasePipeline(metaclass=ABCMeta):
         self.lm_loss_coef = self.config.lm_loss_coef if target_dim is not None else 1.0
         self.target_dim = target_dim
 
+    def _compute_class_counts(self, encoded_dataset):
+        target_arrs = np.asarray([target_arr for doc, target_arr in encoded_dataset])
+        return Counter(self.label_encoder.inverse_transform(target_arrs))
+        
     def _dataset_with_targets(self, Xs, Y, train):
         if not callable(Xs) and not callable(Y):
             dataset = lambda: zip(Xs, Y)
@@ -132,17 +136,17 @@ class BasePipeline(metaclass=ABCMeta):
         dataset_encoded = lambda: itertools.chain.from_iterable(
             map(lambda xy: self.text_to_tokens_mask(*xy), dataset()))
         shape_def = self.feed_shape_type_def()
+
         if not callable(Y) and train:
             dataset_encoded_list = list(dataset_encoded())
-            counter = Counter()
-            for doc, target_arr in dataset_encoded_list:
-                counter.update(target_arr[doc['mask'].astype(np.bool)])
-            class_counts = {
-                self.label_encoder.inverse_transform([target])[0]: count 
-                for target, count in counter.items()
-            }
-            self.config.class_weights = compute_class_weights(self.config.class_weights, class_counts=class_counts)
+            class_counts = self._compute_class_counts(dataset_encoded_list)
             self.config.dataset_size = len(dataset_encoded_list)
+            if self.config.class_weights is not None:
+                self.config.class_weights = compute_class_weights(
+                    class_weights=self.config.class_weights, 
+                    class_counts=class_counts
+                )
+           
         return Dataset.from_generator(lambda: self.wrap_tqdm(dataset_encoded(), train), *shape_def)
 
     def _dataset_without_targets(self, Xs, train):
@@ -292,7 +296,8 @@ class BasePipeline(metaclass=ABCMeta):
             val_dataset_unbatched = self._make_dataset(Xs_va, Y_va, train=False)
             train_dataset_unbatched = self._make_dataset(Xs_tr, Y_tr, train=True)
 
-        if self.config.chunk_long_sequences:
+        if self.config.chunk_long_sequences or self.config.class_weights:
+            # Certain settings require that the entire dataset be encoded before compiling the graph
             train_dataset_unbatched()
 
         val_dataset = lambda: val_dataset_unbatched().batch(batch_size, drop_remainder=False).cache().prefetch(prefetch_buffer)

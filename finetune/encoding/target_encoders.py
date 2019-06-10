@@ -66,6 +66,21 @@ class OneHotLabelEncoder(LabelEncoder, BaseEncoder):
         labels = super().transform(y)
         return self._make_one_hot(labels)
 
+    def inverse_transform(self, one_hot):
+        if len(one_hot.shape) == 2:
+            # Convert batch of one hot labels to class names
+            ys = []
+            for row in one_hot:
+                for i, flag in enumerate(row):
+                    if flag == 1:
+                        ys.append(self.target_labels[i])
+                        break
+            return ys
+        else:
+            # Convert class ids to class names
+            return super().inverse_transform(one_hot)
+    
+
 class OrdinalRegressionEncoder(OrdinalEncoder, BaseEncoder):
 
     def __init__(self):
