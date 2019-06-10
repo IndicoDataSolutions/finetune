@@ -198,6 +198,26 @@ class TestClassifier(unittest.TestCase):
         for proba in probabilities:
             self.assertIsInstance(proba, dict)
 
+    def test_fit_predict_low_memory(self):
+        """
+        Ensure model training does not error out
+        Ensure model returns predictions of the right type
+        """
+
+        model = Classifier(**self.default_config(low_memory_mode=True))
+        train_sample = self.dataset.sample(n=self.n_sample)
+        valid_sample = self.dataset.sample(n=self.n_sample)
+
+        model.fit(train_sample.Text.values, train_sample.Target.values)
+
+        predictions = model.predict(valid_sample.Text.values)
+        for prediction in predictions:
+            self.assertIsInstance(prediction, (np.int, np.int64))
+
+        probabilities = model.predict_proba(valid_sample.Text.values)
+        for proba in probabilities:
+            self.assertIsInstance(proba, dict)
+
     def test_oversample(self):
         """
         Ensure model training does not error out when oversampling is set to True
