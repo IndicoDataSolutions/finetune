@@ -9,20 +9,17 @@ from finetune.encoding.target_encoders import LabelEncoder
 from finetune.errors import FinetuneError
 
 
-def compute_class_weights(class_weights, Y):
+def compute_class_weights(class_weights, class_counts):
     """
     Optionally compute class weights based on target distribution
     """
     if class_weights is None:
         return
 
-    if isinstance(Y, np.ndarray):
-        Y = Y.tolist()
-
     options = {'linear', 'log', 'sqrt'}
 
     if isinstance(class_weights, str) and class_weights in options:
-        counts = Counter(Y)
+        counts = class_counts
         max_count = max(counts.values())
         computed_weights = {}
         for class_name, count in counts.items():
