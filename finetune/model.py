@@ -257,13 +257,6 @@ def get_separate_model_fns(target_model_fn, predict_op, predict_proba_op, build_
                 config=params,
                 train=False
         )
-        outputs = {}
-        for key in featurizer_state:
-            value = featurizer_state[key]
-            if isinstance(value, tf.Variable):
-                value = value.read_value()
-            outputs[key] = value
-
         predictions = {'features':featurizer_state['features'],
                     'sequence_features':featurizer_state['sequence_features']}
         
@@ -278,28 +271,7 @@ def get_separate_model_fns(target_model_fn, predict_op, predict_proba_op, build_
     if portion == 'featurizer':
         return _featurizer_model_fn
 
-    def target_model_op(featurizer_state, Y, params, mode, **kwargs):
-        weighted_tensor = None
-        if params.class_weights is not None:
-            weighted_tensor = class_weight_tensor(
-                class_weights=params.class_weights,
-                target_dim=target_dim,
-                label_encoder=label_encoder
-            )
-        with tf.variable_scope('model/target'):
-            target_model_state = target_model_fn(
-                config=params,
-                featurizer_state=featurizer_state,
-                targets=Y,
-                n_outputs=target_dim,
-                train=(mode == tf.estimator.ModeKeys.TRAIN),
-                max_length=params.max_length,
-                class_weights=weighted_tensor,
-                **kwargs
-            )
-        return target_model_state
-
-    def _target_model_fn(features,labels,mode,params):
+    def _target_model_fn(features, labels, mode, params):
         assert mode == tf.estimator.ModeKeys.PREDICT, "Separated estimators are only supported for inference."
         estimator_mode = mode
         pred_op = None
@@ -309,13 +281,16 @@ def get_separate_model_fns(target_model_fn, predict_op, predict_proba_op, build_
         if params.base_model in [GPTModel, GPTModelSmall] and build_attn:
             predictions[PredictMode.ATTENTION] = featurizer_state['attention_weights']
 
-        target_model_state = target_model_op(
-            featurizer_state=featurizer_state,
-            Y=None,
-            params=params,
-            mode=mode,
-            task_id=None
-        )
+        with tf.variable_scope('model/target'):
+            target_model_state = target_model_fn(
+                config=params,
+                featurizer_state=featurizer_state,
+                targets=None,
+                n_outputs=target_dim,
+                train=False,
+                max_length=params.max_length,
+                class_weights=None,
+            )
 
         logits = target_model_state["logits"]
         predict_params = target_model_state.get("predict_params", {})

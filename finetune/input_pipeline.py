@@ -10,14 +10,12 @@ from abc import ABCMeta, abstractmethod
 import tqdm
 import numpy as np
 import tensorflow as tf
-import pandas as pd
 import functools
 from tensorflow.python.data import Dataset
 from sklearn.model_selection import train_test_split
 
 import finetune
 from finetune.errors import FinetuneError
-from finetune.base_models import GPTModel, GPTModelSmall
 from finetune.encoding.input_encoder import ArrayEncodedOutput, EncodedOutput
 from finetune.util.imbalance import compute_class_weights
 
