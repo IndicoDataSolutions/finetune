@@ -105,14 +105,17 @@ def cascaded_pool(value, kernel_size, dim=1, pool_len=None):
     if w.dtype != value.dtype:
         w = tf.cast(w, value.dtype)
     intermediate_vals.append(value * w)
-    for i in range(math.ceil(math.log(full_pool_len, kernel_size))):
+    num_pooling_ops = math.ceil(math.log(full_pool_len, kernel_size))
+    w_bs = tf.split(
+        normal_1d_conv_block(value, 1, "pool_w_b", value.dtype==tf.float16, output_dim=shape[-1] * num_pooling_ops * 2),
+        num_or_size_splits=2 * num_pooling_ops,
+        axis=-1
+    )
+    for i in range(num_pooling_ops):
         value = dilated_causal_max_pool(value, kernel_size=kernel_size, dilation=kernel_size ** i, dim=dim)
         value_proj = normal_1d_conv_block(value, 1, "pool_project_{}".format(i), value.dtype==tf.float16)
-        w = tf.get_variable("weighted_mean_max_pool_{}".format(i), shape=[shape[-1]], dtype=tf.float32)
-        if w.dtype != value.dtype:
-            w = tf.cast(w, value.dtype)
-        intermediate_vals.append(value_proj * w)
-    return tf.reduce_mean(intermediate_vals, 0)
+        intermediate_vals.append(value_proj * w_bs[2 * i] + w_bs[2 * i + 1])
+    return tf.reduce_mean(tf.nn.relu(intermediate_vals), 0)
     
 def causal_conv(value, filter_, dilation, name='causal_conv'):
     if type(filter_) == tuple:
@@ -196,7 +199,7 @@ def cummax(x, dim):
 def cumulative_state_net(X, name, use_fp16, pool_idx, pdrop, train):
     #previously
     # pool_kernel_size=8, conv_kernels=[1,2,4,8]
-    conv_kernels = [1, 4]
+    conv_kernels = [1, 2, 4, 8]
     pool_kernel_size = conv_kernels[-1]
     outputs = []
     nx = shape_list(X)[-1]

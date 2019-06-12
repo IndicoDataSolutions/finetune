@@ -13,7 +13,7 @@ class GPCModel(SourceModel):
     featurizer = featurizer
     settings = {
         'n_embed': 1024,
-        "base_model_path": "conv37days.jl",
+        "base_model_path": "fresh_start.jl",#"conv37days.jl",
         'n_layer': 12,
         'num_layers_trained':12,
         'n_epochs': 8,
