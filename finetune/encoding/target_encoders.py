@@ -1,6 +1,9 @@
+from abc import ABCMeta
+
 import numpy as np
 from sklearn.preprocessing import LabelEncoder, MultiLabelBinarizer, OrdinalEncoder
-from abc import ABCMeta
+
+from finetune.errors import FinetuneError
 
 
 class BaseEncoder(metaclass=ABCMeta):
@@ -67,19 +70,15 @@ class OneHotLabelEncoder(LabelEncoder, BaseEncoder):
         return self._make_one_hot(labels)
 
     def inverse_transform(self, one_hot):
-        if len(one_hot.shape) == 2:
-            # Convert batch of one hot labels to class names
-            ys = []
-            for row in one_hot:
-                for i, flag in enumerate(row):
-                    if flag == 1:
-                        ys.append(self.target_labels[i])
-                        break
-            return ys
-        else:
-            # Convert class ids to class names
-            return super().inverse_transform(one_hot)
-    
+        ys = []
+        one_hot = np.asarray(one_hot)
+        for row in one_hot:
+            for i, flag in enumerate(row):
+                if flag == 1:
+                    ys.append(self.target_labels[i])
+                    break
+        return ys
+
 
 class OrdinalRegressionEncoder(OrdinalEncoder, BaseEncoder):
 

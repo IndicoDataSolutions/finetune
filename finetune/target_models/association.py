@@ -53,7 +53,7 @@ class AssociationPipeline(BasePipeline):
     def _compute_class_counts(self, encoded_dataset):
         counter = Counter()
         for doc, target_arr in encoded_dataset:
-            targets = target_arr[doc['mask'].astype(np.bool)]
+            targets = target_arr['labels'][doc['mask'].astype(np.bool)]
             counter.update(
                 self.label_encoder.inverse_transform(targets)
             )

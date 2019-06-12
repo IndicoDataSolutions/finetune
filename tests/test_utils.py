@@ -1,4 +1,5 @@
 import unittest
+from collections import Counter
 
 import numpy as np
 import tensorflow as tf
@@ -25,7 +26,7 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
             ["Indico ", "Is the", " best", " hey"]
         ]
         finetuney = [
-            [("1",), ("1", "2"), ("2", ), ("<PAD>")]
+            [("1",), ("1", "2"), ("2",), ("<PAD>",)]
         ]
         encoder = GPTEncoder()
         indicox_pred, indicoy_pred = finetune_to_indico_sequence(raw, finetunex, finetuney, none_value="<PAD>",
@@ -194,7 +195,8 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
         # regression test for issue #181
         np.random.seed(0)
         y = np.random.choice(a=[0, 1, 2], size=1000, p=[0.3, 0.6, 0.1])
-        weights = compute_class_weights('log', y)
+        class_counts = Counter(y)
+        weights = compute_class_weights('log', class_counts=class_counts)
         self.assertEqual(weights[1], 1.0)
 
 
