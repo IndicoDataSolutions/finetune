@@ -128,7 +128,7 @@ class Classifier(BaseModel):
         return processed
 
     def _predict_op(self, logits, **kwargs):
-        return tf.argmax(logits, -1)
+        return tf.contrib.seq2seq.hardmax(logits)
 
     def _predict_proba_op(self, logits, **kwargs):
         return tf.nn.softmax(logits, -1)
