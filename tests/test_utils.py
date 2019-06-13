@@ -1,15 +1,20 @@
 import unittest
+import os.path
+import random
+import json
 from collections import Counter
 
 import numpy as np
 import tensorflow as tf
+import pandas as pd
 
 import finetune
 from finetune.encoding.sequence_encoder import indico_to_finetune_sequence, finetune_to_indico_sequence
 from finetune.optimizers.gradient_accumulation import get_grad_accumulation_optimizer
 from finetune.util.imbalance import compute_class_weights
 from finetune.errors import FinetuneError
-from finetune import Classifier
+from finetune import Classifier, SequenceLabeler
+from finetune.base_models import GPT, GPT2, BERT
 from finetune.base_models.gpt.encoder import GPTEncoder
 from finetune.base_models.gpt2.encoder import GPT2Encoder
 
@@ -19,6 +24,78 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
     def test_invalid_keyword(self):
         with self.assertRaises(FinetuneError):
             model = Classifier(tensorboard='./testing') # should be tensorboard_folder
+    
+    def test_train_test_tokenization_consistency(self):
+        filepath = os.path.abspath(os.path.join(os.path.dirname(__file__), 'testdata.csv'))
+        df = pd.read_csv(filepath)
+        X = []
+        Y = []
+
+        for i, row in df.iterrows():
+            X.append(row["text"])
+            labels = json.loads(row["question_843"])
+            for label in labels:
+                label['start'] = label['startOffset']
+                label['end'] = label['endOffset']
+                label['text'] = row["text"][label['start']:label['end']]
+            Y.append(labels)
+
+        for multilabel_setting in [True, False]:
+            for base_model in [GPT, GPT2, BERT]:
+                model = SequenceLabeler(chunk_long_sequences=True, base_model=base_model, multi_label_sequences=multilabel_setting)
+                train_encoded = [x for x in model.input_pipeline._text_to_ids(X, Y=Y, pad_token=model.config.pad_token)]
+                test_encoded = [x for x in model.input_pipeline._text_to_ids(X)]
+                for chunk_id in range(len(train_encoded)):
+                    for train_token_ids, test_token_ids in zip(train_encoded[chunk_id].token_ids, test_encoded[chunk_id].token_ids):
+                        self.assertEqual(train_token_ids[0], test_token_ids[0])
+
+    def test_whitespace_handling(self):
+        # Newline complications
+        finetunex = [["Train:", "\n\n\n and test", " tokenization must be", " equivalent"]]
+        finetuney = [[("1",), ("1", "2"), ("2",), ("<PAD>",)]]
+        expectedx = ["Train:\n\n\n and test tokenization must be equivalent"]
+        expectedy = [
+            [
+                {'start': 0, 'end': 18, 'label': "1", 'text': "Train:\n\n\n and test"},
+                {'start': 10, 'end': 39, 'label': "2", 'text': "and test tokenization must be"}
+            ]
+        ]
+        indicox_pred, indicoy_pred = finetune_to_indico_sequence(expectedx, finetunex, finetuney, none_value="<PAD>", subtoken_predictions=False)
+        self.assertEqual(indicox_pred, expectedx)
+        self.assertEqual(indicoy_pred, expectedy)
+    
+        expectedx = ["Train and test tokenization must be equivalent"]
+        expectedy = [
+            [
+                {'start': 0, 'end': 14, 'label': "1", 'text': "Train and test"},
+                {'start': 6, 'end': 35, 'label': "2", 'text': "and test tokenization must be"}
+            ]
+        ]
+    
+        # Spaces before labels
+        finetunex = [["Train", " and test", " tokenization must be", " equivalent"]]
+        finetuney = [[("1",), ("1", "2"), ("2",), ("<PAD>",)]]
+
+        indicox_pred, indicoy_pred = finetune_to_indico_sequence(expectedx, finetunex, finetuney, none_value="<PAD>", subtoken_predictions=False)
+        self.assertEqual(indicox_pred, expectedx)
+        self.assertEqual(indicoy_pred, expectedy)
+
+        # Spaces after labels
+        finetunex = [["Train ", "and test ", "tokenization must be ", "equivalent"]]
+        finetuney = [[("1",), ("1", "2"), ("2",), ("<PAD>",)]]
+    
+        indicox_pred, indicoy_pred = finetune_to_indico_sequence(expectedx, finetunex, finetuney, none_value="<PAD>", subtoken_predictions=False)
+        self.assertEqual(indicox_pred, expectedx)
+        self.assertEqual(indicoy_pred, expectedy)
+
+        # Whitespace anarchy
+        finetunex = [["Train", " and test ", "tokenization must be", " equivalent"]]
+        finetuney = [[("1",), ("1", "2"), ("2",), ("<PAD>",)]]
+
+        indicox_pred, indicoy_pred = finetune_to_indico_sequence(expectedx, finetunex, finetuney, none_value="<PAD>", subtoken_predictions=False)
+        self.assertEqual(indicox_pred, expectedx)
+        self.assertEqual(indicoy_pred, expectedy)
+        
 
     def test_overlapping(self):
         raw = ["Indico Is the best hey"]
