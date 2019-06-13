@@ -197,7 +197,7 @@ class SequenceLabeler(BaseModel):
         step_size = chunk_size // 3
         arr_encoded = list(itertools.chain.from_iterable(self.input_pipeline._text_to_ids([x]) for x in X))
         labels, batch_probas = [], []
-        for pred in self._inference(X, predict_keys=[PredictMode.PROBAS, PredictMode.NORMAL]):
+        for pred in self._inference(X, predict_keys=[PredictMode.PROBAS, PredictMode.NORMAL], n_examples=len(arr_encoded)):
             labels.append(self.input_pipeline.label_encoder.inverse_transform(pred[PredictMode.NORMAL]))
             batch_probas.append(pred[PredictMode.PROBAS])
 
@@ -208,7 +208,6 @@ class SequenceLabeler(BaseModel):
 
         doc_idx = -1
         for chunk_idx, (label_seq, proba_seq) in enumerate(zip(labels, batch_probas)):
-            
             position_seq = arr_encoded[chunk_idx].char_locs
             start_of_doc = arr_encoded[chunk_idx].token_ids[0][0] == self.input_pipeline.text_encoder.start
             end_of_doc = (

@@ -335,13 +335,13 @@ class BaseModel(object, metaclass=ABCMeta):
         self._cached_predict = False
         self.close()
 
-    def _cached_inference(self, Xs, predict_keys=None):
+    def _cached_inference(self, Xs, predict_keys=None, n_examples=None):
         """
         Ensure graph is not rebuilt on subsequent calls to .predict()
         """
         self._data = Xs
         self._closed = False
-        n = len(self._data)
+        n = n_examples or len(self._data)
         if self._predictions is None:
             _estimator, hooks = self.get_estimator()
             input_fn = self.input_pipeline.get_predict_input_fn(self._data_generator)
@@ -360,11 +360,11 @@ class BaseModel(object, metaclass=ABCMeta):
 
         return predictions
 
-    def _inference(self, Xs, predict_keys=None):
+    def _inference(self, Xs, predict_keys=None, n_examples=None):
         Xs = self.input_pipeline._format_for_inference(Xs)
 
         if self._cached_predict:
-            return self._cached_inference(Xs=Xs, predict_keys=predict_keys)
+            return self._cached_inference(Xs=Xs, predict_keys=predict_keys, n_examples=n_examples)
         else:
             estimator, hooks = self.get_estimator(build_explain=PredictMode.EXPLAIN in predict_keys)
             input_fn = self.input_pipeline.get_predict_input_fn(Xs)
