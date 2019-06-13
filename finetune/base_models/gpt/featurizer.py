@@ -143,11 +143,11 @@ def create_initializer(initializer_range=0.001):
 
 
 def adapter(X, adapter_size, train, nx, hidden_dropout_prob=0.1):
-    down_projection = tf.layers.dense(X, adapter_size, activation = 'sigmoid',
-        kernel_initializer = create_initializer())
+    down_projection = tf.layers.dense(X, adapter_size, activation='sigmoid',
+        kernel_initializer=create_initializer(0.001))
     down_projection = dropout(down_projection, hidden_dropout_prob, train)
     up_projection = tf.layers.dense(down_projection, nx,
-        kernel_initializer = create_initializer())
+        kernel_initializer=create_initializer(0.001))
     return up_projection + X
 
 
@@ -220,7 +220,7 @@ def gpt_featurizer(X, encoder, config, train=False, reuse=None, explain=False, *
 
         h = embed(X, embed_weights)
         for layer in range(config.n_layer):
-            if (config.n_layer - layer) == config.num_layers_trained and config.num_layers_trained != config.n_layer and config.adapter_size is not None:
+            if (config.n_layer - layer) == config.num_layers_trained and config.num_layers_trained != config.n_layer and config.adapter_size is None:
                 h = tf.stop_gradient(h)
                 train_layer = False
             else:

@@ -166,7 +166,7 @@ class DeploymentModel(BaseModel):
 
     def _get_estimator(self, portion):
         assert portion in ['featurizer', 'target'], "Can only split model into featurizer and target."
-        conf, distribute_strategy, config = self._get_estimator_config()
+        config = self._get_estimator_config()
 
         fn = get_separate_model_fns(
             target_model_fn=self._target_model if portion == 'target' else None, 
