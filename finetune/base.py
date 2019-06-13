@@ -245,7 +245,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self.resolved_gpus = resolved_gpus
         return distribute_strategy
 
-    def get_estimator(self, force_build_lm=False, build_explain=False):
+    def _get_estimator_config(self, force_build_lm=False, build_explain=False):
         conf = tf.ConfigProto(
             allow_soft_placement=self.config.soft_device_placement,
             log_device_placement=self.config.log_device_placement,
@@ -265,6 +265,10 @@ class BaseModel(object, metaclass=ABCMeta):
             train_distribute=distribute_strategy,
             keep_checkpoint_max=1
         )
+        return config
+
+    def get_estimator(self, force_build_lm=False):
+        config = self._get_estimator_config()
 
         model_fn = get_model_fn(
             target_model_fn=self._target_model,

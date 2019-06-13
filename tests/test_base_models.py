@@ -20,8 +20,8 @@ import requests
 from bs4 import BeautifulSoup as bs
 from bs4.element import Tag
 
-from finetune.base_models import TextCNN
-from finetune.base_models import BERTModelCased
+from finetune.base_models import TextCNN, BERTModelCased, GPT2Model
+from .test_deployment_model import TestDeploymentModel
 from finetune import Classifier, Comparison, SequenceLabeler
 from finetune.datasets import generic_download
 from finetune.config import get_config
@@ -468,3 +468,10 @@ class TestComparisonBert(TestComparisonTextCNN):
         "lr": 1e-4
     }
     base_model = BERTModelCased
+
+class TestDeploymentBert(TestDeploymentModel):
+    base_model = BERTModelCased
+
+
+class TestDeploymentGPT2(TestDeploymentModel):  
+    base_model = GPT2Model

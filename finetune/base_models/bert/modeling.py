@@ -27,6 +27,7 @@ import numpy as np
 import six
 import tensorflow as tf
 
+from finetune.base_models.gpt.featurizer import adapter
 
 class BertConfig(object):
   """Configuration for `BertModel`."""
@@ -752,15 +753,6 @@ def attention_layer(from_tensor,
         [batch_size, from_seq_length, num_attention_heads * size_per_head])
 
   return context_layer
-
-
-def adapter(X, adapter_size, input_size, hidden_dropout_prob=0.1):
-    down_projection = tf.layers.dense(X, adapter_size, activation = 'sigmoid',
-        kernel_initializer = create_initializer(0.001))
-    down_projection = dropout(down_projection, hidden_dropout_prob)
-    up_projection = tf.layers.dense(down_projection, input_size,
-        kernel_initializer = create_initializer(0.001))
-    return up_projection + X
 
 
 def transformer_model(input_tensor,

@@ -4,7 +4,9 @@ import logging
 import shutil
 import string
 import gc
+import json
 from copy import copy
+import random
 import time
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -20,9 +22,10 @@ import tensorflow as tf
 import pandas as pd
 import numpy as np
 from sklearn.metrics import accuracy_score, recall_score
+from sklearn.model_selection import train_test_split
 
-from finetune import Classifier, Regressor, DeploymentModel, SequenceLabeler
-from finetune.base_models import GPTModel, 
+from finetune import Classifier, Regressor, DeploymentModel, SequenceLabeler, ComparisonRegressor
+from finetune.base_models import GPTModel
 from finetune.datasets import generic_download
 from finetune.config import get_config
 from finetune.errors import FinetuneError
@@ -43,7 +46,7 @@ class TestDeploymentModel(unittest.TestCase):
         'Data', 'Sequence', 'reuters.xml'
     )
     processed_path = os.path.join('Data', 'Sequence', 'reuters.json')
-
+    basemodel = GPTModel
 
     @classmethod
     def _download_data(cls):
@@ -64,11 +67,11 @@ class TestDeploymentModel(unittest.TestCase):
 
         #Download Reuters Dataset to enso `data` directory
         
-        path = Path(cls._path)
+        path = Path(cls.sequence_dataset_path)
         if not path.exists():
             path.parent.mkdir(parents=True, exist_ok=True)
 
-        if not os.path.exists(cls.dataset_path):
+        if not os.path.exists(cls.sequence_dataset_path):
             url = "https://raw.githubusercontent.com/dice-group/n3-collection/master/reuters.xml"
             r = requests.get(url)
             with open(cls.sequence_dataset_path, "wb") as fp:
@@ -107,7 +110,7 @@ class TestDeploymentModel(unittest.TestCase):
 
     def setUp(self):
         #dataset preparation
-        self.classifier_dataset = pd.read_csv(self.classifier_path, nrows=self.n_sample * 3)
+        self.classifier_dataset = pd.read_csv(self.classifier_dataset_path, nrows=self.n_sample * 3)
 
         with open(self.processed_path, 'rt') as fp:
             self.texts, self.labels = json.load(fp)
@@ -133,13 +136,13 @@ class TestDeploymentModel(unittest.TestCase):
             for i in range(n_per // 2):
                 similar.append([random.choice(dataset), random.choice(dataset)])
         for i in range(n_per):
-            different.append([random.choice(animals), random.choice(numbers)])
+            different.append([random.choice(self.animals), random.choice(self.numbers)])
 
         targets = np.asarray([1] * len(similar) + [0] * len(different))
         data = similar + different
 
         self.x_tr, self.x_te, self.t_tr, self.t_te = train_test_split(data, targets, test_size=0.3, random_state=42)
-        cr.finetune(self.x_tr, self.t_tr)
+        cr.fit(self.x_tr, self.t_tr)
         cr.save(self.comparison_regressor_path)
 
         #train and save sequence labeler for later use
@@ -167,14 +170,14 @@ class TestDeploymentModel(unittest.TestCase):
 
     def test_cached_predict(self):
         """
-        Ensure second call to predict is faster than first
+        Ensure second call to predict is faster than first, 
         """
-        model = DeploymentModel(base_model=GPTModel, **self.default_config())
+        model = DeploymentModel(base_model=self.base_model, **self.default_config())
         model.load_featurizer()
-        model.load_trainables(self.classifier_path)
 
         valid_sample = self.classifier_dataset.sample(n=self.n_sample)
         start = time.time()
+        model.load_trainables(self.classifier_path)
         model.predict(valid_sample.Text[:1].values)
         first = time.time()
         model.predict(valid_sample.Text[:1].values)
@@ -182,13 +185,13 @@ class TestDeploymentModel(unittest.TestCase):
 
         first_prediction_time = (first - start)
         second_prediction_time = (second - first)
-        self.assertLess(second_prediction_time, first_prediction_time / 2.)
+        self.assertLess(second_prediction_time, first_prediction_time)
 
     def test_switching_models(self):
         """
         Ensure model can switch out weights without erroring out
         """
-        model = DeploymentModel(base_model=GPTModel, **self.default_config())
+        model = DeploymentModel(base_model=self.base_model, **self.default_config())
         model.load_featurizer()
         #test transitioning from any of [sequence labeling, comparison, default] to any other
         model.load_trainables(self.classifier_path)
@@ -203,7 +206,7 @@ class TestDeploymentModel(unittest.TestCase):
         """
         Ensure model produces reasonable predictions after loading weights
         """
-        model = DeploymentModel(base_model=GPTModel, **self.default_config())
+        model = DeploymentModel(base_model=self.base_model, **self.default_config())
         model.load_featurizer()
         model.load_trainables(self.classifier_path)
 
@@ -232,7 +235,7 @@ class TestDeploymentModel(unittest.TestCase):
         self.assertTrue(any(pred["text"].strip() == "dog" for pred in predictions[0]))
 
     def test_fast_switch(self):
-        model = DeploymentModel(base_model=GPTModel, **self.default_config())
+        model = DeploymentModel(base_model=self.base_model, **self.default_config())
         model.load_featurizer()
         model.load_trainables(self.classifier_path)
         model.predict('finetune')
