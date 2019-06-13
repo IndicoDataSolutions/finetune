@@ -31,7 +31,7 @@ SST_FILENAME = "SST-binary.csv"
 
 SKIP_LM_TESTS = get_config().base_model.is_bidirectional
 
-class TestClassifier(unittest.TestCase):
+class TestDeploymentModel(unittest.TestCase):
     n_sample = 20
     classifier_path = "tests/saved-models/deployment_classifier.jl"
     comparison_regressor_path = "tests/saved-models/deployment_comparison_regressor.jl"

@@ -106,10 +106,14 @@ def mlp(x, scope, n_state, *, hparams, train=False):
 def block(x, *, past, hparams, train=False):
     nx = x.shape[-1].value
     a = attn(norm(x, 'ln_1'), 'attn', nx, past=past, hparams=hparams, train=train)
-    a = adapter(a, hparams.bert_adapter_size, train, nx)
+    if hparams.adapter_size is not None:
+        with tf.variable_scope('attn_adapter'):
+            a = adapter(a, hparams, train, nx)
     x = x + a
     m = mlp(norm(x, 'ln_2'), 'mlp', nx * 4, hparams=hparams, train=train)
-    m = adapter(m, hparams.bert_adapter_size, train, nx)
+    if hparams.adapter_size is not None:
+        with tf.variable_scope('dense_adapter'):
+            m = adapter(m, hparams.bert_adapter_size, train, nx)
     x = x + m
     return x
 
@@ -158,7 +162,7 @@ def gpt2_featurizer(X, encoder, config, train=False, reuse=None, **kwargs):
         # Transformer
         pasts = [None] * config.n_layer
         for layer, past in enumerate(pasts):
-            if (config.n_layer - layer) == config.num_layers_trained and config.num_layers_trained != config.n_layer and config.bert_adapter_size is not None:
+            if (config.n_layer - layer) == config.num_layers_trained and config.num_layers_trained != config.n_layer and config.bert_adapter_size is None:
                 h = tf.stop_gradient(h)
                 train_layer = False
             else:

@@ -307,9 +307,9 @@ class BasePipeline(metaclass=ABCMeta):
 
     def get_predict_input_fn(self, Xs, batch_size=None):
         batch_size = batch_size or self.config.batch_size
-        tf_dataset = lambda : self._dataset_without_targets(Xs, train=None).batch(batch_size)
+        tf_dataset = lambda: self._dataset_without_targets(Xs, train=None).batch(batch_size)
         return tf_dataset
-            
+      
     @property
     def pad_idx(self):
         if self.pad_idx_ is None:
