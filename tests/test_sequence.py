@@ -6,6 +6,7 @@ from pathlib import Path
 import codecs
 import json
 import random
+import time
 
 # required for tensorflow logging control
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -189,9 +190,29 @@ class TestSequenceLabeler(unittest.TestCase):
                                                          none_value=self.model.config.pad_token)
         train_texts, test_texts, train_annotations, _ = train_test_split(texts, annotations, test_size=0.1)
         self.model.fit(train_texts, train_annotations)
+        
+        self.model.config.chunk_long_sequences = True
+        self.model.config.max_length = 128
+
+        uncached_preds = self.model.predict(test_texts[:1])
+
         with self.model.cached_predict():
-            self.model.predict(test_texts)
-            self.model.predict(test_texts)
+            start = time.time()
+            self.model.predict(test_texts[:1])
+            first = time.time()
+            self.model.predict(test_texts[:1])
+            second = time.time()
+            preds = self.model.predict(test_texts[:1])
+            assert len(preds) == 1
+            preds = self.model.predict(test_texts[:2])
+            assert len(preds) == 2
+
+        for uncached_pred, cached_pred in zip(uncached_preds, preds):
+            self.assertEqual(str(uncached_pred), str(cached_pred))
+
+        first_prediction_time = (first - start)
+        second_prediction_time = (second - first)
+        self.assertLess(second_prediction_time, first_prediction_time / 2.)
 
     def test_reasonable_predictions(self):
         test_sequence = ["I am a dog. A dog that's incredibly bright. I can talk, read, and write!"]
