@@ -64,11 +64,11 @@ class SaverHook(_StopOnPredicateHook):
 
 
 class InitializeHook(tf.train.SessionRunHook):
-    def __init__(self, saver, model_portion = "entire_model"):
+    def __init__(self, saver, model_portion="entire_model"):
         self.saver = saver
         self.model_portion = model_portion
-        self.need_to_refresh = True #between predicts of the same model
-        self.refresh_base_model = False #after we have loaded a model with the entire featurizer, we need to reload from fallback for the next model
+        self.need_to_refresh = True # between predicts of the same model
+        self.refresh_base_model = False # after we have loaded a model with the entire featurizer, we need to reload from fallback for the next model
         self.init_fn = self.saver.get_scaffold_init_fn()
 
     def after_create_session(self, session, coord): 
@@ -76,7 +76,8 @@ class InitializeHook(tf.train.SessionRunHook):
             if self.model_portion == 'target':
                 self.init_fn(None, session,self.model_portion)
             else:
-                self.init_fn(None, session,'whole_featurizer') #after_create_session only called at load_featurizer in deployment_model, so load entire featurizer
+                self.init_fn(None, session,'whole_featurizer') # after_create_session only called at load_featurizer in deployment_model, so load entire featurizer
+            self.need_to_refresh = False
         elif self.model_portion == 'entire_model':
             self.init_fn(None, session,self.model_portion)
 
@@ -85,7 +86,8 @@ class InitializeHook(tf.train.SessionRunHook):
             if self.model_portion == 'whole_featurizer':
                 self.refresh_base_model = True
             self.init_fn(None, run_context.session, self.model_portion, self.refresh_base_model)
-            self.need_to_refresh=False
+            self.need_to_refresh = False
+            self.refresh_base_model = False
 
 class Saver:
     def __init__(self, fallback_filename=None, exclude_matches=None, variable_transforms=None, save_dtype=None):
@@ -151,41 +153,34 @@ class Saver:
             else:
                 variables_sv = dict()
             all_vars = tf.global_variables()
-            if model_portion != 'entire_model': #we must be loading in the case of two separate estimators
-                reset_adapters = False
+            zero_out_adapters = False
+            if model_portion != 'entire_model': # we must be loading in the case of two separate estimators
                 assert model_portion in ['featurizer','target','whole_featurizer'], "Must be using separate estimators if loading before graph creation"
                 base = [v for v in all_vars if 'target' not in v.name]
-                if model_portion == 'whole_featurizer':
+                if model_portion == 'whole_featurizer': # load every weight in featurizer - used to initialize and for loading without adapters
                     to_load = base
                     adapters = [v for v in base if 'adapter' in v.name]
                     reset_adapters = True
-                elif model_portion == 'featurizer':
+                elif model_portion == 'featurizer': # update featurizer, loading adapters and scaling weights
                     norm_variable_scopes = ['b:0', 'g:0']
                     to_load = base if refresh_base_model else [v for v in base if 'adapter' in v.name or v.name[-3:] in norm_variable_scopes]
-                elif model_portion == 'target':
+                elif model_portion == 'target': # update target model weights
                     to_load = [v for v in all_vars if 'target' in v.name]
-                for var in to_load:
-                    name = var.name
-                    saved_var = None
-                    if name in variables_sv.keys():
-                        saved_var = variables_sv[name]
-                    elif name in self.fallback.keys():
-                        saved_var = self.fallback[name]
-                    if saved_var is not None:
-                        for func in self.variable_transforms:
-                            saved_var = func(name, saved_var)
-                        var.load(saved_var, session)
-                    if reset_adapters and 'adapter' in name:
-                        var.load(np.zeros(var.get_shape().as_list()), session)
-            else:
-                for var in all_vars:
-                    name = var.name
-                    for saved_var_name, saved_var in itertools.chain(variables_sv.items(), self.fallback.items()):
-                        if saved_var_name == name:
-                            for func in self.variable_transforms:
-                                saved_var = func(name, saved_var)
-                            var.load(saved_var, session)
-                            break
+                all_vars = to_load
+
+            for var in all_vars:
+                name = var.name
+                saved_var = None
+                if name in variables_sv.keys():
+                    saved_var = variables_sv[name]
+                elif name in self.fallback.keys():
+                    saved_var = self.fallback[name]
+                if saved_var is not None:
+                    for func in self.variable_transforms:
+                        saved_var = func(name, saved_var)
+                    var.load(saved_var, session)
+                if zero_out_adapters and 'adapter' in name:
+                    var.load(np.zeros(var.get_shape().as_list()), session)
         return init_fn
 
     def remove_unchanged(self, variable_names, variable_values, fallback_vars):

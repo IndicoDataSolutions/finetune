@@ -21,7 +21,7 @@ from finetune.errors import FinetuneError
 from finetune.input_pipeline import BasePipeline
 
 LOGGER = logging.getLogger('finetune')
-
+PredictHook = namedtuple('InitializeHook', 'feat_hook target_hook')
 class TaskMode:
     SEQUENCE_LABELING = "Sequence_Labeling"
     CLASSIFICATION = "Classification"
@@ -49,18 +49,18 @@ class DeploymentPipeline(BasePipeline):
         types, shapes = self.feed_shape_type_def()
         return Dataset.from_generator(dataset_encoded, types[0])
         
-    def pipe_gen(self):
+    def get_active_pipeline(self):
         pipelines = {'Classification':ClassificationPipeline, 'Comparison':ComparisonPipeline, 'Sequence_Labeling':SequencePipeline, 'Association':AssociationPipeline}
         self.pipeline_type = pipelines[self.task]
         return self.pipeline_type
 
     def get_text_token_mask(self, X):
-        _ = self.pipe_gen()
+        _ = self.get_active_pipeline()
         if type(self.pipeline) != self.pipeline_type:  #to prevent instantiating the same type of pipeline repeatedly
             if self.pipeline_type == SequencePipeline:
-                self.pipeline = self.pipe_gen()(self.config, multi_label=self.multi_label)
+                self.pipeline = self.get_active_pipeline()(self.config, multi_label=self.multi_label)
             else:
-                self.pipeline = self.pipe_gen()(self.config)
+                self.pipeline = self.get_active_pipeline()(self.config)
         return self.pipeline.text_to_tokens_mask(X)
 
     def get_target_input_fn(self, features, batch_size=None):
@@ -68,7 +68,7 @@ class DeploymentPipeline(BasePipeline):
         features = pd.DataFrame(features).to_dict('list')
         for key in features:
             features[key] = np.array(features[key])
-        tf_dataset = lambda : tf.data.Dataset.from_tensor_slices(dict(features)).batch(batch_size)
+        tf_dataset = lambda: tf.data.Dataset.from_tensor_slices(dict(features)).batch(batch_size)
         return tf_dataset
 
 
@@ -98,6 +98,7 @@ class DeploymentModel(BaseModel):
         self.input_pipeline.task = self.task
         self.featurizer_loaded = False
         self.adapters = False
+        self.loaded_custom_previously = False
 
     def load_featurizer(self):
         """
@@ -113,21 +114,32 @@ class DeploymentModel(BaseModel):
 
     def load_trainables(self, path):
         """
-        Load in a model from save file. Must be called after 
+        Load in target model, and either adapters or entire featurizer from file. Must be called after load_featurizer.
         """
         if not self.featurizer_loaded:
             raise FinetuneError('Need to call load_featurizer before loading weights from file.')
         original_model = self.saver.load(path)
+
         if original_model.config.adapter_size is None:
-            LOGGER.warning("Loading without adapters will result in slightly slower prediction than models that use adapters.")
+            LOGGER.warning("Loading without adapters will result in slightly slower load time than models that use adapters, and will also slow the next switch to an adapter model.")
             self.predict_hooks.feat_hook.model_portion = 'whole_featurizer' #need to load everything from save file, rather than standard base model file
+        elif original_model.config.adapter_size != self.config.adapter_size:
+            raise FinetuneError('adapter_size in config is compatible with this model')
+        
+        if not self.adapters or not self.loaded_custom_previously: #previous model did not use adapters, so we have to update everything
+            self.predict_hooks.feat_hook.refresh_base_model = True
+        self.adapters = original_model.config.adapter_size is not None
+
         self._target_model = original_model._target_model
         self._predict_op = original_model._predict_op
         self._predict_proba_op = original_model._predict_proba_op
         for hook in self.predict_hooks:
             hook.need_to_refresh = True
         self._to_pull = 0
+        self.loaded_custom_previously = True
+        self._update_pipeline(original_model)
 
+    def _update_pipeline(self, original_model):
         self.input_pipeline.target_dim = original_model.input_pipeline.target_dim
         self.input_pipeline.label_encoder = original_model.input_pipeline.label_encoder
         self.input_pipeline.text_encoder = original_model.input_pipeline.text_encoder
@@ -135,8 +147,6 @@ class DeploymentModel(BaseModel):
         self.input_pipeline._post_data_initialization = original_model.input_pipeline._post_data_initialization
         self.input_pipeline._format_for_inference = original_model.input_pipeline._format_for_inference
         self.input_pipeline._format_for_encoding = original_model.input_pipeline._format_for_encoding
-
-        self.adapters = original_model.config.adapter_size is not None
         
         if isinstance(original_model.input_pipeline, SequencePipeline) :
             self.task = TaskMode.SEQUENCE_LABELING
@@ -152,7 +162,6 @@ class DeploymentModel(BaseModel):
             self.task = TaskMode.ASSOCIATION
         else:
             raise FinetuneError("Invalid pipeline in loaded file.")
-
         self.input_pipeline.task = self.task
 
     def _get_estimator(self, portion):
@@ -172,21 +181,12 @@ class DeploymentModel(BaseModel):
             build_attn=not isinstance(self.input_pipeline, ComparisonPipeline)
         )
 
-        if portion == 'featurizer':
-            estimator = tf.estimator.Estimator(
-                model_dir=self.estimator_dir,
-                model_fn=fn,
-                config=config,
-                params=self.config
-            )
-
-        else:
-            estimator = tf.estimator.Estimator(
-                model_dir=self.estimator_dir,
-                model_fn=fn,
-                config=config,
-                params=self.config
-            )
+        estimator = tf.estimator.Estimator(
+            model_dir=self.estimator_dir,
+            model_fn=fn,
+            config=config,
+            params=self.config
+        )
 
         if hasattr(self,'predict_hooks') and portion == 'featurizer':
             for hook in self.predict_hooks:
@@ -194,8 +194,7 @@ class DeploymentModel(BaseModel):
         elif not hasattr(self,'predict_hooks'):
             feat_hook = InitializeHook(self.saver, model_portion='featurizer')
             target_hook = InitializeHook(self.saver, model_portion='target')
-            predict_hook = namedtuple('InitializeHook', 'feat_hook target_hook')
-            self.predict_hooks = predict_hook(feat_hook, target_hook)
+            self.predict_hooks = PredictHook(feat_hook, target_hook)
         return estimator
 
     def _get_input_pipeline(self):
@@ -208,14 +207,11 @@ class DeploymentModel(BaseModel):
         :param X: list or array of text to embed.
         :returns: np.array of features of shape (n_examples, embedding_size).
         """
-        raise NotImplementedError
+        features = self.predict(X, exclude_targets=True)
+        return features['features']
 
-    def get_input_fn(self, gen):
+    def _get_input_fn(self, gen):
         return self.input_pipeline.get_predict_input_fn(gen)
-
-    def pipe_input_fn(self, gen, pipe):
-        fn = pipe.get_predict_input_fn(gen)
-        return fn()
 
     def _inference(self, Xs, mode=PredictMode.NORMAL, exclude_target=False):
         Xs = self.input_pipeline._format_for_inference(Xs)
@@ -230,29 +226,27 @@ class DeploymentModel(BaseModel):
 
         if self._predictions is None:
             featurizer_est = self._get_estimator('featurizer')
-            self._predictions =  featurizer_est.predict(
-                    input_fn=self.get_input_fn(self._data_generator), predict_keys=None, hooks=[self.predict_hooks.feat_hook], yield_single_examples=False)
-            self.predict_hooks.feat_hook.model_portion = 'featurizer'
+            self._predictions = featurizer_est.predict(
+                    input_fn=self._get_input_fn(self._data_generator), predict_keys=None, hooks=[self.predict_hooks.feat_hook], yield_single_examples=False)
 
         self._clear_prediction_queue()
 
-        num_batches = math.ceil(n/self.config.batch_size)
+        num_batches = math.ceil(n / self.config.batch_size)
         features = [None]*n
         for i in tqdm.tqdm(range(num_batches), total=num_batches, desc="Featurization by Batch"):
             y = next(self._predictions)
             for j in range(self.config.batch_size): #this loop needed since yield_single_examples is False. In this case, n = # of predictions * batch_size
                 single_example = {key:value[j] for key,value in y.items()}
-                if self.config.batch_size*i + j > n-1: #this is a result of the generator using cached_example and to_pull. If this is the last batch, we need to check that all examples come from self._data and are not cached examples
+                if self.config.batch_size * i + j > n-1: #this is a result of the generator using cached_example and to_pull. If this is the last batch, we need to check that all examples come from self._data and are not cached examples
                     break
-                features[self.config.batch_size*i + j] = single_example
+                features[self.config.batch_size * i + j] = single_example
 
         if exclude_target: #to initialize featurizer weights in load_featurizer
             return features
 
         preds = None
         if features is not None:
-            if self.adapters:
-                self.predict_hooks.target_hook.need_to_refresh = True
+            self.predict_hooks.target_hook.need_to_refresh = True
             target_est = self._get_estimator('target')
             target_fn = self.input_pipeline.get_target_input_fn(features)
             preds = target_est.predict(
@@ -260,10 +254,7 @@ class DeploymentModel(BaseModel):
             preds = [pred[mode] if mode else pred for pred in preds]
 
         self._clear_prediction_queue()
-        if self.task != TaskMode.SEQUENCE_LABELING:
-            return self.input_pipeline.label_encoder.inverse_transform(np.asarray(preds))
-        else:
-            return preds
+        return preds
 
     def predict(self, X, exclude_target=False):
         """
@@ -272,10 +263,13 @@ class DeploymentModel(BaseModel):
         :param X: list or array of text to embed.
         :returns: list of class labels.
         """
-        if self.task == TaskMode.SEQUENCE_LABELING:
+        if self.task == TaskMode.SEQUENCE_LABELING and not exclude_target:
             return SequenceLabeler.predict(self, X)
         else:
-            return self._inference(X, exclude_target=exclude_target)
+            raw_preds = self._inference(X, exclude_target=exclude_target)
+            if exclude_target:
+                return raw_preds
+            return self.input_pipeline.label_encoder.inverse_transform(np.asarray(raw_preds))
 
     def predict_proba(self, X):
         """

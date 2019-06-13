@@ -170,8 +170,8 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
 
             if params.adapter_size is not None:
                 norm_variable_scopes = ['b:0', 'g:0']
-                #trained variables include: adapter dense layers, scaling/bias factors, target model, and
-                #the bias values in 1dconv if this layer exists (since it also has a 'b' in its name/scope).
+                # trained variables include: adapter dense layers, scaling/bias factors, target model, and
+                # the bias values in 1dconv if this layer exists (since it also has a 'b' in its name/scope).
                 params.trained_variables = [v for v in tf.global_variables()
                 if 'adapter' in v.name or 'target' in v.name or v.name[-3:] in norm_variable_scopes]
             else:
@@ -218,7 +218,7 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                 increment_global_step=True,
                 summaries=summaries,
                 colocate_gradients_with_ops=True,
-                variables = params.trained_variables
+                variables=params.trained_variables
             )
 
         if mode == tf.estimator.ModeKeys.PREDICT:
@@ -257,8 +257,8 @@ def get_separate_model_fns(target_model_fn, predict_op, predict_proba_op, build_
                 config=params,
                 train=False
         )
-        predictions = {'features':featurizer_state['features'],
-                    'sequence_features':featurizer_state['sequence_features']}
+        predictions = {'features': featurizer_state['features'],
+                    'sequence_features': featurizer_state['sequence_features']}
         
         if params.base_model in [GPTModel, GPTModelSmall] and build_attn:
             predictions['attention_weights'] = featurizer_state['attention_weights']
@@ -266,7 +266,7 @@ def get_separate_model_fns(target_model_fn, predict_op, predict_proba_op, build_
         return tf.estimator.EstimatorSpec(
                 mode=mode,
                 predictions=predictions
-            )
+        )
 
     if portion == 'featurizer':
         return _featurizer_model_fn
