@@ -1,4 +1,5 @@
 import warnings
+import copy
 from collections import defaultdict
 
 import numpy as np
@@ -303,7 +304,7 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
         labels = [[]] * len(texts)
 
     encoded_docs = encoder._encode(texts)
-
+    labels = copy.deepcopy(labels)
     for doc_idx, (text, label_seq) in enumerate(zip(texts, labels)):
         tokens = encoded_docs.tokens[doc_idx]
         token_ends = encoded_docs.char_locs[doc_idx]
