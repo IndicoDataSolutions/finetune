@@ -108,12 +108,12 @@ def block(x, *, past, hparams, train=False):
     a = attn(norm(x, 'ln_1'), 'attn', nx, past=past, hparams=hparams, train=train)
     if hparams.adapter_size is not None:
         with tf.variable_scope('attn_adapter'):
-            a = adapter(a, hparams.adapter_size, train, nx)
+            a = adapter(a, hparams.adapter_size, nx, train)
     x = x + a
     m = mlp(norm(x, 'ln_2'), 'mlp', nx * 4, hparams=hparams, train=train)
     if hparams.adapter_size is not None:
         with tf.variable_scope('dense_adapter'):
-            m = adapter(m, hparams.adapter_size, train, nx)
+            m = adapter(m, hparams.adapter_size, nx, train)
     x = x + m
     return x
 
@@ -144,6 +144,7 @@ def embed(X, we):
 def gpt2_featurizer(X, encoder, config, train=False, reuse=None, **kwargs):
     initial_shape = tf.shape(X)
     X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-2:]), 0))
+    X.set_shape([None, None, None])
 
     with tf.variable_scope('model/featurizer', reuse=reuse):
         embed_weights = tf.get_variable(

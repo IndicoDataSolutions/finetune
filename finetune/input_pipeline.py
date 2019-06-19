@@ -10,7 +10,6 @@ from abc import ABCMeta, abstractmethod
 import tqdm
 import numpy as np
 import tensorflow as tf
-import functools
 from tensorflow.python.data import Dataset
 from sklearn.model_selection import train_test_split
 
@@ -309,7 +308,7 @@ class BasePipeline(metaclass=ABCMeta):
         batch_size = batch_size or self.config.batch_size
         tf_dataset = lambda: self._dataset_without_targets(Xs, train=None).batch(batch_size)
         return tf_dataset
-      
+
     @property
     def pad_idx(self):
         if self.pad_idx_ is None:

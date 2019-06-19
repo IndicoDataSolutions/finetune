@@ -155,19 +155,7 @@ class Saver:
             all_vars = tf.global_variables()
             zero_out_adapters = False
             if model_portion != 'entire_model': # we must be loading in the case of two separate estimators
-                assert model_portion in ['featurizer','target','whole_featurizer'], "Must be using separate estimators if loading before graph creation"
-                base = [v for v in all_vars if 'target' not in v.name]
-                if model_portion == 'whole_featurizer': # load every weight in featurizer - used to initialize and for loading without adapters
-                    to_load = base
-                    adapters = [v for v in base if 'adapter' in v.name]
-                    zero_out_adapters = True
-                elif model_portion == 'featurizer': # update featurizer, loading adapters and scaling weights
-                    norm_variable_scopes = ['b:0', 'g:0', 'beta:0', 'gamma:0']
-                    to_load = base if refresh_base_model else [v for v in base if 'adapter' in v.name or any(scope in v.name for scope in norm_variable_scopes)]
-                elif model_portion == 'target': # update target model weights
-                    to_load = [v for v in all_vars if 'target' in v.name]
-                all_vars = to_load
-
+                all_vars, zero_out_adapters = self.subset_to_load(model_portion, refresh_base_model, all_vars)
             for var in all_vars:
                 name = var.name
                 saved_var = None
@@ -182,6 +170,22 @@ class Saver:
                 if zero_out_adapters and 'adapter' in name:
                     var.load(np.zeros(var.get_shape().as_list()), session)
         return init_fn
+
+    def subset_to_load(self, model_portion, refresh_base_model, all_vars):
+        assert model_portion in ['featurizer','target','whole_featurizer'], "Must be using separate estimators if loading before graph creation"
+        base = [v for v in all_vars if 'target' not in v.name]
+        zero_out_adapters = False
+        if model_portion == 'whole_featurizer': # load every weight in featurizer - used to initialize and for loading without adapters
+            to_load = base
+            adapters = [v for v in base if 'adapter' in v.name]
+            zero_out_adapters = True
+        elif model_portion == 'featurizer': # update featurizer, loading adapters and scaling weights
+            norm_variable_scopes = ['b:0', 'g:0', 'beta:0', 'gamma:0']
+            to_load = base if refresh_base_model else [v for v in base if 'target' not in v.name and ('adapter' in v.name or any(scope in v.name for scope in norm_variable_scopes))]
+        elif model_portion == 'target': # update target model weights
+            to_load = [v for v in all_vars if 'target' in v.name]
+        return to_load, zero_out_adapters
+
 
     def remove_unchanged(self, variable_names, variable_values, fallback_vars):
         skips = []

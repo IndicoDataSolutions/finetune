@@ -25,7 +25,7 @@ from sklearn.metrics import accuracy_score, recall_score
 from sklearn.model_selection import train_test_split
 
 from finetune import Classifier, Regressor, DeploymentModel, SequenceLabeler, ComparisonRegressor
-from finetune.base_models import GPTModel, BERTModelCased
+from finetune.base_models import GPTModel
 from finetune.datasets import generic_download
 from finetune.config import get_config
 from finetune.errors import FinetuneError
@@ -35,7 +35,6 @@ SST_FILENAME = "SST-binary.csv"
 class TestDeploymentModel(unittest.TestCase):
     n_sample = 20
     do_comparison = True
-    bert_intermediate_size = None
     base_model = GPTModel
 
     classifier_path = "tests/saved-models/deployment_classifier.jl"
@@ -112,7 +111,7 @@ class TestDeploymentModel(unittest.TestCase):
     def setUp(self):
 
         try:
-            os.mkdir("tests/saved-models-bert")
+            os.mkdir("tests/saved-models")
         except FileExistsError:
             warnings.warn("tests/saved-models still exists, it is possible that some test is not cleaning up properly.")
             pass
@@ -128,25 +127,22 @@ class TestDeploymentModel(unittest.TestCase):
         self.numbers = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen"]
         
         #train and save sequence labeler for later use
-        
         try:
             self.s = SequenceLabeler.load(self.sequence_labeler_path, **self.default_seq_config())
-        except Exception as e:
+        except FileNotFoundError:
             self.s = SequenceLabeler(**self.default_seq_config())
             self.s.fit(self.texts * 10, self.labels * 10)
             self.s.save(self.sequence_labeler_path)
         
         #train and save classifier for later use
-        
         train_sample = self.classifier_dataset.sample(n=self.n_sample*10)
         try:
             self.cl = Classifier.load(self.classifier_path)
-        except Exception as e:
+        except FileNotFoundError:
             self.cl = Classifier(**self.default_config())
             self.cl.fit(train_sample.Text, train_sample.Target)
             self.cl.save(self.classifier_path)
 
-        
         if self.do_comparison:
             #train and save comparison regressor for use
             self.cr = ComparisonRegressor()
@@ -167,7 +163,7 @@ class TestDeploymentModel(unittest.TestCase):
             
             try:
                 self.cr = ComparisonRegressor.load(self.comparison_regressor_path, **self.default_config())
-            except Exception as e:
+            except FileNotFoundError:
                 self.cr = ComparisonRegressor(**self.default_config())
                 self.cr.fit(self.x_tr, self.t_tr)
                 self.cr.save(self.comparison_regressor_path)
@@ -178,7 +174,7 @@ class TestDeploymentModel(unittest.TestCase):
     def default_config(self, **kwargs):
         defaults = {
             'batch_size': 2,
-            'max_length': 128,
+            'max_length': 256,
             'n_epochs': 3,
             'adapter_size': 64,
             'base_model': self.base_model
@@ -199,7 +195,20 @@ class TestDeploymentModel(unittest.TestCase):
         d.update(**kwargs)
         return d
 
-    def dtest_cached_predict(self):
+    def default_comp_config(self, **kwargs):
+        d = dict(
+            batch_size=2,
+            max_length=256,
+            n_epochs=1,
+            l2_reg=0,
+            lm_loss_coef=0.,
+            base_model=self.base_model,
+            val_size=0.,
+        )
+        d.update(kwargs)
+        return d
+
+    def test_cached_predict(self):
         """
         Ensure second call to predict is faster than first, including loading.
         """
@@ -218,7 +227,7 @@ class TestDeploymentModel(unittest.TestCase):
         second_prediction_time = (second - first)
         self.assertLess(second_prediction_time, first_prediction_time)
 
-    def dtest_switching_models(self):
+    def test_switching_models(self):
         """
         Ensure model can switch out weights without erroring out
         """
@@ -239,7 +248,6 @@ class TestDeploymentModel(unittest.TestCase):
         """
         Ensure model produces reasonable predictions after loading weights
         """
-        
         model = DeploymentModel(featurizer=self.base_model, **self.default_seq_config())
         model.load_featurizer()
         
@@ -252,37 +260,18 @@ class TestDeploymentModel(unittest.TestCase):
         for c_pred, d_pred in zip(classifier_preds, deployment_preds):
             self.assertTrue(list(c_pred.keys()) == list(d_pred.keys()))
             for c_pred_val, d_pred_val in zip(c_pred.values(), d_pred.values()):
-                np.testing.assert_almost_equal(c_pred_val, d_pred_val, decimal=2)
+                np.testing.assert_almost_equal(c_pred_val, d_pred_val, decimal=4)
         
         if self.do_comparison:
             #test same output as weights loaded with Comparison Regressor model
             model.load_trainables(self.comparison_regressor_path)
-            compregressor = ComparisonRegressor.load(self.comparison_regressor_path,  **self.default_seq_config())
+            compregressor = ComparisonRegressor.load(self.comparison_regressor_path,  **self.default_comp_config())
             deployment_preds = model.predict(self.x_te)
             compregressor_preds = compregressor.predict(self.x_te)
-
             for c_pred, d_pred in zip(compregressor_preds, deployment_preds):
-                np.testing.assert_almost_equal(c_pred, d_pred, decimal=2)
+                np.testing.assert_almost_equal(c_pred, d_pred, decimal=4)
 
-        '''
-        #test reasonable output for weights loaded with Sequence Labeler model
-        test_sequence = ["I am a dog. A dog that's incredibly bright. I can talk, read, and write! "]
-        #model.load_trainables(self.sequence_labeler_path)
-        #deployment_preds = model.predict_proba(test_sequence)
-        sequence_preds = self.s.predict_proba(test_sequence)
-        differing = [s for s in model.config if model.config[s] != self.s.config[s]]
-        for key in differing:
-            print(key)
-            print(model.config[key])
-            print(self.s.config[key])
-        print('')
-        #print(deployment_preds)
-        print(sequence_preds)
-        self.assertTrue(1 <= len(deployment_preds[0]) <= 3)
-        self.assertTrue(any(pred["text"].strip() == "dog" for pred in deployment_preds[0]))
-        '''
-
-    def dtest_large_predict(self):
+    def test_large_predict(self):
         """
         Ensure model does not have OOM issues with large inputs for inference
         """
@@ -293,7 +282,7 @@ class TestDeploymentModel(unittest.TestCase):
         model.predict(large_dataset)
 
 
-    def dtest_fast_switch(self):
+    def test_fast_switch(self):
         """
         Ensure model can load/reload weights and predict in reasonable time
         """

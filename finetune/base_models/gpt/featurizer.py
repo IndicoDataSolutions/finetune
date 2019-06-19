@@ -142,7 +142,7 @@ def create_initializer(initializer_range=0.001):
   return tf.truncated_normal_initializer(stddev=initializer_range)
 
 
-def adapter(X, adapter_size, train, nx, hidden_dropout_prob=0.1):
+def adapter(X, adapter_size, nx,  train=False, hidden_dropout_prob=0.1):
     down_projection = tf.layers.dense(X, adapter_size, activation='sigmoid',
         kernel_initializer=create_initializer(0.001))
     down_projection = dropout(down_projection, hidden_dropout_prob, train)
@@ -157,12 +157,12 @@ def block(x, n_head, act_fn, adptr_size, resid_pdrop, attn_pdrop, scope, train=F
         a = attn(x, 'attn', nx, n_head, resid_pdrop, attn_pdrop, train=train, scale=scale, explain=explain)
         if adptr_size is not None:
             with tf.variable_scope('attn_adapter'):
-                a = adapter(a, adptr_size, train, nx)
+                a = adapter(a, adptr_size, nx, train)
         n = norm(x + a, 'ln_1')
         m = mlp(n, 'mlp', nx * 4, act_fn, resid_pdrop, train=train)
         if adptr_size is not None:
             with tf.variable_scope('dense_adapter'):
-                m = adapter(m, adptr_size, train, nx)
+                m = adapter(m, adptr_size, nx, train)
         h = norm(n + m, 'ln_2')
         return h
 

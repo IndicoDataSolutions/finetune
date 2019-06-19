@@ -133,13 +133,10 @@ class DeploymentModel(BaseModel):
             self.predict_hooks.feat_hook.model_portion = 'whole_featurizer' #need to load everything from save file, rather than standard base model file
         elif original_model.config.adapter_size != self.config.adapter_size:
             raise FinetuneError('adapter_size in config is compatible with this model')
-        
-        #if isinstance(self, Comparison) and self.featurizer in [BertModelCased]:
-        #    raise FinetuneError('Deployment model does not support Comparison inference with the BERT base model, \
-        #    because changing input shapes between comparison and other forms of inference interfere with BERT shape definitions')
-
         if type(self.config.base_model) != type(original_model.config.base_model):
             raise FinetuneError('Loaded file has incompatible base model.')
+        if original_model.config.max_length != self.config.max_length:
+            raise FinetuneError('Loaded model has a different config.max_length than current value. Changing max_length between loads is not yet supported.')
 
         if not self.adapters or not self.loaded_custom_previously: #previous model did not use adapters, so we have to update everything
             self.predict_hooks.feat_hook.refresh_base_model = True
@@ -155,6 +152,9 @@ class DeploymentModel(BaseModel):
         self._update_pipeline(original_model)
 
     def _update_pipeline(self, original_model):
+        """
+        Refresh necessary attributes of DeploymentModel's input_pipeline so that it can support a newly loaded model
+        """
         self.input_pipeline.target_dim = original_model.input_pipeline.target_dim
         self.input_pipeline.label_encoder = original_model.input_pipeline.label_encoder
         self.input_pipeline.text_encoder = original_model.input_pipeline.text_encoder
@@ -299,14 +299,7 @@ class DeploymentModel(BaseModel):
         return super().predict_proba(X)
 
     def finetune(self, X, Y=None, batch_size=None):
-        """
-        :param X: list or array of text.
-        :param Y: integer or string-valued class labels.
-        :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
-                           corresponds to the number of training examples provided to each GPU.
-        """
         raise NotImplementedError
-
 
     @classmethod
     def get_eval_fn(cls):
