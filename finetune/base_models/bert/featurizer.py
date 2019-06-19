@@ -29,11 +29,12 @@ def bert_featurizer(X, encoder, config, train=False, reuse=None, **kwargs):
         max_position_embeddings=config.max_length,
         type_vocab_size=2,
         initializer_range=config.weight_stddev,
-        bert_adapter_size=config.bert_adapter_size
+        adapter_size=config.adapter_size
     )
 
     initial_shape = tf.shape(X)
     X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-2:]), 0))
+    X.set_shape([None, None, None])
     # To fit the interface of finetune we are going to compute the mask and type id at runtime.
     input_ids = X[:, :, 0]  # slice off pos-embed ids.
     delimiters = tf.cast(tf.equal(input_ids, encoder.delimiter), tf.int32)

@@ -62,7 +62,6 @@ class TestClassifierTextCNN(TestModelBase):
     dataset_path = os.path.join(
         'Data', 'Classify', 'SST-binary.csv'
     )
-
     base_model = TextCNN
 
     @classmethod
@@ -470,8 +469,8 @@ class TestComparisonBert(TestComparisonTextCNN):
     base_model = BERTModelCased
 
 class TestDeploymentBert(TestDeploymentModel):
+    do_comparison = False
     base_model = BERTModelCased
 
-
-class TestDeploymentGPT2(TestDeploymentModel):  
+class TestDeploymentGPT2(TestDeploymentModel):
     base_model = GPT2Model

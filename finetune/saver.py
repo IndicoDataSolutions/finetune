@@ -68,12 +68,14 @@ class InitializeHook(tf.train.SessionRunHook):
         self.saver = saver
         self.model_portion = model_portion
         self.need_to_refresh = True # between predicts of the same model
-        self.refresh_base_model = False # after we have loaded a model with the entire featurizer, we need to reload from fallback for the next model
+        self.refresh_base_model = False # after we have loaded a model that has trained the entire featurizer, we need to reload from fallback for the next model
         self.init_fn = self.saver.get_scaffold_init_fn()
 
-    def after_create_session(self, session, coord): 
+    def after_create_session(self, session, coord):
+        print('after create session'+ str(self.model_portion) + str(self.need_to_refresh))
         if self.model_portion != 'entire_model' and self.need_to_refresh:
-            if self.model_portion == 'target':
+            print("AFTER CREATE SESSION" + str(self.model_portion) + str(self.need_to_refresh))
+            if self.model_portion == 'target':    
                 self.init_fn(None, session,self.model_portion)
             else:
                 self.init_fn(None, session,'whole_featurizer') # after_create_session only called at load_featurizer in deployment_model, so load entire featurizer
@@ -83,6 +85,7 @@ class InitializeHook(tf.train.SessionRunHook):
 
     def before_run(self, run_context):
         if 'featurizer' in self.model_portion and (self.need_to_refresh or self.refresh_base_model):
+            print("BEFORE RUN" + str(self.model_portion) + str(self.need_to_refresh))
             if self.model_portion == 'whole_featurizer':
                 self.refresh_base_model = True
             self.init_fn(None, run_context.session, self.model_portion, self.refresh_base_model)
@@ -160,10 +163,10 @@ class Saver:
                 if model_portion == 'whole_featurizer': # load every weight in featurizer - used to initialize and for loading without adapters
                     to_load = base
                     adapters = [v for v in base if 'adapter' in v.name]
-                    reset_adapters = True
+                    zero_out_adapters = True
                 elif model_portion == 'featurizer': # update featurizer, loading adapters and scaling weights
-                    norm_variable_scopes = ['b:0', 'g:0']
-                    to_load = base if refresh_base_model else [v for v in base if 'adapter' in v.name or v.name[-3:] in norm_variable_scopes]
+                    norm_variable_scopes = ['b:0', 'g:0', 'beta:0', 'gamma:0']
+                    to_load = base if refresh_base_model else [v for v in base if 'adapter' in v.name or any(scope in v.name for scope in norm_variable_scopes)]
                 elif model_portion == 'target': # update target model weights
                     to_load = [v for v in all_vars if 'target' in v.name]
                 all_vars = to_load
@@ -173,13 +176,20 @@ class Saver:
                 saved_var = None
                 if name in variables_sv.keys():
                     saved_var = variables_sv[name]
+                    #print(name + 'loaded')
                 elif name in self.fallback.keys():
                     saved_var = self.fallback[name]
+                    #print(name + 'loaded from fallback')
                 if saved_var is not None:
                     for func in self.variable_transforms:
                         saved_var = func(name, saved_var)
+                    #print(name)
                     var.load(saved_var, session)
+                else:
+                    pass
+                    #print(name + "not loaded")
                 if zero_out_adapters and 'adapter' in name:
+                    #print("ZERO")
                     var.load(np.zeros(var.get_shape().as_list()), session)
         return init_fn
 

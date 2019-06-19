@@ -11,7 +11,7 @@ from tensorflow.python.data import Dataset
 from finetune.config import get_config
 from finetune.saver import Saver, InitializeHook
 from finetune.base import BaseModel
-from finetune.target_models.comparison import ComparisonPipeline
+from finetune.target_models.comparison import ComparisonPipeline, Comparison
 from finetune.target_models.sequence_labeling import SequencePipeline, SequenceLabeler
 from finetune.target_models.association import AssociationPipeline
 from finetune.target_models.classifier import ClassificationPipeline
@@ -22,6 +22,7 @@ from finetune.input_pipeline import BasePipeline
 
 LOGGER = logging.getLogger('finetune')
 PredictHook = namedtuple('InitializeHook', 'feat_hook target_hook')
+
 class TaskMode:
     SEQUENCE_LABELING = "Sequence_Labeling"
     CLASSIFICATION = "Classification"
@@ -47,21 +48,30 @@ class DeploymentPipeline(BasePipeline):
         
         dataset_encoded = lambda: itertools.chain.from_iterable(map(self.get_text_token_mask, Xs_fn()))
         types, shapes = self.feed_shape_type_def()
-        return Dataset.from_generator(dataset_encoded, types[0])
+
+        return Dataset.from_generator(dataset_encoded, output_types=types[0])
         
     def get_active_pipeline(self):
         pipelines = {'Classification':ClassificationPipeline, 'Comparison':ComparisonPipeline, 'Sequence_Labeling':SequencePipeline, 'Association':AssociationPipeline}
         self.pipeline_type = pipelines[self.task]
+        if type(self.pipeline) != self.pipeline_type:  #to prevent instantiating the same type of pipeline repeatedly
+            if self.pipeline_type == SequencePipeline:
+                self.pipeline = self.pipeline_type(self.config, multi_label=self.multi_label)
+            else:
+                self.pipeline = self.pipeline_type(self.config)
         return self.pipeline_type
 
     def get_text_token_mask(self, X):
         _ = self.get_active_pipeline()
-        if type(self.pipeline) != self.pipeline_type:  #to prevent instantiating the same type of pipeline repeatedly
-            if self.pipeline_type == SequencePipeline:
-                self.pipeline = self.get_active_pipeline()(self.config, multi_label=self.multi_label)
-            else:
-                self.pipeline = self.get_active_pipeline()(self.config)
         return self.pipeline.text_to_tokens_mask(X)
+
+    def get_shapes(self):
+        _ = self.get_active_pipeline()
+        types, shapes = self.pipeline.feed_shape_type_def()
+        if hasattr(self, 'dataset'):
+            1/0
+            self.dataset.output_shapes = shapes[0]
+        return shapes[0]
 
     def get_target_input_fn(self, features, batch_size=None):
         batch_size = batch_size or self.config.batch_size
@@ -80,20 +90,20 @@ class DeploymentModel(BaseModel):
     :param config: A :py:class:`finetune.config.Settings` object or None (for default config).
     :param \**kwargs: key-value pairs of config items to override.
     """
-    def __init__(self, base_model, **kwargs):
+    def __init__(self, featurizer, **kwargs):
         """
         For a full list of configuration options, see `finetune.config`.
 
         :param base_model: One of the base models from finetune.base_models, excluding textcnn.
         :param **kwargs: key-value pairs of config items to override.
         """
-        if base_model not in [GPTModel, GPTModelSmall, BERTModelCased, GPT2Model]:
+        if featurizer not in [GPTModel, GPTModelSmall, BERTModelCased, GPT2Model]:
             raise FinetuneError("Selected base model not supported.")
         self.config = get_config(**kwargs)
         self.validate_config()
         self.input_pipeline = DeploymentPipeline(self.config)
         super().__init__(**kwargs)
-        self.config.base_model = base_model
+        self.config.base_model = featurizer
         self.task = TaskMode.CLASSIFICATION
         self.input_pipeline.task = self.task
         self.featurizer_loaded = False
@@ -119,13 +129,19 @@ class DeploymentModel(BaseModel):
         if not self.featurizer_loaded:
             raise FinetuneError('Need to call load_featurizer before loading weights from file.')
         original_model = self.saver.load(path)
-
         if original_model.config.adapter_size is None:
             LOGGER.warning("Loading without adapters will result in slightly slower load time than models that use adapters, and will also slow the next switch to an adapter model.")
             self.predict_hooks.feat_hook.model_portion = 'whole_featurizer' #need to load everything from save file, rather than standard base model file
         elif original_model.config.adapter_size != self.config.adapter_size:
             raise FinetuneError('adapter_size in config is compatible with this model')
         
+        #if isinstance(self, Comparison) and self.featurizer in [BertModelCased]:
+        #    raise FinetuneError('Deployment model does not support Comparison inference with the BERT base model, \
+        #    because changing input shapes between comparison and other forms of inference interfere with BERT shape definitions')
+
+        if type(self.config.base_model) != type(original_model.config.base_model):
+            raise FinetuneError('Loaded file has incompatible base model.')
+
         if not self.adapters or not self.loaded_custom_previously: #previous model did not use adapters, so we have to update everything
             self.predict_hooks.feat_hook.refresh_base_model = True
         self.adapters = original_model.config.adapter_size is not None
@@ -218,7 +234,6 @@ class DeploymentModel(BaseModel):
         self._data = Xs
         self._closed = False
         n = len(self._data)
-        
         if self.adapters:
             self.predict_hooks.feat_hook.model_portion = 'featurizer'
         else:
