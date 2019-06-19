@@ -78,8 +78,7 @@ class DeploymentPipeline(BasePipeline):
         features = pd.DataFrame(features).to_dict('list')
         for key in features:
             features[key] = np.array(features[key])
-        tf_dataset = lambda: tf.data.Dataset.from_tensor_slices(dict(features)).batch(batch_size)
-        return tf_dataset
+        return tf.estimator.inputs.numpy_input_fn(features, batch_size=batch_size, shuffle=False)
 
 
 class DeploymentModel(BaseModel):
@@ -266,10 +265,14 @@ class DeploymentModel(BaseModel):
             target_fn = self.input_pipeline.get_target_input_fn(features)
             preds = target_est.predict(
                     input_fn=target_fn, predict_keys=mode, hooks=[self.predict_hooks.target_hook])
-            preds = [pred[mode] if mode else pred for pred in preds]
+
+            predictions = []
+            for i in tqdm.tqdm(range(n), total=n, desc="Target Model"):
+                predictions.append(next(preds)[mode] if mode else next(preds))
+            #preds = [pred[mode] if mode else pred for pred in preds]
 
         self._clear_prediction_queue()
-        return preds
+        return predictions
 
     def predict(self, X, exclude_target=False):
         """

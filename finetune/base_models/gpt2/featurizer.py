@@ -108,12 +108,12 @@ def block(x, *, past, hparams, train=False):
     a = attn(norm(x, 'ln_1'), 'attn', nx, past=past, hparams=hparams, train=train)
     if hparams.adapter_size is not None:
         with tf.variable_scope('attn_adapter'):
-            a = adapter(a, hparams, train, nx)
+            a = adapter(a, hparams.adapter_size, train, nx)
     x = x + a
     m = mlp(norm(x, 'ln_2'), 'mlp', nx * 4, hparams=hparams, train=train)
     if hparams.adapter_size is not None:
         with tf.variable_scope('dense_adapter'):
-            m = adapter(m, hparams.bert_adapter_size, train, nx)
+            m = adapter(m, hparams.adapter_size, train, nx)
     x = x + m
     return x
 
