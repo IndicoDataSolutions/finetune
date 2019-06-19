@@ -15,6 +15,7 @@ from finetune.target_models.comparison_regressor import ComparisonRegressor
 from finetune.target_models.ordinal_regressor import OrdinalRegressor, ComparisonOrdinalRegressor
 from finetune.target_models.language_model import LanguageModel
 from finetune.target_models.mtl import MultiTask
+from finetune.target_models.deployment_model import DeploymentModel
 
 __version__, VERSION, version = ("0.6.7",) * 3
 
