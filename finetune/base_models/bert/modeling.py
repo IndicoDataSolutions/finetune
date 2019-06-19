@@ -868,7 +868,7 @@ def transformer_model(input_tensor,
           # Insert an "adapter" layer from "Parameter Efficient Transfer Learning for NLP" paper
           if adapter_size is not None:
             with tf.variable_scope("attention_adapter"):
-              attention_output = adapter(attention_output, adapter_size, hidden_size)
+              attention_output = adapter(attention_output, adapter_size, hidden_dropout_prob==0, hidden_size) # dropout prob is set to 0 above if not training, so we can use it to determine if adapters should use dropout as well
           attention_output = layer_norm(attention_output + layer_input)
 
       # The activation is only applied to the "intermediate" hidden layer.
@@ -889,7 +889,7 @@ def transformer_model(input_tensor,
         # Insert an "adapter" layer from "Parameter Efficient Transfer Learning for NLP" paper
         if adapter_size is not None:
             with tf.variable_scope("dense_adapter"):
-                layer_output = adapter(layer_output, adapter_size, hidden_size)
+                layer_output = adapter(layer_output, adapter_size, hidden_dropout_prob==0, hidden_size)
         layer_output = layer_norm(layer_output + attention_output)
         prev_output = layer_output
         all_layer_outputs.append(layer_output)

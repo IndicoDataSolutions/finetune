@@ -169,11 +169,11 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
             )
 
             if params.adapter_size is not None:
-                norm_variable_scopes = ['b:0', 'g:0']
+                norm_variable_scopes = ['b:0', 'g:0', 'beta:0', 'gamma:0']
                 # trained variables include: adapter dense layers, scaling/bias factors, target model, and
                 # the bias values in 1dconv if this layer exists (since it also has a 'b' in its name/scope).
                 params.trained_variables = [v for v in tf.global_variables()
-                if 'adapter' in v.name or 'target' in v.name or v.name[-3:] in norm_variable_scopes]
+                if 'adapter' in v.name or 'target' in v.name or any(scope in v.name for scope in norm_variable_scopes)]
             else:
                 params.trained_variables = [v for v in tf.global_variables()]
                 
