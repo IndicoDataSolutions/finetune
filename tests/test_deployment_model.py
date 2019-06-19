@@ -36,11 +36,11 @@ class TestDeploymentModel(unittest.TestCase):
     n_sample = 20
     do_comparison = True
     bert_intermediate_size = None
-    base_model = BERTModelCased
+    base_model = GPTModel
 
-    classifier_path = "tests/saved-models-bert/deployment_classifier.jl"
-    comparison_regressor_path = "tests/saved-models-bert/deployment_comparison_regressor.jl"
-    sequence_labeler_path = "tests/saved-models-bert/deployment_sequence_labeler.jl"
+    classifier_path = "tests/saved-models/deployment_classifier.jl"
+    comparison_regressor_path = "tests/saved-models/deployment_comparison_regressor.jl"
+    sequence_labeler_path = "tests/saved-models/deployment_sequence_labeler.jl"
     classifier_dataset_path = os.path.join(
         'Data', 'Classify', 'SST-binary.csv'
     )
@@ -118,7 +118,7 @@ class TestDeploymentModel(unittest.TestCase):
             pass
 
         #dataset preparation
-        self.classifier_dataset = pd.read_csv(self.classifier_dataset_path, nrows=self.n_sample * 3)
+        self.classifier_dataset = pd.read_csv(self.classifier_dataset_path, nrows=self.n_sample * 10)
 
         path = os.path.join(os.path.dirname(__file__), "testdata.json")
         with open(path, 'rt') as fp:
@@ -127,26 +127,21 @@ class TestDeploymentModel(unittest.TestCase):
         self.animals = ["dog", "cat", "horse", "cow", "pig", "sheep", "goat", "chicken", "guinea pig", "donkey", "turkey", "duck", "camel", "goose", "llama", "rabbit", "fox"]
         self.numbers = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen"]
         
-        print("TRAINING WITH"+str(self.base_model))
         #train and save sequence labeler for later use
         
         try:
             self.s = SequenceLabeler.load(self.sequence_labeler_path, **self.default_seq_config())
         except Exception as e:
-            print(e)
-            print(self.texts)
-            print(self.labels)
             self.s = SequenceLabeler(**self.default_seq_config())
             self.s.fit(self.texts * 10, self.labels * 10)
             self.s.save(self.sequence_labeler_path)
-        '''
+        
         #train and save classifier for later use
         
-        train_sample = self.classifier_dataset.sample(n=self.n_sample)
+        train_sample = self.classifier_dataset.sample(n=self.n_sample*10)
         try:
             self.cl = Classifier.load(self.classifier_path)
         except Exception as e:
-            print(e)
             self.cl = Classifier(**self.default_config())
             self.cl.fit(train_sample.Text, train_sample.Target)
             self.cl.save(self.classifier_path)
@@ -173,14 +168,12 @@ class TestDeploymentModel(unittest.TestCase):
             try:
                 self.cr = ComparisonRegressor.load(self.comparison_regressor_path, **self.default_config())
             except Exception as e:
-                print(e)
                 self.cr = ComparisonRegressor(**self.default_config())
                 self.cr.fit(self.x_tr, self.t_tr)
                 self.cr.save(self.comparison_regressor_path)
-            '''
+            
     def tearDown(self):
-        pass
-        #shutil.rmtree("tests/saved-models/")
+        shutil.rmtree("tests/saved-models/")
 
     def default_config(self, **kwargs):
         defaults = {
@@ -249,32 +242,28 @@ class TestDeploymentModel(unittest.TestCase):
         
         model = DeploymentModel(featurizer=self.base_model, **self.default_seq_config())
         model.load_featurizer()
-        '''
+        
         #test same output as weights loaded with Classifier model
         valid_sample = self.classifier_dataset.sample(n=self.n_sample)
         model.load_trainables(self.classifier_path)
         deployment_preds = model.predict_proba(valid_sample.Text.values)
-
         classifier_preds = self.cl.predict_proba(valid_sample.Text.values)
-        print(classifier_preds)
-        print(deployment_preds)
-
-
         
         for c_pred, d_pred in zip(classifier_preds, deployment_preds):
             self.assertTrue(list(c_pred.keys()) == list(d_pred.keys()))
             for c_pred_val, d_pred_val in zip(c_pred.values(), d_pred.values()):
-                np.testing.assert_almost_equal(c_pred_val, d_pred_val, decimal=3)
-
+                np.testing.assert_almost_equal(c_pred_val, d_pred_val, decimal=2)
+        
         if self.do_comparison:
             #test same output as weights loaded with Comparison Regressor model
             model.load_trainables(self.comparison_regressor_path)
-            compregressor = ComparisonRegressor.load(self.comparison_regressor_path)
+            compregressor = ComparisonRegressor.load(self.comparison_regressor_path,  **self.default_seq_config())
             deployment_preds = model.predict(self.x_te)
             compregressor_preds = compregressor.predict(self.x_te)
 
             for c_pred, d_pred in zip(compregressor_preds, deployment_preds):
-                np.testing.assert_almost_equal(c_pred, d_pred, decimal=4)
+                np.testing.assert_almost_equal(c_pred, d_pred, decimal=2)
+
         '''
         #test reasonable output for weights loaded with Sequence Labeler model
         test_sequence = ["I am a dog. A dog that's incredibly bright. I can talk, read, and write! "]
@@ -291,7 +280,7 @@ class TestDeploymentModel(unittest.TestCase):
         print(sequence_preds)
         self.assertTrue(1 <= len(deployment_preds[0]) <= 3)
         self.assertTrue(any(pred["text"].strip() == "dog" for pred in deployment_preds[0]))
-        
+        '''
 
     def dtest_large_predict(self):
         """
@@ -300,6 +289,7 @@ class TestDeploymentModel(unittest.TestCase):
         large_dataset = self.animals*100
         model = DeploymentModel(featurizer=self.base_model, **self.default_config())
         model.load_featurizer()
+        model.load_trainables(self.classifier_path)
         model.predict(large_dataset)
 
 
