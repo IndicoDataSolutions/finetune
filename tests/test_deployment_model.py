@@ -215,7 +215,7 @@ class TestDeploymentModel(unittest.TestCase):
 
         valid_sample = self.classifier_dataset.sample(n=self.n_sample)
         start = time.time()
-        model.load_trainables(self.classifier_path)
+        model.load_custom_model(self.classifier_path)
         model.predict(valid_sample.Text[:1].values)
         first = time.time()
         model.predict(valid_sample.Text[:1].values)
@@ -232,15 +232,15 @@ class TestDeploymentModel(unittest.TestCase):
         model = DeploymentModel(featurizer=self.base_model, **self.default_config())
         model.load_featurizer()
         #test transitioning from any of [sequence labeling, comparison, default] to any other
-        model.load_trainables(self.classifier_path)
+        model.load_custom_model(self.classifier_path)
         if self.do_comparison:
-            model.load_trainables(self.comparison_regressor_path)
-        model.load_trainables(self.sequence_labeler_path)
-        model.load_trainables(self.classifier_path)
-        model.load_trainables(self.sequence_labeler_path)
+            model.load_custom_model(self.comparison_regressor_path)
+        model.load_custom_model(self.sequence_labeler_path)
+        model.load_custom_model(self.classifier_path)
+        model.load_custom_model(self.sequence_labeler_path)
         if self.do_comparison:
-            model.load_trainables(self.comparison_regressor_path)
-        model.load_trainables(self.classifier_path)
+            model.load_custom_model(self.comparison_regressor_path)
+        model.load_custom_model(self.classifier_path)
 
     def test_reasonable_predictions(self):
         """
@@ -251,7 +251,7 @@ class TestDeploymentModel(unittest.TestCase):
         
         #test same output as weights loaded with Classifier model
         valid_sample = self.classifier_dataset.sample(n=self.n_sample)
-        model.load_trainables(self.classifier_path)
+        model.load_custom_model(self.classifier_path)
         deployment_preds = model.predict_proba(valid_sample.Text.values)
         classifier_preds = self.cl.predict_proba(valid_sample.Text.values)
         
@@ -262,7 +262,7 @@ class TestDeploymentModel(unittest.TestCase):
         
         if self.do_comparison:
             #test same output as weights loaded with Comparison Regressor model
-            model.load_trainables(self.comparison_regressor_path)
+            model.load_custom_model(self.comparison_regressor_path)
             compregressor = ComparisonRegressor.load(self.comparison_regressor_path,  **self.default_comp_config())
             deployment_preds = model.predict(self.x_te)
             compregressor_preds = compregressor.predict(self.x_te)
@@ -276,7 +276,7 @@ class TestDeploymentModel(unittest.TestCase):
         large_dataset = self.animals*100
         model = DeploymentModel(featurizer=self.base_model, **self.default_config())
         model.load_featurizer()
-        model.load_trainables(self.classifier_path)
+        model.load_custom_model(self.classifier_path)
         model.predict(large_dataset)
 
 
@@ -286,18 +286,18 @@ class TestDeploymentModel(unittest.TestCase):
         """
         model = DeploymentModel(featurizer=self.base_model, **self.default_config())
         model.load_featurizer()
-        model.load_trainables(self.classifier_path)
+        model.load_custom_model(self.classifier_path)
         model.predict(['finetune'])
 
         start = time.time()
-        model.load_trainables(self.sequence_labeler_path)
+        model.load_custom_model(self.sequence_labeler_path)
         predictions = model.predict(['finetune sequence'])
         end = time.time()
         self.assertGreater(2.5, end - start)
 
         if self.do_comparison:
             start = time.time()
-            model.load_trainables(self.comparison_regressor_path)
+            model.load_custom_model(self.comparison_regressor_path)
             predictions = model.predict([['finetune', 'compare']])
             end = time.time()
             self.assertGreater(2.5, end - start)

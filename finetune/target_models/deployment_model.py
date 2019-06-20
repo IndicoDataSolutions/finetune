@@ -112,7 +112,7 @@ class DeploymentModel(BaseModel):
     def load_featurizer(self):
         """
         Performs graph compilation of the featurizer, saving most compilation overhead from occurring at predict time. Should
-        be called after initialization but BEFORE any calls to load_trainables or predict.
+        be called after initialization but BEFORE any calls to load_custom_model or predict.
         """
         self.featurizer_est = self._get_estimator('featurizer')
         self.predict_hooks.feat_hook.model_portion = 'whole_featurizer'
@@ -121,7 +121,7 @@ class DeploymentModel(BaseModel):
         output = self.predict(['finetune'], exclude_target=True) #run arbitrary predict call to compile featurizer graph
         self.featurizer_loaded = True
 
-    def load_trainables(self, path):
+    def load_custom_model(self, path):
         """
         Load in target model, and either adapters or entire featurizer from file. Must be called after load_featurizer.
         """
@@ -281,7 +281,7 @@ class DeploymentModel(BaseModel):
 
     def predict(self, X, exclude_target=False):
         """
-        Performs inference using the weights and targets from the model in filepath used for load_trainables. 
+        Performs inference using the weights and targets from the model in filepath used for load_custom_model. 
 
         :param X: list or array of text to embed.
         :returns: list of class labels.
