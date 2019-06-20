@@ -103,106 +103,104 @@ class TestDeploymentModel(unittest.TestCase):
         with open(cls.processed_path, 'wt') as fp:
             json.dump((docs, docs_labels), fp)
 
-
     @classmethod
     def setUpClass(cls):
         cls._download_data()
-
-    def setUp(self):
-
-        try:
-            os.mkdir("tests/saved-models")
-        except FileExistsError:
-            warnings.warn("tests/saved-models still exists, it is possible that some test is not cleaning up properly.")
-            pass
-
+        
         #dataset preparation
-        self.classifier_dataset = pd.read_csv(self.classifier_dataset_path, nrows=self.n_sample * 10)
+        cls.classifier_dataset = pd.read_csv(cls.classifier_dataset_path, nrows=cls.n_sample * 10)
 
         path = os.path.join(os.path.dirname(__file__), "testdata.json")
         with open(path, 'rt') as fp:
-            self.texts, self.labels = json.load(fp)
+            cls.texts, cls.labels = json.load(fp)
 
-        self.animals = ["dog", "cat", "horse", "cow", "pig", "sheep", "goat", "chicken", "guinea pig", "donkey", "turkey", "duck", "camel", "goose", "llama", "rabbit", "fox"]
-        self.numbers = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen"]
+        cls.animals = ["dog", "cat", "horse", "cow", "pig", "sheep", "goat", "chicken", "guinea pig", "donkey", "turkey", "duck", "camel", "goose", "llama", "rabbit", "fox"]
+        cls.numbers = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen"]
         
         #train and save sequence labeler for later use
         try:
-            self.s = SequenceLabeler.load(self.sequence_labeler_path, **self.default_seq_config())
+            cls.s = SequenceLabeler.load(cls.sequence_labeler_path, **cls.default_seq_config(cls))
         except FileNotFoundError:
-            self.s = SequenceLabeler(**self.default_seq_config())
-            self.s.fit(self.texts * 10, self.labels * 10)
-            self.s.save(self.sequence_labeler_path)
+            cls.s = SequenceLabeler(**cls.default_seq_config(cls))
+            cls.s.fit(cls.texts * 10, cls.labels * 10)
+            cls.s.save(cls.sequence_labeler_path)
         
         #train and save classifier for later use
-        train_sample = self.classifier_dataset.sample(n=self.n_sample*10)
+        train_sample = cls.classifier_dataset.sample(n=cls.n_sample*10)
         try:
-            self.cl = Classifier.load(self.classifier_path)
+            cls.cl = Classifier.load(cls.classifier_path)
         except FileNotFoundError:
-            self.cl = Classifier(**self.default_config())
-            self.cl.fit(train_sample.Text, train_sample.Target)
-            self.cl.save(self.classifier_path)
+            cls.cl = Classifier(**cls.default_config(cls))
+            cls.cl.fit(train_sample.Text, train_sample.Target)
+            cls.cl.save(cls.classifier_path)
 
-        if self.do_comparison:
+        if cls.do_comparison:
             #train and save comparison regressor for use
-            self.cr = ComparisonRegressor()
+            cls.cr = ComparisonRegressor()
     
             n_per = 150
             similar = []
             different = []
-            for dataset in [self.animals, self.numbers]:
+            for dataset in [cls.animals, cls.numbers]:
                 for i in range(n_per // 2):
                     similar.append([random.choice(dataset), random.choice(dataset)])
             for i in range(n_per):
-                different.append([random.choice(self.animals), random.choice(self.numbers)])
+                different.append([random.choice(cls.animals), random.choice(cls.numbers)])
 
             targets = np.asarray([1] * len(similar) + [0] * len(different))
             data = similar + different
 
-            self.x_tr, self.x_te, self.t_tr, self.t_te = train_test_split(data, targets, test_size=0.3, random_state=42)
+            cls.x_tr, cls.x_te, cls.t_tr, cls.t_te = train_test_split(data, targets, test_size=0.3, random_state=42)
             
             try:
-                self.cr = ComparisonRegressor.load(self.comparison_regressor_path, **self.default_config())
+                cls.cr = ComparisonRegressor.load(cls.comparison_regressor_path, **cls.default_config(cls))
             except FileNotFoundError:
-                self.cr = ComparisonRegressor(**self.default_config())
-                self.cr.fit(self.x_tr, self.t_tr)
-                self.cr.save(self.comparison_regressor_path)
-            
-    def tearDown(self):
+                cls.cr = ComparisonRegressor(**cls.default_config(cls))
+                cls.cr.fit(cls.x_tr, cls.t_tr)
+                cls.cr.save(cls.comparison_regressor_path)
+
+    def setUp(self):
+        try:
+            os.mkdir("tests/saved-models")
+        except FileExistsError:
+            warnings.warn("tests/saved-models still exists, it is possible that some test is not cleaning up properly.")
+
+    @classmethod  
+    def tearDownClass(cls):
         shutil.rmtree("tests/saved-models/")
 
-    def default_config(self, **kwargs):
+    def default_config(cls, **kwargs):
         defaults = {
             'batch_size': 2,
             'max_length': 256,
             'n_epochs': 3,
             'adapter_size': 64,
-            'base_model': self.base_model
+            'base_model': cls.base_model
         }
         defaults.update(kwargs)
         return dict(get_config(**defaults))
 
-    def default_seq_config(self, **kwargs):
+    def default_seq_config(cls, **kwargs):
         d = dict(
             batch_size=2,
             max_length=256,
             lm_loss_coef=0.0,
             val_size=0,
             adapter_size=64,
-            base_model=self.base_model,
+            base_model=cls.base_model,
             interpolate_pos_embed=False,
         )
         d.update(**kwargs)
         return d
 
-    def default_comp_config(self, **kwargs):
+    def default_comp_config(cls, **kwargs):
         d = dict(
             batch_size=2,
             max_length=256,
             n_epochs=1,
             l2_reg=0,
             lm_loss_coef=0.,
-            base_model=self.base_model,
+            base_model=cls.base_model,
             val_size=0.,
         )
         d.update(kwargs)

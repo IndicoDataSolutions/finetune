@@ -245,7 +245,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self.resolved_gpus = resolved_gpus
         return distribute_strategy
 
-    def _get_estimator_config(self, force_build_lm=False, build_explain=False):
+    def _get_estimator_config(self):
         conf = tf.ConfigProto(
             allow_soft_placement=self.config.soft_device_placement,
             log_device_placement=self.config.log_device_placement,
@@ -267,7 +267,7 @@ class BaseModel(object, metaclass=ABCMeta):
         )
         return config
 
-    def get_estimator(self, force_build_lm=False):
+    def get_estimator(self, force_build_lm=False, build_explain=False):
         config = self._get_estimator_config()
 
         model_fn = get_model_fn(
@@ -380,17 +380,8 @@ class BaseModel(object, metaclass=ABCMeta):
         n = n_examples or len(self._data)
         if self._predictions is None:
             input_fn = self.input_pipeline.get_predict_input_fn(self._data_generator)
-            if self.config.build_separate_estimators:
-                featurizer_est, target_est, hooks = self.get_separate_estimators()
-                features = featurizer_est.predict(input_fn=input_fn, predict_keys=predict_keys, hooks=hooks)
-                #features = tf.data.Dataset.from_tensor_slices(features)
-
-                target_fn = self.input_pipeline.get_target_input_fn(features)
-
-                self._predictions = target_est.predict(input_fn=target_fn, predict_keys=predict_keys, hooks=hooks)
-            else:
-                _estimator, hooks = self.get_estimator()
-                self._predictions = _estimator.predict(input_fn=input_fn, predict_keys=predict_keys, hooks=hooks)
+            _estimator, hooks = self.get_estimator()
+            self._predictions = _estimator.predict(input_fn=input_fn, predict_keys=predict_keys, hooks=hooks)
 
         self._clear_prediction_queue()
 
@@ -412,24 +403,15 @@ class BaseModel(object, metaclass=ABCMeta):
             return self._cached_inference(Xs=Xs, predict_keys=predict_keys, n_examples=n_examples)
         else:
             input_fn = self.input_pipeline.get_predict_input_fn(Xs)
-            if self.config.build_separate_estimators:
-                featurizer_est, target_est, hooks = self.get_separate_estimators()
-                features = featurizer_est.predict(input_fn=input_fn, predict_keys=predict_keys, hooks=hooks)
-                #features = tf.data.Dataset.from_tensor_slices(features)
+            estimator, hooks = self.get_estimator(build_explain=PredictMode.EXPLAIN in predict_keys)
+            length = len(Xs) if not callable(Xs) else None
 
-                target_fn = self.input_pipeline.get_target_input_fn(features)
-
-                self._predictions = target_est.predict(input_fn=target_fn, predict_keys=predict_keys, hooks=hooks)
-            else:
-                estimator, hooks = self.get_estimator(build_explain=PredictMode.EXPLAIN in predict_keys)
-                length = len(Xs) if not callable(Xs) else None
-
-                predictions = tqdm.tqdm(
-                    estimator.predict(
-                        input_fn=input_fn, predict_keys=predict_keys, hooks=hooks
-                    ),
-                    total=length,
-                    desc="Inference"
+            predictions = tqdm.tqdm(
+                estimator.predict(
+                    input_fn=input_fn, predict_keys=predict_keys, hooks=hooks
+                ),
+                total=length,
+                desc="Inference"
                 )
             try:
                 return [
