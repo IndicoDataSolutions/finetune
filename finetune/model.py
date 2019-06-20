@@ -258,7 +258,8 @@ def get_separate_model_fns(target_model_fn, predict_op, predict_proba_op, build_
                 train=False
         )
         predictions = {'features': featurizer_state['features'],
-                    'sequence_features': featurizer_state['sequence_features']}
+                    'sequence_features': featurizer_state['sequence_features'],
+                    'pool_idx': featurizer_state['pool_idx']}
         
         if params.base_model in [GPTModel, GPTModelSmall] and build_attn:
             predictions['attention_weights'] = featurizer_state['attention_weights']

@@ -228,11 +228,11 @@ class DeploymentModel(BaseModel):
     def _get_input_fn(self, gen):
         return self.input_pipeline.get_predict_input_fn(gen)
 
-    def _inference(self, Xs, mode=PredictMode.NORMAL, exclude_target=False):
+    def _inference(self, Xs, predict_keys=[PredictMode.NORMAL], exclude_target=False, n_examples=None):
         Xs = self.input_pipeline._format_for_inference(Xs)
         self._data = Xs
         self._closed = False
-        n = len(self._data)
+        n = n_examples or len(self._data)
         if self.adapters:
             self.predict_hooks.feat_hook.model_portion = 'featurizer'
         else:
@@ -264,12 +264,17 @@ class DeploymentModel(BaseModel):
             target_est = self._get_estimator('target')
             target_fn = self.input_pipeline.get_target_input_fn(features)
             preds = target_est.predict(
-                    input_fn=target_fn, predict_keys=mode, hooks=[self.predict_hooks.target_hook])
+                    input_fn=target_fn, predict_keys=predict_keys, hooks=[self.predict_hooks.target_hook])
 
-            predictions = []
-            for i in tqdm.tqdm(range(n), total=n, desc="Target Model"):
-                predictions.append(next(preds)[mode] if mode else next(preds))
-            #preds = [pred[mode] if mode else pred for pred in preds]
+        predictions = [None]*n
+
+        for i in tqdm.tqdm(range(n), total=n, desc="Target Model"):
+            y = next(preds)
+            try:
+                y = y[predict_keys[0]] if len(predict_keys) == 1 else y
+            except ValueError:
+                raise FinetuneError("Cannot call `predict()` on a model that has not been fit.")
+            predictions[i] = y
 
         self._clear_prediction_queue()
         return predictions
