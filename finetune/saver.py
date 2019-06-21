@@ -100,6 +100,8 @@ class Saver:
 
     def set_fallback(self, fallback_filename):
         self.tpe = ThreadPoolExecutor()
+        if not os.path.exists(fallback_filename):
+            raise FileNotFoundError('Error loading base model - file not found.')
         self.fallback_filename = fallback_filename
         self.fallback_future = self.tpe.submit(joblib.load, fallback_filename)
         self.fallback_ = None
