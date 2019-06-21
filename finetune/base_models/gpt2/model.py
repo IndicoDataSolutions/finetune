@@ -48,5 +48,5 @@ class GPT2Model345(SourceModel):
             'file': os.path.join(FINETUNE_BASE_FOLDER, 'model', 'gpt2', filename),
             'url': urljoin(GPT2_BASE_URL, filename)
         }
-        for filename in ['encoder.json', 'vocab.bpe', 'model-lg.jl']
+        for filename in ['encoder.json', 'vocab.bpe', 'model-med.jl']
     ]
