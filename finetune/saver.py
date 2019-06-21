@@ -149,7 +149,6 @@ class Saver:
     def get_scaffold_init_fn(self):
         
         def init_fn(scaffold, session, model_portion=None, refresh_base_model = False):
-            self.var_val = []
             if self.variables is not None:
                 variables_sv = self.variables
             else:

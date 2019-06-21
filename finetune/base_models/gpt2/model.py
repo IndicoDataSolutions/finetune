@@ -37,10 +37,11 @@ class GPT2Model345(SourceModel):
         'n_embed': 1024,
         'n_heads': 16,
         'n_layer': 24,
+        'num_layers_trained': 24,
         'l2_reg': 0.001,
         'act_fn': "gelu",
         'interpolate_pos_embed': False,
-        'base_model_path':  os.path.join("gpt2", "model-lg.jl")
+        'base_model_path':  os.path.join("gpt2", "model-lg_correct.jl")
     }
     required_files = [
         {

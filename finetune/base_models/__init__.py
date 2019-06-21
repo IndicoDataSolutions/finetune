@@ -36,6 +36,8 @@ from finetune.base_models.bert.model import BERTModelCased
 # aliases
 GPT = GPTModel
 GPT2 = GPT2Model
+GPT2ModelMedium = GPT2Model345
+GPT2ModelSmall = GPT2Model
 TextCNN = TextCNNModel
 BERT = BERTModelCased
 
