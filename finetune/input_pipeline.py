@@ -9,10 +9,11 @@ from abc import ABCMeta, abstractmethod
 
 import tqdm
 import numpy as np
+import pandas as pd
 import tensorflow as tf
 from tensorflow.python.data import Dataset
 from sklearn.model_selection import train_test_split
-
+from sklearn.preprocessing import MultiLabelBinarizer, LabelBinarizer
 import finetune
 from finetune.errors import FinetuneError
 from finetune.encoding.input_encoder import ArrayEncodedOutput, EncodedOutput
@@ -26,6 +27,7 @@ class BasePipeline(metaclass=ABCMeta):
         self.config = config
         self.text_encoder = self.config.base_model.get_encoder()
         self.label_encoder = None
+        self.context_encoder = MultiLabelBinarizer()
         self.target_dim = None
         self.pad_idx_ = None
         self.rebuild = False
@@ -96,38 +98,84 @@ class BasePipeline(metaclass=ABCMeta):
         )
         return output
 
-    def text_to_tokens_mask(self, X, Y=None):
+    def text_to_tokens_mask(self, X, Y=None, context=None):
         out_gen = self._text_to_ids(X, pad_token=self.config.pad_token)
         for out in out_gen:
             feats = {"tokens": out.token_ids, "mask": out.mask}
-            if Y is None:
-                yield feats
+            output = [feats]
+            if context is not None:
+                output.append(context)
+            if Y is not None:
+                output.append(self.label_encoder.transform([Y])[0])
+            yield output
+
+    def _post_data_initialization(self, Y=None, context=None):
+        if Y:
+            self.label_encoder = self._target_encoder()
+            if not callable(Y):
+                Y_fit = Y
+                self.label_encoder.fit(Y)
             else:
-                yield feats, self.label_encoder.transform([Y])[0]
+                Y_fit = list(itertools.islice(Y(), 10000))
+                self.label_encoder.fit(Y_fit)
+            self.config.pad_idx = self.pad_idx
 
-    def _post_data_initialization(self, Y):
-        self.label_encoder = self._target_encoder()
-        if not callable(Y):
-            Y_fit = Y
-            self.label_encoder.fit(Y)
-        else:
-            Y_fit = list(itertools.islice(Y(), 10000))
-            self.label_encoder.fit(Y_fit)
-        self.config.pad_idx = self.pad_idx
+            target_dim = self.label_encoder.target_dim
+            self.lm_loss_coef = self.config.lm_loss_coef if target_dim is not None else 1.0
+            self.target_dim = target_dim
 
-        target_dim = self.label_encoder.target_dim
-        self.lm_loss_coef = self.config.lm_loss_coef if target_dim is not None else 1.0
-        self.target_dim = target_dim
+        if context:
+            if not callable(Y):
+                characteristics = context
+            else:
+                characteristics = itertools.islice(context(), 10000)
+            num_samples = len(characteristics)
+            print("NUM SAMPLES:"+ str(num_samples))
+
+
+            1/0
+            
+            string_labels = [label for label in characteristics if all(type(x) is str or type(x) is bool or x is None for x in characteristics[label])] 
+            print("String labels")
+            print(string_labels)
+            possible_labels = [set(characteristics[specific_aspect]) for specific_aspect in string_labels]
+            import sklearn
+            dictvectorizer = sklearn.feature_extraction.DictVectorizer()
+            X = dictvectorizer.fit_transform(characteristics)
+            print(X)
+            print(possible_labels)
+            self.context_encoder.fit(possible_labels)
+            continuous_labels = [label for label in characteristic if label not in string_labels]
+            
+            print(continuous_labels)
+
+    def _context_to_vector(self, context):
+            characteristics = itertools.chain.from_iterable(characteristics)
+            characteristics = pd.DataFrame(characteristics).to_dict('list')
+            
+            if not hasattr(self, 'label_encoders'):
+                self.label_encoders = {k:LabelBinarizer() for k in characteristics.keys() if 
+                all(not type(data) == int and not type(data) == float for data in characteristics[k])} # Excludes features that are continuous, like position and font size
+                self.context_labels = context.keys()
+
+            
+            print(label_encoders.keys())
+            binarized_labels = {}
+            for key, encoder in label_encoders.items():
+                print(key)
+                binarized_labels[key] = encoder.fit_transform(characteristics[key])
+            print(binarized_labels)
+
 
     def _compute_class_counts(self, encoded_dataset):
         target_arrs = np.asarray([target_arr for doc, target_arr in encoded_dataset])
         return Counter(self.label_encoder.inverse_transform(target_arrs))
         
-    def _dataset_with_targets(self, Xs, Y, train):
+    def _dataset_with_targets(self, Xs, Y, train, context=None):
         if not callable(Xs) and not callable(Y):
-            dataset = lambda: zip(Xs, Y)
+            dataset = lambda: zip(Xs, Y, context) # Do not need to check if context is callable - it is turned in along with Xs, and thus must have the same form
         elif callable(Xs) and callable(Y):
-            dataset = lambda: zip(Xs(), Y())  # encode one sample at a time.
+            dataset = lambda: zip(Xs(), Y(), context())  # encode one sample at a time.
         else:
             raise ValueError("Either neither or both of Xs and Y should be callable, not a mixture")
 
@@ -196,11 +244,11 @@ class BasePipeline(metaclass=ABCMeta):
     def resampling(self, Xs, Y):
         return Xs, Y
 
-    def _make_dataset(self, Xs, Y, train=False):
+    def _make_dataset(self, Xs, Y, context=None, train=False):
         if Y is not None:
-            dataset = lambda: self._dataset_with_targets(Xs, Y, train=train)
+            dataset = lambda: self._dataset_with_targets(Xs, Y, context=context, train=train)
         else:
-            dataset = lambda: self._dataset_without_targets(Xs, train=train)
+            dataset = lambda: self._dataset_without_targets(Xs, context=context, train=train)
         return dataset
 
     def wrap_tqdm(self, gen, train):
@@ -240,7 +288,7 @@ class BasePipeline(metaclass=ABCMeta):
 
         return internal_gen()
 
-    def get_train_input_fns(self, Xs, Y=None, batch_size=None, val_size=None):
+    def get_train_input_fns(self, Xs, Y=None, context=None, batch_size=None, val_size=None):
         self.epoch = 1
         batch_size = batch_size or self.config.batch_size
 
@@ -267,11 +315,13 @@ class BasePipeline(metaclass=ABCMeta):
         self.config.dataset_size -= val_size
 
         if Y is not None:
-            self._post_data_initialization(Y)
+            self._post_data_initialization(Y=Y, context=context)
+        else:
+            self._post_data_initialization(context=context)
 
         if callable(Xs) or Y is None:
             self._skip_tqdm = val_size
-            dataset = self._make_dataset(Xs, Y, train=True)
+            dataset = self._make_dataset(Xs, Y, context, train=True)
             val_dataset_unbatched = lambda: dataset().shuffle(
                 shuffle_buffer_size, seed=self.config.seed, reshuffle_each_iteration=False
             ).take(self.config.val_size)
@@ -284,15 +334,15 @@ class BasePipeline(metaclass=ABCMeta):
                 if self.config.val_size == 0:
                     Xs_tr, Xs_va, Y_tr, Y_va = Xs, [], Y, []
                 else:
-                    Xs_tr, Xs_va, Y_tr, Y_va = train_test_split(Xs, Y, test_size=self.config.val_size, random_state=self.config.seed)
+                    Xs_tr, Xs_va, Y_tr, Y_va = train_test_split(Xs, Y, context, test_size=self.config.val_size, random_state=self.config.seed)
             else:
                 Xs_tr, Y_tr = Xs, Y
                 Xs_va, Y_va = self.config.val_set
 
             Xs_tr, Y_tr = self.resampling(Xs_tr, Y_tr)
             self.config.dataset_size = len(Xs_tr)
-            val_dataset_unbatched = self._make_dataset(Xs_va, Y_va, train=False)
-            train_dataset_unbatched = self._make_dataset(Xs_tr, Y_tr, train=True)
+            val_dataset_unbatched = self._make_dataset(Xs_va, Y_va, context, train=False)
+            train_dataset_unbatched = self._make_dataset(Xs_tr, Y_tr, context, train=True)
 
         if self.config.chunk_long_sequences or self.config.class_weights:
             # Certain settings require that the entire dataset be encoded before compiling the graph

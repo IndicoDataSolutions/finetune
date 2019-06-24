@@ -132,7 +132,7 @@ class BaseModel(object, metaclass=ABCMeta):
         return steps
 
     def finetune(self, Xs, Y=None, batch_size=None):
-        if not callable(Xs) and Y is not None and len(Xs) != len(Y):
+        if not callable(Xs) and Y is not None and len(Xs) != len(Y) and not self.config.use_auxiliary_info:
             raise FinetuneError(
                 "Mismatch between number of examples ({}) and number of targets ({}) provided.".format(
                     len(Xs),
@@ -140,9 +140,14 @@ class BaseModel(object, metaclass=ABCMeta):
                 )
             )
 
-        batch_size = batch_size or self.config.batch_size
+        if self.config.use_auxiliary_info:
+            context = Xs[1]
+            Xs = Xs[0]
+        else:
+            context = None
 
-        val_input_fn, train_input_fn, val_size, val_interval = self.input_pipeline.get_train_input_fns(Xs, Y, batch_size=batch_size)
+        batch_size = batch_size or self.config.batch_size
+        val_input_fn, train_input_fn, val_size, val_interval = self.input_pipeline.get_train_input_fns(Xs, Y, context=context, batch_size=batch_size)
         if self.config.keep_best_model:
             if isinstance(val_size, dict):
                 tf.logging.warning("Cannot early stop or keep best model with MTL")
@@ -404,7 +409,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         return predictions
 
-    def _inference(self, Xs, predict_keys=None, n_examples=None):
+    def _inference(self, Xs, context=None, predict_keys=None, n_examples=None):
         Xs = self.input_pipeline._format_for_inference(Xs)
 
         if self._cached_predict:

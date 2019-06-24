@@ -3,13 +3,14 @@ from urllib.parse import urljoin
 
 from finetune.base_models import SourceModel
 from finetune.base_models.gpt.encoder import GPTEncoder
+from finetune.base_models.gpt2.encoder import GPT2Encoder
 from finetune.base_models.textcnn.featurizer import textcnn_featurizer
 from finetune.util.download import GPT_BASE_URL, FINETUNE_BASE_FOLDER
 
 
 class TextCNNModel(SourceModel):
     is_bidirectional = False
-    encoder = GPTEncoder
+    encoder = GPT2Encoder
     featurizer = textcnn_featurizer
     kernel_sizes = [2, 3, 4]
     settings = {

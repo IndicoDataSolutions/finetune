@@ -25,11 +25,11 @@ class SequencePipeline(BasePipeline):
         super(SequencePipeline, self).__init__(config)
         self.multi_label = multi_label
 
-    def _post_data_initialization(self, Y):
+    def _post_data_initialization(self, Y, context=None):
         Y_ = list(itertools.chain.from_iterable(Y))
-        super()._post_data_initialization(Y_)
+        super()._post_data_initialization(Y_, context)
 
-    def text_to_tokens_mask(self, X, Y=None):
+    def text_to_tokens_mask(self, X, Y=None, context=None):
         pad_token = (
             [self.config.pad_token] if self.multi_label else self.config.pad_token
         )
@@ -37,13 +37,18 @@ class SequencePipeline(BasePipeline):
         for out in out_gen:
             feats = {"tokens": out.token_ids, "mask": out.mask}
             if Y is None:
-                yield feats
-            else:
-                yield feats, self.label_encoder.transform(out.labels)
+                yield feats, context
+            if Y is not None:
+                yield feats, context, self.label_encoder.transform(out.labels)
+
+            # if Y is None:
+            #    yield feats
+            # else:
+            #    yield feats, self.label_encoder.transform(out.labels)
 
     def _compute_class_counts(self, encoded_dataset):
         counter = Counter()
-        for doc, target_arr in encoded_dataset:
+        for doc, context, target_arr in encoded_dataset:
             targets = target_arr[doc["mask"].astype(np.bool)]
             counter.update(self.label_encoder.inverse_transform(targets))
         return counter
@@ -164,6 +169,9 @@ class SequenceLabeler(BaseModel):
         return super()._initialize()
 
     def finetune(self, Xs, Y=None, batch_size=None):
+        if self.config.use_auxiliary_info:
+            context = Xs[1]
+            Xs = Xs[0]
         Xs, Y_new, *_ = indico_to_finetune_sequence(
             Xs,
             encoder=self.input_pipeline.text_encoder,
@@ -172,6 +180,10 @@ class SequenceLabeler(BaseModel):
             none_value=self.config.pad_token,
         )
         Y = Y_new if Y is not None else None
+
+        if self.config.use_auxiliary_info:
+            Xs = [Xs, context]
+
         return super().finetune(Xs, Y=Y, batch_size=batch_size)
 
     def predict(self, X, per_token=False):

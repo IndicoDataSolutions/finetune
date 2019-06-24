@@ -25,6 +25,13 @@ def textcnn_featurizer(X, encoder, config, train=False, reuse=None, **kwargs):
             shape=[encoder.vocab_size + config.max_length, config.n_embed_featurizer],
             initializer=tf.random_normal_initializer(stddev=config.weight_stddev)
         )
+
+        context_embed_weights = tf.get_variable(
+            name="ce",
+            shape=[encoder.context_vocab_size + config.max_length, config.n_embed_featurizer],
+            initializer=tf.random_normal_initializer(stddev=config.weight_stddev))
+
+
         if config.train_embeddings:
             embed_weights = dropout(embed_weights, config.embed_p_drop, train)
         else:
