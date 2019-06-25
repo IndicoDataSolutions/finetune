@@ -349,8 +349,6 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
 
         while len(queue):
             current_annotation = queue.pop(0)
-            print(current_annotation)
-            1/0
 
             # for each existing merged annotation
             for annotation in merged_annotations:
