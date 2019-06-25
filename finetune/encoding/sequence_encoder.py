@@ -293,8 +293,6 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
     :param none_value: A categorical label to use as the none value.
     :return: Segmented Text, Labels of the form described above.
     """
-    print(context)
-    print(labels)
     all_subseqs = []
     all_labels = []
     all_context = []
@@ -376,7 +374,6 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
 
         for annotation in merged_annotations:
             annotation['label'] = tuple(annotation['label'])
-            annotation['context'] = tuple(annotation['context'])
 
         # Add none labels
         current_idx = 0
@@ -389,7 +386,7 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
                     'end': annotation['start'],
                     'text': text[current_idx:annotation['start']],
                     'label': tuple([none_value]),
-                    'context': tuple([none_value])
+                    'context': {none_value:none_value}
                 })
             # Copy over labeled span
             all_annotations.append(annotation)
@@ -409,7 +406,7 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
                 'end': len(text),
                 'text': text[last_chunk_end_idx:len(text)],
                 'label': tuple([none_value]),
-                'context': tuple([none_value])
+                'context': {none_value:none_value}
             })
 
         if not multi_label:
@@ -438,4 +435,4 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
         all_association_type.append(doc_association_type)
         all_idxs.append(doc_current_label_idx)
 
-    return all_subseqs, all_labels, all_association_type, all_association_idx, all_idxs
+    return all_subseqs, all_labels, all_association_type, all_association_idx, all_idxs, all_context

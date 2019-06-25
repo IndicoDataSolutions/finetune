@@ -162,7 +162,6 @@ class BaseEncoder(object):
         :param max_length: Max length of the sequences.
         :return: A Labeled Sequence Object.
         """
-
         token_ids = []
         tokens = []
         positions = []
@@ -183,20 +182,7 @@ class BaseEncoder(object):
                     "Some examples are longer than the max_length. Please trim documents or increase `max_length`. "
                     "Fallback behaviour is to use the first {} byte-pair encoded tokens".format(max_length - 2)
                 )
-        '''
-        print('Encoded:')
-        print(encoded)
-        print("Tokens:")
-        print(tokens)
-        print("Token Ids:")
-        print(token_ids)
-        print("positions")
-        print(positions)
-        #print('context')
-        #print(context)
-        print('labels')
-        print(labels)
-        '''
+
         # merge fields + truncate if necessary
         token_ids = self._cut_and_concat(
             encoded=token_ids,

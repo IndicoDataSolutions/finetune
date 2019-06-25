@@ -68,22 +68,20 @@ class BasePipeline(metaclass=ABCMeta):
             0: byte-pair encoding embedding
             1: positional embedding
         """
+        print(encoded_output)
+        num_tokens = len(encoded_output.tokens)
         seq_length = len(encoded_output.token_ids)
         x = np.zeros((self.config.max_length, 2), dtype=np.int32)
         mask = np.zeros((self.config.max_length), dtype=np.float32)
 
         if encoded_output.labels is not None:
-            print(encoded_output.labels)
-            print(len(encoded_output.labels))
             labels_arr = np.empty((self.config.max_length), dtype='object')
             labels_arr.fill((pad_token or self.config.pad_token))
         else:
             labels_arr = None
 
         if encoded_output.context is not None:
-            print(encoded_output.context)
-            print(len(encoded_output.context))
-            context_arr = np.empty((self.config.max_length), dtype='object')
+            context_arr = np.empty((self.config.max_length, self.config.context_dim), dtype='object')
             context_arr.fill((pad_token or self.config.pad_token))
 
         # BPE embedding
@@ -93,7 +91,9 @@ class BasePipeline(metaclass=ABCMeta):
         if encoded_output.labels:
             labels_arr[:seq_length] = encoded_output.labels
         if encoded_output.context:
-            context_arr[:seq_length] = encoded_output.context
+            print(np.shape(encoded_output.context))
+            context_arr[:seq_length][:] = np.squeeze(encoded_output.context)
+
         # positional_embeddings
         x[:, 1] = np.arange(
             self.text_encoder.vocab_size, self.text_encoder.vocab_size + self.config.max_length
@@ -144,62 +144,90 @@ class BasePipeline(metaclass=ABCMeta):
             _ = self._context_to_vector(characteristics) # to fit the auxiliary information label encoders
 
     def _context_to_vector(self, context):
+            """
+            Takes list of context dictionaries and turns them into lists (per sample) of lists (per token) of context vectors
+            """
             num_samples = len(context)
-            characteristics = itertools.chain.from_iterable(context)
-            characteristics = pd.DataFrame(characteristics).to_dict('list')
+            vector_list = []
 
             if not hasattr(self, 'label_encoders'): # we will fit necessary label encoders here to know dimensionality of input vector before entering featurizer
-                self.label_encoders = {k:LabelBinarizer() for k in characteristics.keys() if 
-                all(not type(data) == int and not type(data) == float for data in characteristics[k])} # Excludes features that are continuous, like position and font size
+                characteristics = itertools.chain.from_iterable(context)
+                characteristics = pd.DataFrame(characteristics).to_dict('list')
 
+                self.label_encoders = {k:LabelBinarizer() for k in characteristics.keys() if 
+                all(k != self.config.pad_token and not (type(data) == int or (type(data) == float and not pd.isna(data))) for data in characteristics[k])} # Excludes features that are continuous, like position and font size, since they do not have categorical binary encodings
                 for label, encoder in self.label_encoders.items():
-                    encoder.fit(characteristics[label])
+                    without_nans = [x for x in characteristics[label] if not pd.isna(x)]
+                    encoder.fit(without_nans)
 
                 self.context_labels = sorted(characteristics.keys()) # sort for consistent ordering between runs
                 continuous_labels = [label for label in self.context_labels if label not in self.label_encoders.keys()]
-                self.context_dim = len(continuous_labels) + np.sum([len(encoder.classes_) for encoder in self.label_encoders.values()]) #since categorical labels use LabelBinarizer, they take num_possible_labels dimensions each for one-hot-encoding, while numerical features only use 1 dimension
+
+                self.context_dim = len(continuous_labels) # Sum over features to determine dimensionality of each feature vector.
+                for encoder in self.label_encoders.values(): # since categorical labels use LabelBinarizer, they use varying dimensions each for each one-hot-encoding, while numerical features only use 1 dimension, so we sum over all for the total dimension.
+                    self.context_dim += 1 if len(encoder.classes_) == 1 else len(encoder.classes_) # Binary encodings with only two classes are given with one bit. Encodings with n > 1 classes are given with n bits. (Thanks sklearn)
                 self.config.context_dim = self.context_dim
 
-            # make sure all labels have a value for every token, and calculate total num tokens
-            num_tokens = None
-            for label in self.context_labels:
-                new_length = len(characteristics[label]) if type(characteristics[label] == list) else 1
-                if num_tokens is not None and num_tokens != new_length:
-                    raise FinetuneError('Incorrect label shapes.')
-                num_tokens = new_length
 
-            vector = np.zeros((num_tokens, self.context_dim)) # final shape: (num_tokens, self.context_dim)
-            #print(np.shape(vector))
-            current_index = 0
-            for label in self.context_labels:
-                #print(label)
-                data = characteristics[label]
-                if label in self.label_encoders.keys():
-                    data = self.label_encoders[label].transform(data)
-                    data_dim = len(self.label_encoders[label].classes_)
-                    if data_dim == 2: # since binary classes default to column vector
-                        data_dim=1
-                    #print(self.label_encoders[label].classes_)
-                else:
-                    #data = [data]
-                    data_dim = 1
-                #print(data)
-                #print("DATA DIM:"+str(data_dim))
-                for sample_idx in range(num_tokens):
-                    for label_dimension in range(data_dim):
-                        #print("Label dim:" + str(label_dimension) + "Sample:" + str(sample_idx))
-                        #print(data[sample_idx])
-                        vector[sample_idx][current_index + label_dimension] = data[sample_idx] if data_dim  == 1 else data[sample_idx][label_dimension]
-                current_index += 1
+            for sample in context:
 
-            return vector
+                # See which tokens have padded labels/context vectors, and thus have a zero vector for features
+                padded_indices = []
+                for idx in range(len(sample)):
+                    if self.config.pad_token in sample[idx].keys():
+                        padded_indices.append(idx)
+                characteristics = pd.DataFrame(sample).to_dict('list')
+
+                # make sure all features cover the same number of tokens, and calculate total num tokens
+                num_tokens = None
+                for label in self.context_labels:
+                    new_length = len(characteristics[label]) if type(characteristics[label] == list) else 1
+                    if num_tokens is not None and num_tokens != new_length:
+                        raise FinetuneError('Incorrect label shapes.')
+                    num_tokens = new_length
+
+                vector = np.zeros((num_tokens, self.config.context_dim)) # Feature vector for one document.
+                current_index = 0
+
+                # Loop through each feature and add each to new index of the feature vector
+                for label in self.context_labels:
+                    if label == self.config.pad_token:
+                        continue
+                    data = characteristics[label]
+
+                    # Binary encoded features have different dimensionality as simple floats/ints, so must be handled differently.
+                    if label in self.label_encoders.keys():
+                        without_nans = [x for x in data if not pd.isna(x)]
+                        data = self.label_encoders[label].transform(without_nans) #this removes nans from padded tokens, but now the list is too short. The 'num_backward' variable will track this offset to ensure indices are correctly tracked.
+                        data_dim = len(self.label_encoders[label].classes_)
+                        if data_dim == 2: # since binary classes default to column vector
+                            data_dim=1
+                    else:
+                        data = [x for x in data if not pd.isna(x)]
+                        data_dim = 1
+
+                    #loop through indices and fill with correct data
+                    num_backward = 0
+                    for sample_idx in range(num_tokens):
+                        if sample_idx in padded_indices: # there is no data, simply a pad from the encoder, so fill out with zero vector
+                            vector[sample_idx][:] = 0
+                            num_backward += 1 #since we're skipping this sample, the next sample needs to be filled from this sample's index in data. This variable tracks how far back we need to go for following indices
+                            continue
+                        for label_dimension in range(data_dim):
+                            #print("Label dim:" + str(label_dimension) + "Sample:" + str(sample_idx))
+                            if self.config.pad_token in sample[sample_idx]: 
+                                vector[sample_idx][current_index + label_dimension] = 0
+                            else:
+                                vector[sample_idx][current_index + label_dimension] = data[sample_idx - num_backward] if data_dim  == 1 else data[sample_idx - num_backward][label_dimension]
+                    current_index += 1
+                vector_list.append(vector)
+            return vector_list
 
     def _compute_class_counts(self, encoded_dataset):
         target_arrs = np.asarray([target_arr for doc, target_arr in encoded_dataset])
         return Counter(self.label_encoder.inverse_transform(target_arrs))
         
     def _dataset_with_targets(self, Xs, Y, train, context=None):
-        print(Y)
         if not callable(Xs) and not callable(Y):
             dataset = lambda: zip(Xs, Y, context) # Do not need to check if context is callable - it is turned in along with Xs, and thus must have the same form
         elif callable(Xs) and callable(Y):
@@ -414,10 +442,9 @@ class BasePipeline(metaclass=ABCMeta):
         return list(X)
 
     def _text_to_ids(self, Xs, Y=None, pad_token=None, context=None):
-        Xs = self._format_for_encoding(Xs)
-        if self.config.chunk_long_sequences and len(Xs) == 1:
+        Xs = self._format_for_encoding(Xs)            
 
-            print(Y)
+        if self.config.chunk_long_sequences and len(Xs) == 1:
             # can only chunk single sequence inputs
             chunk_size = self.config.max_length - 2
             step_size = chunk_size // 3
@@ -428,6 +455,7 @@ class BasePipeline(metaclass=ABCMeta):
                 pad_token=(pad_token or self.config.pad_token),
                 context=context
             )
+            processed_context = self._context_to_vector([encoded.context])
             length = len(encoded.token_ids)
             starts = list(range(0, length, step_size))
             for start in starts:
@@ -437,14 +465,14 @@ class BasePipeline(metaclass=ABCMeta):
                     field_value = getattr(encoded, field)
                     if field_value is not None:
                         d[field] = field_value[start:end]
+                d['context'] = processed_context[start:end] # forced since encoded is immutable
                 yield self._array_format(EncodedOutput(**d), pad_token=pad_token)
         else:
             encoder_out = self.text_encoder.encode_multi_input(
                 Xs,
                 Y=Y,
                 max_length=self.config.max_length,
-                pad_token=(pad_token or self.config.pad_token),
-                context=context
+                pad_token=(pad_token or self.config.pad_token)
             )
 
             yield self._array_format(encoder_out, pad_token=(pad_token or self.config.pad_token))

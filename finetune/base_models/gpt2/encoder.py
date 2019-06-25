@@ -123,7 +123,7 @@ class GPT2Encoder(BaseEncoder):
 
     def _encode(self, texts, labels=None, context=None):
         """
-        Convert a batch of raw text to a batch of byte-pair encoded token indices.
+        Convert a sample of raw text to a list of byte-pair encoded token indices.
         """
         self._lazy_init()
 
@@ -134,16 +134,6 @@ class GPT2Encoder(BaseEncoder):
         batch_character_locs = []
         label = None
         context_ = None
-
-        #print("CONTEXT IN -ENCODE")
-        #print(context)
-        #print(labels)
-        #print(texts)
-        try:
-            print(len(context))
-            print(len(labels))
-        except:
-            pass
 
         for i, text in enumerate(texts):
             if labels is not None:
