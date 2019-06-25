@@ -253,6 +253,7 @@ class TestDeploymentModel(unittest.TestCase):
         valid_sample = self.classifier_dataset.sample(n=self.n_sample)
         model.load_custom_model(self.classifier_path)
         deployment_preds = model.predict_proba(valid_sample.Text.values)
+        model.close()
         classifier_preds = self.cl.predict_proba(valid_sample.Text.values)
         
         for c_pred, d_pred in zip(classifier_preds, deployment_preds):
@@ -262,9 +263,12 @@ class TestDeploymentModel(unittest.TestCase):
         
         if self.do_comparison:
             #test same output as weights loaded with Comparison Regressor model
+            model = DeploymentModel(featurizer=self.base_model, **self.default_seq_config())
+            model.load_featurizer()
             model.load_custom_model(self.comparison_regressor_path)
-            compregressor = ComparisonRegressor.load(self.comparison_regressor_path,  **self.default_comp_config())
             deployment_preds = model.predict(self.x_te)
+            model.close()
+            compregressor = ComparisonRegressor.load(self.comparison_regressor_path,  **self.default_comp_config())
             compregressor_preds = compregressor.predict(self.x_te)
             for c_pred, d_pred in zip(compregressor_preds, deployment_preds):
                 np.testing.assert_almost_equal(c_pred, d_pred, decimal=4)
