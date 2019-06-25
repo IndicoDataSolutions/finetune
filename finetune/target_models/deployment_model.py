@@ -228,7 +228,10 @@ class DeploymentModel(BaseModel):
     def _get_input_fn(self, gen):
         return self.input_pipeline.get_predict_input_fn(gen)
 
+
     def _inference(self, Xs, predict_keys=[PredictMode.NORMAL], exclude_target=False, n_examples=None):
+        if not self._cached_predict:
+            raise FinetuneError('Deployment Predict must operate within a cached_predict context manager.')
         Xs = self.input_pipeline._format_for_inference(Xs)
         self._data = Xs
         self._closed = False
@@ -286,13 +289,14 @@ class DeploymentModel(BaseModel):
         :param X: list or array of text to embed.
         :returns: list of class labels.
         """
-        if self.task == TaskMode.SEQUENCE_LABELING and not exclude_target:
-            return SequenceLabeler.predict(self, X)
-        else:
-            raw_preds = self._inference(X, exclude_target=exclude_target)
-            if exclude_target:
-                return raw_preds
-            return self.input_pipeline.label_encoder.inverse_transform(np.asarray(raw_preds))
+        with self.cached_predict():
+            if self.task == TaskMode.SEQUENCE_LABELING and not exclude_target:
+                return SequenceLabeler.predict(self, X)
+            else:
+                raw_preds = self._inference(X, exclude_target=exclude_target)
+                if exclude_target:
+                    return raw_preds
+                return self.input_pipeline.label_encoder.inverse_transform(np.asarray(raw_preds))
 
     def predict_proba(self, X):
         """
@@ -333,9 +337,6 @@ class DeploymentModel(BaseModel):
         raise NotImplementedError
 
     def create_base_model(self, filename, exists_ok):
-        raise NotImplementedError
-
-    def cached_predict(self):
         raise NotImplementedError
     
     def load(cls, path, **kwargs):
