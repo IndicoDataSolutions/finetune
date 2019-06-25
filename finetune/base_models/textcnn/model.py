@@ -24,12 +24,12 @@ class TextCNNModel(SourceModel):
         'train_embeddings': False,
         'lr': .01,
         'seq_num_heads': len(kernel_sizes) * 2,
-        'base_model_path': os.path.join("gpt", "model-lg.jl"),
+        'base_model_path': os.path.join("gpt2", "model-sm.jl"),
     }
     required_files = [
         {
-            'file': os.path.join(FINETUNE_BASE_FOLDER, 'model', 'gpt', filename),
+            'file': os.path.join(FINETUNE_BASE_FOLDER, 'model', 'gpt2', filename),
             'url': urljoin(GPT_BASE_URL, filename)
         }
-        for filename in ['encoder.json', 'vocab.bpe', 'model-lg.jl']
+        for filename in ['encoder.json', 'vocab.bpe', 'model-sm.jl']
     ]

@@ -26,16 +26,19 @@ def textcnn_featurizer(X, encoder, config, train=False, reuse=None, **kwargs):
             initializer=tf.random_normal_initializer(stddev=config.weight_stddev)
         )
 
-        context_embed_weights = tf.get_variable(
-            name="ce",
-            shape=[encoder.context_vocab_size + config.max_length, config.n_embed_featurizer],
-            initializer=tf.random_normal_initializer(stddev=config.weight_stddev))
+        if config.use_auxiliary_info:
+            context_embed_weights = tf.get_variable(
+                name="ce",
+                shape=[config.context_dim, config.n_embed_featurizer],
+                initializer=tf.random_normal_initializer(stddev=config.weight_stddev))
 
 
         if config.train_embeddings:
             embed_weights = dropout(embed_weights, config.embed_p_drop, train)
+            context_embed_weights = dropout(context_embed_weights, config.embed_p_drop, train)
         else:
-            embed_weights = tf.stop_gradient(embed_weights)
+            embed_weights = tf.stop_gradient(context_embed_weights)
+            context_embed_weights = tf.stop_gradient(context_embed_weights)
 
         X = tf.reshape(X, [-1, config.max_length, 2])
 

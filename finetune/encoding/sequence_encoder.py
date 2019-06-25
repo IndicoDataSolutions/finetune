@@ -265,7 +265,7 @@ def overlap_handler(current_annotation, annotation, text, multi_label, ):
     return chunks
 
 
-def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=True, none_value=None):
+def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=True, none_value=None, context=None):
     """
     Maps from the 'indico' format sequence labeling data. Into a labeled substring format. This is the exact inverse of
     :meth finetune_to_indico_sequence:.
@@ -293,8 +293,11 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
     :param none_value: A categorical label to use as the none value.
     :return: Segmented Text, Labels of the form described above.
     """
+    print(context)
+    print(labels)
     all_subseqs = []
     all_labels = []
+    all_context = []
     all_association_idx = []
     all_association_type = []
     all_idxs = []
@@ -303,23 +306,30 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
     if labels is None:
         labels = [[]] * len(texts)
 
+    #if context is not used
+    if context is None:
+        context = [[]] * len(texts)
+
     encoded_docs = encoder._encode(texts)
     labels = copy.deepcopy(labels)
-    for doc_idx, (text, label_seq) in enumerate(zip(texts, labels)):
+    context = copy.deepcopy(context)
+    for doc_idx, (text, label_seq, context_seq) in enumerate(zip(texts, labels, context)):
         tokens = encoded_docs.tokens[doc_idx]
         token_ends = encoded_docs.char_locs[doc_idx]
         token_lengths = [encoder._token_length(token) for token in tokens]
         token_starts = [end - length for end, length in zip(token_ends, token_lengths)]
         label_seq = sorted(label_seq, key=lambda x: x["start"])
+        context_seq = sorted(context_seq, key=lambda x: x["start"])
         merged_annotations = []
 
         doc_association_idx = []
         doc_association_type = []
         doc_current_label_idx = []
 
-        for i, label in enumerate(label_seq):
+        for i, (label, context) in enumerate(zip(label_seq, context_seq)):
             # Add the index to track for annotation
             label["idx"] = i
+            context['idx'] = i
             # Check user hasn't accidentally mislabeled something
             if label.get('text') is not None and label['text'] != text[label['start']:label['end']]:
                 raise ValueError(
@@ -331,12 +341,16 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
                 )
            
         queue = sorted(label_seq, key=lambda x: (x['start'], x['end']))
-        for label in queue:
+        context_queue = sorted(context_seq, key=lambda x: (x['start'], x['end']))
+        for label, context in zip(queue, context_queue):
             label['label'] = {label['label']}
+            label['context'] = context
             round_to_nearest_start_and_end(label, token_starts, token_ends, text)
 
         while len(queue):
             current_annotation = queue.pop(0)
+            print(current_annotation)
+            1/0
 
             # for each existing merged annotation
             for annotation in merged_annotations:
@@ -364,6 +378,7 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
 
         for annotation in merged_annotations:
             annotation['label'] = tuple(annotation['label'])
+            annotation['context'] = tuple(annotation['context'])
 
         # Add none labels
         current_idx = 0
@@ -376,6 +391,7 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
                     'end': annotation['start'],
                     'text': text[current_idx:annotation['start']],
                     'label': tuple([none_value]),
+                    'context': tuple([none_value])
                 })
             # Copy over labeled span
             all_annotations.append(annotation)
@@ -394,7 +410,8 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
                 'start': last_chunk_end_idx,
                 'end': len(text),
                 'text': text[last_chunk_end_idx:len(text)],
-                'label': tuple([none_value])
+                'label': tuple([none_value]),
+                'context': tuple([none_value])
             })
 
         if not multi_label:
@@ -415,8 +432,10 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
 
         doc_subseqs = [annotation['text'] for annotation in all_annotations]
         doc_labels = [annotation['label'] for annotation in all_annotations]
+        doc_context = [annotation['context'] for annotation in all_annotations]
         all_subseqs.append(doc_subseqs)
         all_labels.append(doc_labels)
+        all_context.append(doc_context)
         all_association_idx.append(doc_association_idx)
         all_association_type.append(doc_association_type)
         all_idxs.append(doc_current_label_idx)

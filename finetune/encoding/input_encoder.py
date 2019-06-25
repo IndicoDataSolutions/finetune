@@ -22,7 +22,7 @@ EncodedOutput = namedtuple("EncodedOutput", [
     "tokens",    # list of list of subtokens (strs)
     "labels",    # list of list of labels
     "char_locs", # list of list of character locations (ints)
-    "auxiliary", # list of list of auxiliary token characteristics
+    "context",   # list of list of context token characteristics
 ])
 EncodedOutput.__new__.__defaults__ = (None,) * len(EncodedOutput._fields)
 ArrayEncodedOutput = namedtuple("ArrayEncodedOutput", [
@@ -31,6 +31,7 @@ ArrayEncodedOutput = namedtuple("ArrayEncodedOutput", [
     "labels",    # object array shape (batch, seq_length)
     "char_locs", # list of list of char_locs (int) passed through from `EncoderOutput`
     "mask",      # int array shape (batch, seq_length)
+    "context",   # list of list of context token characteristics
 ])
 ArrayEncodedOutput.__new__.__defaults__ = (None,) * len(ArrayEncodedOutput._fields)
 
@@ -152,7 +153,7 @@ class BaseEncoder(object):
     def _token_length(self, token):
         return len(token)
 
-    def encode_multi_input(self, Xs, Y=None, max_length=None, pad_token=None):
+    def encode_multi_input(self, Xs, Y=None, max_length=None, pad_token=None, context=None):
         """
         Encodes the text for passing to the model, also tracks the location of each token to allow reconstruction.
         It can also, optionally, construct a per-token labels as required for training.
@@ -172,7 +173,7 @@ class BaseEncoder(object):
             assert isinstance(field, (list, tuple)), "This should be a list of strings, instead it's {}".format(
                 tf.contrib.framework.nest.map_structure(type, field)
             )
-            encoded = self._encode(field, labels=Y)
+            encoded = self._encode(field, labels=Y, context=context)
             token_ids.append(_flatten(encoded.token_ids))
             tokens.append(_flatten(encoded.tokens))
             positions.append(_flatten(encoded.char_locs))
@@ -182,7 +183,7 @@ class BaseEncoder(object):
                     "Some examples are longer than the max_length. Please trim documents or increase `max_length`. "
                     "Fallback behaviour is to use the first {} byte-pair encoded tokens".format(max_length - 2)
                 )
-        '''        
+        '''
         print('Encoded:')
         print(encoded)
         print("Tokens:")
@@ -191,8 +192,11 @@ class BaseEncoder(object):
         print(token_ids)
         print("positions")
         print(positions)
+        #print('context')
+        #print(context)
+        print('labels')
+        print(labels)
         '''
-        
         # merge fields + truncate if necessary
         token_ids = self._cut_and_concat(
             encoded=token_ids,
@@ -222,4 +226,5 @@ class BaseEncoder(object):
             tokens=tokens,
             labels=labels,
             char_locs=locations,
+            context=context
         )

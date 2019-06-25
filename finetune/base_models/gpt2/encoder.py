@@ -121,7 +121,7 @@ class GPT2Encoder(BaseEncoder):
         self.cache[token] = word
         return word
 
-    def _encode(self, texts, labels=None):
+    def _encode(self, texts, labels=None, context=None):
         """
         Convert a batch of raw text to a batch of byte-pair encoded token indices.
         """
@@ -130,12 +130,26 @@ class GPT2Encoder(BaseEncoder):
         batch_tokens = []
         batch_token_idxs = []
         batch_label_idxs = []
+        batch_context_idxs = []
         batch_character_locs = []
         label = None
+        context_ = None
+
+        #print("CONTEXT IN -ENCODE")
+        #print(context)
+        #print(labels)
+        #print(texts)
+        try:
+            print(len(context))
+            print(len(labels))
+        except:
+            pass
 
         for i, text in enumerate(texts):
             if labels is not None:
                 label = labels[i]
+            if context is not None:
+                context_ = context[i]
 
             subtokens = []
             subtoken_idxs = []
@@ -168,12 +182,15 @@ class GPT2Encoder(BaseEncoder):
             batch_character_locs.append(tok_pos)
             if labels is not None:
                 batch_label_idxs.append([label] * len(subtoken_idxs))
+            if context_ is not None:
+                batch_context_idxs.append([context_] * len(subtoken_idxs))
 
         return EncodedOutput(
             token_ids=batch_token_idxs,
             tokens=batch_tokens,
             labels=batch_label_idxs,
-            char_locs=batch_character_locs,
+            context=context,
+            char_locs=batch_character_locs
         )
 
     def decode(self, token_ids):
