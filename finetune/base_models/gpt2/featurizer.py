@@ -163,7 +163,7 @@ def gpt2_featurizer(X, encoder, config, train=False, reuse=None, **kwargs):
         # Transformer
         pasts = [None] * config.n_layer
         for layer, past in enumerate(pasts):
-            if (config.n_layer - layer) == config.num_layers_trained and config.num_layers_trained != config.n_layer and config.bert_adapter_size is None:
+            if (config.n_layer - layer) == config.num_layers_trained and config.num_layers_trained != config.n_layer and config.adapter_size is None:
                 h = tf.stop_gradient(h)
                 train_layer = False
             else:
