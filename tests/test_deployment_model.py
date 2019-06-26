@@ -226,86 +226,86 @@ class TestDeploymentModel(unittest.TestCase):
         self.assertLess(second_prediction_time, first_prediction_time)
         model.close()
 
-    # def test_switching_models(self):
-    #     """
-    #     Ensure model can switch out weights without erroring out
-    #     """
-    #     model = DeploymentModel(featurizer=self.base_model, **self.default_config())
-    #     model.load_featurizer()
-    #     #test transitioning from any of [sequence labeling, comparison, default] to any other
-    #     model.load_custom_model(self.classifier_path)
-    #     if self.do_comparison:
-    #         model.load_custom_model(self.comparison_regressor_path)
-    #     model.load_custom_model(self.sequence_labeler_path)
-    #     model.load_custom_model(self.classifier_path)
-    #     model.load_custom_model(self.sequence_labeler_path)
-    #     if self.do_comparison:
-    #         model.load_custom_model(self.comparison_regressor_path)
-    #     model.load_custom_model(self.classifier_path)
-    #     model.close()
+    def test_switching_models(self):
+        """
+        Ensure model can switch out weights without erroring out
+        """
+        model = DeploymentModel(featurizer=self.base_model, **self.default_config())
+        model.load_featurizer()
+        #test transitioning from any of [sequence labeling, comparison, default] to any other
+        model.load_custom_model(self.classifier_path)
+        if self.do_comparison:
+            model.load_custom_model(self.comparison_regressor_path)
+        model.load_custom_model(self.sequence_labeler_path)
+        model.load_custom_model(self.classifier_path)
+        model.load_custom_model(self.sequence_labeler_path)
+        if self.do_comparison:
+            model.load_custom_model(self.comparison_regressor_path)
+        model.load_custom_model(self.classifier_path)
+        model.close()
 
-    # def test_reasonable_predictions(self):
-    #     """
-    #     Ensure model produces reasonable predictions after loading weights
-    #     """
-    #     model = DeploymentModel(featurizer=self.base_model, **self.default_seq_config())
-    #     model.load_featurizer()
+    def test_reasonable_predictions(self):
+        """
+        Ensure model produces reasonable predictions after loading weights
+        """
+        model = DeploymentModel(featurizer=self.base_model, **self.default_seq_config())
+        model.load_featurizer()
         
-    #     #test same output as weights loaded with Classifier model
-    #     valid_sample = self.classifier_dataset.sample(n=self.n_sample)
-    #     model.load_custom_model(self.classifier_path)
-    #     deployment_preds = model.predict_proba(valid_sample.Text.values)
-    #     model.close()
-    #     classifier_preds = self.cl.predict_proba(valid_sample.Text.values)
+        #test same output as weights loaded with Classifier model
+        valid_sample = self.classifier_dataset.sample(n=self.n_sample)
+        model.load_custom_model(self.classifier_path)
+        deployment_preds = model.predict_proba(valid_sample.Text.values)
+        model.close()
+        classifier_preds = self.cl.predict_proba(valid_sample.Text.values)
         
-    #     for c_pred, d_pred in zip(classifier_preds, deployment_preds):
-    #         self.assertTrue(list(c_pred.keys()) == list(d_pred.keys()))
-    #         for c_pred_val, d_pred_val in zip(c_pred.values(), d_pred.values()):
-    #             np.testing.assert_almost_equal(c_pred_val, d_pred_val, decimal=4)
+        for c_pred, d_pred in zip(classifier_preds, deployment_preds):
+            self.assertTrue(list(c_pred.keys()) == list(d_pred.keys()))
+            for c_pred_val, d_pred_val in zip(c_pred.values(), d_pred.values()):
+                np.testing.assert_almost_equal(c_pred_val, d_pred_val, decimal=4)
         
-    #     if self.do_comparison:
-    #         #test same output as weights loaded with Comparison Regressor model
-    #         model = DeploymentModel(featurizer=self.base_model, **self.default_seq_config())
-    #         model.load_featurizer()
-    #         model.load_custom_model(self.comparison_regressor_path)
-    #         deployment_preds = model.predict(self.x_te)
-    #         model.close()
-    #         compregressor = ComparisonRegressor.load(self.comparison_regressor_path,  **self.default_comp_config())
-    #         compregressor_preds = compregressor.predict(self.x_te)
-    #         for c_pred, d_pred in zip(compregressor_preds, deployment_preds):
-    #             np.testing.assert_almost_equal(c_pred, d_pred, decimal=4)
+        if self.do_comparison:
+            #test same output as weights loaded with Comparison Regressor model
+            model = DeploymentModel(featurizer=self.base_model, **self.default_seq_config())
+            model.load_featurizer()
+            model.load_custom_model(self.comparison_regressor_path)
+            deployment_preds = model.predict(self.x_te)
+            model.close()
+            compregressor = ComparisonRegressor.load(self.comparison_regressor_path,  **self.default_comp_config())
+            compregressor_preds = compregressor.predict(self.x_te)
+            for c_pred, d_pred in zip(compregressor_preds, deployment_preds):
+                np.testing.assert_almost_equal(c_pred, d_pred, decimal=4)
 
-    # def test_large_predict(self):
-    #     """
-    #     Ensure model does not have OOM issues with large inputs for inference
-    #     """
-    #     large_dataset = self.animals*100
-    #     model = DeploymentModel(featurizer=self.base_model, **self.default_config())
-    #     model.load_featurizer()
-    #     model.load_custom_model(self.classifier_path)
-    #     model.predict(large_dataset)
-    #     model.close()
+    def test_large_predict(self):
+        """
+        Ensure model does not have OOM issues with large inputs for inference
+        """
+        large_dataset = self.animals*100
+        model = DeploymentModel(featurizer=self.base_model, **self.default_config())
+        model.load_featurizer()
+        model.load_custom_model(self.classifier_path)
+        model.predict(large_dataset)
+        model.close()
 
 
-    # def test_fast_switch(self):
-    #     """
-    #     Ensure model can load/reload weights and predict in reasonable time
-    #     """
-    #     model = DeploymentModel(featurizer=self.base_model, **self.default_config())
-    #     model.load_featurizer()
-    #     model.load_custom_model(self.classifier_path)
-    #     model.predict(['finetune'])
+    def test_fast_switch(self):
+        """
+        Ensure model can load/reload weights and predict in reasonable time
+        """
+        model = DeploymentModel(featurizer=self.base_model, **self.default_config())
+        model.load_featurizer()
+        model.load_custom_model(self.classifier_path)
+        model.predict(['finetune'])
 
-    #     start = time.time()
-    #     model.load_custom_model(self.sequence_labeler_path)
-    #     predictions = model.predict(['finetune sequence'])
-    #     end = time.time()
-    #     self.assertGreater(2.5, end - start)
+        start = time.time()
+        model.load_custom_model(self.sequence_labeler_path)
+        predictions = model.predict(['finetune sequence'])
+        end = time.time()
+        self.assertGreater(2.5, end - start)
 
-    #     if self.do_comparison:
-    #         start = time.time()
-    #         model.load_custom_model(self.comparison_regressor_path)
-    #         predictions = model.predict([['finetune', 'compare']])
-    #         model.close()
-    #         end = time.time()
-    #         self.assertGreater(2.5, end - start)
+        if self.do_comparison:
+            start = time.time()
+            model.load_custom_model(self.comparison_regressor_path)
+            predictions = model.predict([['finetune', 'compare']])
+            model.close()
+            end = time.time()
+            self.assertGreater(2.5, end - start)
