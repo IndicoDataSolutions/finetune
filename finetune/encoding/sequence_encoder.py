@@ -305,12 +305,17 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
         labels = [[]] * len(texts)
 
     #if context is not used
-    if context is None:
+    using_context = context is not None
+    if not using_context:
         context = [[]] * len(texts)
 
     encoded_docs = encoder._encode(texts)
     labels = copy.deepcopy(labels)
     context = copy.deepcopy(context)
+    #print("LABELS")
+    #print(labels)
+    #print("context")
+    #print(context)
     for doc_idx, (text, label_seq, context_seq) in enumerate(zip(texts, labels, context)):
         tokens = encoded_docs.tokens[doc_idx]
         token_ends = encoded_docs.char_locs[doc_idx]
@@ -337,17 +342,26 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
                         text[label['start']:label['end']]
                     )
                 )
-           
+        
+        #print('queues')
         queue = sorted(label_seq, key=lambda x: (x['start'], x['end']))
-        context_queue = sorted(context_seq, key=lambda x: (x['start'], x['end']))
+        context_queue = sorted(context_seq, key=lambda x: (x['start'], x['end'])) if using_context else [None]*len(queue)
+
+        #print(queue)
+        #print(context_queue)
 
         for label, context in zip(queue, context_queue):
+            #print("editing queue")
+            #(label)
             label['label'] = {label['label']}
+            #print(label)
             label['context'] = context
             round_to_nearest_start_and_end(label, token_starts, token_ends, text)
 
         while len(queue):
             current_annotation = queue.pop(0)
+            #print('begin loop')
+            #print(annotation['label'])
             # for each existing merged annotation
             for annotation in merged_annotations:
                 # no overlap possible, check next merged annotation
@@ -373,8 +387,9 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
                 sorted_insert(merged_annotations,  current_annotation)
 
         for annotation in merged_annotations:
+            #print(annotation['label'])
             annotation['label'] = tuple(annotation['label'])
-
+            #print(annotation['label'])
         # Add none labels
         current_idx = 0
         all_annotations = []
@@ -412,6 +427,7 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
         if not multi_label:
             # if `multi_label_sequences` is False, flatten labels
             for annotation in all_annotations:
+                #print(annotation['label'])
                 assert len(annotation['label']) == 1
                 annotation['label'] = annotation['label'][0]
 

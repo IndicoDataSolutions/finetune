@@ -72,12 +72,22 @@ class BasePipeline(metaclass=ABCMeta):
         x = np.zeros((self.config.max_length, 2), dtype=np.int32)
         mask = np.zeros((self.config.max_length), dtype=np.float32)
 
-        print('NUM TOKENS')
-        print(seq_length)
-        print('NUM CONTEXT')
-        print(len(np.squeeze(encoded_output.context)))
-        print('NUM LABEL')
-        print(len(encoded_output.labels))
+        
+
+
+        #print('NUM TOKENS')
+        #print(seq_length)
+        #print('NUM CONTEXT')
+        #print(len(np.squeeze(encoded_output.context)))
+        #if seq_length != len(np.squeeze(encoded_output.context)) and len(np.shape(encoded_output.context)) == 3:
+        #    print(str(seq_length))
+        #    print(len(np.squeeze(encoded_output.context)))
+        #    1/0
+
+        #if len(np.squeeze(encoded_output.context)) == 0:
+        #    print(encoded_output.context)
+        #    raise FinetuneError("No context information")
+        #print(encoded_output.tokens)
         
 
         if encoded_output.labels is not None:
@@ -87,8 +97,9 @@ class BasePipeline(metaclass=ABCMeta):
             labels_arr = None
 
         if encoded_output.context is not None:
-            context_arr = np.empty((self.config.max_length, self.config.context_dim), dtype='object')
-            context_arr.fill((pad_token or self.config.pad_token))
+            context_arr = np.zeros((self.config.max_length, self.config.context_dim), dtype=np.float32)
+        else:
+            context_arr = None
 
         # BPE embedding
         x[:seq_length, 0] = encoded_output.token_ids
@@ -96,8 +107,13 @@ class BasePipeline(metaclass=ABCMeta):
         mask[1:seq_length] = 1
         if encoded_output.labels:
             labels_arr[:seq_length] = encoded_output.labels
-        if encoded_output.context:
-            context_arr[:seq_length][:] = np.squeeze(encoded_output.context)
+        if encoded_output.context is not None:
+            if len(np.shape(encoded_output.context)) == 3:
+                context_arr[:seq_length][:] = np.squeeze(encoded_output.context)
+            elif len(np.shape(encoded_output.context)) == 2:
+                context_arr[:seq_length][:] = np.squeeze(encoded_output.context)
+            else:
+                raise FinetuneError('Incorrect context rank.')
 
         # positional_embeddings
         x[:, 1] = np.arange(
@@ -154,18 +170,27 @@ class BasePipeline(metaclass=ABCMeta):
             """
             num_samples = len(context)
             vector_list = []
-
             if not hasattr(self, 'label_encoders'): # we will fit necessary label encoders here to know dimensionality of input vector before entering featurizer
-                characteristics = itertools.chain.from_iterable(context)
-                characteristics = pd.DataFrame(characteristics).to_dict('list')
+                pads_removed = [dictionary for dictionary in context[0] if dictionary != self.config.pad_token]
 
+                keys = pads_removed[0].keys()
+                characteristics = {k:[dictionary[k] for dictionary in pads_removed] for k in keys}
+
+
+                #print(pads_removed)
+                #characteristics = itertools.chain.from_iterable(pads_removed)
+                #characteristics = pd.DataFrame(characteristics).to_dict('list')
+                #print(characteristics)
+                #1/0
+                
                 self.label_encoders = {k:LabelBinarizer() for k in characteristics.keys() if 
-                all(k != self.config.pad_token and not (type(data) == int or (type(data) == float and not pd.isna(data))) for data in characteristics[k])} # Excludes features that are continuous, like position and font size, since they do not have categorical binary encodings
+                all(k != self.config.pad_token and not (type(data) == int or (type(data) == float and not pd.isna(data))) and k != 'label' for data in characteristics[k])} # Excludes features that are continuous, like position and font size, since they do not have categorical binary encodings
+
                 for label, encoder in self.label_encoders.items():
                     without_nans = [x for x in characteristics[label] if not pd.isna(x)]
                     encoder.fit(without_nans)
-
-                self.context_labels = sorted(characteristics.keys()) # sort for consistent ordering between runs
+                
+                self.context_labels = sorted([label for label in characteristics.keys() if label != 'label']) # sort for consistent ordering between runs
                 continuous_labels = [label for label in self.context_labels if label not in self.label_encoders.keys()]
 
                 self.context_dim = len(continuous_labels) # Sum over features to determine dimensionality of each feature vector.
@@ -175,8 +200,7 @@ class BasePipeline(metaclass=ABCMeta):
                 return True
 
             for sample in context:
-                #sample = sample[1:len(context)-2] # remove special tokens
-                print(sample)
+                #print(sample)
                 # See which tokens have padded labels/context vectors, and thus have a zero vector for features
                 padded_indices = []
                 tokens_with_context=[]
@@ -185,14 +209,7 @@ class BasePipeline(metaclass=ABCMeta):
                         padded_indices.append(idx)
                     else:
                         tokens_with_context.append(sample[idx])
-
-                #if len(sample) > 1:
                 characteristics = pd.DataFrame(tokens_with_context).to_dict('list')
-                #else:
-                #    characteristics = {k:[v] for k,v in sample.pop().items()}
-                print(characteristics)
-                print("padded indices:")
-                print(padded_indices)
 
                 # make sure all features cover the same number of tokens, and calculate total num tokens
                 num_tokens = None
@@ -201,11 +218,8 @@ class BasePipeline(metaclass=ABCMeta):
                     if num_tokens is not None and num_tokens != new_length:
                         raise FinetuneError('Incorrect label shapes.')
                     num_tokens = new_length
-                
-                print("INPUT PIPELINE NUM TOKENS")
-                print(num_tokens)
 
-                vector = np.zeros((num_tokens + len(padded_indices), self.config.context_dim)) # Feature vector for one document. Add 2 for the special tokens at beginning/end
+                vector = np.zeros((num_tokens + len(padded_indices), self.config.context_dim), dtype=np.float32) # Feature vector for one document. Add 2 for the special tokens at beginning/end
                 current_index = 0
 
                 # Loop through each feature and add each to new index of the feature vector
@@ -224,7 +238,8 @@ class BasePipeline(metaclass=ABCMeta):
                     else:
                         data = [x for x in data if not pd.isna(x)]
                         data_dim = 1
-
+                    #print(label)
+                    #print(self.label_encoders.keys())
                     #loop through indices and fill with correct data
                     num_backward = 0
                     for sample_idx in range(num_tokens):
@@ -234,15 +249,12 @@ class BasePipeline(metaclass=ABCMeta):
                             continue
                         for label_dimension in range(data_dim):
                             #print("Label dim:" + str(label_dimension + current_index) + "Sample Index:" + str(sample_idx) + "Current label" + label)
-                            #if self.config.pad_token in sample[sample_idx]: 
-                            #    vector[sample_idx][current_index + label_dimension] = 0
-                            #else:
                             vector[sample_idx][current_index + label_dimension] = data[sample_idx - num_backward] if data_dim  == 1 else data[sample_idx - num_backward][label_dimension]
 
                     current_index += 1
                 vector_list.append(vector)
-            print('Vector shape')
-            print(np.shape(vector_list))
+            #print('Vector shape')
+            #print(np.shape(vector_list))
             return vector_list
 
 
@@ -253,9 +265,15 @@ class BasePipeline(metaclass=ABCMeta):
         
     def _dataset_with_targets(self, Xs, Y, train, context=None):
         if not callable(Xs) and not callable(Y):
-            dataset = lambda: zip(Xs, Y, context) # Do not need to check if context is callable - it is turned in along with Xs, and thus must have the same form
+            if self.config.use_auxiliary_info:
+                dataset = lambda: zip(Xs, Y, context) # Do not need to check if context is callable - it is turned in along with Xs, and thus must have the same form
+            else:
+                dataset = lambda: zip(Xs, Y)                
         elif callable(Xs) and callable(Y):
-            dataset = lambda: zip(Xs(), Y(), context())  # encode one sample at a time.
+            if self.config.use_auxiliary_info:
+                dataset = lambda: zip(Xs(), Y(), context())  # encode one sample at a time.
+            else:
+                dataset = lambda: zip(Xs(), Y())
         else:
             raise ValueError("Either neither or both of Xs and Y should be callable, not a mixture")
 
@@ -275,8 +293,10 @@ class BasePipeline(metaclass=ABCMeta):
            
         return Dataset.from_generator(lambda: self.wrap_tqdm(dataset_encoded(), train), *shape_def)
 
-    def _dataset_without_targets(self, Xs, train):
+    def _dataset_without_targets(self, Xs, train, context=None):
         if not callable(Xs):
+            if context:
+                Xs = list(zip(Xs, context))
             Xs_fn = lambda: self.wrap_tqdm(Xs, train)
         else:
             Xs_fn = lambda: self.wrap_tqdm(Xs(), train)
@@ -425,8 +445,6 @@ class BasePipeline(metaclass=ABCMeta):
 
             Xs_tr, Y_tr = self.resampling(Xs_tr, Y_tr)
             self.config.dataset_size = len(Xs_tr)
-
-            print(self.config.dataset_size)
             val_dataset_unbatched = self._make_dataset(Xs_va, Y_va, C_va, train=False)
             train_dataset_unbatched = self._make_dataset(Xs_tr, Y_tr, C_tr, train=True)
 
@@ -440,9 +458,9 @@ class BasePipeline(metaclass=ABCMeta):
 
         return val_dataset, train_dataset, self.config.val_size, self.config.val_interval
 
-    def get_predict_input_fn(self, Xs, batch_size=None):
+    def get_predict_input_fn(self, Xs, batch_size=None, context=None):
         batch_size = batch_size or self.config.batch_size
-        tf_dataset = lambda: self._dataset_without_targets(Xs, train=None).batch(batch_size)
+        tf_dataset = lambda: self._dataset_without_targets(Xs, train=None, context=context).batch(batch_size)
         return tf_dataset
 
     @property
@@ -482,10 +500,12 @@ class BasePipeline(metaclass=ABCMeta):
                 Y=Y,
                 max_length=sys.maxsize,
                 pad_token=(pad_token or self.config.pad_token),
+                #context=context.pop() if len(context)==1 else context
                 context=context
             )
-            processed_context = self._context_to_vector([encoded.context])
-            print(np.shape(processed_context))
+            if self.config.use_auxiliary_info:
+                processed_context = np.squeeze(self._context_to_vector([encoded.context]))
+            #print("Post process lengths")
             length = len(encoded.token_ids)
             starts = list(range(0, length, step_size))
             for start in starts:
@@ -495,7 +515,14 @@ class BasePipeline(metaclass=ABCMeta):
                     field_value = getattr(encoded, field)
                     if field_value is not None:
                         d[field] = field_value[start:end]
-                d['context'] = processed_context[start:end] # forced since encoded is immutable
+                        #print(field)
+                        #print(np.shape(d[field]))
+                if self.config.use_auxiliary_info:
+                    print(processed_context)
+                    d['context'] = processed_context[start:end] # forced since encoded is immutable
+                #print('context')
+                #print(np.shape(d['context']))
+                #print(np.shape(processed_context))
                 yield self._array_format(EncodedOutput(**d), pad_token=pad_token)
         else:
             encoder_out = self.text_encoder.encode_multi_input(

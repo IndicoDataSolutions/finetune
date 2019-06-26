@@ -167,13 +167,27 @@ class BaseEncoder(object):
         positions = []
         labels = []
         contexts = []
-
+        if context is not None:
+            context = context[0]
 
         # for each field in that example
-        for field in Xs:
+        for i, field in enumerate(Xs):
             assert isinstance(field, (list, tuple)), "This should be a list of strings, instead it's {}".format(
                 tf.contrib.framework.nest.map_structure(type, field)
             )
+            '''
+            if context is None:
+                context_field = []
+            elif type(context[i] == list): # we have text from multiple examples, so need to collect the correct context
+                context_field = context[i]
+            else:  #we have text from only one sample
+                context_field = context
+            
+            print('field info')
+            print(context)
+            print(field)
+            print('end field info')
+            '''
             encoded = self._encode(field, labels=Y, context=context)
             token_ids.append(_flatten(encoded.token_ids))
             tokens.append(_flatten(encoded.tokens))
@@ -201,6 +215,7 @@ class BaseEncoder(object):
             special_tokens=-1
         )
 
+
         if context is None:
             contexts = None
         else:
@@ -218,6 +233,13 @@ class BaseEncoder(object):
                 max_length=max_length,
                 special_tokens=pad_token
             )
+        '''
+        print("new shapes")
+        print(np.shape(contexts))
+        print(np.shape(tokens))
+        print(np.shape(labels))
+        print(np.shape(token_ids))
+        '''
 
         return EncodedOutput(
             token_ids=token_ids,

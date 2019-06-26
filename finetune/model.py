@@ -95,6 +95,7 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
         train = estimator_mode == tf.estimator.ModeKeys.TRAIN
         X = features["tokens"]
         M = features["mask"]
+        C = features.get("context", None)
         task_id = features.get("task_id", None)
         Y = labels
         pred_op = None
@@ -107,6 +108,7 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                 encoder=encoder,
                 config=params,
                 train=train,
+                context=C,
                 explain=build_explain, 
             )
             predictions = {PredictMode.FEATURIZE: featurizer_state["features"]}

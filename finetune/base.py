@@ -410,13 +410,18 @@ class BaseModel(object, metaclass=ABCMeta):
 
         return predictions
 
-    def _inference(self, Xs, context=None, predict_keys=None, n_examples=None):
+    def _inference(self, Xs, predict_keys=None, n_examples=None):
+        if self.config.use_auxiliary_info:
+            context = Xs[1]
+            Xs = Xs[0]
+        else:
+            context = None
         Xs = self.input_pipeline._format_for_inference(Xs)
 
         if self._cached_predict:
             return self._cached_inference(Xs=Xs, predict_keys=predict_keys, n_examples=n_examples)
         else:
-            input_fn = self.input_pipeline.get_predict_input_fn(Xs)
+            input_fn = self.input_pipeline.get_predict_input_fn(Xs, context=context)
             estimator, hooks = self.get_estimator(build_explain=PredictMode.EXPLAIN in predict_keys)
             length = len(Xs) if not callable(Xs) else None
 

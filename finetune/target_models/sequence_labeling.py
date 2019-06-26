@@ -30,16 +30,15 @@ class SequencePipeline(BasePipeline):
         super()._post_data_initialization(Y_, context)
 
     def text_to_tokens_mask(self, X, Y=None, context=None):
-        pad_token = (
-            [self.config.pad_token] if self.multi_label else self.config.pad_token
-        )
+        
+        if context is None and self.config.use_auxiliary_info:
+            context = X[1]
+
         out_gen = self._text_to_ids(X, Y=Y, pad_token=pad_token, context=context)
         for out in out_gen:
-            feats = {
-                "tokens": out.token_ids,
-                "mask": out.mask,
-                "context": self._context_to_vector([out.context]),
-            }
+            if self.config.use_auxiliary_info:
+                feats = {"tokens": out.token_ids, "mask": out.mask, "context": out.context}
+            else:
             if Y is None:
                 yield feats, context
             if Y is not None:
@@ -65,16 +64,42 @@ class SequencePipeline(BasePipeline):
             if self.multi_label
             else [self.config.max_length]
         )
-        return (
-            ({"tokens": tf.int32, "mask": tf.float32}, tf.int32),
-            (
-                {
-                    "tokens": TS([self.config.max_length, 2]),
-                    "mask": TS([self.config.max_length]),
-                },
-                TS(target_shape),
-            ),
-        )
+        if self.config.use_auxiliary_info:
+            return (
+                (
+                    {
+                        "tokens": tf.int32,
+                        "mask": tf.float32,
+                        "context": tf.float32
+                    },
+                    tf.int32
+                ),
+                (
+                    {
+                        "tokens": TS([self.config.max_length, 2]),
+                        "mask": TS([self.config.max_length]),
+                        "context": TS([self.config.max_length, self.context_dim])
+                    },
+                    TS(target_shape)
+                )
+            )
+        else:
+            return (
+                (
+                    {
+                        "tokens": tf.int32,
+                        "mask": tf.float32
+                    },
+                    tf.int32
+                ),
+                (
+                    {
+                        "tokens": TS([self.config.max_length, 2]),
+                        "mask": TS([self.config.max_length])
+                    },
+                    TS(target_shape)
+                )
+            )
 
     def _target_encoder(self):
         if self.multi_label:
@@ -193,10 +218,28 @@ class SequenceLabeler(BaseModel):
         :param X: A list / array of text, shape [batch]
         :param per_token: If True, return raw probabilities and labels on a per token basis
         :returns: list of class labels.
-
-        Chunk idx for prediction.  Dividers at `step_size` increments.
-        [  1  |  1  |  2  |  3  |  3  ]
         """
+        context=None
+
+        chunk_size = self.config.max_length - 2
+        step_size = chunk_size // 3
+
+        if self.config.use_auxiliary_info:
+            context = X[1]
+            text = X[0]
+            arr_encoded = list(itertools.chain.from_iterable(self.input_pipeline._text_to_ids([x], context=[c]) for x,c in zip(text,context)))
+        else:
+            text = X
+            arr_encoded = list(itertools.chain.from_iterable(self.input_pipeline._text_to_ids([x]) for x in X))
+       
+        labels, batch_probas = [], []
+        for pred in self._inference(X, predict_keys=[PredictMode.PROBAS, PredictMode.NORMAL], n_examples=len(arr_encoded)):
+            labels.append(self.input_pipeline.label_encoder.inverse_transform(pred[PredictMode.NORMAL]))
+            batch_probas.append(pred[PredictMode.PROBAS])
+
+        X = text # remove context information
+
+
         all_subseqs = []
         all_labels = []
         all_probs = []
