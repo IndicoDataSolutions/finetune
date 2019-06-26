@@ -340,6 +340,7 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
            
         queue = sorted(label_seq, key=lambda x: (x['start'], x['end']))
         context_queue = sorted(context_seq, key=lambda x: (x['start'], x['end']))
+
         for label, context in zip(queue, context_queue):
             label['label'] = {label['label']}
             label['context'] = context
@@ -347,7 +348,6 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
 
         while len(queue):
             current_annotation = queue.pop(0)
-
             # for each existing merged annotation
             for annotation in merged_annotations:
                 # no overlap possible, check next merged annotation
@@ -428,6 +428,7 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
         doc_subseqs = [annotation['text'] for annotation in all_annotations]
         doc_labels = [annotation['label'] for annotation in all_annotations]
         doc_context = [annotation['context'] for annotation in all_annotations]
+
         all_subseqs.append(doc_subseqs)
         all_labels.append(doc_labels)
         all_context.append(doc_context)

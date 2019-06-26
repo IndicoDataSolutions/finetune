@@ -148,6 +148,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         batch_size = batch_size or self.config.batch_size
         val_input_fn, train_input_fn, val_size, val_interval = self.input_pipeline.get_train_input_fns(Xs, Y, context=context, batch_size=batch_size)
+
         if self.config.keep_best_model:
             if isinstance(val_size, dict):
                 tf.logging.warning("Cannot early stop or keep best model with MTL")

@@ -179,7 +179,7 @@ class GPT2Encoder(BaseEncoder):
             token_ids=batch_token_idxs,
             tokens=batch_tokens,
             labels=batch_label_idxs,
-            context=context,
+            context=batch_context_idxs,
             char_locs=batch_character_locs
         )
 

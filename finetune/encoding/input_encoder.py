@@ -166,6 +166,8 @@ class BaseEncoder(object):
         tokens = []
         positions = []
         labels = []
+        contexts = []
+
 
         # for each field in that example
         for field in Xs:
@@ -177,6 +179,7 @@ class BaseEncoder(object):
             tokens.append(_flatten(encoded.tokens))
             positions.append(_flatten(encoded.char_locs))
             labels.append(_flatten(encoded.labels))
+            contexts.append(_flatten(encoded.context))
             if len(tokens[-1]) > (max_length - 2):
                 warnings.warn(
                     "Some examples are longer than the max_length. Please trim documents or increase `max_length`. "
@@ -198,6 +201,15 @@ class BaseEncoder(object):
             special_tokens=-1
         )
 
+        if context is None:
+            contexts = None
+        else:
+            contexts = self._cut_and_concat(
+                encoded=contexts,
+                max_length=max_length,
+                special_tokens=pad_token
+            )
+
         if Y is None:
             labels = None
         else:
@@ -212,5 +224,5 @@ class BaseEncoder(object):
             tokens=tokens,
             labels=labels,
             char_locs=locations,
-            context=context
+            context=contexts
         )

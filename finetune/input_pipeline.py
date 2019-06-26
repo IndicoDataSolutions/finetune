@@ -68,11 +68,17 @@ class BasePipeline(metaclass=ABCMeta):
             0: byte-pair encoding embedding
             1: positional embedding
         """
-        print(encoded_output)
-        num_tokens = len(encoded_output.tokens)
         seq_length = len(encoded_output.token_ids)
         x = np.zeros((self.config.max_length, 2), dtype=np.int32)
         mask = np.zeros((self.config.max_length), dtype=np.float32)
+
+        print('NUM TOKENS')
+        print(seq_length)
+        print('NUM CONTEXT')
+        print(len(np.squeeze(encoded_output.context)))
+        print('NUM LABEL')
+        print(len(encoded_output.labels))
+        
 
         if encoded_output.labels is not None:
             labels_arr = np.empty((self.config.max_length), dtype='object')
@@ -91,7 +97,6 @@ class BasePipeline(metaclass=ABCMeta):
         if encoded_output.labels:
             labels_arr[:seq_length] = encoded_output.labels
         if encoded_output.context:
-            print(np.shape(encoded_output.context))
             context_arr[:seq_length][:] = np.squeeze(encoded_output.context)
 
         # positional_embeddings
@@ -167,16 +172,27 @@ class BasePipeline(metaclass=ABCMeta):
                 for encoder in self.label_encoders.values(): # since categorical labels use LabelBinarizer, they use varying dimensions each for each one-hot-encoding, while numerical features only use 1 dimension, so we sum over all for the total dimension.
                     self.context_dim += 1 if len(encoder.classes_) == 1 else len(encoder.classes_) # Binary encodings with only two classes are given with one bit. Encodings with n > 1 classes are given with n bits. (Thanks sklearn)
                 self.config.context_dim = self.context_dim
-
+                return True
 
             for sample in context:
-
+                #sample = sample[1:len(context)-2] # remove special tokens
+                print(sample)
                 # See which tokens have padded labels/context vectors, and thus have a zero vector for features
                 padded_indices = []
+                tokens_with_context=[]
                 for idx in range(len(sample)):
-                    if self.config.pad_token in sample[idx].keys():
+                    if type(sample[idx]) == str and sample[idx] == self.config.pad_token:
                         padded_indices.append(idx)
-                characteristics = pd.DataFrame(sample).to_dict('list')
+                    else:
+                        tokens_with_context.append(sample[idx])
+
+                #if len(sample) > 1:
+                characteristics = pd.DataFrame(tokens_with_context).to_dict('list')
+                #else:
+                #    characteristics = {k:[v] for k,v in sample.pop().items()}
+                print(characteristics)
+                print("padded indices:")
+                print(padded_indices)
 
                 # make sure all features cover the same number of tokens, and calculate total num tokens
                 num_tokens = None
@@ -185,8 +201,11 @@ class BasePipeline(metaclass=ABCMeta):
                     if num_tokens is not None and num_tokens != new_length:
                         raise FinetuneError('Incorrect label shapes.')
                     num_tokens = new_length
+                
+                print("INPUT PIPELINE NUM TOKENS")
+                print(num_tokens)
 
-                vector = np.zeros((num_tokens, self.config.context_dim)) # Feature vector for one document.
+                vector = np.zeros((num_tokens + len(padded_indices), self.config.context_dim)) # Feature vector for one document. Add 2 for the special tokens at beginning/end
                 current_index = 0
 
                 # Loop through each feature and add each to new index of the feature vector
@@ -214,14 +233,19 @@ class BasePipeline(metaclass=ABCMeta):
                             num_backward += 1 #since we're skipping this sample, the next sample needs to be filled from this sample's index in data. This variable tracks how far back we need to go for following indices
                             continue
                         for label_dimension in range(data_dim):
-                            #print("Label dim:" + str(label_dimension) + "Sample:" + str(sample_idx))
-                            if self.config.pad_token in sample[sample_idx]: 
-                                vector[sample_idx][current_index + label_dimension] = 0
-                            else:
-                                vector[sample_idx][current_index + label_dimension] = data[sample_idx - num_backward] if data_dim  == 1 else data[sample_idx - num_backward][label_dimension]
+                            #print("Label dim:" + str(label_dimension + current_index) + "Sample Index:" + str(sample_idx) + "Current label" + label)
+                            #if self.config.pad_token in sample[sample_idx]: 
+                            #    vector[sample_idx][current_index + label_dimension] = 0
+                            #else:
+                            vector[sample_idx][current_index + label_dimension] = data[sample_idx - num_backward] if data_dim  == 1 else data[sample_idx - num_backward][label_dimension]
+
                     current_index += 1
                 vector_list.append(vector)
+            print('Vector shape')
+            print(np.shape(vector_list))
             return vector_list
+
+
 
     def _compute_class_counts(self, encoded_dataset):
         target_arrs = np.asarray([target_arr for doc, target_arr in encoded_dataset])
@@ -388,17 +412,23 @@ class BasePipeline(metaclass=ABCMeta):
             self._skip_tqdm = 0
             if self.config.val_set is None:
                 if self.config.val_size == 0:
-                    Xs_tr, Xs_va, Y_tr, Y_va = Xs, [], Y, []
+                    Xs_tr, Xs_va, Y_tr, Y_va, C_tr, C_va = Xs, [], Y, [], context, []
                 else:
-                    Xs_tr, Xs_va, Y_tr, Y_va = train_test_split(Xs, Y, context, test_size=self.config.val_size, random_state=self.config.seed)
+                    if context:
+                        Xs_tr, Xs_va, Y_tr, Y_va, C_tr, C_va = train_test_split(Xs, Y, context, test_size=self.config.val_size, random_state=self.config.seed)
+                    else:
+                        Xs_tr, Xs_va, Y_tr, Y_va = train_test_split(Xs, Y, test_size=self.config.val_size, random_state=self.config.seed)
+                        C_tr, C_va = None
             else:
                 Xs_tr, Y_tr = Xs, Y
                 Xs_va, Y_va = self.config.val_set
 
             Xs_tr, Y_tr = self.resampling(Xs_tr, Y_tr)
             self.config.dataset_size = len(Xs_tr)
-            val_dataset_unbatched = self._make_dataset(Xs_va, Y_va, context, train=False)
-            train_dataset_unbatched = self._make_dataset(Xs_tr, Y_tr, context, train=True)
+
+            print(self.config.dataset_size)
+            val_dataset_unbatched = self._make_dataset(Xs_va, Y_va, C_va, train=False)
+            train_dataset_unbatched = self._make_dataset(Xs_tr, Y_tr, C_tr, train=True)
 
         if self.config.chunk_long_sequences or self.config.class_weights:
             # Certain settings require that the entire dataset be encoded before compiling the graph
@@ -442,8 +472,7 @@ class BasePipeline(metaclass=ABCMeta):
         return list(X)
 
     def _text_to_ids(self, Xs, Y=None, pad_token=None, context=None):
-        Xs = self._format_for_encoding(Xs)            
-
+        Xs = self._format_for_encoding(Xs)
         if self.config.chunk_long_sequences and len(Xs) == 1:
             # can only chunk single sequence inputs
             chunk_size = self.config.max_length - 2
@@ -456,6 +485,7 @@ class BasePipeline(metaclass=ABCMeta):
                 context=context
             )
             processed_context = self._context_to_vector([encoded.context])
+            print(np.shape(processed_context))
             length = len(encoded.token_ids)
             starts = list(range(0, length, step_size))
             for start in starts:
