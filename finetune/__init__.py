@@ -17,7 +17,7 @@ from finetune.target_models.language_model import LanguageModel
 from finetune.target_models.mtl import MultiTask
 from finetune.target_models.deployment_model import DeploymentModel
 
-__version__, VERSION, version = ("0.6.7",) * 3
+__version__, VERSION, version = ("0.7.0",) * 3
 
 # Logging configuration
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
