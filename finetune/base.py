@@ -351,8 +351,15 @@ class BaseModel(object, metaclass=ABCMeta):
         self._to_pull = 0
         while not self._closed:
             try:
-                self._cached_example = self._data.pop(0)
-                yield self._cached_example
+                example = self._data.pop(0)
+
+                # Ensure examples used for padding match expected input format
+                if isinstance(example, str):
+                    self._cached_example = ""
+                elif isinstance(example, (list, tuple)):
+                    self._cached_example = [""] * len(example)
+
+                yield example
             except IndexError:
                 # _data_generator was asked for more examples than we had
                 # Feed a cached example through the input_pipeline
