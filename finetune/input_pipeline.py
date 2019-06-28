@@ -168,6 +168,8 @@ class BasePipeline(metaclass=ABCMeta):
             """
             Takes list of context dictionaries and turns them into lists (per sample) of lists (per token) of context vectors
             """
+            #print("CONTEXT TO VECTOR")            
+            #print(context)
             num_samples = len(context)
             vector_list = []
             if not hasattr(self, 'label_encoders'): # we will fit necessary label encoders here to know dimensionality of input vector before entering featurizer
@@ -209,7 +211,8 @@ class BasePipeline(metaclass=ABCMeta):
                         padded_indices.append(idx)
                     else:
                         tokens_with_context.append(sample[idx])
-                characteristics = pd.DataFrame(tokens_with_context).to_dict('list')
+                #characteristics = pd.DataFrame(tokens_with_context).to_dict('list')
+                characteristics = {k:[dictionary[k] for dictionary in tokens_with_context] for k in tokens_with_context[0].keys()}
 
                 # make sure all features cover the same number of tokens, and calculate total num tokens
                 num_tokens = None
@@ -255,6 +258,7 @@ class BasePipeline(metaclass=ABCMeta):
                 vector_list.append(vector)
             #print('Vector shape')
             #print(np.shape(vector_list))
+            #print(vector_list)
             return vector_list
 
 
@@ -279,7 +283,7 @@ class BasePipeline(metaclass=ABCMeta):
 
         dataset_encoded = lambda: itertools.chain.from_iterable(
             map(lambda xy: self.text_to_tokens_mask(*xy), dataset()))
-        shape_def = self.feed_shape_type_def()
+        
 
         if not callable(Y) and train:
             dataset_encoded_list = list(dataset_encoded())
@@ -290,7 +294,7 @@ class BasePipeline(metaclass=ABCMeta):
                     class_weights=self.config.class_weights, 
                     class_counts=class_counts
                 )
-           
+        shape_def = self.feed_shape_type_def()
         return Dataset.from_generator(lambda: self.wrap_tqdm(dataset_encoded(), train), *shape_def)
 
     def _dataset_without_targets(self, Xs, train, context=None):
@@ -518,11 +522,13 @@ class BasePipeline(metaclass=ABCMeta):
                         #print(field)
                         #print(np.shape(d[field]))
                 if self.config.use_auxiliary_info:
-                    print(processed_context)
+                    #print(processed_context)
                     d['context'] = processed_context[start:end] # forced since encoded is immutable
                 #print('context')
                 #print(np.shape(d['context']))
                 #print(np.shape(processed_context))
+                    #print("BEFORE ARRAY FORMAT")
+                    #print(d['context'])
                 yield self._array_format(EncodedOutput(**d), pad_token=pad_token)
         else:
             encoder_out = self.text_encoder.encode_multi_input(

@@ -167,9 +167,11 @@ class BaseEncoder(object):
         positions = []
         labels = []
         contexts = []
-        if context is not None:
-            context = context[0]
 
+        
+        #if context is not None:
+        #    context = [context]
+        
         # for each field in that example
         for i, field in enumerate(Xs):
             assert isinstance(field, (list, tuple)), "This should be a list of strings, instead it's {}".format(
@@ -240,6 +242,8 @@ class BaseEncoder(object):
         print(np.shape(labels))
         print(np.shape(token_ids))
         '''
+        #print("AFTER MULTI INPUT")
+        #print(contexts)
 
         return EncodedOutput(
             token_ids=token_ids,
