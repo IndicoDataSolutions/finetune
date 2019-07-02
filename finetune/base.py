@@ -216,7 +216,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 self.config.num_layers_trained = num_layers_trained
                 self.saver.variables = {k: v for k, v in self.saver.variables.items() if "adam" not in k and "global_step" not in k}
                 for weight in self.saver.variables:
-                    if weight.startswith("model/target/"):
+                    if weight.startswith("model/target/") or 'context_embedding' in weight:
                         w = self.saver.variables[weight]
                         if len(w.shape) == 1:
                             continue

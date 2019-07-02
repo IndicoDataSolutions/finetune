@@ -72,24 +72,6 @@ class BasePipeline(metaclass=ABCMeta):
         x = np.zeros((self.config.max_length, 2), dtype=np.int32)
         mask = np.zeros((self.config.max_length), dtype=np.float32)
 
-        
-
-
-        #print('NUM TOKENS')
-        #print(seq_length)
-        #print('NUM CONTEXT')
-        #print(len(np.squeeze(encoded_output.context)))
-        #if seq_length != len(np.squeeze(encoded_output.context)) and len(np.shape(encoded_output.context)) == 3:
-        #    print(str(seq_length))
-        #    print(len(np.squeeze(encoded_output.context)))
-        #    1/0
-
-        #if len(np.squeeze(encoded_output.context)) == 0:
-        #    print(encoded_output.context)
-        #    raise FinetuneError("No context information")
-        #print(encoded_output.tokens)
-        
-
         if encoded_output.labels is not None:
             labels_arr = np.empty((self.config.max_length), dtype='object')
             labels_arr.fill((pad_token or self.config.pad_token))
@@ -168,32 +150,24 @@ class BasePipeline(metaclass=ABCMeta):
             """
             Takes list of context dictionaries and turns them into lists (per sample) of lists (per token) of context vectors
             """
-            #print("CONTEXT TO VECTOR")            
-            #print(context)
             num_samples = len(context)
             vector_list = []
             if not hasattr(self, 'label_encoders'): # we will fit necessary label encoders here to know dimensionality of input vector before entering featurizer
-                pads_removed = [dictionary for dictionary in context[0] if dictionary != self.config.pad_token]
-
+                valid_samples = [dict_list for dict_list in context if dict_list != self.config.pad_token] # one list of dicts per sample of text
+                pads_removed = [dictionary for dict_list in valid_samples for dictionary in dict_list if dictionary != self.config.pad_token] # concat each dictionary (per token) into a list of dict
                 keys = pads_removed[0].keys()
                 characteristics = {k:[dictionary[k] for dictionary in pads_removed] for k in keys}
 
-
-                #print(pads_removed)
-                #characteristics = itertools.chain.from_iterable(pads_removed)
-                #characteristics = pd.DataFrame(characteristics).to_dict('list')
-                #print(characteristics)
-                #1/0
-                
+                ignore = ['start', 'end', 'label']
                 self.label_encoders = {k:LabelBinarizer() for k in characteristics.keys() if 
-                all(k != self.config.pad_token and not (type(data) == int or (type(data) == float and not pd.isna(data))) and k != 'label' for data in characteristics[k])} # Excludes features that are continuous, like position and font size, since they do not have categorical binary encodings
+                all(k != self.config.pad_token and not (type(data) == int or (type(data) == float and not pd.isna(data))) and k not in ignore for data in characteristics[k])} # Excludes features that are continuous, like position and font size, since they do not have categorical binary encodings
 
                 for label, encoder in self.label_encoders.items():
                     without_nans = [x for x in characteristics[label] if not pd.isna(x)]
                     encoder.fit(without_nans)
                 
                 self.context_labels = sorted([label for label in characteristics.keys() if label != 'label']) # sort for consistent ordering between runs
-                continuous_labels = [label for label in self.context_labels if label not in self.label_encoders.keys()]
+                continuous_labels = [label for label in self.context_labels if label not in self.label_encoders.keys() and label not in ignore]
 
                 self.context_dim = len(continuous_labels) # Sum over features to determine dimensionality of each feature vector.
                 for encoder in self.label_encoders.values(): # since categorical labels use LabelBinarizer, they use varying dimensions each for each one-hot-encoding, while numerical features only use 1 dimension, so we sum over all for the total dimension.
@@ -202,7 +176,6 @@ class BasePipeline(metaclass=ABCMeta):
                 return True
 
             for sample in context:
-                #print(sample)
                 # See which tokens have padded labels/context vectors, and thus have a zero vector for features
                 padded_indices = []
                 tokens_with_context=[]
@@ -211,7 +184,6 @@ class BasePipeline(metaclass=ABCMeta):
                         padded_indices.append(idx)
                     else:
                         tokens_with_context.append(sample[idx])
-                #characteristics = pd.DataFrame(tokens_with_context).to_dict('list')
                 characteristics = {k:[dictionary[k] for dictionary in tokens_with_context] for k in tokens_with_context[0].keys()}
 
                 # make sure all features cover the same number of tokens, and calculate total num tokens
@@ -241,11 +213,10 @@ class BasePipeline(metaclass=ABCMeta):
                     else:
                         data = [x for x in data if not pd.isna(x)]
                         data_dim = 1
-                    #print(label)
-                    #print(self.label_encoders.keys())
+
                     #loop through indices and fill with correct data
                     num_backward = 0
-                    for sample_idx in range(num_tokens):
+                    for sample_idx in range(len(sample)):
                         if sample_idx in padded_indices: # there is no data, simply a pad from the encoder, so fill out with zero vector
                             vector[sample_idx][:] = 0
                             num_backward += 1 #since we're skipping this sample, the next sample needs to be filled from this sample's index in data. This variable tracks how far back we need to go for following indices
@@ -256,9 +227,6 @@ class BasePipeline(metaclass=ABCMeta):
 
                     current_index += 1
                 vector_list.append(vector)
-            #print('Vector shape')
-            #print(np.shape(vector_list))
-            #print(vector_list)
             return vector_list
 
 
@@ -499,17 +467,18 @@ class BasePipeline(metaclass=ABCMeta):
             # can only chunk single sequence inputs
             chunk_size = self.config.max_length - 2
             step_size = chunk_size // 3
+
             encoded = self.text_encoder.encode_multi_input(
                 Xs,
                 Y=Y,
                 max_length=sys.maxsize,
                 pad_token=(pad_token or self.config.pad_token),
-                #context=context.pop() if len(context)==1 else context
                 context=context
             )
+
             if self.config.use_auxiliary_info:
                 processed_context = np.squeeze(self._context_to_vector([encoded.context]))
-            #print("Post process lengths")
+
             length = len(encoded.token_ids)
             starts = list(range(0, length, step_size))
             for start in starts:
@@ -519,16 +488,8 @@ class BasePipeline(metaclass=ABCMeta):
                     field_value = getattr(encoded, field)
                     if field_value is not None:
                         d[field] = field_value[start:end]
-                        #print(field)
-                        #print(np.shape(d[field]))
                 if self.config.use_auxiliary_info:
-                    #print(processed_context)
                     d['context'] = processed_context[start:end] # forced since encoded is immutable
-                #print('context')
-                #print(np.shape(d['context']))
-                #print(np.shape(processed_context))
-                    #print("BEFORE ARRAY FORMAT")
-                    #print(d['context'])
                 yield self._array_format(EncodedOutput(**d), pad_token=pad_token)
         else:
             encoder_out = self.text_encoder.encode_multi_input(

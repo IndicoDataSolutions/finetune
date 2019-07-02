@@ -53,7 +53,7 @@ def textcnn_featurizer(X, encoder, config, train=False, reuse=None, context=None
         h = embed(X[:, :, :1], embed_weights)
 
         if config.use_auxiliary_info: # add the auxiliary info context embeddings
-            with tf.variable_scope('context_embedding/'):
+            with tf.variable_scope('context_embedding'):
                 weighted_C = tf.multiply(context, context_weighted_avg) # [batch_size, seq_length, context_dim] * [context_dim] = [batch_size, seq_length, context_dim], with weighted inputs
                 c_embed = tf.tensordot(weighted_C, context_embed_weights, axes = [[2],[0]]) # [batch_size, seq_length, context_dim] * [context_dim, n_embed] = [batch_size, seq_length, n_embed]
                 c_embed = norm(c_embed, tf.get_variable_scope())

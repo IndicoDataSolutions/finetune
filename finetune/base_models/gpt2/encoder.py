@@ -136,20 +136,16 @@ class GPT2Encoder(BaseEncoder):
         label = None
         context_ = None
 
-
-        #print("BEFORE ENCODE")
-        #print(context)
         for i, text in enumerate(texts):
-            #print("WITHIN LOOP")
-            #print(i)
-            #print(text)
             if labels is not None:
                 label = labels[i]
-            if context is not None:
-                context_ = context[i]
-                if type(context_) == dict: # seeing if we have a list of context tokens, or a list of lists of context tokens
+            if context is not None: # each field in texts needs a list of dicts for its context
+                if type(context) == dict: # seeing if we have a list of context tokens, or a list of lists of context tokens
+                    context_ = [context]
+                elif type(context[0]) == dict: # this is one example, so a list of dicts
                     context_ = context
-            #print(context_)
+                else: # this is multiple examples, so a list of list of dicts
+                    context_ = context[i]
 
             subtokens = []
             subtoken_idxs = []
@@ -157,6 +153,7 @@ class GPT2Encoder(BaseEncoder):
             token_start = 0
 
             tokens = re.findall(self.pat, text)
+
             for j, token in enumerate(tokens):
                 encoded_token = ''.join(self.byte_encoder[b] for b in token.encode('utf-8'))
                 bpe_toks = self.bpe(encoded_token).split(' ')
@@ -185,16 +182,12 @@ class GPT2Encoder(BaseEncoder):
         
             # Context is tokenwise, so we need to duplicate contexts for each subtoken of a token, and to match length of labels
             if context_ is not None:
-                single_example=False
-                #print("CONTEXT_ WITHIN ENCODE")
-                #print(context_)
-                #print(type(context_))
-                try:
-                    token_starts = [context['start'] for context in context_]
-                except TypeError: # only one token of context, so the start must be 0 TODO: find out why this throws such an error
-                    token_starts = [0]
-                    1/0
-                    single_example=True
+                #single_example=False
+                #try:
+                token_starts = [context['start'] for context in context_]
+                #except TypeError: # only one token of context, so the start must be 0 TODO: find out why this throws such an error
+                #    token_starts = [context_['start']]
+                #    single_example=True
                 original_tokens = []
                 for char_loc in batch_character_locs[i]:
                     original_token=-1
@@ -204,14 +197,11 @@ class GPT2Encoder(BaseEncoder):
                     original_tokens.append(original_token)
                 expanded_context = [None]*len(original_tokens)
                 for j in range(len(expanded_context)):
-                    expanded_context[j] =  context_ if single_example else context_[original_tokens[j]]
+                    expanded_context[j] =  context_[original_tokens[j]]
+                    #expanded_context[j] =  context_ if single_example else context_[original_tokens[j]]
                 batch_context.append(expanded_context)
 
                 assert len(expanded_context) == len(subtoken_idxs) and len(expanded_context) == len(tok_pos)
-                
-        #print("AFTER ENCODE")
-                    
-        #print(batch_context)
 
         return EncodedOutput(
             token_ids=batch_token_idxs,
