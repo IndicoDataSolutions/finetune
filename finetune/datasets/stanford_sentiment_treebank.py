@@ -47,12 +47,12 @@ if __name__ == "__main__":
     trainX, testX, trainY, testY = train_test_split(dataset.Text.values, dataset.Target.values, test_size=0.3, random_state=42)
     feat_modes = ["final_state", "clf_tok", "mean_state", "mean_tok", "max_state", "max_tok"] 
 
-    for l2 in [0.0, 0.001, 0.01, 0.1]:
-        for prefit_init in [True, False]:
+    for l2 in [0.001]:#[0.0, 0.001, 0.01, 0.1]:
+        for prefit_init in [False]:#True, False]:
             for lr_warmup in [0.0, 0.1, 0.3]:
                 for batch_size in [2, 4, 8]:
-                    for lr in [1e-5, 1e-4, 1e-3, 1e-2, 1e-1]:
-                        for epoch in [2, 4, 8, 16]:
+                    for lr in [1e-5]:#, 1e-4, 1e-3, 1e-2, 1e-1]:
+                        for epoch in [4]:#[2, 4, 8, 16]:
                             for feat_mode in feat_modes:
                                 model = Classifier(
                                     max_length=64,
@@ -62,7 +62,7 @@ if __name__ == "__main__":
                                     val_size=0,
                                     lr=lr,
                                     base_model=GPCModel,
-                                    base_model_path="conv25days.jl",
+                                    base_model_path="conv_base_30jun.jl",
                                     xla=False,
                                     keep_best_model=False,#True,
                                     l2_reg=l2,
@@ -92,7 +92,7 @@ if __name__ == "__main__":
                                     val_size=0,
                                     lr=lr,
                                     base_model=GPCModel,
-                                    base_model_path="conv25days.jl",
+                                    base_model_path="conv_base_30jun.jl",#"conv25days.jl",
                                     xla=False,
                                     keep_best_model=False,#True,
                                     l2_reg=l2,

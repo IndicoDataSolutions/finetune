@@ -101,7 +101,7 @@ def cascaded_pool(value, kernel_size, dim=1, pool_len=None):
     shape = shape_list(value)
     full_pool_len = pool_len or shape[dim]
     intermediate_vals = []
-    w = tf.get_variable("weighted_mean_max_pool_identity", shape=[shape[-1]], dtype=tf.float32)
+    w = tf.get_variable("weighted_mean_max_pool_identity", shape=[shape[-1]], dtype=tf.float32, initializer=tf.random_normal_initializer())
     if w.dtype != value.dtype:
         w = tf.cast(w, value.dtype)
     intermediate_vals.append(value * w)
