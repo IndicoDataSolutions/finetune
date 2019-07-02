@@ -212,15 +212,13 @@ def enc_dec_mix(enc, dec, enc_mask, dec_mask):
                                            output_dim=feats))
 
 
-def block(
-        X, block_name, use_fp16, pool_idx=None, encoder_state=None,
-        train=False, pdrop=0.1, pool_kernel_size=None,
-        nominal_pool_length=512
-):
+def block(X, block_name, use_fp16, pool_idx=None, encoder_state=None,
+          train=False, pdrop=0.1, pool_kernel_size=None,
+          nominal_pool_length=512, causal=True):
     with tf.variable_scope(block_name):
         h1, feats = cumulative_state_net(
             X, "cumulative_state_net", use_fp16, pool_idx, pdrop, train, pool_kernel_size=pool_kernel_size,
-            nominal_pool_length=nominal_pool_length
+            nominal_pool_length=nominal_pool_length, causal=causal
         )
         # TODO write encoder_decoder interface
         if encoder_state is not None:
