@@ -151,8 +151,6 @@ class Saver:
                     for func in self.variable_transforms:
                         saved_var = func(var.name, saved_var)
                     var_init = var.load(saved_var, session)
-                else:
-                    print("Uninitialized Var:",  var.name)
                         
         return init_fn
 

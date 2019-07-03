@@ -1,6 +1,6 @@
 import tensorflow as tf
 import math
-from finetune.base_models.gpt.featurizer import dropout, embed, norm
+from finetune.base_models.gpt.featurizer import dropout, embed, norm, split_heads, merge_heads
 from finetune.util.shapes import shape_list
 
 from finetune.optimizers.recompute_grads import recompute_grad
@@ -37,7 +37,7 @@ def batch_to_time(value, dilation):
 
 
 def dilated_causal_max_pool(value, kernel_size, dilation, padding="left"):
-    pool_op = lambda x, padding: causalmax(x, dim=1, pool_len=kernel_size, padding)
+    pool_op = lambda x, padding: causalmax(x, dim=1, pool_len=kernel_size, padding_type=padding)
     with tf.name_scope("causal_pool"):
         if dilation > 1:
             transformed, pad_elements = time_to_batch(value, dilation, pad_with=-1e4)
@@ -68,19 +68,9 @@ def cascaded_pool(value, kernel_size, dim=1, pool_len=None, corr_nonlin=None, ca
     w_bs = tf.split(w_bs, num_or_size_splits=2 * num_pooling_ops, axis=-1)
 
     for i in range(num_pooling_ops):
-        value_pooled = dilated_causal_max_pool(value, kernel_size=kernel_size, dilation=kernel_size ** i)
-
-        if not causal:
-            value_reversed = tf.reverse_sequence(value, pool_len, seq_axis=1)
-            value_reversed_pooled = dilated_causal_max_pool(
-                value_reversed, kernel_size=kernel_size,
-                dilation=kernel_size ** i
-            )
-            value_reversed_pooled = tf.reverse_sequence(value_reversed_pooled, pool_len, seq_axis=1)
-            value_pooled = tf.concat((value_pooled, value_reversed_pooled), axis=-1)
-
+        value = dilated_causal_max_pool(value, kernel_size=kernel_size, dilation=kernel_size ** i, padding="left" if causal else "even")
         value_proj = normal_1d_conv_block(
-            value_pooled, 1, "pool_project_{}".format(i), value.dtype == tf.float16,
+            value, 1, "pool_project_{}".format(i), value.dtype == tf.float16,
             output_dim=shape[-1], causal=causal
         )
         intermediate_vals.append(value_proj * w_bs[2 * i] + w_bs[2 * i + 1])
@@ -112,7 +102,10 @@ def causalmax(x, dim, pool_len=None, padding_type="left"):
     if padding_type == "left":
         padding[dim] = [pool_len - 1, 0]
     elif padding_type == "right":
-        padding[dim] = [0, pool_len - 1, ]
+        padding[dim] = [0, pool_len - 1]
+    elif padding_type == "even":
+        leng = pool_len - 1
+        padding[dim] = [leng // 2, leng - leng // 2]
     else:
         raise ValueError("Padding type {} not supported".format(padding_type))
     padded_x = tf.pad(x, padding, "CONSTANT", constant_values=-1e4)
@@ -158,7 +151,7 @@ def cumulative_state_net(X, name, use_fp16, pool_idx, pdrop, train, pool_kernel_
     return normal_1d_conv_block(outputs_cum_pooled, 1, "output_reproject", use_fp16, output_dim=nx, causal=causal), feats
 
 
-def normal_1d_conv_block(X, kernel_width, layer_name, use_fp16, dilation=1, layer_num=1, output_dim=None, causal=True):
+def normal_1d_conv_block(X, kernel_width, layer_name, use_fp16, dilation=1, layer_num=1, output_dim=None, causal=True, sequence_lengths=None):
     # layer_input shape = #batch, seq, embed_dim or batch, channels, seq, embed_dim
     with tf.variable_scope(layer_name):
         # Pad kernel_width (word_wise) - 1 to stop future viewing.
@@ -181,35 +174,57 @@ def normal_1d_conv_block(X, kernel_width, layer_name, use_fp16, dilation=1, laye
             W = tf.cast(W, tf.float16)
             b = tf.cast(b, tf.float16)
 
-        conv = causal_conv(padded_input, W, dilation)
-        conv = tf.nn.bias_add(conv, b)
+        if kernel_width == 1 and causal and sequence_lengths is not None and not use_fp16:
+            pad_mask = tf.reshape(tf.sequence_mask(sequence_lengths, maxlen=shape_list(X)[1]), [-1])
+            non_pad_ids = tf.to_int32(tf.where(pad_mask))
+            dim_origin = tf.shape(pad_mask)
+            x_shape = X.get_shape().as_list()
+            x_nopad = tf.gather_nd(
+                tf.reshape(X, [-1, nx]),
+                indices=self.nonpad_ids,
+            )
+            x_nopad.set_shape([None] + x_shape[1:])
+            conv = causal_conv(tf.expand_dims(x_nopad, axis=0), W, dilation)
+            conv = tf.squeeze(tf.nn.bias_add(conv, b), axis=0)
+            conv = tf.scatter_nd(
+                indices=nonpad_ids,
+                updates=x,
+                shape=tf.concat([dim_origin, tf.shape(conv)[1:]], axis=0),
+            )
+            conv = tf.reshape(conv, shape_list(X))
+
+        else:    
+            conv = causal_conv(padded_input, W, dilation)
+            conv = tf.nn.bias_add(conv, b)
 
         out = conv
     return out
 
 
-def enc_dec_mix(enc, dec, enc_mask, dec_mask):
+def enc_dec_mix(enc, dec, enc_mask, dec_mask, n_head=16):
     # enc = batch, seq, feats
     # dec = batch, seq, feats
-    batch, dec_seq, feats = shape_list(dec)
-    enc_seq = shape_list(enc)[1]
-
-    enc_proj = tf.expand_dims(normal_1d_conv_block(enc, 1, "enc_proj", use_fp16=enc.dtype == tf.float16),
-                              2)  # batch, seq, 1, feats
-    enc_mask = tf.reshape(1.0 - tf.sequence_mask(enc_mask, maxlen=enc_seq, dtype=enc.dtype),
-                          [batch, enc_seq, 1, 1]) * -1e4
-
-    dec_proj = tf.expand_dims(
-        normal_1d_conv_block(dec, 1, "dec_proj", use_fp16=enc.dtype == tf.float16, output_dim=feats),
-        1)  # batch, 1, seq, feats
-    dec_mask = tf.reshape(1.0 - tf.sequence_mask(dec_mask, maxlen=dec_seq, dtype=enc.dtype),
-                          [batch, 1, dec_seq, 1]) * -1e4
-
-    enc_dec = tf.nn.relu(enc_proj + dec_proj) + enc_mask + dec_mask  # batch, seq_enc, seq_dec, feats
-
-    mixed = tf.reduce_max(enc_dec, 1)  # batch, seq_dec, feats
-    return tf.nn.relu(normal_1d_conv_block(tf.concat([dec, mixed], 2), 1, "mixing", use_fp16=enc.dtype == tf.float16,
-                                           output_dim=feats))
+    with tf.variable_scope("enc_dec_attn"):
+        batch, dec_seq, feats = shape_list(dec)
+        enc_seq = shape_list(enc)[1]
+        
+        enc_proj = normal_1d_conv_block(enc, 1, "enc_proj", use_fp16=enc.dtype == tf.float16, output_dim=feats * 2)
+        dec_proj = normal_1d_conv_block(dec, 1, "dec_proj", use_fp16=enc.dtype == tf.float16, output_dim=feats)
+        k, v = tf.split(enc_proj, 2, 2)
+        q = dec_proj
+        q = split_heads(q, n_head)
+        k = split_heads(k, n_head, k=True)
+        v = split_heads(v, n_head)
+        w = tf.matmul(q, k)
+        w = w * tf.rsqrt(tf.cast(dec_seq, tf.float32))
+        
+        enc_mask = tf.reshape(tf.sequence_mask(enc_mask, maxlen=enc_seq, dtype=enc.dtype), [batch, 1, 1, enc_seq])
+        dec_mask = tf.reshape(tf.sequence_mask(dec_mask, maxlen=dec_seq, dtype=enc.dtype), [batch, 1, dec_seq, 1])
+        m = enc_mask * dec_mask
+        w = w * m + -1e9 * (1 - m)
+        w = tf.nn.softmax(w)
+        
+    return merge_heads(tf.matmul(w, v))
 
 
 def block(X, block_name, use_fp16, pool_idx=None, encoder_state=None,
@@ -223,7 +238,6 @@ def block(X, block_name, use_fp16, pool_idx=None, encoder_state=None,
         # TODO write encoder_decoder interface
         if encoder_state is not None:
             mixed = enc_dec_mix(encoder_state["sequence_features"], h1, encoder_state["pool_idx"], pool_idx)
-            mixed *= tf.get_variable("mix_weight", shape=[shape_list(h1)[-1]], initializer=tf.zeros_initializer())
             h1 = h1 + mixed
 
         return tf.nn.relu(dropout(norm(h1 + X, "norm", fp16=use_fp16, e=1e-2), pdrop, train)), feats
@@ -284,7 +298,7 @@ def featurizer(X, encoder, config, train=False, reuse=None, encoder_state=None):
 
                 def block_fn_fwd(inp, pool_idxi):
                     return block(inp, block_name='block%d_' % layer, use_fp16=config.use_fp16,
-                                 layer_num=layer + 1, pool_idx=pool_idxi, encoder_state=encoder_state, train=train,
+                                 pool_idx=pool_idxi, encoder_state=encoder_state, train=train,
                                  pdrop=config.resid_p_drop)
 
                 if config.low_memory_mode and train:

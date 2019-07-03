@@ -46,14 +46,13 @@ if __name__ == "__main__":
     dataset = StanfordSentimentTreebank(nrows=1000).dataframe
     trainX, testX, trainY, testY = train_test_split(dataset.Text.values, dataset.Target.values, test_size=0.3, random_state=42)
     feat_modes = ["final_state", "clf_tok", "mean_state", "mean_tok", "max_state", "max_tok"] 
-
-    for l2 in [0.001]:#[0.0, 0.001, 0.01, 0.1]:
+    for l2 in [0.0, 0.001, 0.01, 0.1]:
         for prefit_init in [False]:#True, False]:
             for lr_warmup in [0.0, 0.1, 0.3]:
-                for batch_size in [2, 4, 8]:
-                    for lr in [1e-5]:#, 1e-4, 1e-3, 1e-2, 1e-1]:
-                        for epoch in [4]:#[2, 4, 8, 16]:
-                            for feat_mode in feat_modes:
+                for batch_size in [2, 3, 4]:
+                    for lr in [1e-4]:
+                        for epoch in [3]:
+                            for feat_mode in ["clf_tok"]:
                                 model = Classifier(
                                     max_length=64,
                                     n_epochs=epoch, 
@@ -84,21 +83,21 @@ if __name__ == "__main__":
                                 model.fit(trainX, trainY)
                                 accuracy = np.mean(model.predict(testX) == testY)
 
-                                model = Classifier(
-                                    max_length=64,
-                                    n_epochs=epoch,
-                                    batch_size=batch_size,
-                                    lr_warmup=lr_warmup,
-                                    val_size=0,
-                                    lr=lr,
-                                    base_model=GPCModel,
-                                    base_model_path="conv_base_30jun.jl",#"conv25days.jl",
-                                    xla=False,
-                                    keep_best_model=False,#True,
-                                    l2_reg=l2,
-                                    prefit_init=prefit_init,
-                                    feat_mode=feat_mode
-                                )
-                                model.fit(trainX[:100], trainY[:100])
-                                accuracy_100 = np.mean(model.predict(testX) == testY)
-                                print('Test Accuracy 1000: {:0.2f}, 100: {:0.2f}'.format(accuracy, accuracy_100))
+#                                model = Classifier(
+#                                    max_length=64,
+#                                    n_epochs=epoch,
+#                                    batch_size=batch_size,
+#                                    lr_warmup=lr_warmup,
+#                                    val_size=0,
+#                                    lr=lr,
+#                                    base_model=GPCModel,
+#                                    base_model_path="conv_base_30jun.jl",#"conv25days.jl",
+#                                    xla=False,
+#                                    keep_best_model=False,#True,
+#                                    l2_reg=l2,
+#                                    prefit_init=prefit_init,
+#                                    feat_mode=feat_mode
+#                                )
+#                                model.fit(trainX[:100], trainY[:100])
+#                                accuracy_100 = np.mean(model.predict(testX) == testY)
+                                print('Test Accuracy 1000: {:0.2f}, 100: {:0.2f}'.format(accuracy, -1))
