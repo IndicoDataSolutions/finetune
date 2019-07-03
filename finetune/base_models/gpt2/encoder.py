@@ -182,12 +182,7 @@ class GPT2Encoder(BaseEncoder):
         
             # Context is tokenwise, so we need to duplicate contexts for each subtoken of a token, and to match length of labels
             if context_ is not None:
-                #single_example=False
-                #try:
                 token_starts = [context['start'] for context in context_]
-                #except TypeError: # only one token of context, so the start must be 0 TODO: find out why this throws such an error
-                #    token_starts = [context_['start']]
-                #    single_example=True
                 original_tokens = []
                 for char_loc in batch_character_locs[i]:
                     original_token=-1
@@ -198,9 +193,7 @@ class GPT2Encoder(BaseEncoder):
                 expanded_context = [None]*len(original_tokens)
                 for j in range(len(expanded_context)):
                     expanded_context[j] =  context_[original_tokens[j]]
-                    #expanded_context[j] =  context_ if single_example else context_[original_tokens[j]]
                 batch_context.append(expanded_context)
-
                 assert len(expanded_context) == len(subtoken_idxs) and len(expanded_context) == len(tok_pos)
 
         return EncodedOutput(

@@ -13,7 +13,7 @@ import pandas as pd
 import tensorflow as tf
 from tensorflow.python.data import Dataset
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import MultiLabelBinarizer, LabelBinarizer
+from sklearn.preprocessing import LabelBinarizer
 import finetune
 from finetune.errors import FinetuneError
 from finetune.encoding.input_encoder import ArrayEncodedOutput, EncodedOutput
@@ -27,7 +27,6 @@ class BasePipeline(metaclass=ABCMeta):
         self.config = config
         self.text_encoder = self.config.base_model.get_encoder()
         self.label_encoder = None
-        self.context_encoder = MultiLabelBinarizer()
         self.target_dim = None
         self.pad_idx_ = None
         self.rebuild = False
@@ -44,22 +43,42 @@ class BasePipeline(metaclass=ABCMeta):
 
     def feed_shape_type_def(self):
         TS = tf.TensorShape
-        return (
-            (
-                {
-                    "tokens": tf.int32,
-                    "mask": tf.float32
-                },
-                tf.float32
-            ),
-            (
-                {
-                    "tokens": TS([self.config.max_length, 2]),
-                    "mask": TS([self.config.max_length])
-                },
-                TS([self.target_dim])
+        if self.config.use_auxiliary_info:
+            return (
+                (
+                    {
+                        "tokens": tf.int32,
+                        "mask": tf.float32,
+                        "context": tf.float32
+                    },
+                    tf.float32
+                ),
+                (
+                    {
+                        "tokens": TS([self.config.max_length, 2]),
+                        "mask": TS([self.config.max_length]),
+                        "context": TS([self.config.max_length, self.context_dim])
+                    },
+                    TS([self.target_dim])
+                )
             )
-        )
+        else:
+            return (
+                (
+                    {
+                        "tokens": tf.int32,
+                        "mask": tf.float32
+                    },
+                    tf.float32
+                ),
+                (
+                    {
+                        "tokens": TS([self.config.max_length, 2]),
+                        "mask": TS([self.config.max_length])
+                    },
+                    TS([self.target_dim])
+                )
+            )
 
     def _array_format(self, encoded_output, pad_token=None):
         """
@@ -90,9 +109,7 @@ class BasePipeline(metaclass=ABCMeta):
         if encoded_output.labels:
             labels_arr[:seq_length] = encoded_output.labels
         if encoded_output.context is not None:
-            if len(np.shape(encoded_output.context)) == 3:
-                context_arr[:seq_length][:] = np.squeeze(encoded_output.context)
-            elif len(np.shape(encoded_output.context)) == 2:
+            if len(np.shape(encoded_output.context)) in (2,3):
                 context_arr[:seq_length][:] = np.squeeze(encoded_output.context)
             else:
                 raise FinetuneError('Incorrect context rank.')
@@ -113,15 +130,21 @@ class BasePipeline(metaclass=ABCMeta):
         return output
 
     def text_to_tokens_mask(self, X, Y=None, context=None):
-        out_gen = self._text_to_ids(X, pad_token=self.config.pad_token)
+        if context is None and self.config.use_auxiliary_info:
+            context = X[1]
+            X = X[0]
+
+        out_gen = self._text_to_ids(X, pad_token=self.config.pad_token, context=context)
+
         for out in out_gen:
-            feats = {"tokens": out.token_ids, "mask": out.mask, "context": out.context}
-            output = [feats]
-            if context is not None:
-                output.append(context)
-            if Y is not None:
-                output.append(self.label_encoder.transform([Y])[0])
-            yield output
+            if self.config.use_auxiliary_info:
+                feats = {"tokens": out.token_ids, "mask": out.mask, "context": out.context}
+            else:
+                feats = {"tokens": out.token_ids, "mask": out.mask}
+            if Y is None:
+                yield feats
+            else:
+                yield feats, self.label_encoder.transform([Y])[0]
 
     def _post_data_initialization(self, Y=None, context=None):
         if Y:
@@ -152,22 +175,31 @@ class BasePipeline(metaclass=ABCMeta):
             """
             num_samples = len(context)
             vector_list = []
+            ignore = ['start', 'end', 'label']
+
             if not hasattr(self, 'label_encoders'): # we will fit necessary label encoders here to know dimensionality of input vector before entering featurizer
                 valid_samples = [dict_list for dict_list in context if dict_list != self.config.pad_token] # one list of dicts per sample of text
                 pads_removed = [dictionary for dict_list in valid_samples for dictionary in dict_list if dictionary != self.config.pad_token] # concat each dictionary (per token) into a list of dict
                 keys = pads_removed[0].keys()
                 characteristics = {k:[dictionary[k] for dictionary in pads_removed] for k in keys}
 
-                ignore = ['start', 'end', 'label']
                 self.label_encoders = {k:LabelBinarizer() for k in characteristics.keys() if 
                 all(k != self.config.pad_token and not (type(data) == int or (type(data) == float and not pd.isna(data))) and k not in ignore for data in characteristics[k])} # Excludes features that are continuous, like position and font size, since they do not have categorical binary encodings
 
-                for label, encoder in self.label_encoders.items():
+                for label, encoder in self.label_encoders.items(): # fit encoders
                     without_nans = [x for x in characteristics[label] if not pd.isna(x)]
                     encoder.fit(without_nans)
                 
                 self.context_labels = sorted([label for label in characteristics.keys() if label != 'label']) # sort for consistent ordering between runs
                 continuous_labels = [label for label in self.context_labels if label not in self.label_encoders.keys() and label not in ignore]
+
+                self.label_stats = {}
+                for label in continuous_labels:
+                    stats = {
+                            'mean' : np.mean(characteristics[label]),
+                            'std' : np.std(characteristics[label])
+                    }
+                    self.label_stats[label] = stats
 
                 self.context_dim = len(continuous_labels) # Sum over features to determine dimensionality of each feature vector.
                 for encoder in self.label_encoders.values(): # since categorical labels use LabelBinarizer, they use varying dimensions each for each one-hot-encoding, while numerical features only use 1 dimension, so we sum over all for the total dimension.
@@ -199,7 +231,7 @@ class BasePipeline(metaclass=ABCMeta):
 
                 # Loop through each feature and add each to new index of the feature vector
                 for label in self.context_labels:
-                    if label == self.config.pad_token:
+                    if label == self.config.pad_token or label in ignore:
                         continue
                     data = characteristics[label]
 
@@ -210,8 +242,10 @@ class BasePipeline(metaclass=ABCMeta):
                         data_dim = len(self.label_encoders[label].classes_)
                         if data_dim == 2: # since binary classes default to column vector
                             data_dim=1
-                    else:
+                    else: # need to normalize our float/int inputs
                         data = [x for x in data if not pd.isna(x)]
+                        stats = self.label_stats[label]
+                        data = (data - stats['mean']) / stats['std']
                         data_dim = 1
 
                     #loop through indices and fill with correct data
@@ -222,9 +256,7 @@ class BasePipeline(metaclass=ABCMeta):
                             num_backward += 1 #since we're skipping this sample, the next sample needs to be filled from this sample's index in data. This variable tracks how far back we need to go for following indices
                             continue
                         for label_dimension in range(data_dim):
-                            #print("Label dim:" + str(label_dimension + current_index) + "Sample Index:" + str(sample_idx) + "Current label" + label)
                             vector[sample_idx][current_index + label_dimension] = data[sample_idx - num_backward] if data_dim  == 1 else data[sample_idx - num_backward][label_dimension]
-
                     current_index += 1
                 vector_list.append(vector)
             return vector_list
@@ -496,7 +528,16 @@ class BasePipeline(metaclass=ABCMeta):
                 Xs,
                 Y=Y,
                 max_length=self.config.max_length,
-                pad_token=(pad_token or self.config.pad_token)
+                pad_token=(pad_token or self.config.pad_token),
+                context=context
             )
 
-            yield self._array_format(encoder_out, pad_token=(pad_token or self.config.pad_token))
+            d = dict()
+            for field in EncodedOutput._fields:
+                    field_value = getattr(encoder_out, field)
+                    if field_value is not None:
+                        d[field] = field_value
+            if self.config.use_auxiliary_info:
+                d['context'] = np.squeeze(self._context_to_vector([encoder_out.context])) # forced since encoded is immutable
+
+            yield self._array_format(EncodedOutput(**d), pad_token=(pad_token or self.config.pad_token))
