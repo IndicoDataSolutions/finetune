@@ -16,13 +16,13 @@ class GPCModel(SourceModel):
         "base_model_path": "conv_base_30jun.jl",
         'n_layer': 12,
         'num_layers_trained':12,
-        'n_epochs': 8,
+        'n_epochs': 3,
         'prefit_init': True,
-        'batch_size': 4,
+        'batch_size': 3,
         'feat_mode': 'clf_tok',
-        'l2_reg': 0.0,
+        'l2_reg': 0.1,
         'lr': 0.0001,
-        'lr_warmup': 0.0
+        'lr_warmup': 0.1
     }
 
 
