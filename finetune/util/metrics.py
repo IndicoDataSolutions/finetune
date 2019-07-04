@@ -3,7 +3,7 @@ from collections import defaultdict
 from sklearn.metrics import accuracy_score, recall_score, precision_score
 import numpy as np
 
-from finetune.encoding.input_encoder import NLP
+from finetune.encoding.input_encoder import SPACY_TOKENIZER
 
 
 def _convert_to_token_list(annotations, doc_idx=None):
@@ -19,7 +19,7 @@ def _convert_to_token_list(annotations, doc_idx=None):
                 'label': annotation.get('label'),
                 'doc_idx': doc_idx
             }
-            for token in NLP(annotation.get('text'))
+            for token in SPACY_TOKENIZER(annotation.get('text'))
         ])
 
     return tokens

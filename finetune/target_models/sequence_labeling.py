@@ -10,7 +10,7 @@ from finetune.encoding.target_encoders import SequenceLabelingEncoder, SequenceM
 from finetune.nn.target_blocks import sequence_labeler
 from finetune.nn.crf import sequence_decode
 from finetune.encoding.sequence_encoder import indico_to_finetune_sequence, finetune_to_indico_sequence
-from finetune.encoding.input_encoder import NLP
+from finetune.encoding.input_encoder import SPACY_TOKENIZER
 from finetune.input_pipeline import BasePipeline
 
 
@@ -105,7 +105,7 @@ def _spacy_token_predictions(raw_text, tokens, probas, positions):
     to_combine = []
     spacy_attn = []
 
-    spacy_token_starts, spacy_token_ends = zip(*[(token.idx, token.idx + len(token.text)) for token in NLP(raw_text)])
+    spacy_token_starts, spacy_token_ends = zip(*[(token.idx, token.idx + len(token.text)) for token in SPACY_TOKENIZER(raw_text)])
     spacy_token_idx = 0
     spacy_results = []
 

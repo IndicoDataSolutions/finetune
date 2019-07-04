@@ -16,7 +16,7 @@ import tensorflow as tf
 from ftfy.fixes import uncurl_quotes
 
 import finetune
-from finetune.encoding.input_encoder import NLP, EncodedOutput, BaseEncoder, get_pairs
+from finetune.encoding.input_encoder import SPACY_TOKENIZER, EncodedOutput, BaseEncoder, get_pairs
 
 
 FINETUNE_FOLDER = os.path.dirname(finetune.__file__)
@@ -134,19 +134,20 @@ class GPTEncoder(BaseEncoder):
         batch_label_idxs = []
         batch_character_locs = []
         label = None
-        for i, text in enumerate(texts):
+
+        docs = SPACY_TOKENIZER.pipe(map(_text_standardize, texts))
+        for i, (doc, text) in enumerate(zip(docs, texts)):
             if labels is not None:
                 label = labels[i]
             raw_text = text.lower()
             # Only fine to apply this fix because it preserves character locations
             ftfy_text = uncurl_quotes(raw_text)
-            tokens = NLP(_text_standardize(text))
             subtokens = []
             subtoken_idxs = []
             tok_pos = []
             token_start = 0
 
-            for j, token in enumerate(tokens):
+            for j, token in enumerate(doc):
                 bpe_toks = self.bpe(token.text).split(' ')
 
                 try:

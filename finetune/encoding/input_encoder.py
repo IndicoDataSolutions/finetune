@@ -10,12 +10,13 @@ from collections import namedtuple
 import codecs
 
 import ftfy
-import spacy
+from spacy.lang.en import English
+from spacy.tokenizer import Tokenizer
 import numpy as np
 import tensorflow as tf
 
 
-NLP = spacy.load('en', disable=['parser', 'tagger', 'ner', 'textcat'])
+SPACY_TOKENIZER = Tokenizer(English().vocab)
 
 EncodedOutput = namedtuple("EncodedOutput", [
     "token_ids", # list of list of subtoken ids (ints)

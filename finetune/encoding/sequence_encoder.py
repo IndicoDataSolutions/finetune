@@ -5,7 +5,7 @@ from collections import defaultdict
 import numpy as np
 
 from finetune.util.logging import truncate_text
-from finetune.encoding.input_encoder import NLP
+from finetune.encoding.input_encoder import SPACY_TOKENIZER
 from finetune.errors import FinetuneError
 
 
@@ -82,7 +82,7 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
     annotations = []
     loop_vals = zip(raw_texts, subseqs, labels, probs or [None] * len(raw_texts))
     for doc_idx, (raw_text, doc_seq, label_seq, prob_seq) in enumerate(loop_vals):
-        spacy_tokens = NLP(raw_text)
+        spacy_tokens = SPACY_TOKENIZER(raw_text)
         spacy_token_starts = [token.idx for token in spacy_tokens]
         spacy_token_ends = [token.idx + len(token.text) for token in spacy_tokens]
         doc_annotations = []
@@ -238,7 +238,7 @@ def overlap_handler(current_annotation, annotation, text, multi_label, ):
                     annotation, current_annotation
                 )
             )
-        spacy_tokens = NLP(text)
+        spacy_tokens = SPACY_TOKENIZER(text)
         spacy_token_starts = [token.idx for token in spacy_tokens]
         if second['start'] in spacy_token_starts:
             second_label = second['label']
