@@ -1,8 +1,8 @@
 import tensorflow as tf
-from finetune.base_models.bert.modeling import BertConfig, BertModel
+from finetune.base_models.bert.modeling import BertConfig, BertModel, dropout, layer_norm
 
 
-def bert_featurizer(X, encoder, config, train=False, reuse=None, **kwargs):
+def bert_featurizer(X, encoder, config, train=False, reuse=None, context=None, context_dim=None,**kwargs):
     """
     The transformer element of the finetuning model. Maps from tokens ids to a dense, embedding of the sequence.
 
@@ -62,16 +62,42 @@ def bert_featurizer(X, encoder, config, train=False, reuse=None, **kwargs):
             use_one_hot_embeddings=False,
             scope=None
         )
-        output_state = {
-            'embed_weights': bert.get_embedding_table(),
-            'features': tf.reshape(
+
+        embed_weights = bert.get_embedding_table()
+        features = tf.reshape(
                 bert.get_pooled_output(),
-                shape=tf.concat((initial_shape[: -2], [config.n_embed]), 0)
-            ),
-            'sequence_features': tf.reshape(
+                shape=tf.concat((initial_shape[: -2], [config.n_embed]), 0))
+        sequence_features = tf.reshape(
                 bert.get_sequence_output(),
-                shape=tf.concat((initial_shape[:-1], [config.n_embed]), 0)
-            ),
+                shape=tf.concat((initial_shape[:-1], [config.n_embed]), 0))
+
+        if config.use_auxiliary_info:
+            context_embed_weights = tf.get_variable(
+                name="ce",
+                shape=[context_dim, config.n_embed],
+                initializer=tf.random_normal_initializer(stddev=config.weight_stddev))
+
+            context_weighted_avg = tf.get_variable(
+                name='cwa',
+                shape=[context_dim],
+                initializer=tf.random_normal_initializer(stddev=config.weight_stddev)
+            )
+            
+            if train:
+                context_embed_weights = dropout(context_embed_weights, config.embed_p_drop)
+
+            with tf.variable_scope('context_embedding'):
+                weighted_C = tf.multiply(context, context_weighted_avg) # [batch_size, seq_length, context_dim] * [context_dim] = [batch_size, seq_length, context_dim], with weighted inputs
+                c_embed = tf.tensordot(weighted_C, context_embed_weights, axes = [[2],[0]]) # [batch_size, seq_length, context_dim] * [context_dim, n_embed] = [batch_size, seq_length, n_embed]
+                c_embed = layer_norm(c_embed, tf.get_variable_scope())
+                sequence_features = sequence_features + c_embed
+                features = features + tf.reduce_sum(c_embed, axis=1)
+
+
+        output_state = {
+            'embed_weights': embed_weights,
+            'features': features,
+            'sequence_features': sequence_features,
             'pool_idx': lengths
         }
         if config.num_layers_trained == 0:

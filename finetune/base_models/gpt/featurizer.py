@@ -182,7 +182,7 @@ def add_explain_tokens(X, max_length, pool_idx):
     return tf.concat((X, clf_tok_x_seq_w_pos), 1)
 
 
-def gpt_featurizer(X, encoder, config, train=False, reuse=None, explain=False, **kwargs):
+def gpt_featurizer(X, encoder, config, train=False, reuse=None, explain=False, context=None, context_dim=None, **kwargs):
     """
     The transformer element of the finetuning model. Maps from tokens ids to a dense, embedding of the sequence.
 
@@ -205,8 +205,24 @@ def gpt_featurizer(X, encoder, config, train=False, reuse=None, explain=False, *
             shape=[encoder.vocab_size + config.max_length, config.n_embed],
             initializer=tf.random_normal_initializer(stddev=config.weight_stddev)
         )
+        with tf.variable_scope('context_embedding'):
+            if config.use_auxiliary_info:
+                context_embed_weights = tf.get_variable(
+                    name="ce",
+                    shape=[context_dim, config.n_c_embed],
+                    initializer=tf.random_normal_initializer(stddev=config.weight_stddev))
+
+                context_weighted_avg = tf.get_variable(
+                    name='cwa',
+                    shape=[context_dim],
+                    initializer=tf.random_normal_initializer(stddev=config.weight_stddev/10)
+                )
+
         if config.train_embeddings:
             embed_weights = dropout(embed_weights, config.embed_p_drop, train)
+            if config.use_auxiliary_info:
+                context_embed_weights = dropout(context_embed_weights, config.embed_p_drop, train)
+                context_weighted_avg = dropout(context_weighted_avg, config.embed_p_drop, train)
         else:
             embed_weights = tf.stop_gradient(embed_weights)
 
@@ -256,6 +272,25 @@ def gpt_featurizer(X, encoder, config, train=False, reuse=None, explain=False, *
         clf_h = tf.gather(clf_h, tf.range(shape_list(X)[0], dtype=tf.int32) * config.max_length + pool_idx)
         clf_h = tf.reshape(clf_h, shape=tf.concat((initial_shape[: -2], [config.n_embed]), 0))
         seq_feats = tf.reshape(h, shape=tf.concat((initial_shape[:-1], [config.n_embed]), 0))
+
+        if config.use_auxiliary_info:
+            with tf.variable_scope('context_embedding'):
+                context_weighted_avg = tf.Print(context_weighted_avg, [context_weighted_avg], 'context_weighted_avg')
+                weighted_C = tf.multiply(context, context_weighted_avg) # [batch_size, seq_length, context_dim] * [context_dim] = [batch_size, seq_length, context_dim], with weighted inputs
+                c_embed = tf.tensordot(weighted_C, context_embed_weights, axes = [[2],[0]]) # [batch_size, seq_length, context_dim] * [context_dim, n_embed] = [batch_size, seq_length, n_embed]
+                print(context)
+                #orig_std = tf.reduce_std(clf_h)
+                
+                c_embed = norm(c_embed, tf.get_variable_scope())
+
+                #c_embed = tf.
+
+                #seq_feats = tf.Print(seq_feats, [seq_feats], 'seq_feats')
+                #c_embed = tf.Print(c_embed, [c_embed], 'c_embed')
+
+                seq_feats = tf.concat([seq_feats, c_embed], axis=2)
+                c_embed = tf.reduce_sum(c_embed, axis=1)
+                clf_h = tf.concat([clf_h, c_embed], axis=1)
 
         out = {
             'embed_weights': embed_weights,

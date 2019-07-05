@@ -141,7 +141,7 @@ def embed(X, we):
     return h
 
 
-def gpt2_featurizer(X, encoder, config, train=False, reuse=None, **kwargs):
+def gpt2_featurizer(X, encoder, config, train=False, reuse=None, context=None, context_dim=None, **kwargs):
     initial_shape = tf.shape(X)
     X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-2:]), 0))
     X.set_shape([None, None, None])
@@ -184,6 +184,27 @@ def gpt2_featurizer(X, encoder, config, train=False, reuse=None, **kwargs):
         clf_h = tf.gather(clf_h, tf.range(shape_list(X)[0], dtype=tf.int32) * config.max_length + pool_idx)
         clf_h = tf.reshape(clf_h, shape=tf.concat((initial_shape[: -2], [config.n_embed]), 0))
         seq_feats = tf.reshape(h, shape=tf.concat((initial_shape[: -1], [config.n_embed]), 0))
+
+        if config.use_auxiliary_info:
+            context_embed_weights = tf.get_variable(
+                name="ce",
+                shape=[context_dim, config.n_embed],
+                initializer=tf.random_normal_initializer(stddev=config.weight_stddev))
+
+            context_weighted_avg = tf.get_variable(
+                name='cwa',
+                shape=[context_dim],
+                initializer=tf.random_normal_initializer(stddev=config.weight_stddev)
+            )
+
+            context_embed_weights = dropout(context_embed_weights, config.embed_p_drop, train)
+
+            with tf.variable_scope('context_embedding'):
+                weighted_C = tf.multiply(context, context_weighted_avg) # [batch_size, seq_length, context_dim] * [context_dim] = [batch_size, seq_length, context_dim], with weighted inputs
+                c_embed = tf.tensordot(weighted_C, context_embed_weights, axes = [[2],[0]]) # [batch_size, seq_length, context_dim] * [context_dim, n_embed] = [batch_size, seq_length, n_embed]
+                c_embed = norm(c_embed, tf.get_variable_scope())
+                seq_feats = seq_feats + c_embed
+                clf_h = clf_h + tf.reduce_sum(c_embed, axis=1)
 
         return {
             'embed_weights': embed_weights,

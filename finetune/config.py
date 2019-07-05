@@ -226,7 +226,7 @@ def get_default_config():
     """
     settings = Settings(
         # General Settings
-        low_memory_mode=True,
+        low_memory_mode=False,
         interpolate_pos_embed=False,
         save_adam_vars=True,
         shuffle_buffer_size=100,
@@ -313,7 +313,7 @@ def get_default_config():
         assocation_loss_weight=100.0,
 
         # Location of model weights
-        base_model=TextCNN,
+        base_model=GPTModel,
         base_model_path=None,
 
         # Possible `SourceModel` specific settings
@@ -330,7 +330,7 @@ def get_default_config():
         # BERT only
         bert_intermediate_size=None,
 
-        use_auxiliary_info = True
+        use_auxiliary_info = False
     )
     return settings
 

@@ -3,6 +3,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.contrib.crf import crf_log_likelihood
 
+from finetune.base_models import TextCNN
 from finetune.base_models.gpt.featurizer import attn, dropout, norm
 from finetune.util.shapes import shape_list, merge_leading_dims
 from finetune.optimizers.recompute_grads import recompute_grad
@@ -295,6 +296,8 @@ def sequence_labeler(hidden, targets, n_targets, config, pad_id, multilabel=Fals
     """
     with tf.variable_scope('sequence-labeler', reuse=reuse):
         nx = config.n_embed
+        if config.use_auxiliary_info and config.base_model != TextCNN:
+            nx += config.n_c_embed
 
         def seq_lab_internal(hidden):
             if config.base_model.is_bidirectional:

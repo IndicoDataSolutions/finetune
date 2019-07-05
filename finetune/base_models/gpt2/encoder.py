@@ -1,5 +1,6 @@
 import os
 import json
+import itertools
 import regex as re
 from functools import lru_cache
 
@@ -127,6 +128,7 @@ class GPT2Encoder(BaseEncoder):
         """
         self._lazy_init()
 
+        total_chars = 0
         batch_tokens = []
         batch_token_idxs = []
         batch_label_idxs = []
@@ -135,7 +137,7 @@ class GPT2Encoder(BaseEncoder):
         batch_context = []
         label = None
         context_ = None
-
+        
         for i, text in enumerate(texts):
             if labels is not None:
                 label = labels[i]
@@ -153,7 +155,6 @@ class GPT2Encoder(BaseEncoder):
             token_start = 0
 
             tokens = re.findall(self.pat, text)
-
             for j, token in enumerate(tokens):
                 encoded_token = ''.join(self.byte_encoder[b] for b in token.encode('utf-8'))
                 bpe_toks = self.bpe(encoded_token).split(' ')
@@ -181,21 +182,61 @@ class GPT2Encoder(BaseEncoder):
                 batch_label_idxs.append([label] * len(subtoken_idxs))
         
             # Context is tokenwise, so we need to duplicate contexts for each subtoken of a token, and to match length of labels
+            print('')
+            print('text')
+            print(text)
+            print('char locs')
+            print(batch_character_locs[i])
+            #print("context")
+            #print(context_)
+            print('tokens')
+            print(batch_tokens[i])
+            
             if context_ is not None:
-                token_starts = [context['start'] for context in context_]
+                '''
+                context_start_idx = max(token_count - len(tokens) - 1, 0) 
+                context_end_idx = token_count
+                print(context_start_idx)
+                print(context_end_idx)
+                context_ = context[context_start_idx:context_end_idx]
+                '''
+                context_ = [context for context in context_ if context['start'] >= total_chars] # remove first n contexts of the list so that the first context corresponds to first token in text
+                context_ = sorted(context_, key=lambda k: k['start']) 
+                print(context_)
+
+                token_begin = context_[0]['start'] # since context starts reflect the whole document, but we are only looking at a subset (looping through every text in texts)
+                token_starts = [context['start'] - token_begin for context in context_]
+
+                print('starts')
+                try:
+                    print(token_starts)
+                except:
+                    print("none")
+                print('')
+
                 original_tokens = []
-                for char_loc in batch_character_locs[i]:
+                for char_loc, token in zip(batch_character_locs[i], batch_tokens[i]): 
+                    end = char_loc - 1 # last char that lies within the subtoken
+                    print('end in loop')
+                    print(end)
                     original_token=-1
                     for i in range(len(token_starts)):
-                        if char_loc >= token_starts[i]:
+                        if end >= token_starts[i]: # subtract one since subtokens include spaces at the beginning, while the 'start's from context do not
                             original_token += 1
                     original_tokens.append(original_token)
                 expanded_context = [None]*len(original_tokens)
+                print('orig tokens')
+                print(original_tokens)
                 for j in range(len(expanded_context)):
                     expanded_context[j] =  context_[original_tokens[j]]
+                print('expanded context')
+                print(expanded_context)
                 batch_context.append(expanded_context)
                 assert len(expanded_context) == len(subtoken_idxs) and len(expanded_context) == len(tok_pos)
 
+                total_chars += len(text)
+        if context_ is not None:
+            1/0
         return EncodedOutput(
             token_ids=batch_token_idxs,
             tokens=batch_tokens,

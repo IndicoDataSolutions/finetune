@@ -41,7 +41,7 @@ class BERTEncoder(BaseEncoder):
     def _token_length(self, token):
         return len(token.strip().replace('##', ''))
 
-    def _encode(self, texts, labels=None):
+    def _encode(self, texts, labels=None, context=None):
         """
         Convert a batch of raw text to a batch of byte-pair encoded token indices.
         """
@@ -49,12 +49,23 @@ class BERTEncoder(BaseEncoder):
         batch_tokens = []
         batch_token_idxs = []
         batch_label_idxs = []
+        batch_context_idxs = []
         batch_character_locs = []
+        batch_context = []
         label = None
+        context_ = None
 
         for i, text in enumerate(texts):
             if labels is not None:
                 label = labels[i]
+            if context is not None: # each field in texts needs a list of dicts for its context
+                if type(context) == dict: # here we have one token of context for the text
+                    context_ = [context]
+                elif type(context[0]) == dict: # this is multiple tokens of context for one example
+                    context_ = context
+                else: # this is multiple examples, so a list of list of dicts
+                    context_ = context[i]
+
 
             subtokens, token_idxs = self.tokenizer.tokenize(text)
             subtoken_locs = [l[1] for l in token_idxs]
@@ -65,10 +76,27 @@ class BERTEncoder(BaseEncoder):
             if labels is not None:
                 batch_label_idxs.append([label] * len(subtokens))
 
+            # Context is tokenwise, so we need to duplicate contexts for each subtoken of a token, and to match length of labels
+            if context_ is not None:
+                token_starts = [context['start'] for context in context_]
+                original_tokens = []
+                for char_loc in batch_character_locs[i]:
+                    original_token=-1
+                    for i in range(len(token_starts)):
+                        if char_loc >= token_starts[i]:
+                            original_token += 1
+                    original_tokens.append(original_token)
+                expanded_context = [None]*len(original_tokens)
+                for j in range(len(expanded_context)):
+                    expanded_context[j] =  context_[original_tokens[j]]
+                batch_context.append(expanded_context)
+                assert len(expanded_context) == len(subtoken_locs)
+
         return EncodedOutput(
             token_ids=batch_token_idxs,
             tokens=batch_tokens,
             labels=batch_label_idxs,
+            context=batch_context,
             char_locs=batch_character_locs,
         )
 

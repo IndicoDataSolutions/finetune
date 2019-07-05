@@ -21,7 +21,7 @@ class TextCNNModel(SourceModel):
         'num_filters_per_size': 2,
         'n_embed': len(kernel_sizes) * 2,
         'act_fn': "gelu",
-        'train_embeddings': False,
+        'train_embeddings': True,
         'lr': .01,
         'seq_num_heads': len(kernel_sizes) * 2,
         'base_model_path': os.path.join("gpt2", "model-sm.jl"),

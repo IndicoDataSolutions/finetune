@@ -71,7 +71,7 @@ class SequencePipeline(BasePipeline):
                     {
                         "tokens": tf.int32,
                         "mask": tf.float32,
-                        "context": tf.float32
+                        "context": tf.float32,
                     },
                     tf.int32
                 ),
@@ -79,7 +79,7 @@ class SequencePipeline(BasePipeline):
                     {
                         "tokens": TS([self.config.max_length, 2]),
                         "mask": TS([self.config.max_length]),
-                        "context": TS([self.config.max_length, self.context_dim])
+                        "context": TS([self.config.max_length, self.context_dim]),
                     },
                     TS(target_shape)
                 )

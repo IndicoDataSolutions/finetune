@@ -32,6 +32,7 @@ ArrayEncodedOutput = namedtuple("ArrayEncodedOutput", [
     "char_locs", # list of list of char_locs (int) passed through from `EncoderOutput`
     "mask",      # int array shape (batch, seq_length)
     "context",   # list of list of context token characteristics
+    "context_dim", # int specifying the dimensionality of each context vector
 ])
 ArrayEncodedOutput.__new__.__defaults__ = (None,) * len(ArrayEncodedOutput._fields)
 
@@ -168,10 +169,6 @@ class BaseEncoder(object):
         labels = []
         contexts = []
 
-        
-        #if context is not None:
-        #    context = [context]
-        
         # for each field in that example
         for i, field in enumerate(Xs):
             assert isinstance(field, (list, tuple)), "This should be a list of strings, instead it's {}".format(
@@ -203,7 +200,6 @@ class BaseEncoder(object):
             max_length=max_length,
             special_tokens=-1
         )
-
 
         if context is None:
             contexts = None
