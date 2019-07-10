@@ -106,23 +106,17 @@ class Classifier(BaseModel):
 
             if end_of_doc:
                 # last chunk in a document
-                print('')
-                print(doc_probs)
                 mean_pool = np.mean(doc_probs, axis=0)
-                print(mean_pool)
                 pred = np.argmax(mean_pool)
                 one_hot = np.zeros_like(mean_pool)
                 one_hot[pred] = 1
                 label = self.input_pipeline.label_encoder.inverse_transform([one_hot])
-                print(label)
-                print('')
                 all_labels.append(label)
                 all_probs.append(mean_pool)
 
         if probas:
             return all_probs
         else:
-            print(all_probs)
             return all_labels
 
     def predict_proba(self, X):
