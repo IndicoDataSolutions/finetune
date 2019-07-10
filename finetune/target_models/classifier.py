@@ -67,8 +67,7 @@ class Classifier(BaseModel):
         arr_encoded = list(itertools.chain.from_iterable(self.input_pipeline._text_to_ids(x) for x in X))
         labels, batch_probas = [], []
         for pred in self._inference(X, predict_keys=[PredictMode.PROBAS, PredictMode.NORMAL], n_examples=len(arr_encoded)):
-            label = self.input_pipeline.label_encoder.inverse_transform([pred[PredictMode.NORMAL]])
-            label = label.pop()
+            label = self.input_pipeline.label_encoder.inverse_transform([pred[PredictMode.NORMAL]]).pop()
             labels.append(label)
             batch_probas.append(pred[PredictMode.PROBAS])
 
@@ -126,7 +125,6 @@ class Classifier(BaseModel):
         :param X: list or array of text to embed.
         :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
         """
-        #return super().predict_proba(X)
         return self.predict(X, proba=True)
 
     def finetune(self, X, Y=None, batch_size=None):
