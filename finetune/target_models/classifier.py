@@ -1,3 +1,5 @@
+import itertools
+import copy
 import tensorflow as tf
 import numpy as np
 from imblearn.over_sampling import RandomOverSampler
@@ -31,6 +33,16 @@ class Classifier(BaseModel):
     :param \**kwargs: key-value pairs of config items to override.
     """
 
+    defaults = {
+        "low_memory_mode": True,
+        "chunk_long_sequences": True
+    }
+
+    def __init__(self, **kwargs):
+        d = copy.deepcopy(Classifier.defaults)
+        d.update(kwargs)
+        super().__init__(**d)
+
     def _get_input_pipeline(self):
         return ClassificationPipeline(self.config)
 
@@ -43,14 +55,75 @@ class Classifier(BaseModel):
         """
         return super().featurize(X)
 
-    def predict(self, X):
+    def predict(self, X, probas=False):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
         :param X: list or array of text to embed.
         :returns: list of class labels.
         """
-        return super().predict(X)
+        chunk_size = self.config.max_length - 2
+        step_size = chunk_size // 3
+        arr_encoded = list(itertools.chain.from_iterable(self.input_pipeline._text_to_ids(x) for x in X))
+        labels, batch_probas = [], []
+        for pred in self._inference(X, predict_keys=[PredictMode.PROBAS, PredictMode.NORMAL], n_examples=len(arr_encoded)):
+            label = self.input_pipeline.label_encoder.inverse_transform([pred[PredictMode.NORMAL]])
+            label = label.pop()
+            labels.append(label)
+            batch_probas.append(pred[PredictMode.PROBAS])
+
+        all_subseqs = []
+        all_labels = []
+        all_probs = []
+        all_positions = []
+
+        doc_idx = -1
+        for chunk_idx, (label, proba) in enumerate(zip(labels, batch_probas)):
+            position_seq = arr_encoded[chunk_idx].char_locs
+            start_of_doc = arr_encoded[chunk_idx].token_ids[0][0] == self.input_pipeline.text_encoder.start
+            end_of_doc = (
+                    chunk_idx + 1 >= len(arr_encoded) or
+                    arr_encoded[chunk_idx + 1].token_ids[0][0] == self.input_pipeline.text_encoder.start
+            )
+            """
+            Chunk idx for prediction.  Dividers at `step_size` increments.
+            [  1  |  1  |  2  |  3  |  3  ]
+            """
+            start, end = 0, None
+            if start_of_doc:
+                # if this is the first chunk in a document, start accumulating from scratch
+                doc_subseqs = []
+                doc_labels = []
+                doc_probs = []
+                doc_positions = []
+                doc_starts = []
+
+                doc_idx += 1
+                start_of_token = 0
+
+            doc_labels.append(label)
+            doc_probs.append(proba)
+
+            if end_of_doc:
+                # last chunk in a document
+                print('')
+                print(doc_probs)
+                mean_pool = np.mean(doc_probs, axis=0)
+                print(mean_pool)
+                pred = np.argmax(mean_pool)
+                one_hot = np.zeros_like(mean_pool)
+                one_hot[pred] = 1
+                label = self.input_pipeline.label_encoder.inverse_transform([one_hot])
+                print(label)
+                print('')
+                all_labels.append(label)
+                all_probs.append(mean_pool)
+
+        if probas:
+            return all_probs
+        else:
+            print(all_probs)
+            return all_labels
 
     def predict_proba(self, X):
         """
@@ -59,7 +132,8 @@ class Classifier(BaseModel):
         :param X: list or array of text to embed.
         :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
         """
-        return super().predict_proba(X)
+        #return super().predict_proba(X)
+        return self.predict(X, proba=True)
 
     def finetune(self, X, Y=None, batch_size=None):
         """
