@@ -185,6 +185,20 @@ class BaseEncoder(object):
                     "Some examples are longer than the max_length. Please trim documents or increase `max_length`. "
                     "Fallback behaviour is to use the first {} byte-pair encoded tokens".format(max_length - 2)
                 )
+        '''
+        if context:
+            Xs_context = context[0]
+            context = context[1]
+            print(Xs)
+            print(Xs_context)
+            print(context)
+            for i, field in enumerate(Xs_context): 
+                encoded = self._encode([field], labels=[context[i]]) # context schema mimics label spans so we can use _encode to format them as well
+                contexts.append(_flatten(encoded.labels))
+
+                print("processed context")
+                print(encoded)
+        '''
 
         # merge fields + truncate if necessary
         token_ids = self._cut_and_concat(
@@ -218,7 +232,10 @@ class BaseEncoder(object):
                 max_length=max_length,
                 special_tokens=pad_token
             )
-
+        #print("RESULTS")
+        #print(tokens)
+        #print(labels)
+        #print(contexts)
         return EncodedOutput(
             token_ids=token_ids,
             tokens=tokens,

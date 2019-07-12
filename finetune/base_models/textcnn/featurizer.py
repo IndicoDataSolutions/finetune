@@ -29,7 +29,7 @@ def textcnn_featurizer(X, encoder, config, train=False, reuse=None, context=None
         if config.use_auxiliary_info:
             context_embed_weights = tf.get_variable(
                 name="ce",
-                shape=[context_dim, config.n_embed_featurizer],
+                shape=[context_dim, config.n_c_embed],
                 initializer=tf.random_normal_initializer(stddev=config.weight_stddev))
 
             context_weighted_avg = tf.get_variable(
@@ -52,24 +52,6 @@ def textcnn_featurizer(X, encoder, config, train=False, reuse=None, context=None
 
         # we remove positional embeddings from the model
         h = embed(X[:, :, :1], embed_weights)
-
-        if config.use_auxiliary_info: # add the auxiliary info context embeddings
-            with tf.variable_scope('context_embedding'):
-                #context = tf.Print(context, [context], 'context', summarize = 100)
-                #print('')
-                weighted_C = tf.multiply(context, context_weighted_avg) # [batch_size, seq_length, context_dim] * [context_dim] = [batch_size, seq_length, context_dim], with weighted inputs
-                c_embed = tf.tensordot(weighted_C, context_embed_weights, axes = [[2],[0]]) # [batch_size, seq_length, context_dim] * [context_dim, n_embed] = [batch_size, seq_length, n_embed]
-                c_embed = tf.tensordot(context, context_embed_weights, axes = [[2],[0]]) # [batch_size, seq_length, context_dim] * [context_dim, n_embed] = [batch_size, seq_length, n_embed]
-                #c_embed = tf.Print(c_embed, [c_embed], 'c_embed', summarize = 10000)
-                c_embed = norm(c_embed, tf.get_variable_scope())
-                
-                print_op = tf.print(tf.norm(c_embed), 'c_embed mag')
-                other_print_op = tf.print(tf.norm(h), 'h mag')
-                with tf.control_dependencies([print_op, other_print_op]):
-                    c_embed = tf.identity(c_embed)
-                
-                #c_embed = tf.Print(c_embed, [c_embed], 'c_embed')
-                h = h + c_embed
 
         # keep track of the classify token
         clf_token = encoder['_classify_']
@@ -103,6 +85,48 @@ def textcnn_featurizer(X, encoder, config, train=False, reuse=None, context=None
 
         # note that, due to convolution and pooling, the dimensionality of the features is much smaller than in the
         # transformer base models
+
+        '''
+        if config.use_auxiliary_info: # add the auxiliary info context embeddings
+            with tf.variable_scope('context_embedding'):
+                #context = tf.Print(context, [context], 'context', summarize = 100)
+                #print('')
+                weighted_C = tf.multiply(context, context_weighted_avg) # [batch_size, seq_length, context_dim] * [context_dim] = [batch_size, seq_length, context_dim], with weighted inputs
+                c_embed = tf.tensordot(weighted_C, context_embed_weights, axes = [[2],[0]]) # [batch_size, seq_length, context_dim] * [context_dim, n_embed] = [batch_size, seq_length, n_embed]
+                #c_embed = tf.tensordot(context, context_embed_weights, axes = [[2],[0]]) # [batch_size, seq_length, context_dim] * [context_dim, n_embed] = [batch_size, seq_length, n_embed]
+                #c_embed = tf.Print(c_embed, [c_embed], 'c_embed', summarize = 10000)
+                #c_embed = norm(c_embed, tf.get_variable_scope())
+                
+                print_op = tf.print(tf.norm(c_embed), 'c_embed mag')
+                other_print_op = tf.print(tf.norm(h), 'h mag')
+                with tf.control_dependencies([print_op, other_print_op]):
+                    c_embed = tf.identity(c_embed)
+                
+                #c_embed = tf.Print(c_embed, [c_embed], 'c_embed')
+                h = h + c_embed
+        '''
+        if config.use_auxiliary_info:
+            with tf.variable_scope('context_embedding'):
+                context_weighted_avg = tf.Print(context_weighted_avg, [context_weighted_avg], 'context_weighted_avg')
+                weighted_C = tf.multiply(context, context_weighted_avg) # [batch_size, seq_length, context_dim] * [context_dim] = [batch_size, seq_length, context_dim], with weighted inputs
+                c_embed = tf.tensordot(weighted_C, context_embed_weights, axes = [[2],[0]]) # [batch_size, seq_length, context_dim] * [context_dim, n_embed] = [batch_size, seq_length, n_embed]
+                
+                #orig_std = tf.reduce_std(clf_h)
+                
+                c_embed = norm(c_embed, tf.get_variable_scope())
+                #print(c_embed)
+                #c_embed = tf.
+
+                #seq_feats = tf.Print(seq_feats, [seq_feats], 'seq_feats')
+                #c_embed = tf.Print(c_embed, [c_embed], 'c_embed')
+                #print(seq_feats)
+                seq_feats = tf.concat([seq_feats, c_embed], axis=2)
+                #print(seq_feats)
+                #print(config.n_embed)
+                c_embed = tf.reduce_sum(c_embed, axis=1)
+                clf_h = tf.concat([clf_h, c_embed], axis=1)
+
+
         return {
             'embed_weights': embed_weights,
             'features': clf_h,  # [batch_size, n_embed] for classify, [batch_size, 1, n_embed] for comparison, etc.

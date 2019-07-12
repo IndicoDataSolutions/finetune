@@ -215,7 +215,7 @@ def gpt_featurizer(X, encoder, config, train=False, reuse=None, explain=False, c
                 context_weighted_avg = tf.get_variable(
                     name='cwa',
                     shape=[context_dim],
-                    initializer=tf.random_normal_initializer(stddev=config.weight_stddev/10)
+                    initializer=tf.random_normal_initializer(stddev=config.weight_stddev)
                 )
 
         if config.train_embeddings:

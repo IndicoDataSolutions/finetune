@@ -134,27 +134,25 @@ class GPT2Encoder(BaseEncoder):
         batch_label_idxs = []
         batch_context_idxs = []
         batch_character_locs = []
+        batch_original_character_locs = [] # to account for the fact that some BPEs have different lengths than their original tokens (e.g. special characters such as bullets)
         batch_context = []
         label = None
         context_ = None
-        
+        offset = 0 # tracks offset between this fields' character_locs, which start at 0, and the 'start' keys in context which track the entire document (not just this field)
+
         for i, text in enumerate(texts):
             if labels is not None:
                 label = labels[i]
-            if context is not None: # each field in texts needs a list of dicts for its context
-                if type(context) == dict: # seeing if we have a list of context tokens, or a list of lists of context tokens
-                    context_ = [context]
-                elif type(context[0]) == dict: # this is one example, so a list of dicts
-                    context_ = context
-                else: # this is multiple examples, so a list of list of dicts
-                    context_ = context[i]
+            if context is not None:
+                context_ = context[i]
 
             subtokens = []
             subtoken_idxs = []
             tok_pos = []
+            original_tok_pos = []
             token_start = 0
 
-            tokens = re.findall(self.pat, text)
+            tokens = re.findall(self.pat, text)            
             for j, token in enumerate(tokens):
                 encoded_token = ''.join(self.byte_encoder[b] for b in token.encode('utf-8'))
                 bpe_toks = self.bpe(encoded_token).split(' ')
@@ -172,71 +170,44 @@ class GPT2Encoder(BaseEncoder):
                     for t in bpe_toks
                 ])
                 subtoken_positions = np.cumsum([len(tok) for tok in bpe_toks]) + token_start
+                if np.sum([len(tok) for tok in bpe_toks]) > len(token):
+                    special_character=True
+                    #print(token)
+                    #print(bpe_toks)
+                    #print(bpe_toks)
+                    #print(token)
+                    original_subtoken_positions = np.asarray([len(token.strip()) for tok in bpe_toks]) + token_start
+                else:
+                    special_character=False
+                    original_subtoken_positions = np.cumsum([len(tok) for tok in bpe_toks]) + token_start
+
                 token_start += len(token.strip())
                 tok_pos.extend(subtoken_positions)
+                original_tok_pos.extend(original_subtoken_positions)
 
             batch_tokens.append(subtokens)
             batch_token_idxs.append(subtoken_idxs)
             batch_character_locs.append(tok_pos)
+            batch_original_character_locs.append(original_tok_pos)
             if labels is not None:
                 batch_label_idxs.append([label] * len(subtoken_idxs))
-        
-            # Context is tokenwise, so we need to duplicate contexts for each subtoken of a token, and to match length of labels
-            print('')
-            print('text')
-            print(text)
-            print('char locs')
-            print(batch_character_locs[i])
-            #print("context")
-            #print(context_)
-            print('tokens')
-            print(batch_tokens[i])
             
+            # Context is tokenwise, so we need to duplicate contexts for each subtoken of a token, and to match length of labels
             if context_ is not None:
-                '''
-                context_start_idx = max(token_count - len(tokens) - 1, 0) 
-                context_end_idx = token_count
-                print(context_start_idx)
-                print(context_end_idx)
-                context_ = context[context_start_idx:context_end_idx]
-                '''
-                context_ = [context for context in context_ if context['start'] >= total_chars] # remove first n contexts of the list so that the first context corresponds to first token in text
-                context_ = sorted(context_, key=lambda k: k['start']) 
-                print(context_)
-
-                token_begin = context_[0]['start'] # since context starts reflect the whole document, but we are only looking at a subset (looping through every text in texts)
-                token_starts = [context['start'] - token_begin for context in context_]
-
-                print('starts')
-                try:
-                    print(token_starts)
-                except:
-                    print("none")
-                print('')
-
                 original_tokens = []
-                for char_loc, token in zip(batch_character_locs[i], batch_tokens[i]): 
-                    end = char_loc - 1 # last char that lies within the subtoken
-                    print('end in loop')
-                    print(end)
-                    original_token=-1
-                    for i in range(len(token_starts)):
-                        if end >= token_starts[i]: # subtract one since subtokens include spaces at the beginning, while the 'start's from context do not
+                for char_loc, token in zip(batch_original_character_locs[i], batch_tokens[i]): 
+                    original_token=0
+                    for subtoken_idx in range(len(context_)):
+                        if char_loc + offset > context_[subtoken_idx]['end']: # subtract one since subtokens include spaces at the beginning, while the 'start's from context do not
                             original_token += 1
                     original_tokens.append(original_token)
                 expanded_context = [None]*len(original_tokens)
-                print('orig tokens')
-                print(original_tokens)
                 for j in range(len(expanded_context)):
                     expanded_context[j] =  context_[original_tokens[j]]
-                print('expanded context')
-                print(expanded_context)
                 batch_context.append(expanded_context)
                 assert len(expanded_context) == len(subtoken_idxs) and len(expanded_context) == len(tok_pos)
+                offset += batch_original_character_locs[i][-1]
 
-                total_chars += len(text)
-        if context_ is not None:
-            1/0
         return EncodedOutput(
             token_ids=batch_token_idxs,
             tokens=batch_tokens,

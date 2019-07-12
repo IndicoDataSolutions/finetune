@@ -30,7 +30,7 @@ class SequencePipeline(BasePipeline):
         super()._post_data_initialization(Y_, context)
 
     def text_to_tokens_mask(self, X, Y=None, context=None):
-        
+        pad_token = [self.config.pad_token] if self.multi_label else self.config.pad_token
         if context is None and self.config.use_auxiliary_info:
             context = X[1]
             X = X[0]
@@ -197,18 +197,40 @@ class SequenceLabeler(BaseModel):
         if self.config.use_auxiliary_info:
             context = Xs[1]
             Xs = Xs[0]
-        Xs, Y_new, _, _, _ = indico_to_finetune_sequence(
+        Xs_new, Y_new, _, _, _ = indico_to_finetune_sequence(
             Xs,
             encoder=self.input_pipeline.text_encoder,
             labels=Y,
             multi_label=self.multi_label,
             none_value=self.config.pad_token,
         )
+
         Y = Y_new if Y is not None else None
 
         if self.config.use_auxiliary_info:
-            Xs = [Xs, context]
+            context_new = self.process_context(context, Xs, Xs_new)
+            Xs = [Xs_new, context_new]
+        else:
+            Xs = Xs_new
+
         return super().finetune(Xs, Y=Y, batch_size=batch_size)
+
+    def process_context(self, context, Xs, Xs_new=None):
+        if Xs_new is None:
+            Xs_new = Xs
+        context_new = []
+        for i in range(len(Xs)):
+            fields = Xs_new[i]
+            example_context = context[i]
+            fields_context = []
+            start = end = 0
+            for field in fields:
+                end += len(field)
+                field_context = sorted([c for c in example_context if c['start'] < end and c['end'] > start], key = lambda c: c['start'])
+                start += len(field)
+                fields_context.append(field_context)
+            context_new.append(fields_context)
+        return context_new
 
     def predict(self, X, per_token=False):
         """
@@ -224,20 +246,21 @@ class SequenceLabeler(BaseModel):
         step_size = chunk_size // 3
 
         if self.config.use_auxiliary_info:
-            context = X[1]
+            context = [[c] for c in X[1]]
             text = X[0]
-            arr_encoded = list(itertools.chain.from_iterable(self.input_pipeline._text_to_ids([x], context=[c]) for x,c in zip(text,context)))
+            arr_encoded = list(itertools.chain.from_iterable(self.input_pipeline._text_to_ids([x], context=c) for x,c in zip(text,context)))
         else:
             text = X
             arr_encoded = list(itertools.chain.from_iterable(self.input_pipeline._text_to_ids([x]) for x in X))
        
+        if self.config.use_auxiliary_info:
+            X = [text, context]
         labels, batch_probas = [], []
         for pred in self._inference(X, predict_keys=[PredictMode.PROBAS, PredictMode.NORMAL], n_examples=len(arr_encoded)):
             labels.append(self.input_pipeline.label_encoder.inverse_transform(pred[PredictMode.NORMAL]))
             batch_probas.append(pred[PredictMode.PROBAS])
 
         X = text # remove context information
-
 
         all_subseqs = []
         all_labels = []

@@ -330,7 +330,8 @@ def get_default_config():
         # BERT only
         bert_intermediate_size=None,
 
-        use_auxiliary_info = False
+        use_auxiliary_info = False,
+        n_c_embed = 32
     )
     return settings
 

@@ -117,7 +117,7 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
                     # handle case where we extend existing annotation
                     if (
                         # same label
-                        item["label"] == label 
+                        item['label'] == label 
                         # and only separated by whitespace
                         and item['end'] <= raw_annotation_end
                         and not raw_text[item["end"]:raw_annotation_start].strip()
@@ -137,7 +137,7 @@ def finetune_to_indico_sequence(raw_texts, subseqs, labels, probs=None, none_val
                 annotation = {
                     "start": int(annotation_start),
                     "end": int(annotation_end),
-                    "label": label,
+                    'label': label,
                     "text": raw_text[annotation_start:annotation_end],
                 }
 
@@ -201,7 +201,7 @@ def overlap(current_annotation, annotation):
     )
 
 
-def overlap_handler(current_annotation, annotation, text, multi_label, ):
+def overlap_handler(current_annotation, annotation, text, multi_label, keyword='label'):
     """
     Scenarios:
         <> --> current_annotation
@@ -217,21 +217,21 @@ def overlap_handler(current_annotation, annotation, text, multi_label, ):
         first, second = annotation, current_annotation
     
     final_delimiter = min(first['end'], second['end'])
-    final_label = second['label'] if (second['end'] > first['end']) else first['label']
+    final_label = second[keyword] if (second['end'] > first['end']) else first[keyword]
     overlapping_text = text[second['start']:final_delimiter]
     end = max(first['end'], second['end'])
 
     first_chunk = {
         'start': first['start'],
         'end': second['start'],
-        'label': first['label'],
+        keyword: first[keyword],
         'text': text[first['start']:second['start']]
     }
 
     if multi_label:
-        second_label = first['label'] | second['label']
+        second_label = first[keyword] | second[keyword]
     else:
-        if first['label'] != second['label'] and (len(overlapping_text.strip()) > 1):
+        if first[keyword] != second[keyword] and (len(overlapping_text.strip()) > 1):
             warnings.warn(
                 "Found overlapping annotations: {} and {}. \n"
                 "Consider setting `multi_label_sequences` to `True` in your config.".format(
@@ -240,24 +240,24 @@ def overlap_handler(current_annotation, annotation, text, multi_label, ):
             )
         spacy_tokens = NLP(text)
         spacy_token_starts = [token.idx for token in spacy_tokens]
-        if second['start'] in spacy_token_starts:
-            second_label = second['label']
+        if second[keyword] in spacy_token_starts:
+            second_label = second[keyword]
         elif final_delimiter in spacy_token_starts:
-            second_label = first['label']
+            second_label = first[keyword]
         else:
-            second_label = first['label']
+            second_label = first[keyword]
 
     second_chunk = {
         'start': second['start'],
         'end': final_delimiter,
-        'label': second_label,
+        keyword: second_label,
         'text': overlapping_text
     }
 
     third_chunk = {
         'start': final_delimiter,
         'end': end,
-        'label': final_label,
+        keyword: final_label,
         'text': text[final_delimiter:end]
     }
     chunks = [first_chunk, second_chunk, third_chunk]
@@ -265,7 +265,7 @@ def overlap_handler(current_annotation, annotation, text, multi_label, ):
     return chunks
 
 
-def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=True, none_value=None, context=None):
+def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=True, none_value=None, keyword='label'):
     """
     Maps from the 'indico' format sequence labeling data. Into a labeled substring format. This is the exact inverse of
     :meth finetune_to_indico_sequence:.
@@ -295,7 +295,6 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
     """
     all_subseqs = []
     all_labels = []
-    all_context = []
     all_association_idx = []
     all_association_type = []
     all_idxs = []
@@ -304,16 +303,15 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
     if labels is None:
         labels = [[]] * len(texts)
 
-    #if context is not used
-    using_context = context is not None
-    if not using_context:
-        context = [[]] * len(texts)
+    if keyword != 'token':
+        encoded_docs = encoder._encode(texts)
+    else:
+        encoded_docs = {}
+        encoded_docs['tokens']
 
-    encoded_docs = encoder._encode(texts)
     labels = copy.deepcopy(labels)
-    context = copy.deepcopy(context)
 
-    for doc_idx, (text, label_seq, context_seq) in enumerate(zip(texts, labels, context)):
+    for doc_idx, (text, label_seq) in enumerate(zip(texts, labels)):
         tokens = encoded_docs.tokens[doc_idx]
         token_ends = encoded_docs.char_locs[doc_idx]
         token_lengths = [encoder._token_length(token) for token in tokens]
@@ -341,7 +339,7 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
         queue = sorted(label_seq, key=lambda x: (x['start'], x['end']))
 
         for label in queue:
-            label['label'] = {label['label']}
+            label[keyword] = {label[keyword]}
             round_to_nearest_start_and_end(label, token_starts, token_ends, text)
 
         while len(queue):
@@ -362,7 +360,7 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
                 # into it's component parts.  process each component individually
                 elif overlap(current_annotation, annotation):
                     merged_annotations.remove(annotation)
-                    split_annotations = overlap_handler(current_annotation, annotation, text, multi_label)
+                    split_annotations = overlap_handler(current_annotation, annotation, text, multi_label, keyword)
                     queue = split_annotations + queue
                     break
             else:
@@ -371,7 +369,7 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
                 sorted_insert(merged_annotations,  current_annotation)
 
         for annotation in merged_annotations:
-            annotation['label'] = tuple(annotation['label'])
+            annotation[keyword] = tuple(annotation[keyword])
         # Add none labels
         current_idx = 0
         all_annotations = []
@@ -382,8 +380,7 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
                     'start': current_idx,
                     'end': annotation['start'],
                     'text': text[current_idx:annotation['start']],
-                    'label': tuple([none_value]),
-                    'context': {none_value:none_value}
+                    keyword: tuple([none_value])
                 })
             # Copy over labeled span
             all_annotations.append(annotation)
@@ -402,15 +399,14 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
                 'start': last_chunk_end_idx,
                 'end': len(text),
                 'text': text[last_chunk_end_idx:len(text)],
-                'label': tuple([none_value]),
-                'context': {none_value:none_value}
+                keyword: tuple([none_value])
             })
 
         if not multi_label:
             # if `multi_label_sequences` is False, flatten labels
             for annotation in all_annotations:
-                assert len(annotation['label']) == 1
-                annotation['label'] = annotation['label'][0]
+                assert len(annotation[keyword]) == 1
+                annotation[keyword] = annotation[keyword][0]
 
         for annotation in all_annotations:
             if 'association' not in annotation:
@@ -423,7 +419,7 @@ def indico_to_finetune_sequence(texts, labels=None, encoder=None, multi_label=Tr
                 doc_current_label_idx.append(annotation["idx"])
 
         doc_subseqs = [annotation['text'] for annotation in all_annotations]
-        doc_labels = [annotation['label'] for annotation in all_annotations]
+        doc_labels = [annotation[keyword] for annotation in all_annotations]
 
 
         all_subseqs.append(doc_subseqs)

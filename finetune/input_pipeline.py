@@ -135,7 +135,7 @@ class BasePipeline(metaclass=ABCMeta):
         if context is None and self.config.use_auxiliary_info:
             context = X[1]
             X = X[0]
-
+        
         out_gen = self._text_to_ids(X, pad_token=self.config.pad_token, context=context)
 
         for out in out_gen:
@@ -175,10 +175,12 @@ class BasePipeline(metaclass=ABCMeta):
             """
             Takes list of context dictionaries and turns them into lists (per sample) of lists (per token) of context vectors
             """
-            print(context)
+            #print("CONTEXT TO VECTOR")
+            #print(context)
+            #print('')
             num_samples = len(context)
             vector_list = []
-            ignore = ['start', 'end', 'label', 'token']
+            ignore = ['start', 'end', 'label', 'token', 'inline']
 
             if not hasattr(self, 'label_encoders'): # we will fit necessary label encoders here to know dimensionality of input vector before entering featurizer
                 valid_samples = [dict_list for dict_list in context if dict_list != self.config.pad_token] # one list of dicts per sample of text
@@ -241,7 +243,7 @@ class BasePipeline(metaclass=ABCMeta):
                     # Binary encoded features have different dimensionality as simple floats/ints, so must be handled differently.
                     if label in self.label_encoders.keys():
                         without_nans = [x for x in data if not pd.isna(x)]
-                        data = self.label_encoders[label].transform(without_nans) #this removes nans from padded tokens, but now the list is too short. The 'num_backward' variable will track this offset to ensure indices are correctly tracked.
+                        data = np.asarray(self.label_encoders[label].transform(without_nans)) - 0.5 #this removes nans from padded tokens, but now the list is too short. The 'num_backward' variable will track this offset to ensure indices are correctly tracked.
                         data_dim = len(self.label_encoders[label].classes_)
                         if data_dim == 2: # since binary classes default to column vector
                             data_dim=1
@@ -263,7 +265,7 @@ class BasePipeline(metaclass=ABCMeta):
                     current_index += 1
                 vector_list.append(vector)
                 
-                print(vector_list)
+                #print(vector_list)
             return vector_list
 
 
@@ -286,10 +288,10 @@ class BasePipeline(metaclass=ABCMeta):
         else:
             raise ValueError("Either neither or both of Xs and Y should be callable, not a mixture")
 
+        
         dataset_encoded = lambda: itertools.chain.from_iterable(
             map(lambda xy: self.text_to_tokens_mask(*xy), dataset()))
         
-
         if not callable(Y) and train:
             dataset_encoded_list = list(dataset_encoded())
             class_counts = self._compute_class_counts(dataset_encoded_list)
@@ -423,10 +425,13 @@ class BasePipeline(metaclass=ABCMeta):
         )
         self.config.dataset_size -= val_size
 
+        context_style = None
+        if context:
+            context_style = context[1]
         if Y is not None:
-            self._post_data_initialization(Y=Y, context=context)
+            self._post_data_initialization(Y=Y, context=context_style)
         else:
-            self._post_data_initialization(context=context)
+            self._post_data_initialization(context=context_style)
 
         if callable(Xs) or Y is None:
             self._skip_tqdm = val_size
@@ -444,13 +449,17 @@ class BasePipeline(metaclass=ABCMeta):
                     Xs_tr, Xs_va, Y_tr, Y_va, C_tr, C_va = Xs, [], Y, [], context, []
                 else:
                     if context:
+                        raise FinetuneError("Validation set with auxiliary info not yet supported.")
                         Xs_tr, Xs_va, Y_tr, Y_va, C_tr, C_va = train_test_split(Xs, Y, context, test_size=self.config.val_size, random_state=self.config.seed)
                     else:
                         Xs_tr, Xs_va, Y_tr, Y_va = train_test_split(Xs, Y, test_size=self.config.val_size, random_state=self.config.seed)
                         C_tr, C_va = None
             else:
-                Xs_tr, Y_tr = Xs, Y
-                Xs_va, Y_va = self.config.val_set
+                Xs_tr, Y_tr, C_tr = Xs, Y, context
+                if context:
+                    Xs_va, Y_va, C_va = self.config.val_set
+                else:
+                    Xs_va, Y_va, C_va = self.config.val_set
 
             Xs_tr, Y_tr = self.resampling(Xs_tr, Y_tr)
             self.config.dataset_size = len(Xs_tr)
@@ -500,12 +509,10 @@ class BasePipeline(metaclass=ABCMeta):
 
     def _text_to_ids(self, Xs, Y=None, pad_token=None, context=None):
         Xs = self._format_for_encoding(Xs)
-        print(context)
         if self.config.chunk_long_sequences and len(Xs) == 1:
             # can only chunk single sequence inputs
             chunk_size = self.config.max_length - 2
             step_size = chunk_size // 3
-
             encoded = self.text_encoder.encode_multi_input(
                 Xs,
                 Y=Y,
@@ -529,8 +536,7 @@ class BasePipeline(metaclass=ABCMeta):
                         d[field] = field_value[start:end]
                 if self.config.use_auxiliary_info:
                     d['context'] = processed_context[start:end] # forced since encoded is immutable'
-                #if d['tokens'][0] != 50256:
-                #    print(start) 
+
                 yield self._array_format(EncodedOutput(**d), pad_token=pad_token)
         else:
             encoder_out = self.text_encoder.encode_multi_input(

@@ -296,7 +296,7 @@ def sequence_labeler(hidden, targets, n_targets, config, pad_id, multilabel=Fals
     """
     with tf.variable_scope('sequence-labeler', reuse=reuse):
         nx = config.n_embed
-        if config.use_auxiliary_info and config.base_model != TextCNN:
+        if config.use_auxiliary_info:
             nx += config.n_c_embed
 
         def seq_lab_internal(hidden):

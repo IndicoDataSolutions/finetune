@@ -62,7 +62,11 @@ class BaseModel(object, metaclass=ABCMeta):
 
         atexit.register(cleanup)
 
+        self.default = kwargs.pop('default', None)
+        if self.default is not None and type(self.default) != dict:
+            raise FinetuneError('Invalid default given: Need a dictionary of auxiliary info fields and default values.')
         self.config = get_config(**kwargs)
+        self.config.use_auxiliary_info = self.default is not None
         self.resolved_gpus = None
         self.validate_config()
         self.input_pipeline = self._get_input_pipeline()
