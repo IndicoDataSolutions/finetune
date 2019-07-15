@@ -246,6 +246,22 @@ class TestClassifier(unittest.TestCase):
         model = Classifier(**self.default_config(class_weights='log'))
         model.fit(train_sample.Text.values, train_sample.Target.values)
 
+    def test_chunk_long_sequences(self):
+        test_sequence = ["This is a sentence to test chunk_long_sequences in classification. " * 10, 'Another example so now there are two different classes in the test. ' * 10]
+        labels = ['a', 'b']
+        model = Classifier()
+        model.config.chunk_long_sequences = True
+        model.config.max_length = 18
+
+        model.finetune(test_sequence * 10, labels * 10)
+        
+        predictions = model.predict(test_sequence * 10)
+        probas = model.predict_proba(test_sequence * 10)
+
+        self.assertEqual(len(predictions), 20)
+        self.assertEqual(len(probas[0]), 2)
+        self.assertEqual(np.sum(probas[0]), 1)
+
     def test_fit_predict_batch_size_1(self):
         """
         Ensure training is possible with batch size of 1

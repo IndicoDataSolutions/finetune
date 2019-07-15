@@ -34,6 +34,7 @@ from finetune.model import get_model_fn, PredictMode
 from finetune.util.download import download_data_if_required
 from finetune.util.estimator import PatchedParameterServerStrategy
 from finetune.util.positional_embeddings import embedding_preprocessor
+from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
 from finetune.base_models import GPTModel, GPTModelSmall
 
 
@@ -707,6 +708,41 @@ class BaseModel(object, metaclass=ABCMeta):
             return aggregated_results
 
         return max(aggregated_results, key=lambda x: x[1])[0]
+
+    def process_long_sequence(self, X, task, probas=False):
+        tasks = ['sequence_labeling', 'classification', 'regression']
+        assert task in tasks, 'invalid task for processing long sequences'
+        chunk_size = self.config.max_length - 2
+        step_size = chunk_size // 3
+        if task == 'sequence_labeling':
+            arr_encoded = list(itertools.chain.from_iterable(self.input_pipeline._text_to_ids([x]) for x in X))
+        else:
+            arr_encoded = list(itertools.chain.from_iterable(self.input_pipeline._text_to_ids(x) for x in X))
+        
+        labels, batch_probas = [], []
+        pred_keys = [PredictMode.NORMAL]
+        if task != 'regression':
+            pred_keys.append(PredictMode.PROBAS)
+        for pred in self._inference(X, predict_keys=[PredictMode.PROBAS, PredictMode.NORMAL], n_examples=len(arr_encoded)):
+            try:
+                labels.append(self.input_pipeline.label_encoder.inverse_transform([pred[PredictMode.NORMAL]]))
+            except ValueError:
+                labels.append(self.input_pipeline.label_encoder.inverse_transform(pred[PredictMode.NORMAL]))
+            if task != 'regression':
+                batch_probas.append(pred[PredictMode.PROBAS])
+
+        if not batch_probas:
+            batch_probas = [None]*len(labels)
+
+        doc_idx = -1
+        for chunk_idx, (label_seq, proba_seq) in enumerate(zip(labels, batch_probas)):
+            position_seq = arr_encoded[chunk_idx].char_locs
+            start_of_doc = arr_encoded[chunk_idx].token_ids[0][0] == self.input_pipeline.text_encoder.start
+            end_of_doc = (
+                    chunk_idx + 1 >= len(arr_encoded) or
+                    arr_encoded[chunk_idx + 1].token_ids[0][0] == self.input_pipeline.text_encoder.start
+            )
+            yield position_seq, start_of_doc, end_of_doc, label_seq, proba_seq
 
     def __del__(self):
         if hasattr(self, '_tmp_dir') and self._tmp_dir is not None:
