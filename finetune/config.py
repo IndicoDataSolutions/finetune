@@ -286,6 +286,7 @@ def get_default_config():
         max_grad_norm=1.0,
         prefit_init=False,
         accum_steps=1,
+        tsa_schedule='exp_schedule',
 
         # MTL
         tasks=None,
