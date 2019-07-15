@@ -6,6 +6,7 @@ from tensorflow.contrib.crf import crf_log_likelihood
 from finetune.base_models.gpt.featurizer import attn, dropout, norm
 from finetune.util.shapes import shape_list, merge_leading_dims
 from finetune.optimizers.recompute_grads import recompute_grad
+from finetune.optimizers.TSA_schedules import get_tsa_threshold
 from finetune.errors import FinetuneError
 
 
@@ -114,6 +115,29 @@ def classifier(hidden, targets, n_targets, config, train=False, reuse=None, **kw
             )
 
             clf_losses = _apply_class_weight(clf_losses, targets, kwargs.get('class_weights'))
+
+            if config.tsa_schedule: # From Unsupervised Data Augmentation for Consistency Training, Xie et al. 2019
+                with tf.variable_scope('tsa'):
+                    start = 1/n_targets
+                    global_step = tf.train.get_or_create_global_step()
+                    total_num_steps = config.n_epochs * config.dataset_size//config.batch_size
+                    tsa_threshold = get_tsa_threshold(config.tsa_schedule, global_step, total_num_steps, start, 1)
+                    
+                    clf_logits = tf.nn.log_softmax(clf_logits)
+                    #clf_logits = tf.Print(clf_logits, [clf_logits],'clf logits')
+                    #targets = tf.Print(targets, [targets], 'target')
+                    multiplied = targets * tf.exp(clf_logits)
+                    #multiplied = tf.Print(multiplied, [multiplied], 'multiplied')
+                    correct_label_probs = tf.reduce_sum(multiplied, axis=1)
+                    #correct_label_probs = tf.Print(correct_label_probs, [correct_label_probs], 'correct label probs')
+                    larger_than_threshold = tf.greater(correct_label_probs, tsa_threshold)
+                    #larger_than_threshold = tf.Print(larger_than_threshold, [larger_than_threshold], 'larger_than_threshold')
+                    loss_mask = tf.ones_like(clf_losses, dtype=clf_losses.dtype)
+
+                    loss_mask = loss_mask * (1 - tf.cast(larger_than_threshold, tf.float32))
+                    loss_mask = tf.stop_gradient(loss_mask)
+                    clf_losses = tf.multiply(clf_losses, loss_mask)
+                    #clf_losses = tf.Print(clf_losses, [clf_losses], 'clf_losses')
 
         return {
             'logits': clf_logits,
