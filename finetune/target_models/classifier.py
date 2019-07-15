@@ -61,44 +61,20 @@ class Classifier(BaseModel):
 
         :param X: list or array of text to embed.
         :returns: list of class labels.
+        
+        
+        Chunk idx for prediction.  Dividers at `step_size` increments.
+        [  1  |  1  |  2  |  3  |  3  ]
         """
-        chunk_size = self.config.max_length - 2
-        step_size = chunk_size // 3
-        arr_encoded = list(itertools.chain.from_iterable(self.input_pipeline._text_to_ids(x) for x in X))
-        labels, batch_probas = [], []
-        for pred in self._inference(X, predict_keys=[PredictMode.PROBAS, PredictMode.NORMAL], n_examples=len(arr_encoded)):
-            label = self.input_pipeline.label_encoder.inverse_transform([pred[PredictMode.NORMAL]]).pop()
-            labels.append(label)
-            batch_probas.append(pred[PredictMode.PROBAS])
-
-        all_subseqs = []
         all_labels = []
         all_probs = []
-        all_positions = []
 
-        doc_idx = -1
-        for chunk_idx, (label, proba) in enumerate(zip(labels, batch_probas)):
-            position_seq = arr_encoded[chunk_idx].char_locs
-            start_of_doc = arr_encoded[chunk_idx].token_ids[0][0] == self.input_pipeline.text_encoder.start
-            end_of_doc = (
-                    chunk_idx + 1 >= len(arr_encoded) or
-                    arr_encoded[chunk_idx + 1].token_ids[0][0] == self.input_pipeline.text_encoder.start
-            )
-            """
-            Chunk idx for prediction.  Dividers at `step_size` increments.
-            [  1  |  1  |  2  |  3  |  3  ]
-            """
+        for _, start_of_doc, end_of_doc, label, proba in self.process_long_sequence(X, task='classification'):
             start, end = 0, None
             if start_of_doc:
                 # if this is the first chunk in a document, start accumulating from scratch
-                doc_subseqs = []
                 doc_labels = []
                 doc_probs = []
-                doc_positions = []
-                doc_starts = []
-
-                doc_idx += 1
-                start_of_token = 0
 
             doc_labels.append(label)
             doc_probs.append(proba)
@@ -125,7 +101,7 @@ class Classifier(BaseModel):
         :param X: list or array of text to embed.
         :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
         """
-        return self.predict(X, proba=True)
+        return self.predict(X, probas=True)
 
     def finetune(self, X, Y=None, batch_size=None):
         """

@@ -1,4 +1,5 @@
 import tensorflow as tf
+import numpy as np
 
 from finetune.base import BaseModel
 from finetune.encoding.target_encoders import RegressionEncoder
@@ -40,7 +41,20 @@ class Regressor(BaseModel):
         :param X: list or array of text to embed.
         :returns: list of class labels.
         """
-        return super().predict(X).tolist()
+        all_labels=[]
+        for _, start_of_doc, end_of_doc, label, _ in self.process_long_sequence(X, task='regression'):
+            if start_of_doc:
+                # if this is the first chunk in a document, start accumulating from scratch
+                doc_labels = []
+                
+            doc_labels.append(label)
+
+            if end_of_doc:
+                # last chunk in a document
+                means = np.mean(doc_labels, axis=0)
+                label = self.input_pipeline.label_encoder.inverse_transform([means])
+                all_labels.append(list(label))
+        return all_labels
 
     def predict_proba(self, X):
         """
