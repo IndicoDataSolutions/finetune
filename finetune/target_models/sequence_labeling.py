@@ -192,32 +192,18 @@ class SequenceLabeler(BaseModel):
         :param X: A list / array of text, shape [batch]
         :param per_token: If True, return raw probabilities and labels on a per token basis
         :returns: list of class labels.
-        """
-        chunk_size = self.config.max_length - 2
-        step_size = chunk_size // 3
-        arr_encoded = list(itertools.chain.from_iterable(self.input_pipeline._text_to_ids([x]) for x in X))
-        labels, batch_probas = [], []
-        for pred in self._inference(X, predict_keys=[PredictMode.PROBAS, PredictMode.NORMAL], n_examples=len(arr_encoded)):
-            labels.append(self.input_pipeline.label_encoder.inverse_transform(pred[PredictMode.NORMAL]))
-            batch_probas.append(pred[PredictMode.PROBAS])
 
+        Chunk idx for prediction.  Dividers at `step_size` increments.
+        [  1  |  1  |  2  |  3  |  3  ]
+        """
         all_subseqs = []
         all_labels = []
         all_probs = []
         all_positions = []
-
+        chunk_size = self.config.max_length - 2
+        step_size = chunk_size // 3
         doc_idx = -1
-        for chunk_idx, (label_seq, proba_seq) in enumerate(zip(labels, batch_probas)):
-            position_seq = arr_encoded[chunk_idx].char_locs
-            start_of_doc = arr_encoded[chunk_idx].token_ids[0][0] == self.input_pipeline.text_encoder.start
-            end_of_doc = (
-                    chunk_idx + 1 >= len(arr_encoded) or
-                    arr_encoded[chunk_idx + 1].token_ids[0][0] == self.input_pipeline.text_encoder.start
-            )
-            """
-            Chunk idx for prediction.  Dividers at `step_size` increments.
-            [  1  |  1  |  2  |  3  |  3  ]
-            """
+        for position_seq, start_of_doc, end_of_doc, label_seq, proba_seq in self.process_long_sequence(X, task='sequence_labeling'):
             start, end = 0, None
             if start_of_doc:
                 # if this is the first chunk in a document, start accumulating from scratch
