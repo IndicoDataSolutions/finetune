@@ -1,7 +1,9 @@
 import tensorflow as tf
 from tensorflow.python.distribute import device_util
 from tensorflow.contrib.distribute import ParameterServerStrategy
-from tensorflow.contrib.distribute.python.parameter_server_strategy import ParameterServerExtended
+from tensorflow.contrib.distribute.python.parameter_server_strategy import (
+    ParameterServerExtended,
+)
 from tensorflow.python.distribute import cross_device_ops as cross_device_ops_lib
 
 
@@ -19,10 +21,8 @@ class PatchedParameterServerExtended(ParameterServerExtended):
         self._initialize_local(num_gpus_per_worker)
 
         # We typically don't need to do all-reduce in this strategy.
-        self._cross_device_ops = (
-            cross_device_ops_lib.ReductionToOneDeviceCrossDeviceOps(
-                reduce_to_device=_LOCAL_CPU
-            )
+        self._cross_device_ops = cross_device_ops_lib.ReductionToOneDeviceCrossDeviceOps(
+            reduce_to_device=_LOCAL_CPU
         )
 
     def _initialize_local(self, num_gpus_per_worker):
@@ -38,9 +38,7 @@ class PatchedParameterServerExtended(ParameterServerExtended):
         else:
             self._compute_devices = (_LOCAL_CPU,)
 
-        self._compute_devices = tuple(
-            map(device_util.resolve, self._compute_devices)
-        )
+        self._compute_devices = tuple(map(device_util.resolve, self._compute_devices))
         self._canonical_compute_device_set = set(self._compute_devices)
 
         # If there is only one GPU, put everything on that GPU. Otherwise, place
@@ -60,7 +58,6 @@ class PatchedParameterServerExtended(ParameterServerExtended):
 
 
 class PatchedParameterServerStrategy(ParameterServerStrategy):
-
     def __init__(self, visible_gpus):
         """Initializes this strategy.
         Args:
@@ -68,8 +65,6 @@ class PatchedParameterServerStrategy(ParameterServerStrategy):
         """
         super(ParameterServerStrategy, self).__init__(
             PatchedParameterServerExtended(
-                self,
-                num_gpus_per_worker=len(visible_gpus),
-                visible_gpus=visible_gpus
+                self, num_gpus_per_worker=len(visible_gpus), visible_gpus=visible_gpus
             )
         )

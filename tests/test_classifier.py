@@ -11,8 +11,8 @@ from unittest.mock import MagicMock
 import warnings
 
 # prevent excessive warning logs
-warnings.filterwarnings('ignore')
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+warnings.filterwarnings("ignore")
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 import pytest
 
@@ -31,11 +31,10 @@ SST_FILENAME = "SST-binary.csv"
 
 SKIP_LM_TESTS = get_config().base_model.is_bidirectional
 
+
 class TestClassifier(unittest.TestCase):
     n_sample = 20
-    dataset_path = os.path.join(
-        'Data', 'Classify', 'SST-binary.csv'
-    )
+    dataset_path = os.path.join("Data", "Classify", "SST-binary.csv")
 
     @classmethod
     def _download_sst(cls):
@@ -51,7 +50,7 @@ class TestClassifier(unittest.TestCase):
             url="https://s3.amazonaws.com/enso-data/SST-binary.csv",
             text_column="Text",
             target_column="Target",
-            filename=SST_FILENAME
+            filename=SST_FILENAME,
         )
 
     @classmethod
@@ -63,22 +62,22 @@ class TestClassifier(unittest.TestCase):
         try:
             os.mkdir("tests/saved-models")
         except FileExistsError:
-            warnings.warn("tests/saved-models still exists, it is possible that some test is not cleaning up properly.")
+            warnings.warn(
+                "tests/saved-models still exists, it is possible that some test is not cleaning up properly."
+            )
             pass
 
     def tearDown(self):
         shutil.rmtree("tests/saved-models/")
 
     def default_config(self, **kwargs):
-        defaults = {
-            'batch_size': 2,
-            'max_length': 128,
-            'n_epochs': 1
-        }
+        defaults = {"batch_size": 2, "max_length": 128, "n_epochs": 1}
         defaults.update(kwargs)
         return dict(get_config(**defaults))
 
-    @pytest.mark.skipif(SKIP_LM_TESTS, reason="Bidirectional models do not yet support LM functions")
+    @pytest.mark.skipif(
+        SKIP_LM_TESTS, reason="Bidirectional models do not yet support LM functions"
+    )
     def test_fit_lm_only(self):
         """
         Ensure LM only training does not error out
@@ -91,7 +90,7 @@ class TestClassifier(unittest.TestCase):
         model.fit(train_sample.Text)
 
         # Save and reload check
-        save_file = 'tests/saved-models/test-save-load'
+        save_file = "tests/saved-models/test-save-load"
         model.save(save_file)
         model = Classifier.load(save_file)
 
@@ -136,9 +135,9 @@ class TestClassifier(unittest.TestCase):
             model.predict(valid_sample.Text[:1].values)
             second = time.time()
 
-        first_prediction_time = (first - start)
-        second_prediction_time = (second - first)
-        self.assertLess(second_prediction_time, first_prediction_time / 2.)
+        first_prediction_time = first - start
+        second_prediction_time = second - first
+        self.assertLess(second_prediction_time, first_prediction_time / 2.0)
 
     def test_correct_cached_predict(self):
         model = Classifier(**self.default_config())
@@ -157,7 +156,7 @@ class TestClassifier(unittest.TestCase):
             model.predict_proba(valid_sample.Text.values[:half_sample]),
             model.predict_proba(valid_sample.Text.values[half_sample:]),
             model.predict_proba(valid_sample.Text.values[:quarter_sample]),
-            model.predict_proba(valid_sample.Text.values[quarter_sample:])
+            model.predict_proba(valid_sample.Text.values[quarter_sample:]),
         ]
 
         # Predictions w/ cached predict
@@ -166,13 +165,15 @@ class TestClassifier(unittest.TestCase):
                 model.predict_proba(valid_sample.Text.values[:half_sample]),
                 model.predict_proba(valid_sample.Text.values[half_sample:]),
                 model.predict_proba(valid_sample.Text.values[:quarter_sample]),
-                model.predict_proba(valid_sample.Text.values[quarter_sample:])
+                model.predict_proba(valid_sample.Text.values[quarter_sample:]),
             ]
 
         for batch_preds, batch_cached_preds in zip(preds, cached_preds):
             for pred, cached_pred in zip(batch_preds, batch_cached_preds):
                 assert list(pred.keys()) == list(cached_pred.keys())
-                for pred_val, cached_pred_val in zip(pred.values(), cached_pred.values()):
+                for pred_val, cached_pred_val in zip(
+                    pred.values(), cached_pred.values()
+                ):
                     np.testing.assert_almost_equal(pred_val, cached_pred_val, decimal=4)
 
     def test_fit_predict(self):
@@ -243,18 +244,21 @@ class TestClassifier(unittest.TestCase):
         self.assertTrue(new_recall >= recall)
 
         # test auto-inferred class weights function
-        model = Classifier(**self.default_config(class_weights='log'))
+        model = Classifier(**self.default_config(class_weights="log"))
         model.fit(train_sample.Text.values, train_sample.Target.values)
 
     def test_chunk_long_sequences(self):
-        test_sequence = ["This is a sentence to test chunk_long_sequences in classification. " * 10, 'Another example so now there are two different classes in the test. ' * 10]
-        labels = ['a', 'b']
+        test_sequence = [
+            "This is a sentence to test chunk_long_sequences in classification. " * 10,
+            "Another example so now there are two different classes in the test. " * 10,
+        ]
+        labels = ["a", "b"]
         model = Classifier()
         model.config.chunk_long_sequences = True
         model.config.max_length = 18
 
         model.finetune(test_sequence * 10, labels * 10)
-        
+
         predictions = model.predict(test_sequence * 10)
         probas = model.predict_proba(test_sequence * 10)
 
@@ -278,7 +282,7 @@ class TestClassifier(unittest.TestCase):
         Ensure saving + loading does not cause errors
         Ensure saving + loading does not change predictions
         """
-        save_file = 'tests/saved-models/test-save-load'
+        save_file = "tests/saved-models/test-save-load"
         config = self.default_config(save_adam_vars=False)
         model = Classifier(**config)
         train_sample = self.dataset.sample(n=self.n_sample)
@@ -318,11 +322,11 @@ class TestClassifier(unittest.TestCase):
         Ensure model converges to a reasonable solution for a trivial problem
         """
         model = Classifier(**self.default_config())
-        n_per_class = (self.n_sample * 5)
-        trX = ['cat'] * n_per_class + ['finance'] * n_per_class
+        n_per_class = self.n_sample * 5
+        trX = ["cat"] * n_per_class + ["finance"] * n_per_class
         trY = copy(trX)
-        teX = ['feline'] + ['investment']
-        teY = ['cat'] + ['finance']
+        teX = ["feline"] + ["investment"]
+        teY = ["cat"] + ["finance"]
         model.fit(trX, trY)
         predY = model.predict(teX)
         self.assertEqual(accuracy_score(teY, predY), 1.00)
@@ -332,17 +336,19 @@ class TestClassifier(unittest.TestCase):
         Ensure model converges to a reasonable solution for a trivial problem
         """
         model = Classifier(base_model=GPTModelSmall)
-        n_per_class = (self.n_sample * 5)
-        trX = ['cat'] * n_per_class + ['finance'] * n_per_class
+        n_per_class = self.n_sample * 5
+        trX = ["cat"] * n_per_class + ["finance"] * n_per_class
         np.random.shuffle(trX)
         trY = copy(trX)
-        teX = ['feline'] * n_per_class + ['investment'] * n_per_class
-        teY = ['cat'] * n_per_class + ['finance'] * n_per_class
+        teX = ["feline"] * n_per_class + ["investment"] * n_per_class
+        teY = ["cat"] * n_per_class + ["finance"] * n_per_class
         model.fit(trX, trY)
         predY = model.predict(teX)
         self.assertEqual(accuracy_score(teY, predY), 1.00)
 
-    @pytest.mark.skipif(SKIP_LM_TESTS, reason="Bidirectional models do not yet support LM functions")
+    @pytest.mark.skipif(
+        SKIP_LM_TESTS, reason="Bidirectional models do not yet support LM functions"
+    )
     def test_language_model(self):
         """
         Ensure saving + loading does not cause errors
@@ -355,15 +361,17 @@ class TestClassifier(unittest.TestCase):
         self.assertEqual(type(lm_out_2), str)
         start_id = model.input_pipeline.text_encoder.start
         start_token = model.input_pipeline.text_encoder.decoder[start_id]
-        self.assertIn('{}Indico RULE'.format(start_token).lower(), lm_out_2.lower())
+        self.assertIn("{}Indico RULE".format(start_token).lower(), lm_out_2.lower())
 
-    @pytest.mark.skipif(SKIP_LM_TESTS, reason="Bidirectional models do not yet support LM functions")
+    @pytest.mark.skipif(
+        SKIP_LM_TESTS, reason="Bidirectional models do not yet support LM functions"
+    )
     def test_save_load_language_model(self):
         """
         Ensure saving + loading does not cause errors
         Ensure saving + loading does not change predictions
         """
-        save_file = 'tests/saved-models/test-save-load'
+        save_file = "tests/saved-models/test-save-load"
         model = Classifier()
         train_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text, train_sample.Target)
@@ -375,9 +383,11 @@ class TestClassifier(unittest.TestCase):
         self.assertEqual(type(lm_out_2), str)
         start_id = model.input_pipeline.text_encoder.start
         start_token = model.input_pipeline.text_encoder.decoder[start_id]
-        self.assertIn('{}Indico RULE'.format(start_token).lower(), lm_out_2.lower())
+        self.assertIn("{}Indico RULE".format(start_token).lower(), lm_out_2.lower())
 
-    @pytest.mark.skipif(SKIP_LM_TESTS, reason="Bidirectional models do not yet support LM functions")
+    @pytest.mark.skipif(
+        SKIP_LM_TESTS, reason="Bidirectional models do not yet support LM functions"
+    )
     def test_generate_text_stop_early(self):
         model = Classifier()
 
@@ -386,16 +396,14 @@ class TestClassifier(unittest.TestCase):
         model.get_estimator = lambda *args, **kwargs: (fake_estimator, [])
         model.input_pipeline.text_encoder._lazy_init()
         fake_estimator.predict = MagicMock(
-            return_value=iter([
-                {
-                    "GEN_TEXT": 100 * [model.input_pipeline.text_encoder['_classify_']]
-                }
-            ])
+            return_value=iter(
+                [{"GEN_TEXT": 100 * [model.input_pipeline.text_encoder["_classify_"]]}]
+            )
         )
         start_id = model.input_pipeline.text_encoder.start
         start_token = model.input_pipeline.text_encoder.decoder[start_id]
         lm_out = model.generate_text()
-        self.assertEqual(lm_out, '{}_classify_'.format(start_token))
+        self.assertEqual(lm_out, "{}_classify_".format(start_token))
 
     def test_validation(self):
         """
@@ -430,17 +438,9 @@ class TestClassifier(unittest.TestCase):
         self.assertEqual(type(explanations[0]["token_ends"]), list)
         self.assertEqual(type(explanations[0]["token_starts"]), list)
         self.assertEqual(type(explanations[0]["explanation"]), dict)
-        self.assertEqual(len(explanations[0]["token_starts"]), len(explanations[0]["explanation"][0]))
-        self.assertEqual(len(explanations[0]["token_ends"]), len(explanations[0]["explanation"][0]))
-
-
-
-
-
-
-
-
-
-
-
-
+        self.assertEqual(
+            len(explanations[0]["token_starts"]), len(explanations[0]["explanation"][0])
+        )
+        self.assertEqual(
+            len(explanations[0]["token_ends"]), len(explanations[0]["explanation"][0])
+        )

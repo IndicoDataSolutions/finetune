@@ -15,31 +15,31 @@ import numpy as np
 import tensorflow as tf
 
 
-NLP = spacy.load('en', disable=['parser', 'tagger', 'ner', 'textcat'])
+NLP = spacy.load("en", disable=["parser", "tagger", "ner", "textcat"])
 
-EncodedOutput = namedtuple("EncodedOutput", [
-    "token_ids", # list of list of subtoken ids (ints)
-    "tokens",    # list of list of subtokens (strs)
-    "labels",    # list of list of labels
-    "char_locs", # list of list of character locations (ints)
-])
+EncodedOutput = namedtuple(
+    "EncodedOutput",
+    [
+        "token_ids",  # list of list of subtoken ids (ints)
+        "tokens",  # list of list of subtokens (strs)
+        "labels",  # list of list of labels
+        "char_locs",  # list of list of character locations (ints)
+    ],
+)
 EncodedOutput.__new__.__defaults__ = (None,) * len(EncodedOutput._fields)
-ArrayEncodedOutput = namedtuple("ArrayEncodedOutput", [
-    "token_ids", # int array shape (batch, seq_length)
-    "tokens",    # list of list of subtokens (str) passed through from `EncoderOutput`
-    "labels",    # object array shape (batch, seq_length)
-    "char_locs", # list of list of char_locs (int) passed through from `EncoderOutput`
-    "mask",      # int array shape (batch, seq_length)
-])
+ArrayEncodedOutput = namedtuple(
+    "ArrayEncodedOutput",
+    [
+        "token_ids",  # int array shape (batch, seq_length)
+        "tokens",  # list of list of subtokens (str) passed through from `EncoderOutput`
+        "labels",  # object array shape (batch, seq_length)
+        "char_locs",  # list of list of char_locs (int) passed through from `EncoderOutput`
+        "mask",  # int array shape (batch, seq_length)
+    ],
+)
 ArrayEncodedOutput.__new__.__defaults__ = (None,) * len(ArrayEncodedOutput._fields)
 
-SUBS = {
-    '—': '-',
-    '–': '-',
-    '―': '-',
-    '…': '...',
-    '´': "'"
-}
+SUBS = {"—": "-", "–": "-", "―": "-", "…": "...", "´": "'"}
 
 
 def get_pairs(word):
@@ -64,6 +64,7 @@ class BaseEncoder(object):
     Base class for GPT and GPT-2 encoding
     Translates raw texts into structured token arrays
     """
+
     UNK_IDX = 0
 
     def __init__(self, encoder_path, vocab_path):
@@ -104,8 +105,16 @@ class BaseEncoder(object):
 
         raise NotImplementedError
 
-    def _cut_and_concat(self, *, encoded, max_length, special_tokens=None, start=None, delimiter=None,
-                        end=None):
+    def _cut_and_concat(
+        self,
+        *,
+        encoded,
+        max_length,
+        special_tokens=None,
+        start=None,
+        delimiter=None,
+        end=None
+    ):
         """
         Takes some tokenized text and arranges it into a format that maximises the amount of kept text from each
         whilst keeping the overall sequence length within max_length tokens. It also adds the 3 special tokens. Start,
@@ -131,9 +140,11 @@ class BaseEncoder(object):
         if spare >= 0:
             cut_len = None
         else:
-            warnings.warn("Document is longer than max length allowed, trimming document to {} tokens.".format(
-                max_length
-            ))
+            warnings.warn(
+                "Document is longer than max length allowed, trimming document to {} tokens.".format(
+                    max_length
+                )
+            )
             empty_tokens = sum(max(overflow, 0) for overflow in overflows)
             num_over = [max(overflow, 0) for overflow in overflows].count(0)
             if num_over == 0:
@@ -143,7 +154,7 @@ class BaseEncoder(object):
 
         joined = [start]
         for d in encoded:
-            joined += (d[:cut_len] + [delimiter])
+            joined += d[:cut_len] + [delimiter]
         joined = joined[:-1] + [clf_token]
 
         return joined
@@ -168,7 +179,9 @@ class BaseEncoder(object):
 
         # for each field in that example
         for field in Xs:
-            assert isinstance(field, (list, tuple)), "This should be a list of strings, instead it's {}".format(
+            assert isinstance(
+                field, (list, tuple)
+            ), "This should be a list of strings, instead it's {}".format(
                 tf.contrib.framework.nest.map_structure(type, field)
             )
             encoded = self._encode(field, labels=Y)
@@ -179,36 +192,25 @@ class BaseEncoder(object):
             if len(tokens[-1]) > (max_length - 2):
                 warnings.warn(
                     "Some examples are longer than the max_length. Please trim documents or increase `max_length`. "
-                    "Fallback behaviour is to use the first {} byte-pair encoded tokens".format(max_length - 2)
+                    "Fallback behaviour is to use the first {} byte-pair encoded tokens".format(
+                        max_length - 2
+                    )
                 )
 
         # merge fields + truncate if necessary
-        token_ids = self._cut_and_concat(
-            encoded=token_ids,
-            max_length=max_length
-        )
-        tokens = self._cut_and_concat(
-            encoded=tokens,
-            max_length=max_length
-        )
+        token_ids = self._cut_and_concat(encoded=token_ids, max_length=max_length)
+        tokens = self._cut_and_concat(encoded=tokens, max_length=max_length)
         locations = self._cut_and_concat(
-            encoded=positions,
-            max_length=max_length,
-            special_tokens=-1
+            encoded=positions, max_length=max_length, special_tokens=-1
         )
 
         if Y is None:
             labels = None
         else:
             labels = self._cut_and_concat(
-                encoded=labels,
-                max_length=max_length,
-                special_tokens=pad_token
+                encoded=labels, max_length=max_length, special_tokens=pad_token
             )
 
         return EncodedOutput(
-            token_ids=token_ids,
-            tokens=tokens,
-            labels=labels,
-            char_locs=locations,
+            token_ids=token_ids, tokens=tokens, labels=labels, char_locs=locations
         )

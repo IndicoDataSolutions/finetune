@@ -2,7 +2,7 @@ import os
 import unittest
 
 # required for tensorflow logging control
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 import pytest
 
@@ -16,7 +16,6 @@ SKIP_LM_TESTS = get_config().base_model.is_bidirectional
 
 
 class TestAssociation(unittest.TestCase):
-
     @classmethod
     def get_data_and_schema(cls, rows=None):
         data = TreebankNounVP()
@@ -24,13 +23,8 @@ class TestAssociation(unittest.TestCase):
             data.get_data(rows),
             {
                 "association_types": ["has_verb"],
-                "viable_edges": {
-                    "noun_phrase": [
-                        ["verb", "has_verb"],
-                    ]
-                    , "verb": [None]
-                }
-            }
+                "viable_edges": {"noun_phrase": [["verb", "has_verb"]], "verb": [None]},
+            },
         )
 
     def setUp(self):
@@ -38,13 +32,17 @@ class TestAssociation(unittest.TestCase):
         self.texts, self.labels = data
         self.model = Association(batch_size=2, max_length=32, **schema)
 
-    @pytest.mark.skipif(SKIP_LM_TESTS, reason="Bidirectional models do not yet support LM functions")
+    @pytest.mark.skipif(
+        SKIP_LM_TESTS, reason="Bidirectional models do not yet support LM functions"
+    )
     def test_fit_lm_predict(self):
         """
         Ensure model training does not error out
         Ensure model returns predictions
         """
-        train_texts, test_texts, train_annotations, test_annotations = train_test_split(self.texts, self.labels, test_size=0.1)
+        train_texts, test_texts, train_annotations, test_annotations = train_test_split(
+            self.texts, self.labels, test_size=0.1
+        )
         self.model.fit(train_texts)
         self.model.fit(train_texts, train_annotations)
         predictions = self.model.predict(test_texts)
@@ -70,7 +68,9 @@ class TestAssociation(unittest.TestCase):
 
                     self.assertIn("prob", p_i["associations"])
                     self.assertTrue(0.0 < p_i["associations"]["prob"] < 1.0)
-                    self.assertEqual(pred[p_i["associations"]["index"]]["label"], "verb")
+                    self.assertEqual(
+                        pred[p_i["associations"]["index"]]["label"], "verb"
+                    )
                     # check it is associated with a verb
                 else:
                     self.assertNotIn("associations", p_i)
@@ -110,11 +110,12 @@ class TestAssociation(unittest.TestCase):
 
                     self.assertIn("prob", p_i["associations"])
                     self.assertTrue(0.0 < p_i["associations"]["prob"] < 1.0)
-                    self.assertEqual(pred[p_i["associations"]["index"]]["label"], "verb")
+                    self.assertEqual(
+                        pred[p_i["associations"]["index"]]["label"], "verb"
+                    )
                     # check it is associated with a verb
                 else:
                     self.assertNotIn("associations", p_i)
                     # Verbs cannot have any associations by the above schema
 
             self.model.predict(test_texts)
-
