@@ -25,6 +25,35 @@ class ClassificationPipeline(BasePipeline):
     def _target_encoder(self):
         return OneHotLabelEncoder()
 
+    def feed_shape_type_def(self):
+        TS = tf.TensorShape
+        if self.config.use_auxiliary_info:
+            return (
+                (
+                    {"tokens": tf.int32, "mask": tf.float32, "context": tf.float32},
+                    tf.int32,
+                ),
+                (
+                    {
+                        "tokens": TS([self.config.max_length, 2]),
+                        "mask": TS([self.config.max_length]),
+                        "context": TS([self.config.max_length, self.context_dim]),
+                    },
+                    TS([self.target_dim]),
+                ),
+            )
+        else:
+            return (
+                ({"tokens": tf.int32, "mask": tf.float32}, tf.int32),
+                (
+                    {
+                        "tokens": TS([self.config.max_length, 2]),
+                        "mask": TS([self.config.max_length]),
+                    },
+                    TS([self.target_dim]),
+                ),
+            )
+
 
 class Classifier(BaseModel):
     """ 
@@ -102,6 +131,11 @@ class Classifier(BaseModel):
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
         """
+        if self.config.use_auxiliary_info:
+            context = X[1]
+            X = X[0]
+            context_new = self.process_context(context, X)
+            X = [X, context_new]
         return super().finetune(X, Y=Y, batch_size=batch_size)
 
     @classmethod

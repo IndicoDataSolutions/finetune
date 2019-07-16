@@ -30,7 +30,9 @@ class SequencePipeline(BasePipeline):
         super()._post_data_initialization(Y_, context)
 
     def text_to_tokens_mask(self, X, Y=None, context=None):
-        pad_token = [self.config.pad_token] if self.multi_label else self.config.pad_token
+        pad_token = (
+            [self.config.pad_token] if self.multi_label else self.config.pad_token
+        )
         if context is None and self.config.use_auxiliary_info:
             context = X[1]
             X = X[0]
@@ -38,7 +40,11 @@ class SequencePipeline(BasePipeline):
         out_gen = self._text_to_ids(X, Y=Y, pad_token=pad_token, context=context)
         for out in out_gen:
             if self.config.use_auxiliary_info:
-                feats = {"tokens": out.token_ids, "mask": out.mask, "context": out.context}
+                feats = {
+                    "tokens": out.token_ids,
+                    "mask": out.mask,
+                    "context": out.context,
+                }
             else:
             if Y is None:
                 yield feats, context
@@ -47,7 +53,7 @@ class SequencePipeline(BasePipeline):
 
     def _compute_class_counts(self, encoded_dataset):
         counter = Counter()
-        for doc, context, target_arr in encoded_dataset:
+        for doc, target_arr in encoded_dataset:
             targets = target_arr[doc["mask"].astype(np.bool)]
             counter.update(self.label_encoder.inverse_transform(targets))
         return counter
@@ -68,12 +74,8 @@ class SequencePipeline(BasePipeline):
         if self.config.use_auxiliary_info:
             return (
                 (
-                    {
-                        "tokens": tf.int32,
-                        "mask": tf.float32,
-                        "context": tf.float32,
-                    },
-                    tf.int32
+                    {"tokens": tf.int32, "mask": tf.float32, "context": tf.float32},
+                    tf.int32,
                 ),
                 (
                     {
@@ -81,25 +83,19 @@ class SequencePipeline(BasePipeline):
                         "mask": TS([self.config.max_length]),
                         "context": TS([self.config.max_length, self.context_dim]),
                     },
-                    TS(target_shape)
-                )
+                    TS(target_shape),
+                ),
             )
         else:
             return (
-                (
-                    {
-                        "tokens": tf.int32,
-                        "mask": tf.float32
-                    },
-                    tf.int32
-                ),
+                ({"tokens": tf.int32, "mask": tf.float32}, tf.int32),
                 (
                     {
                         "tokens": TS([self.config.max_length, 2]),
-                        "mask": TS([self.config.max_length])
+                        "mask": TS([self.config.max_length]),
                     },
-                    TS(target_shape)
-                )
+                    TS(target_shape),
+                ),
             )
 
     def _target_encoder(self):
@@ -194,6 +190,7 @@ class SequenceLabeler(BaseModel):
         return super()._initialize()
 
     def finetune(self, Xs, Y=None, batch_size=None):
+        context = None
         if self.config.use_auxiliary_info:
             context = Xs[1]
             Xs = Xs[0]
@@ -215,23 +212,6 @@ class SequenceLabeler(BaseModel):
 
         return super().finetune(Xs, Y=Y, batch_size=batch_size)
 
-    def process_context(self, context, Xs, Xs_new=None):
-        if Xs_new is None:
-            Xs_new = Xs
-        context_new = []
-        for i in range(len(Xs)):
-            fields = Xs_new[i]
-            example_context = context[i]
-            fields_context = []
-            start = end = 0
-            for field in fields:
-                end += len(field)
-                field_context = sorted([c for c in example_context if c['start'] < end and c['end'] > start], key = lambda c: c['start'])
-                start += len(field)
-                fields_context.append(field_context)
-            context_new.append(list(itertools.chain.from_iterable(fields_context)))
-        return context_new
-
     def predict(self, X, per_token=False):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
@@ -240,7 +220,7 @@ class SequenceLabeler(BaseModel):
         :param per_token: If True, return raw probabilities and labels on a per token basis
         :returns: list of class labels.
         """
-        context=None
+        context = None
 
         chunk_size = self.config.max_length - 2
         step_size = chunk_size // 3
@@ -248,19 +228,36 @@ class SequenceLabeler(BaseModel):
         if self.config.use_auxiliary_info:
             context = X[1]
             text = X[0]
-            arr_encoded = list(itertools.chain.from_iterable(self.input_pipeline._text_to_ids([x], context=c) for x,c in zip(text,context)))
+            arr_encoded = list(
+                itertools.chain.from_iterable(
+                    self.input_pipeline._text_to_ids([x], context=c)
+                    for x, c in zip(text, context)
+                )
+            )
         else:
             text = X
-            arr_encoded = list(itertools.chain.from_iterable(self.input_pipeline._text_to_ids([x]) for x in X))
-       
+            arr_encoded = list(
+                itertools.chain.from_iterable(
+                    self.input_pipeline._text_to_ids([x]) for x in X
+                )
+            )
+
         if self.config.use_auxiliary_info:
             X = [text, context]
         labels, batch_probas = [], []
-        for pred in self._inference(X, predict_keys=[PredictMode.PROBAS, PredictMode.NORMAL], n_examples=len(arr_encoded)):
-            labels.append(self.input_pipeline.label_encoder.inverse_transform(pred[PredictMode.NORMAL]))
+        for pred in self._inference(
+            X,
+            predict_keys=[PredictMode.PROBAS, PredictMode.NORMAL],
+            n_examples=len(arr_encoded),
+        ):
+            labels.append(
+                self.input_pipeline.label_encoder.inverse_transform(
+                    pred[PredictMode.NORMAL]
+                )
+            )
             batch_probas.append(pred[PredictMode.PROBAS])
 
-        X = text # remove context information
+        X = text  # remove context information
 
         all_subseqs = []
         all_labels = []
@@ -423,3 +420,7 @@ class SequenceLabeler(BaseModel):
 
     def _predict_proba_op(self, logits, **kwargs):
         return tf.no_op()
+<<<<<<< HEAD
+=======
+
+>>>>>>> 875635e... ADD: Auxiliary info for classifier

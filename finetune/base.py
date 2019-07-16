@@ -636,6 +636,23 @@ class BaseModel(object, metaclass=ABCMeta):
         model.saver.variables = saver.variables
         return model
 
+    def process_context(self, context, Xs, Xs_new=None):
+        if Xs_new is None:
+            Xs_new = Xs
+        context_new = []
+        for i in range(len(Xs)):
+            fields = Xs_new[i]
+            example_context = context[i]
+            fields_context = []
+            start = end = 0
+            for field in fields:
+                end += len(field)
+                field_context = sorted([c for c in example_context if c['start'] < end and c['end'] > start], key = lambda c: c['start'])
+                start += len(field)
+                fields_context.append(field_context)
+            context_new.append(list(itertools.chain.from_iterable(fields_context)))
+        return context_new
+
     @classmethod
     def finetune_grid_search(cls, Xs, Y, *, test_size, eval_fn=None, probs=False, return_all=False, **kwargs):
         """
