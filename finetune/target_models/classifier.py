@@ -33,15 +33,8 @@ class Classifier(BaseModel):
     :param \**kwargs: key-value pairs of config items to override.
     """
 
-    defaults = {
-        "low_memory_mode": True,
-        "chunk_long_sequences": True
-    }
-
     def __init__(self, **kwargs):
-        d = copy.deepcopy(Classifier.defaults)
-        d.update(kwargs)
-        super().__init__(**d)
+        super().__init__(**kwargs)
 
     def _get_input_pipeline(self):
         return ClassificationPipeline(self.config)
@@ -55,7 +48,7 @@ class Classifier(BaseModel):
         """
         return super().featurize(X)
 
-    def predict(self, X, probas=False):
+    def predict(self, X, probas=True):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
@@ -69,14 +62,12 @@ class Classifier(BaseModel):
         all_labels = []
         all_probs = []
 
-        for _, start_of_doc, end_of_doc, label, proba in self.process_long_sequence(X, task='classification'):
+        for _, start_of_doc, end_of_doc, _, proba in self.process_long_sequence(X, probas):
             start, end = 0, None
             if start_of_doc:
                 # if this is the first chunk in a document, start accumulating from scratch
-                doc_labels = []
                 doc_probs = []
 
-            doc_labels.append(label)
             doc_probs.append(proba)
 
             if end_of_doc:
@@ -101,7 +92,7 @@ class Classifier(BaseModel):
         :param X: list or array of text to embed.
         :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
         """
-        return self.predict(X, probas=True)
+        return self.predict(X)
 
     def finetune(self, X, Y=None, batch_size=None):
         """

@@ -42,7 +42,7 @@ class Regressor(BaseModel):
         :returns: list of class labels.
         """
         all_labels=[]
-        for _, start_of_doc, end_of_doc, label, _ in self.process_long_sequence(X, task='regression'):
+        for _, start_of_doc, end_of_doc, label, _ in self.process_long_sequence(X):
             if start_of_doc:
                 # if this is the first chunk in a document, start accumulating from scratch
                 doc_labels = []

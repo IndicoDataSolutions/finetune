@@ -7,6 +7,7 @@ import itertools
 import math
 from abc import ABCMeta, abstractmethod
 from copy import deepcopy
+from enum import Enum
 import tempfile
 import time
 import sys
@@ -709,26 +710,25 @@ class BaseModel(object, metaclass=ABCMeta):
 
         return max(aggregated_results, key=lambda x: x[1])[0]
 
-    def process_long_sequence(self, X, task, probas=False):
-        tasks = ['sequence_labeling', 'classification', 'regression']
-        assert task in tasks, 'invalid task for processing long sequences'
+    class Task(Enum):
+        SEQUENCE_LABELING = 'sequence_labeling'
+
+
+    def process_long_sequence(self, X, probas=False):
         chunk_size = self.config.max_length - 2
         step_size = chunk_size // 3
-        if task == 'sequence_labeling':
-            arr_encoded = list(itertools.chain.from_iterable(self.input_pipeline._text_to_ids([x]) for x in X))
-        else:
-            arr_encoded = list(itertools.chain.from_iterable(self.input_pipeline._text_to_ids(x) for x in X))
-        
+        arr_encoded = list(itertools.chain.from_iterable(self.input_pipeline._text_to_ids(x) 
+            for x in self.input_pipeline._format_for_inference(X)))
+
         labels, batch_probas = [], []
         pred_keys = [PredictMode.NORMAL]
-        if task != 'regression':
+        if probas:
             pred_keys.append(PredictMode.PROBAS)
         for pred in self._inference(X, predict_keys=[PredictMode.PROBAS, PredictMode.NORMAL], n_examples=len(arr_encoded)):
-            try:
-                labels.append(self.input_pipeline.label_encoder.inverse_transform([pred[PredictMode.NORMAL]]))
-            except ValueError:
-                labels.append(self.input_pipeline.label_encoder.inverse_transform(pred[PredictMode.NORMAL]))
-            if task != 'regression':
+            labels.append(self.input_pipeline.label_encoder.inverse_transform(
+                pred[PredictMode.NORMAL] if hasattr(self,'multi_label') else [pred[PredictMode.NORMAL]] # only wrap in list if not sequence labeling
+            ))
+            if probas:
                 batch_probas.append(pred[PredictMode.PROBAS])
 
         if not batch_probas:

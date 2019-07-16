@@ -40,6 +40,17 @@ class Comparison(Classifier):
     :param \**kwargs: key-value pairs of config items to override.
     """
 
+    defaults = {
+        "chunk_long_sequences": False
+    }
+
+    def __init__(self, **kwargs):
+        d = copy.deepcopy(Comparison.defaults)
+        d.update(kwargs)
+        super().__init__(**d)
+        if self.config.chunk_long_sequences:
+            raise FinetuneError("Multifield model is incompatible with chunk_long_sequences = True in config.")
+
     def _get_input_pipeline(self):
         return ComparisonPipeline(self.config)
 
