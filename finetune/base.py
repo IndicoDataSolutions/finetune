@@ -7,7 +7,6 @@ import itertools
 import math
 from abc import ABCMeta, abstractmethod
 from copy import deepcopy
-from enum import Enum
 import tempfile
 import time
 import sys
@@ -717,10 +716,6 @@ class BaseModel(object, metaclass=ABCMeta):
 
         return max(aggregated_results, key=lambda x: x[1])[0]
 
-    class Task(Enum):
-        SEQUENCE_LABELING = 'sequence_labeling'
-
-
     def process_long_sequence(self, X, probas=False):
         chunk_size = self.config.max_length - 2
         step_size = chunk_size // 3
@@ -728,9 +723,6 @@ class BaseModel(object, metaclass=ABCMeta):
             for x in self.input_pipeline._format_for_inference(X)))
 
         labels, batch_probas = [], []
-        pred_keys = [PredictMode.NORMAL]
-        if probas:
-            pred_keys.append(PredictMode.PROBAS)
         for pred in self._inference(X, predict_keys=[PredictMode.PROBAS, PredictMode.NORMAL], n_examples=len(arr_encoded)):
             labels.append(self.input_pipeline.label_encoder.inverse_transform(
                 pred[PredictMode.NORMAL] if hasattr(self,'multi_label') else [pred[PredictMode.NORMAL]] # only wrap in list if not sequence labeling
