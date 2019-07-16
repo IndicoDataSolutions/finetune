@@ -144,7 +144,7 @@ class GPT2Encoder(BaseEncoder):
             if labels is not None:
                 label = labels[i]
             if context is not None:
-                context_ = context[i]
+                context_ = context
 
             subtokens = []
             subtoken_idxs = []
@@ -172,10 +172,6 @@ class GPT2Encoder(BaseEncoder):
                 subtoken_positions = np.cumsum([len(tok) for tok in bpe_toks]) + token_start
                 if np.sum([len(tok) for tok in bpe_toks]) > len(token):
                     special_character=True
-                    #print(token)
-                    #print(bpe_toks)
-                    #print(bpe_toks)
-                    #print(token)
                     original_subtoken_positions = np.asarray([len(token.strip()) for tok in bpe_toks]) + token_start
                 else:
                     special_character=False

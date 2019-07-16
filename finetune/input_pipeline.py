@@ -111,8 +111,6 @@ class BasePipeline(metaclass=ABCMeta):
         if encoded_output.context is not None:
             if len(np.shape(encoded_output.context)) in (2,3):
                 context_arr[:seq_length][:] = np.squeeze(encoded_output.context)
-                #print(context_arr[:10])
-                #print(encoded_output.tokens)
             else:
                 raise FinetuneError('Incorrect context rank.')
 
@@ -175,19 +173,15 @@ class BasePipeline(metaclass=ABCMeta):
             """
             Takes list of context dictionaries and turns them into lists (per sample) of lists (per token) of context vectors
             """
-            #print("CONTEXT TO VECTOR")
-            #print(context)
-            #print('')
             num_samples = len(context)
             vector_list = []
-            ignore = ['start', 'end', 'label', 'token', 'inline']
+            ignore = ['start', 'end', 'label', 'token']
 
             if not hasattr(self, 'label_encoders'): # we will fit necessary label encoders here to know dimensionality of input vector before entering featurizer
                 valid_samples = [dict_list for dict_list in context if dict_list != self.config.pad_token] # one list of dicts per sample of text
                 pads_removed = [dictionary for dict_list in valid_samples for dictionary in dict_list if dictionary != self.config.pad_token] # concat each dictionary (per token) into a list of dict
-                keys = pads_removed[0].keys()
+                keys = [k for k in pads_removed[0].keys() if k not in ignore and k in self.default.keys()]
                 characteristics = {k:[dictionary[k] for dictionary in pads_removed] for k in keys}
-
                 self.label_encoders = {k:LabelBinarizer() for k in characteristics.keys() if 
                 all(k != self.config.pad_token and not (type(data) == int or (type(data) == float and not pd.isna(data))) and k not in ignore for data in characteristics[k])} # Excludes features that are continuous, like position and font size, since they do not have categorical binary encodings
 
@@ -220,8 +214,9 @@ class BasePipeline(metaclass=ABCMeta):
                     if type(sample[idx]) == str and sample[idx] == self.config.pad_token:
                         padded_indices.append(idx)
                     else:
+                        assert set(self.default.keys()).issubset(set(sample[idx].keys())), 'token does not contain all the fields described in default'
                         tokens_with_context.append(sample[idx])
-                characteristics = {k:[dictionary[k] for dictionary in tokens_with_context] for k in tokens_with_context[0].keys()}
+                characteristics = {k:[dictionary[k] for dictionary in tokens_with_context] for k in self.default.keys()}
 
                 # make sure all features cover the same number of tokens, and calculate total num tokens
                 num_tokens = None
@@ -246,7 +241,7 @@ class BasePipeline(metaclass=ABCMeta):
                         data = np.asarray(self.label_encoders[label].transform(without_nans)) - 0.5 #this removes nans from padded tokens, but now the list is too short. The 'num_backward' variable will track this offset to ensure indices are correctly tracked.
                         data_dim = len(self.label_encoders[label].classes_)
                         if data_dim == 2: # since binary classes default to column vector
-                            data_dim=1
+                            data_dim = 1
                     else: # need to normalize our float/int inputs
                         data = [x for x in data if not pd.isna(x)]
                         stats = self.label_stats[label]
@@ -254,18 +249,16 @@ class BasePipeline(metaclass=ABCMeta):
                         data_dim = 1
 
                     #loop through indices and fill with correct data
-                    num_backward = 0
+                    tokens_added = 0
                     for sample_idx in range(len(sample)):
                         if sample_idx in padded_indices: # there is no data, simply a pad from the encoder, so fill out with zero vector
                             vector[sample_idx][:] = 0
-                            num_backward += 1 #since we're skipping this sample, the next sample needs to be filled from this sample's index in data. This variable tracks how far back we need to go for following indices
                             continue
                         for label_dimension in range(data_dim):
-                            vector[sample_idx][current_index + label_dimension] = data[sample_idx - num_backward] if data_dim  == 1 else data[sample_idx - num_backward][label_dimension]
+                            vector[sample_idx][current_index + label_dimension] = data[tokens_added] if data_dim  == 1 else data[tokens_added][label_dimension]
+                            tokens_added += 1
                     current_index += 1
                 vector_list.append(vector)
-                
-                #print(vector_list)
             return vector_list
 
 
@@ -427,7 +420,7 @@ class BasePipeline(metaclass=ABCMeta):
 
         context_style = None
         if context:
-            context_style = context[1]
+            context_style = context
         if Y is not None:
             self._post_data_initialization(Y=Y, context=context_style)
         else:

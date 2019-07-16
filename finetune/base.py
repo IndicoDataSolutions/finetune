@@ -70,6 +70,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self.resolved_gpus = None
         self.validate_config()
         self.input_pipeline = self._get_input_pipeline()
+        self.input_pipeline.default = self.default
         download_data_if_required(self.config.base_model)
         self._initialize()
         if self.config.debugging_logs:

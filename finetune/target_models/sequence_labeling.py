@@ -229,7 +229,7 @@ class SequenceLabeler(BaseModel):
                 field_context = sorted([c for c in example_context if c['start'] < end and c['end'] > start], key = lambda c: c['start'])
                 start += len(field)
                 fields_context.append(field_context)
-            context_new.append(fields_context)
+            context_new.append(list(itertools.chain.from_iterable(fields_context)))
         return context_new
 
     def predict(self, X, per_token=False):
@@ -246,7 +246,7 @@ class SequenceLabeler(BaseModel):
         step_size = chunk_size // 3
 
         if self.config.use_auxiliary_info:
-            context = [[c] for c in X[1]]
+            context = X[1]
             text = X[0]
             arr_encoded = list(itertools.chain.from_iterable(self.input_pipeline._text_to_ids([x], context=c) for x,c in zip(text,context)))
         else:
