@@ -226,7 +226,7 @@ def get_default_config():
     """
     settings = Settings(
         # General Settings
-        low_memory_mode=False,
+        low_memory_mode=True,
         interpolate_pos_embed=False,
         save_adam_vars=True,
         shuffle_buffer_size=100,
@@ -302,7 +302,7 @@ def get_default_config():
         subtoken_predictions=False,
         multi_label_sequences=False,
         multi_label_threshold=0.5,
-        chunk_long_sequences=False,
+        chunk_long_sequences=True,
 
         # Regression Params
         regression_loss="L2",
