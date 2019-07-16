@@ -147,9 +147,7 @@ class SequenceLabeler(BaseModel):
 
     defaults = {
         "n_epochs": 5,
-        "lr_warmup": 0.1,
-        "low_memory_mode": True,
-        "chunk_long_sequences": True
+        "lr_warmup": 0.1
     }
 
     def __init__(self, **kwargs):
@@ -203,7 +201,7 @@ class SequenceLabeler(BaseModel):
         chunk_size = self.config.max_length - 2
         step_size = chunk_size // 3
         doc_idx = -1
-        for position_seq, start_of_doc, end_of_doc, label_seq, proba_seq in self.process_long_sequence(X, task='sequence_labeling'):
+        for position_seq, start_of_doc, end_of_doc, label_seq, proba_seq in self.process_long_sequence(X, probas=True):
             start, end = 0, None
             if start_of_doc:
                 # if this is the first chunk in a document, start accumulating from scratch
