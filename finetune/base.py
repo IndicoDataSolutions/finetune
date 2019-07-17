@@ -709,7 +709,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         return max(aggregated_results, key=lambda x: x[1])[0]
 
-    def process_long_sequence(self, X, probas=False):
+    def process_long_sequence(self, X):
         chunk_size = self.config.max_length - 2
         step_size = chunk_size // 3
         arr_encoded = list(itertools.chain.from_iterable(self.input_pipeline._text_to_ids(x) 
@@ -720,8 +720,7 @@ class BaseModel(object, metaclass=ABCMeta):
             labels.append(self.input_pipeline.label_encoder.inverse_transform(
                 pred[PredictMode.NORMAL] if hasattr(self,'multi_label') else [pred[PredictMode.NORMAL]] # only wrap in list if not sequence labeling
             ))
-            if probas:
-                batch_probas.append(pred[PredictMode.PROBAS])
+            batch_probas.append(pred[PredictMode.PROBAS])
 
         if not batch_probas:
             batch_probas = [None]*len(labels)
