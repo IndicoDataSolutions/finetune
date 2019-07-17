@@ -254,9 +254,16 @@ class BasePipeline(metaclass=ABCMeta):
                 if type(sample[idx]) == str and sample[idx] == self.config.pad_token:
                     padded_indices.append(idx)
                 else:
-                    assert set(self.default.keys()).issubset(
-                        set(sample[idx].keys())
-                    ), "token does not contain all the fields described in default"
+                    if not set(self.default.keys()).issubset(set(sample[idx].keys())):
+                        missing = str(
+                            set(self.default.keys()).difference(set(sample[idx].keys()))
+                        )
+
+                        raise FinetuneError(
+                            "Token '{}' does not contain field(s) {} as described in default".format(
+                                sample[idx]["token"], missing
+                            )
+                        )
                     tokens_with_context.append(sample[idx])
             characteristics = {
                 k: [dictionary[k] for dictionary in tokens_with_context]

@@ -1,8 +1,22 @@
 import tensorflow as tf
-from finetune.base_models.bert.modeling import BertConfig, BertModel, dropout, layer_norm
+from finetune.base_models.bert.modeling import (
+    BertConfig,
+    BertModel,
+    dropout,
+    layer_norm,
+)
 
 
-def bert_featurizer(X, encoder, config, train=False, reuse=None, context=None, context_dim=None,**kwargs):
+def bert_featurizer(
+    X,
+    encoder,
+    config,
+    train=False,
+    reuse=None,
+    context=None,
+    context_dim=None,
+    **kwargs
+):
     """
     The transformer element of the finetuning model. Maps from tokens ids to a dense, embedding of the sequence.
 
@@ -29,7 +43,7 @@ def bert_featurizer(X, encoder, config, train=False, reuse=None, context=None, c
         max_position_embeddings=config.max_length,
         type_vocab_size=2,
         initializer_range=config.weight_stddev,
-        adapter_size=config.adapter_size
+        adapter_size=config.adapter_size,
     )
 
     initial_shape = tf.shape(X)
@@ -43,16 +57,20 @@ def bert_featurizer(X, encoder, config, train=False, reuse=None, context=None, c
     seq_length = tf.shape(delimiters)[1]
 
     lengths = tf.argmax(
-        tf.cast(delimiters, tf.float32) *
-        tf.expand_dims(tf.range(tf.cast(seq_length, tf.float32), dtype=tf.float32), 0),
-        axis=1
+        tf.cast(delimiters, tf.float32)
+        * tf.expand_dims(
+            tf.range(tf.cast(seq_length, tf.float32), dtype=tf.float32), 0
+        ),
+        axis=1,
     )
 
     mask = tf.sequence_mask(lengths, maxlen=seq_length, dtype=tf.float32)
     if config.num_layers_trained not in [config.n_layer, 0]:
-        raise ValueError("Bert base model does not support num_layers_trained not equal to 0 or n_layer")
+        raise ValueError(
+            "Bert base model does not support num_layers_trained not equal to 0 or n_layer"
+        )
 
-    with tf.variable_scope('model/featurizer', reuse=reuse):
+    with tf.variable_scope("model/featurizer", reuse=reuse):
         bert = BertModel(
             config=bert_config,
             is_training=train,
@@ -60,45 +78,59 @@ def bert_featurizer(X, encoder, config, train=False, reuse=None, context=None, c
             input_mask=mask,
             token_type_ids=token_type_ids,
             use_one_hot_embeddings=False,
-            scope=None
+            scope=None,
         )
 
         embed_weights = bert.get_embedding_table()
         features = tf.reshape(
-                bert.get_pooled_output(),
-                shape=tf.concat((initial_shape[: -2], [config.n_embed]), 0))
+            bert.get_pooled_output(),
+            shape=tf.concat((initial_shape[:-2], [config.n_embed]), 0),
+        )
         sequence_features = tf.reshape(
-                bert.get_sequence_output(),
-                shape=tf.concat((initial_shape[:-1], [config.n_embed]), 0))
+            bert.get_sequence_output(),
+            shape=tf.concat((initial_shape[:-1], [config.n_embed]), 0),
+        )
 
         if config.use_auxiliary_info:
             context_embed_weights = tf.get_variable(
                 name="ce",
-                shape=[context_dim, config.n_embed],
-                initializer=tf.random_normal_initializer(stddev=config.weight_stddev))
+                shape=[context_dim, config.n_c_embed],
+                initializer=tf.random_normal_initializer(stddev=config.weight_stddev),
+            )
 
             context_weighted_avg = tf.get_variable(
-                name='cwa',
+                name="cwa",
                 shape=[context_dim],
-                initializer=tf.random_normal_initializer(stddev=config.weight_stddev)
+                initializer=tf.random_normal_initializer(stddev=config.weight_stddev),
             )
-            
+
             if train:
-                context_embed_weights = dropout(context_embed_weights, config.embed_p_drop)
+                context_embed_weights = dropout(
+                    context_embed_weights, config.embed_p_drop
+                )
 
-            with tf.variable_scope('context_embedding'):
-                weighted_C = tf.multiply(context, context_weighted_avg) # [batch_size, seq_length, context_dim] * [context_dim] = [batch_size, seq_length, context_dim], with weighted inputs
-                c_embed = tf.tensordot(weighted_C, context_embed_weights, axes = [[2],[0]]) # [batch_size, seq_length, context_dim] * [context_dim, n_embed] = [batch_size, seq_length, n_embed]
+            with tf.variable_scope("context_embedding"):
+                weighted_C = tf.multiply(
+                    context, context_weighted_avg
+                )  # [batch_size, seq_length, context_dim] * [context_dim] = [batch_size, seq_length, context_dim], with weighted inputs
+                c_embed = tf.tensordot(
+                    weighted_C, context_embed_weights, axes=[[2], [0]]
+                )  # [batch_size, seq_length, context_dim] * [context_dim, n_embed] = [batch_size, seq_length, n_embed]
                 c_embed = layer_norm(c_embed, tf.get_variable_scope())
-                sequence_features = sequence_features + c_embed
-                features = features + tf.reduce_sum(c_embed, axis=1)
-
+                print(config.n_c_embed)
+                print(sequence_features)
+                sequence_features = tf.concat([sequence_features, c_embed], axis=2)
+                print(sequence_features)
+                c_embed = tf.reduce_sum(c_embed, axis=1)
+                print(features)
+                features = tf.concat([features, c_embed], axis=1)
+                print(features)
 
         output_state = {
-            'embed_weights': embed_weights,
-            'features': features,
-            'sequence_features': sequence_features,
-            'pool_idx': lengths
+            "embed_weights": embed_weights,
+            "features": features,
+            "sequence_features": sequence_features,
+            "pool_idx": lengths,
         }
         if config.num_layers_trained == 0:
             output_state = {k: tf.stop_gradient(v) for k, v in output_state.items()}

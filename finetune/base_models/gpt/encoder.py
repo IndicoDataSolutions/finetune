@@ -20,15 +20,9 @@ from finetune.encoding.input_encoder import NLP, EncodedOutput, BaseEncoder, get
 
 
 FINETUNE_FOLDER = os.path.dirname(finetune.__file__)
-ENCODER_PATH = os.path.join(FINETUNE_FOLDER, 'model', 'gpt', 'encoder.json')
-VOCAB_PATH = os.path.join(FINETUNE_FOLDER, 'model', 'gpt', 'vocab.bpe')
-SUBS = {
-    '—': '-',
-    '–': '-',
-    '―': '-',
-    '…': '...',
-    '´': "'"
-}
+ENCODER_PATH = os.path.join(FINETUNE_FOLDER, "model", "gpt", "encoder.json")
+VOCAB_PATH = os.path.join(FINETUNE_FOLDER, "model", "gpt", "vocab.bpe")
+SUBS = {"—": "-", "–": "-", "―": "-", "…": "...", "´": "'"}
 
 
 def _text_standardize(text):
@@ -36,9 +30,13 @@ def _text_standardize(text):
     Fixes some issues the spacy tokenizer had on books corpus
     Also handles whitespace standardization
     """
-    text = re.sub('''(-+|~+|!+|"+|;+|\?+|\++|,+|\)+|\(+|\\+|\/+|\*+|\[+|\]+|}+|{+|\|+|_+)''', r' \1 ', text)
-    text = re.sub('\s*\n\s*', ' \n ', text)
-    text = re.sub('[^\S\n]+', ' ', text)
+    text = re.sub(
+        """(-+|~+|!+|"+|;+|\?+|\++|,+|\)+|\(+|\\+|\/+|\*+|\[+|\]+|}+|{+|\|+|_+)""",
+        r" \1 ",
+        text,
+    )
+    text = re.sub("\s*\n\s*", " \n ", text)
+    text = re.sub("[^\S\n]+", " ", text)
     return ftfy.fix_text(text.strip().lower())
 
 
@@ -47,6 +45,7 @@ class GPTEncoder(BaseEncoder):
     A modified wrapper for a public python BPE tokenizer. The modifications allow encoding directly into the formats
     required for finetune. Particularly with respect to formatting with multiple inputs.
     """
+
     UNK_IDX = 0
 
     def __init__(self, encoder_path=ENCODER_PATH, vocab_path=VOCAB_PATH):
@@ -57,41 +56,43 @@ class GPTEncoder(BaseEncoder):
         if self.initialized:
             return
 
-        with open(self.encoder_path, 'r') as f:
+        with open(self.encoder_path, "r") as f:
             self.encoder = json.load(f)
 
-        with codecs.open(self.vocab_path, encoding='utf8'):
-            merges = codecs.open(self.vocab_path, encoding='utf8').read().split('\n')[1:-1]
+        with codecs.open(self.vocab_path, encoding="utf8"):
+            merges = (
+                codecs.open(self.vocab_path, encoding="utf8").read().split("\n")[1:-1]
+            )
             merges = [tuple(merge.split()) for merge in merges]
             self.bpe_ranks = dict(zip(merges, range(len(merges))))
 
         self.decoder = {v: k for k, v in self.encoder.items()}
 
-        self.special_tokens = ['_start_', '_delimiter_', '_classify_']
+        self.special_tokens = ["_start_", "_delimiter_", "_classify_"]
         for token in self.special_tokens:
             self.encoder[token] = len(self.encoder)
 
         self.decoder = {v: k for k, v in self.encoder.items()}
         self.cache = {}
-        self.start = self.encoder['_start_']
-        self.delimiter = self.encoder['_delimiter_']
-        self.clf_token = self.encoder['_classify_']
+        self.start = self.encoder["_start_"]
+        self.delimiter = self.encoder["_delimiter_"]
+        self.clf_token = self.encoder["_classify_"]
         self.initialized = True
 
     def _token_length(self, token):
-        return len(token.strip().replace('</w>', ''))
+        return len(token.strip().replace("</w>", ""))
 
     def bpe(self, token):
-        word = tuple(token[:-1]) + (token[-1] + '</w>',)
+        word = tuple(token[:-1]) + (token[-1] + "</w>",)
         if token in self.cache:
             return self.cache[token]
         pairs = get_pairs(word)
 
         if not pairs:
-            return token + '</w>'
+            return token + "</w>"
 
         while True:
-            bigram = min(pairs, key=lambda pair: self.bpe_ranks.get(pair, float('inf')))
+            bigram = min(pairs, key=lambda pair: self.bpe_ranks.get(pair, float("inf")))
             if bigram not in self.bpe_ranks:
                 break
             first, second = bigram
@@ -118,9 +119,9 @@ class GPTEncoder(BaseEncoder):
                 break
             else:
                 pairs = get_pairs(word)
-        word = ' '.join(word)
-        if word == '\n  </w>':
-            word = '\n</w>'
+        word = " ".join(word)
+        if word == "\n  </w>":
+            word = "\n</w>"
         self.cache[token] = word
         return word
 
@@ -131,75 +132,101 @@ class GPTEncoder(BaseEncoder):
         self._lazy_init()
         batch_tokens = []
         batch_context = []
-        batch_context_idxs = []
         batch_token_idxs = []
         batch_label_idxs = []
         batch_character_locs = []
+        batch_original_character_locs = (
+            []
+        )  # to account for the fact that some BPEs have different lengths than their original tokens (e.g. special characters such as bullets)
         label = None
         context_ = None
+        offset = (
+            0
+        )  # tracks offset between this fields' character_locs, which start at 0, and the 'start' keys in context which track the entire document (not just this field)
+
         for i, text in enumerate(texts):
             if labels is not None:
                 label = labels[i]
-            if context is not None: # each field in texts needs a list of dicts for its context
-                if type(context) == dict: # seeing if we have a list of context tokens, or a list of lists of context tokens
-                    context_ = [context]
-                elif type(context[0]) == dict: # this is one example, so a list of dicts
-                    context_ = context
-                else: # this is multiple examples, so a list of list of dicts
-                    context_ = context[i]
+            if context is not None:
+                context_ = context
+
             raw_text = text.lower()
             # Only fine to apply this fix because it preserves character locations
             ftfy_text = uncurl_quotes(raw_text)
             tokens = NLP(_text_standardize(text))
             subtokens = []
             subtoken_idxs = []
+            original_tok_pos = []
             tok_pos = []
             token_start = 0
 
             for j, token in enumerate(tokens):
-                bpe_toks = self.bpe(token.text).split(' ')
+                bpe_toks = self.bpe(token.text).split(" ")
 
                 try:
                     if token.text.strip():
                         token_start = ftfy_text.index((token.text.strip()), token_start)
                 except ValueError:
-                    warnings.warn("Failed to find token `{}` in text.".format(token.text))
+                    warnings.warn(
+                        "Failed to find token `{}` in text.".format(token.text)
+                    )
                     continue
 
                 subtokens.extend(bpe_toks)
-                subtoken_idxs.extend([
-                    self.encoder.get(SUBS.get(t, t), self.UNK_IDX)
-                    for t in bpe_toks
-                ])
+                subtoken_idxs.extend(
+                    [self.encoder.get(SUBS.get(t, t), self.UNK_IDX) for t in bpe_toks]
+                )
 
-                assert len("".join(bpe_toks).replace("</w>", "")) == len(token.text.replace(' ', ''))
-                subtoken_positions = np.cumsum([len(tok.replace("</w>", '')) for tok in bpe_toks]) + token_start
+                assert len("".join(bpe_toks).replace("</w>", "")) == len(
+                    token.text.replace(" ", "")
+                )
+                subtoken_positions = (
+                    np.cumsum([len(tok.replace("</w>", "")) for tok in bpe_toks])
+                    + token_start
+                )
+                if np.sum([len(tok) for tok in bpe_toks]) > len(token):
+                    original_subtoken_positions = (
+                        np.asarray([len(token.text.strip()) for tok in bpe_toks])
+                        + token_start
+                    )
+                else:
+                    original_subtoken_positions = (
+                        np.cumsum([len(tok) for tok in bpe_toks]) + token_start
+                    )
 
                 token_start += len(token.text.strip())
 
                 tok_pos.extend(subtoken_positions)
+                original_tok_pos.extend(original_subtoken_positions)
 
             batch_tokens.append(subtokens)
             batch_token_idxs.append(subtoken_idxs)
             batch_character_locs.append(tok_pos)
+            batch_original_character_locs.append(original_tok_pos)
             if labels is not None:
                 batch_label_idxs.append([label] * len(subtoken_idxs))
 
             # Context is tokenwise, so we need to duplicate contexts for each subtoken of a token, and to match length of labels
             if context_ is not None:
-                token_starts = [context['start'] for context in context_]
                 original_tokens = []
-                for char_loc in batch_character_locs[i]:
-                    original_token=-1
-                    for i in range(len(token_starts)):
-                        if char_loc >= token_starts[i]:
+                for char_loc, token in zip(
+                    batch_original_character_locs[i], batch_tokens[i]
+                ):
+                    original_token = 0
+                    for subtoken_idx in range(len(context_)):
+                        if (
+                            char_loc + offset > context_[subtoken_idx]["end"]
+                        ):  # subtract one since subtokens include spaces at the beginning, while the 'start's from context do not
                             original_token += 1
                     original_tokens.append(original_token)
-                expanded_context = [None]*len(original_tokens)
+                expanded_context = [None] * len(original_tokens)
                 for j in range(len(expanded_context)):
-                    expanded_context[j] =  context_[original_tokens[j]]
+                    expanded_context[j] = context_[original_tokens[j]]
                 batch_context.append(expanded_context)
-                assert len(expanded_context) == len(subtoken_idxs) and len(expanded_context) == len(tok_pos)
+                assert len(expanded_context) == len(subtoken_idxs) and len(
+                    expanded_context
+                ) == len(tok_pos)
+                offset += batch_original_character_locs[i][-1]
 
         return EncodedOutput(
             token_ids=batch_token_idxs,
@@ -214,7 +241,9 @@ class GPTEncoder(BaseEncoder):
         Convert a batch of ids [batch_size, id] into text(ish).
         """
 
-        return "".join([self.decoder.get(word_idx, '<unk>') for word_idx in ids]).replace("</w>", " ")
+        return "".join(
+            [self.decoder.get(word_idx, "<unk>") for word_idx in ids]
+        ).replace("</w>", " ")
 
 
 def aggregate_to_full_tokens(attn, tokens, token_starts, token_ends, attention=True):
@@ -227,7 +256,7 @@ def aggregate_to_full_tokens(attn, tokens, token_starts, token_ends, attention=T
         to_combine.append(prob)
         if spacy_start is None:
             spacy_start = start
-        if token.endswith('</w>'):
+        if token.endswith("</w>"):
             if attention:
                 spacy_attn.append(np.max(to_combine, 0))
             else:
@@ -236,17 +265,17 @@ def aggregate_to_full_tokens(attn, tokens, token_starts, token_ends, attention=T
             spacy_token_ends.append(end)
             to_combine = []
             spacy_start = None
-            
+
     if attention:
         spacy_attn = spacy_attn / sum(spacy_attn)
-        key = 'attention_weights'
+        key = "attention_weights"
     else:
-        key = 'explanation'
+        key = "explanation"
 
     return {
         key: spacy_attn,
-        'token_starts': spacy_token_starts,
-        'token_ends': spacy_token_ends
+        "token_starts": spacy_token_starts,
+        "token_ends": spacy_token_ends,
     }
 
 
@@ -277,13 +306,17 @@ def finetune_to_indico_explain(raw_texts, attn_weights, encoder, attention=True)
             # offset of one to take into account the start token
             clf_token_idx = len(tokens) + 1
             # take the average values over the attention heads for the attention weights of the classify token
-            attn = np.mean(attn_weights[doc_idx], axis=0)[clf_token_idx][1:clf_token_idx]  # [num_tokens]
+            attn = np.mean(attn_weights[doc_idx], axis=0)[clf_token_idx][
+                1:clf_token_idx
+            ]  # [num_tokens]
         else:
             # There is no start token
             clf_token_idx = len(tokens)
             attn = attn_weights[doc_idx][:clf_token_idx]
         # map one-to-one with spacy tokenization
-        spacy_output = aggregate_to_full_tokens(attn, tokens, token_starts, token_ends, attention=attention)
+        spacy_output = aggregate_to_full_tokens(
+            attn, tokens, token_starts, token_ends, attention=attention
+        )
         spacy_outputs.append(spacy_output)
     return spacy_outputs
 
