@@ -6,10 +6,16 @@ import tensorflow as tf
 import numpy as np
 
 from finetune.base import BaseModel, PredictMode
-from finetune.encoding.target_encoders import SequenceLabelingEncoder, SequenceMultiLabelingEncoder
+from finetune.encoding.target_encoders import (
+    SequenceLabelingEncoder,
+    SequenceMultiLabelingEncoder,
+)
 from finetune.nn.target_blocks import sequence_labeler
 from finetune.nn.crf import sequence_decode
-from finetune.encoding.sequence_encoder import indico_to_finetune_sequence, finetune_to_indico_sequence
+from finetune.encoding.sequence_encoder import (
+    indico_to_finetune_sequence,
+    finetune_to_indico_sequence,
+)
 from finetune.encoding.input_encoder import NLP
 from finetune.input_pipeline import BasePipeline
 
@@ -24,7 +30,9 @@ class SequencePipeline(BasePipeline):
         super()._post_data_initialization(Y_)
 
     def text_to_tokens_mask(self, X, Y=None):
-        pad_token = [self.config.pad_token] if self.multi_label else self.config.pad_token
+        pad_token = (
+            [self.config.pad_token] if self.multi_label else self.config.pad_token
+        )
         out_gen = self._text_to_ids(X, Y=Y, pad_token=pad_token)
         for out in out_gen:
             feats = {"tokens": out.token_ids, "mask": out.mask}
@@ -36,12 +44,10 @@ class SequencePipeline(BasePipeline):
     def _compute_class_counts(self, encoded_dataset):
         counter = Counter()
         for doc, target_arr in encoded_dataset:
-            targets = target_arr[doc['mask'].astype(np.bool)]
-            counter.update(
-                self.label_encoder.inverse_transform(targets)
-            )
+            targets = target_arr[doc["mask"].astype(np.bool)]
+            counter.update(self.label_encoder.inverse_transform(targets))
         return counter
-    
+
     def _format_for_encoding(self, X):
         return [X]
 
@@ -52,23 +58,18 @@ class SequencePipeline(BasePipeline):
         TS = tf.TensorShape
         target_shape = (
             [self.config.max_length, self.label_encoder.target_dim]
-            if self.multi_label else [self.config.max_length]
+            if self.multi_label
+            else [self.config.max_length]
         )
         return (
-            (
-                {
-                    "tokens": tf.int32,
-                    "mask": tf.float32
-                },
-                tf.int32
-            ),
+            ({"tokens": tf.int32, "mask": tf.float32}, tf.int32),
             (
                 {
                     "tokens": TS([self.config.max_length, 2]),
-                    "mask": TS([self.config.max_length])
+                    "mask": TS([self.config.max_length]),
                 },
-                TS(target_shape)
-            )
+                TS(target_shape),
+            ),
         )
 
     def _target_encoder(self):
@@ -82,19 +83,16 @@ def _combine_and_format(subtokens, start, end, raw_text):
     Combine predictions on many subtokens into a single token prediction.
     Currently only valid for GPT.
     """
-    result = {
-        'start': start, 
-        'end': end
-    }
-    result['text'] = raw_text[result['start']:result['end']]
+    result = {"start": start, "end": end}
+    result["text"] = raw_text[result["start"] : result["end"]]
     probabilities = {}
-    keys = subtokens[0]['probabilities'].keys()
+    keys = subtokens[0]["probabilities"].keys()
     for k in keys:
-        probabilities[k] = np.mean([token['probabilities'][k] for token in subtokens])
-    result['probabilities'] = probabilities
+        probabilities[k] = np.mean([token["probabilities"][k] for token in subtokens])
+    result["probabilities"] = probabilities
     max_response = max(probabilities.items(), key=lambda x: x[1])
-    result['label'] = max_response[0]
-    result['confidence'] = max_response[1]
+    result["label"] = max_response[0]
+    result["confidence"] = max_response[1]
     return result
 
 
@@ -105,18 +103,17 @@ def _spacy_token_predictions(raw_text, tokens, probas, positions):
     to_combine = []
     spacy_attn = []
 
-    spacy_token_starts, spacy_token_ends = zip(*[(token.idx, token.idx + len(token.text)) for token in NLP(raw_text)])
+    spacy_token_starts, spacy_token_ends = zip(
+        *[(token.idx, token.idx + len(token.text)) for token in NLP(raw_text)]
+    )
     spacy_token_idx = 0
     spacy_results = []
 
     for token, prob, (start, end) in zip(tokens, probas, positions):
-        to_combine.append({
-            'start': start,
-            'end': end,
-            'token': token,
-            'probabilities': prob
-        })
-    
+        to_combine.append(
+            {"start": start, "end": end, "token": token, "probabilities": prob}
+        )
+
         try:
             end_match = spacy_token_ends.index(end, spacy_token_idx)
             start = spacy_token_starts[end_match]
@@ -125,12 +122,7 @@ def _spacy_token_predictions(raw_text, tokens, probas, positions):
             continue
 
         spacy_results.append(
-            _combine_and_format(
-                to_combine,
-                start=start, 
-                end=end,
-                raw_text=raw_text
-            )
+            _combine_and_format(to_combine, start=start, end=end, raw_text=raw_text)
         )
         to_combine = []
 
@@ -145,10 +137,7 @@ class SequenceLabeler(BaseModel):
     :param \**kwargs: key-value pairs of config items to override.
     """
 
-    defaults = {
-        "n_epochs": 5,
-        "lr_warmup": 0.1
-    }
+    defaults = {"n_epochs": 5, "lr_warmup": 0.1}
 
     def __init__(self, **kwargs):
         """
@@ -166,7 +155,9 @@ class SequenceLabeler(BaseModel):
         super().__init__(**d)
 
     def _get_input_pipeline(self):
-        return SequencePipeline(config=self.config, multi_label=self.config.multi_label_sequences)
+        return SequencePipeline(
+            config=self.config, multi_label=self.config.multi_label_sequences
+        )
 
     def _initialize(self):
         self.multi_label = self.config.multi_label_sequences
@@ -178,7 +169,7 @@ class SequenceLabeler(BaseModel):
             encoder=self.input_pipeline.text_encoder,
             labels=Y,
             multi_label=self.multi_label,
-            none_value=self.config.pad_token
+            none_value=self.config.pad_token,
         )
         Y = Y_new if Y is not None else None
         return super().finetune(Xs, Y=Y, batch_size=batch_size)
@@ -201,7 +192,13 @@ class SequenceLabeler(BaseModel):
         chunk_size = self.config.max_length - 2
         step_size = chunk_size // 3
         doc_idx = -1
-        for position_seq, start_of_doc, end_of_doc, label_seq, proba_seq in self.process_long_sequence(X, probas=True):
+        for (
+            position_seq,
+            start_of_doc,
+            end_of_doc,
+            label_seq,
+            proba_seq,
+        ) in self.process_long_sequence(X):
             start, end = 0, None
             if start_of_doc:
                 # if this is the first chunk in a document, start accumulating from scratch
@@ -231,7 +228,7 @@ class SequenceLabeler(BaseModel):
                 if position == -1:
                     # indicates padding / special tokens
                     continue
-                
+
                 # if there are no current subsequence
                 # or the current subsequence has the wrong label
                 if not doc_subseqs or label != doc_labels[-1] or per_token:
@@ -243,7 +240,7 @@ class SequenceLabeler(BaseModel):
                     doc_starts.append(start_of_token)
                 else:
                     # continue appending to current subsequence
-                    doc_subseqs[-1] = X[doc_idx][doc_starts[-1]:position]
+                    doc_subseqs[-1] = X[doc_idx][doc_starts[-1] : position]
                     doc_probs[-1].append(proba)
                 start_of_token = position
 
@@ -253,7 +250,9 @@ class SequenceLabeler(BaseModel):
                 for prob_seq in doc_probs:
                     # format probabilities as dictionary
                     probs = np.mean(np.vstack(prob_seq), axis=0)
-                    prob_dicts.append(dict(zip(self.input_pipeline.label_encoder.classes_, probs)))
+                    prob_dicts.append(
+                        dict(zip(self.input_pipeline.label_encoder.classes_, probs))
+                    )
                     if self.multi_label:
                         del prob_dicts[-1][self.config.pad_token]
 
@@ -262,23 +261,33 @@ class SequenceLabeler(BaseModel):
                 all_probs.append(prob_dicts)
                 all_positions.append(doc_positions)
 
-        _, doc_annotations = finetune_to_indico_sequence(raw_texts=X, subseqs=all_subseqs, labels=all_labels,
-                                                         probs=all_probs, none_value=self.config.pad_token,
-                                                         subtoken_predictions=self.config.subtoken_predictions)
+        _, doc_annotations = finetune_to_indico_sequence(
+            raw_texts=X,
+            subseqs=all_subseqs,
+            labels=all_labels,
+            probs=all_probs,
+            none_value=self.config.pad_token,
+            subtoken_predictions=self.config.subtoken_predictions,
+        )
 
         if per_token:
             return [
                 {
-                    'tokens': _spacy_token_predictions(
+                    "tokens": _spacy_token_predictions(
                         raw_text=raw_text,
                         tokens=tokens,
-                        probas=probas, 
-                        positions=positions
+                        probas=probas,
+                        positions=positions,
                     ),
-                    'prediction': predictions,
+                    "prediction": predictions,
                 }
                 for raw_text, tokens, labels, probas, positions, predictions in zip(
-                    X, all_subseqs, all_labels, all_probs, all_positions, doc_annotations
+                    X,
+                    all_subseqs,
+                    all_labels,
+                    all_probs,
+                    all_positions,
+                    doc_annotations,
                 )
             ]
         else:
@@ -303,9 +312,11 @@ class SequenceLabeler(BaseModel):
         return self.predict(X)
 
     @staticmethod
-    def _target_model(config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
+    def _target_model(
+        config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
+    ):
         return sequence_labeler(
-            hidden=featurizer_state['sequence_features'],
+            hidden=featurizer_state["sequence_features"],
             targets=targets,
             n_targets=n_outputs,
             pad_id=config.pad_idx,
