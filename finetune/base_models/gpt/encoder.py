@@ -39,7 +39,7 @@ def _text_standardize(text):
     text = re.sub('''(-+|~+|!+|"+|;+|\?+|\++|,+|\)+|\(+|\\+|\/+|\*+|\[+|\]+|}+|{+|\|+|_+)''', r' \1 ', text)
     text = re.sub('\s*\n\s*', ' \n ', text)
     text = re.sub('[^\S\n]+', ' ', text)
-    return ftfy.fix_text(text.strip().lower())
+    return uncurl_quotes(text.strip().lower())
 
 
 class GPTEncoder(BaseEncoder):
@@ -138,6 +138,7 @@ class GPTEncoder(BaseEncoder):
             if labels is not None:
                 label = labels[i]
             raw_text = text.lower()
+            
             # Only fine to apply this fix because it preserves character locations
             ftfy_text = uncurl_quotes(raw_text)
             tokens = NLP(_text_standardize(text))
