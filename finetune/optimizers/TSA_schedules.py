@@ -1,10 +1,12 @@
 import tensorflow as tf
 from finetune.errors import FinetuneError
 
-def get_tsa_threshold(schedule, global_step, num_train_steps, start, end): # From Unsupervised Data Augmentation for Consistency Training, Xie et al. 2019
-    thresholds = ['linear_schedule', 'exp_schedule', 'log_schedule']
-    if schedule not in thresholds:
-        raise FinetuneError('Invalid TSA schedule set in config. Must be one of ["linear_schedule", "exp_schedule", "log_schedule"].')
+# From Unsupervised Data Augmentation for Consistency Training, Xie et al. 2019
+def get_tsa_threshold(schedule, global_step, num_train_steps, start, end):
+    if schedule not in ["linear_schedule", "exp_schedule", "log_schedule"]:
+        raise FinetuneError(
+            'Invalid TSA schedule set in config. Must be one of ["linear_schedule", "exp_schedule", "log_schedule"].'
+        )
     training_progress = tf.to_float(global_step) / tf.to_float(num_train_steps)
     if schedule == "linear_schedule":
         threshold = training_progress
