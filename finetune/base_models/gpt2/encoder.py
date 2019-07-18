@@ -9,9 +9,8 @@ import finetune
 from finetune.encoding.input_encoder import BaseEncoder, EncodedOutput, get_pairs
 
 FINETUNE_FOLDER = os.path.dirname(finetune.__file__)
-ENCODER_PATH = os.path.join(FINETUNE_FOLDER, "model", "gpt2", "encoder.json")
-VOCAB_PATH = os.path.join(FINETUNE_FOLDER, "model", "gpt2", "vocab.bpe")
-
+ENCODER_PATH = os.path.join(FINETUNE_FOLDER, 'model', 'gpt2', 'encoder.json')
+VOCAB_PATH = os.path.join(FINETUNE_FOLDER, 'model', 'gpt2', 'vocab.bpe')
 
 @lru_cache()
 def bytes_to_unicode():
@@ -25,9 +24,9 @@ def bytes_to_unicode():
     And avoids mapping to whitespace/control characters the bpe code barfs on.
     """
     bs = (
-        list(range(ord("!"), ord("~") + 1))
-        + list(range(ord("¡"), ord("¬") + 1))
-        + list(range(ord("®"), ord("ÿ") + 1))
+        list(range(ord("!"), ord("~") + 1)) +
+        list(range(ord("¡"), ord("¬") + 1)) +
+        list(range(ord("®"), ord("ÿ") + 1))
     )
     cs = bs[:]
     n = 0
@@ -45,29 +44,26 @@ class GPT2Encoder(BaseEncoder):
     A modified wrapper for a public python BPE tokenizer. The modifications allow encoding directly into the formats
     required for finetune. Particularly with respect to formatting with multiple inputs.
     """
-
     UNK_IDX = 0
 
     def __init__(self, encoder_path=ENCODER_PATH, vocab_path=VOCAB_PATH):
         super().__init__(encoder_path=encoder_path, vocab_path=vocab_path)
 
-    def _lazy_init(self, errors="replace"):
+    def _lazy_init(self, errors='replace'):
         if self.initialized:
             return
 
         # Load encoder
-        with open(self.encoder_path, "r") as f:
+        with open(self.encoder_path, 'r') as f:
             self.encoder = json.load(f)
 
         # Load BPE
-        with open(self.vocab_path, "r", encoding="utf-8") as f:
+        with open(self.vocab_path, 'r', encoding="utf-8") as f:
             bpe_data = f.read()
-        bpe_merges = [
-            tuple(merge_str.split()) for merge_str in bpe_data.split("\n")[1:-1]
-        ]
+        bpe_merges = [tuple(merge_str.split()) for merge_str in bpe_data.split('\n')[1:-1]]
         self.bpe_ranks = dict(zip(bpe_merges, range(len(bpe_merges))))
 
-        self.special_tokens = ["_delimiter_", "_classify_"]
+        self.special_tokens = ['_delimiter_', '_classify_']
         for token in self.special_tokens:
             self.encoder[token] = len(self.encoder)
 
@@ -75,15 +71,13 @@ class GPT2Encoder(BaseEncoder):
         self.errors = errors
         self.byte_encoder = bytes_to_unicode()
         self.byte_decoder = {v: k for k, v in self.byte_encoder.items()}
-        self.start = self.encoder["<|endoftext|>"]
-        self.delimiter = self.encoder["_delimiter_"]
-        self.clf_token = self.encoder["_classify_"]
+        self.start = self.encoder['<|endoftext|>']
+        self.delimiter = self.encoder['_delimiter_']
+        self.clf_token = self.encoder['_classify_']
         self.cache = {}
 
         # Should haved added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
-        self.pat = re.compile(
-            r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
-        )
+        self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
         self.initialized = True
 
     def bpe(self, token):
@@ -96,7 +90,7 @@ class GPT2Encoder(BaseEncoder):
             return token
 
         while True:
-            bigram = min(pairs, key=lambda pair: self.bpe_ranks.get(pair, float("inf")))
+            bigram = min(pairs, key=lambda pair: self.bpe_ranks.get(pair, float('inf')))
             if bigram not in self.bpe_ranks:
                 break
             first, second = bigram
@@ -123,7 +117,7 @@ class GPT2Encoder(BaseEncoder):
                 break
             else:
                 pairs = get_pairs(word)
-        word = " ".join(word)
+        word = ' '.join(word)
         self.cache[token] = word
         return word
 
@@ -150,10 +144,8 @@ class GPT2Encoder(BaseEncoder):
 
             tokens = re.findall(self.pat, text)
             for j, token in enumerate(tokens):
-                encoded_token = "".join(
-                    self.byte_encoder[b] for b in token.encode("utf-8")
-                )
-                bpe_toks = self.bpe(encoded_token).split(" ")
+                encoded_token = ''.join(self.byte_encoder[b] for b in token.encode('utf-8'))
+                bpe_toks = self.bpe(encoded_token).split(' ')
                 try:
                     if token.strip():
                         token_start = text.index(token, token_start)
@@ -163,12 +155,11 @@ class GPT2Encoder(BaseEncoder):
                     continue
 
                 subtokens.extend(bpe_toks)
-                subtoken_idxs.extend(
-                    [self.encoder.get(t, self.UNK_IDX) for t in bpe_toks]
-                )
-                subtoken_positions = (
-                    np.cumsum([len(tok) for tok in bpe_toks]) + token_start
-                )
+                subtoken_idxs.extend([
+                    self.encoder.get(t, self.UNK_IDX)
+                    for t in bpe_toks
+                ])
+                subtoken_positions = np.cumsum([len(tok) for tok in bpe_toks]) + token_start
                 token_start += len(token.strip())
                 tok_pos.extend(subtoken_positions)
 
@@ -189,8 +180,6 @@ class GPT2Encoder(BaseEncoder):
         """
         Convert a batch of ids [batch_size, id] into text(ish).
         """
-        text = "".join([self.decoder[token_id] for token_id in token_ids])
-        text = bytearray([self.byte_decoder[c] for c in text]).decode(
-            "utf-8", errors=self.errors
-        )
+        text = ''.join([self.decoder[token_id] for token_id in token_ids])
+        text = bytearray([self.byte_decoder[c] for c in text]).decode('utf-8', errors=self.errors)
         return text

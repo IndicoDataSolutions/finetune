@@ -41,12 +41,12 @@ class Regressor(BaseModel):
         :param X: list or array of text to embed.
         :returns: list of class labels.
         """
-        all_labels = []
+        all_labels=[]
         for _, start_of_doc, end_of_doc, label, _ in self.process_long_sequence(X):
             if start_of_doc:
                 # if this is the first chunk in a document, start accumulating from scratch
                 doc_labels = []
-
+                
             doc_labels.append(label)
 
             if end_of_doc:
@@ -75,16 +75,14 @@ class Regressor(BaseModel):
         return super().finetune(X, Y=Y, batch_size=batch_size)
 
     @staticmethod
-    def _target_model(
-        config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
-    ):
+    def _target_model(config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
         return regressor(
-            hidden=featurizer_state["features"],
-            targets=targets,
+            hidden=featurizer_state['features'],
+            targets=targets, 
             n_targets=n_outputs,
             config=config,
-            train=train,
-            reuse=reuse,
+            train=train, 
+            reuse=reuse, 
             **kwargs
         )
 

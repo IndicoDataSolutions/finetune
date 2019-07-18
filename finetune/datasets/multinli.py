@@ -14,13 +14,15 @@ from finetune.datasets import Dataset
 logging.basicConfig(level=logging.DEBUG)
 
 FILENAME = "multinli.dev.csv"
-DATA_PATH = os.path.join("Data", "Entailment", FILENAME)
+DATA_PATH = os.path.join('Data', 'Entailment', FILENAME)
 CHECKSUM = "4837f671a2ee1042f3d308de5352b58e"
 
 
 class MultiNLI(Dataset):
+
     def __init__(self, filename=None, **kwargs):
         super().__init__(filename=(filename or DATA_PATH), **kwargs)
+
 
     @property
     def md5(self):
@@ -36,7 +38,8 @@ class MultiNLI(Dataset):
         remote_url = "https://s3.amazonaws.com/enso-data/multinli.dev.csv"
 
         response = requests.get(remote_url)
-        open(DATA_PATH, "wb").write(response.content)
+        open(DATA_PATH, 'wb').write(response.content)
+
 
 
 if __name__ == "__main__":
@@ -48,4 +51,4 @@ if __name__ == "__main__":
     )
     model.fit(list(zip(trainX1, trainX2)), Y=trainY)
     accuracy = np.mean(model.predict(list(zip(testX1, testX2))) == testY)
-    print("Test Accuracy: {:0.2f}".format(accuracy))
+    print('Test Accuracy: {:0.2f}'.format(accuracy))

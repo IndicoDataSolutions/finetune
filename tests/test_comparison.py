@@ -4,8 +4,8 @@ import warnings
 import random
 
 # prevent excessive warning logs
-warnings.filterwarnings("ignore")
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+warnings.filterwarnings('ignore')
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 import tensorflow as tf
 import numpy as np
@@ -20,7 +20,9 @@ SST_FILENAME = "SST-binary.csv"
 
 class TestComparison(unittest.TestCase):
     n_sample = 20
-    dataset_path = os.path.join("Data", "Classify", "SST-binary.csv")
+    dataset_path = os.path.join(
+        'Data', 'Classify', 'SST-binary.csv'
+    )
 
     def default_config(self, **kwargs):
         d = dict(
@@ -28,8 +30,8 @@ class TestComparison(unittest.TestCase):
             max_length=128,
             n_epochs=1,
             l2_reg=0,
-            lm_loss_coef=0.0,
-            val_size=0.0,
+            lm_loss_coef=0.,
+            val_size=0.,
         )
         d.update(kwargs)
         return d
@@ -47,22 +49,11 @@ class TestComparison(unittest.TestCase):
         model = Comparison(**self.default_config())
         n_samples = 10
         model.fit(
-            [
-                [
-                    "Transformers was a terrible movie but a great model",
-                    "Transformers are a great model but a terrible movie",
-                ]
-            ]
-            * n_samples,
-            ["yes"] * n_samples,
+            [["Transformers was a terrible movie but a great model", "Transformers are a great model but a terrible movie"]] * n_samples,
+            ['yes'] * n_samples
         )
 
-        test_data = [
-            [
-                "Transformers was a terrible movie but a great model",
-                "Transformers are a great model but a terrible movie",
-            ]
-        ]
+        test_data = [["Transformers was a terrible movie but a great model", "Transformers are a great model but a terrible movie"]]
 
         predictions = model.predict(test_data)
         for prediction in predictions:
@@ -76,43 +67,8 @@ class TestComparison(unittest.TestCase):
         model = Comparison(**self.default_config())
 
         # fake dataset generation
-        animals = [
-            "dog",
-            "cat",
-            "horse",
-            "cow",
-            "pig",
-            "sheep",
-            "goat",
-            "chicken",
-            "guinea pig",
-            "donkey",
-            "turkey",
-            "duck",
-            "camel",
-            "goose",
-            "llama",
-            "rabbit",
-            "fox",
-        ]
-        numbers = [
-            "one",
-            "two",
-            "three",
-            "four",
-            "five",
-            "six",
-            "seven",
-            "eight",
-            "nine",
-            "ten",
-            "eleven",
-            "twelve",
-            "thirteen",
-            "fourteen",
-            "fifteen",
-            "sixteen",
-        ]
+        animals = ["dog", "cat", "horse", "cow", "pig", "sheep", "goat", "chicken", "guinea pig", "donkey", "turkey", "duck", "camel", "goose", "llama", "rabbit", "fox"]
+        numbers = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen"]
 
         n_per = 100
         similar = []
@@ -123,9 +79,7 @@ class TestComparison(unittest.TestCase):
         for i in range(n_per):
             different.append([random.choice(animals), random.choice(numbers)])
 
-        targets = np.asarray(
-            ["similar"] * len(similar) + ["different"] * len(different)
-        )
+        targets = np.asarray(["similar"] * len(similar) + ["different"] * len(different))
         data = similar + different
 
         x_tr, x_te, t_tr, t_te = train_test_split(data, targets, test_size=0.3)
@@ -133,7 +87,5 @@ class TestComparison(unittest.TestCase):
 
         predictions = model.predict(x_te)
         accuracy = np.mean([pred == true for pred, true in zip(predictions, t_te)])
-        naive_baseline = max(
-            np.mean(targets == "similar"), np.mean(targets == "different")
-        )
+        naive_baseline = max(np.mean(targets == "similar"), np.mean(targets == "different"))
         self.assertGreater(accuracy, naive_baseline)

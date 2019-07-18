@@ -18,7 +18,7 @@ from finetune.errors import FinetuneError
 from finetune.encoding.input_encoder import ArrayEncodedOutput, EncodedOutput
 from finetune.util.imbalance import compute_class_weights
 
-LOGGER = logging.getLogger("finetune")
+LOGGER = logging.getLogger('finetune')
 
 
 class BasePipeline(metaclass=ABCMeta):
@@ -43,14 +43,20 @@ class BasePipeline(metaclass=ABCMeta):
     def feed_shape_type_def(self):
         TS = tf.TensorShape
         return (
-            ({"tokens": tf.int32, "mask": tf.float32}, tf.float32),
+            (
+                {
+                    "tokens": tf.int32,
+                    "mask": tf.float32
+                },
+                tf.float32
+            ),
             (
                 {
                     "tokens": TS([self.config.max_length, 2]),
-                    "mask": TS([self.config.max_length]),
+                    "mask": TS([self.config.max_length])
                 },
-                TS([self.target_dim]),
-            ),
+                TS([self.target_dim])
+            )
         )
 
     def _array_format(self, encoded_output, pad_token=None):
@@ -65,7 +71,7 @@ class BasePipeline(metaclass=ABCMeta):
         mask = np.zeros((self.config.max_length), dtype=np.float32)
 
         if encoded_output.labels is not None:
-            labels_arr = np.empty((self.config.max_length), dtype="object")
+            labels_arr = np.empty((self.config.max_length), dtype='object')
             labels_arr.fill((pad_token or self.config.pad_token))
         else:
             labels_arr = None
@@ -78,8 +84,7 @@ class BasePipeline(metaclass=ABCMeta):
             labels_arr[:seq_length] = encoded_output.labels
         # positional_embeddings
         x[:, 1] = np.arange(
-            self.text_encoder.vocab_size,
-            self.text_encoder.vocab_size + self.config.max_length,
+            self.text_encoder.vocab_size, self.text_encoder.vocab_size + self.config.max_length
         )
 
         output = ArrayEncodedOutput(
@@ -117,20 +122,17 @@ class BasePipeline(metaclass=ABCMeta):
     def _compute_class_counts(self, encoded_dataset):
         target_arrs = np.asarray([target_arr for doc, target_arr in encoded_dataset])
         return Counter(self.label_encoder.inverse_transform(target_arrs))
-
+        
     def _dataset_with_targets(self, Xs, Y, train):
         if not callable(Xs) and not callable(Y):
             dataset = lambda: zip(Xs, Y)
         elif callable(Xs) and callable(Y):
             dataset = lambda: zip(Xs(), Y())  # encode one sample at a time.
         else:
-            raise ValueError(
-                "Either neither or both of Xs and Y should be callable, not a mixture"
-            )
+            raise ValueError("Either neither or both of Xs and Y should be callable, not a mixture")
 
         dataset_encoded = lambda: itertools.chain.from_iterable(
-            map(lambda xy: self.text_to_tokens_mask(*xy), dataset())
-        )
+            map(lambda xy: self.text_to_tokens_mask(*xy), dataset()))
         shape_def = self.feed_shape_type_def()
 
         if not callable(Y) and train:
@@ -139,12 +141,11 @@ class BasePipeline(metaclass=ABCMeta):
             self.config.dataset_size = len(dataset_encoded_list)
             if self.config.class_weights is not None:
                 self.config.class_weights = compute_class_weights(
-                    class_weights=self.config.class_weights, class_counts=class_counts
+                    class_weights=self.config.class_weights, 
+                    class_counts=class_counts
                 )
-
-        return Dataset.from_generator(
-            lambda: self.wrap_tqdm(dataset_encoded(), train), *shape_def
-        )
+           
+        return Dataset.from_generator(lambda: self.wrap_tqdm(dataset_encoded(), train), *shape_def)
 
     def _dataset_without_targets(self, Xs, train):
         if not callable(Xs):
@@ -152,17 +153,13 @@ class BasePipeline(metaclass=ABCMeta):
         else:
             Xs_fn = lambda: self.wrap_tqdm(Xs(), train)
 
-        dataset_encoded = lambda: itertools.chain.from_iterable(
-            map(self.text_to_tokens_mask, Xs_fn())
-        )
+        dataset_encoded = lambda: itertools.chain.from_iterable(map(self.text_to_tokens_mask, Xs_fn()))
         if not callable(Xs) and self.config.chunk_long_sequences:
             # Adjust dataset size to account for long documents being chunked
             dataset_encoded_list = list(dataset_encoded())
             self.config.dataset_size = len(dataset_encoded_list)
         types, shapes = self.feed_shape_type_def()
-        return Dataset.from_generator(
-            dataset_encoded, types[0], shapes[0]
-        )  # 0s cut out the targets
+        return Dataset.from_generator(dataset_encoded, types[0], shapes[0])  # 0s cut out the targets
 
     def _integer_val_size(self, val_size):
         if isinstance(val_size, float):
@@ -174,10 +171,7 @@ class BasePipeline(metaclass=ABCMeta):
         Auto-select reasonable validation settings
         """
         if self.config.val_size is not None and self.config.val_interval is not None:
-            return (
-                self._integer_val_size(self.config.val_size),
-                self.config.val_interval,
-            )
+            return self._integer_val_size(self.config.val_size), self.config.val_interval
 
         # Auto-select reasonable validation size
         if self.config.val_size is None:
@@ -230,9 +224,7 @@ class BasePipeline(metaclass=ABCMeta):
 
             if train:
                 if self.config.prefit_init and self.epoch <= self.config.n_epochs:
-                    desc = "Initialization Epoch {}/{}".format(
-                        current_epoch, self.config.n_epochs
-                    )
+                    desc = "Initialization Epoch {}/{}".format(current_epoch, self.config.n_epochs)
                 else:
                     desc = "Epoch {}/{}".format(current_epoch, self.config.n_epochs)
             else:
@@ -240,13 +232,7 @@ class BasePipeline(metaclass=ABCMeta):
             for _, i in zip(range(self._skip_tqdm), it):
                 yield i
 
-            for i in tqdm.tqdm(
-                it,
-                desc=desc,
-                total=total,
-                miniters=1,
-                leave=current_epoch == self.config.n_epochs and train,
-            ):
+            for i in tqdm.tqdm(it, desc=desc, total=total, miniters=1, leave=current_epoch == self.config.n_epochs and train):
                 yield i
 
             if train:
@@ -276,7 +262,7 @@ class BasePipeline(metaclass=ABCMeta):
 
         self.config.val_size, self.config.val_interval = self.validation_settings(
             n_examples=len(Xs) if not callable(Xs) else self.config.dataset_size,
-            batch_size=batch_size or self.config.batch_size,
+            batch_size=batch_size or self.config.batch_size
         )
         self.config.dataset_size -= val_size
 
@@ -286,36 +272,19 @@ class BasePipeline(metaclass=ABCMeta):
         if callable(Xs) or Y is None:
             self._skip_tqdm = val_size
             dataset = self._make_dataset(Xs, Y, train=True)
-            val_dataset_unbatched = (
-                lambda: dataset()
-                .shuffle(
-                    shuffle_buffer_size,
-                    seed=self.config.seed,
-                    reshuffle_each_iteration=False,
-                )
-                .take(self.config.val_size)
-            )
-            train_dataset_unbatched = (
-                lambda: dataset()
-                .shuffle(
-                    shuffle_buffer_size,
-                    seed=self.config.seed,
-                    reshuffle_each_iteration=False,
-                )
-                .skip(self.config.val_size)
-            )
+            val_dataset_unbatched = lambda: dataset().shuffle(
+                shuffle_buffer_size, seed=self.config.seed, reshuffle_each_iteration=False
+            ).take(self.config.val_size)
+            train_dataset_unbatched = lambda: dataset().shuffle(
+                shuffle_buffer_size, seed=self.config.seed, reshuffle_each_iteration=False
+            ).skip(self.config.val_size)
         else:
             self._skip_tqdm = 0
             if self.config.val_set is None:
                 if self.config.val_size == 0:
                     Xs_tr, Xs_va, Y_tr, Y_va = Xs, [], Y, []
                 else:
-                    Xs_tr, Xs_va, Y_tr, Y_va = train_test_split(
-                        Xs,
-                        Y,
-                        test_size=self.config.val_size,
-                        random_state=self.config.seed,
-                    )
+                    Xs_tr, Xs_va, Y_tr, Y_va = train_test_split(Xs, Y, test_size=self.config.val_size, random_state=self.config.seed)
             else:
                 Xs_tr, Y_tr = Xs, Y
                 Xs_va, Y_va = self.config.val_set
@@ -329,31 +298,15 @@ class BasePipeline(metaclass=ABCMeta):
             # Certain settings require that the entire dataset be encoded before compiling the graph
             train_dataset_unbatched()
 
-        val_dataset = (
-            lambda: val_dataset_unbatched()
-            .batch(batch_size, drop_remainder=False)
-            .cache()
-            .prefetch(prefetch_buffer)
-        )
-        train_dataset = (
-            lambda: train_dataset_unbatched()
-            .batch(batch_size, drop_remainder=False)
-            .repeat(self.config.n_epochs)
-            .prefetch(prefetch_buffer)
-        )
+        val_dataset = lambda: val_dataset_unbatched().batch(batch_size, drop_remainder=False).cache().prefetch(prefetch_buffer)
+        train_dataset = lambda: train_dataset_unbatched().batch(batch_size, drop_remainder=False).repeat(
+            self.config.n_epochs).prefetch(prefetch_buffer)
 
-        return (
-            val_dataset,
-            train_dataset,
-            self.config.val_size,
-            self.config.val_interval,
-        )
+        return val_dataset, train_dataset, self.config.val_size, self.config.val_interval
 
     def get_predict_input_fn(self, Xs, batch_size=None):
         batch_size = batch_size or self.config.batch_size
-        tf_dataset = lambda: self._dataset_without_targets(Xs, train=None).batch(
-            batch_size
-        )
+        tf_dataset = lambda: self._dataset_without_targets(Xs, train=None).batch(batch_size)
         return tf_dataset
 
     @property
@@ -392,7 +345,7 @@ class BasePipeline(metaclass=ABCMeta):
                 Xs,
                 Y=Y,
                 max_length=sys.maxsize,
-                pad_token=(pad_token or self.config.pad_token),
+                pad_token=(pad_token or self.config.pad_token)
             )
             length = len(encoded.token_ids)
             starts = list(range(0, length, step_size))
@@ -409,9 +362,7 @@ class BasePipeline(metaclass=ABCMeta):
                 Xs,
                 Y=Y,
                 max_length=self.config.max_length,
-                pad_token=(pad_token or self.config.pad_token),
+                pad_token=(pad_token or self.config.pad_token)
             )
 
-            yield self._array_format(
-                encoder_out, pad_token=(pad_token or self.config.pad_token)
-            )
+            yield self._array_format(encoder_out, pad_token=(pad_token or self.config.pad_token))

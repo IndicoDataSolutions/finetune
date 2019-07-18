@@ -47,11 +47,6 @@ def sequence_decode(logits, transition_matrix):
             viterbi_sequence, viterbi_logits = viterbi_decode(logit, transition_matrix)
             all_predictions.append(viterbi_sequence)
             all_logits.append(viterbi_logits)
-        return (
-            np.array(all_predictions, dtype=np.int32),
-            np.array(all_logits, dtype=np.float32),
-        )
+        return np.array(all_predictions, dtype=np.int32), np.array(all_logits, dtype=np.float32)
 
-    return tf.py_func(
-        _sequence_decode, [logits, transition_matrix], [tf.int32, tf.float32]
-    )
+    return tf.py_func(_sequence_decode, [logits, transition_matrix], [tf.int32, tf.float32])
