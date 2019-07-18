@@ -7,16 +7,23 @@ from finetune.target_models.comparison import ComparisonPipeline
 from finetune.nn.target_blocks import regressor
 from finetune.base import BaseModel
 
-class ComparisonRegressionPipeline(ComparisonPipeline):
 
+class ComparisonRegressionPipeline(ComparisonPipeline):
     def _target_encoder(self):
         return RegressionEncoder()
 
     def feed_shape_type_def(self):
         TS = tf.TensorShape
-        return ({"tokens": tf.int32, "mask": tf.int32}, tf.float32), (
-            {"tokens": TS([2, self.config.max_length, 2]), "mask": TS([2, self.config.max_length])},
-            TS([self.target_dim]))
+        return (
+            ({"tokens": tf.int32, "mask": tf.int32}, tf.float32),
+            (
+                {
+                    "tokens": TS([2, self.config.max_length, 2]),
+                    "mask": TS([2, self.config.max_length]),
+                },
+                TS([self.target_dim]),
+            ),
+        )
 
 
 class ComparisonRegressor(BaseModel):
@@ -31,16 +38,22 @@ class ComparisonRegressor(BaseModel):
         return ComparisonRegressionPipeline(self.config)
 
     @staticmethod
-    def _target_model(config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
-        featurizer_state["sequence_features"] = tf.abs(tf.reduce_sum(featurizer_state["sequence_features"], 1))
-        featurizer_state["features"] = tf.abs(tf.reduce_sum(featurizer_state["features"], 1))
+    def _target_model(
+        config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
+    ):
+        featurizer_state["sequence_features"] = tf.abs(
+            tf.reduce_sum(featurizer_state["sequence_features"], 1)
+        )
+        featurizer_state["features"] = tf.abs(
+            tf.reduce_sum(featurizer_state["features"], 1)
+        )
         return regressor(
-            hidden=featurizer_state['features'],
-            targets=targets, 
+            hidden=featurizer_state["features"],
+            targets=targets,
             n_targets=n_outputs,
             config=config,
-            train=train, 
-            reuse=reuse, 
+            train=train,
+            reuse=reuse,
             **kwargs
         )
 
@@ -58,7 +71,9 @@ class ComparisonRegressor(BaseModel):
         """
         Not implemented in regression task.
         """
-        raise AttributeError("`ComparisonRegressor` model does not support `predict_proba`.")
+        raise AttributeError(
+            "`ComparisonRegressor` model does not support `predict_proba`."
+        )
 
     def featurize(self, pairs):
         """
@@ -68,8 +83,7 @@ class ComparisonRegressor(BaseModel):
         :returns: np.array of features of shape (n_examples, embedding_size).
         """
         return self._featurize(pairs)
-    
-    
+
     def finetune(self, pairs, Y=None, batch_size=None):
         """
         :param pairs: Array of text, shape [batch_size, 2]
@@ -78,7 +92,7 @@ class ComparisonRegressor(BaseModel):
                            corresponds to the number of training examples provided to each GPU.
         """
         return super().finetune(pairs, Y=Y, batch_size=batch_size)
-    
+
     def _predict_op(self, logits, **kwargs):
         return logits
 

@@ -444,4 +444,3 @@ class TestClassifier(unittest.TestCase):
         self.assertEqual(
             len(explanations[0]["token_ends"]), len(explanations[0]["explanation"][0])
         )
-

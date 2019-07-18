@@ -9,8 +9,8 @@ import json
 import random
 
 # prevent excessive warning logs
-warnings.filterwarnings('ignore')
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+warnings.filterwarnings("ignore")
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 import pandas as pd
 import numpy as np
@@ -28,8 +28,10 @@ from finetune.config import get_config
 from finetune.errors import FinetuneError
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
 from finetune.util.metrics import (
-    sequence_labeling_token_precision, sequence_labeling_token_recall,
-    sequence_labeling_overlap_precision, sequence_labeling_overlap_recall
+    sequence_labeling_token_precision,
+    sequence_labeling_token_recall,
+    sequence_labeling_overlap_precision,
+    sequence_labeling_overlap_recall,
 )
 
 
@@ -49,19 +51,17 @@ class TestModelBase(unittest.TestCase):
             lm_loss_coef=0.0,
             **cls.model_specific_config
         )
-        
-        
-        return dict(get_config(
-            **kwargs,
-            **{k:v for k, v in defaults.items() if k not in kwargs}
-        ))
+
+        return dict(
+            get_config(
+                **kwargs, **{k: v for k, v in defaults.items() if k not in kwargs}
+            )
+        )
 
 
 class TestClassifierTextCNN(TestModelBase):
     n_sample = 20
-    dataset_path = os.path.join(
-        'Data', 'Classify', 'SST-binary.csv'
-    )
+    dataset_path = os.path.join("Data", "Classify", "SST-binary.csv")
     base_model = TextCNN
 
     @classmethod
@@ -78,7 +78,7 @@ class TestClassifierTextCNN(TestModelBase):
             url="https://s3.amazonaws.com/enso-data/SST-binary.csv",
             text_column="Text",
             target_column="Target",
-            filename=SST_FILENAME
+            filename=SST_FILENAME,
         )
 
     @classmethod
@@ -90,7 +90,9 @@ class TestClassifierTextCNN(TestModelBase):
         try:
             os.mkdir("tests/saved-models")
         except FileExistsError:
-            warnings.warn("tests/saved-models still exists, it is possible that some test is not cleaning up properly.")
+            warnings.warn(
+                "tests/saved-models still exists, it is possible that some test is not cleaning up properly."
+            )
             pass
 
     def tearDown(self):
@@ -127,9 +129,9 @@ class TestClassifierTextCNN(TestModelBase):
             model.predict(valid_sample.Text[:1].values)
             second = time.time()
 
-        first_prediction_time = (first - start)
-        second_prediction_time = (second - first)
-        self.assertLess(second_prediction_time, first_prediction_time / 2.)
+        first_prediction_time = first - start
+        second_prediction_time = second - first
+        self.assertLess(second_prediction_time, first_prediction_time / 2.0)
 
     def test_correct_cached_predict(self):
         model = Classifier(**self.default_config())
@@ -142,12 +144,12 @@ class TestClassifierTextCNN(TestModelBase):
             np.testing.assert_allclose(
                 list(model.predict_proba(valid_sample.Text[:1].values)[0].values()),
                 list(predictions[0].values()),
-                rtol=1e-4
+                rtol=1e-4,
             )
             np.testing.assert_allclose(
                 list(model.predict_proba(valid_sample.Text[1:2].values)[0].values()),
                 list(predictions2[0].values()),
-                rtol=1e-4
+                rtol=1e-4,
             )
 
     def test_fit_predict(self):
@@ -198,7 +200,7 @@ class TestClassifierTextCNN(TestModelBase):
         self.assertTrue(new_recall >= recall)
 
         # test auto-inferred class weights function
-        model = Classifier(**self.default_config(class_weights='log'))
+        model = Classifier(**self.default_config(class_weights="log"))
         model.fit(train_sample.Text.values, train_sample.Target.values)
 
     def test_fit_predict_batch_size_1(self):
@@ -217,7 +219,7 @@ class TestClassifierTextCNN(TestModelBase):
         Ensure saving + loading does not cause errors
         Ensure saving + loading does not change predictions
         """
-        save_file = 'tests/saved-models/test-save-load'
+        save_file = "tests/saved-models/test-save-load"
         config = self.default_config(save_adam_vars=False)
         model = Classifier(**config)
         train_sample = self.dataset.sample(n=self.n_sample)
@@ -257,7 +259,7 @@ class TestClassifierTextCNN(TestModelBase):
         Ensure validation settings do not result in an error
         """
         config = self.default_config()
-        config.update({'val_interval': 10, 'val_size': 0})
+        config.update({"val_interval": 10, "val_size": 0})
         model = Classifier(**config)
         train_sample = self.dataset.sample(n=20)
         model.fit(train_sample.Text, train_sample.Target)
@@ -265,9 +267,7 @@ class TestClassifierTextCNN(TestModelBase):
 
 class TestComparisonTextCNN(TestModelBase):
     n_sample = 20
-    dataset_path = os.path.join(
-        'Data', 'Classify', 'SST-binary.csv'
-    )
+    dataset_path = os.path.join("Data", "Classify", "SST-binary.csv")
     base_model = TextCNN
 
     def setUp(self):
@@ -283,11 +283,22 @@ class TestComparisonTextCNN(TestModelBase):
         model = Comparison(**self.default_config())
         n_samples = 10
         model.fit(
-            [["Transformers was a terrible movie but a great model", "Transformers are a great model but a terrible movie"]] * n_samples,
-            ['yes'] * n_samples
+            [
+                [
+                    "Transformers was a terrible movie but a great model",
+                    "Transformers are a great model but a terrible movie",
+                ]
+            ]
+            * n_samples,
+            ["yes"] * n_samples,
         )
 
-        test_data = [["Transformers was a terrible movie but a great model", "Transformers are a great model but a terrible movie"]]
+        test_data = [
+            [
+                "Transformers was a terrible movie but a great model",
+                "Transformers are a great model but a terrible movie",
+            ]
+        ]
 
         predictions = model.predict(test_data)
         for prediction in predictions:
@@ -300,10 +311,8 @@ class TestComparisonTextCNN(TestModelBase):
 
 class TestSequenceLabelerTextCNN(TestModelBase):
     n_sample = 100
-    dataset_path = os.path.join(
-        'Data', 'Sequence', 'reuters.xml'
-    )
-    processed_path = os.path.join('Data', 'Sequence', 'reuters.json')
+    dataset_path = os.path.join("Data", "Sequence", "reuters.xml")
+    processed_path = os.path.join("Data", "Sequence", "reuters.json")
 
     base_model = TextCNN
 
@@ -344,7 +353,7 @@ class TestSequenceLabelerTextCNN(TestModelBase):
             docs.append(texts)
             docs_labels.append(labels)
 
-        with open(cls.processed_path, 'wt') as fp:
+        with open(cls.processed_path, "wt") as fp:
             json.dump((docs, docs_labels), fp)
 
     @classmethod
@@ -352,15 +361,13 @@ class TestSequenceLabelerTextCNN(TestModelBase):
         cls._download_reuters()
 
     def setUp(self):
-        self.save_file = 'tests/saved-models/test-save-load'
+        self.save_file = "tests/saved-models/test-save-load"
         random.seed(42)
         np.random.seed(42)
-        with open(self.processed_path, 'rt') as fp:
+        with open(self.processed_path, "rt") as fp:
             self.texts, self.labels = json.load(fp)
 
-        self.model = SequenceLabeler(
-            **self.default_config()
-        )
+        self.model = SequenceLabeler(**self.default_config())
 
     def test_fit_predict(self):
         """
@@ -369,18 +376,21 @@ class TestSequenceLabelerTextCNN(TestModelBase):
         Ensure class reweighting behaves as intended
         """
         raw_docs = ["".join(text) for text in self.texts]
-        texts, annotations = finetune_to_indico_sequence(raw_docs, self.texts, self.labels,
-                                                         none_value=self.model.config.pad_token)
+        texts, annotations = finetune_to_indico_sequence(
+            raw_docs, self.texts, self.labels, none_value=self.model.config.pad_token
+        )
         train_texts, test_texts, train_annotations, test_annotations = train_test_split(
             texts, annotations, test_size=0.1
         )
 
         reweighted_model = SequenceLabeler(
-            **self.default_config(class_weights={'Named Entity': 10.})
+            **self.default_config(class_weights={"Named Entity": 10.0})
         )
         reweighted_model.fit(train_texts, train_annotations)
         reweighted_predictions = reweighted_model.predict(test_texts)
-        reweighted_token_recall = sequence_labeling_token_recall(test_annotations, reweighted_predictions)
+        reweighted_token_recall = sequence_labeling_token_recall(
+            test_annotations, reweighted_predictions
+        )
 
         self.model.fit(train_texts, train_annotations)
         predictions = self.model.predict(test_texts)
@@ -389,21 +399,27 @@ class TestSequenceLabelerTextCNN(TestModelBase):
         self.assertIsInstance(probas, list)
         self.assertIsInstance(probas[0], list)
         self.assertIsInstance(probas[0][0], dict)
-        self.assertIsInstance(probas[0][0]['confidence'], dict)
+        self.assertIsInstance(probas[0][0]["confidence"], dict)
 
-        token_precision = sequence_labeling_token_precision(test_annotations, predictions)
+        token_precision = sequence_labeling_token_precision(
+            test_annotations, predictions
+        )
         token_recall = sequence_labeling_token_recall(test_annotations, predictions)
-        overlap_precision = sequence_labeling_overlap_precision(test_annotations, predictions)
+        overlap_precision = sequence_labeling_overlap_precision(
+            test_annotations, predictions
+        )
         overlap_recall = sequence_labeling_overlap_recall(test_annotations, predictions)
 
-        self.assertIn('Named Entity', token_precision)
-        self.assertIn('Named Entity', token_recall)
-        self.assertIn('Named Entity', overlap_precision)
-        self.assertIn('Named Entity', overlap_recall)
+        self.assertIn("Named Entity", token_precision)
+        self.assertIn("Named Entity", token_recall)
+        self.assertIn("Named Entity", overlap_precision)
+        self.assertIn("Named Entity", overlap_recall)
 
         self.model.save(self.save_file)
 
-        self.assertGreater(reweighted_token_recall['Named Entity'], token_recall['Named Entity'])
+        self.assertGreater(
+            reweighted_token_recall["Named Entity"], token_recall["Named Entity"]
+        )
 
     def test_cached_predict(self):
         """
@@ -411,9 +427,12 @@ class TestSequenceLabelerTextCNN(TestModelBase):
         Ensure model returns predictions
         """
         raw_docs = ["".join(text) for text in self.texts]
-        texts, annotations = finetune_to_indico_sequence(raw_docs, self.texts, self.labels,
-                                                         none_value=self.model.config.pad_token)
-        train_texts, test_texts, train_annotations, _ = train_test_split(texts, annotations, test_size=0.1)
+        texts, annotations = finetune_to_indico_sequence(
+            raw_docs, self.texts, self.labels, none_value=self.model.config.pad_token
+        )
+        train_texts, test_texts, train_annotations, _ = train_test_split(
+            texts, annotations, test_size=0.1
+        )
         self.model.fit(train_texts, train_annotations)
         with self.model.cached_predict():
             self.model.predict(test_texts)
@@ -426,53 +445,53 @@ class TestSequenceLabelerTextCNN(TestModelBase):
         """
         self.model = SequenceLabeler(
             **self.default_config(
-                batch_size=2, max_length=256, lm_loss_coef=0.0, multi_label_sequences=True
+                batch_size=2,
+                max_length=256,
+                lm_loss_coef=0.0,
+                multi_label_sequences=True,
             )
         )
         raw_docs = ["".join(text) for text in self.texts]
-        texts, annotations = finetune_to_indico_sequence(raw_docs, self.texts, self.labels,
-                                                         none_value=self.model.config.pad_token)
-        train_texts, test_texts, train_annotations, _ = train_test_split(texts, annotations, test_size=0.1)
+        texts, annotations = finetune_to_indico_sequence(
+            raw_docs, self.texts, self.labels, none_value=self.model.config.pad_token
+        )
+        train_texts, test_texts, train_annotations, _ = train_test_split(
+            texts, annotations, test_size=0.1
+        )
         self.model.fit(train_texts, train_annotations)
         self.model.predict(test_texts)
         probas = self.model.predict_proba(test_texts)
         self.assertIsInstance(probas, list)
         self.assertIsInstance(probas[0], list)
         self.assertIsInstance(probas[0][0], dict)
-        self.assertIsInstance(probas[0][0]['confidence'], dict)
+        self.assertIsInstance(probas[0][0]["confidence"], dict)
         self.model.save(self.save_file)
         model = SequenceLabeler.load(self.save_file)
         model.predict(test_texts)
 
 
 class TestSequenceLabelerBert(TestSequenceLabelerTextCNN):
-    model_specific_config = {
-        "n_epochs": 2,
-        "lr": 1e-4
-    }
+    model_specific_config = {"n_epochs": 2, "lr": 1e-4}
     base_model = BERTModelCased
 
 
 class TestClassifierBert(TestClassifierTextCNN):
-    model_specific_config = {
-	"n_epochs": 2,	
-        "lr": 1e-4
-    }
+    model_specific_config = {"n_epochs": 2, "lr": 1e-4}
     base_model = BERTModelCased
 
 
 class TestComparisonBert(TestComparisonTextCNN):
-    model_specific_config = {
-	"n_epochs": 2,	
-        "lr": 1e-4
-    }
+    model_specific_config = {"n_epochs": 2, "lr": 1e-4}
     base_model = BERTModelCased
+
 
 class TestDeploymentBert(TestDeploymentModel):
     base_model = BERTModelCased
 
+
 class TestDeploymentGPT(TestDeploymentModel):
     base_model = GPTModel
+
 
 class TestDeploymentGPT2(TestDeploymentModel):
     base_model = GPT2Model

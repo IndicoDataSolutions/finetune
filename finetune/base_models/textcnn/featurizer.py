@@ -19,11 +19,11 @@ def textcnn_featurizer(X, encoder, config, train=False, reuse=None, **kwargs):
     initial_shape = tf.shape(X)
     X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-2:]), 0))
 
-    with tf.variable_scope('model/featurizer', reuse=reuse):
+    with tf.variable_scope("model/featurizer", reuse=reuse):
         embed_weights = tf.get_variable(
             name="we",
             shape=[encoder.vocab_size + config.max_length, config.n_embed_featurizer],
-            initializer=tf.random_normal_initializer(stddev=config.weight_stddev)
+            initializer=tf.random_normal_initializer(stddev=config.weight_stddev),
         )
         if config.train_embeddings:
             embed_weights = dropout(embed_weights, config.embed_p_drop, train)
@@ -36,7 +36,7 @@ def textcnn_featurizer(X, encoder, config, train=False, reuse=None, **kwargs):
         h = embed(X[:, :, :1], embed_weights)
 
         # keep track of the classify token
-        clf_token = encoder['_classify_']
+        clf_token = encoder["_classify_"]
         # Convolutional Layer (this is all the same layer, just different filter sizes)
         pool_layers = []
         conv_layers = []
@@ -45,16 +45,25 @@ def textcnn_featurizer(X, encoder, config, train=False, reuse=None, **kwargs):
                 inputs=h,
                 filters=config.num_filters_per_size,
                 kernel_size=kernel_size,
-                padding='same',
+                padding="same",
                 activation=tf.nn.relu,
-                name='conv' + str(i),
-                kernel_initializer=tf.initializers.glorot_normal
+                name="conv" + str(i),
+                kernel_initializer=tf.initializers.glorot_normal,
             )
             conv_layers.append(conv)
             # mask out the values past the classify token before performing pooling
-            pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
+            pool_idx = tf.cast(
+                tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1),
+                tf.int32,
+            )
             # mask is past the classify token (i.e. make those results extremely negative)
-            mask = tf.expand_dims(1.0 - tf.sequence_mask(pool_idx, maxlen=tf.shape(conv)[1], dtype=tf.float32), -1)
+            mask = tf.expand_dims(
+                1.0
+                - tf.sequence_mask(
+                    pool_idx, maxlen=tf.shape(conv)[1], dtype=tf.float32
+                ),
+                -1,
+            )
             pool = tf.reduce_max(conv + mask * -1e9, 1)
             pool_layers.append(pool)
 
@@ -63,13 +72,15 @@ def textcnn_featurizer(X, encoder, config, train=False, reuse=None, **kwargs):
         seq_feats = tf.reshape(conv_seq, shape=[-1, config.max_length, config.n_embed])
         # Concatenate the univariate vectors as features for classification
         clf_h = tf.concat(pool_layers, axis=1)
-        clf_h = tf.reshape(clf_h, shape=tf.concat((initial_shape[: -2], [config.n_embed]), 0))
+        clf_h = tf.reshape(
+            clf_h, shape=tf.concat((initial_shape[:-2], [config.n_embed]), 0)
+        )
 
         # note that, due to convolution and pooling, the dimensionality of the features is much smaller than in the
         # transformer base models
         return {
-            'embed_weights': embed_weights,
-            'features': clf_h,  # [batch_size, n_embed] for classify, [batch_size, 1, n_embed] for comparison, etc.
-            'sequence_features': seq_feats,  # [batch_size, seq_len, n_embed]
-            'pool_idx': pool_idx  # [batch_size]
+            "embed_weights": embed_weights,
+            "features": clf_h,  # [batch_size, n_embed] for classify, [batch_size, 1, n_embed] for comparison, etc.
+            "sequence_features": seq_feats,  # [batch_size, seq_len, n_embed]
+            "pool_idx": pool_idx,  # [batch_size]
         }

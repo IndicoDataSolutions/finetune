@@ -10,21 +10,16 @@ from sklearn.model_selection import train_test_split
 import numpy as np
 
 QnA = "QandA"
-DATA_PATH = os.path.join('Data', 'QA', QnA)
+DATA_PATH = os.path.join("Data", "QA", QnA)
 CHECKSUM = ""
 
 
 def download_data():
-    base_url = "https://raw.githubusercontent.com/uberspot/OpenTriviaQA/master/categories/{}"
+    base_url = (
+        "https://raw.githubusercontent.com/uberspot/OpenTriviaQA/master/categories/{}"
+    )
 
-    file_list = [
-        "animals",
-        "general",
-        "geography",
-        "history",
-        "literature",
-        "people"
-    ]
+    file_list = ["animals", "general", "geography", "history", "literature", "people"]
 
     for filename in file_list:
         folder = DATA_PATH
@@ -35,12 +30,13 @@ def download_data():
 
         print(base_url.format(filename))
         data = requests.get(base_url.format(filename)).content
-        fd = open(local_filepath, 'wb')
+        fd = open(local_filepath, "wb")
         fd.write(data)
         fd.close()
 
+
 def parse_file(filename):
-    with codecs.open(filename, encoding='ISO-8859-2') as file:
+    with codecs.open(filename, encoding="ISO-8859-2") as file:
         file_content = file.readlines()
     questions = []
     last_question = None
@@ -52,13 +48,12 @@ def parse_file(filename):
             continue
         elif line[0] == "#":
             if last_question is not None:
-                last_question["correct_answer"] = last_question["answers"].index(correct_answer)
+                last_question["correct_answer"] = last_question["answers"].index(
+                    correct_answer
+                )
                 questions.append(last_question)
 
-            last_question = {
-                "content": line[3:],
-                "answers": [],
-            }
+            last_question = {"content": line[3:], "answers": []}
             inside_question = True
         elif line[0] == "^":
             correct_answer = line[2:]
@@ -75,20 +70,23 @@ def parse_file(filename):
         questions.append(last_question)
     return questions
 
+
 def get_dataset(nrows=None):
     download_data()
     data = []
     files = os.listdir(DATA_PATH)
     for file in files:
-        if not file.startswith('.'):
+        if not file.startswith("."):
             data.extend(parse_file(os.path.join(DATA_PATH, file)))
     random.shuffle(data)
     return data[:nrows]
 
 
 if __name__ == "__main__":
-    print("DISCLAIMER: THIS DATASET IS NOT WELL SUITED TO THIS MODEL AND DOES NOT ACHIEVE RESULTS MUCH BETTER THAN "
-          "RANDOM CHANCE. IT IS HERE FOR API DEMO PURPOSES DUE TO LICENCES OF AVAILABLE DATASETS.")
+    print(
+        "DISCLAIMER: THIS DATASET IS NOT WELL SUITED TO THIS MODEL AND DOES NOT ACHIEVE RESULTS MUCH BETTER THAN "
+        "RANDOM CHANCE. IT IS HERE FOR API DEMO PURPOSES DUE TO LICENCES OF AVAILABLE DATASETS."
+    )
 
     data = get_dataset()
 
@@ -118,9 +116,8 @@ if __name__ == "__main__":
     model.fit(train_qs, train_ans, train_ans_correct)
     print(list(zip(model.predict(test_qs, test_ans_all), test_qs)))
 
-    accuracy = np.mean([p == t for p, t in zip(model.predict(test_qs, test_ans_all), test_ans_correct)])
+    accuracy = np.mean(
+        [p == t for p, t in zip(model.predict(test_qs, test_ans_all), test_ans_correct)]
+    )
 
-    print('Test Accuracy: {:0.2f}'.format(accuracy))
-
-
-
+    print("Test Accuracy: {:0.2f}".format(accuracy))
