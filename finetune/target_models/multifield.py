@@ -2,13 +2,13 @@ from finetune.target_models.classifier import Classifier, ClassificationPipeline
 from finetune.target_models.regressor import Regressor, RegressionPipeline
 from finetune.base import BaseModel
 
-
 class MultiFieldClassificationPipeline(ClassificationPipeline):
     def _format_for_encoding(self, X):
         return [X]
 
 
 class MultiFieldRegressionPipeline(RegressionPipeline):
+    
     def _format_for_encoding(self, X):
         return [X]
 
@@ -21,20 +21,20 @@ class MultiFieldClassifier(Classifier):
     :param \**kwargs: key-value pairs of config items to override.
     """
 
-    defaults = {"chunk_long_sequences": False}
+    defaults = {
+        "chunk_long_sequences": False
+    }
 
     def __init__(self, **kwargs):
         d = copy.deepcopy(MultifieldClassifier.defaults)
         d.update(kwargs)
         super().__init__(**d)
         if self.config.chunk_long_sequences:
-            raise FinetuneError(
-                "Multifield model is incompatible with chunk_long_sequences = True in config."
-            )
+            raise FinetuneError("Multifield model is incompatible with chunk_long_sequences = True in config.")
 
     def _get_input_pipeline(self):
         return MultiFieldClassificationPipeline(self.config)
-
+        
     def finetune(self, Xs, Y=None, batch_size=None):
         """
         :param \*Xs: lists of text inputs, shape [batch, n_fields]
@@ -82,7 +82,7 @@ class MultiFieldRegressor(Regressor):
 
     def _get_input_pipeline(self):
         return MultiFieldRegressionPipeline(self.config)
-
+        
     def finetune(self, Xs, Y=None, batch_size=None):
         """
         :param \*Xs: lists of text inputs, shape [batch, n_fields]

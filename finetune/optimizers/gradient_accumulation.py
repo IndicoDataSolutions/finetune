@@ -29,41 +29,29 @@ def get_grad_accumulation_optimizer(optimizer_class, accum_steps):
                     dtype=g.dtype,
                     initializer=tf.constant_initializer(0),
                     use_resource=True,
-                    trainable=False,
+                    trainable=False
                 )
                 add_gradients_ops.append(accum_grad.assign_add(g))
                 accumulation_vars.append(accum_grad)
 
                 grads_and_accumulated_vars.append((accum_grad, v))
 
-            global_step = (
-                global_step
-                if global_step is not None
-                else tf.train.get_or_create_global_step()
-            )
+            global_step = global_step if global_step is not None else tf.train.get_or_create_global_step()
 
             with tf.control_dependencies(add_gradients_ops):
-
                 def apply_grads():
-                    with tf.control_dependencies(
-                        [
-                            super(GradAccumulationOptimizer, self).apply_gradients(
-                                grads_and_accumulated_vars,
-                                global_step=global_step,
-                                *args,
-                                **kwargs
-                            )
-                        ]
-                    ):
-                        apply_grads_op = tf.group(
-                            *[g.assign(g.initial_value) for g in accumulation_vars]
+                    with tf.control_dependencies([
+                        super(GradAccumulationOptimizer, self).apply_gradients(
+                            grads_and_accumulated_vars, global_step=global_step, *args, **kwargs
                         )
+                    ]):
+                        apply_grads_op = tf.group(*[g.assign(g.initial_value) for g in accumulation_vars])
                     return apply_grads_op
 
                 return tf.cond(
                     tf.equal(global_step % accum_steps, accum_steps - 1),
                     true_fn=apply_grads,
-                    false_fn=lambda: tf.group(global_step.assign_add(1)),
+                    false_fn=lambda: tf.group(global_step.assign_add(1))
                 )
 
     return GradAccumulationOptimizer

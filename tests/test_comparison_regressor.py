@@ -3,8 +3,8 @@ import unittest
 import warnings
 
 # prevent excessive warning logs
-warnings.filterwarnings("ignore")
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+warnings.filterwarnings('ignore')
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 import numpy as np
 import random
@@ -21,8 +21,8 @@ class TestComparisonRegression(unittest.TestCase):
             batch_size=2,
             max_length=16,
             n_epochs=3,
-            val_size=0.0,
-            l2_reg=0.0,
+            val_size=0.,
+            l2_reg=0.,
             interpolate_pos_embed=False,
             low_memory_mode=True,
         )
@@ -42,43 +42,8 @@ class TestComparisonRegression(unittest.TestCase):
         model = ComparisonRegressor(**self.default_config())
 
         # fake dataset generation
-        animals = [
-            "dog",
-            "cat",
-            "horse",
-            "cow",
-            "pig",
-            "sheep",
-            "goat",
-            "chicken",
-            "guinea pig",
-            "donkey",
-            "turkey",
-            "duck",
-            "camel",
-            "goose",
-            "llama",
-            "rabbit",
-            "fox",
-        ]
-        numbers = [
-            "one",
-            "two",
-            "three",
-            "four",
-            "five",
-            "six",
-            "seven",
-            "eight",
-            "nine",
-            "ten",
-            "eleven",
-            "twelve",
-            "thirteen",
-            "fourteen",
-            "fifteen",
-            "sixteen",
-        ]
+        animals = ["dog", "cat", "horse", "cow", "pig", "sheep", "goat", "chicken", "guinea pig", "donkey", "turkey", "duck", "camel", "goose", "llama", "rabbit", "fox"]
+        numbers = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen"]
 
         n_per = 150
         similar = []
@@ -92,19 +57,17 @@ class TestComparisonRegression(unittest.TestCase):
         targets = np.asarray([1] * len(similar) + [0] * len(different))
         data = similar + different
 
-        x_tr, x_te, t_tr, t_te = train_test_split(
-            data, targets, test_size=0.3, random_state=42
-        )
+        x_tr, x_te, t_tr, t_te = train_test_split(data, targets, test_size=0.3, random_state=42)
         model.finetune(x_tr, t_tr)
 
         predictions = model.predict(x_te)
-        mse = np.mean([(pred - true) ** 2 for pred, true in zip(predictions, t_te)])
+        mse = np.mean([(pred - true)**2 for pred, true in zip(predictions, t_te)])
         naive_baseline = max(np.mean(targets == 1), np.mean(targets == 0))
-        naive_baseline_mse = np.mean([(naive_baseline - true) ** 2 for true in t_te])
+        naive_baseline_mse = np.mean([(naive_baseline - true)**2 for true in t_te])
         self.assertIsInstance(predictions, np.ndarray)
         self.assertIsInstance(predictions[0], np.float32)
         self.assertGreater(naive_baseline_mse, mse)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main()

@@ -12,35 +12,36 @@ class GPTModel(SourceModel):
     encoder = GPTEncoder
     featurizer = gpt_featurizer
     settings = {
-        "n_embed": 768,
-        "n_heads": 12,
-        "n_layer": 12,
-        "act_fn": "gelu",
+        'n_embed': 768,
+        'n_heads': 12,
+        'n_layer': 12,
+        'act_fn': "gelu",
         "base_model_path": os.path.join("gpt", "model-lg.jl"),
     }
     required_files = [
         {
-            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "gpt", filename),
-            "url": urljoin(GPT_BASE_URL, filename),
+            'file': os.path.join(FINETUNE_BASE_FOLDER, 'model', 'gpt', filename),
+            'url': urljoin(GPT_BASE_URL, filename)
         }
-        for filename in ["encoder.json", "vocab.bpe", "model-lg.jl"]
+        for filename in ['encoder.json', 'vocab.bpe', 'model-lg.jl']
     ]
 
 
 class GPTModelSmall(GPTModel):
     is_bidirectional = False
     settings = {
-        "n_embed": 512,
-        "n_heads": 8,
-        "n_layer": 6,
-        "act_fn": "gelu",
-        "num_layers_trained": 6,
-        "base_model_path": os.path.join("gpt", "model-sm.jl"),
+        'n_embed': 512,
+        'n_heads': 8,
+        'n_layer': 6,
+        'act_fn': "gelu",
+        'num_layers_trained': 6,
+        'base_model_path': os.path.join("gpt", "model-sm.jl"),
     }
     required_files = [
         {
-            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "gpt", filename),
-            "url": urljoin(GPT_BASE_URL, filename),
+            'file': os.path.join(FINETUNE_BASE_FOLDER, 'model', 'gpt', filename),
+            'url': urljoin(GPT_BASE_URL, filename)
         }
-        for filename in ["encoder.json", "vocab.bpe", "model-sm.jl"]
+        for filename in ['encoder.json', 'vocab.bpe', 'model-sm.jl']
     ]
+

@@ -67,11 +67,9 @@ class MultiLabelClassifier(BaseModel):
         return super().finetune(X, Y=Y, batch_size=batch_size)
 
     @staticmethod
-    def _target_model(
-        config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
-    ):
+    def _target_model(config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
         return multi_classifier(
-            hidden=featurizer_state["features"],
+            hidden=featurizer_state['features'],
             targets=targets,
             n_targets=n_outputs,
             config=config,

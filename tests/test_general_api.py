@@ -3,9 +3,9 @@ import unittest
 import warnings
 from pathlib import Path
 
-# prevent excessive warning logs
-warnings.filterwarnings("ignore")
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+# prevent excessive warning logs 
+warnings.filterwarnings('ignore')
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 import tensorflow as tf
 import pandas as pd
@@ -20,7 +20,9 @@ SST_FILENAME = "SST-binary.csv"
 
 class TestModel(unittest.TestCase):
     n_sample = 100
-    dataset_path = os.path.join("Data", "Classify", SST_FILENAME)
+    dataset_path = os.path.join(
+        'Data', 'Classify', SST_FILENAME
+    )
 
     @classmethod
     def _download_sst(cls):
@@ -36,7 +38,7 @@ class TestModel(unittest.TestCase):
             url="https://s3.amazonaws.com/enso-data/SST-binary.csv",
             text_column="Text",
             target_column="Target",
-            filename=SST_FILENAME,
+            filename=SST_FILENAME
         )
 
     @classmethod
@@ -47,11 +49,9 @@ class TestModel(unittest.TestCase):
         try:
             os.mkdir("tests/saved-models")
         except FileExistsError:
-            warnings.warn(
-                "tests/saved-models still exists, it is possible that some test is not cleaning up properly."
-            )
+            warnings.warn("tests/saved-models still exists, it is possible that some test is not cleaning up properly.")
             pass
-        self.save_file = "tests/saved-models/test-save-load.jl"
+        self.save_file = 'tests/saved-models/test-save-load.jl'
         self.dataset = pd.read_csv(self.dataset_path)
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
@@ -73,7 +73,7 @@ class TestModel(unittest.TestCase):
         new_predictions = model.predict(self.text_data_valid)
         for new_pred, old_pred in zip(new_predictions, predictions):
             self.assertEqual(new_pred, old_pred)
-
+    
     def test_cached_predict(self):
         """
         Ensure fit predict works on classification with multi inputs
@@ -93,10 +93,7 @@ class TestModel(unittest.TestCase):
         self.model = MultiFieldClassifier()
         n_examples = 10
         self.model.fit([["text " * 100] * 10] * n_examples, ["target"] * n_examples)
-        self.model.fit(
-            [["text", "text", "text", "text " * 300, "text " * 300]] * n_examples,
-            ["target"] * n_examples,
-        )
+        self.model.fit([["text", "text", "text", "text " * 300, "text " * 300]] * n_examples, ["target"] * n_examples)
 
     def test_multifield_regression(self):
         """                                                                                                                                                                         
@@ -105,9 +102,7 @@ class TestModel(unittest.TestCase):
         Ensure saving + loading does not change predictions                                                                                                                         
         """
         self.model = MultiFieldRegressor()
-        self.model.fit(
-            self.text_data_train, [np.random.random() for _ in self.train_targets]
-        )
+        self.model.fit(self.text_data_train, [np.random.random() for _ in self.train_targets])
         predictions = self.model.predict(self.text_data_valid)
         self.model.save(self.save_file)
         model = MultiFieldRegressor.load(self.save_file)
@@ -117,7 +112,7 @@ class TestModel(unittest.TestCase):
 
     def test_regressor(self):
         n_samples = 20
-        x_test = np.array(["the quick fox jumped over the lazy brown dog"] * n_samples)
+        x_test = np.array(['the quick fox jumped over the lazy brown dog'] * n_samples)
         y_test = np.random.random(n_samples)
         model_test = Regressor(n_epochs=1)
         model_test.fit(x_test, y_test)

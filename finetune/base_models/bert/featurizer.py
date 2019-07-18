@@ -29,7 +29,7 @@ def bert_featurizer(X, encoder, config, train=False, reuse=None, **kwargs):
         max_position_embeddings=config.max_length,
         type_vocab_size=2,
         initializer_range=config.weight_stddev,
-        adapter_size=config.adapter_size,
+        adapter_size=config.adapter_size
     )
 
     initial_shape = tf.shape(X)
@@ -43,20 +43,16 @@ def bert_featurizer(X, encoder, config, train=False, reuse=None, **kwargs):
     seq_length = tf.shape(delimiters)[1]
 
     lengths = tf.argmax(
-        tf.cast(delimiters, tf.float32)
-        * tf.expand_dims(
-            tf.range(tf.cast(seq_length, tf.float32), dtype=tf.float32), 0
-        ),
-        axis=1,
+        tf.cast(delimiters, tf.float32) *
+        tf.expand_dims(tf.range(tf.cast(seq_length, tf.float32), dtype=tf.float32), 0),
+        axis=1
     )
 
     mask = tf.sequence_mask(lengths, maxlen=seq_length, dtype=tf.float32)
     if config.num_layers_trained not in [config.n_layer, 0]:
-        raise ValueError(
-            "Bert base model does not support num_layers_trained not equal to 0 or n_layer"
-        )
+        raise ValueError("Bert base model does not support num_layers_trained not equal to 0 or n_layer")
 
-    with tf.variable_scope("model/featurizer", reuse=reuse):
+    with tf.variable_scope('model/featurizer', reuse=reuse):
         bert = BertModel(
             config=bert_config,
             is_training=train,
@@ -64,19 +60,19 @@ def bert_featurizer(X, encoder, config, train=False, reuse=None, **kwargs):
             input_mask=mask,
             token_type_ids=token_type_ids,
             use_one_hot_embeddings=False,
-            scope=None,
+            scope=None
         )
         output_state = {
-            "embed_weights": bert.get_embedding_table(),
-            "features": tf.reshape(
+            'embed_weights': bert.get_embedding_table(),
+            'features': tf.reshape(
                 bert.get_pooled_output(),
-                shape=tf.concat((initial_shape[:-2], [config.n_embed]), 0),
+                shape=tf.concat((initial_shape[: -2], [config.n_embed]), 0)
             ),
-            "sequence_features": tf.reshape(
+            'sequence_features': tf.reshape(
                 bert.get_sequence_output(),
-                shape=tf.concat((initial_shape[:-1], [config.n_embed]), 0),
+                shape=tf.concat((initial_shape[:-1], [config.n_embed]), 0)
             ),
-            "pool_idx": lengths,
+            'pool_idx': lengths
         }
         if config.num_layers_trained == 0:
             output_state = {k: tf.stop_gradient(v) for k, v in output_state.items()}

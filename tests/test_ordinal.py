@@ -3,8 +3,8 @@ import unittest
 import warnings
 
 # prevent excessive warning logs
-warnings.filterwarnings("ignore")
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+warnings.filterwarnings('ignore')
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 import random
 import numpy as np
@@ -12,43 +12,8 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from finetune import ComparisonOrdinalRegressor, OrdinalRegressor
 
-ANIMALS = [
-    "dog",
-    "cat",
-    "horse",
-    "cow",
-    "pig",
-    "sheep",
-    "goat",
-    "chicken",
-    "guinea pig",
-    "donkey",
-    "turkey",
-    "duck",
-    "camel",
-    "goose",
-    "llama",
-    "rabbit",
-    "fox",
-]
-NUMBERS = [
-    "one",
-    "two",
-    "three",
-    "four",
-    "five",
-    "six",
-    "seven",
-    "eight",
-    "nine",
-    "ten",
-    "eleven",
-    "twelve",
-    "thirteen",
-    "fourteen",
-    "fifteen",
-    "sixteen",
-]
+ANIMALS = ["dog", "cat", "horse", "cow", "pig", "sheep", "goat", "chicken", "guinea pig", "donkey", "turkey", "duck", "camel", "goose", "llama", "rabbit", "fox"]
+NUMBERS = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen"]
 
 
 class TestOrdinal(unittest.TestCase):
@@ -59,8 +24,8 @@ class TestOrdinal(unittest.TestCase):
             batch_size=2,
             max_length=16,
             n_epochs=5,
-            val_size=0.0,
-            l2_reg=0.0,
+            val_size=0.,
+            l2_reg=0.,
             interpolate_pos_embed=False,
             low_memory_mode=True,
         )
@@ -87,9 +52,9 @@ class TestOrdinal(unittest.TestCase):
         model.finetune(x_tr, t_tr)
 
         predictions = model.predict(x_te)
-        mse = np.mean([(pred - true) ** 2 for pred, true in zip(predictions, t_te)])
+        mse = np.mean([(pred - true)**2 for pred, true in zip(predictions, t_te)])
         naive_baseline = max(np.mean(targets == 1), np.mean(targets == 0))
-        naive_baseline_mse = np.mean([(naive_baseline - true) ** 2 for true in t_te])
+        naive_baseline_mse = np.mean([(naive_baseline - true)**2 for true in t_te])
         self.assertIsInstance(predictions, list)
         self.assertGreater(naive_baseline_mse, mse)
 
@@ -117,9 +82,9 @@ class TestOrdinal(unittest.TestCase):
         model.finetune(x_tr, t_tr)
 
         predictions = model.predict(x_te)
-        mse = np.mean([(pred - true) ** 2 for pred, true in zip(predictions, t_te)])
+        mse = np.mean([(pred - true)**2 for pred, true in zip(predictions, t_te)])
         naive_baseline = max(np.mean(targets == 1), np.mean(targets == 0))
-        naive_baseline_mse = np.mean([(naive_baseline - true) ** 2 for true in t_te])
+        naive_baseline_mse = np.mean([(naive_baseline - true)**2 for true in t_te])
         self.assertIsInstance(predictions, list)
         self.assertGreater(naive_baseline_mse, mse)
 
@@ -143,6 +108,5 @@ class TestOrdinal(unittest.TestCase):
         predictions = model.predict(x_te)
         self.assertIsInstance(predictions, list)
 
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main()

@@ -9,7 +9,7 @@ from finetune.errors import FinetuneError
 class BaseEncoder(metaclass=ABCMeta):
     @property
     def target_labels(self):
-        return getattr(self, "classes_", None)
+        return getattr(self, 'classes_', None)
 
     @property
     def target_dim(self):
@@ -31,11 +31,7 @@ class RegressionEncoder(BaseEncoder):
             return np.expand_dims(output, 1)  # for single output value regression.
         if rank == 2:
             return output
-        raise ValueError(
-            "Unresolvable shape: {}. Must be able to fit a format [batch, n_outputs]".format(
-                output.shape
-            )
-        )
+        raise ValueError("Unresolvable shape: {}. Must be able to fit a format [batch, n_outputs]".format(output.shape))
 
     def fit_transform(self, x):
         output = self.transform(x)
@@ -59,6 +55,7 @@ class RegressionEncoder(BaseEncoder):
 
 
 class OneHotLabelEncoder(LabelEncoder, BaseEncoder):
+
     def _make_one_hot(self, labels):
         output = np.zeros([len(labels), len(self.classes_)], dtype=np.float)
         output[np.arange(len(labels)), labels] = 1
@@ -84,6 +81,7 @@ class OneHotLabelEncoder(LabelEncoder, BaseEncoder):
 
 
 class OrdinalRegressionEncoder(OrdinalEncoder, BaseEncoder):
+
     def __init__(self):
         self.num_outputs = None
         super().__init__()
@@ -129,7 +127,6 @@ class OrdinalRegressionEncoder(OrdinalEncoder, BaseEncoder):
     def target_labels(self):
         raise ValueError
 
-
 class SequenceLabelingEncoder(LabelEncoder, BaseEncoder):
     pass
 
@@ -143,6 +140,7 @@ class MultilabelClassificationEncoder(MultiLabelBinarizer, BaseEncoder):
 
 
 class IDEncoder(BaseEncoder):
+
     def __init__(self):
         self.classes_ = [0]
 

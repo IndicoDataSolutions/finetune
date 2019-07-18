@@ -23,21 +23,14 @@ def fn_with_custom_grad(grad_fn, use_global_vars=False, use_entire_scope=False):
         @functools.wraps(fn)
         def wrapped(*args):
             return _fn_with_custom_grad(
-                fn,
-                args,
-                grad_fn,
-                use_global_vars=use_global_vars,
-                use_entire_scope=use_entire_scope,
-            )
+                fn, args, grad_fn, use_global_vars=use_global_vars, use_entire_scope=use_entire_scope)
 
         return wrapped
 
     return dec
 
 
-def _fn_with_custom_grad(
-    fn, inputs, grad_fn, use_global_vars=False, use_entire_scope=False
-):
+def _fn_with_custom_grad(fn, inputs, grad_fn, use_global_vars=False, use_entire_scope=False):
     """Create a subgraph with a custom gradient.
     Args:
       fn: function that takes inputs as arguments and produces 1 or more Tensors.
@@ -54,7 +47,7 @@ def _fn_with_custom_grad(
 
     # Use a function attribute to store the local variables. This means that on graph rebuild,
     # When variables already exist we know what variables relate to this function.
-    get_vars_fn = vs.global_variables if use_global_vars else vs.trainable_variables
+    get_vars_fn = (vs.global_variables if use_global_vars else vs.trainable_variables)
     len_before_vars = len(get_vars_fn())
     inputs = list(inputs)
     outputs = fn(*inputs)
@@ -75,8 +68,7 @@ def _fn_with_custom_grad(
     def custom_grad_fn(op, *dys):
         """Custom grad fn applying grad_fn for identity Defun."""
         fn_inputs, fn_vars, fn_outputs = tf.contrib.framework.nest.pack_sequence_as(
-            defun_inputs, list(op.inputs)
-        )
+            defun_inputs, list(op.inputs))
         dys = list(dys)
         assert len(fn_outputs) == len(outputs)
         assert len(fn_outputs) == len(dys)
@@ -97,8 +89,7 @@ def _fn_with_custom_grad(
         *(in_types + var_types + out_types),
         func_name="identity_custom_grad%d" % ops.uid(),
         python_grad_func=custom_grad_fn,
-        shape_func=lambda _: [t.get_shape() for t in outputs]
-    )
+        shape_func=lambda _: [t.get_shape() for t in outputs])
     def identity(*args):
         _, _, outs = tf.contrib.framework.nest.pack_sequence_as(defun_inputs, args)
         return tuple([tf.identity(t) for t in outs])
@@ -167,8 +158,8 @@ def _recompute_grad(fn, args, use_entire_scope):
             outputs = [outputs]
         outputs = list(outputs)
         grads = tf.gradients(outputs, inputs + variables, output_grads)
-        grad_inputs = grads[: len(inputs)]
-        grad_vars = grads[len(inputs) :]
+        grad_inputs = grads[:len(inputs)]
+        grad_vars = grads[len(inputs):]
         return grad_inputs, grad_vars
 
     @fn_with_custom_grad(grad_fn, use_entire_scope=use_entire_scope)

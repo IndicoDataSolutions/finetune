@@ -57,16 +57,12 @@ class TreebankNounVP:
                 verbs_contract.append(v)
                 words_contract.append(w)
             else:
-                words_contract[-1] += " " + w
+                words_contract[-1] += ' ' + w
         final_segment_verbs = [v for v in verbs_contract if v is not None]
-        associations = [
-            final_segment_verbs.index(idx) if idx else None for idx in nouns_contract
-        ]
+        associations = [final_segment_verbs.index(idx) if idx else None for idx in nouns_contract]
         output_lab = []
         output_text = ""
-        for n, v, w, a in zip(
-            nouns_contract, verbs_contract, words_contract, associations
-        ):
+        for n, v, w, a in zip(nouns_contract, verbs_contract, words_contract, associations):
             if n or v:
                 offset = 1 if output_text else 0
                 output_lab.append(
@@ -80,10 +76,10 @@ class TreebankNounVP:
                 if a is not None:
                     output_lab[-1]["association"] = {
                         "index": a,
-                        "relationship": "has_verb",
+                        "relationship": "has_verb"
                     }
             if output_text:
-                output_text += " "
+                output_text += ' '
             output_text += w
 
         return output_text, output_lab
@@ -105,13 +101,8 @@ if __name__ == "__main__":
     # Train and evaluate on SST
     data = TreebankNounVP()
     X, Y = data.get_data(30)
-    model = Association(
-        association_types=["has_verb"],
-        max_length=32,
-        viable_edges={"noun_phrase": [["verb", "has_verb"], None], "verb": [None]},
-    )
-    trainX, testX, trainY, testY = train_test_split(
-        X, Y, test_size=0.3, random_state=42
-    )
+    model = Association(association_types=["has_verb"], max_length=32,
+                        viable_edges={"noun_phrase": [["verb", "has_verb"], None], "verb": [None]})
+    trainX, testX, trainY, testY = train_test_split(X, Y, test_size=0.3, random_state=42)
     model.fit(trainX, trainY)
     print(model.predict(testX))

@@ -13,27 +13,22 @@ def dont_optimize_zeros(optimizer):
     :param optimizer:
     :return:
     """
-
+    
     def _is_all_zeros(grad):
         return tf.equal(tf.count_nonzero(grad), 0)
-
-    overridden_methods = (
-        "_apply_dense",
-        "_resource_apply_dense",
-        "_apply_sparse",
-        "_resource_apply_sparse",
-    )
+    
+    overridden_methods = ('_apply_dense', '_resource_apply_dense', '_apply_sparse', '_resource_apply_sparse')
 
     def _get_wrapper(fn, opt):
+        
         def wrap(self, grad, *args, **kwargs):
             all_zeros = _is_all_zeros(grad)
 
             def call_fn():
                 with tf.control_dependencies([fn(grad, *args, **kwargs)]):
                     return tf.no_op()
-
             return tf.cond(all_zeros, tf.no_op, call_fn)
-
+        
         wrapper = types.MethodType(wrap, opt)
         return wrapper
 

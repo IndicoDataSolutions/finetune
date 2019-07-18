@@ -39,15 +39,7 @@ class AdamaxOptimizer(optimizer.Optimizer):
     ([pdf](http://arxiv.org/pdf/1412.6980.pdf)).
     """
 
-    def __init__(
-        self,
-        learning_rate=0.001,
-        beta1=0.9,
-        beta2=0.999,
-        use_locking=False,
-        name="Adamax",
-        epsilon=1e-8,
-    ):
+    def __init__(self, learning_rate=0.001, beta1=0.9, beta2=0.999, use_locking=False, name="Adamax", epsilon=1e-8):
         super(AdamaxOptimizer, self).__init__(use_locking, name)
         self._lr = learning_rate
         self._beta1 = beta1
@@ -76,7 +68,7 @@ class AdamaxOptimizer(optimizer.Optimizer):
         beta2_t = math_ops.cast(self._beta2_t, var.dtype.base_dtype)
 
         v = self.get_slot(var, "v")
-        v_t = v.assign(beta1_t * v + (1.0 - beta1_t) * grad)
+        v_t = v.assign(beta1_t * v + (1. - beta1_t) * grad)
         m = self.get_slot(var, "m")
         m_t = m.assign(tf.maximum(beta2_t * m + self.eps, tf.abs(grad)))
         g_t = v_t / m_t
