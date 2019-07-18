@@ -9,6 +9,7 @@ import tensorflow as tf
 from finetune.nn.target_blocks import multi_choice_question
 from finetune.util import list_transpose
 
+
 class MultipleChoicePipeline(BasePipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -29,9 +30,9 @@ class MultipleChoicePipeline(BasePipeline):
             arrays.append(next(super()._text_to_ids(pair, Y=Y)))
 
         kwargs = arrays[0]._asdict()
-        kwargs['tokens'] = [arr.tokens for arr in arrays]
-        kwargs['token_ids'] = np.stack([arr.token_ids for arr in arrays], 0)
-        kwargs['mask'] = np.stack([arr.mask for arr in arrays], 0)
+        kwargs["tokens"] = [arr.tokens for arr in arrays]
+        kwargs["token_ids"] = np.stack([arr.token_ids for arr in arrays], 0)
+        kwargs["mask"] = np.stack([arr.mask for arr in arrays], 0)
         yield ArrayEncodedOutput(**kwargs)
 
     def _format_for_encoding(self, X):
@@ -39,8 +40,16 @@ class MultipleChoicePipeline(BasePipeline):
 
     def feed_shape_type_def(self):
         TS = tf.TensorShape
-        return ({"tokens": tf.int32, "mask": tf.float32}, tf.int32), (
-            {"tokens": TS([self.target_dim, self.config.max_length, 2]), "mask": TS([self.target_dim, self.config.max_length])}, TS([]))
+        return (
+            ({"tokens": tf.int32, "mask": tf.float32}, tf.int32),
+            (
+                {
+                    "tokens": TS([self.target_dim, self.config.max_length, 2]),
+                    "mask": TS([self.target_dim, self.config.max_length]),
+                },
+                TS([]),
+            ),
+        )
 
     def _target_encoder(self):
         return IDEncoder()
@@ -71,16 +80,20 @@ class MultipleChoice(BaseModel):
         """
         answer_idx = []
         if not len(correct_answer) == len(answers) == len(questions):
-            raise ValueError("Answers, questions and corrext_answer are not all the same length, {},{},{}".format(
-                len(questions), len(correct_answer), len(answers)
-            ))
+            raise ValueError(
+                "Answers, questions and corrext_answer are not all the same length, {},{},{}".format(
+                    len(questions), len(correct_answer), len(answers)
+                )
+            )
 
         for correct, others in zip(correct_answer, answers):
             if isinstance(correct, int):
                 if 0 > correct > len(others):
                     raise ValueError(
                         "Correct answer is of type int but is invalid with value {} for answers of len {}".format(
-                            correct, len(others)))
+                            correct, len(others)
+                        )
+                    )
                 answer_idx.append(correct)
             else:
                 try:
@@ -88,16 +101,21 @@ class MultipleChoice(BaseModel):
                     answer_idx.append(ans_idx)
                 except ValueError:
                     raise ValueError(
-                        "Correct answer {} is not contained in possible answers {}".format(correct, others))
+                        "Correct answer {} is not contained in possible answers {}".format(
+                            correct, others
+                        )
+                    )
 
         labels = None if fit_lm_only else answer_idx
         self.input_pipeline.target_dim_ = len(answers[0])
         return super().finetune(list(zip(questions, answers)), Y=labels)
 
     @staticmethod
-    def _target_model(config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
+    def _target_model(
+        config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
+    ):
         return multi_choice_question(
-            hidden=featurizer_state['features'],
+            hidden=featurizer_state["features"],
             targets=targets,
             n_targets=n_outputs,
             config=config,
@@ -138,9 +156,7 @@ class MultipleChoice(BaseModel):
 
         formatted_predictions = []
         for probas, *answers_per_sample in zip(raw_probas, *answers):
-            formatted_predictions.append(
-                dict(zip(answers_per_sample, probas))
-            )
+            formatted_predictions.append(dict(zip(answers_per_sample, probas)))
         return formatted_predictions
 
     def featurize(self, questions, answers):
