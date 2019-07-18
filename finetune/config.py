@@ -13,28 +13,26 @@ import finetune
 from finetune.errors import FinetuneError
 from finetune.base_models import GPTModel, GPT2Model, BERT
 
-LOGGER = logging.getLogger('finetune')
+LOGGER = logging.getLogger("finetune")
 
 
 def finetune_model_path(path):
     return os.path.abspath(
-        os.path.join(
-            os.path.dirname(finetune.__file__),
-            'model',
-            path
-        )
+        os.path.join(os.path.dirname(finetune.__file__), "model", path)
     )
 
 
 def nvidia_device_ids():
-    sp = subprocess.Popen(['nvidia-smi -L'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    sp = subprocess.Popen(
+        ["nvidia-smi -L"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
+    )
     response = sp.communicate()[0]
-    gpu_list = response.decode('utf-8').strip().split('\n')
+    gpu_list = response.decode("utf-8").strip().split("\n")
     device_ids = {}
     for i, gpu in enumerate(gpu_list):
         # May be worth logging GPU description
-        device_id_str, _, description = gpu.partition(':')
-        assert int(device_id_str.split(' ')[-1]) == i
+        device_id_str, _, description = gpu.partition(":")
+        assert int(device_id_str.split(" ")[-1]) == i
         device_ids[i] = description
     return device_ids
 
@@ -60,10 +58,12 @@ def all_gpus(visible_gpus=None):
             device_ids = {
                 device_id: description
                 for device_id, description in device_ids.items()
-                if str(device_id) in cuda_visible_devices.split(',')
+                if str(device_id) in cuda_visible_devices.split(",")
             }
-            mapping = {dev_id: i for i, (dev_id, _) in enumerate(sorted(device_ids.items()))}
-            
+            mapping = {
+                dev_id: i for i, (dev_id, _) in enumerate(sorted(device_ids.items()))
+            }
+
         # restricting GPUs based on config
         if visible_gpus is not None:
             device_ids = {
@@ -72,12 +72,16 @@ def all_gpus(visible_gpus=None):
                 if device_id in visible_gpus
             }
 
-        LOGGER.info(" Visible GPUs: {{{}}}".format(
-            ", ".join([
-                "{}:{}".format(device_id, description.split('(')[0]).strip()
-                for device_id, description in device_ids.items()
-            ])
-        ))
+        LOGGER.info(
+            " Visible GPUs: {{{}}}".format(
+                ", ".join(
+                    [
+                        "{}:{}".format(device_id, description.split("(")[0]).strip()
+                        for device_id, description in device_ids.items()
+                    ]
+                )
+            )
+        )
 
         if mapping is not None:
             # Resolve these to internal tensorflow device ids.
@@ -94,6 +98,7 @@ def all_gpus(visible_gpus=None):
         device_ids = []
 
     return device_ids
+
 
 GridSearchable = namedtuple("GridSearchable", "default iterator")
 
@@ -178,7 +183,7 @@ class Settings(dict):
             self[key] = value
 
     def __getattr__(self, attr):
-        if attr.startswith('__'):
+        if attr.startswith("__"):
             raise AttributeError
 
         if attr == "base_model_path":
@@ -202,9 +207,9 @@ class Settings(dict):
 
 def did_you_mean(keyword, keyword_pool):
     candidates = list(keyword_pool)
-    closest_match_idx = np.argmin([
-        edit_distance(keyword, candidate) for candidate in candidates
-    ])
+    closest_match_idx = np.argmin(
+        [edit_distance(keyword, candidate) for candidate in candidates]
+    )
     return candidates[closest_match_idx]
 
 
@@ -232,7 +237,7 @@ def get_default_config():
         shuffle_buffer_size=100,
         dataset_size=None,
         batch_size=2,
-        visible_gpus=None, # defaults to all available
+        visible_gpus=None,  # defaults to all available
         n_epochs=GridSearchable(3, [1, 2, 3, 4]),
         seed=42,
         max_length=512,
@@ -240,8 +245,7 @@ def get_default_config():
         save_dtype=None,
         val_set=None,
         per_process_gpu_memory_fraction=0.95,
-        adapter_size = None, #from Parameter Efficient Transfer Learning paper
-
+        adapter_size=None,  # from Parameter Efficient Transfer Learning paper
         # Regularization
         embed_p_drop=0.1,
         attn_p_drop=0.1,
@@ -249,7 +253,6 @@ def get_default_config():
         clf_p_drop=0.1,
         l2_reg=GridSearchable(0.01, [0.0, 0.1, 0.01, 0.001]),
         vector_l2=False,
-
         # Early Stopping and Validation
         autosave_path=None,
         keep_best_model=False,
@@ -258,44 +261,37 @@ def get_default_config():
         eval_acc=False,
         val_size=None,
         val_interval=None,
-
         # Debugging
         log_device_placement=False,
         soft_device_placement=True,
         tensorboard_folder=None,
         summarize_grads=False,
         debugging_logs=False,
-
         # Partial Fitting
         num_layers_trained=12,
         train_embeddings=True,
-
         # Class Imbalance
         class_weights=None,
         oversample=False,
         params_device="cpu",
-
         # Optimization Params
         optimizer="AdamW",
         b1=0.9,
         b2=0.999,
         epsilon=1e-8,
-        lr_schedule='warmup_linear',
+        lr_schedule="warmup_linear",
         lr=GridSearchable(6.25e-5, [6.25e-4, 6.25e-5, 6.25e-6]),
         lr_warmup=0.002,
         max_grad_norm=1.0,
         prefit_init=False,
         accum_steps=1,
-        tsa_schedule='exp_schedule',
-
+        tsa_schedule=None,
         # MTL
         tasks=None,
         dont_optimize_zero_gradients=False,
-
         # Language Model Settings
         lm_loss_coef=0.0,
         lm_temp=0.2,
-
         # Sequence Labeling
         seq_num_heads=16,
         pad_token="<PAD>",
@@ -303,33 +299,27 @@ def get_default_config():
         subtoken_predictions=False,
         multi_label_sequences=False,
         multi_label_threshold=0.5,
-        chunk_long_sequences=True,
-
+        chunk_long_sequences=False,
         # Regression Params
         regression_loss="L2",
-
         # Association Params
         viable_edges=None,
         association_types=None,
         assocation_loss_weight=100.0,
-
         # Location of model weights
         base_model=GPTModel,
         base_model_path=None,
-
         # Possible `SourceModel` specific settings
         n_heads=None,
         n_layer=None,
         act_fn=None,
         n_embed=None,
-
         # for TextCNN SourceModel only
         kernel_sizes=None,
         num_filters_per_size=None,
-        n_embed_featurizer=None, # needed because the dimensions CNN output are different from the embedding dimensions
-
+        n_embed_featurizer=None,  # needed because the dimensions CNN output are different from the embedding dimensions
         # BERT only
-        bert_intermediate_size=None
+        bert_intermediate_size=None,
     )
     return settings
 
@@ -342,7 +332,7 @@ def get_config(**kwargs):
     :return: Config object.    """
     assert_valid_config(**kwargs)
     config = get_default_config()
-    config.base_model = kwargs.get('base_model', config.base_model)
+    config.base_model = kwargs.get("base_model", config.base_model)
     config.update(config.base_model.settings)
     config.update(kwargs)
     return config
