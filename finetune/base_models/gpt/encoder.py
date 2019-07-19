@@ -142,7 +142,6 @@ class GPTEncoder(BaseEncoder):
         offset = (
             0
         )  # tracks offset between this fields' character_locs, which start at 0, and the 'start' keys in context which track the entire document (not just this field)
-
         for i, text in enumerate(texts):
             if labels is not None:
                 label = labels[i]
@@ -213,7 +212,7 @@ class GPTEncoder(BaseEncoder):
                     offset,
                 )
                 batch_context.extend(text_context)
-            offset += batch_original_character_locs[i][-1]
+                offset += batch_original_character_locs[i][-1]
 
         return EncodedOutput(
             token_ids=batch_token_idxs,

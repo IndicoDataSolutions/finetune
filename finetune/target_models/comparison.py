@@ -5,32 +5,44 @@ from finetune.base import BaseModel
 from finetune.target_models.classifier import Classifier, ClassificationPipeline
 from finetune.encoding.input_encoder import ArrayEncodedOutput
 
-class ComparisonPipeline(ClassificationPipeline):
 
+class ComparisonPipeline(ClassificationPipeline):
     def _format_for_encoding(self, X):
         return [X]
 
-    def _text_to_ids(self, pair, Y=None, pad_token=None):
+    def _text_to_ids(self, pair, Y=None, pad_token=None, context=None):
         """
         Format comparison examples as a list of IDs
 
         pairs: Array of text, shape [batch, 2]
         """
-        assert self.config.chunk_long_sequences is False, "Chunk Long Sequences is not compatible with comparison"
+        assert (
+            self.config.chunk_long_sequences is False
+        ), "Chunk Long Sequences is not compatible with comparison"
         arr_forward = next(super()._text_to_ids(pair, Y=None))
         reversed_pair = pair[::-1]
         arr_backward = next(super()._text_to_ids(reversed_pair, Y=None))
         kwargs = arr_forward._asdict()
-        kwargs['tokens'] = [arr_forward.tokens, arr_backward.tokens]
-        kwargs['token_ids'] = np.stack([arr_forward.token_ids, arr_backward.token_ids], 0)
-        kwargs['mask'] = np.stack([arr_forward.mask, arr_backward.mask], 0)
+        kwargs["tokens"] = [arr_forward.tokens, arr_backward.tokens]
+        kwargs["token_ids"] = np.stack(
+            [arr_forward.token_ids, arr_backward.token_ids], 0
+        )
+        kwargs["mask"] = np.stack([arr_forward.mask, arr_backward.mask], 0)
         yield ArrayEncodedOutput(**kwargs)
 
     def feed_shape_type_def(self):
         TS = tf.TensorShape
-        return ({"tokens": tf.int32, "mask": tf.float32}, tf.float32), (
-            {"tokens": TS([2, self.config.max_length, 2]), "mask": TS([None, self.config.max_length])},
-            TS([self.target_dim]))
+        return (
+            ({"tokens": tf.int32, "mask": tf.float32}, tf.float32),
+            (
+                {
+                    "tokens": TS([2, self.config.max_length, 2]),
+                    "mask": TS([None, self.config.max_length]),
+                },
+                TS([self.target_dim]),
+            ),
+        )
+
 
 class Comparison(Classifier):
     """
@@ -55,11 +67,32 @@ class Comparison(Classifier):
         return ComparisonPipeline(self.config)
 
     @staticmethod
-    def _target_model(config, *, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
+    def _target_model(
+        config,
+        *,
+        featurizer_state,
+        targets,
+        n_outputs,
+        train=False,
+        reuse=None,
+        **kwargs
+    ):
         featurizer_state = featurizer_state.copy()
-        featurizer_state["sequence_features"] = tf.abs(tf.reduce_sum(featurizer_state["sequence_features"], 1))
-        featurizer_state["features"] = tf.abs(tf.reduce_sum(featurizer_state["features"], 1))
-        return Classifier._target_model(config, featurizer_state=featurizer_state, targets=targets, n_outputs=n_outputs, train=train, reuse=reuse, **kwargs)
+        featurizer_state["sequence_features"] = tf.abs(
+            tf.reduce_sum(featurizer_state["sequence_features"], 1)
+        )
+        featurizer_state["features"] = tf.abs(
+            tf.reduce_sum(featurizer_state["features"], 1)
+        )
+        return Classifier._target_model(
+            config,
+            featurizer_state=featurizer_state,
+            targets=targets,
+            n_outputs=n_outputs,
+            train=train,
+            reuse=reuse,
+            **kwargs
+        )
 
     def predict(self, pairs):
         """

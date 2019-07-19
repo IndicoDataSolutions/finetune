@@ -315,7 +315,8 @@ class BaseModel(object, metaclass=ABCMeta):
             encoder=self.input_pipeline.text_encoder,
             target_dim=self.input_pipeline.target_dim,
             label_encoder=self.input_pipeline.label_encoder,
-            saver=self.saver
+            saver=self.saver,
+            context_dim=context_dim
         )
 
         featurizer_est = tf.estimator.Estimator(
@@ -381,7 +382,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 # out of the queue later
                 self._to_pull += 1
                 yield self._cached_example
-
+                
     @contextmanager
     def cached_predict(self):
         """

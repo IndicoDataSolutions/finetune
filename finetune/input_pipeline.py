@@ -103,6 +103,7 @@ class BasePipeline(metaclass=ABCMeta):
             if len(np.shape(encoded_output.context)) in (2, 3):
                 context_arr[:seq_length][:] = np.squeeze(encoded_output.context)
             else:
+                print(encoded_output)
                 raise FinetuneError("Incorrect context rank.")
 
         # positional_embeddings
@@ -143,7 +144,7 @@ class BasePipeline(metaclass=ABCMeta):
                 yield feats, self.label_encoder.transform([Y])[0]
 
     def _post_data_initialization(self, Y=None, context=None):
-        if Y:
+        if Y is not None:
             self.label_encoder = self._target_encoder()
             if not callable(Y):
                 Y_fit = Y
@@ -563,7 +564,7 @@ class BasePipeline(metaclass=ABCMeta):
                             test_size=self.config.val_size,
                             random_state=self.config.seed,
                         )
-                        C_tr, C_va = None
+                        C_tr, C_va = None, None
             else:
                 Xs_tr, Y_tr, C_tr = Xs, Y, context
                 if context:
@@ -634,6 +635,9 @@ class BasePipeline(metaclass=ABCMeta):
         return list(X)
 
     def _text_to_ids(self, Xs, Y=None, pad_token=None, context=None):
+        if context is None and self.config.use_auxiliary_info:
+            context = Xs[0]
+            Xs = Xs[1]
         Xs = self._format_for_encoding(Xs)
         if self.config.chunk_long_sequences and len(Xs) == 1:
             # can only chunk single sequence inputs
