@@ -139,7 +139,6 @@ class GPTEncoder(BaseEncoder):
             []
         )  # to account for the fact that some BPEs have different lengths than their original tokens (e.g. special characters such as bullets)
         label = None
-        context_ = None
         offset = (
             0
         )  # tracks offset between this fields' character_locs, which start at 0, and the 'start' keys in context which track the entire document (not just this field)
@@ -147,8 +146,6 @@ class GPTEncoder(BaseEncoder):
         for i, text in enumerate(texts):
             if labels is not None:
                 label = labels[i]
-            if context is not None:
-                context_ = context
 
             raw_text = text.lower()
             # Only fine to apply this fix because it preserves character locations
@@ -207,14 +204,15 @@ class GPTEncoder(BaseEncoder):
                 batch_label_idxs.append([label] * len(subtoken_idxs))
 
             # Context is tokenwise, so we need to duplicate contexts for each subtoken of a token, and to match length of labels
-            if context_ is not None:
-                batch_context = self.line_up_context(
-                    context_,
+            if context is not None:
+                text_context = self.line_up_context(
+                    context,
                     batch_original_character_locs[i],
                     batch_tokens[i],
                     subtoken_idxs,
-                    offset
+                    offset,
                 )
+                batch_context.extend(text_context)
             offset += batch_original_character_locs[i][-1]
 
         return EncodedOutput(

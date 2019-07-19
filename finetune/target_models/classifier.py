@@ -131,11 +131,6 @@ class Classifier(BaseModel):
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
         """
-        if self.config.use_auxiliary_info:
-            context = X[1]
-            X = X[0]
-            context_new = self.context_span_to_label_span(context, X)
-            X = [X, context_new]
         return super().finetune(X, Y=Y, batch_size=batch_size)
 
     @classmethod

@@ -93,7 +93,6 @@ class BasePipeline(metaclass=ABCMeta):
             )
         else:
             context_arr = None
-
         # BPE embedding
         x[:seq_length, 0] = encoded_output.token_ids
         # masking: value of 1 means "consider this in cross-entropy LM loss"
@@ -647,7 +646,6 @@ class BasePipeline(metaclass=ABCMeta):
                 pad_token=(pad_token or self.config.pad_token),
                 context=context,
             )
-
             if self.config.use_auxiliary_info:
                 processed_context = np.squeeze(
                     self._context_to_vector([encoded.context])

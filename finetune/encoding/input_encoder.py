@@ -202,20 +202,6 @@ class BaseEncoder(object):
                         max_length - 2
                     )
                 )
-        """
-        if context:
-            Xs_context = context[0]
-            context = context[1]
-            print(Xs)
-            print(Xs_context)
-            print(context)
-            for i, field in enumerate(Xs_context): 
-                encoded = self._encode([field], labels=[context[i]]) # context schema mimics label spans so we can use _encode to format them as well
-                contexts.append(_flatten(encoded.labels))
-
-                print("processed context")
-                print(encoded)
-        """
 
         # merge fields + truncate if necessary
         token_ids = self._cut_and_concat(encoded=token_ids, max_length=max_length)
@@ -262,5 +248,4 @@ class BaseEncoder(object):
             expanded_context[j] = context[original_tokens[j]]
         batch_context.append(expanded_context)
         assert len(expanded_context) == len(subtoken_idxs)
-        offset += char_locs[-1]
         return batch_context

@@ -58,16 +58,11 @@ class BERTEncoder(BaseEncoder):
         batch_original_character_locs = []
         batch_context = []
         label = None
-        context_ = None
         offset = 0
 
         for i, text in enumerate(texts):
             if labels is not None:
                 label = labels[i]
-            if (
-                context is not None
-            ):  # each field in texts needs a list of dicts for its context
-                context_ = context
             original_tok_pos = []
 
             subtokens, token_idxs, original_subtoken_positions = self.tokenizer.tokenize(
@@ -84,15 +79,15 @@ class BERTEncoder(BaseEncoder):
                 batch_label_idxs.append([label] * len(subtokens))
 
             # Context is tokenwise, so we need to duplicate contexts for each subtoken of a token, and to match length of labels
-            if context_ is not None:
-                batch_context = self.line_up_context(
-                    context_,
+            if context is not None:
+                text_context = self.line_up_context(
+                    context,
                     batch_original_character_locs[i],
                     batch_tokens[i],
                     subtoken_locs,
-                    offset
-                    )
-
+                    offset,
+                )
+                batch_context.extend(text_context)
             offset += batch_original_character_locs[i][-1]
 
         return EncodedOutput(

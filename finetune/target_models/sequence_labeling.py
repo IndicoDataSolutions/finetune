@@ -209,7 +209,6 @@ class SequenceLabeler(BaseModel):
             Xs = [Xs_new, context_new]
         else:
             Xs = Xs_new
-
         return super().finetune(Xs, Y=Y, batch_size=batch_size)
 
     def predict(self, X, per_token=False):
