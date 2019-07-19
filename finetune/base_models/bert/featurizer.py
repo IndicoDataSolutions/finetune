@@ -1,4 +1,5 @@
 import tensorflow as tf
+from finetune.nn.add_auxiliary import add_auxiliary
 from finetune.base_models.bert.modeling import (
     BertConfig,
     BertModel,
@@ -92,39 +93,10 @@ def bert_featurizer(
         )
 
         if config.use_auxiliary_info:
-            context_embed_weights = tf.get_variable(
-                name="ce",
-                shape=[context_dim, config.n_c_embed],
-                initializer=tf.random_normal_initializer(stddev=config.weight_stddev),
-            )
-
-            context_weighted_avg = tf.get_variable(
-                name="cwa",
-                shape=[context_dim],
-                initializer=tf.random_normal_initializer(stddev=config.weight_stddev),
-            )
-
-            if train:
-                context_embed_weights = dropout(
-                    context_embed_weights, config.embed_p_drop
-                )
-
             with tf.variable_scope("context_embedding"):
-                weighted_C = tf.multiply(
-                    context, context_weighted_avg
-                )  # [batch_size, seq_length, context_dim] * [context_dim] = [batch_size, seq_length, context_dim], with weighted inputs
-                c_embed = tf.tensordot(
-                    weighted_C, context_embed_weights, axes=[[2], [0]]
-                )  # [batch_size, seq_length, context_dim] * [context_dim, n_embed] = [batch_size, seq_length, n_embed]
-                c_embed = layer_norm(c_embed, tf.get_variable_scope())
-                print(config.n_c_embed)
-                print(sequence_features)
-                sequence_features = tf.concat([sequence_features, c_embed], axis=2)
-                print(sequence_features)
-                c_embed = tf.reduce_sum(c_embed, axis=1)
-                print(features)
-                features = tf.concat([features, c_embed], axis=1)
-                print(features)
+                features, sequence_features = add_auxiliary(
+                    context, context_dim, features, sequence_features, config, train
+                )
 
         output_state = {
             "embed_weights": embed_weights,

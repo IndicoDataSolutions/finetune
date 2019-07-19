@@ -85,23 +85,15 @@ class BERTEncoder(BaseEncoder):
 
             # Context is tokenwise, so we need to duplicate contexts for each subtoken of a token, and to match length of labels
             if context_ is not None:
-                original_tokens = []
-                for char_loc, token in zip(
-                    batch_original_character_locs[i], batch_tokens[i]
-                ):
-                    original_token = 0
-                    for subtoken_idx in range(len(context_)):
-                        if (
-                            char_loc + offset > context_[subtoken_idx]["end"]
-                        ):  # subtract one since subtokens include spaces at the beginning, while the 'start's from context do not
-                            original_token += 1
-                    original_tokens.append(original_token)
-                expanded_context = [None] * len(original_tokens)
-                for j in range(len(expanded_context)):
-                    expanded_context[j] = context_[original_tokens[j]]
-                batch_context.append(expanded_context)
-                assert len(expanded_context) == len(subtoken_locs)
-                offset += batch_original_character_locs[i][-1]
+                batch_context = self.line_up_context(
+                    context_,
+                    batch_original_character_locs[i],
+                    batch_tokens[i],
+                    subtoken_locs,
+                    offset
+                    )
+
+            offset += batch_original_character_locs[i][-1]
 
         return EncodedOutput(
             token_ids=batch_token_idxs,

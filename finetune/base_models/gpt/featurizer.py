@@ -6,24 +6,8 @@ import tensorflow as tf
 from finetune.optimizers.recompute_grads import recompute_grad
 from finetune.util.shapes import shape_list
 from finetune.nn.activations import act_fns
-
-
-def norm(x, scope, axis=[-1], e=1e-5):
-    with tf.variable_scope(scope):
-        n_state = shape_list(x)[-1]
-        g = tf.get_variable("g", [n_state], initializer=tf.constant_initializer(1))
-        b = tf.get_variable("b", [n_state], initializer=tf.constant_initializer(0))
-        u = tf.reduce_mean(x, axis=axis, keepdims=True)
-        s = tf.reduce_mean(tf.square(x - u), axis=axis, keepdims=True)
-        x = (x - u) * tf.rsqrt(s + e)
-        x = x * g + b
-        return x
-
-
-def dropout(x, pdrop, train):
-    if train and pdrop > 0:
-        x = tf.nn.dropout(x, 1 - pdrop)
-    return x
+from finetune.nn.nn_utils import dropout, norm
+from finetune.nn.add_auxiliary import add_auxiliary
 
 
 def mask_attn_weights(w):
@@ -372,17 +356,9 @@ def gpt_featurizer(
         )
 
         if config.use_auxiliary_info:
-            with tf.variable_scope("context_embedding"):
-                weighted_C = tf.multiply(
-                    context, context_weighted_avg
-                )  # [batch_size, seq_length, context_dim] * [context_dim] = [batch_size, seq_length, context_dim], with weighted inputs
-                c_embed = tf.tensordot(
-                    weighted_C, context_embed_weights, axes=[[2], [0]]
-                )  # [batch_size, seq_length, context_dim] * [context_dim, n_embed] = [batch_size, seq_length, n_embed]
-                c_embed = norm(c_embed, tf.get_variable_scope())
-                seq_feats = tf.concat([seq_feats, c_embed], axis=2)
-                c_embed = tf.reduce_sum(c_embed, axis=1)
-                clf_h = tf.concat([clf_h, c_embed], axis=1)
+            clf_h, seq_feats = add_auxiliary(
+                context, context_dim, clf_h, seq_feats, config, train
+            )
 
         out = {
             "embed_weights": embed_weights,

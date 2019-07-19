@@ -636,21 +636,22 @@ class BaseModel(object, metaclass=ABCMeta):
         model.saver.variables = saver.variables
         return model
 
-    def process_context(self, context, Xs, Xs_new=None):
-        if Xs_new is None:
-            Xs_new = Xs
+    def context_span_to_label_span(self, batch_context_spans, batch_text_chunks=None):
+        """
+        Copy relevant context spans into each corresponding label span as denoted by batch_text_chunks
+        """
         context_new = []
-        for i in range(len(Xs)):
-            fields = Xs_new[i]
-            example_context = context[i]
-            fields_context = []
+        for i in range(len(batch_text_chunks)):
+            text_chunks = batch_text_chunks[i]
+            example_context = batch_context_spans[i]
+            chunks_context = []
             start = end = 0
-            for field in fields:
-                end += len(field)
-                field_context = sorted([c for c in example_context if c['start'] < end and c['end'] > start], key = lambda c: c['start'])
-                start += len(field)
-                fields_context.append(field_context)
-            context_new.append(list(itertools.chain.from_iterable(fields_context)))
+            for text_chunk in text_chunks:
+                end += len(text_chunk)
+                chunk_context = sorted([c for c in example_context if c['start'] < end and c['end'] > start], key = lambda c: c['start'])
+                start += len(text_chunk)
+                chunks_context.append(chunk_context)
+            context_new.append(list(itertools.chain.from_iterable(chunks_context)))
         return context_new
 
     @classmethod

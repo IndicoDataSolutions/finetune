@@ -172,8 +172,8 @@ class BasePipeline(metaclass=ABCMeta):
 
     def _context_to_vector(self, context):
         """
-            Takes list of context dictionaries and turns them into lists (per sample) of lists (per token) of context vectors
-            """
+        Takes list of context dictionaries and turns them into lists (per sample) of lists (per token) of context vectors
+        """
         num_samples = len(context)
         vector_list = []
         ignore = ["start", "end", "label", "token"]

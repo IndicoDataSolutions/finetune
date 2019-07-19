@@ -205,7 +205,7 @@ class SequenceLabeler(BaseModel):
         Y = Y_new if Y is not None else None
 
         if self.config.use_auxiliary_info:
-            context_new = self.process_context(context, Xs, Xs_new)
+            context_new = self.context_span_to_label_span(context, Xs_new)
             Xs = [Xs_new, context_new]
         else:
             Xs = Xs_new

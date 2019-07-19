@@ -8,6 +8,7 @@ from finetune.util.shapes import shape_list
 from finetune.optimizers.recompute_grads import recompute_grad
 from finetune.nn.activations import gelu
 from finetune.base_models.gpt.featurizer import norm, dropout, adapter
+from finetune.nn.add_auxiliary import add_auxiliary
 
 
 def softmax(x, axis=-1):
@@ -31,9 +32,16 @@ def merge_states(x):
 def conv1d(x, scope, nf, *, w_init_stdev=0.02):
     with tf.variable_scope(scope):
         *start, nx = shape_list(x)
-        w = tf.get_variable('w', [1, nx, nf], initializer=tf.random_normal_initializer(stddev=w_init_stdev))
-        b = tf.get_variable('b', [nf], initializer=tf.constant_initializer(0))
-        c = tf.reshape(tf.matmul(tf.reshape(x, [-1, nx]), tf.reshape(w, [-1, nf])) + b, start + [nf])
+        w = tf.get_variable(
+            "w",
+            [1, nx, nf],
+            initializer=tf.random_normal_initializer(stddev=w_init_stdev),
+        )
+        b = tf.get_variable("b", [nf], initializer=tf.constant_initializer(0))
+        c = tf.reshape(
+            tf.matmul(tf.reshape(x, [-1, nx]), tf.reshape(w, [-1, nf])) + b,
+            start + [nf],
+        )
         return c
 
 
@@ -41,7 +49,7 @@ def attention_mask(nd, ns, *, dtype):
     """1's in the lower triangle, counting from the lower right corner.
     Same as tf.matrix_band_part(tf.ones([nd, ns]), -1, ns-nd), but doesn't produce garbage on TPUs.
     """
-    i = tf.range(nd)[:,None]
+    i = tf.range(nd)[:, None]
     j = tf.range(ns)
     m = i >= j - ns + nd
     return tf.cast(m, dtype)
@@ -51,7 +59,9 @@ def attn(x, scope, n_state, *, past, hparams, train=False):
     assert x.shape.ndims == 3  # Should be [batch, sequence, features]
     assert n_state % hparams.n_heads == 0
     if past is not None:
-        assert past.shape.ndims == 5  # Should be [batch, 2, heads, sequence, features], where 2 is [k, v]
+        assert (
+            past.shape.ndims == 5
+        )  # Should be [batch, 2, heads, sequence, features], where 2 is [k, v]
 
     def split_heads(x):
         # From [batch, sequence, features] to [batch, heads, sequence, features]
@@ -81,7 +91,7 @@ def attn(x, scope, n_state, *, past, hparams, train=False):
         return a
 
     with tf.variable_scope(scope):
-        c = conv1d(x, 'c_attn', n_state * 3)
+        c = conv1d(x, "c_attn", n_state * 3)
         q, k, v = map(split_heads, tf.split(c, 3, axis=2))
         if past is not None:
             pk, pv = tf.unstack(past, axis=1)
@@ -89,7 +99,7 @@ def attn(x, scope, n_state, *, past, hparams, train=False):
             v = tf.concat([pv, v], axis=-2)
         a = multihead_attn(q, k, v, hparams.attn_p_drop, train=train)
         a = merge_heads(a)
-        a = conv1d(a, 'c_proj', n_state)
+        a = conv1d(a, "c_proj", n_state)
         a = dropout(a, hparams.resid_p_drop, train=train)
         return a
 
@@ -97,34 +107,41 @@ def attn(x, scope, n_state, *, past, hparams, train=False):
 def mlp(x, scope, n_state, *, hparams, train=False):
     with tf.variable_scope(scope):
         nx = x.shape[-1].value
-        h = gelu(conv1d(x, 'c_fc', n_state))
-        h2 = conv1d(h, 'c_proj', nx)
+        h = gelu(conv1d(x, "c_fc", n_state))
+        h2 = conv1d(h, "c_proj", nx)
         h2 = dropout(h2, hparams.resid_p_drop, train=train)
         return h2
 
 
 def block(x, *, past, hparams, train=False):
     nx = x.shape[-1].value
-    a = attn(norm(x, 'ln_1'), 'attn', nx, past=past, hparams=hparams, train=train)
+    a = attn(norm(x, "ln_1"), "attn", nx, past=past, hparams=hparams, train=train)
     if hparams.adapter_size is not None:
-        with tf.variable_scope('attn_adapter'):
+        with tf.variable_scope("attn_adapter"):
             a = adapter(a, hparams.adapter_size, nx, train)
     x = x + a
-    m = mlp(norm(x, 'ln_2'), 'mlp', nx * 4, hparams=hparams, train=train)
+    m = mlp(norm(x, "ln_2"), "mlp", nx * 4, hparams=hparams, train=train)
     if hparams.adapter_size is not None:
-        with tf.variable_scope('dense_adapter'):
+        with tf.variable_scope("dense_adapter"):
             m = adapter(m, hparams.adapter_size, nx, train)
     x = x + m
     return x
 
 
 def past_shape(*, hparams, batch_size=None, sequence=None):
-    return [batch_size, hparams.n_layer, 2, hparams.n_heads, sequence, hparams.n_embd // hparams.n_heads]
+    return [
+        batch_size,
+        hparams.n_layer,
+        2,
+        hparams.n_heads,
+        sequence,
+        hparams.n_embd // hparams.n_heads,
+    ]
 
 
 def expand_tile(value, size):
     """Add a new axis of given size."""
-    value = tf.convert_to_tensor(value, name='value')
+    value = tf.convert_to_tensor(value, name="value")
     ndims = value.shape.ndims
     return tf.tile(tf.expand_dims(value, axis=0), [size] + [1] * ndims)
 
@@ -141,16 +158,25 @@ def embed(X, we):
     return h
 
 
-def gpt2_featurizer(X, encoder, config, train=False, reuse=None, context=None, context_dim=None, **kwargs):
+def gpt2_featurizer(
+    X,
+    encoder,
+    config,
+    train=False,
+    reuse=None,
+    context=None,
+    context_dim=None,
+    **kwargs
+):
     initial_shape = tf.shape(X)
     X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-2:]), 0))
     X.set_shape([None, None, None])
 
-    with tf.variable_scope('model/featurizer', reuse=reuse):
+    with tf.variable_scope("model/featurizer", reuse=reuse):
         embed_weights = tf.get_variable(
             name="we",
             shape=[encoder.vocab_size + config.max_length, config.n_embed],
-            initializer=tf.random_normal_initializer(stddev=config.weight_stddev)
+            initializer=tf.random_normal_initializer(stddev=config.weight_stddev),
         )
         if config.train_embeddings:
             embed_weights = dropout(embed_weights, config.embed_p_drop, train)
@@ -163,52 +189,51 @@ def gpt2_featurizer(X, encoder, config, train=False, reuse=None, context=None, c
         # Transformer
         pasts = [None] * config.n_layer
         for layer, past in enumerate(pasts):
-            if (config.n_layer - layer) == config.num_layers_trained and config.num_layers_trained != config.n_layer and config.adapter_size is None:
+            if (
+                (config.n_layer - layer) == config.num_layers_trained
+                and config.num_layers_trained != config.n_layer
+                and config.adapter_size is None
+            ):
                 h = tf.stop_gradient(h)
                 train_layer = False
             else:
                 train_layer = train
 
-            with tf.variable_scope('h%d' % layer):
-                block_fn = functools.partial(block, past=past, hparams=config, train=train)
+            with tf.variable_scope("h%d" % layer):
+                block_fn = functools.partial(
+                    block, past=past, hparams=config, train=train
+                )
                 if config.low_memory_mode and train_layer:
                     block_fn = recompute_grad(block_fn, use_entire_scope=True)
                 h = block_fn(h)
 
-        h = norm(h, 'ln_f')
+        h = norm(h, "ln_f")
 
         # Use hidden state at classifier token as input to final proj. + softmax
         clf_h = tf.reshape(h, [-1, config.n_embed])  # [batch * seq_len, embed]
-        clf_token = encoder['_classify_']
-        pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
-        clf_h = tf.gather(clf_h, tf.range(shape_list(X)[0], dtype=tf.int32) * config.max_length + pool_idx)
-        clf_h = tf.reshape(clf_h, shape=tf.concat((initial_shape[: -2], [config.n_embed]), 0))
-        seq_feats = tf.reshape(h, shape=tf.concat((initial_shape[: -1], [config.n_embed]), 0))
+        clf_token = encoder["_classify_"]
+        pool_idx = tf.cast(
+            tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32
+        )
+        clf_h = tf.gather(
+            clf_h,
+            tf.range(shape_list(X)[0], dtype=tf.int32) * config.max_length + pool_idx,
+        )
+        clf_h = tf.reshape(
+            clf_h, shape=tf.concat((initial_shape[:-2], [config.n_embed]), 0)
+        )
+        seq_feats = tf.reshape(
+            h, shape=tf.concat((initial_shape[:-1], [config.n_embed]), 0)
+        )
 
         if config.use_auxiliary_info:
-            context_embed_weights = tf.get_variable(
-                name="ce",
-                shape=[context_dim, config.n_embed],
-                initializer=tf.random_normal_initializer(stddev=config.weight_stddev))
-
-            context_weighted_avg = tf.get_variable(
-                name='cwa',
-                shape=[context_dim],
-                initializer=tf.random_normal_initializer(stddev=config.weight_stddev)
+            clf_h, seq_feats = add_auxiliary(
+                context, context_dim, clf_h, seq_feats, config, train
             )
 
-            context_embed_weights = dropout(context_embed_weights, config.embed_p_drop, train)
-
-            with tf.variable_scope('context_embedding'):
-                weighted_C = tf.multiply(context, context_weighted_avg) # [batch_size, seq_length, context_dim] * [context_dim] = [batch_size, seq_length, context_dim], with weighted inputs
-                c_embed = tf.tensordot(weighted_C, context_embed_weights, axes = [[2],[0]]) # [batch_size, seq_length, context_dim] * [context_dim, n_embed] = [batch_size, seq_length, n_embed]
-                c_embed = norm(c_embed, tf.get_variable_scope())
-                seq_feats = seq_feats + c_embed
-                clf_h = clf_h + tf.reduce_sum(c_embed, axis=1)
-
         return {
-            'embed_weights': embed_weights,
-            'features': clf_h,
-            'sequence_features': seq_feats,
-            'pool_idx': pool_idx
+            "embed_weights": embed_weights,
+            "features": clf_h,
+            "sequence_features": seq_feats,
+            "pool_idx": pool_idx,
         }
