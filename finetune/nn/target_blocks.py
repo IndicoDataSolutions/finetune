@@ -25,7 +25,7 @@ def perceptron(x, ny, config, w_init=None, b_init=None):
     with tf.variable_scope("perceptron"):
         nx = config.n_embed
         if config.use_auxiliary_info:
-            nx += config.n_c_embed
+            nx += config.n_context_embed
         w = tf.get_variable("w", [nx, ny], initializer=w_init)
         b = tf.get_variable("b", [ny], initializer=b_init)
         return tf.matmul(x, w) + b
@@ -323,7 +323,7 @@ def sequence_labeler(
     with tf.variable_scope("sequence-labeler", reuse=reuse):
         nx = config.n_embed
         if config.use_auxiliary_info:
-            nx += config.n_c_embed
+            nx += config.n_context_embed
 
         def seq_lab_internal(hidden):
             if config.base_model.is_bidirectional:

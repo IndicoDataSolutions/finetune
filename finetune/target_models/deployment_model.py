@@ -60,7 +60,7 @@ class DeploymentPipeline(BasePipeline):
                 self.get_active_pipeline()
             )  # Call of dataset_encoded will refresh self.pipeline; if it is not called, still need to refresh
 
-        types, shapes = self.feed_shape_type_def()
+        types, _ = self.feed_shape_type_def()
 
         return Dataset.from_generator(dataset_encoded, output_types=types[0])
 
@@ -87,7 +87,7 @@ class DeploymentPipeline(BasePipeline):
             self.pipeline.context_labels = self.context_labels
             self.pipeline.context_dim = self.context_dim
             self.pipeline.label_stats = self.label_stats
-            self.pipeline.default = self.default
+            self.pipeline.default_context = self.default_context
         return self.pipeline_type
 
     def get_text_token_mask(self, *X):
@@ -243,7 +243,7 @@ class DeploymentModel(BaseModel):
             )
             self.input_pipeline.context_dim = original_model.input_pipeline.context_dim
             self.input_pipeline.label_stats = original_model.input_pipeline.label_stats
-            self.input_pipeline.default = original_model.input_pipeline.default
+            self.input_pipeline.default_context = original_model.input_pipeline.default_context
         else:
             self.config.use_auxiliary_info = False
             self.input_pipeline.config.use_auxiliary_info = False

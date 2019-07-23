@@ -136,7 +136,6 @@ class GPT2Encoder(BaseEncoder):
         batch_tokens = []
         batch_token_idxs = []
         batch_label_idxs = []
-        batch_character_locs = []
         batch_original_character_locs = (
             []
         )  # to account for the fact that some BPEs have different lengths than their original tokens (e.g. special characters such as bullets)
@@ -152,7 +151,6 @@ class GPT2Encoder(BaseEncoder):
 
             subtokens = []
             subtoken_idxs = []
-            tok_pos = []
             original_tok_pos = []
             token_start = 0
 
@@ -174,9 +172,6 @@ class GPT2Encoder(BaseEncoder):
                 subtoken_idxs.extend(
                     [self.encoder.get(t, self.UNK_IDX) for t in bpe_toks]
                 )
-                subtoken_positions = (
-                    np.cumsum([len(tok) for tok in bpe_toks]) + token_start
-                )
 
                 if np.sum([len(tok) for tok in bpe_toks]) > len(token):
                     original_subtoken_positions = (
@@ -189,12 +184,10 @@ class GPT2Encoder(BaseEncoder):
                     )
 
                 token_start += len(token.strip())
-                tok_pos.extend(subtoken_positions)
                 original_tok_pos.extend(original_subtoken_positions)
 
             batch_tokens.append(subtokens)
             batch_token_idxs.append(subtoken_idxs)
-            batch_character_locs.append(tok_pos)
             batch_original_character_locs.append(original_tok_pos)
             if labels is not None:
                 batch_label_idxs.append([label] * len(subtoken_idxs))
@@ -216,7 +209,7 @@ class GPT2Encoder(BaseEncoder):
             tokens=batch_tokens,
             labels=batch_label_idxs,
             context=batch_context,
-            char_locs=batch_character_locs,
+            char_locs=batch_original_character_locs,
         )
 
     def decode(self, token_ids):

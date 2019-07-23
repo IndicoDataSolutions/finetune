@@ -62,15 +62,15 @@ class BaseModel(object, metaclass=ABCMeta):
 
         atexit.register(cleanup)
 
-        self.default = kwargs.pop('default', None)
-        if self.default is not None and type(self.default) != dict:
+        self.default_context = kwargs.pop('default', None)
+        if self.default_context is not None and type(self.default_context) != dict:
             raise FinetuneError('Invalid default given: Need a dictionary of auxiliary info fields and default values.')
         self.config = get_config(**kwargs)
-        self.config.use_auxiliary_info = self.default is not None
+        self.config.use_auxiliary_info = self.default_context is not None
         self.resolved_gpus = None
         self.validate_config()
         self.input_pipeline = self._get_input_pipeline()
-        self.input_pipeline.default = self.default
+        self.input_pipeline.default_context = self.default_context
         download_data_if_required(self.config.base_model)
         self._initialize()
         if self.config.debugging_logs:
@@ -164,7 +164,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 )
 
         force_build_lm = (Y is None)
-        estimator, hooks = self.get_estimator(force_build_lm=force_build_lm, context_dim=self.input_pipeline.context_dim)
+        estimator, hooks = self.get_estimator(force_build_lm=force_build_lm)
         train_hooks = hooks.copy()
 
         steps_per_epoch = self._n_steps(
@@ -293,7 +293,7 @@ class BaseModel(object, metaclass=ABCMeta):
             label_encoder=self.input_pipeline.label_encoder,
             saver=self.saver,
             build_explain=build_explain,
-            context_dim=context_dim
+            context_dim=context_dim or self.input_pipeline.context_dim
         )
         hooks = [InitializeHook(self.saver)]
         est = tf.estimator.Estimator(
@@ -405,7 +405,7 @@ class BaseModel(object, metaclass=ABCMeta):
         n = n_examples or len(self._data)
         if self._predictions is None:
             input_fn = self.input_pipeline.get_predict_input_fn(self._data_generator)
-            _estimator, hooks = self.get_estimator(context_dim=self.input_pipeline.context_dim)
+            _estimator, hooks = self.get_estimator()
             self._predictions = _estimator.predict(input_fn=input_fn, predict_keys=predict_keys, hooks=hooks)
 
         self._clear_prediction_queue()
@@ -433,7 +433,7 @@ class BaseModel(object, metaclass=ABCMeta):
             return self._cached_inference(Xs=Xs, context=context, predict_keys=predict_keys, n_examples=n_examples)
         else:
             input_fn = self.input_pipeline.get_predict_input_fn(Xs, context=context)
-            estimator, hooks = self.get_estimator(build_explain=PredictMode.EXPLAIN in predict_keys, context_dim=self.input_pipeline.context_dim)
+            estimator, hooks = self.get_estimator(build_explain=PredictMode.EXPLAIN in predict_keys)
             length = len(Xs) if not callable(Xs) else None
 
             predictions = tqdm.tqdm(

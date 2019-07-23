@@ -26,6 +26,7 @@ class BasePipeline(metaclass=ABCMeta):
     def __init__(self, config):
         self.config = config
         self.text_encoder = self.config.base_model.get_encoder()
+        self.context_dim = None
         self.label_encoder = None
         self.target_dim = None
         self.pad_idx_ = None
@@ -165,7 +166,6 @@ class BasePipeline(metaclass=ABCMeta):
                 characteristics = context
             else:
                 characteristics = itertools.islice(context(), 10000)
-            num_samples = len(characteristics)
             _ = self._context_to_vector(
                 characteristics
             )  # to fit the auxiliary information label encoders
@@ -193,7 +193,7 @@ class BasePipeline(metaclass=ABCMeta):
             keys = [
                 k
                 for k in pads_removed[0].keys()
-                if k not in ignore and k in self.default.keys()
+                if k not in ignore and k in self.default_context.keys()
             ]
             characteristics = {
                 k: [dictionary[k] for dictionary in pads_removed] for k in keys
@@ -254,9 +254,9 @@ class BasePipeline(metaclass=ABCMeta):
                 if type(sample[idx]) == str and sample[idx] == self.config.pad_token:
                     padded_indices.append(idx)
                 else:
-                    if not set(self.default.keys()).issubset(set(sample[idx].keys())):
+                    if not set(self.default_context.keys()).issubset(set(sample[idx].keys())):
                         missing = str(
-                            set(self.default.keys()).difference(set(sample[idx].keys()))
+                            set(self.default_context.keys()).difference(set(sample[idx].keys()))
                         )
 
                         raise FinetuneError(
@@ -267,7 +267,7 @@ class BasePipeline(metaclass=ABCMeta):
                     tokens_with_context.append(sample[idx])
             characteristics = {
                 k: [dictionary[k] for dictionary in tokens_with_context]
-                for k in self.default.keys()
+                for k in self.default_context.keys()
             }
 
             # make sure all features cover the same number of tokens, and calculate total num tokens

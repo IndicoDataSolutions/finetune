@@ -134,7 +134,6 @@ class GPTEncoder(BaseEncoder):
         batch_context = []
         batch_token_idxs = []
         batch_label_idxs = []
-        batch_character_locs = []
         batch_original_character_locs = (
             []
         )  # to account for the fact that some BPEs have different lengths than their original tokens (e.g. special characters such as bullets)
@@ -176,10 +175,7 @@ class GPTEncoder(BaseEncoder):
                 assert len("".join(bpe_toks).replace("</w>", "")) == len(
                     token.text.replace(" ", "")
                 )
-                subtoken_positions = (
-                    np.cumsum([len(tok.replace("</w>", "")) for tok in bpe_toks])
-                    + token_start
-                )
+
                 if np.sum([len(tok) for tok in bpe_toks]) > len(token):
                     original_subtoken_positions = (
                         np.asarray([len(token.text.strip()) for tok in bpe_toks])
@@ -192,12 +188,10 @@ class GPTEncoder(BaseEncoder):
 
                 token_start += len(token.text.strip())
 
-                tok_pos.extend(subtoken_positions)
                 original_tok_pos.extend(original_subtoken_positions)
 
             batch_tokens.append(subtokens)
             batch_token_idxs.append(subtoken_idxs)
-            batch_character_locs.append(tok_pos)
             batch_original_character_locs.append(original_tok_pos)
             if labels is not None:
                 batch_label_idxs.append([label] * len(subtoken_idxs))
@@ -219,7 +213,7 @@ class GPTEncoder(BaseEncoder):
             tokens=batch_tokens,
             labels=batch_label_idxs,
             context=batch_context,
-            char_locs=batch_character_locs,
+            char_locs=batch_original_character_locs,
         )
 
     def decode(self, ids):
