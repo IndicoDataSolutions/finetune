@@ -96,7 +96,7 @@ class DeploymentPipeline(BasePipeline):
 
     def get_shapes(self):
         _ = self.get_active_pipeline()
-        types, shapes = self.pipeline.feed_shape_type_def()
+        _, shapes = self.pipeline.feed_shape_type_def()
         if hasattr(self, "dataset"):
             self.dataset.output_shapes = shapes[0]
         return shapes[0]
@@ -243,7 +243,9 @@ class DeploymentModel(BaseModel):
             )
             self.input_pipeline.context_dim = original_model.input_pipeline.context_dim
             self.input_pipeline.label_stats = original_model.input_pipeline.label_stats
-            self.input_pipeline.default_context = original_model.input_pipeline.default_context
+            self.input_pipeline.default_context = (
+                original_model.input_pipeline.default_context
+            )
         else:
             self.config.use_auxiliary_info = False
             self.input_pipeline.config.use_auxiliary_info = False

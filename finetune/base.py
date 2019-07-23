@@ -38,7 +38,7 @@ from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
 from finetune.base_models import GPTModel, GPTModelSmall
 
 
-LOGGER = logging.getLogger('finetune')
+LOGGER = logging.getLogger("finetune")
 
 
 class BaseModel(object, metaclass=ABCMeta):
@@ -62,10 +62,13 @@ class BaseModel(object, metaclass=ABCMeta):
 
         atexit.register(cleanup)
 
-        self.default_context = kwargs.pop('default', None)
+        self.default_context = kwargs.pop("default_context", None)
         if self.default_context is not None and type(self.default_context) != dict:
-            raise FinetuneError('Invalid default given: Need a dictionary of auxiliary info fields and default values.')
+            raise FinetuneError(
+                "Invalid default given: Need a dictionary of auxiliary info fields and default values."
+            )
         self.config = get_config(**kwargs)
+
         self.config.use_auxiliary_info = self.default_context is not None
         self.resolved_gpus = None
         self.validate_config()
@@ -78,8 +81,13 @@ class BaseModel(object, metaclass=ABCMeta):
             tf.logging.set_verbosity(tf.logging.DEBUG)
 
     def validate_config(self):
-        if self.config.num_layers_trained != self.config.n_layer and self.config.train_embeddings:
-            raise ValueError("If you are only finetuning a subset of the layers, you cannot finetune embeddings.")
+        if (
+            self.config.num_layers_trained != self.config.n_layer
+            and self.config.train_embeddings
+        ):
+            raise ValueError(
+                "If you are only finetuning a subset of the layers, you cannot finetune embeddings."
+            )
 
     @abstractmethod
     def _get_input_pipeline(self):
@@ -112,8 +120,10 @@ class BaseModel(object, metaclass=ABCMeta):
         self.saver = Saver(
             fallback_filename=self.config.base_model_path,
             exclude_matches=None if self.config.save_adam_vars else "Adam",
-            variable_transforms=[embedding_preprocessor(self.input_pipeline, self.config)],
-            save_dtype=self.config.save_dtype
+            variable_transforms=[
+                embedding_preprocessor(self.input_pipeline, self.config)
+            ],
+            save_dtype=self.config.save_dtype,
         )
 
     @abstractmethod
@@ -126,51 +136,67 @@ class BaseModel(object, metaclass=ABCMeta):
 
     @staticmethod
     @abstractmethod
-    def _target_model(*, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
+    def _target_model(
+        *,
+        config,
+        featurizer_state,
+        targets,
+        n_outputs,
+        train=False,
+        reuse=None,
+        **kwargs
+    ):
         # Overridden by subclass to attach a target model onto the shared base featurizer.
         raise NotImplementedError
 
     def _n_steps(self, n_examples, batch_size, n_gpus):
-        steps = int(math.ceil(
-            n_examples / (batch_size * n_gpus)
-        ))
+        steps = int(math.ceil(n_examples / (batch_size * n_gpus)))
         return steps
 
     def finetune(self, Xs, Y=None, batch_size=None):
-        if not callable(Xs) and Y is not None and len(Xs) != len(Y) and not self.config.use_auxiliary_info:
+        if (
+            not callable(Xs)
+            and Y is not None
+            and len(Xs) != len(Y)
+            and not self.config.use_auxiliary_info
+        ):
             raise FinetuneError(
                 "Mismatch between number of examples ({}) and number of targets ({}) provided.".format(
-                    len(Xs),
-                    len(Y)
+                    len(Xs), len(Y)
                 )
             )
 
         if self.config.use_auxiliary_info:
             context = Xs[1]
             Xs = Xs[0]
+            context = self.fill_in_context_gaps(Xs, context)
         else:
             context = None
-            self.input_pipeline.context_dim=None
+            self.input_pipeline.context_dim = None
 
         batch_size = batch_size or self.config.batch_size
-        val_input_fn, train_input_fn, val_size, val_interval = self.input_pipeline.get_train_input_fns(Xs, Y, context=context, batch_size=batch_size)
+        val_input_fn, train_input_fn, val_size, val_interval = self.input_pipeline.get_train_input_fns(
+            Xs, Y, context=context, batch_size=batch_size
+        )
 
         if self.config.keep_best_model:
             if isinstance(val_size, dict):
                 tf.logging.warning("Cannot early stop or keep best model with MTL")
             elif val_size <= 10:
                 tf.logging.warning(
-                "Early stopping / keeping best model with a validation size of {} is likely to case undesired results".format(val_size)
+                    "Early stopping / keeping best model with a validation size of {} is likely to case undesired results".format(
+                        val_size
+                    )
                 )
 
-        force_build_lm = (Y is None)
+        force_build_lm = Y is None
         estimator, hooks = self.get_estimator(force_build_lm=force_build_lm)
         train_hooks = hooks.copy()
 
         steps_per_epoch = self._n_steps(
             n_examples=self.input_pipeline.dataset_size,
             batch_size=batch_size,
-            n_gpus=max(1, len(self.resolved_gpus))
+            n_gpus=max(1, len(self.resolved_gpus)),
         )
         num_steps = steps_per_epoch * self.config.n_epochs
 
@@ -180,14 +206,20 @@ class BaseModel(object, metaclass=ABCMeta):
                 if val_size[task] > 0:
                     train_hooks.append(
                         tf.estimator.experimental.InMemoryEvaluatorHook(
-                            estimator, val_input_fn[task], every_n_iter=val_interval[task],
-                            steps=val_size[task] // batch_size, name=task
+                            estimator,
+                            val_input_fn[task],
+                            every_n_iter=val_interval[task],
+                            steps=val_size[task] // batch_size,
+                            name=task,
                         )
                     )
                     train_hooks.append(
                         tf.estimator.experimental.InMemoryEvaluatorHook(
-                            estimator, val_input_fn[task + "_train"], every_n_iter=val_interval[task],
-                            steps=val_size[task] // batch_size, name=task + "_train"
+                            estimator,
+                            val_input_fn[task + "_train"],
+                            every_n_iter=val_interval[task],
+                            steps=val_size[task] // batch_size,
+                            name=task + "_train",
                         )
                     )
             early_stopping_interval = sys.maxsize  # turn off early stopping for mtl.
@@ -195,7 +227,10 @@ class BaseModel(object, metaclass=ABCMeta):
             # Validation with all other tasks.
             train_hooks.append(
                 tf.estimator.experimental.InMemoryEvaluatorHook(
-                    estimator, val_input_fn, every_n_iter=val_interval, steps=val_size // batch_size
+                    estimator,
+                    val_input_fn,
+                    every_n_iter=val_interval,
+                    steps=val_size // batch_size,
                 )
             )
             early_stopping_interval = val_interval
@@ -208,7 +243,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 keep_best_model=self.config.keep_best_model,
                 steps_per_epoch=steps_per_epoch,
                 early_stopping_steps=self.config.early_stopping_steps,
-                eval_frequency=early_stopping_interval
+                eval_frequency=early_stopping_interval,
             )
         )
         with warnings.catch_warnings():
@@ -219,15 +254,29 @@ class BaseModel(object, metaclass=ABCMeta):
                 self.config.num_layers_trained = 0
                 estimator.train(train_input_fn, hooks=train_hooks, steps=num_steps)
                 self.config.num_layers_trained = num_layers_trained
-                self.saver.variables = {k: v for k, v in self.saver.variables.items() if "adam" not in k and "global_step" not in k}
+                self.saver.variables = {
+                    k: v
+                    for k, v in self.saver.variables.items()
+                    if "adam" not in k and "global_step" not in k
+                }
                 for weight in self.saver.variables:
-                    if weight.startswith("model/target/") or 'context_embedding' in weight:
+                    if (
+                        weight.startswith("model/target/")
+                        or "context_embedding" in weight
+                    ):
                         w = self.saver.variables[weight]
                         if len(w.shape) == 1:
                             continue
                         w_flat = np.reshape(w, [-1, w.shape[-1]])
-                        expectation_of_norm = ((self.config.weight_stddev ** 2) * w_flat.shape[0]) ** 0.5
-                        self.saver.variables[weight] = np.reshape(expectation_of_norm * w_flat / np.linalg.norm(w_flat, axis=0), w.shape)
+                        expectation_of_norm = (
+                            (self.config.weight_stddev ** 2) * w_flat.shape[0]
+                        ) ** 0.5
+                        self.saver.variables[weight] = np.reshape(
+                            expectation_of_norm
+                            * w_flat
+                            / np.linalg.norm(w_flat, axis=0),
+                            w.shape,
+                        )
 
                 tf.logging.info("Finishing pre-fit initialisation...")
             estimator.train(train_input_fn, hooks=train_hooks, steps=num_steps)
@@ -250,9 +299,9 @@ class BaseModel(object, metaclass=ABCMeta):
             )
         elif num_gpus == 1:
             gpu = resolved_gpus[0]
-            distribute_strategy = OneDeviceStrategy(device='/gpu:{}'.format(gpu))
+            distribute_strategy = OneDeviceStrategy(device="/gpu:{}".format(gpu))
         else:
-            distribute_strategy = OneDeviceStrategy(device='/cpu:0')
+            distribute_strategy = OneDeviceStrategy(device="/cpu:0")
 
         self.resolved_gpus = resolved_gpus
         return distribute_strategy
@@ -275,11 +324,13 @@ class BaseModel(object, metaclass=ABCMeta):
             session_config=conf,
             log_step_count_steps=100,
             train_distribute=distribute_strategy,
-            keep_checkpoint_max=1
+            keep_checkpoint_max=1,
         )
         return config
 
-    def get_estimator(self, force_build_lm=False, build_explain=False, context_dim=None):
+    def get_estimator(
+        self, force_build_lm=False, build_explain=False, context_dim=None
+    ):
         config = self._get_estimator_config()
 
         model_fn = get_model_fn(
@@ -293,21 +344,21 @@ class BaseModel(object, metaclass=ABCMeta):
             label_encoder=self.input_pipeline.label_encoder,
             saver=self.saver,
             build_explain=build_explain,
-            context_dim=context_dim or self.input_pipeline.context_dim
+            context_dim=context_dim or self.input_pipeline.context_dim,
         )
         hooks = [InitializeHook(self.saver)]
         est = tf.estimator.Estimator(
             model_dir=self.estimator_dir,
             model_fn=model_fn,
             config=config,
-            params=self.config
+            params=self.config,
         )
-    
+
         return est, hooks
-    
-    def get_separate_estimators(self, force_build_lm = False):
+
+    def get_separate_estimators(self, force_build_lm=False):
         fns = get_separate_model_fns(
-            target_model_fn=self._target_model, 
+            target_model_fn=self._target_model,
             predict_op=self._predict_op,
             predict_proba_op=self._predict_proba_op,
             build_target_model=self.input_pipeline.target_dim is not None,
@@ -316,27 +367,26 @@ class BaseModel(object, metaclass=ABCMeta):
             target_dim=self.input_pipeline.target_dim,
             label_encoder=self.input_pipeline.label_encoder,
             saver=self.saver,
-            context_dim=context_dim
+            context_dim=self.input_pipeline.context_dim,
         )
 
         featurizer_est = tf.estimator.Estimator(
             model_dir=self.estimator_dir,
-            model_fn=fns['featurizer_model_fn'],
+            model_fn=fns["featurizer_model_fn"],
             config=config,
-            params=self.config
+            params=self.config,
         )
 
         target_est = tf.estimator.Estimator(
             model_dir=self.estimator_dir,
-            model_fn=fns['target_model_fn'],
+            model_fn=fns["target_model_fn"],
             config=config,
-            params=self.config
+            params=self.config,
         )
 
         hooks = [InitializeHook(self.saver)]
 
         return featurizer_est, target_est, hooks
-
 
     def close(self):
         self._closed = True
@@ -382,7 +432,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 # out of the queue later
                 self._to_pull += 1
                 yield self._cached_example
-                
+
     @contextmanager
     def cached_predict(self):
         """
@@ -406,7 +456,9 @@ class BaseModel(object, metaclass=ABCMeta):
         if self._predictions is None:
             input_fn = self.input_pipeline.get_predict_input_fn(self._data_generator)
             _estimator, hooks = self.get_estimator()
-            self._predictions = _estimator.predict(input_fn=input_fn, predict_keys=predict_keys, hooks=hooks)
+            self._predictions = _estimator.predict(
+                input_fn=input_fn, predict_keys=predict_keys, hooks=hooks
+            )
 
         self._clear_prediction_queue()
 
@@ -416,7 +468,9 @@ class BaseModel(object, metaclass=ABCMeta):
             try:
                 y = y[predict_keys[0]] if len(predict_keys) == 1 else y
             except ValueError:
-                raise FinetuneError("Cannot call `predict()` on a model that has not been fit.")
+                raise FinetuneError(
+                    "Cannot call `predict()` on a model that has not been fit."
+                )
             predictions[i] = y
 
         return predictions
@@ -425,15 +479,20 @@ class BaseModel(object, metaclass=ABCMeta):
         if self.config.use_auxiliary_info:
             context = Xs[1]
             Xs = Xs[0]
+            context = self.fill_in_context_gaps(Xs, context)
         else:
             context = None
         Xs = self.input_pipeline._format_for_inference(Xs)
 
         if self._cached_predict:
-            return self._cached_inference(Xs=Xs, context=context, predict_keys=predict_keys, n_examples=n_examples)
+            return self._cached_inference(
+                Xs=Xs, context=context, predict_keys=predict_keys, n_examples=n_examples
+            )
         else:
             input_fn = self.input_pipeline.get_predict_input_fn(Xs, context=context)
-            estimator, hooks = self.get_estimator(build_explain=PredictMode.EXPLAIN in predict_keys)
+            estimator, hooks = self.get_estimator(
+                build_explain=PredictMode.EXPLAIN in predict_keys
+            )
             length = len(Xs) if not callable(Xs) else None
 
             predictions = tqdm.tqdm(
@@ -441,15 +500,17 @@ class BaseModel(object, metaclass=ABCMeta):
                     input_fn=input_fn, predict_keys=predict_keys, hooks=hooks
                 ),
                 total=length,
-                desc="Inference"
-                )
+                desc="Inference",
+            )
             try:
                 return [
-                    pred[predict_keys[0]] if len(predict_keys) == 1 
-                    else pred for pred in predictions
+                    pred[predict_keys[0]] if len(predict_keys) == 1 else pred
+                    for pred in predictions
                 ]
             except ValueError:
-                raise FinetuneError("Cannot call `predict()` on a model that has not been fit.")
+                raise FinetuneError(
+                    "Cannot call `predict()` on a model that has not been fit."
+                )
 
     def fit(self, *args, **kwargs):
         """ An alias for finetune. """
@@ -457,7 +518,9 @@ class BaseModel(object, metaclass=ABCMeta):
 
     def _predict(self, Xs):
         raw_preds = self._inference(Xs, predict_keys=[PredictMode.NORMAL])
-        return self.input_pipeline.label_encoder.inverse_transform(np.asarray(raw_preds))
+        return self.input_pipeline.label_encoder.inverse_transform(
+            np.asarray(raw_preds)
+        )
 
     def predict(self, Xs):
         return self._predict(Xs)
@@ -478,16 +541,16 @@ class BaseModel(object, metaclass=ABCMeta):
 
         formatted_predictions = []
         for probas in raw_probas:
-            formatted_predictions.append(
-                dict(zip(classes, probas))
-            )
+            formatted_predictions.append(dict(zip(classes, probas)))
         return formatted_predictions
 
     def attention_weights(self, Xs):
         if self.config.base_model in [GPTModel, GPTModelSmall]:
             raw_preds = self._inference(Xs, predict_keys=[PredictMode.ATTENTION])
             return raw_preds
-        raise NotImplementedError("'attention_weights' only supported for GPTModel and GPTModelSmall base models.")
+        raise NotImplementedError(
+            "'attention_weights' only supported for GPTModel and GPTModelSmall base models."
+        )
 
     def _featurize(self, Xs):
         raw_preds = self._inference(Xs, predict_keys=[PredictMode.FEATURIZE])
@@ -503,7 +566,9 @@ class BaseModel(object, metaclass=ABCMeta):
 
     @classmethod
     def get_eval_fn(cls):
-        raise NotImplementedError("No default eval function is given, please pass an explicit eval fn to grid_search")
+        raise NotImplementedError(
+            "No default eval function is given, please pass an explicit eval fn to grid_search"
+        )
 
     def transform(self, *args, **kwargs):
         """
@@ -517,7 +582,7 @@ class BaseModel(object, metaclass=ABCMeta):
         np.random.seed(seed)
         tf.set_random_seed(seed)
 
-    def generate_text(self, seed_text='', max_length=None, use_extra_toks=True):
+    def generate_text(self, seed_text="", max_length=None, use_extra_toks=True):
         """
         Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
         Temperature parameter for decoding is set in the config.
@@ -525,6 +590,7 @@ class BaseModel(object, metaclass=ABCMeta):
         :param seed_text: Defaults to the empty string. This will form the starting point to begin modelling
         :return: A string containing the generated text.
         """
+
         def dataset_encoded():
             while not dataset_encoded.finished:
                 yield {"tokens": arr_encoded.token_ids, "mask": arr_encoded.mask}
@@ -539,17 +605,23 @@ class BaseModel(object, metaclass=ABCMeta):
         self.config.use_extra_toks = use_extra_toks
         encoded = self.input_pipeline.text_encoder._encode([seed_text])
         if encoded == [] and not use_extra_toks:
-            raise ValueError("If you are not using the extra tokens, you must provide some non-empty seed text")
+            raise ValueError(
+                "If you are not using the extra tokens, you must provide some non-empty seed text"
+            )
         start = [self.input_pipeline.text_encoder.start] if use_extra_toks else []
         encoded = EncodedOutput(token_ids=start + encoded.token_ids[0])
 
         estimator, hooks = self.get_estimator(force_build_lm=True)
-        predict = estimator.predict(input_fn=get_input_fn, predict_keys=[PredictMode.GENERATE_TEXT], hooks=hooks)
+        predict = estimator.predict(
+            input_fn=get_input_fn, predict_keys=[PredictMode.GENERATE_TEXT], hooks=hooks
+        )
 
         EOS = self.input_pipeline.text_encoder.clf_token
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
-            for i in range(len(encoded.token_ids) - 1, (max_length or self.config.max_length) - 2):
+            for i in range(
+                len(encoded.token_ids) - 1, (max_length or self.config.max_length) - 2
+            ):
                 arr_encoded = self.input_pipeline._array_format(encoded)
                 class_idx = next(predict)[PredictMode.GENERATE_TEXT]
                 encoded.token_ids.append(class_idx[i])
@@ -565,12 +637,9 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         Leave serialization of all tf objects to tf
         """
-        required_fields = [
-            '_load_from_file', 'config', 'input_pipeline'
-        ]
+        required_fields = ["_load_from_file", "config", "input_pipeline"]
         serialized_state = {
-            k: v for k, v in self.__dict__.items()
-            if k in required_fields
+            k: v for k, v in self.__dict__.items() if k in required_fields
         }
         return serialized_state
 
@@ -604,12 +673,19 @@ class BaseModel(object, metaclass=ABCMeta):
             base_model_path = base_model_path + str(int(time.time()))
             LOGGER.warning(
                 "Cannot overwrite model {}, set exists_ok to overwrite, saving as {} to avoid loss of data.".format(
-                    filename, base_model_path))
+                    filename, base_model_path
+                )
+            )
 
         if not self.saver.variables:
             raise FinetuneError(
-                "Cannot save a base model with no weights changed. Call fit before creating a base model.")
-        weights_stripped = {k: v for k, v in self.saver.variables.items() if "featurizer" in k and "Adam" not in k}
+                "Cannot save a base model with no weights changed. Call fit before creating a base model."
+            )
+        weights_stripped = {
+            k: v
+            for k, v in self.saver.variables.items()
+            if "featurizer" in k and "Adam" not in k
+        }
         joblib.dump(weights_stripped, base_model_path)
 
     def load(path, *args, **kwargs):
@@ -622,7 +698,7 @@ class BaseModel(object, metaclass=ABCMeta):
         if type(path) != str:
             instance = path
             raise FinetuneError(
-                "The .load() method can only be called on the class, not on an instance. Try `{}.load(\"{}\") instead.".format(
+                'The .load() method can only be called on the class, not on an instance. Try `{}.load("{}") instead.'.format(
                     instance.__class__.__name__, args[0]
                 )
             )
@@ -649,14 +725,77 @@ class BaseModel(object, metaclass=ABCMeta):
             start = end = 0
             for text_chunk in text_chunks:
                 end += len(text_chunk)
-                chunk_context = sorted([c for c in example_context if c['start'] < end and c['end'] > start], key = lambda c: c['start'])
+                chunk_context = sorted(
+                    [
+                        c
+                        for c in example_context
+                        if c["start"] < end and c["end"] > start
+                    ],
+                    key=lambda c: c["start"],
+                )
                 start += len(text_chunk)
                 chunks_context.append(chunk_context)
             context_new.append(list(itertools.chain.from_iterable(chunks_context)))
         return context_new
 
+    def fill_in_context_gaps(self, X, context):
+        """
+        Ensure all tokens are covered by context; if they are not, fill in gaps with the default style as given from the user
+        """
+        if len(X) != len(context):
+            raise FinetuneError(
+                "Length conflict between context spans and X - Make sure every text sample has associated context list. If a sample has no context, please use [] as its context."
+            )
+
+        filled_contexts = []
+        for spans, text in zip(context, X):
+            if type(text) == list:
+                text = ''.join(text)
+            spans = sorted([c for c in spans], key=lambda c: c["start"])
+
+            filled_in_spans = []
+            num_spans = len(spans)
+
+            if num_spans == 0:
+                filler = self.generate_default(text, 0)
+                filled_contexts.append([filler])
+                continue
+
+            for i, span in enumerate(spans):
+                filler = None
+                if i == 0:  # make sure first span starts at 0
+                    start = span["start"]
+                    if start != 0:
+                        filler = self.generate_default(text[:start], 0)
+                        filled_in_spans.append(filler)
+                filled_in_spans.append(span)
+                if i + 1 == num_spans: # make sure last span ends at end of document - this is a separate if rather than elif because if spans has len 1, it is both the first and the last
+                    end = span["end"]
+                    if end < len(text) - 1:
+                        filler = self.generate_default(text[end:], end)
+                        filled_in_spans.append(filler)
+                if i > 0 and i + 1 < num_spans:
+                    next_span = spans[i + 1]
+                    if span["end"] != next_span["start"]:
+                        filler = self.generate_default(
+                            text[span["end"] : next_span["start"]], span["end"]
+                        )
+                        filled_in_spans.append(filler)
+            filled_contexts.append(filled_in_spans)
+        return filled_contexts
+
+    def generate_default(self, text, start):
+        assert len(text) > 0
+        template = deepcopy(self.default_context)
+        template["token"] = text
+        template["start"] = start
+        template["end"] = start + len(text)
+        return template
+
     @classmethod
-    def finetune_grid_search(cls, Xs, Y, *, test_size, eval_fn=None, probs=False, return_all=False, **kwargs):
+    def finetune_grid_search(
+        cls, Xs, Y, *, test_size, eval_fn=None, probs=False, return_all=False, **kwargs
+    ):
         """
         Performs grid search over config items defined using "GridSearchable" objects and returns either full results or
         the config object that relates to the best results. The default config contains grid searchable objects for the
@@ -679,7 +818,9 @@ class BaseModel(object, metaclass=ABCMeta):
         config.val_size = 0.0
         eval_fn = eval_fn or cls.get_eval_fn()
 
-        trainXs, testXs, trainY, testY = train_test_split(list_transpose(Xs), Y, test_size=test_size, shuffle=True)
+        trainXs, testXs, trainY, testY = train_test_split(
+            list_transpose(Xs), Y, test_size=test_size, shuffle=True
+        )
         trainXs = list_transpose(trainXs)
         testXs = list_transpose(testXs)
         gs = config.get_grid_searchable()
@@ -704,8 +845,18 @@ class BaseModel(object, metaclass=ABCMeta):
         return max(results, key=lambda x: x[1])[0]
 
     @classmethod
-    def finetune_grid_search_cv(cls, Xs, Y, *, n_splits, test_size, eval_fn=None, probs=False,
-                                return_all=False, **kwargs):
+    def finetune_grid_search_cv(
+        cls,
+        Xs,
+        Y,
+        *,
+        n_splits,
+        test_size,
+        eval_fn=None,
+        probs=False,
+        return_all=False,
+        **kwargs
+    ):
         """
         Performs cross validated grid search over config items defined using "GridSearchable" objects and returns either full results or
         the config object that relates to the best results. The default config contains grid searchable objects for the
@@ -783,5 +934,5 @@ class BaseModel(object, metaclass=ABCMeta):
             yield position_seq, start_of_doc, end_of_doc, label_seq, proba_seq
 
     def __del__(self):
-        if hasattr(self, '_tmp_dir') and self._tmp_dir is not None:
+        if hasattr(self, "_tmp_dir") and self._tmp_dir is not None:
             self._tmp_dir.cleanup()

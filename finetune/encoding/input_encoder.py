@@ -238,9 +238,7 @@ class BaseEncoder(object):
         for char_loc, token in zip(char_locs, tokens):
             original_token = 0
             for subtoken_idx in range(len(context)):
-                if (
-                    char_loc + offset > context[subtoken_idx]["end"]
-                ):  # subtract one since subtokens include spaces at the beginning, while the 'start's from context do not
+                if char_loc + offset > context[subtoken_idx]["end"]:
                     original_token += 1
             original_tokens.append(original_token)
         expanded_context = [None] * len(original_tokens)

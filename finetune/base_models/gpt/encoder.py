@@ -152,7 +152,6 @@ class GPTEncoder(BaseEncoder):
             subtokens = []
             subtoken_idxs = []
             original_tok_pos = []
-            tok_pos = []
             token_start = 0
 
             for j, token in enumerate(tokens):

@@ -201,11 +201,18 @@ class SequenceLabeler(BaseModel):
             multi_label=self.multi_label,
             none_value=self.config.pad_token,
         )
+        for X in Xs_new:
+            if (
+                " securities market and offered to buy all maturities of Treasury notes and bonds, a"
+                in X
+            ):
+                print(X)
 
         Y = Y_new if Y is not None else None
 
         if self.config.use_auxiliary_info:
-            context_new = self.context_span_to_label_span(context, Xs_new)
+            # context_new = self.context_span_to_label_span(context, Xs_new)
+            context_new = context
             Xs = [Xs_new, context_new]
         else:
             Xs = Xs_new

@@ -54,7 +54,6 @@ class BERTEncoder(BaseEncoder):
         batch_tokens = []
         batch_token_idxs = []
         batch_label_idxs = []
-        batch_character_locs = []
         batch_original_character_locs = []
         batch_context = []
         label = None
@@ -73,7 +72,6 @@ class BERTEncoder(BaseEncoder):
 
             batch_tokens.append(subtokens)
             batch_token_idxs.append(self.tokenizer.convert_tokens_to_ids(subtokens))
-            batch_character_locs.append(subtoken_locs)
             batch_original_character_locs.append(original_tok_pos)
             if labels is not None:
                 batch_label_idxs.append([label] * len(subtokens))
@@ -95,7 +93,7 @@ class BERTEncoder(BaseEncoder):
             tokens=batch_tokens,
             labels=batch_label_idxs,
             context=batch_context,
-            char_locs=batch_character_locs,
+            char_locs=batch_original_character_locs,
         )
 
     def decode(self, ids):
