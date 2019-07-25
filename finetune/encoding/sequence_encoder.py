@@ -35,7 +35,7 @@ def _merge_confidences(annotation):
     annotation['confidence'] = {
         label: np.mean([
             confidences[label] for confidences in annotation['confidence']
-        ])
+        ]).tolist()
         for label in labels
     }
 
