@@ -24,6 +24,7 @@ EncodedOutput = namedtuple(
         "tokens",  # list of list of subtokens (strs)
         "labels",  # list of list of labels
         "char_locs",  # list of list of character locations (ints)
+        "char_starts",  # list of list of character starts (locs are character ends) (ints)
         "context",  # list of list of context token characteristics
     ],
 )

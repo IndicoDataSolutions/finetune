@@ -190,7 +190,8 @@ class FullTokenizer(object):
             []
         )  # to account for shift in BPE creation needed to line up auxiliary info spans
         original_tok_pos = []
-        token_start = 0
+        char_starts = []
+
         for token, token_idx in zip(*self.basic_tokenizer.tokenize(text)):
             subtokens = []
             for sub_token, sub_token_idx in zip(
@@ -200,7 +201,10 @@ class FullTokenizer(object):
                 split_idxs.append((sub_token_idx[0], sub_token_idx[-1] + 1))
                 subtokens.append(sub_token)
 
-            if np.sum([len(tok) for tok in subtokens]) > len(token):
+            token_char_starts = [token_idx[0]] * len(subtokens)
+            token_start = token_idx[0]
+
+            if np.sum([len(tok) for tok in subtokens]) != len(token):
                 original_subtoken_positions = (
                     np.asarray([len(token.strip()) for tok in subtokens]) + token_start
                 )
@@ -208,10 +212,11 @@ class FullTokenizer(object):
                 original_subtoken_positions = (
                     np.cumsum([len(tok) for tok in subtokens]) + token_start
                 )
-            original_tok_pos.extend(original_subtoken_positions)
-            token_start += len(token.strip())
 
-        return split_tokens, split_idxs, original_tok_pos
+            original_tok_pos.extend(original_subtoken_positions)
+            char_starts.extend(token_char_starts)
+
+        return split_tokens, split_idxs, original_tok_pos, char_starts
 
     def convert_tokens_to_ids(self, tokens):
         return convert_by_vocab(self.vocab, tokens)

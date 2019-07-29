@@ -16,7 +16,7 @@ def compute_class_weights(class_weights, class_counts):
     if class_weights is None:
         return
 
-    options = {'linear', 'log', 'sqrt'}
+    options = {"linear", "log", "sqrt"}
 
     if isinstance(class_weights, str) and class_weights in options:
         counts = class_counts
@@ -24,11 +24,11 @@ def compute_class_weights(class_weights, class_counts):
         computed_weights = {}
         for class_name, count in counts.items():
             ratio = max_count / count
-            if class_weights == 'linear':
+            if class_weights == "linear":
                 computed_weights[class_name] = ratio
-            elif class_weights == 'sqrt':
+            elif class_weights == "sqrt":
                 computed_weights[class_name] = np.sqrt(ratio)
-            elif class_weights == 'log':
+            elif class_weights == "log":
                 computed_weights[class_name] = np.log(ratio) + 1
         class_weights = computed_weights
 
@@ -36,8 +36,7 @@ def compute_class_weights(class_weights, class_counts):
         raise FinetuneError(
             "Invalid value for config.class_weights: {}. "
             "Expected dictionary mapping from class name to weight or one of {}".format(
-                class_weights,
-                list(options)
+                class_weights, list(options)
             )
         )
     return class_weights

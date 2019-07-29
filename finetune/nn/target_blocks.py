@@ -274,6 +274,8 @@ def class_reweighting(class_weights):
     @tf.custom_gradient
     def custom_grad(logits):
         def grad(g):
+            # class_weights = tf.Print(class_weights, [class_weights])
+            # g = tf.print(g, [g])
             new_g = g * class_weights
             ratio = tf.norm(g) / tf.norm(new_g)
             return new_g * ratio

@@ -259,7 +259,7 @@ def gpt_featurizer(
             if config.use_auxiliary_info:
                 context_embed_weights = tf.get_variable(
                     name="ce",
-                    shape=[context_dim, config.n_c_embed],
+                    shape=[context_dim, config.n_context_embed],
                     initializer=tf.random_normal_initializer(
                         stddev=config.weight_stddev
                     ),

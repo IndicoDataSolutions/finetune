@@ -140,6 +140,7 @@ class GPT2Encoder(BaseEncoder):
             []
         )  # to account for the fact that some BPEs have different lengths than their original tokens (e.g. special characters such as bullets)
         batch_context = []
+        batch_char_starts = []
         label = None
         offset = (
             0
@@ -147,19 +148,21 @@ class GPT2Encoder(BaseEncoder):
 
         skipped = 0
         for i, text in enumerate(texts):  # text = one label span
-            if text == "":
-                skipped += 1
-                continue
-            i -= skipped
             if labels is not None:
                 label = labels[i]
 
             subtokens = []
             subtoken_idxs = []
             original_tok_pos = []
+            char_starts = []
             token_start = 0
 
             tokens = re.findall(self.pat, text)
+            if not tokens:
+                offset += len(text)  # for spans that are just whitespace
+                skipped += 1
+                continue
+            i -= skipped
             for j, token in enumerate(tokens):
                 encoded_token = "".join(
                     self.byte_encoder[b] for b in token.encode("utf-8")
@@ -178,6 +181,8 @@ class GPT2Encoder(BaseEncoder):
                     [self.encoder.get(t, self.UNK_IDX) for t in bpe_toks]
                 )
 
+                token_char_starts = [token_start] * len(bpe_toks)
+
                 if np.sum([len(tok) for tok in bpe_toks]) > len(token):
                     original_subtoken_positions = (
                         np.asarray([len(token.strip()) for tok in bpe_toks])
@@ -190,10 +195,12 @@ class GPT2Encoder(BaseEncoder):
 
                 token_start += len(token.strip())
                 original_tok_pos.extend(original_subtoken_positions)
+                char_starts.extend(token_char_starts)
 
             batch_tokens.append(subtokens)
             batch_token_idxs.append(subtoken_idxs)
             batch_original_character_locs.append(original_tok_pos)
+            batch_char_starts.append(char_starts)
             if labels is not None:
                 batch_label_idxs.append([label] * len(subtoken_idxs))
 
@@ -215,6 +222,7 @@ class GPT2Encoder(BaseEncoder):
             labels=batch_label_idxs,
             context=batch_context,
             char_locs=batch_original_character_locs,
+            char_starts=batch_char_starts,
         )
 
     def decode(self, token_ids):

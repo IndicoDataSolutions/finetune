@@ -56,23 +56,32 @@ class BERTEncoder(BaseEncoder):
         batch_label_idxs = []
         batch_original_character_locs = []
         batch_context = []
+        batch_char_starts = []
         label = None
         offset = 0
 
+        skipped = 0
         for i, text in enumerate(texts):
             if labels is not None:
                 label = labels[i]
             original_tok_pos = []
 
-            subtokens, token_idxs, original_subtoken_positions = self.tokenizer.tokenize(
+            subtokens, token_idxs, original_subtoken_positions, starts = self.tokenizer.tokenize(
                 text
             )
+            if not subtokens:
+                offset += len(text)  # for spans that are just whitespace
+                skipped += 1
+                continue
+            i -= skipped
+
             subtoken_locs = [l[1] for l in token_idxs]
             original_tok_pos.extend(original_subtoken_positions)
-
+            subtoken_idxs = self.tokenizer.convert_tokens_to_ids(subtokens)
             batch_tokens.append(subtokens)
-            batch_token_idxs.append(self.tokenizer.convert_tokens_to_ids(subtokens))
+            batch_token_idxs.append(subtoken_idxs)
             batch_original_character_locs.append(original_tok_pos)
+            batch_char_starts.append(starts)
             if labels is not None:
                 batch_label_idxs.append([label] * len(subtokens))
 
@@ -82,7 +91,7 @@ class BERTEncoder(BaseEncoder):
                     context,
                     batch_original_character_locs[i],
                     batch_tokens[i],
-                    subtoken_locs,
+                    subtoken_idxs,
                     offset,
                 )
                 batch_context.extend(text_context)
@@ -94,6 +103,7 @@ class BERTEncoder(BaseEncoder):
             labels=batch_label_idxs,
             context=batch_context,
             char_locs=batch_original_character_locs,
+            char_starts=batch_char_starts,
         )
 
     def decode(self, ids):

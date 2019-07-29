@@ -37,7 +37,7 @@ def _text_standardize(text):
     )
     text = re.sub("\s*\n\s*", " \n ", text)
     text = re.sub("[^\S\n]+", " ", text)
-    return ftfy.fix_text(text.strip().lower())
+    return uncurl_quotes(text.strip().lower())
 
 
 class GPTEncoder(BaseEncoder):
@@ -137,10 +137,12 @@ class GPTEncoder(BaseEncoder):
         batch_original_character_locs = (
             []
         )  # to account for the fact that some BPEs have different lengths than their original tokens (e.g. special characters such as bullets)
+        batch_char_starts = []
         label = None
         offset = (
             0
         )  # tracks offset between this fields' character_locs, which start at 0, and the 'start' keys in context which track the entire document (not just this field)
+        skipped = 0
         for i, text in enumerate(texts):
             if labels is not None:
                 label = labels[i]
@@ -149,9 +151,15 @@ class GPTEncoder(BaseEncoder):
             # Only fine to apply this fix because it preserves character locations
             ftfy_text = uncurl_quotes(raw_text)
             tokens = NLP(_text_standardize(text))
+            if not tokens:
+                offset += len(text)  # for spans that are just whitespace
+                skipped += 1
+                continue
+            i -= skipped
             subtokens = []
             subtoken_idxs = []
             original_tok_pos = []
+            char_starts = []
             token_start = 0
 
             for j, token in enumerate(tokens):
@@ -175,23 +183,29 @@ class GPTEncoder(BaseEncoder):
                     token.text.replace(" ", "")
                 )
 
-                if np.sum([len(tok) for tok in bpe_toks]) > len(token):
+                token_char_starts = [token_start] * len(bpe_toks)
+
+                if np.sum([len(tok) for tok in bpe_toks]) > len(
+                    token
+                ):  # the BPEs comprising a token are longer than the token itself
                     original_subtoken_positions = (
                         np.asarray([len(token.text.strip()) for tok in bpe_toks])
                         + token_start
                     )
                 else:
                     original_subtoken_positions = (
-                        np.cumsum([len(tok) for tok in bpe_toks]) + token_start
+                        np.cumsum([len(tok.replace("</w>", "")) for tok in bpe_toks])
+                        + token_start
                     )
 
                 token_start += len(token.text.strip())
-
                 original_tok_pos.extend(original_subtoken_positions)
+                char_starts.extend(token_char_starts)
 
             batch_tokens.append(subtokens)
             batch_token_idxs.append(subtoken_idxs)
             batch_original_character_locs.append(original_tok_pos)
+            batch_char_starts.append(char_starts)
             if labels is not None:
                 batch_label_idxs.append([label] * len(subtoken_idxs))
 
@@ -213,6 +227,7 @@ class GPTEncoder(BaseEncoder):
             labels=batch_label_idxs,
             context=batch_context,
             char_locs=batch_original_character_locs,
+            char_starts=batch_char_starts,
         )
 
     def decode(self, ids):

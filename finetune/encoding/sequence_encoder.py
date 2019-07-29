@@ -336,8 +336,7 @@ def indico_to_finetune_sequence(
     for doc_idx, (text, label_seq) in enumerate(zip(texts, labels)):
         tokens = encoded_docs.tokens[doc_idx]
         token_ends = encoded_docs.char_locs[doc_idx]
-        token_lengths = [encoder._token_length(token) for token in tokens]
-        token_starts = [end - length for end, length in zip(token_ends, token_lengths)]
+        token_starts = encoded_docs.char_starts[doc_idx]
         label_seq = sorted(label_seq, key=lambda x: x["start"])
         merged_annotations = []
 
@@ -353,6 +352,7 @@ def indico_to_finetune_sequence(
                 label.get("text") is not None
                 and label["text"] != text[label["start"] : label["end"]]
             ):
+
                 raise ValueError(
                     "Annotation text does not match text specified by `start` and `end` indexes. "
                     "Text provided: `{}`.  Text extracted: `{}`.".format(
