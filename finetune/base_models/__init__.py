@@ -31,7 +31,7 @@ class SourceModel(metaclass=ABCMeta):
 from finetune.base_models.gpt.model import GPTModel, GPTModelSmall
 from finetune.base_models.gpt2.model import GPT2Model, GPT2Model345
 from finetune.base_models.textcnn.model import TextCNNModel
-from finetune.base_models.bert.model import BERTModelCased, BERTModelLargeCased
+from finetune.base_models.bert.model import BERTModelCased, BERTModelLargeCased, roBERTa
 
 # Aliases
 GPT = GPTModel
@@ -40,3 +40,4 @@ GPT2Medium = GPT2Model345
 TextCNN = TextCNNModel
 BERT = BERTModelCased
 BERTLarge = BERTModelLargeCased
+ROBERTA = roBERTa

@@ -2,9 +2,14 @@ import os
 from urllib.parse import urljoin
 
 from finetune.base_models import SourceModel
-from finetune.base_models.bert.encoder import BERTEncoder, BERTEncoderMultuilingal, BERTEncoderLarge
+from finetune.base_models.bert.encoder import (
+    BERTEncoder,
+    BERTEncoderMultuilingal,
+    BERTEncoderLarge,
+)
+from finetune.base_models.gpt2.encoder import GPT2Encoder
 from finetune.base_models.bert.featurizer import bert_featurizer
-from finetune.util.download import BERT_BASE_URL, FINETUNE_BASE_FOLDER
+from finetune.util.download import BERT_BASE_URL, GPT2_BASE_URL, FINETUNE_BASE_FOLDER
 
 
 class BERTModelCased(SourceModel):
@@ -12,24 +17,23 @@ class BERTModelCased(SourceModel):
     encoder = BERTEncoder
     featurizer = bert_featurizer
     settings = {
-        'n_embed': 768,
-        'n_epochs': 8,
-        'n_heads': 12,
-        'n_layer': 12,
-        'act_fn': "gelu",
+        "n_embed": 768,
+        "n_epochs": 8,
+        "n_heads": 12,
+        "n_layer": 12,
+        "act_fn": "gelu",
         "lr_warmup": 0.1,
         "lr": 1e-5,
         "l2_reg": 0.01,
-        'bert_intermediate_size': 3072,
+        "bert_intermediate_size": 3072,
         "base_model_path": os.path.join("bert", "bert_small_cased.jl"),
     }
     required_files = [
         {
-            'file': os.path.join(FINETUNE_BASE_FOLDER, 'model', 'bert', filename),
-            'url': urljoin(BERT_BASE_URL, filename)
-        } for filename in [
-            "bert_small_cased.jl", "vocab.txt"
-        ]
+            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", filename),
+            "url": urljoin(BERT_BASE_URL, filename),
+        }
+        for filename in ["bert_small_cased.jl", "vocab.txt"]
     ]
 
 
@@ -38,25 +42,24 @@ class BERTModelLargeCased(SourceModel):
     encoder = BERTEncoderLarge
     featurizer = bert_featurizer
     settings = {
-        'n_embed': 1024,
-        'n_epochs': 8,
-        'n_heads': 16,
-        'n_layer': 24,
-        'num_layers_trained': 24,
-        'act_fn': "gelu",
+        "n_embed": 1024,
+        "n_epochs": 8,
+        "n_heads": 16,
+        "n_layer": 24,
+        "num_layers_trained": 24,
+        "act_fn": "gelu",
         "lr_warmup": 0.1,
         "lr": 1e-5,
         "l2_reg": 0.01,
-        'bert_intermediate_size': 4096,
+        "bert_intermediate_size": 4096,
         "base_model_path": os.path.join("bert", "bert_large_cased.jl"),
     }
     required_files = [
         {
-            'file': os.path.join(FINETUNE_BASE_FOLDER, 'model', 'bert', filename),
-            'url': urljoin(BERT_BASE_URL, filename)
-        } for filename in [
-            "bert_large_cased.jl", "vocab_large.txt"
-        ]
+            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", filename),
+            "url": urljoin(BERT_BASE_URL, filename),
+        }
+        for filename in ["bert_large_cased.jl", "vocab_large.txt"]
     ]
 
 
@@ -65,25 +68,24 @@ class BERTModelLargeWWMCased(SourceModel):
     encoder = BERTEncoderLarge
     featurizer = bert_featurizer
     settings = {
-        'n_embed': 1024,
-        'n_epochs': 8,
-        'n_heads': 16,
-        'n_layer': 24,
-        'num_layers_trained': 24,
-        'act_fn': "gelu",
+        "n_embed": 1024,
+        "n_epochs": 8,
+        "n_heads": 16,
+        "n_layer": 24,
+        "num_layers_trained": 24,
+        "act_fn": "gelu",
         "lr_warmup": 0.1,
         "lr": 1e-5,
         "l2_reg": 0.01,
-        'bert_intermediate_size': 4096,
+        "bert_intermediate_size": 4096,
         "base_model_path": os.path.join("bert", "bert_wwm_large_cased.jl"),
     }
     required_files = [
         {
-            'file': os.path.join(FINETUNE_BASE_FOLDER, 'model', 'bert', filename),
-            'url': urljoin(BERT_BASE_URL, filename)
-        } for filename in [
-            "bert_wwm_large_cased.jl", "vocab_large.txt"
-        ]
+            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", filename),
+            "url": urljoin(BERT_BASE_URL, filename),
+        }
+        for filename in ["bert_wwm_large_cased.jl", "vocab_large.txt"]
     ]
 
 
@@ -92,22 +94,55 @@ class BERTModelMultilingualCased(SourceModel):
     encoder = BERTEncoderMultuilingal
     featurizer = bert_featurizer
     settings = {
-        'n_embed': 768,
-        'n_epochs': 8,
-        'n_heads': 12,
-        'n_layer': 12,
-        'act_fn': "gelu",
+        "n_embed": 768,
+        "n_epochs": 8,
+        "n_heads": 12,
+        "n_layer": 12,
+        "act_fn": "gelu",
         "lr_warmup": 0.1,
         "lr": 1e-5,
         "l2_reg": 0.01,
-        'bert_intermediate_size': 3072,
+        "bert_intermediate_size": 3072,
         "base_model_path": os.path.join("bert", "bert_small_multi_cased.jl"),
     }
     required_files = [
         {
-            'file': os.path.join(FINETUNE_BASE_FOLDER, 'model', 'bert', filename),
-            'url': urljoin(BERT_BASE_URL, filename)
-        } for filename in [
-            "bert_small_multi_cased.jl", "vocab_multi.txt"
-        ]
+            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", filename),
+            "url": urljoin(BERT_BASE_URL, filename),
+        }
+        for filename in ["bert_small_multi_cased.jl", "vocab_multi.txt"]
+    ]
+
+
+class roBERTa(SourceModel):
+    is_bidirectional = True
+    encoder = GPT2Encoder
+    featurizer = bert_featurizer
+    settings = {
+        "n_embed": 768,
+        "n_epochs": 8,
+        "n_heads": 12,
+        "n_layer": 12,
+        "act_fn": "gelu",
+        "lr_warmup": 0.1,
+        "lr": 1e-5,
+        "l2_reg": 0.01,
+        "bert_intermediate_size": 3072,
+        "base_model_path": os.path.join("bert", "roberta-model-sm.jl"),
+    }
+    required_files = [
+        {
+            "file": os.path.join(
+                FINETUNE_BASE_FOLDER, "model", "bert", "roberta-model-sm.jl"
+            ),
+            "url": urljoin(BERT_BASE_URL, "roberta-model-sm.jl"),
+        },
+        {
+            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "gpt2", "vocab.bpe"),
+            "url": urljoin(GPT2_BASE_URL, "vocab.bpe"),
+        },
+        {
+            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "gpt2", "encoder.json"),
+            "url": urljoin(GPT2_BASE_URL, "encoder.json"),
+        },
     ]
