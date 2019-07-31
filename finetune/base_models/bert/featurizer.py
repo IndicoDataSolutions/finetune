@@ -80,6 +80,7 @@ def bert_featurizer(
             token_type_ids=token_type_ids,
             use_one_hot_embeddings=False,
             scope=None,
+            use_pooler=config.bert_use_pooler,
         )
 
         embed_weights = bert.get_embedding_table()

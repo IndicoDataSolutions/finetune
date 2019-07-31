@@ -184,7 +184,7 @@ class BaseEncoder(object):
         contexts = []
 
         # for each field in that example
-        for i, field in enumerate(Xs):
+        for field in Xs:
             assert isinstance(
                 field, (list, tuple)
             ), "This should be a list of strings, instead it's {}".format(

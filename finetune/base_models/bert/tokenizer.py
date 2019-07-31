@@ -363,7 +363,7 @@ class BasicTokenizer(object):
 
 
 class WordpieceTokenizer(object):
-    """Runs WordPiece tokenziation."""
+    """Runs WordPiece tokenization."""
 
     def __init__(self, vocab, unk_token="[UNK]", max_input_chars_per_word=200):
         self.vocab = vocab
