@@ -79,6 +79,7 @@ class Classifier(BaseModel):
                 one_hot[pred] = 1
                 label = self.input_pipeline.label_encoder.inverse_transform([one_hot])
                 all_labels.append(label)
+
                 all_probs.append(mean_pool)
 
         if probas:
@@ -93,7 +94,14 @@ class Classifier(BaseModel):
         :param X: list or array of text to embed.
         :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
         """
-        return self.predict(X, probas=True)
+        # this is simply a vector of probabilities, not a dict from classes to class probs
+        raw_preds = self.predict(X, probas=True)
+
+        classes = self.input_pipeline.label_encoder.classes_
+        formatted_predictions = []
+        for probas in raw_probas:
+            formatted_predictions.append(dict(zip(classes, probas)))
+        return formatted_predictions
 
     def finetune(self, X, Y=None, batch_size=None):
         """
