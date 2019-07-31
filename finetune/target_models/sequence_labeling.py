@@ -137,7 +137,7 @@ class SequenceLabeler(BaseModel):
     :param \**kwargs: key-value pairs of config items to override.
     """
 
-    defaults = {"n_epochs": 5, "lr_warmup": 0.1}
+    defaults = {"lr_warmup": 0.1}
 
     def __init__(self, **kwargs):
         """
@@ -153,6 +153,7 @@ class SequenceLabeler(BaseModel):
         d = copy.deepcopy(SequenceLabeler.defaults)
         d.update(kwargs)
         super().__init__(**d)
+        self.config.n_epochs = int(self.config.n_epochs * 1.5)
 
     def _get_input_pipeline(self):
         return SequencePipeline(
