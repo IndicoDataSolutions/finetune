@@ -79,7 +79,6 @@ class Classifier(BaseModel):
                 one_hot[pred] = 1
                 label = self.input_pipeline.label_encoder.inverse_transform([one_hot])
                 all_labels.append(label)
-
                 all_probs.append(mean_pool)
 
         if probas:
