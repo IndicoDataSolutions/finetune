@@ -153,7 +153,8 @@ class SequenceLabeler(BaseModel):
         d = copy.deepcopy(SequenceLabeler.defaults)
         d.update(kwargs)
         super().__init__(**d)
-        self.config.n_epochs = int(self.config.n_epochs * 1.5)
+        if "n_epochs" not in kwargs.keys():
+            self.config.n_epochs = int(self.config.n_epochs * 1.5)
 
     def _get_input_pipeline(self):
         return SequencePipeline(
