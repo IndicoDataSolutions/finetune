@@ -6,7 +6,7 @@ from tensorflow.contrib.crf import crf_log_likelihood
 from finetune.base_models.gpt.featurizer import attn, dropout, norm
 from finetune.util.shapes import shape_list, merge_leading_dims
 from finetune.optimizers.recompute_grads import recompute_grad
-from finetune.optimizers.TSA_schedules import get_tsa_threshold
+from finetune.optimizers.tsa_schedules import get_tsa_threshold, tsa_loss
 from finetune.errors import FinetuneError
 
 
@@ -124,32 +124,11 @@ def classifier(hidden, targets, n_targets, config, train=False, reuse=None, **kw
                 clf_losses, targets, kwargs.get("class_weights")
             )
 
-            if (
-                config.tsa_schedule
-            ):  # From Unsupervised Data Augmentation for Consistency Training, Xie et al. 2019
-                with tf.variable_scope("tsa"):
-                    start = 1 / n_targets
-                    global_step = tf.train.get_or_create_global_step()
-                    total_num_steps = (
-                        config.n_epochs * config.dataset_size // config.batch_size
-                    )
-                    tsa_threshold = get_tsa_threshold(
-                        config.tsa_schedule, global_step, total_num_steps, start, 1
-                    )
-
-                    clf_logits = tf.nn.log_softmax(clf_logits)
-                    multiplied = targets * tf.exp(clf_logits)
-                    correct_label_probs = tf.reduce_sum(multiplied, axis=1)
-                    larger_than_threshold = tf.greater(
-                        correct_label_probs, tsa_threshold
-                    )
-                    loss_mask = tf.ones_like(clf_losses, dtype=clf_losses.dtype)
-
-                    loss_mask = loss_mask * (
-                        1 - tf.cast(larger_than_threshold, tf.float32)
-                    )
-                    loss_mask = tf.stop_gradient(loss_mask)
-                    clf_losses = tf.multiply(clf_losses, loss_mask)
+            # From Unsupervised Data Augmentation for Consistency Training, Xie et al. 2019
+            if config.tsa_schedule:
+                clf_logits, clf_losses = tsa_loss(
+                    n_targets, config, clf_losses, clf_logits, targets
+                )
 
         return {"logits": clf_logits, "losses": clf_losses}
 
