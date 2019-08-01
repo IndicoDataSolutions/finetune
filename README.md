@@ -3,8 +3,8 @@
 **Scikit-learn style model finetuning for NLP**
 
 `Finetune` ships with pre-trained language models
-from ["Improving Language Understanding by Generative Pre-Training"](https://s3-us-west-2.amazonaws.com/openai-assets/research-covers/language-unsupervised/language_understanding_paper.pdf) (GPT)
-and ["Language Models are Unsupervised Multitask Learners"](https://d4mucfpksywv.cloudfront.net/better-language-models/language-models.pdf) (GPT-2). Base model code has been adapated from the [GPT](https://github.com/openai/finetune-transformer-lm) and [GPT-2](https://github.com/openai/gpt-2) github repos.
+from ["Improving Language Understanding by Generative Pre-Training"](https://s3-us-west-2.amazonaws.com/openai-assets/research-covers/language-unsupervised/language_understanding_paper.pdf) (GPT),
+["Language Models are Unsupervised Multitask Learners"](https://d4mucfpksywv.cloudfront.net/better-language-models/language-models.pdf) (GPT-2), and ["BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding"](https://arxiv.org/abs/1810.04805) (BERT). Base model code has been adapted from the [GPT](https://github.com/openai/finetune-transformer-lm), [GPT-2](https://github.com/openai/gpt-2), and [BERT](https://github.com/google-research/bert) github repos.
 
 Huge thanks to Alec Radford and Jeff Wu for their hard work and quality research.
 
@@ -20,7 +20,7 @@ predictions = model.predict(testX) # [{'class_1': 0.23, 'class_2': 0.54, ..}, ..
 model.save(path)                   # Serialize the model to disk
 ```
 
-Reload saved models from disk by using `LanguageModelClassifier.load`:
+Reload saved models from disk by using `Classifier.load`:
 
 ```
 model = Classifier.load(path)
@@ -103,6 +103,7 @@ Model Types
 - `MultiFieldRegressor`
 - `MultiLabelClassifier`
 - `Comparison`
+- `ComparisonRegressor`
 - `OrdinalRegressor`
 - `ComparisonOrdinalRegressor`
 - `MultiTask`
