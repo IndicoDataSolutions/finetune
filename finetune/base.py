@@ -637,7 +637,7 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         Leave serialization of all tf objects to tf
         """
-        required_fields = ["_load_from_file", "config", "input_pipeline"]
+        required_fields = ["_load_from_file", "config", "input_pipeline", "default_context"]
         serialized_state = {
             k: v for k, v in self.__dict__.items() if k in required_fields
         }
@@ -750,7 +750,7 @@ class BaseModel(object, metaclass=ABCMeta):
         filled_contexts = []
         for spans, text in zip(context, X):
             if type(text) == list:
-                text = ''.join(text)
+                text = "".join(text)
             spans = sorted([c for c in spans], key=lambda c: c["start"])
 
             filled_in_spans = []
@@ -769,7 +769,9 @@ class BaseModel(object, metaclass=ABCMeta):
                         filler = self.generate_default(text[:start], 0)
                         filled_in_spans.append(filler)
                 filled_in_spans.append(span)
-                if i + 1 == num_spans: # make sure last span ends at end of document - this is a separate if rather than elif because if spans has len 1, it is both the first and the last
+                if (
+                    i + 1 == num_spans
+                ):  # make sure last span ends at end of document - this is a separate if rather than elif because if spans has len 1, it is both the first and the last
                     end = span["end"]
                     if end < len(text) - 1:
                         filler = self.generate_default(text[end:], end)

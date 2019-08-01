@@ -134,7 +134,7 @@ class GPTEncoder(BaseEncoder):
         batch_context = []
         batch_token_idxs = []
         batch_label_idxs = []
-        batch_original_character_locs = (
+        batch_char_ends = (
             []
         )  # to account for the fact that some BPEs have different lengths than their original tokens (e.g. special characters such as bullets)
         batch_char_starts = []
@@ -158,8 +158,8 @@ class GPTEncoder(BaseEncoder):
             i -= skipped
             subtokens = []
             subtoken_idxs = []
-            original_tok_pos = []
             char_starts = []
+            char_ends = []
             token_start = 0
 
             for j, token in enumerate(tokens):
@@ -188,23 +188,23 @@ class GPTEncoder(BaseEncoder):
                 if np.sum([len(tok) for tok in bpe_toks]) > len(
                     token
                 ):  # the BPEs comprising a token are longer than the token itself
-                    original_subtoken_positions = (
+                    token_char_ends = (
                         np.asarray([len(token.text.strip()) for tok in bpe_toks])
                         + token_start
                     )
                 else:
-                    original_subtoken_positions = (
+                    token_char_ends = (
                         np.cumsum([len(tok.replace("</w>", "")) for tok in bpe_toks])
                         + token_start
                     )
 
                 token_start += len(token.text.strip())
-                original_tok_pos.extend(original_subtoken_positions)
+                char_ends.extend(token_char_ends)
                 char_starts.extend(token_char_starts)
 
             batch_tokens.append(subtokens)
             batch_token_idxs.append(subtoken_idxs)
-            batch_original_character_locs.append(original_tok_pos)
+            batch_char_ends.append(char_ends)
             batch_char_starts.append(char_starts)
             if labels is not None:
                 batch_label_idxs.append([label] * len(subtoken_idxs))
@@ -212,21 +212,17 @@ class GPTEncoder(BaseEncoder):
             # Context is tokenwise, so we need to duplicate contexts for each subtoken of a token, and to match length of labels
             if context is not None:
                 text_context = self.line_up_context(
-                    context,
-                    batch_original_character_locs[i],
-                    batch_tokens[i],
-                    subtoken_idxs,
-                    offset,
+                    context, batch_char_ends[i], batch_tokens[i], subtoken_idxs, offset
                 )
                 batch_context.extend(text_context)
-                offset += batch_original_character_locs[i][-1]
+                offset += batch_char_ends[i][-1]
 
         return EncodedOutput(
             token_ids=batch_token_idxs,
             tokens=batch_tokens,
             labels=batch_label_idxs,
             context=batch_context,
-            char_locs=batch_original_character_locs,
+            char_locs=batch_char_ends,
             char_starts=batch_char_starts,
         )
 
