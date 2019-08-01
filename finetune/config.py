@@ -246,6 +246,7 @@ def get_default_config():
         val_set=None,
         per_process_gpu_memory_fraction=0.95,
         adapter_size=None,  # from Parameter Efficient Transfer Learning paper
+
         # Regularization
         embed_p_drop=0.1,
         attn_p_drop=0.1,
@@ -253,6 +254,7 @@ def get_default_config():
         clf_p_drop=0.1,
         l2_reg=GridSearchable(0.01, [0.0, 0.1, 0.01, 0.001]),
         vector_l2=False,
+
         # Early Stopping and Validation
         autosave_path=None,
         keep_best_model=False,
@@ -261,19 +263,23 @@ def get_default_config():
         eval_acc=False,
         val_size=None,
         val_interval=None,
+
         # Debugging
         log_device_placement=False,
         soft_device_placement=True,
         tensorboard_folder=None,
         summarize_grads=False,
         debugging_logs=False,
+
         # Partial Fitting
         num_layers_trained=12,
         train_embeddings=True,
+
         # Class Imbalance
         class_weights=None,
         oversample=False,
         params_device="cpu",
+        
         # Optimization Params
         optimizer="AdamW",
         b1=0.9,
@@ -286,12 +292,15 @@ def get_default_config():
         prefit_init=False,
         accum_steps=1,
         tsa_schedule=None,
+
         # MTL
         tasks=None,
         dont_optimize_zero_gradients=False,
+
         # Language Model Settings
         lm_loss_coef=0.0,
         lm_temp=0.2,
+
         # Sequence Labeling
         seq_num_heads=16,
         pad_token="<PAD>",
@@ -300,24 +309,30 @@ def get_default_config():
         multi_label_sequences=False,
         multi_label_threshold=0.5,
         chunk_long_sequences=False,
+
         # Regression Params
         regression_loss="L2",
+
         # Association Params
         viable_edges=None,
         association_types=None,
         assocation_loss_weight=100.0,
+
         # Location of model weights
         base_model=GPTModel,
         base_model_path=None,
+
         # Possible `SourceModel` specific settings
         n_heads=None,
         n_layer=None,
         act_fn=None,
         n_embed=None,
+
         # for TextCNN SourceModel only
         kernel_sizes=None,
         num_filters_per_size=None,
         n_embed_featurizer=None,  # needed because the dimensions CNN output are different from the embedding dimensions
+        
         # BERT only
         bert_intermediate_size=None,
     )
