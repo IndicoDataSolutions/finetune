@@ -60,7 +60,8 @@ def bert_featurizer(X, encoder, config, train=False, reuse=None, **kwargs):
             input_mask=mask,
             token_type_ids=token_type_ids,
             use_one_hot_embeddings=False,
-            scope=None
+            scope=None,
+            use_pooler=config.bert_use_pooler
         )
         output_state = {
             'embed_weights': bert.get_embedding_table(),

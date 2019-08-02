@@ -30,7 +30,7 @@ def sequence_labeling_token_counts(true, predicted):
     Return FP, FN, and TP counts
     """
 
-    unique_classes = set([seq['label'] for seqs in true for seq in seqs])
+    unique_classes = set([seq['label'] for seqs in true + predicted for seq in seqs])
 
     d = {
         cls_: {

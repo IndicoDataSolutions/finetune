@@ -129,6 +129,7 @@ class roBERTa(SourceModel):
         "l2_reg": 0.01,
         "bert_intermediate_size": 3072,
         "base_model_path": os.path.join("bert", "roberta-model-sm.jl"),
+        "bert_use_pooler": False
     }
     required_files = [
         {

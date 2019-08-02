@@ -93,7 +93,16 @@ class Classifier(BaseModel):
         :param X: list or array of text to embed.
         :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
         """
-        return self.predict(X, probas=True)
+        raw_probas = self.predict(X, probas=True)
+        classes = self.input_pipeline.label_encoder.classes_
+
+        formatted_predictions = []
+        for probas in raw_probas:
+            formatted_predictions.append(
+                dict(zip(classes, probas))
+            )
+        return formatted_predictions
+
 
     def finetune(self, X, Y=None, batch_size=None):
         """
