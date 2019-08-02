@@ -142,7 +142,7 @@ def sequence_labeling_overlaps(true, predicted):
     """
     Return FP, FN, and TP counts
     """
-    unique_classes = set([annotation['label'] for annotations in true for annotation in annotations])
+    unique_classes = set([annotation['label'] for annotations in true + predicted for annotation in annotations])
 
     d = {
         cls_: {
