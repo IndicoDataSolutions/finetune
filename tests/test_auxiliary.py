@@ -141,6 +141,7 @@ class TestAuxiliary(unittest.TestCase):
 
         model.fit(trainX, trainY)
         preds = model.predict(testX)
+        print(preds)
         token_precision = sequence_labeling_token_precision(preds, testY)
         token_recall = sequence_labeling_token_recall(preds, testY)
         self.assertIn("Named Entity", token_precision)

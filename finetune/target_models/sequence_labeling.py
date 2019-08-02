@@ -46,10 +46,12 @@ class SequencePipeline(BasePipeline):
                     "context": out.context,
                 }
             else:
+                feats = {"tokens": out.token_ids, "mask": out.mask}
+
             if Y is None:
-                yield feats, context
+                yield feats
             if Y is not None:
-                yield feats, context, self.label_encoder.transform(out.labels)
+                yield feats, self.label_encoder.transform(out.labels)
 
     def _compute_class_counts(self, encoded_dataset):
         counter = Counter()
@@ -201,17 +203,10 @@ class SequenceLabeler(BaseModel):
             multi_label=self.multi_label,
             none_value=self.config.pad_token,
         )
-        for X in Xs_new:
-            if (
-                " securities market and offered to buy all maturities of Treasury notes and bonds, a"
-                in X
-            ):
-                print(X)
 
         Y = Y_new if Y is not None else None
 
         if self.config.use_auxiliary_info:
-            # context_new = self.context_span_to_label_span(context, Xs_new)
             context_new = context
             Xs = [Xs_new, context_new]
         else:
@@ -226,45 +221,11 @@ class SequenceLabeler(BaseModel):
         :param per_token: If True, return raw probabilities and labels on a per token basis
         :returns: list of class labels.
         """
-        context = None
-
-        chunk_size = self.config.max_length - 2
-        step_size = chunk_size // 3
-
         if self.config.use_auxiliary_info:
-            context = X[1]
-            text = X[0]
-            arr_encoded = list(
-                itertools.chain.from_iterable(
-                    self.input_pipeline._text_to_ids([x], context=c)
-                    for x, c in zip(text, context)
-                )
-            )
+            X_with_context = copy.deepcopy(X)
+            X = X[0]
         else:
-            text = X
-            arr_encoded = list(
-                itertools.chain.from_iterable(
-                    self.input_pipeline._text_to_ids([x]) for x in X
-                )
-            )
-
-        if self.config.use_auxiliary_info:
-            X = [text, context]
-        labels, batch_probas = [], []
-        for pred in self._inference(
-            X,
-            predict_keys=[PredictMode.PROBAS, PredictMode.NORMAL],
-            n_examples=len(arr_encoded),
-        ):
-            labels.append(
-                self.input_pipeline.label_encoder.inverse_transform(
-                    pred[PredictMode.NORMAL]
-                )
-            )
-            batch_probas.append(pred[PredictMode.PROBAS])
-
-        X = text  # remove context information
-
+            X_with_context = X
         all_subseqs = []
         all_labels = []
         all_probs = []
@@ -278,7 +239,7 @@ class SequenceLabeler(BaseModel):
             end_of_doc,
             label_seq,
             proba_seq,
-        ) in self.process_long_sequence(X):
+        ) in self.process_long_sequence(X_with_context):
             start, end = 0, None
             if start_of_doc:
                 # if this is the first chunk in a document, start accumulating from scratch
@@ -426,7 +387,3 @@ class SequenceLabeler(BaseModel):
 
     def _predict_proba_op(self, logits, **kwargs):
         return tf.no_op()
-<<<<<<< HEAD
-=======
-
->>>>>>> 875635e... ADD: Auxiliary info for classifier

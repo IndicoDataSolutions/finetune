@@ -526,7 +526,7 @@ class BasePipeline(metaclass=ABCMeta):
         if Y is not None:
             self._post_data_initialization(Y=Y, context=context_style)
         else:
-            self._post_data_initialization(context=context_style)
+            self._post_data_initialization(Y=None, context=context_style)
 
         if callable(Xs) or Y is None:
             self._skip_tqdm = val_size

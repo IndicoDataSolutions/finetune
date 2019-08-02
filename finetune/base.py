@@ -910,10 +910,28 @@ class BaseModel(object, metaclass=ABCMeta):
         return max(aggregated_results, key=lambda x: x[1])[0]
 
     def process_long_sequence(self, X):
-        chunk_size = self.config.max_length - 2
-        step_size = chunk_size // 3
-        arr_encoded = list(itertools.chain.from_iterable(self.input_pipeline._text_to_ids(x) 
-            for x in self.input_pipeline._format_for_inference(X)))
+        context = None
+        sequence_labeling = hasattr(self,'multi_label')
+        if self.config.use_auxiliary_info:
+            context = X[1]
+            text = X[0]
+            assert len(context) == len(text)
+            arr_encoded = list(
+                itertools.chain.from_iterable(
+                    self.input_pipeline._text_to_ids([x], context=c) if sequence_labeling else self.input_pipeline._text_to_ids(x, context=c)
+                    for x, c in zip(text, context)
+                )
+            )
+        else:
+            text = X
+            arr_encoded = list(
+                itertools.chain.from_iterable(
+                    self.input_pipeline._text_to_ids(x) for x in self.input_pipeline._format_for_inference(X)
+                )
+            )
+
+        if self.config.use_auxiliary_info:
+            X = [text, context]
 
         labels, batch_probas = [], []
         for pred in self._inference(X, predict_keys=[PredictMode.PROBAS, PredictMode.NORMAL], n_examples=len(arr_encoded)):
