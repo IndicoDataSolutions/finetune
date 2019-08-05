@@ -1,4 +1,5 @@
 import tensorflow as tf
+import numpy as np
 
 from finetune.base import BaseModel
 from finetune.encoding.target_encoders import OrdinalRegressionEncoder
@@ -50,12 +51,12 @@ class OrdinalRegressor(BaseModel):
         :param X: list or array of text to embed.
         :returns: list of class labels.
         """
-        all_labels=[]
+        all_labels = []
         for _, start_of_doc, end_of_doc, label, _ in self.process_long_sequence(X):
             if start_of_doc:
                 # if this is the first chunk in a document, start accumulating from scratch
                 doc_labels = []
-                
+
             doc_labels.append(label)
 
             if end_of_doc:
@@ -84,9 +85,11 @@ class OrdinalRegressor(BaseModel):
         return super().finetune(X, Y=Y, batch_size=batch_size)
 
     @staticmethod
-    def _target_model(config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
+    def _target_model(
+        config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
+    ):
         return ordinal_regressor(
-            hidden=featurizer_state['features'],
+            hidden=featurizer_state["features"],
             targets=targets,
             n_targets=n_outputs,
             config=config,
@@ -117,11 +120,17 @@ class ComparisonOrdinalRegressor(OrdinalRegressor):
         return ComparisonOrdinalRegressionPipeline(self.config)
 
     @staticmethod
-    def _target_model(config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
-        featurizer_state["sequence_features"] = tf.abs(tf.reduce_sum(featurizer_state["sequence_features"], 1))
-        featurizer_state["features"] = tf.abs(tf.reduce_sum(featurizer_state["features"], 1))
+    def _target_model(
+        config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
+    ):
+        featurizer_state["sequence_features"] = tf.abs(
+            tf.reduce_sum(featurizer_state["sequence_features"], 1)
+        )
+        featurizer_state["features"] = tf.abs(
+            tf.reduce_sum(featurizer_state["features"], 1)
+        )
         return ordinal_regressor(
-            hidden=featurizer_state['features'],
+            hidden=featurizer_state["features"],
             targets=targets,
             n_targets=n_outputs,
             config=config,

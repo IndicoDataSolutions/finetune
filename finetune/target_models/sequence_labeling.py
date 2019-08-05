@@ -26,7 +26,7 @@ class SequencePipeline(BasePipeline):
         self.multi_label = multi_label
 
     def _post_data_initialization(self, Y, context=None):
-        Y_ = list(itertools.chain.from_iterable(Y))
+        Y_ = list(itertools.chain.from_iterable(Y)) if Y is not None else None
         super()._post_data_initialization(Y_, context)
 
     def text_to_tokens_mask(self, X, Y=None, context=None):
