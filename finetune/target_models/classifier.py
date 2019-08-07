@@ -107,6 +107,7 @@ class Classifier(BaseModel):
                 one_hot = np.zeros_like(mean_pool)
                 one_hot[pred] = 1
                 label = self.input_pipeline.label_encoder.inverse_transform([one_hot])
+                label = np.squeeze(label).tolist()
                 all_labels.append(label)
                 all_probs.append(mean_pool)
 

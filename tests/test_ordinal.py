@@ -36,6 +36,7 @@ class TestOrdinal(unittest.TestCase):
         random.seed(42)
         np.random.seed(42)
 
+    
     def test_reasonable_predictions(self):
         """
         Ensure model training does not error out
@@ -57,6 +58,7 @@ class TestOrdinal(unittest.TestCase):
         naive_baseline_mse = np.mean([(naive_baseline - true)**2 for true in t_te])
         self.assertIsInstance(predictions, list)
         self.assertGreater(naive_baseline_mse, mse)
+    
 
     def test_reasonable_predictions_comparison(self):
         """
