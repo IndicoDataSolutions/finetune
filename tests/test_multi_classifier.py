@@ -3,14 +3,13 @@ import unittest
 import logging
 import shutil
 import string
-from copy import copy
 from pathlib import Path
 from unittest.mock import MagicMock
 import warnings
 
 # prevent excessive warning logs
-warnings.filterwarnings('ignore')
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+warnings.filterwarnings("ignore")
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 import tensorflow as tf
 import pandas as pd
@@ -25,9 +24,7 @@ SST_FILENAME = "SST-binary.csv"
 
 class TestMultiLabelClassifier(unittest.TestCase):
     n_sample = 20
-    dataset_path = os.path.join(
-        'Data', 'Classify', 'SST-binary.csv'
-    )
+    dataset_path = os.path.join("Data", "Classify", "SST-binary.csv")
 
     @classmethod
     def _download_sst(cls):
@@ -43,7 +40,7 @@ class TestMultiLabelClassifier(unittest.TestCase):
             url="https://s3.amazonaws.com/enso-data/SST-binary.csv",
             text_column="Text",
             target_column="Target",
-            filename=SST_FILENAME
+            filename=SST_FILENAME,
         )
 
     @classmethod
@@ -55,7 +52,9 @@ class TestMultiLabelClassifier(unittest.TestCase):
         try:
             os.mkdir("tests/saved-models")
         except FileExistsError:
-            warnings.warn("tests/saved-models still exists, it is possible that some test is not cleaning up properly.")
+            warnings.warn(
+                "tests/saved-models still exists, it is possible that some test is not cleaning up properly."
+            )
             pass
 
     def tearDown(self):
@@ -66,8 +65,8 @@ class TestMultiLabelClassifier(unittest.TestCase):
             batch_size=2,
             max_length=128,
             n_epochs=5,
-            l2_reg=0.,
-            clf_p_drop=0.,
+            l2_reg=0.0,
+            clf_p_drop=0.0,
             **kwargs
         )
 
