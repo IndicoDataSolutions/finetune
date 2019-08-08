@@ -499,7 +499,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 estimator.predict(
                     input_fn=input_fn, predict_keys=predict_keys, hooks=hooks
                 ),
-                total=length,
+                total=length or n_examples,
                 desc="Inference",
             )
             try:
