@@ -183,9 +183,7 @@ class GPTEncoder(BaseEncoder):
                     token.text.replace(" ", "")
                 )
 
-                token_char_starts = [token_start] * len(bpe_toks)
-
-                if np.sum([len(tok) for tok in bpe_toks]) > len(
+                if np.sum([len(tok.replace("</w>", "")) for tok in bpe_toks]) > len(
                     token
                 ):  # the BPEs comprising a token are longer than the token itself
                     token_char_ends = (
@@ -197,7 +195,8 @@ class GPTEncoder(BaseEncoder):
                         np.cumsum([len(tok.replace("</w>", "")) for tok in bpe_toks])
                         + token_start
                     )
-
+                
+                token_char_starts = [token_start] + token_char_ends[:-1].tolist()
                 token_start += len(token.text.strip())
                 char_ends.extend(token_char_ends)
                 char_starts.extend(token_char_starts)

@@ -5,7 +5,7 @@ from finetune.base_models import SourceModel
 from finetune.base_models.gpt.encoder import GPTEncoder
 from finetune.base_models.gpt2.encoder import GPT2Encoder
 from finetune.base_models.textcnn.featurizer import textcnn_featurizer
-from finetune.util.download import GPT_BASE_URL, FINETUNE_BASE_FOLDER
+from finetune.util.download import GPT2_BASE_URL, FINETUNE_BASE_FOLDER
 
 
 class TextCNNModel(SourceModel):
@@ -30,7 +30,7 @@ class TextCNNModel(SourceModel):
     required_files = [
         {
             "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "gpt2", filename),
-            "url": urljoin(GPT_BASE_URL, filename),
+            "url": urljoin(GPT2_BASE_URL, filename),
         }
         for filename in ["encoder.json", "vocab.bpe", "model-sm.jl"]
     ]
