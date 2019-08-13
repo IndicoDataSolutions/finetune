@@ -22,6 +22,7 @@ import numpy as np
 from sklearn.metrics import accuracy_score, recall_score
 
 from finetune import Classifier
+from finetune.model import PredictMode
 from finetune.base_models import GPTModelSmall
 from finetune.datasets import generic_download
 from finetune.config import get_config
@@ -397,7 +398,7 @@ class TestClassifier(unittest.TestCase):
         model.input_pipeline.text_encoder._lazy_init()
         fake_estimator.predict = MagicMock(
             return_value=iter(
-                [{"GEN_TEXT": 100 * [model.input_pipeline.text_encoder["_classify_"]]}]
+                [{PredictMode.GENERATE_TEXT: 100 * [model.input_pipeline.text_encoder["_classify_"]]}]
             )
         )
         start_id = model.input_pipeline.text_encoder.start
