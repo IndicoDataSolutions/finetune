@@ -25,7 +25,7 @@ class MultiFieldClassifier(Classifier):
     defaults = {"chunk_long_sequences": False}
 
     def __init__(self, **kwargs):
-        d = copy.deepcopy(MultifieldClassifier.defaults)
+        d = copy.deepcopy(MultiFieldClassifier.defaults)
         d.update(kwargs)
         super().__init__(**d)
         if self.config.chunk_long_sequences:

@@ -609,7 +609,10 @@ class BaseModel(object, metaclass=ABCMeta):
                 "If you are not using the extra tokens, you must provide some non-empty seed text"
             )
         start = [self.input_pipeline.text_encoder.start] if use_extra_toks else []
-        encoded = EncodedOutput(token_ids=start + encoded.token_ids[0])
+        token_ids = start
+        if encoded.token_ids is not None and len(encoded.token_ids):
+            token_ids += encoded.token_ids[0]
+        encoded = EncodedOutput(token_ids=token_ids)
 
         estimator, hooks = self.get_estimator(force_build_lm=True)
         predict = estimator.predict(
