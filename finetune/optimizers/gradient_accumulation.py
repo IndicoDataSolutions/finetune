@@ -23,18 +23,19 @@ def get_grad_accumulation_optimizer(optimizer_class, accum_steps):
             accumulation_vars = []
             grads_and_accumulated_vars = []
             for g, v in grads_and_vars:
-                accum_grad = tf.get_variable(
-                    name=g.name[:-2] + "_acc",
-                    shape=g.shape,
-                    dtype=g.dtype,
-                    initializer=tf.constant_initializer(0),
-                    use_resource=True,
-                    trainable=False
-                )
-                add_gradients_ops.append(accum_grad.assign_add(g))
-                accumulation_vars.append(accum_grad)
+                if g is not None: # skip global step variable
+                    accum_grad = tf.get_variable(
+                        name=g.name[:-2] + "_acc",
+                        shape=g.shape,
+                        dtype=g.dtype,
+                        initializer=tf.constant_initializer(0),
+                        use_resource=True,
+                        trainable=False,
+                    )
+                    add_gradients_ops.append(accum_grad.assign_add(g))
+                    accumulation_vars.append(accum_grad)
 
-                grads_and_accumulated_vars.append((accum_grad, v))
+                    grads_and_accumulated_vars.append((accum_grad, v))
 
             global_step = global_step if global_step is not None else tf.train.get_or_create_global_step()
 
