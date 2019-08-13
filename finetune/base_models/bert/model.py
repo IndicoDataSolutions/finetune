@@ -142,6 +142,12 @@ class roBERTa(SourceModel):
             "url": urljoin(BERT_BASE_URL, "roberta-model-sm.jl"),
         },
         {
+            "file": os.path.join(
+                FINETUNE_BASE_FOLDER, "model", "bert", "dict.txt"
+            ),
+            "url": urljoin(BERT_BASE_URL, "dict.txt"),
+        },
+        {
             "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "gpt2", "vocab.bpe"),
             "url": urljoin(GPT2_BASE_URL, "vocab.bpe"),
         },
