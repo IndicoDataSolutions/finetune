@@ -264,7 +264,7 @@ class TestClassifier(unittest.TestCase):
 
         self.assertEqual(len(predictions), 20)
         self.assertEqual(len(probas[0]), 2)
-        np.testing.assert_almost_equal(np.sum(probas[0]), 1, decimal=4)
+        np.testing.assert_almost_equal(np.sum(list(probas[0].values())), 1, decimal=4)
 
     def test_fit_predict_batch_size_1(self):
         """
