@@ -7,6 +7,7 @@ from finetune.base_models import TextCNN
 from finetune.base_models.gpt.featurizer import attn, dropout, norm
 from finetune.util.shapes import shape_list, merge_leading_dims
 from finetune.optimizers.recompute_grads import recompute_grad
+from finetune.optimizers.tsa_schedules import get_tsa_threshold, tsa_loss
 from finetune.errors import FinetuneError
 
 
@@ -125,6 +126,12 @@ def classifier(hidden, targets, n_targets, config, train=False, reuse=None, **kw
             clf_losses = _apply_class_weight(
                 clf_losses, targets, kwargs.get("class_weights")
             )
+
+            # From Unsupervised Data Augmentation for Consistency Training, Xie et al. 2019
+            if config.tsa_schedule:
+                clf_logits, clf_losses = tsa_loss(
+                    n_targets, config, clf_losses, clf_logits, targets
+                )
 
         return {"logits": clf_logits, "losses": clf_losses}
 

@@ -1,5 +1,6 @@
 import itertools
 import copy
+import math
 from collections import Counter
 
 import tensorflow as tf
@@ -165,7 +166,7 @@ class SequenceLabeler(BaseModel):
     :param \**kwargs: key-value pairs of config items to override.
     """
 
-    defaults = {"n_epochs": 5, "lr_warmup": 0.1}
+    defaults = {"lr_warmup": 0.1}
 
     def __init__(self, **kwargs):
         """
@@ -181,6 +182,8 @@ class SequenceLabeler(BaseModel):
         d = copy.deepcopy(SequenceLabeler.defaults)
         d.update(kwargs)
         super().__init__(**d)
+        if "n_epochs" not in kwargs.keys():
+            self.config.n_epochs = math.ceil(self.config.n_epochs * 1.5)
 
     def _get_input_pipeline(self):
         return SequencePipeline(

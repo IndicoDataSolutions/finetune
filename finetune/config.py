@@ -244,7 +244,7 @@ def get_default_config():
         weight_stddev=0.02,
         save_dtype=None,
         val_set=None,
-        per_process_gpu_memory_fraction=0.95,
+        per_process_gpu_memory_fraction=0.90,
         adapter_size=None,  # from Parameter Efficient Transfer Learning paper
         # Regularization
         embed_p_drop=0.1,
@@ -285,6 +285,7 @@ def get_default_config():
         max_grad_norm=1.0,
         prefit_init=False,
         accum_steps=1,
+        tsa_schedule=None,
         # MTL
         tasks=None,
         dont_optimize_zero_gradients=False,
@@ -319,6 +320,7 @@ def get_default_config():
         n_embed_featurizer=None,  # needed because the dimensions CNN output are different from the embedding dimensions
         # BERT only
         bert_intermediate_size=None,
+        # Auxiliary Information
         use_auxiliary_info=False,
         n_context_embed=32,
     )

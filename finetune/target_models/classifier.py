@@ -125,7 +125,6 @@ class Classifier(BaseModel):
         """
         # this is simply a vector of probabilities, not a dict from classes to class probs
         raw_probas = self.predict(X, probas=True)
-
         classes = self.input_pipeline.label_encoder.classes_
         formatted_predictions = []
         for probas in raw_probas:

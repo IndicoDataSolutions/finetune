@@ -148,6 +148,7 @@ class GPTEncoder(BaseEncoder):
                 label = labels[i]
 
             raw_text = text.lower()
+            
             # Only fine to apply this fix because it preserves character locations
             ftfy_text = uncurl_quotes(raw_text)
             tokens = NLP(_text_standardize(text))
