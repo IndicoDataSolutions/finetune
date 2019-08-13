@@ -11,7 +11,7 @@ from finetune.encoding.input_encoder import BaseEncoder, EncodedOutput, get_pair
 FINETUNE_FOLDER = os.path.dirname(finetune.__file__)
 ENCODER_PATH = os.path.join(FINETUNE_FOLDER, "model", "gpt2", "encoder.json")
 VOCAB_PATH = os.path.join(FINETUNE_FOLDER, "model", "gpt2", "vocab.bpe")
-DICT_PATH = (os.path.join(FINETUNE_FOLDER, "model", "bert", "dict.txt"),)
+DICT_PATH = os.path.join(FINETUNE_FOLDER, "model", "bert", "dict.txt")
 
 
 @lru_cache()
@@ -53,7 +53,7 @@ class roBERTaEncoder(BaseEncoder):
         super().__init__(encoder_path=encoder_path, vocab_path=vocab_path)
         self.freqs = {}
         index = 0
-        with open("dict.txt", "r", encoding="utf-8") as freq_dict:
+        with open(DICT_PATH, "r", encoding="utf-8") as freq_dict:
             lines = freq_dict.readlines()
             for line in lines:
                 idx = line.rfind(" ")
