@@ -45,6 +45,7 @@ def bert_featurizer(
         type_vocab_size=2,
         initializer_range=config.weight_stddev,
         adapter_size=config.adapter_size,
+        low_memory_mode=config.low_memory_mode
     )
 
     initial_shape = tf.shape(X)
