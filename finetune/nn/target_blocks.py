@@ -137,9 +137,17 @@ def classifier(hidden, targets, n_targets, config, train=False, reuse=None, **kw
 
 
 def multi_choice_question(
-    hidden, targets, n_targets, config, train=False, reuse=None, **kwargs
+    hidden, 
+    targets, 
+    n_targets, 
+    config, 
+    train=False, 
+    reuse=None, 
+    **kwargs
 ):
     with tf.variable_scope("model", reuse=reuse):
+        if targets is not None:
+            targets = tf.cast(targets, tf.int32)
         hidden = dropout(hidden, config.clf_p_drop, train)
         hidden = tf.unstack(hidden, num=n_targets, axis=1)
         hidden = tf.concat(hidden, axis=0)
