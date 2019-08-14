@@ -144,6 +144,7 @@ class BertModel(object):
         use_one_hot_embeddings=False,
         scope=None,
         use_pooler=True,
+        roberta=False
     ):
         """Constructor for BertModel.
 
@@ -188,7 +189,6 @@ class BertModel(object):
                     word_embedding_name="word_embeddings",
                     use_one_hot_embeddings=use_one_hot_embeddings,
                 )
-
                 # Add positional embeddings and token type embeddings, then layer
                 # normalize and perform dropout.
                 self.embedding_output = embedding_postprocessor(
@@ -202,6 +202,7 @@ class BertModel(object):
                     initializer_range=config.initializer_range,
                     max_position_embeddings=config.max_position_embeddings,
                     dropout_prob=config.hidden_dropout_prob,
+                    roberta=roberta
                 )
 
             with tf.variable_scope("encoder"):
@@ -228,8 +229,8 @@ class BertModel(object):
                     adapter_size=config.adapter_size,
                     do_return_all_layers=True,
                 )
-
             self.sequence_output = self.all_encoder_layers[-1]
+
             # The "pooler" converts the encoded sequence tensor of shape
             # [batch_size, seq_length, hidden_size] to a tensor of shape
             # [batch_size, hidden_size]. This is necessary for segment-level
@@ -256,10 +257,10 @@ class BertModel(object):
     def get_sequence_output(self):
         """Gets final hidden layer of encoder.
 
-    Returns:
-      float Tensor of shape [batch_size, seq_length, hidden_size] corresponding
-      to the final hidden of the transformer encoder.
-    """
+        Returns:
+          float Tensor of shape [batch_size, seq_length, hidden_size] corresponding
+          to the final hidden of the transformer encoder.
+        """
         return self.sequence_output
 
     def get_all_encoder_layers(self):
@@ -457,6 +458,7 @@ def embedding_postprocessor(
     initializer_range=0.02,
     max_position_embeddings=512,
     dropout_prob=0.1,
+    roberta=False,
 ):
     """Performs various post-processing on a word embedding tensor.
 
@@ -485,12 +487,10 @@ def embedding_postprocessor(
   Raises:
     ValueError: One of the tensor shapes or input values is invalid.
   """
-
     input_shape = get_shape_list(input_tensor, expected_rank=3)
     batch_size = input_shape[0]
     seq_length = input_shape[1]
     width = input_shape[2]
-
     output = input_tensor
 
     if use_token_type:
@@ -530,9 +530,14 @@ def embedding_postprocessor(
             # for position [0, 1, 2, ..., max_position_embeddings-1], and the current
             # sequence has positions [0, 1, 2, ... seq_length-1], so we can just
             # perform a slice.
-            position_embeddings = tf.slice(
-                full_position_embeddings, [0, 0], [seq_length, -1]
-            )
+            if roberta:
+                position_embeddings = tf.slice(
+                    full_position_embeddings, [2, 0], [seq_length, -1]
+                )
+            else:
+                position_embeddings = tf.slice(
+                    full_position_embeddings, [0, 0], [seq_length, -1]
+                )
             num_dims = len(output.shape.as_list())
 
             # Only the last two dimensions are relevant (`seq_length` and `width`), so
@@ -736,6 +741,7 @@ def attention_layer(
     # Take the dot product between "query" and "key" to get the raw
     # attention scores.
     # `attention_scores` = [B, N, F, T]
+
     attention_scores = tf.matmul(query_layer, key_layer, transpose_b=True)
     attention_scores = tf.multiply(
         attention_scores, 1.0 / math.sqrt(float(size_per_head))
@@ -852,6 +858,7 @@ def transformer_model(
 
     attention_head_size = int(hidden_size / num_attention_heads)
     input_shape = get_shape_list(input_tensor, expected_rank=3)
+
     batch_size = input_shape[0]
     seq_length = input_shape[1]
     input_width = input_shape[2]
@@ -868,11 +875,11 @@ def transformer_model(
     # forth from a 3D tensor to a 2D tensor. Re-shapes are normally free on
     # the GPU/CPU but may not be free on the TPU, so we want to minimize them to
     # help the optimizer.
-    prev_output = reshape_to_matrix(input_tensor)
 
+    prev_output = reshape_to_matrix(input_tensor)
     all_layer_outputs = []
     for layer_idx in range(num_hidden_layers):
-        
+
         with tf.variable_scope("layer_%d" % layer_idx):
             layer_input = prev_output
             with tf.variable_scope("attention"):
@@ -909,6 +916,7 @@ def transformer_model(
                         hidden_size,
                         kernel_initializer=create_initializer(initializer_range),
                     )
+
                     attention_output = dropout(attention_output, hidden_dropout_prob)
                     # Insert an "adapter" layer from "Parameter Efficient Transfer Learning for NLP" paper
                     if adapter_size is not None:
@@ -948,7 +956,6 @@ def transformer_model(
                             hidden_dropout_prob != 0,
                         )
                 layer_output = layer_norm(layer_output + attention_output)
-
                 prev_output = layer_output
                 all_layer_outputs.append(layer_output)
 

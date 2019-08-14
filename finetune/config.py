@@ -244,9 +244,9 @@ def get_default_config():
         weight_stddev=0.02,
         save_dtype=None,
         val_set=None,
-        per_process_gpu_memory_fraction=None,
+        per_process_gpu_memory_fraction=0.9,
         adapter_size=None,  # from Parameter Efficient Transfer Learning paper
-
+        
         # Regularization
         embed_p_drop=0.1,
         attn_p_drop=0.1,
@@ -254,7 +254,7 @@ def get_default_config():
         clf_p_drop=0.1,
         l2_reg=GridSearchable(0.01, [0.0, 0.1, 0.01, 0.001]),
         vector_l2=False,
-
+        
         # Early Stopping and Validation
         autosave_path=None,
         keep_best_model=False,

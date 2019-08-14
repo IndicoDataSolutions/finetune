@@ -78,10 +78,9 @@ class BasePipeline(metaclass=ABCMeta):
             0: byte-pair encoding embedding
             1: positional embedding
         """
-        np.set_printoptions(threshold=sys.maxsize)
         seq_length = len(encoded_output.token_ids)
         x = np.zeros((self.config.max_length, 2), dtype=np.int32)
-        if "roberta" in self.config.base_model_path:
+        if self.config.base_model.__name__ == "roBERTa":
             x += 1
         mask = np.zeros((self.config.max_length), dtype=np.float32)
 
@@ -117,15 +116,14 @@ class BasePipeline(metaclass=ABCMeta):
         )
 
         # roberta uses different positional embedding structure
-        if "roberta" in self.config.base_model_path:
-            mask = np.ones((self.config.max_length), dtype=np.float32)
-            mask[0], mask[seq_length - 1] = (
-                0,
-                0,
-            )  # set pad positions to 0 so they are not included in length
+        if self.config.base_model.__name__ == "roBERTa":
+            mask = np.zeros((self.config.max_length), dtype=np.float32)
+            mask[0:seq_length] = 1
             positions = np.cumsum(mask, dtype=np.int32)
-            positions += 1  # add padding idx
-            positions += self.text_encoder.vocab_size
+            positions += 1  # add padding idx because roBERTa's pos embeds depend on it
+            positions += (
+                self.text_encoder.vocab_size + 1
+            )  # + 1 to include unused mask token in embedding layer
             x[:, 1] = positions
 
         output = ArrayEncodedOutput(
