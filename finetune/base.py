@@ -311,9 +311,10 @@ class BaseModel(object, metaclass=ABCMeta):
             allow_soft_placement=self.config.soft_device_placement,
             log_device_placement=self.config.log_device_placement,
         )
-        conf.gpu_options.per_process_gpu_memory_fraction = (
-            self.config.per_process_gpu_memory_fraction
-        )
+        if self.config.per_process_gpu_memory_fraction is not None:
+            conf.gpu_options.per_process_gpu_memory_fraction = (
+                self.config.per_process_gpu_memory_fraction
+            )
         distribute_strategy = self._distribute_strategy(self.config.visible_gpus)
         config = tf.estimator.RunConfig(
             tf_random_seed=self.config.seed,
