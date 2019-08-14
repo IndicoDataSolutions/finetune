@@ -31,7 +31,7 @@ class ClassificationPipeline(BasePipeline):
             return (
                 (
                     {"tokens": tf.int32, "mask": tf.float32, "context": tf.float32},
-                    tf.int32,
+                    tf.float32,
                 ),
                 (
                     {
@@ -44,7 +44,7 @@ class ClassificationPipeline(BasePipeline):
             )
         else:
             return (
-                ({"tokens": tf.int32, "mask": tf.float32}, tf.int32),
+                ({"tokens": tf.int32, "mask": tf.float32}, tf.float32),
                 (
                     {
                         "tokens": TS([self.config.max_length, 2]),
