@@ -330,6 +330,9 @@ def sequence_labeler(
         "predict_params": A dictionary of params to be fed to the viterbi decode function.
     """
     with tf.variable_scope("sequence-labeler", reuse=reuse):
+        if targets is not None:
+            targets = tf.cast(targets, dtype=tf.int32)
+
         nx = config.n_embed
         if config.use_auxiliary_info:
             nx += config.n_context_embed
