@@ -131,7 +131,7 @@ class roBERTa(SourceModel):
         "epsilon": 1e-8,
         "bert_intermediate_size": 3072,
         "bert_use_pooler": False,
-        "max_length": 514,  # because of quirks in roBERTa positional embeddings
+        "max_length": 512,
         "base_model_path": os.path.join("bert", "roberta-model-sm.jl"),
     }
     required_files = [
@@ -142,9 +142,7 @@ class roBERTa(SourceModel):
             "url": urljoin(BERT_BASE_URL, "roberta-model-sm.jl"),
         },
         {
-            "file": os.path.join(
-                FINETUNE_BASE_FOLDER, "model", "bert", "dict.txt"
-            ),
+            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "dict.txt"),
             "url": urljoin(BERT_BASE_URL, "dict.txt"),
         },
         {

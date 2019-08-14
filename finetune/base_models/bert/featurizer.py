@@ -65,7 +65,13 @@ def bert_featurizer(
         axis=1,
     )
 
+    if config.base_model.__name__ == "roBERTa":
+        lengths += 1
+        bert_config.vocab_size += 1
+        bert_config.max_position_embeddings += 2
+
     mask = tf.sequence_mask(lengths, maxlen=seq_length, dtype=tf.float32)
+
     if config.num_layers_trained not in [config.n_layer, 0]:
         raise ValueError(
             "Bert base model does not support num_layers_trained not equal to 0 or n_layer"
@@ -81,6 +87,7 @@ def bert_featurizer(
             use_one_hot_embeddings=False,
             scope=None,
             use_pooler=config.bert_use_pooler,
+            roberta=config.base_model.__name__ == "roBERTa",
         )
 
         embed_weights = bert.get_embedding_table()
