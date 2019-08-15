@@ -272,7 +272,7 @@ def get_model_fn(
             train_op = tf.contrib.layers.optimize_loss(
                 loss=train_loss,
                 global_step=tf.train.get_or_create_global_step(),
-                learning_rate=params.lr,
+                learning_rate=tf.constant(params.lr),
                 optimizer=optimizer,
                 clip_gradients=float(params.max_grad_norm),
                 learning_rate_decay_fn=lr_decay,

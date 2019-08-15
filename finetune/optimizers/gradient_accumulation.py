@@ -1,5 +1,7 @@
 import tensorflow as tf
 
+from finetune.errors import FinetuneError
+
 
 def get_grad_accumulation_optimizer(optimizer_class, accum_steps):
     """
@@ -18,20 +20,26 @@ def get_grad_accumulation_optimizer(optimizer_class, accum_steps):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
 
-        def apply_gradients(self, grads_and_vars, global_step=None, *args, **kwargs):
+        def apply_gradients(self, grads_and_vars, global_step=None, name=None, *args, **kwargs):
             add_gradients_ops = []
             accumulation_vars = []
             grads_and_accumulated_vars = []
             for g, v in grads_and_vars:
+                if g is None:
+                    continue
+                g = tf.convert_to_tensor(g)
                 accum_grad = tf.get_variable(
-                    name=g.name[:-2] + "_acc",
+                    name=v.name[:-2] + "_acc",
                     shape=g.shape,
                     dtype=g.dtype,
                     initializer=tf.constant_initializer(0),
                     use_resource=True,
                     trainable=False
                 )
-                add_gradients_ops.append(accum_grad.assign_add(g))
+                try:
+                    add_gradients_ops.append(accum_grad.assign_add(g))
+                except ValueError:
+                    raise FinetuneError("GradAccumulationOptimizer does not currently support multiple GPUs")
                 accumulation_vars.append(accum_grad)
 
                 grads_and_accumulated_vars.append((accum_grad, v))
@@ -42,7 +50,7 @@ def get_grad_accumulation_optimizer(optimizer_class, accum_steps):
                 def apply_grads():
                     with tf.control_dependencies([
                         super(GradAccumulationOptimizer, self).apply_gradients(
-                            grads_and_accumulated_vars, global_step=global_step, *args, **kwargs
+                            grads_and_accumulated_vars, global_step=global_step, name=name, *args, **kwargs
                         )
                     ]):
                         apply_grads_op = tf.group(*[g.assign(g.initial_value) for g in accumulation_vars])

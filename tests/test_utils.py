@@ -302,6 +302,5 @@ class TestGradientAccumulation(unittest.TestCase):
             self.assertEqual(val_before, val_after1)  # first step should not actually do anything
 
 
-
 if __name__ == '__main__':
     unittest.main()
