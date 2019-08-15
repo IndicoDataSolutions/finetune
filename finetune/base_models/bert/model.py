@@ -10,7 +10,7 @@ from finetune.base_models.bert.encoder import (
 
 from finetune.base_models.bert.roberta_encoder import roBERTaEncoder
 from finetune.base_models.bert.featurizer import bert_featurizer
-from finetune.util.download import BERT_BASE_URL, GPT2_BASE_URL, FINETUNE_BASE_FOLDER
+from finetune.util.download import BERT_BASE_URL, GPT2_BASE_URL, ROBERTA_BASE_URL, FINETUNE_BASE_FOLDER
 
 
 class BERTModelCased(SourceModel):
@@ -139,11 +139,11 @@ class roBERTa(SourceModel):
             "file": os.path.join(
                 FINETUNE_BASE_FOLDER, "model", "bert", "roberta-model-sm.jl"
             ),
-            "url": urljoin(BERT_BASE_URL, "roberta-model-sm.jl"),
+            "url": urljoin(ROBERTA_BASE_URL, "roberta-model-sm.jl"),
         },
         {
             "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "dict.txt"),
-            "url": urljoin(BERT_BASE_URL, "dict.txt"),
+            "url": urljoin(ROBERTA_BASE_URL, "dict.txt"),
         },
         {
             "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "gpt2", "vocab.bpe"),
