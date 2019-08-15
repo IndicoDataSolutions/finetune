@@ -150,7 +150,7 @@ class roBERTaEncoder(BaseEncoder):
         self.cache[token] = word
         return word
 
-    def _encode(self, texts, labels=None):
+    def _encode(self, texts, labels=None, context=None):
         """
         Convert a batch of raw text to a batch of byte-pair encoded token indices.
         """
