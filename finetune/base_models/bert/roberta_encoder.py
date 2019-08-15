@@ -210,6 +210,7 @@ class roBERTaEncoder(BaseEncoder):
             tokens=batch_tokens,
             labels=batch_label_idxs,
             char_locs=batch_character_locs,
+            context=[]
         )
 
     def decode(self, token_ids):
