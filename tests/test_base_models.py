@@ -235,7 +235,7 @@ class TestClassifierTextCNN(TestModelBase):
         # reducing floating point precision
         model.saver.save_dtype = np.float16
         model.save(save_file)
-        self.assertLess(os.stat(save_file).st_size, 251000000)
+        self.assertLess(os.stat(save_file).st_size, 260000000)
 
         model = Classifier.load(save_file)
         new_predictions = model.predict(valid_sample.Text)
