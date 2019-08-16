@@ -186,6 +186,34 @@ the SequenceLabeler are in the following format, as a list of lists of dictionar
 
 
 
+Using the SequenceLabeler Class
+============================================
+
+One of the dozen tasks our base models support is sequence labeling, where you label certain spans of text within a document rather than classifying the entire example. Labels for training
+the SequenceLabeler are in the following format, as a list of lists of dictionaries:
+
+.. code-block:: python
+    
+    # We include text, label, and start and end positions in our Y values. You do not need to create dictionaries for spans that have no label.
+    # The text in the 'text' field must be equivalent to example[label['start']:label['end']]
+    trainX = [['Intelligent process automation]]
+    trainY = [[{text: 'Intelligent', 'capitalized': 'True', 'end': 11, 'start': 0, 'part_of_speech': 'ADJ'},
+                {text: 'process', 'start': 12, 'end': 19, 'part_of_speech': 'NOUN'}, 
+                {text: 'automation', 'start': 20, 'end': 30, 'part_of_speech': 'NOUN'}]]
+
+    from finetune import SequenceLabeler
+    model = SequenceLabeler()
+    model.fit(trainX, trainY)
+
+    # Prediction outputs are in the same format as labels
+    preds = model.predict(trainX)
+
+    # preds = [[{text: 'Intelligent', 'capitalized': 'True', 'end': 11, 'start': 0, 'part_of_speech': 'ADJ'},
+    # {text: 'process', 'start': 12, 'end': 19, 'part_of_speech': 'NOUN'}, 
+    # {text: 'automation', 'start': 20, 'end': 30, 'part_of_speech': 'NOUN'}]]
+
+
+
 Using Adapters and the DeploymentModel class
 ============================================
 
@@ -214,7 +242,7 @@ This dramatically shrinks the size of serialized model files.  When used in conj
 
     # Switching to another model takes only 2 seconds now rather than 20
     deployment_model.load_custom_model('another-adapter-model.jl')
-    predictions = deployment_model.predict(textX)
+    predictions = deployment_model.predict(testX) 
 
 
 Using Auxiliary Info in Your Models
