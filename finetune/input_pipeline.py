@@ -225,7 +225,7 @@ class BasePipeline(metaclass=ABCMeta):
             }  # Excludes features that are continuous, like position and font size, since they do not have categorical binary encodings
 
             for label, encoder in self.label_encoders.items():  # fit encoders
-                without_nans = [x for x in characteristics[label] if not pd.isna(x)]
+                without_nans = [str(x) for x in characteristics[label] if not pd.isna(x)]
                 encoder.fit(without_nans)
 
             self.context_labels = sorted(
@@ -317,7 +317,7 @@ class BasePipeline(metaclass=ABCMeta):
                     if data_dim == 2:  # since binary classes default to column vector
                         data_dim = 1
                 else:  # need to normalize our float/int inputs
-                    data = [x for x in data if not pd.isna(x)]
+                    data = [str(x) for x in data if not pd.isna(x)]
                     stats = self.label_stats[label]
                     data = (data - stats["mean"]) / stats["std"]
                     data_dim = 1
