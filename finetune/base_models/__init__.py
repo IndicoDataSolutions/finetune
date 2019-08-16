@@ -41,3 +41,4 @@ TextCNN = TextCNNModel
 BERT = BERTModelCased
 BERTLarge = BERTModelLargeCased
 ROBERTA = roBERTa
+roberta = roBERTa

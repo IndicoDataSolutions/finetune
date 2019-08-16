@@ -154,3 +154,5 @@ class roBERTa(SourceModel):
             "url": urljoin(GPT2_BASE_URL, "encoder.json"),
         },
     ]
+
+zuckerBERT = roBERTa

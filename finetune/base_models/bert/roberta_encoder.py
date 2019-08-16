@@ -155,12 +155,20 @@ class roBERTaEncoder(BaseEncoder):
         Convert a batch of raw text to a batch of byte-pair encoded token indices.
         """
         self._lazy_init()
-
         batch_tokens = []
         batch_token_idxs = []
         batch_label_idxs = []
-        batch_character_locs = []
+        batch_char_ends = (
+            []
+        )  # to account for the fact that some BPEs have different lengths than their original tokens (e.g. special characters such as bullets)
+        batch_context = []
+        batch_char_starts = []
         label = None
+        offset = (
+            0
+        )  # tracks offset between this fields' character_locs, which start at 0, and the 'start' keys in context which track the entire document (not just this field)
+
+        skipped = 0
 
         for i, text in enumerate(texts):
             if labels is not None:
@@ -168,10 +176,16 @@ class roBERTaEncoder(BaseEncoder):
 
             subtokens = []
             subtoken_idxs = []
-            tok_pos = []
+            char_ends = []
+            char_starts = []
             token_start = 0
 
             tokens = re.findall(self.pat, text)
+            if not tokens:
+                offset += len(text)  # for spans that are just whitespace
+                skipped += 1
+                continue
+            i -= skipped
             for j, token in enumerate(tokens):
                 # token = token.strip()
                 encoded_token = "".join(
@@ -186,31 +200,46 @@ class roBERTaEncoder(BaseEncoder):
                     traceback.print_exc()
                     continue
 
-                subtokens.extend(bpe_toks)
-                subtoken_idxs.extend(
-                    [self.encoder.get(t, self.UNK_IDX) for t in bpe_toks]
-                )
+                token_char_starts = [token_start] * len(bpe_toks)
 
-                subtoken_positions = (
-                    np.cumsum([len(tok) for tok in bpe_toks]) + token_start
-                )
+                if np.sum([len(tok) for tok in bpe_toks]) > len(token):
+                    token_char_ends = (
+                        np.asarray([len(token.strip()) for tok in bpe_toks])
+                        + token_start
+                    )
+                else:
+                    token_char_ends = (
+                        np.cumsum([len(tok) for tok in bpe_toks]) + token_start
+                    )
+
                 token_start += len(token.strip())
-                tok_pos.extend(subtoken_positions)
+                char_ends.extend(token_char_ends)
+                char_starts.extend(token_char_starts)
 
             batch_tokens.append(subtokens)
             for i in range(len(subtoken_idxs)):
                 subtoken_idxs[i] = self.freqs[str(subtoken_idxs[i])]
             batch_token_idxs.append(subtoken_idxs)
-            batch_character_locs.append(tok_pos)
+            batch_char_ends.append(char_ends)
+            batch_char_starts.append(char_starts)
             if labels is not None:
                 batch_label_idxs.append([label] * len(subtoken_idxs))
+
+            # Context is tokenwise, so we need to duplicate contexts for each subtoken of a token, and to match length of labels
+            if context is not None:
+                text_context = self.line_up_context(
+                    context, batch_char_ends[i], batch_tokens[i], subtoken_idxs, offset
+                )
+                batch_context.extend(text_context)
+                offset += batch_char_ends[i][-1]
 
         return EncodedOutput(
             token_ids=batch_token_idxs,
             tokens=batch_tokens,
             labels=batch_label_idxs,
-            char_locs=batch_character_locs,
-            context=[]
+            char_locs=batch_char_ends,
+            char_starts=batch_char_starts,
+            context=batch_context
         )
 
     def decode(self, token_ids):

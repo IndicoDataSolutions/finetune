@@ -69,7 +69,6 @@ class TestAuxiliary(unittest.TestCase):
         dataset["annotations"] = [
             json.loads(annotation) for annotation in dataset["annotations"]
         ]
-
         trainX, testX, trainY, testY = train_test_split(
             dataset.texts.values,
             dataset.annotations.values,
@@ -82,6 +81,7 @@ class TestAuxiliary(unittest.TestCase):
             context = cls.create_context(nlp, text, cls.default_context)
             train_context.append(context)
         trainX = [trainX, train_context]
+        print(train_context)
 
         for text in testX:
             context = cls.create_context(nlp, text, cls.default_context)

@@ -491,12 +491,12 @@ class TestSequenceLabelerroBERTa(TestSequenceLabelerTextCNN):
     base_model = roBERTa
 
 
-class TestClassifierroBERTa(TestClassifierTextCNN):
+class TestClassifierROBERTA(TestClassifierTextCNN):
     model_specific_config = {"n_epochs": 2, "lr": 1e-4}
     base_model = roBERTa
 
 
-class TestComparisonroBERTa(TestComparisonTextCNN):
+class TestComparisonROBERTA(TestComparisonTextCNN):
     model_specific_config = {"n_epochs": 2, "lr": 1e-4}
     base_model = roBERTa
 
@@ -512,6 +512,8 @@ class TestDeploymentGPT(TestDeploymentModel):
 class TestDeploymentGPT2(TestDeploymentModel):
     base_model = GPT2Model
 
+class TestDeploymentROBERTA(TestDeploymentModel):
+    base_model = roBERTa
 
 class TestAuxiliaryBert(TestAuxiliary):
     base_model = BERTModelCased
@@ -524,5 +526,7 @@ class TestAuxiliaryGPT(TestAuxiliary):
 class TestAuxiliaryGPT2(TestAuxiliary):
     base_model = GPT2Model
     
-class TestDeploymentroBERTa(TestDeploymentModel):
+
+class TestAuxiliaryROBERTA(TestAuxiliary):
     base_model = roBERTa
+
