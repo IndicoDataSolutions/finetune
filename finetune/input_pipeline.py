@@ -176,7 +176,7 @@ class BasePipeline(metaclass=ABCMeta):
         """
         num_samples = len(context)
         vector_list = []
-        ignore = ["start", "end", "label", "token"]
+        ignore = ["start", "end", "label", "text"]
 
         if not hasattr(
             self, "label_encoders"
@@ -212,7 +212,7 @@ class BasePipeline(metaclass=ABCMeta):
             }  # Excludes features that are continuous, like position and font size, since they do not have categorical binary encodings
 
             for label, encoder in self.label_encoders.items():  # fit encoders
-                without_nans = [x for x in characteristics[label] if not pd.isna(x)]
+                without_nans = [str(x) for x in characteristics[label] if not pd.isna(x)]
                 encoder.fit(without_nans)
 
             self.context_labels = sorted(
@@ -261,7 +261,7 @@ class BasePipeline(metaclass=ABCMeta):
 
                         raise FinetuneError(
                             "Token '{}' does not contain field(s) {} as described in default".format(
-                                sample[idx]["token"], missing
+                                sample[idx]["text"], missing
                             )
                         )
                     tokens_with_context.append(sample[idx])
@@ -295,7 +295,7 @@ class BasePipeline(metaclass=ABCMeta):
 
                 # Binary encoded features have different dimensionality as simple floats/ints, so must be handled differently.
                 if label in self.label_encoders.keys():
-                    without_nans = [x for x in data if not pd.isna(x)]
+                    without_nans = [str(x) for x in data if not pd.isna(x)]
                     data = (
                         np.asarray(self.label_encoders[label].transform(without_nans))
                         - 0.5
@@ -318,11 +318,6 @@ class BasePipeline(metaclass=ABCMeta):
                         vector[sample_idx][:] = 0
                         continue
                     for label_dimension in range(data_dim):
-                        #print(tokens_added)
-                        #print(label_dimension)
-                        #print(sample_idx)
-                        #print(np.shape(data))
-                        #print(len(sample))
                         vector[sample_idx][current_index + label_dimension] = (
                             data[tokens_added]
                             if data_dim == 1
@@ -331,10 +326,6 @@ class BasePipeline(metaclass=ABCMeta):
                     tokens_added += 1
                 current_index += 1
             vector_list.append(vector)
-        #print(vector_list)
-        #print(context)
-        #print(np.shape(context))
-        #print(np.shape(vector_list))
         return vector_list
 
     def _compute_class_counts(self, encoded_dataset):
