@@ -72,10 +72,10 @@ class BaseModel(object, metaclass=ABCMeta):
         self.config.use_auxiliary_info = self.default_context is not None
         self.resolved_gpus = None
         self.validate_config()
+        download_data_if_required(self.config.base_model)
         self.input_pipeline = self._get_input_pipeline()
         self.input_pipeline.default_context = self.default_context
         self._trained = False
-        download_data_if_required(self.config.base_model)
         self._initialize()
         if self.config.debugging_logs:
             os.environ["TF_CPP_MIN_LOG_LEVEL"] = "0"
