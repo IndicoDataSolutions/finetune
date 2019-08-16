@@ -96,6 +96,7 @@ class BasePipeline(metaclass=ABCMeta):
             )
         else:
             context_arr = None
+
         # BPE embedding
         x[:seq_length, 0] = encoded_output.token_ids
         # masking: value of 1 means "consider this in cross-entropy LM loss"
@@ -681,6 +682,8 @@ class BasePipeline(metaclass=ABCMeta):
                     d["context"] = processed_context[
                         start:end
                     ]  # forced since encoded is immutable'
+                else:
+                    d['context'] = None
 
                 yield self._array_format(EncodedOutput(**d), pad_token=pad_token)
         else:
@@ -701,6 +704,8 @@ class BasePipeline(metaclass=ABCMeta):
                 d["context"] = np.squeeze(
                     self._context_to_vector([encoder_out.context])
                 )  # forced since encoded is immutable
+            else:
+                d["context"] = None
 
             yield self._array_format(
                 EncodedOutput(**d), pad_token=(pad_token or self.config.pad_token)

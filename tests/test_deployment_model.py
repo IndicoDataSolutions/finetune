@@ -110,7 +110,7 @@ class TestDeploymentModel(unittest.TestCase):
         #dataset preparation
         cls.classifier_dataset = pd.read_csv(cls.classifier_dataset_path, nrows=cls.n_sample * 10)
 
-        path = os.path.join(os.path.dirname(__file__), "testdata.json")
+        path = os.path.join(os.path.dirname(__file__), "data", "testdata.json")
         with open(path, 'rt') as fp:
             cls.texts, cls.labels = json.load(fp)
 
