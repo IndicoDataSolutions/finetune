@@ -8,7 +8,7 @@ from finetune.base_models.bert.encoder import (
     BERTEncoderLarge,
 )
 
-from finetune.base_models.bert.roberta_encoder import roBERTaEncoder
+from finetune.base_models.bert.roberta_encoder import RoBERTaEncoder
 from finetune.base_models.bert.featurizer import bert_featurizer
 from finetune.util.download import BERT_BASE_URL, GPT2_BASE_URL, ROBERTA_BASE_URL, FINETUNE_BASE_FOLDER
 
@@ -115,9 +115,9 @@ class BERTModelMultilingualCased(SourceModel):
     ]
 
 
-class roBERTa(SourceModel):
+class RoBERTa(SourceModel):
     is_bidirectional = True
-    encoder = roBERTaEncoder
+    encoder = RoBERTaEncoder
     featurizer = bert_featurizer
     settings = {
         "n_embed": 768,
@@ -155,4 +155,5 @@ class roBERTa(SourceModel):
         },
     ]
 
-zuckerBERT = roBERTa
+
+ZuckerBERT = RoBERTa

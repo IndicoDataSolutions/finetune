@@ -88,7 +88,7 @@ def bert_featurizer(
             use_one_hot_embeddings=False,
             scope=None,
             use_pooler=config.bert_use_pooler,
-            roberta=config.base_model.__name__ == "roBERTa",
+            roberta=config.base_model.__name__ == "RoBERTa",
         )
 
         embed_weights = bert.get_embedding_table()
