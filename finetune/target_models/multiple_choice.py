@@ -36,7 +36,7 @@ class MultipleChoicePipeline(BasePipeline):
         yield ArrayEncodedOutput(**kwargs)
 
     def _format_for_encoding(self, X):
-        return [X]
+        return [[field] for field in X]
 
     def feed_shape_type_def(self):
         TS = tf.TensorShape

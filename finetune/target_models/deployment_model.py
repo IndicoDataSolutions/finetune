@@ -174,6 +174,8 @@ class DeploymentModel(BaseModel):
             )
 
         original_model = self.saver.load(path)
+        original_model._trained = True
+
         if original_model.config.adapter_size != self.config.adapter_size:
             raise FinetuneError("adapter_size in config is compatible with this model")
         if type(self.config.base_model) != type(original_model.config.base_model):

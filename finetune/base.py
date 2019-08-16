@@ -74,6 +74,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self.validate_config()
         self.input_pipeline = self._get_input_pipeline()
         self.input_pipeline.default_context = self.default_context
+        self._trained = False
         download_data_if_required(self.config.base_model)
         self._initialize()
         if self.config.debugging_logs:
@@ -280,6 +281,9 @@ class BaseModel(object, metaclass=ABCMeta):
 
                 tf.logging.info("Finishing pre-fit initialisation...")
             estimator.train(train_input_fn, hooks=train_hooks, steps=num_steps)
+        
+        self._trained = True
+
 
     def _distribute_strategy(self, visible_gpus):
         """
@@ -583,7 +587,7 @@ class BaseModel(object, metaclass=ABCMeta):
         np.random.seed(seed)
         tf.set_random_seed(seed)
 
-    def generate_text(self, seed_text="", max_length=None, use_extra_toks=True):
+    def generate_text(self, seed_text="", max_length=None, use_extra_toks=None):
         """
         Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
         Temperature parameter for decoding is set in the config.
@@ -591,7 +595,9 @@ class BaseModel(object, metaclass=ABCMeta):
         :param seed_text: Defaults to the empty string. This will form the starting point to begin modelling
         :return: A string containing the generated text.
         """
-
+        if use_extra_toks is None:
+            use_extra_tokens = self._trained
+    
         def dataset_encoded():
             while not dataset_encoded.finished:
                 yield {"tokens": arr_encoded.token_ids, "mask": arr_encoded.mask}
@@ -715,6 +721,7 @@ class BaseModel(object, metaclass=ABCMeta):
         saver.set_fallback(model.config.base_model_path)
         model._initialize()
         model.saver.variables = saver.variables
+        model._trained = True
         return model
 
     def context_span_to_label_span(self, batch_context_spans, batch_text_chunks=None):

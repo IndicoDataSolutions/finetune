@@ -6,12 +6,12 @@ import copy
 
 class MultiFieldClassificationPipeline(ClassificationPipeline):
     def _format_for_encoding(self, X):
-        return [X]
+        return [[field] for field in X]
 
 
 class MultiFieldRegressionPipeline(RegressionPipeline):
     def _format_for_encoding(self, X):
-        return [X]
+        return [[field] for field in X]
 
 
 class MultiFieldClassifier(Classifier):
