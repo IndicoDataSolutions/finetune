@@ -200,6 +200,11 @@ class roBERTaEncoder(BaseEncoder):
                     traceback.print_exc()
                     continue
 
+                subtokens.extend(bpe_toks)
+                subtoken_idxs.extend(
+                    [self.encoder.get(t, self.UNK_IDX) for t in bpe_toks]
+                )
+
                 token_char_starts = [token_start] * len(bpe_toks)
 
                 if np.sum([len(tok) for tok in bpe_toks]) > len(token):
@@ -217,8 +222,8 @@ class roBERTaEncoder(BaseEncoder):
                 char_starts.extend(token_char_starts)
 
             batch_tokens.append(subtokens)
-            for i in range(len(subtoken_idxs)):
-                subtoken_idxs[i] = self.freqs[str(subtoken_idxs[i])]
+            for k in range(len(subtoken_idxs)):
+                subtoken_idxs[k] = self.freqs[str(subtoken_idxs[k])]
             batch_token_idxs.append(subtoken_idxs)
             batch_char_ends.append(char_ends)
             batch_char_starts.append(char_starts)

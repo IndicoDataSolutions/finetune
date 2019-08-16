@@ -106,7 +106,6 @@ class BasePipeline(metaclass=ABCMeta):
             if len(np.shape(encoded_output.context)) in (2, 3):
                 context_arr[:seq_length][:] = np.squeeze(encoded_output.context)
             else:
-                print(encoded_output)
                 raise FinetuneError("Incorrect context rank.")
 
         # positional_embeddings
@@ -331,11 +330,6 @@ class BasePipeline(metaclass=ABCMeta):
                         vector[sample_idx][:] = 0
                         continue
                     for label_dimension in range(data_dim):
-                        #print(tokens_added)
-                        #print(label_dimension)
-                        #print(sample_idx)
-                        #print(np.shape(data))
-                        #print(len(sample))
                         vector[sample_idx][current_index + label_dimension] = (
                             data[tokens_added]
                             if data_dim == 1
@@ -344,10 +338,6 @@ class BasePipeline(metaclass=ABCMeta):
                     tokens_added += 1
                 current_index += 1
             vector_list.append(vector)
-        #print(vector_list)
-        #print(context)
-        #print(np.shape(context))
-        #print(np.shape(vector_list))
         return vector_list
 
     def _compute_class_counts(self, encoded_dataset):

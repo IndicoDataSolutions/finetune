@@ -81,7 +81,6 @@ class TestAuxiliary(unittest.TestCase):
             context = cls.create_context(nlp, text, cls.default_context)
             train_context.append(context)
         trainX = [trainX, train_context]
-        print(train_context)
 
         for text in testX:
             context = cls.create_context(nlp, text, cls.default_context)
@@ -112,7 +111,7 @@ class TestAuxiliary(unittest.TestCase):
         }
         defaults.update(kwargs)
         return dict(get_config(**defaults))
-
+    
     def test_auxiliary_classifier(self):
         """
         Ensure model training does not error out
@@ -125,10 +124,9 @@ class TestAuxiliary(unittest.TestCase):
         model = Classifier(
             default_context=self.default_context, **self.default_config()
         )
-
         model.fit(trainX, trainY)
         _ = model.predict(testX)
-
+    
     def test_auxiliary_sequence_labeler(self):
         """
         Ensure model training does not error out
@@ -150,6 +148,7 @@ class TestAuxiliary(unittest.TestCase):
         self.assertGreater(token_precision, 0.6)
         self.assertGreater(token_recall, 0.6)
 
+    
     def test_save_load(self):
         """
         Ensure saving + loading does not cause errors
@@ -169,3 +168,4 @@ class TestAuxiliary(unittest.TestCase):
         new_predictions = model.predict(testX)
         for i, prediction in enumerate(predictions):
             self.assertEqual(prediction, new_predictions[i])
+    
