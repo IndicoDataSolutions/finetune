@@ -51,7 +51,7 @@ def dilated_causal_max_pool(value, kernel_size, dilation, padding="left"):
         return restored
 
 
-def cascaded_pool(value, kernel_size, dim=1, pool_len=None, corr_nonlin=None, causal=True):
+def cascaded_pool(value, kernel_size, dim=1, pool_len=None, corr_nonlin=tf.nn.softmax, causal=True):
     shape = shape_list(value)
     full_pool_len = pool_len or shape[dim]
     intermediate_vals = []
@@ -129,7 +129,7 @@ def cummax(x, dim):
 
 def cumulative_state_net(X, name, use_fp16, pool_idx, pdrop, train, pool_kernel_size=None, corr_nonlin=None,
                          nominal_pool_length=512, causal=True):
-    conv_kernels = [1, 2, 4, 8]
+    conv_kernels = [4]
     pool_kernel_size = pool_kernel_size or conv_kernels[-1]
 
     outputs = []

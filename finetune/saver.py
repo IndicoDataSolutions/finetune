@@ -1,4 +1,5 @@
 import os
+import collections
 from concurrent.futures import ThreadPoolExecutor
 import itertools
 import logging
@@ -7,13 +8,41 @@ import sys
 import joblib
 import numpy as np
 import tensorflow as tf
+
 from tensorflow.python.training import distribution_strategy_context
 from tensorflow.contrib.estimator.python.estimator.early_stopping import _StopOnPredicateHook, _get_or_create_stop_var
+from tensorflow.python.platform import gfile
+from tensorflow.python.summary import summary_iterator
+
 
 from finetune.util.estimator import PatchedParameterServerStrategy
 from finetune.errors import FinetuneError
 
 LOGGER = logging.getLogger('finetune')
+
+_EVENT_FILE_GLOB_PATTERN = 'events.out.tfevents.*'
+
+def _summaries(eval_dir):
+    if gfile.Exists(eval_dir):
+        for event_file in gfile.Glob(
+                os.path.join(eval_dir, _EVENT_FILE_GLOB_PATTERN)):
+            for event in summary_iterator.summary_iterator(event_file):
+                yield event
+                                      
+
+def read_eval_metrics(eval_dir):
+    eval_metrics_dict = collections.defaultdict(dict)
+    for event in _summaries(eval_dir):
+        if not event.HasField('summary'):
+            continue
+        metrics = {}
+        for value in event.summary.value:
+            if value.HasField('simple_value'):
+                metrics[value.tag] = value.simple_value
+        if metrics:
+            eval_metrics_dict[event.step].update(metrics)
+    return collections.OrderedDict(
+        sorted(eval_metrics_dict.items(), key=lambda t: t[0]))
 
 
 class SaverHook(_StopOnPredicateHook):
@@ -32,7 +61,7 @@ class SaverHook(_StopOnPredicateHook):
     def stop_if_no_metric_improvement_fn(self):
         if not self.keep_best_model:
             return False
-        eval_results = tf.contrib.estimator.read_eval_metrics(self.estimator.eval_dir())
+        eval_results = read_eval_metrics(self.estimator.eval_dir())
         if len(eval_results) == 0:
             return False
         most_recent_eval = max(eval_results.items(), key=lambda x: x[0])  # last steps.

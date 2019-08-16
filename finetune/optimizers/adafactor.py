@@ -165,7 +165,7 @@ class AdafactorOptimizer(tf.train.Optimizer):
         self._epsilon2 = epsilon2
 
     def apply_gradients(self, grads_and_vars, global_step=None, name=None, **kwargs):
-        return super().apply_gradients(grads_and_vars=grads_and_vars, global_step=global_step, name=name)
+        return tf.cast(super().apply_gradients(grads_and_vars=grads_and_vars, global_step=global_step, name=name), tf.bool)
 
     def _should_use_factored_second_moment_estimate(self, shape):
         """Should we use a factored second moment estimator.

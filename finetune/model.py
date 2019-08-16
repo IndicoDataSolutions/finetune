@@ -14,6 +14,7 @@ from finetune.optimizers.adamax import AdamaxWOptimizer
 from finetune.util.imbalance import class_weight_tensor
 from finetune.errors import FinetuneError
 from finetune.optimizers.adafactor import AdafactorWOptimizer, AdafactorOptimizer
+from finetune.optimizers.loss_scale import ExponentialUpdateLossScaleManager
 
 LOGGER = logging.getLogger('finetune')
 
@@ -186,16 +187,18 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                     opt = dont_optimize_zeros(opt)
 
                 if params.scale_loss:
-                    loss_scale_manager = tf.contrib.mixed_precision.ExponentialUpdateLossScaleManager(
-                        init_loss_scale=params.loss_scale_every_n_steps,
-                        incr_every_n_steps=5000,
-                        decr_every_n_nan_or_inf=2,
-                        incr_ratio=1.5,
-                        decr_ratio=0.5
-                    )
-                    
-                    opt = tf.contrib.mixed_precision.LossScaleOptimizer(opt, loss_scale_manager)
-                    tf.summary.scalar("loss_scale", loss_scale_manager.get_loss_scale())
+                    opt = tf.train.experimental.enable_mixed_precision_graph_rewrite(opt)
+                    #loss_scale_manager = ExponentialUpdateLossScaleManager(
+                    #    init_loss_scale=params.loss_scale_every_n_steps,
+                    #    incr_every_n_steps=5000,
+                    #    decr_every_n_nan_or_inf=2,
+                    #    incr_ratio=1.5,
+                    #    decr_ratio=0.5
+                    #)
+                    #loss_scale_manager = tf.contrib.mixed_precision.FixedLossScaleManager(200)
+                   
+                                        
+ #                   tf.summary.scalar("loss_scale", loss_scale_manager.get_loss_scale())
                 return opt
 
             summaries = tf.contrib.layers.OPTIMIZER_SUMMARIES if params.summarize_grads else None
@@ -219,6 +222,8 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                 increment_global_step=True,
                 summaries=summaries
             )
+#            to_train = [v for v, g in zip(tf.trainable_variables(), tf.gradients(train_loss, tf.trainable_variables())) if g is not None]
+#            train_op = optimizer(lr_decay(params.lr, tf.train.get_or_create_global_step())).get_updates(train_loss, to_train)[0]
 
         if mode == tf.estimator.ModeKeys.PREDICT:
             return tf.estimator.EstimatorSpec(

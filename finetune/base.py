@@ -249,9 +249,9 @@ class BaseModel(object, metaclass=ABCMeta):
 
         num_gpus = len(resolved_gpus)
         if num_gpus > 1:
-            distribute_strategy = PatchedParameterServerStrategy(
-                visible_gpus=resolved_gpus
-            )
+            distribute_strategy = tf.distribute.MirroredStrategy()#PatchedParameterServerStrategy(
+#                visible_gpus=resolved_gpus
+#            )
         elif num_gpus == 1:
             gpu = resolved_gpus[0]
             distribute_strategy = None #OneDeviceStrategy(device='/gpu:{}'.format(gpu))

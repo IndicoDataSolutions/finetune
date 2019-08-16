@@ -33,7 +33,7 @@ class GPCModelFP16(SourceModel):
         'n_embed': 1024,
         "base_model_path": "fresh_start.jl",
         "optimizer": "Adafactor",
-        "use_fp16": True,
+#        "use_fp16": True,
         "scale_loss": True,
         'n_layer': 12,
         'num_layers_trained':12,
