@@ -150,15 +150,15 @@ You can use the :py:func:`BaseModel.save()` and :py:func:`.load()` methods to se
 
 
 
-Using Different Base Models (e.g. BERT, GPT2)
+Using Different Base Models (e.g. BERT, GPT2, RoBERTa)
 =============================================
 
 Finetune defaults to using OpenAI's GPT base model, but also supports other base model options.
 
 .. code-block:: python
     
-    from finetune.base_models import BERT, BERTLarge, GPT2, GPT2Medium, TextCNN
-    model = Classifier(base_model=BERT)
+    from finetune.base_models import BERT, BERTLarge, GPT2, GPT2Medium, TextCNN, RoBERTa
+    model = Classifier(base_model=RoBERTa)
 
 
 Using the SequenceLabeler Class
