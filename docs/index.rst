@@ -161,6 +161,34 @@ Finetune defaults to using OpenAI's GPT base model, but also supports other base
     model = Classifier(base_model=BERT)
 
 
+Using the SequenceLabeler Class
+============================================
+
+One of the dozen tasks our base models support is sequence labeling, where you label certain spans of text within a document rather than classifying the entire example. Labels for training
+the SequenceLabeler are in the following format, as a list of lists of dictionaries:
+
+.. code-block:: python
+    
+    # We include text, label, and start and end positions in our Y values. You do not need to create dictionaries for spans that have no label.
+    # The text in the 'text' field must be equivalent to example[label['start']:label['end']]
+    trainX = [['Intelligent process automation]]
+    trainY = [[{text: 'Intelligent', 'capitalized': 'True', 'end': 11, 'start': 0, 'part_of_speech': 'ADJ'},
+                {text: 'process', 'start': 12, 'end': 19, 'part_of_speech': 'NOUN'}, 
+                {text: 'automation', 'start': 20, 'end': 30, 'part_of_speech': 'NOUN'}]]
+
+    from finetune import SequenceLabeler
+    model = SequenceLabeler()
+    model.fit(trainX, trainY)
+
+    # Prediction outputs are in the same format as labels
+    preds = model.predict(trainX)
+
+    # preds = [[{text: 'Intelligent', 'capitalized': 'True', 'end': 11, 'start': 0, 'part_of_speech': 'ADJ'},
+    # {text: 'process', 'start': 12, 'end': 19, 'part_of_speech': 'NOUN'}, 
+    # {text: 'automation', 'start': 20, 'end': 30, 'part_of_speech': 'NOUN'}]]
+
+
+
 Using Adapters and the DeploymentModel class
 ============================================
 
@@ -189,7 +217,37 @@ This dramatically shrinks the size of serialized model files.  When used in conj
 
     # Switching to another model takes only 2 seconds now rather than 20
     deployment_model.load_custom_model('another-adapter-model.jl')
+<<<<<<< HEAD
     predictions = deployment_model.predict(textX) 
+=======
+    predictions = deployment_model.predict(textX)
+
+
+Using Auxiliary Info in Your Models
+============================================
+
+Our base models can also process arbitrary auxiliary information in addition to text, such as style (bolding, italics, etc.), semantics (part-of-speech tags, sentiment tags), or other forms,
+as long as they describe specific spans of text.
+
+.. code-block:: python
+
+    # First we define the extra features we will be providing, as well as a default value that it will take if given data does not cover the text.
+    # Auxiliary info can take the form of strings, booleans, floats, or ints.
+    default = {'capitalized':False, 'part_of_speech':'unknown'}
+    
+    # Next we create context tags in a similar format to SequenceLabeling labels, as a list of lists of dictionaries:
+    train_text = [['Intelligent process automation]]
+    train_context = [[{text: 'Intelligent', 'capitalized': True, 'end': 11, 'start': 0, 'part_of_speech': 'ADJ'},
+    {text: 'process', 'capitalized': False, 'end': 19, 'start': 12, 'part_of_speech': 'NOUN'}, 
+    {text: 'automation', 'capitalized': False, 'end': 30, 'start': 20, 'part_of_speech': 'NOUN'}]]
+
+    # Our input to the model is now a list containing the text, and then the context
+    trainX = [train_text, train_context]
+
+    # We indicate to the model that we are including auxiliary info by passing our default dictionary in with the kwarg default_context.
+    model = Classifier(default_context=default)
+    model.fit(trainX, trainY)
+>>>>>>> cb68d09... FIX: docs
 
 
 
