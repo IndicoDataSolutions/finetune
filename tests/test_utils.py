@@ -26,7 +26,7 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
             model = Classifier(tensorboard='./testing') # should be tensorboard_folder
     
     def test_train_test_tokenization_consistency(self):
-        filepath = os.path.abspath(os.path.join(os.path.dirname(__file__), 'testdata.csv'))
+        filepath = os.path.abspath(os.path.join(os.path.dirname(__file__), 'data', 'testdata.csv'))
         df = pd.read_csv(filepath)
         X = []
         Y = []

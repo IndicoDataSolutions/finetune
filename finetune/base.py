@@ -561,13 +561,23 @@ class BaseModel(object, metaclass=ABCMeta):
         raw_preds = self._inference(Xs, predict_keys=[PredictMode.FEATURIZE])
         return np.asarray(raw_preds)
 
-    @abstractmethod
+    def _featurize_sequence(self, Xs):
+        raw_preds = self._inference(Xs, predict_keys=[PredictMode.SEQUENCE])
+        return np.asarray(raw_preds)
+
     def featurize(self, *args, **kwargs):
         """
         Base method to get raw features out of the model.
-        These features are the same that are fed into the target_model.
+        These features are the same features that are fed into the target_model.
         """
         return self._featurize(*args, **kwargs)
+
+    def featurize_sequence(self, *args, **kwargs):
+        """
+        Base method to get raw token-level features out of the model.
+        These features are the same features that are fed into the target_model.
+        """
+        return self._featurize_sequence(*args, **kwargs)
 
     @classmethod
     def get_eval_fn(cls):

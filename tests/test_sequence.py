@@ -216,7 +216,7 @@ class TestSequenceLabeler(unittest.TestCase):
 
     def test_reasonable_predictions(self):
         test_sequence = ["I am a dog. A dog that's incredibly bright. I can talk, read, and write!"]
-        path = os.path.join(os.path.dirname(__file__), "testdata.json")
+        path = os.path.join(os.path.dirname(__file__), "data", "testdata.json")
 
         # test ValueError raised when raw text is passed along with character idxs and doesn't match
         with self.assertRaises(ValueError):
@@ -237,7 +237,7 @@ class TestSequenceLabeler(unittest.TestCase):
 
     def test_chunk_long_sequences(self):
         test_sequence = ["I am a dog. A dog that's incredibly bright. I can talk, read, and write! " * 10]
-        path = os.path.join(os.path.dirname(__file__), "testdata.json")
+        path = os.path.join(os.path.dirname(__file__), "data", "testdata.json")
 
         # test ValueError raised when raw text is passed along with character idxs and doesn't match
         self.model.config.chunk_long_sequences = True
