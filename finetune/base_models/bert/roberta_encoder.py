@@ -41,7 +41,7 @@ def bytes_to_unicode():
     return dict(zip(bs, cs))
 
 
-class roBERTaEncoder(BaseEncoder):
+class RoBERTaEncoder(BaseEncoder):
     """
     A modified wrapper for a public python BPE tokenizer. The modifications allow encoding directly into the formats
     required for finetune. Particularly with respect to formatting with multiple inputs.

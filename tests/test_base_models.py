@@ -20,7 +20,7 @@ import requests
 from bs4 import BeautifulSoup as bs
 from bs4.element import Tag
 
-from finetune.base_models import TextCNN, BERTModelCased, GPT2Model, GPTModel, roBERTa
+from finetune.base_models import TextCNN, BERTModelCased, GPT2Model, GPTModel, RoBERTa
 from .test_deployment_model import TestDeploymentModel
 from .test_auxiliary import TestAuxiliary
 from finetune import Classifier, Comparison, SequenceLabeler
@@ -488,17 +488,16 @@ class TestComparisonBert(TestComparisonTextCNN):
 
 class TestSequenceLabelerRoberta(TestSequenceLabelerTextCNN):
     model_specific_config = {"n_epochs": 2, "lr": 1e-4}
-    base_model = roBERTa
-
+    base_model = RoBERTa
 
 class TestClassifierRoberta(TestClassifierTextCNN):
     model_specific_config = {"n_epochs": 2, "lr": 1e-4}
-    base_model = roBERTa
+    base_model = RoBERTa
 
 
 class TestComparisonRoberta(TestComparisonTextCNN):
     model_specific_config = {"n_epochs": 2, "lr": 1e-4}
-    base_model = roBERTa
+    base_model = RoBERTa
 
 
 class TestDeploymentBert(TestDeploymentModel):
@@ -513,7 +512,7 @@ class TestDeploymentGPT2(TestDeploymentModel):
     base_model = GPT2Model
 
 class TestDeploymentRoberta(TestDeploymentModel):
-    base_model = roBERTa
+    base_model = RoBERTa
 
 class TestAuxiliaryBert(TestAuxiliary):
     base_model = BERTModelCased
@@ -528,5 +527,4 @@ class TestAuxiliaryGPT2(TestAuxiliary):
     
 
 class TestAuxiliaryRoberta(TestAuxiliary):
-    base_model = roBERTa
-
+    base_model = RoBERTa

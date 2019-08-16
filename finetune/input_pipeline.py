@@ -80,7 +80,7 @@ class BasePipeline(metaclass=ABCMeta):
         """
         seq_length = len(encoded_output.token_ids)
         x = np.zeros((self.config.max_length, 2), dtype=np.int32)
-        if self.config.base_model.__name__ == "roBERTa":
+        if self.config.base_model.__name__ == "RoBERTa":
             x += 1
         mask = np.zeros((self.config.max_length), dtype=np.float32)
 
@@ -116,11 +116,11 @@ class BasePipeline(metaclass=ABCMeta):
         )
 
         # roberta uses different positional embedding structure
-        if self.config.base_model.__name__ == "roBERTa":
+        if self.config.base_model.__name__ == "RoBERTa":
             mask = np.zeros((self.config.max_length), dtype=np.float32)
             mask[0:seq_length] = 1
             positions = np.cumsum(mask, dtype=np.int32)
-            positions += 1  # add padding idx because roBERTa's pos embeds depend on it
+            positions += 1  # add padding idx because RoBERTa's pos embeds depend on it
             positions += (
                 self.text_encoder.vocab_size + 1
             )  # + 1 to include unused mask token in embedding layer
