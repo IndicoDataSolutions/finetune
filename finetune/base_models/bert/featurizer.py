@@ -66,7 +66,6 @@ def bert_featurizer(
     )
 
     if config.base_model.__name__ == "roBERTa":
-        lengths += 1
         bert_config.vocab_size += 1
         bert_config.max_position_embeddings += 2
 
