@@ -51,21 +51,6 @@ class GPT2Encoder(BaseEncoder):
 
     def __init__(self, encoder_path=ENCODER_PATH, vocab_path=VOCAB_PATH):
         super().__init__(encoder_path=encoder_path, vocab_path=vocab_path)
-        self.freqs = {}
-        index = 0
-        with open("dict.txt", "r", encoding="utf-8") as freq_dict:
-            lines = freq_dict.readlines()
-            for line in lines:
-                idx = line.rfind(" ")
-                if idx == -1:
-                    raise ValueError(
-                        "Incorrect dictionary format, expected '<token> <cnt>'"
-                    )
-                if "madeupword" in line[:idx]:
-                    break
-                token_idx = int(line[:idx])
-                self.freqs[str(token_idx)] = index
-                index += 1
 
     def _lazy_init(self, errors="replace"):
         if self.initialized:
@@ -213,8 +198,6 @@ class GPT2Encoder(BaseEncoder):
                 char_starts.extend(token_char_starts)
 
             batch_tokens.append(subtokens)
-            for i in range(len(subtoken_idxs)):
-                subtoken_idxs[i] = self.freqs[str(subtoken_idxs[i])]
             batch_token_idxs.append(subtoken_idxs)
             batch_char_ends.append(char_ends)
             batch_char_starts.append(char_starts)

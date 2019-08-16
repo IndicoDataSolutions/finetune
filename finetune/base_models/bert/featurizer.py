@@ -66,7 +66,9 @@ def bert_featurizer(
     )
 
     if config.base_model.__name__ == "roBERTa":
+        # Because roberta embeddings include an unused <MASK> token, and our embedding layer size needs to accommodate for that.
         bert_config.vocab_size += 1
+        # In our use case (padding token has index 1), roberta's position indexes begin at 2, so our positions embeddings come from indices 2:514.
         bert_config.max_position_embeddings += 2
 
     mask = tf.sequence_mask(lengths, maxlen=seq_length, dtype=tf.float32)
