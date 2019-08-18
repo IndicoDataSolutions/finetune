@@ -261,7 +261,7 @@ def get_default_config():
         early_stopping_steps=None,
         min_secs_between_eval=60,
         eval_acc=False,
-        val_size=None,
+        val_size=0.,
         val_interval=None,
 
         # Debugging
