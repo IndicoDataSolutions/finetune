@@ -183,8 +183,8 @@ class SequenceLabeler(BaseModel):
         d.update(kwargs)
         super().__init__(**d)
         # If our basemodel has a default n_epochs > 5, use that; otherwise, use 5 epochs
-        base_model_epochs = self.config.base_model.settings.get('n_epochs', 5)
-        self.config.n_epochs = max(base_model_epochs, 5)
+        base_model_epochs = self.config.base_model.settings.get('n_epochs', 0)
+        self.config.n_epochs = max(base_model_epochs, self.defaults['n_epochs'])
 
     def _get_input_pipeline(self):
         return SequencePipeline(
