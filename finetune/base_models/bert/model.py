@@ -121,7 +121,7 @@ class RoBERTa(SourceModel):
     featurizer = bert_featurizer
     settings = {
         "n_embed": 768,
-        "n_epochs": 10,
+        "n_epochs": 8,
         "n_heads": 12,
         "n_layer": 12,
         "act_fn": "gelu",
