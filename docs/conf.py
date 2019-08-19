@@ -24,14 +24,14 @@ import os
 sys.path.append(os.path.join(os.path.dirname(__name__), '..'))
 
 project = 'finetune'
-copyright = '2018, Madison May, Ben Townsend'
-author = 'Madison May, Ben Townsend'
+copyright = '2019, Madison May, Ben Townsend, Lily Zhang, Matthew Bayer'
+author = 'Madison May, Ben Townsend, Lily Zhang, Matthew Bayer'
 
 # The short X.Y version
-version, __version__ = ('0.7',) * 2
+version, __version__ = ('0.8',) * 2
 
 # The full version, including alpha/beta/rc tags
-release = '0.7.2'
+release = '0.8.0'
 
 # -- General configuration ---------------------------------------------------
 
