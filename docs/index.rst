@@ -159,7 +159,6 @@ Finetune defaults to using OpenAI's GPT base model, but also supports other base
     
     from finetune.base_models import BERT, BERTLarge, GPT2, GPT2Medium, TextCNN, RoBERTa
     model = Classifier(base_model=RoBERTa)
-<<<<<<< HEAD
 
 
 Using the SequenceLabeler Class
@@ -184,9 +183,6 @@ the SequenceLabeler are in the following format, as a list of lists of dictionar
 
     # Prediction outputs are in the same format as labels
     preds = model.predict(trainX)
-
-=======
->>>>>>> 3b5055d... FIX: missing quote
 
 
 Using the SequenceLabeler Class
@@ -242,11 +238,7 @@ This dramatically shrinks the size of serialized model files.  When used in conj
 
     # Switching to another model takes only 2 seconds now rather than 20
     deployment_model.load_custom_model('another-adapter-model.jl')
-<<<<<<< HEAD
     predictions = deployment_model.predict(testX) 
-=======
-    predictions = deployment_model.predict(textX)
->>>>>>> 3b5055d... FIX: missing quote
 
 
 Using Auxiliary Info in Your Models
