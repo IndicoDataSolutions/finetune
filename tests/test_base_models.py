@@ -385,7 +385,7 @@ class TestSequenceLabelerTextCNN(TestModelBase):
         )
 
         reweighted_model = SequenceLabeler(
-            **self.default_config(class_weights={"Named Entity": 10.0})
+            **self.default_config(class_weights={"Named Entity": 100.0})
         )
         reweighted_model.fit(train_texts, train_annotations)
         reweighted_predictions = reweighted_model.predict(test_texts)
