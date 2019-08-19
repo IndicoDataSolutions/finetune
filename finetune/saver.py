@@ -174,12 +174,18 @@ class Saver:
             init_vals = []
             default_init = []
             self.var_val = []
+            print(all_vars)
             for var in all_vars:
                 saved_var = variables_sv.get(var.name, self.fallback.get(var.name, None))
                 if saved_var is not None:
                     for func in self.variable_transforms:
                         saved_var = func(var.name, saved_var)
-                    var_init = var.load(saved_var, session)
+                    print("Success:", var)
+                    if hasattr(var, "_values"):
+                        for v in var._values:
+                            v.load(saved_var, session)
+                    else:
+                        var_init = var.load(saved_var, session)
                         
         return init_fn
 
