@@ -335,6 +335,10 @@ def get_default_config():
         act_fn=None,
         n_embed=None,
 
+        # for TCN SourceModel only
+        n_filter=None,
+        kernel_size=None,
+
         # for TextCNN SourceModel only
         kernel_sizes=None,
         num_filters_per_size=None,
