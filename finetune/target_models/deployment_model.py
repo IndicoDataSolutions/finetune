@@ -159,7 +159,7 @@ class DeploymentModel(BaseModel):
                     ["finetune"], exclude_target=True
                 )  # run arbitrary predict call to compile featurizer graph
             self.featurizer_loaded = True
-        else:
+        elif not self.featurizer_loaded:
             LOGGER.warning(
                 "Delaying featurizer loading until the first call of predict, since auxiliary_info is turned on and the default schema for the information has not yet been supplied."
             )
