@@ -21,6 +21,7 @@ from finetune.target_models.ordinal_regressor import OrdinalRegressor, Compariso
 from finetune.target_models.language_model import LanguageModel
 from finetune.target_models.mtl import MultiTask
 from finetune.target_models.deployment_model import DeploymentModel
+from finetune.target_models.logistic_regression import LogisticRegressionClassifier
 
 __version__, VERSION, version = ("0.8.2",) * 3
 
