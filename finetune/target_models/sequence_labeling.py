@@ -179,12 +179,15 @@ class SequenceLabeler(BaseModel):
         :param chunk_long_sequences: defaults to `True`
         :param **kwargs: key-value pairs of config items to override.
         """
+        super().__init__(**kwargs)
+
         d = copy.deepcopy(SequenceLabeler.defaults)
-        d.update(kwargs)
-        super().__init__(**d)
-        # If our basemodel has a default n_epochs > 5, use that; otherwise, use 5 epochs
-        base_model_epochs = self.config.base_model.settings.get('n_epochs', 0)
-        self.config.n_epochs = max(base_model_epochs, self.defaults['n_epochs'])
+        for key, value in d.items():
+            if key in kwargs:
+                continue
+            elif key == 'n_epochs':
+                value = max(self.defaults['n_epochs'], self.config.n_epochs)
+            setattr(self.config, key, value)
 
     def _get_input_pipeline(self):
         return SequencePipeline(
