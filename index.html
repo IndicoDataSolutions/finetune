@@ -353,12 +353,9 @@ This dramatically shrinks the size of serialized model files.  When used in conj
 
 <span class="c1"># Switching to another model takes only 2 seconds now rather than 20</span>
 <span class="n">deployment_model</span><span class="o">.</span><span class="n">load_custom_model</span><span class="p">(</span><span class="s1">&#39;another-adapter-model.jl&#39;</span><span class="p">)</span>
+<span class="n">predictions</span> <span class="o">=</span> <span class="n">deployment_model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">testX</span><span class="p">)</span>
 </pre></div>
 </div>
-<dl class="docutils">
-<dt>&lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD</dt>
-<dd>predictions = deployment_model.predict(testX)</dd>
-</dl>
 </div>
 <div class="section" id="using-auxiliary-info-in-your-models">
 <h1>Using Auxiliary Info in Your Models<a class="headerlink" href="#using-auxiliary-info-in-your-models" title="Permalink to this headline">¶</a></h1>
