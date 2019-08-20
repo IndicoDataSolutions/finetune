@@ -413,7 +413,7 @@ def sequence_labeler(
                             (logits_individual[pad_id], logits_individual[i]), axis=-1
                         )
                     )
-                    if targets is not None and train and i != pad_id:
+                    if targets is not None and i != pad_id:
                         log_likelihood += crf_log_likelihood(
                             logits[-1],
                             targets_individual[i],
@@ -526,7 +526,7 @@ def association(
         transition_params = tf.get_variable(
             "Transition_matrix", shape=[n_targets, n_targets]
         )
-        if train and targets is not None:
+        if targets is not None:
             log_likelihood, _ = crf_log_likelihood(
                 logits,
                 targets["labels"],
