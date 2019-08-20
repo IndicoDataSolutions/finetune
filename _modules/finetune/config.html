@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>finetune.config &mdash; finetune 0.7.2 documentation</title>
+  <title>finetune.config &mdash; finetune 0.8.0 documentation</title>
   
 
   
@@ -35,7 +35,7 @@
         <link rel="index" title="Index"
               href="../../genindex.html"/>
         <link rel="search" title="Search" href="../../search.html"/>
-    <link rel="top" title="finetune 0.7.2 documentation" href="../../index.html"/>
+    <link rel="top" title="finetune 0.8.0 documentation" href="../../index.html"/>
         <link rel="up" title="Module code" href="../index.html"/> 
 
   
@@ -65,7 +65,7 @@
             
             
               <div class="version">
-                0.7
+                0.8
               </div>
             
           
@@ -166,30 +166,28 @@
 
 <span class="kn">import</span> <span class="nn">finetune</span>
 <span class="kn">from</span> <span class="nn">finetune.errors</span> <span class="k">import</span> <span class="n">FinetuneError</span>
-<span class="kn">from</span> <span class="nn">finetune.base_models</span> <span class="k">import</span> <span class="n">GPTModel</span><span class="p">,</span> <span class="n">GPT2Model</span><span class="p">,</span> <span class="n">BERT</span>
+<span class="kn">from</span> <span class="nn">finetune.base_models</span> <span class="k">import</span> <span class="n">GPTModel</span><span class="p">,</span> <span class="n">GPT2Model</span><span class="p">,</span> <span class="n">BERT</span><span class="p">,</span> <span class="n">TextCNN</span>
 
-<span class="n">LOGGER</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s1">&#39;finetune&#39;</span><span class="p">)</span>
+<span class="n">LOGGER</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">&quot;finetune&quot;</span><span class="p">)</span>
 
 
 <span class="k">def</span> <span class="nf">finetune_model_path</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
     <span class="k">return</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">abspath</span><span class="p">(</span>
-        <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
-            <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">finetune</span><span class="o">.</span><span class="vm">__file__</span><span class="p">),</span>
-            <span class="s1">&#39;model&#39;</span><span class="p">,</span>
-            <span class="n">path</span>
-        <span class="p">)</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">finetune</span><span class="o">.</span><span class="vm">__file__</span><span class="p">),</span> <span class="s2">&quot;model&quot;</span><span class="p">,</span> <span class="n">path</span><span class="p">)</span>
     <span class="p">)</span>
 
 
 <span class="k">def</span> <span class="nf">nvidia_device_ids</span><span class="p">():</span>
-    <span class="n">sp</span> <span class="o">=</span> <span class="n">subprocess</span><span class="o">.</span><span class="n">Popen</span><span class="p">([</span><span class="s1">&#39;nvidia-smi -L&#39;</span><span class="p">],</span> <span class="n">stdout</span><span class="o">=</span><span class="n">subprocess</span><span class="o">.</span><span class="n">PIPE</span><span class="p">,</span> <span class="n">stderr</span><span class="o">=</span><span class="n">subprocess</span><span class="o">.</span><span class="n">PIPE</span><span class="p">,</span> <span class="n">shell</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">sp</span> <span class="o">=</span> <span class="n">subprocess</span><span class="o">.</span><span class="n">Popen</span><span class="p">(</span>
+        <span class="p">[</span><span class="s2">&quot;nvidia-smi -L&quot;</span><span class="p">],</span> <span class="n">stdout</span><span class="o">=</span><span class="n">subprocess</span><span class="o">.</span><span class="n">PIPE</span><span class="p">,</span> <span class="n">stderr</span><span class="o">=</span><span class="n">subprocess</span><span class="o">.</span><span class="n">PIPE</span><span class="p">,</span> <span class="n">shell</span><span class="o">=</span><span class="kc">True</span>
+    <span class="p">)</span>
     <span class="n">response</span> <span class="o">=</span> <span class="n">sp</span><span class="o">.</span><span class="n">communicate</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
-    <span class="n">gpu_list</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
+    <span class="n">gpu_list</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s2">&quot;utf-8&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
     <span class="n">device_ids</span> <span class="o">=</span> <span class="p">{}</span>
     <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">gpu</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">gpu_list</span><span class="p">):</span>
         <span class="c1"># May be worth logging GPU description</span>
-        <span class="n">device_id_str</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">description</span> <span class="o">=</span> <span class="n">gpu</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s1">&#39;:&#39;</span><span class="p">)</span>
-        <span class="k">assert</span> <span class="nb">int</span><span class="p">(</span><span class="n">device_id_str</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39; &#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span> <span class="o">==</span> <span class="n">i</span>
+        <span class="n">device_id_str</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">description</span> <span class="o">=</span> <span class="n">gpu</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s2">&quot;:&quot;</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="nb">int</span><span class="p">(</span><span class="n">device_id_str</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot; &quot;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span> <span class="o">==</span> <span class="n">i</span>
         <span class="n">device_ids</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">description</span>
     <span class="k">return</span> <span class="n">device_ids</span>
 
@@ -215,10 +213,12 @@
             <span class="n">device_ids</span> <span class="o">=</span> <span class="p">{</span>
                 <span class="n">device_id</span><span class="p">:</span> <span class="n">description</span>
                 <span class="k">for</span> <span class="n">device_id</span><span class="p">,</span> <span class="n">description</span> <span class="ow">in</span> <span class="n">device_ids</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
-                <span class="k">if</span> <span class="nb">str</span><span class="p">(</span><span class="n">device_id</span><span class="p">)</span> <span class="ow">in</span> <span class="n">cuda_visible_devices</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;,&#39;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="nb">str</span><span class="p">(</span><span class="n">device_id</span><span class="p">)</span> <span class="ow">in</span> <span class="n">cuda_visible_devices</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;,&quot;</span><span class="p">)</span>
             <span class="p">}</span>
-            <span class="n">mapping</span> <span class="o">=</span> <span class="p">{</span><span class="n">dev_id</span><span class="p">:</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">dev_id</span><span class="p">,</span> <span class="n">_</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">device_ids</span><span class="o">.</span><span class="n">items</span><span class="p">()))}</span>
-            
+            <span class="n">mapping</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="n">dev_id</span><span class="p">:</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">dev_id</span><span class="p">,</span> <span class="n">_</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">device_ids</span><span class="o">.</span><span class="n">items</span><span class="p">()))</span>
+            <span class="p">}</span>
+
         <span class="c1"># restricting GPUs based on config</span>
         <span class="k">if</span> <span class="n">visible_gpus</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">device_ids</span> <span class="o">=</span> <span class="p">{</span>
@@ -227,12 +227,16 @@
                 <span class="k">if</span> <span class="n">device_id</span> <span class="ow">in</span> <span class="n">visible_gpus</span>
             <span class="p">}</span>
 
-        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot; Visible GPUs: {{</span><span class="si">{}</span><span class="s2">}}&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
-            <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span>
-                <span class="s2">&quot;</span><span class="si">{}</span><span class="s2">:</span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">device_id</span><span class="p">,</span> <span class="n">description</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;(&#39;</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
-                <span class="k">for</span> <span class="n">device_id</span><span class="p">,</span> <span class="n">description</span> <span class="ow">in</span> <span class="n">device_ids</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
-            <span class="p">])</span>
-        <span class="p">))</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s2">&quot; Visible GPUs: {{</span><span class="si">{}</span><span class="s2">}}&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+                    <span class="p">[</span>
+                        <span class="s2">&quot;</span><span class="si">{}</span><span class="s2">:</span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">device_id</span><span class="p">,</span> <span class="n">description</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;(&quot;</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+                        <span class="k">for</span> <span class="n">device_id</span><span class="p">,</span> <span class="n">description</span> <span class="ow">in</span> <span class="n">device_ids</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+                    <span class="p">]</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
 
         <span class="k">if</span> <span class="n">mapping</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># Resolve these to internal tensorflow device ids.</span>
@@ -249,6 +253,7 @@
         <span class="n">device_ids</span> <span class="o">=</span> <span class="p">[]</span>
 
     <span class="k">return</span> <span class="n">device_ids</span>
+
 
 <span class="n">GridSearchable</span> <span class="o">=</span> <span class="n">namedtuple</span><span class="p">(</span><span class="s2">&quot;GridSearchable&quot;</span><span class="p">,</span> <span class="s2">&quot;default iterator&quot;</span><span class="p">)</span>
 
@@ -333,7 +338,7 @@
             <span class="bp">self</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
 
     <span class="k">def</span> <span class="nf">__getattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">attr</span><span class="p">):</span>
-        <span class="k">if</span> <span class="n">attr</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;__&#39;</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">attr</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;__&quot;</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">AttributeError</span>
 
         <span class="k">if</span> <span class="n">attr</span> <span class="o">==</span> <span class="s2">&quot;base_model_path&quot;</span><span class="p">:</span>
@@ -357,9 +362,9 @@
 
 <span class="k">def</span> <span class="nf">did_you_mean</span><span class="p">(</span><span class="n">keyword</span><span class="p">,</span> <span class="n">keyword_pool</span><span class="p">):</span>
     <span class="n">candidates</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">keyword_pool</span><span class="p">)</span>
-    <span class="n">closest_match_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argmin</span><span class="p">([</span>
-        <span class="n">edit_distance</span><span class="p">(</span><span class="n">keyword</span><span class="p">,</span> <span class="n">candidate</span><span class="p">)</span> <span class="k">for</span> <span class="n">candidate</span> <span class="ow">in</span> <span class="n">candidates</span>
-    <span class="p">])</span>
+    <span class="n">closest_match_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argmin</span><span class="p">(</span>
+        <span class="p">[</span><span class="n">edit_distance</span><span class="p">(</span><span class="n">keyword</span><span class="p">,</span> <span class="n">candidate</span><span class="p">)</span> <span class="k">for</span> <span class="n">candidate</span> <span class="ow">in</span> <span class="n">candidates</span><span class="p">]</span>
+    <span class="p">)</span>
     <span class="k">return</span> <span class="n">candidates</span><span class="p">[</span><span class="n">closest_match_idx</span><span class="p">]</span>
 
 
@@ -387,16 +392,16 @@
         <span class="n">shuffle_buffer_size</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
         <span class="n">dataset_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">batch_size</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
-        <span class="n">visible_gpus</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="c1"># defaults to all available</span>
+        <span class="n">visible_gpus</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>  <span class="c1"># defaults to all available</span>
         <span class="n">n_epochs</span><span class="o">=</span><span class="n">GridSearchable</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">]),</span>
         <span class="n">seed</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
         <span class="n">max_length</span><span class="o">=</span><span class="mi">512</span><span class="p">,</span>
         <span class="n">weight_stddev</span><span class="o">=</span><span class="mf">0.02</span><span class="p">,</span>
         <span class="n">save_dtype</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">val_set</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">per_process_gpu_memory_fraction</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
-        <span class="n">adapter_size</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="c1">#from Parameter Efficient Transfer Learning paper</span>
-
+        <span class="n">per_process_gpu_memory_fraction</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span>
+        <span class="n">adapter_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>  <span class="c1"># from Parameter Efficient Transfer Learning paper</span>
+        
         <span class="c1"># Regularization</span>
         <span class="n">embed_p_drop</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
         <span class="n">attn_p_drop</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
@@ -404,14 +409,14 @@
         <span class="n">clf_p_drop</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
         <span class="n">l2_reg</span><span class="o">=</span><span class="n">GridSearchable</span><span class="p">(</span><span class="mf">0.01</span><span class="p">,</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.001</span><span class="p">]),</span>
         <span class="n">vector_l2</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-
+        
         <span class="c1"># Early Stopping and Validation</span>
         <span class="n">autosave_path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">keep_best_model</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
         <span class="n">early_stopping_steps</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">min_secs_between_eval</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span>
         <span class="n">eval_acc</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="n">val_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">val_size</span><span class="o">=</span><span class="mf">0.</span><span class="p">,</span>
         <span class="n">val_interval</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
 
         <span class="c1"># Debugging</span>
@@ -435,12 +440,13 @@
         <span class="n">b1</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span>
         <span class="n">b2</span><span class="o">=</span><span class="mf">0.999</span><span class="p">,</span>
         <span class="n">epsilon</span><span class="o">=</span><span class="mf">1e-8</span><span class="p">,</span>
-        <span class="n">lr_schedule</span><span class="o">=</span><span class="s1">&#39;warmup_linear&#39;</span><span class="p">,</span>
+        <span class="n">lr_schedule</span><span class="o">=</span><span class="s2">&quot;warmup_linear&quot;</span><span class="p">,</span>
         <span class="n">lr</span><span class="o">=</span><span class="n">GridSearchable</span><span class="p">(</span><span class="mf">6.25e-5</span><span class="p">,</span> <span class="p">[</span><span class="mf">6.25e-4</span><span class="p">,</span> <span class="mf">6.25e-5</span><span class="p">,</span> <span class="mf">6.25e-6</span><span class="p">]),</span>
         <span class="n">lr_warmup</span><span class="o">=</span><span class="mf">0.002</span><span class="p">,</span>
         <span class="n">max_grad_norm</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
         <span class="n">prefit_init</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
         <span class="n">accum_steps</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">tsa_schedule</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
 
         <span class="c1"># MTL</span>
         <span class="n">tasks</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
@@ -480,10 +486,15 @@
         <span class="c1"># for TextCNN SourceModel only</span>
         <span class="n">kernel_sizes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">num_filters_per_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-        <span class="n">n_embed_featurizer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="c1"># needed because the dimensions CNN output are different from the embedding dimensions</span>
+        <span class="n">n_embed_featurizer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>  <span class="c1"># needed because the dimensions CNN output are different from the embedding dimensions</span>
 
         <span class="c1"># BERT only</span>
-        <span class="n">bert_intermediate_size</span><span class="o">=</span><span class="kc">None</span>
+        <span class="n">bert_intermediate_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">bert_use_pooler</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        
+        <span class="c1"># Auxiliary Information</span>
+        <span class="n">use_auxiliary_info</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">n_context_embed</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="k">return</span> <span class="n">settings</span>
 
@@ -496,7 +507,7 @@
 <span class="sd">    :return: Config object.    &quot;&quot;&quot;</span>
     <span class="n">assert_valid_config</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
     <span class="n">config</span> <span class="o">=</span> <span class="n">get_default_config</span><span class="p">()</span>
-    <span class="n">config</span><span class="o">.</span><span class="n">base_model</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;base_model&#39;</span><span class="p">,</span> <span class="n">config</span><span class="o">.</span><span class="n">base_model</span><span class="p">)</span>
+    <span class="n">config</span><span class="o">.</span><span class="n">base_model</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;base_model&quot;</span><span class="p">,</span> <span class="n">config</span><span class="o">.</span><span class="n">base_model</span><span class="p">)</span>
     <span class="n">config</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">base_model</span><span class="o">.</span><span class="n">settings</span><span class="p">)</span>
     <span class="n">config</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">config</span>
@@ -521,7 +532,7 @@
 
   <div role="contentinfo">
     <p>
-        &copy; Copyright 2018, Madison May, Ben Townsend.
+        &copy; Copyright 2019, Madison May, Ben Townsend, Lily Zhang, Matthew Bayer.
 
     </p>
   </div>
@@ -543,7 +554,7 @@
     <script type="text/javascript">
         var DOCUMENTATION_OPTIONS = {
             URL_ROOT:'../../',
-            VERSION:'0.7.2',
+            VERSION:'0.8.0',
             COLLAPSE_INDEX:false,
             FILE_SUFFIX:'.html',
             HAS_SOURCE:  true,

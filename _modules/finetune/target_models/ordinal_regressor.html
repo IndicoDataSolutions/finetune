@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>finetune.target_models.ordinal_regressor &mdash; finetune 0.7.2 documentation</title>
+  <title>finetune.target_models.ordinal_regressor &mdash; finetune 0.8.0 documentation</title>
   
 
   
@@ -35,7 +35,7 @@
         <link rel="index" title="Index"
               href="../../../genindex.html"/>
         <link rel="search" title="Search" href="../../../search.html"/>
-    <link rel="top" title="finetune 0.7.2 documentation" href="../../../index.html"/>
+    <link rel="top" title="finetune 0.8.0 documentation" href="../../../index.html"/>
         <link rel="up" title="Module code" href="../../index.html"/> 
 
   
@@ -65,7 +65,7 @@
             
             
               <div class="version">
-                0.7
+                0.8
               </div>
             
           
@@ -154,13 +154,15 @@
             
   <h1>Source code for finetune.target_models.ordinal_regressor</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">tensorflow</span> <span class="k">as</span> <span class="nn">tf</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">from</span> <span class="nn">scipy.stats</span> <span class="k">import</span> <span class="n">mode</span>
 
 <span class="kn">from</span> <span class="nn">finetune.base</span> <span class="k">import</span> <span class="n">BaseModel</span>
 <span class="kn">from</span> <span class="nn">finetune.encoding.target_encoders</span> <span class="k">import</span> <span class="n">OrdinalRegressionEncoder</span>
 <span class="kn">from</span> <span class="nn">finetune.nn.target_blocks</span> <span class="k">import</span> <span class="n">ordinal_regressor</span>
 <span class="kn">from</span> <span class="nn">finetune.input_pipeline</span> <span class="k">import</span> <span class="n">BasePipeline</span>
 <span class="kn">from</span> <span class="nn">finetune.target_models.comparison_regressor</span> <span class="k">import</span> <span class="n">ComparisonRegressionPipeline</span>
-
+<span class="kn">from</span> <span class="nn">finetune.target_models.comparison</span> <span class="k">import</span> <span class="n">Comparison</span>
 
 <span class="k">class</span> <span class="nc">OrdinalRegressionPipeline</span><span class="p">(</span><span class="n">BasePipeline</span><span class="p">):</span>
     <span class="k">def</span> <span class="nf">_target_encoder</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -205,7 +207,23 @@
 <span class="sd">        :param X: list or array of text to embed.</span>
 <span class="sd">        :returns: list of class labels.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">X</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span></div>
+        <span class="n">all_labels</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">start_of_doc</span><span class="p">,</span> <span class="n">end_of_doc</span><span class="p">,</span> <span class="n">label</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">process_long_sequence</span><span class="p">(</span><span class="n">X</span><span class="p">):</span>
+            <span class="nb">print</span><span class="p">(</span><span class="n">start_of_doc</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">start_of_doc</span><span class="p">:</span>
+                <span class="c1"># if this is the first chunk in a document, start accumulating from scratch</span>
+                <span class="n">doc_labels</span> <span class="o">=</span> <span class="p">[]</span>
+
+            <span class="n">doc_labels</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">label</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">end_of_doc</span><span class="p">:</span>
+                <span class="c1"># last chunk in a document</span>
+                <span class="c1"># since we are working with discrete boundaries, and have no probabilities to average across, we take the mode                </span>
+                <span class="n">doc_labels</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">doc_labels</span><span class="p">)</span>
+                <span class="n">doc_mode</span> <span class="o">=</span> <span class="n">mode</span><span class="p">(</span><span class="n">doc_labels</span><span class="p">)</span><span class="o">.</span><span class="n">mode</span>
+                <span class="n">label</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">label_encoder</span><span class="o">.</span><span class="n">inverse_transform</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">([</span><span class="n">doc_mode</span><span class="p">]))</span>
+                <span class="n">all_labels</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">label</span><span class="o">.</span><span class="n">tolist</span><span class="p">())</span>
+        <span class="k">return</span> <span class="n">all_labels</span></div>
 
 <div class="viewcode-block" id="OrdinalRegressor.predict_proba"><a class="viewcode-back" href="../../../index.html#finetune.OrdinalRegressor.predict_proba">[docs]</a>    <span class="k">def</span> <span class="nf">predict_proba</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -226,9 +244,11 @@
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">finetune</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="n">Y</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">)</span></div>
 
     <span class="nd">@staticmethod</span>
-    <span class="k">def</span> <span class="nf">_target_model</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">featurizer_state</span><span class="p">,</span> <span class="n">targets</span><span class="p">,</span> <span class="n">n_outputs</span><span class="p">,</span> <span class="n">train</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">reuse</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_target_model</span><span class="p">(</span>
+        <span class="n">config</span><span class="p">,</span> <span class="n">featurizer_state</span><span class="p">,</span> <span class="n">targets</span><span class="p">,</span> <span class="n">n_outputs</span><span class="p">,</span> <span class="n">train</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">reuse</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+    <span class="p">):</span>
         <span class="k">return</span> <span class="n">ordinal_regressor</span><span class="p">(</span>
-            <span class="n">hidden</span><span class="o">=</span><span class="n">featurizer_state</span><span class="p">[</span><span class="s1">&#39;features&#39;</span><span class="p">],</span>
+            <span class="n">hidden</span><span class="o">=</span><span class="n">featurizer_state</span><span class="p">[</span><span class="s2">&quot;features&quot;</span><span class="p">],</span>
             <span class="n">targets</span><span class="o">=</span><span class="n">targets</span><span class="p">,</span>
             <span class="n">n_targets</span><span class="o">=</span><span class="n">n_outputs</span><span class="p">,</span>
             <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span>
@@ -255,15 +275,32 @@
 <span class="sd">    :param \**kwargs: key-value pairs of config items to override.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
+<div class="viewcode-block" id="ComparisonOrdinalRegressor.predict"><a class="viewcode-back" href="../../../index.html#finetune.ComparisonOrdinalRegressor.predict">[docs]</a>    <span class="k">def</span> <span class="nf">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pairs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Produces a floating point prediction determined by the fine-tuned model.</span>
+
+
+<span class="sd">        :param pairs: Array of text, shape [batch, 2]</span>
+<span class="sd">        :returns: list of floats, shape [batch]</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">Comparison</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pairs</span><span class="p">))</span></div>
+
+
     <span class="k">def</span> <span class="nf">_get_input_pipeline</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">ComparisonOrdinalRegressionPipeline</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">)</span>
 
     <span class="nd">@staticmethod</span>
-    <span class="k">def</span> <span class="nf">_target_model</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">featurizer_state</span><span class="p">,</span> <span class="n">targets</span><span class="p">,</span> <span class="n">n_outputs</span><span class="p">,</span> <span class="n">train</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">reuse</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="n">featurizer_state</span><span class="p">[</span><span class="s2">&quot;sequence_features&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">reduce_sum</span><span class="p">(</span><span class="n">featurizer_state</span><span class="p">[</span><span class="s2">&quot;sequence_features&quot;</span><span class="p">],</span> <span class="mi">1</span><span class="p">))</span>
-        <span class="n">featurizer_state</span><span class="p">[</span><span class="s2">&quot;features&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">reduce_sum</span><span class="p">(</span><span class="n">featurizer_state</span><span class="p">[</span><span class="s2">&quot;features&quot;</span><span class="p">],</span> <span class="mi">1</span><span class="p">))</span>
+    <span class="k">def</span> <span class="nf">_target_model</span><span class="p">(</span>
+        <span class="n">config</span><span class="p">,</span> <span class="n">featurizer_state</span><span class="p">,</span> <span class="n">targets</span><span class="p">,</span> <span class="n">n_outputs</span><span class="p">,</span> <span class="n">train</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">reuse</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+    <span class="p">):</span>
+        <span class="n">featurizer_state</span><span class="p">[</span><span class="s2">&quot;sequence_features&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span>
+            <span class="n">tf</span><span class="o">.</span><span class="n">reduce_sum</span><span class="p">(</span><span class="n">featurizer_state</span><span class="p">[</span><span class="s2">&quot;sequence_features&quot;</span><span class="p">],</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">featurizer_state</span><span class="p">[</span><span class="s2">&quot;features&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span>
+            <span class="n">tf</span><span class="o">.</span><span class="n">reduce_sum</span><span class="p">(</span><span class="n">featurizer_state</span><span class="p">[</span><span class="s2">&quot;features&quot;</span><span class="p">],</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="p">)</span>
         <span class="k">return</span> <span class="n">ordinal_regressor</span><span class="p">(</span>
-            <span class="n">hidden</span><span class="o">=</span><span class="n">featurizer_state</span><span class="p">[</span><span class="s1">&#39;features&#39;</span><span class="p">],</span>
+            <span class="n">hidden</span><span class="o">=</span><span class="n">featurizer_state</span><span class="p">[</span><span class="s2">&quot;features&quot;</span><span class="p">],</span>
             <span class="n">targets</span><span class="o">=</span><span class="n">targets</span><span class="p">,</span>
             <span class="n">n_targets</span><span class="o">=</span><span class="n">n_outputs</span><span class="p">,</span>
             <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span>
@@ -287,7 +324,7 @@
 
   <div role="contentinfo">
     <p>
-        &copy; Copyright 2018, Madison May, Ben Townsend.
+        &copy; Copyright 2019, Madison May, Ben Townsend, Lily Zhang, Matthew Bayer.
 
     </p>
   </div>
@@ -309,7 +346,7 @@
     <script type="text/javascript">
         var DOCUMENTATION_OPTIONS = {
             URL_ROOT:'../../../',
-            VERSION:'0.7.2',
+            VERSION:'0.8.0',
             COLLAPSE_INDEX:false,
             FILE_SUFFIX:'.html',
             HAS_SOURCE:  true,

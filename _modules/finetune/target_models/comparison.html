@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>finetune.target_models.comparison &mdash; finetune 0.7.2 documentation</title>
+  <title>finetune.target_models.comparison &mdash; finetune 0.8.0 documentation</title>
   
 
   
@@ -35,7 +35,7 @@
         <link rel="index" title="Index"
               href="../../../genindex.html"/>
         <link rel="search" title="Search" href="../../../search.html"/>
-    <link rel="top" title="finetune 0.7.2 documentation" href="../../../index.html"/>
+    <link rel="top" title="finetune 0.8.0 documentation" href="../../../index.html"/>
         <link rel="up" title="Module code" href="../../index.html"/> 
 
   
@@ -65,7 +65,7 @@
             
             
               <div class="version">
-                0.7
+                0.8
               </div>
             
           
@@ -155,37 +155,50 @@
   <h1>Source code for finetune.target_models.comparison</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 <span class="kn">import</span> <span class="nn">tensorflow</span> <span class="k">as</span> <span class="nn">tf</span>
+<span class="kn">import</span> <span class="nn">copy</span>
 
 <span class="kn">from</span> <span class="nn">finetune.base</span> <span class="k">import</span> <span class="n">BaseModel</span>
 <span class="kn">from</span> <span class="nn">finetune.target_models.classifier</span> <span class="k">import</span> <span class="n">Classifier</span><span class="p">,</span> <span class="n">ClassificationPipeline</span>
 <span class="kn">from</span> <span class="nn">finetune.encoding.input_encoder</span> <span class="k">import</span> <span class="n">ArrayEncodedOutput</span>
 
-<span class="k">class</span> <span class="nc">ComparisonPipeline</span><span class="p">(</span><span class="n">ClassificationPipeline</span><span class="p">):</span>
 
+<span class="k">class</span> <span class="nc">ComparisonPipeline</span><span class="p">(</span><span class="n">ClassificationPipeline</span><span class="p">):</span>
     <span class="k">def</span> <span class="nf">_format_for_encoding</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
         <span class="k">return</span> <span class="p">[</span><span class="n">X</span><span class="p">]</span>
 
-    <span class="k">def</span> <span class="nf">_text_to_ids</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pair</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">pad_token</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_text_to_ids</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pair</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">pad_token</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Format comparison examples as a list of IDs</span>
 
 <span class="sd">        pairs: Array of text, shape [batch, 2]</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">chunk_long_sequences</span> <span class="ow">is</span> <span class="kc">False</span><span class="p">,</span> <span class="s2">&quot;Chunk Long Sequences is not compatible with comparison&quot;</span>
+        <span class="k">assert</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">chunk_long_sequences</span> <span class="ow">is</span> <span class="kc">False</span>
+        <span class="p">),</span> <span class="s2">&quot;Chunk Long Sequences is not compatible with comparison&quot;</span>
         <span class="n">arr_forward</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_text_to_ids</span><span class="p">(</span><span class="n">pair</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="kc">None</span><span class="p">))</span>
         <span class="n">reversed_pair</span> <span class="o">=</span> <span class="n">pair</span><span class="p">[::</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
         <span class="n">arr_backward</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_text_to_ids</span><span class="p">(</span><span class="n">reversed_pair</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="kc">None</span><span class="p">))</span>
         <span class="n">kwargs</span> <span class="o">=</span> <span class="n">arr_forward</span><span class="o">.</span><span class="n">_asdict</span><span class="p">()</span>
-        <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;tokens&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">arr_forward</span><span class="o">.</span><span class="n">tokens</span><span class="p">,</span> <span class="n">arr_backward</span><span class="o">.</span><span class="n">tokens</span><span class="p">]</span>
-        <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;token_ids&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">arr_forward</span><span class="o">.</span><span class="n">token_ids</span><span class="p">,</span> <span class="n">arr_backward</span><span class="o">.</span><span class="n">token_ids</span><span class="p">],</span> <span class="mi">0</span><span class="p">)</span>
-        <span class="n">kwargs</span><span class="p">[</span><span class="s1">&#39;mask&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">arr_forward</span><span class="o">.</span><span class="n">mask</span><span class="p">,</span> <span class="n">arr_backward</span><span class="o">.</span><span class="n">mask</span><span class="p">],</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;tokens&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">arr_forward</span><span class="o">.</span><span class="n">tokens</span><span class="p">,</span> <span class="n">arr_backward</span><span class="o">.</span><span class="n">tokens</span><span class="p">]</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;token_ids&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">arr_forward</span><span class="o">.</span><span class="n">token_ids</span><span class="p">,</span> <span class="n">arr_backward</span><span class="o">.</span><span class="n">token_ids</span><span class="p">],</span> <span class="mi">0</span>
+        <span class="p">)</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;mask&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">arr_forward</span><span class="o">.</span><span class="n">mask</span><span class="p">,</span> <span class="n">arr_backward</span><span class="o">.</span><span class="n">mask</span><span class="p">],</span> <span class="mi">0</span><span class="p">)</span>
         <span class="k">yield</span> <span class="n">ArrayEncodedOutput</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">feed_shape_type_def</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">TS</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">TensorShape</span>
-        <span class="k">return</span> <span class="p">({</span><span class="s2">&quot;tokens&quot;</span><span class="p">:</span> <span class="n">tf</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span> <span class="s2">&quot;mask&quot;</span><span class="p">:</span> <span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">},</span> <span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span> <span class="p">(</span>
-            <span class="p">{</span><span class="s2">&quot;tokens&quot;</span><span class="p">:</span> <span class="n">TS</span><span class="p">([</span><span class="mi">2</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span><span class="p">,</span> <span class="mi">2</span><span class="p">]),</span> <span class="s2">&quot;mask&quot;</span><span class="p">:</span> <span class="n">TS</span><span class="p">([</span><span class="kc">None</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span><span class="p">])},</span>
-            <span class="n">TS</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">target_dim</span><span class="p">]))</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="p">({</span><span class="s2">&quot;tokens&quot;</span><span class="p">:</span> <span class="n">tf</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span> <span class="s2">&quot;mask&quot;</span><span class="p">:</span> <span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">},</span> <span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>
+            <span class="p">(</span>
+                <span class="p">{</span>
+                    <span class="s2">&quot;tokens&quot;</span><span class="p">:</span> <span class="n">TS</span><span class="p">([</span><span class="mi">2</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span><span class="p">,</span> <span class="mi">2</span><span class="p">]),</span>
+                    <span class="s2">&quot;mask&quot;</span><span class="p">:</span> <span class="n">TS</span><span class="p">([</span><span class="kc">None</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span><span class="p">]),</span>
+                <span class="p">},</span>
+                <span class="n">TS</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">target_dim</span><span class="p">]),</span>
+            <span class="p">),</span>
+        <span class="p">)</span>
+
 
 <div class="viewcode-block" id="Comparison"><a class="viewcode-back" href="../../../index.html#finetune.Comparison">[docs]</a><span class="k">class</span> <span class="nc">Comparison</span><span class="p">(</span><span class="n">Classifier</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
@@ -195,15 +208,47 @@
 <span class="sd">    :param \**kwargs: key-value pairs of config items to override.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
+    <span class="n">defaults</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;chunk_long_sequences&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">}</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="n">d</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">Comparison</span><span class="o">.</span><span class="n">defaults</span><span class="p">)</span>
+        <span class="n">d</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">**</span><span class="n">d</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">chunk_long_sequences</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">FinetuneError</span><span class="p">(</span>
+                <span class="s2">&quot;Multifield model is incompatible with chunk_long_sequences = True in config.&quot;</span>
+            <span class="p">)</span>
+
     <span class="k">def</span> <span class="nf">_get_input_pipeline</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">ComparisonPipeline</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">)</span>
 
     <span class="nd">@staticmethod</span>
-    <span class="k">def</span> <span class="nf">_target_model</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">featurizer_state</span><span class="p">,</span> <span class="n">targets</span><span class="p">,</span> <span class="n">n_outputs</span><span class="p">,</span> <span class="n">train</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">reuse</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_target_model</span><span class="p">(</span>
+        <span class="n">config</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">featurizer_state</span><span class="p">,</span>
+        <span class="n">targets</span><span class="p">,</span>
+        <span class="n">n_outputs</span><span class="p">,</span>
+        <span class="n">train</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">reuse</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span>
+    <span class="p">):</span>
         <span class="n">featurizer_state</span> <span class="o">=</span> <span class="n">featurizer_state</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
-        <span class="n">featurizer_state</span><span class="p">[</span><span class="s2">&quot;sequence_features&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">reduce_sum</span><span class="p">(</span><span class="n">featurizer_state</span><span class="p">[</span><span class="s2">&quot;sequence_features&quot;</span><span class="p">],</span> <span class="mi">1</span><span class="p">))</span>
-        <span class="n">featurizer_state</span><span class="p">[</span><span class="s2">&quot;features&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">reduce_sum</span><span class="p">(</span><span class="n">featurizer_state</span><span class="p">[</span><span class="s2">&quot;features&quot;</span><span class="p">],</span> <span class="mi">1</span><span class="p">))</span>
-        <span class="k">return</span> <span class="n">Classifier</span><span class="o">.</span><span class="n">_target_model</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">featurizer_state</span><span class="o">=</span><span class="n">featurizer_state</span><span class="p">,</span> <span class="n">targets</span><span class="o">=</span><span class="n">targets</span><span class="p">,</span> <span class="n">n_outputs</span><span class="o">=</span><span class="n">n_outputs</span><span class="p">,</span> <span class="n">train</span><span class="o">=</span><span class="n">train</span><span class="p">,</span> <span class="n">reuse</span><span class="o">=</span><span class="n">reuse</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">featurizer_state</span><span class="p">[</span><span class="s2">&quot;sequence_features&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span>
+            <span class="n">tf</span><span class="o">.</span><span class="n">reduce_sum</span><span class="p">(</span><span class="n">featurizer_state</span><span class="p">[</span><span class="s2">&quot;sequence_features&quot;</span><span class="p">],</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">featurizer_state</span><span class="p">[</span><span class="s2">&quot;features&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span>
+            <span class="n">tf</span><span class="o">.</span><span class="n">reduce_sum</span><span class="p">(</span><span class="n">featurizer_state</span><span class="p">[</span><span class="s2">&quot;features&quot;</span><span class="p">],</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">Classifier</span><span class="o">.</span><span class="n">_target_model</span><span class="p">(</span>
+            <span class="n">config</span><span class="p">,</span>
+            <span class="n">featurizer_state</span><span class="o">=</span><span class="n">featurizer_state</span><span class="p">,</span>
+            <span class="n">targets</span><span class="o">=</span><span class="n">targets</span><span class="p">,</span>
+            <span class="n">n_outputs</span><span class="o">=</span><span class="n">n_outputs</span><span class="p">,</span>
+            <span class="n">train</span><span class="o">=</span><span class="n">train</span><span class="p">,</span>
+            <span class="n">reuse</span><span class="o">=</span><span class="n">reuse</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span>
+        <span class="p">)</span>
 
 <div class="viewcode-block" id="Comparison.predict"><a class="viewcode-back" href="../../../index.html#finetune.Comparison.predict">[docs]</a>    <span class="k">def</span> <span class="nf">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pairs</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -247,7 +292,7 @@
 
   <div role="contentinfo">
     <p>
-        &copy; Copyright 2018, Madison May, Ben Townsend.
+        &copy; Copyright 2019, Madison May, Ben Townsend, Lily Zhang, Matthew Bayer.
 
     </p>
   </div>
@@ -269,7 +314,7 @@
     <script type="text/javascript">
         var DOCUMENTATION_OPTIONS = {
             URL_ROOT:'../../../',
-            VERSION:'0.7.2',
+            VERSION:'0.8.0',
             COLLAPSE_INDEX:false,
             FILE_SUFFIX:'.html',
             HAS_SOURCE:  true,
