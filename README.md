@@ -2,30 +2,67 @@
 
 **Scikit-learn style model finetuning for NLP**
 
-`Finetune` ships with pre-trained language models
-from ["Improving Language Understanding by Generative Pre-Training"](https://s3-us-west-2.amazonaws.com/openai-assets/research-covers/language-unsupervised/language_understanding_paper.pdf) (GPT),
-["Language Models are Unsupervised Multitask Learners"](https://d4mucfpksywv.cloudfront.net/better-language-models/language-models.pdf) (GPT-2), and ["BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding"](https://arxiv.org/abs/1810.04805) (BERT). Base model code has been adapted from the [GPT](https://github.com/openai/finetune-transformer-lm), [GPT-2](https://github.com/openai/gpt-2), and [BERT](https://github.com/google-research/bert) github repos.
+Finetune is a library that allows users to leverage state-of-the-art pretrained NLP models for a wide variety of downstream tasks.
+
+Finetune currently supports TensorFlow implementations of the following models:
+
+    (TODO: add links/descriptions)
+    1. BERT ["BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding"](https://arxiv.org/abs/1810.04805)
+    2. RoBERTa, from ["RoBERTa: A Robustly Optimized BERT Pretraining Approach"](https://arxiv.org/abs/1907.11692)
+    3. GPT, from ["Improving Language Understanding by Generative Pre-Training"](https://s3-us-west-2.amazonaws.com/openai-assets/research-covers/language-unsupervised/language_understanding_paper.pdf)
+    4. GPT2, from ["Language Models are Unsupervised Multitask Learners"](https://d4mucfpksywv.cloudfront.net/better-language-models/language-models.pdf)
+    5. TextCNN, from ["Convolutional Neural Networks for Sentence Classification"](https://arxiv.org/abs/1408.5882)
+    6. Temporal Convolution Network, from ["An Empirical Evaluation of Generic Convolutional and Recurrent Networks for Sequence Modeling"](https://arxiv.org/pdf/1803.01271.pdf)
 
 Huge thanks to Alec Radford and Jeff Wu for their hard work and quality research.
 
-Finetune Quickstart Guide
-=========================
+| Section | Description |
+|-|-|
+| [API Tour](#finetune-api-tour) | Base models, configurables, and more |
+| [Installation](#installation-tour) | How to install using pip or directly from source |
+| [Finetune with Docker](#docker) | Finetune and inference within a Docker Container |
+| [Documentation](https://https://finetune.indico.io/) | Full API documentation |
+
+#Finetune API Tour
 
 Finetuning the base language model is as easy as calling `Classifier.fit`:
 
 ```python3
 model = Classifier()               # Load base model
 model.fit(trainX, trainY)          # Finetune base model on custom data
-predictions = model.predict(testX) # [{'class_1': 0.23, 'class_2': 0.54, ..}, ..]
 model.save(path)                   # Serialize the model to disk
+...
+model = Classifier.load(path)      # Reload models from disk at any time
+predictions = model.predict(testX) # [{'class_1': 0.23, 'class_2': 0.54, ..}, ..]
 ```
 
-Reload saved models from disk by using `Classifier.load`:
+Choose your desired base model from `finetune.base_models`:
+```python3
+from finetune.base_models import BERT, RoBERTa, GPT, GPT2, TextCNN, TCN
+model = Classifier(base_model=BERT)
+```
 
+TODO: Make config description doc/ add link
+Optimize your model with a variety of configurables. A detailed list of all config items can be found HERE.
+```python3
+model = Classifier(low_memory_mode=True, lr_schedule="warmup_linear", max_length=512, l2_reg=0.01, oversample=True...)
 ```
-model = Classifier.load(path)
-predictions = model.predict(testX)
+
+TODO: Make target model description doc/ add link
+The library supports finetuning for a number of tasks. A detailed description of all target models can be found HERE.
+```python3
+from finetune import *
+models = (Classifier, MultiLabelClassifier, MultiFieldClassifier, MultipleChoice, # Classify one or more inputs into one or more classes
+          Regressor, OrdinalRegressor, MultifieldRegressor,                       # Regress on one or more inputs
+          SequenceLabeler, Association,                                           # Extract tokens from a given class, or infer relationships between them
+          Comparison, ComparisonRegressor, ComparisonOrdinalRegressor,            # Compare two documents for a given task
+          LanguageModel, MultiTask,                                               # Further pretrain your base models
+          DeploymentModel                                                         # Wrapper to optimize your serialized models for a production environment
+          )
 ```
+For example usage of each of these target types, see the [finetune/datasets directory](https://github.com/IndicoDataSolutions/finetune/tree/master/finetune/datasets).
+For purposes of simplicity and runtime these examples use smaller versions of the published datasets.
+
 
 If you have large amounts of unlabeled training data and only a small amount of labeled training data,
 you can finetune in two steps for best performance.
@@ -38,13 +75,8 @@ predictions = model.predict(testX) # [{'class_1': 0.23, 'class_2': 0.54, ..}, ..
 model.save(path)                   # Serialize the model to disk
 ```
 
-Documentation
-=============
-Full documentation and an API Reference for `finetune` is available at [finetune.indico.io](https://finetune.indico.io).
+#Installation
 
-
-Installation
-============
 Finetune can be installed directly from PyPI by using `pip`
 
 ```
@@ -70,8 +102,7 @@ pytest
 ```
 
 
-Docker
-=======
+#Docker
 
 If you'd prefer you can also run `finetune` in a docker container. The bash scripts provided assume you have a functional install of [docker](https://docs.docker.com/install/) and [nvidia-docker](https://github.com/nvidia/nvidia-docker/wiki/Installation-(version-2.0)).
 
@@ -91,22 +122,6 @@ For CPU-only usage:
 ./docker/start_cpu_docker.sh
 ```
 
+#Documentation
+Full documentation and an API Reference for `finetune` is available at [finetune.indico.io](https://finetune.indico.io).
 
-Model Types
-============
-`finetune` ships with a half dozen different classes for finetuning the base language model on different task types.
-
-- `Classifier`
-- `Regressor`
-- `SequenceLabeler`
-- `MultiFieldClassifier`
-- `MultiFieldRegressor`
-- `MultiLabelClassifier`
-- `Comparison`
-- `ComparisonRegressor`
-- `OrdinalRegressor`
-- `ComparisonOrdinalRegressor`
-- `MultiTask`
-
-For example usage of each of these model types, see the [finetune/datasets directory](https://github.com/IndicoDataSolutions/finetune/tree/master/finetune/datasets).
-For purposes of simplicity and runtime these examples use smaller versions of the published datasets.
