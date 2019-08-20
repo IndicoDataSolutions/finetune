@@ -425,7 +425,7 @@ def sequence_labeler(
                 transition_params = tf.get_variable(
                     "Transition_matrix", shape=[n_targets, n_targets]
                 )
-                if train and targets is not None:
+                if targets is not None:
                     log_likelihood, _ = crf_log_likelihood(
                         logits, targets, pool_idx, transition_params=transition_params
                     )
