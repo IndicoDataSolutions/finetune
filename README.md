@@ -6,13 +6,13 @@ Finetune is a library that allows users to leverage state-of-the-art pretrained 
 
 Finetune currently supports TensorFlow implementations of the following models:
 
-    (TODO: add links/descriptions)
-    1. BERT ["BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding"](https://arxiv.org/abs/1810.04805)
-    2. RoBERTa, from ["RoBERTa: A Robustly Optimized BERT Pretraining Approach"](https://arxiv.org/abs/1907.11692)
-    3. GPT, from ["Improving Language Understanding by Generative Pre-Training"](https://s3-us-west-2.amazonaws.com/openai-assets/research-covers/language-unsupervised/language_understanding_paper.pdf)
-    4. GPT2, from ["Language Models are Unsupervised Multitask Learners"](https://d4mucfpksywv.cloudfront.net/better-language-models/language-models.pdf)
-    5. TextCNN, from ["Convolutional Neural Networks for Sentence Classification"](https://arxiv.org/abs/1408.5882)
-    6. Temporal Convolution Network, from ["An Empirical Evaluation of Generic Convolutional and Recurrent Networks for Sequence Modeling"](https://arxiv.org/pdf/1803.01271.pdf)
+1. BERT ["BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding"](https://arxiv.org/abs/1810.04805)
+2. RoBERTa, from ["RoBERTa: A Robustly Optimized BERT Pretraining Approach"](https://arxiv.org/abs/1907.11692)
+3. GPT, from ["Improving Language Understanding by Generative Pre-Training"](https://s3-us-west-2.amazonaws.com/openai-assets/research-covers/language-unsupervised/language_understanding_paper.pdf)
+4. GPT2, from ["Language Models are Unsupervised Multitask Learners"](https://d4mucfpksywv.cloudfront.net/better-language-models/language-models.pdf)
+5. TextCNN, from ["Convolutional Neural Networks for Sentence Classification"](https://arxiv.org/abs/1408.5882)
+6. Temporal Convolution Network, from ["An Empirical Evaluation of Generic Convolutional and Recurrent Networks for Sequence Modeling"](https://arxiv.org/pdf/1803.01271.pdf)
+
 
 Huge thanks to Alec Radford and Jeff Wu for their hard work and quality research.
 
@@ -23,7 +23,7 @@ Huge thanks to Alec Radford and Jeff Wu for their hard work and quality research
 | [Finetune with Docker](#docker) | Finetune and inference within a Docker Container |
 | [Documentation](https://https://finetune.indico.io/) | Full API documentation |
 
-#Finetune API Tour
+# Finetune API Tour
 
 Finetuning the base language model is as easy as calling `Classifier.fit`:
 
@@ -75,7 +75,7 @@ predictions = model.predict(testX) # [{'class_1': 0.23, 'class_2': 0.54, ..}, ..
 model.save(path)                   # Serialize the model to disk
 ```
 
-#Installation
+# Installation
 
 Finetune can be installed directly from PyPI by using `pip`
 
@@ -102,7 +102,7 @@ pytest
 ```
 
 
-#Docker
+# Docker
 
 If you'd prefer you can also run `finetune` in a docker container. The bash scripts provided assume you have a functional install of [docker](https://docs.docker.com/install/) and [nvidia-docker](https://github.com/nvidia/nvidia-docker/wiki/Installation-(version-2.0)).
 
@@ -122,6 +122,6 @@ For CPU-only usage:
 ./docker/start_cpu_docker.sh
 ```
 
-#Documentation
+# Documentation
 Full documentation and an API Reference for `finetune` is available at [finetune.indico.io](https://finetune.indico.io).
 
