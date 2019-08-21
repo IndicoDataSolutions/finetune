@@ -6,12 +6,12 @@ Finetune is a library that allows users to leverage state-of-the-art pretrained 
 
 Finetune currently supports TensorFlow implementations of the following models:
 
-1. BERT ["BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding"](https://arxiv.org/abs/1810.04805)
-2. RoBERTa, from ["RoBERTa: A Robustly Optimized BERT Pretraining Approach"](https://arxiv.org/abs/1907.11692)
-3. GPT, from ["Improving Language Understanding by Generative Pre-Training"](https://s3-us-west-2.amazonaws.com/openai-assets/research-covers/language-unsupervised/language_understanding_paper.pdf)
-4. GPT2, from ["Language Models are Unsupervised Multitask Learners"](https://d4mucfpksywv.cloudfront.net/better-language-models/language-models.pdf)
-5. TextCNN, from ["Convolutional Neural Networks for Sentence Classification"](https://arxiv.org/abs/1408.5882)
-6. Temporal Convolution Network, from ["An Empirical Evaluation of Generic Convolutional and Recurrent Networks for Sequence Modeling"](https://arxiv.org/pdf/1803.01271.pdf)
+1. **BERT**, from ["BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding"](https://arxiv.org/abs/1810.04805)
+2. **RoBERTa**, from ["RoBERTa: A Robustly Optimized BERT Pretraining Approach"](https://arxiv.org/abs/1907.11692)
+3. **GPT**, from ["Improving Language Understanding by Generative Pre-Training"](https://s3-us-west-2.amazonaws.com/openai-assets/research-covers/language-unsupervised/language_understanding_paper.pdf)
+4. **GPT2**, from ["Language Models are Unsupervised Multitask Learners"](https://d4mucfpksywv.cloudfront.net/better-language-models/language-models.pdf)
+5. **TextCNN**, from ["Convolutional Neural Networks for Sentence Classification"](https://arxiv.org/abs/1408.5882)
+6. **Temporal Convolution Network**, from ["An Empirical Evaluation of Generic Convolutional and Recurrent Networks for Sequence Modeling"](https://arxiv.org/pdf/1803.01271.pdf)
 
 
 Huge thanks to Alec Radford and Jeff Wu for their hard work and quality research.
@@ -21,7 +21,8 @@ Huge thanks to Alec Radford and Jeff Wu for their hard work and quality research
 | [API Tour](#finetune-api-tour) | Base models, configurables, and more |
 | [Installation](#installation-tour) | How to install using pip or directly from source |
 | [Finetune with Docker](#docker) | Finetune and inference within a Docker Container |
-| [Documentation](https://https://finetune.indico.io/) | Full API documentation |
+| [Using Adapters](#docker) | Finetune and inference within a Docker Container |
+| [Documentation](https://finetune.indico.io/) | Full API documentation |
 
 # Finetune API Tour
 
@@ -42,13 +43,11 @@ from finetune.base_models import BERT, RoBERTa, GPT, GPT2, TextCNN, TCN
 model = Classifier(base_model=BERT)
 ```
 
-TODO: Make config description doc/ add link
 Optimize your model with a variety of configurables. A detailed list of all config items can be found HERE.
 ```python3
-model = Classifier(low_memory_mode=True, lr_schedule="warmup_linear", max_length=512, l2_reg=0.01, oversample=True...)
+model = Classifier(low_memory_mode=True, lr_schedule="warmup_linear", max_length=512, l2_reg=0.01, oversample=True, ...)
 ```
 
-TODO: Make target model description doc/ add link
 The library supports finetuning for a number of tasks. A detailed description of all target models can be found HERE.
 ```python3
 from finetune import *
@@ -62,6 +61,10 @@ models = (Classifier, MultiLabelClassifier, MultiFieldClassifier, MultipleChoice
 ```
 For example usage of each of these target types, see the [finetune/datasets directory](https://github.com/IndicoDataSolutions/finetune/tree/master/finetune/datasets).
 For purposes of simplicity and runtime these examples use smaller versions of the published datasets.
+
+
+
+
 
 
 If you have large amounts of unlabeled training data and only a small amount of labeled training data,
