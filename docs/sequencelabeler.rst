@@ -1,5 +1,5 @@
-Using the SequenceLabeler Class
-===============================
+SequenceLabeler Class
+=====================
 
 One of the dozen tasks our base models support is sequence labeling, where you label certain spans of text within a document rather than classifying the entire example. Labels for training
 the SequenceLabeler are in the following format, as a list of lists of dictionaries:

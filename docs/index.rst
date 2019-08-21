@@ -29,6 +29,7 @@ Source code for :mod:`finetune` is available `on github <https://github.com/Indi
     datasetloading
     serializing
     config
+    resource
 
 .. toctree::
     :maxdepth: 2
