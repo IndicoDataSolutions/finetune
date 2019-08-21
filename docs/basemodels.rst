@@ -10,5 +10,5 @@ Finetune defaults to using OpenAI's GPT base model, but also supports other base
     # RoBERTa has provided state-of-the-art results on a variety of natural language tasks, as of late 2019
     model = Classifier(base_model=RoBERTa)
 
-    # TextCNN and TCN are much faster convolutional models, at the expensive of downstream task performances
+    # TextCNN and TCN are much faster convolutional models, at the expense of downstream task performance
     fast_model = Classifier(base_model=TextCNN)

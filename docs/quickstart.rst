@@ -7,7 +7,8 @@ Finetuning the base language model is as easy as calling :meth:`Classifier.fit`:
 
     model = Classifier()               # Load base model
     model.fit(trainX, trainY)          # Finetune base model on custom data
-    predictions = model.predict(testX) # [{'class_1': 0.23, 'class_2': 0.54, ..}, ..]
+    predictions= model.predict(testX)  # ['class_2', 'class_1', 'class_3'...]
+    probs = model.predict_proba(testX) # [{'class_1': 0.23, 'class_2': 0.54, ..}, ..]
     model.save(path)                   # Serialize the model to disk
 
 Reload saved models from disk by using :meth:`Classifier.load`:
