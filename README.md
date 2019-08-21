@@ -21,7 +21,6 @@ Huge thanks to Alec Radford and Jeff Wu for their hard work and quality research
 | [API Tour](#finetune-api-tour) | Base models, configurables, and more |
 | [Installation](#installation-tour) | How to install using pip or directly from source |
 | [Finetune with Docker](#docker) | Finetune and inference within a Docker Container |
-| [Using Adapters](#docker) | Finetune and inference within a Docker Container |
 | [Documentation](https://finetune.indico.io/) | Full API documentation |
 
 # Finetune API Tour
