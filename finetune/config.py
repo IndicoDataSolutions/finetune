@@ -107,10 +107,11 @@ class Settings(dict):
     """
     Model configuration options
 
+    :param base_model: Which base model to use - one of {GPT, GPT2, RoBERTa, BERT, TextCNN, TCN}, imported from finetune.base_models. Defaults to `GPT`.
     :param batch_size: Number of examples per batch, defaults to `2`.
     :param visible_gpus: List of integer GPU ids to spread out computation across, defaults to all available GPUs.
     :param n_epochs: Number of iterations through training data, defaults to `3`.
-    :param random_seed: Random seed to use for repeatability purposes, defaults to `42`.
+    :param seed: Random seed to use for repeatability purposes, defaults to `42`.
     :param max_length:  Maximum number of subtokens per sequence. Examples longer than this number will be truncated
         (unless `chunk_long_sequences=True` for SequenceLabeler models). Defaults to `512`.
     :param weight_stddev: Standard deviation of initial weights.  Defaults to `0.02`.
@@ -134,11 +135,13 @@ class Settings(dict):
     :param lr: Learning rate.  Defaults to `6.25e-5`.
     :param lr_warmup: Learning rate warmup (percentage of all batches to warmup for).  Defaults to `0.002`.
     :param max_grad_norm: Clip gradients larger than this norm. Defaults to `1.0`.
+    :param shuffle_buffer_size: How many examples to load into a buffer before shuffling. Defaults to `100`.
     :param accum_steps: Number of updates to accumulate before applying. This is used to simulate a higher batch size.
     :param lm_loss_coef: Language modeling loss coefficient -- a value between `0.0` - `1.0`
         that indicates how to trade off between language modeling loss
         and target model loss.  Usually not beneficial to turn on unless
         dataset size exceeds a few thousand examples.  Defaults to `0.0`.
+    :param tsa_schedule: Training Signal Annealing Schedule from 'Unsupervised Data Augmentation for Consistency Training'. One of {"linear_schedule", "exp_schedule", "log_schedule"}.  Defaults to `None`.
     :param summarize_grads: Include gradient summary information in tensorboard.  Defaults to `False`.
     :param val_size: Validation set size if int. Validation set size as percentage of all training data if float.  Validation will not be run by default if n_examples < 50.
         If n_examples > 50, defaults to max(5, min(100, 0.05 * n_examples))
@@ -147,6 +150,8 @@ class Settings(dict):
     :param lm_temp: Language model temperature -- a value of `0.0` corresponds to greedy maximum likelihood predictions
         while a value of `1.0` corresponds to random predictions. Defaults to `0.2`.
     :param seq_num_heads: Number of attention heads of final attention layer. Defaults to `16`.
+    :param keep_best_model: Whether or not to keep the highest-performing model weights throughout the train. Defaults to `False`.
+    :param early_stopping_steps: How many steps to continue with no loss improvement before early stopping. Defaults to `None`.
     :param subtoken_predictions: Return predictions at subtoken granularity or token granularity?  Defaults to `False`.
     :param multi_label_sequences: Use a multi-labeling approach to sequence labeling to allow overlapping labels.
     :param multi_label_threshold: Threshold of sigmoid unit in multi label classifier.
@@ -157,7 +162,7 @@ class Settings(dict):
     :param log_device_placement: Log which device each operation is placed on for debugging purposes.  Defaults to `False`.
     :param allow_soft_placement: Allow tf to allocate an operation to a different device if a device is unavailable.  Defaults to `True`.
     :param save_adam_vars: Save adam parameters when calling `model.save()`.  Defaults to `True`.
-    :param num_layers_trained: How many layers to finetune.  Specifying a value less than 12 will train layers starting from model output. Defaults to `12`.
+    :param num_layers_trained: How many layers to finetune.  Specifying a value less than model's number of layers will train layers starting from model output. Defaults to `12`.
     :param train_embeddings: Should embedding layer be finetuned? Defaults to `True`.
     :param class_weights: One of 'log', 'linear', or 'sqrt'. Auto-scales gradient updates based on class frequency.  Can also be a dictionary that maps from true class name to loss coefficient. Defaults to `None`.
     :param oversample: Should rare classes be oversampled?  Defaults to `False`.
@@ -171,6 +176,7 @@ class Settings(dict):
     :param val_set: Where it is neccessary to use an explicit validation set, provide it here as a tuple (text, labels)
     :param per_process_gpu_memory_fraction: fraction of the overall amount of memory that each visible GPU should be allocated, defaults to `1.0`.
     :param adapter_size: width of adapter module from 'Parameter Efficient Transfer Learning' paper, if defined. defaults to 'None'.
+    :param n_context_embed: Dimensionality of auxiliary info embeddings. Only use if passing 'default_context' to the model as well. Defaults to `6` for convolutional models, otherwise `32`.
     """
 
     def get_grid_searchable(self):
