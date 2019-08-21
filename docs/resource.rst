@@ -18,7 +18,11 @@ especially under certain training conditions. Here are some tips to to help diag
 * If you have a very large dataset, ensure that you are not loading the entire file into memory; instead, pass it to a Finetune model with a generator.
 
 .. code-block:: python
-    very_low_memory_model = Classifier(base_model=TextCNN, low_memory_mode=True, batch_size=2, max_length=128)
+
+    very_low_memory_model = Classifier(base_model=TextCNN,
+                                       low_memory_mode=True,
+                                       batch_size=2, 
+                                       max_length=128)
 
 **Model Throughput**
 
@@ -30,4 +34,6 @@ For the transformer-based language models, training and inference are very compu
 * Keep in mind that model prediction is much faster than training, so your deployed model will be able to handle many more examples/sec once it is deployed.
 
 .. code-block:: python
-    very_fast_model = Classifier(base_model=TextCNN, max_length=128)
+
+    very_fast_model = Classifier(base_model=TextCNN,
+                                 max_length=128)
