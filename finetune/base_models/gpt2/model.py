@@ -50,3 +50,26 @@ class GPT2Model345(SourceModel):
         }
         for filename in ['encoder.json', 'vocab.bpe', 'model-med.jl']
     ]
+
+
+class GPT2Model762(SourceModel):
+    is_bidirectional = False
+    encoder = GPT2Encoder
+    featurizer = gpt2_featurizer
+    settings = {
+        'n_embed': 1280,
+        'n_heads': 20,
+        'n_layer': 36,
+        'num_layers_trained': 36,
+        'l2_reg': 0.001,
+        'act_fn': "gelu",
+        'interpolate_pos_embed': False,
+        'base_model_path':  os.path.join("gpt2", "model-lg.jl")
+    }
+    required_files = [
+        {
+            'file': os.path.join(FINETUNE_BASE_FOLDER, 'model', 'gpt2', filename),
+            'url': urljoin(GPT2_BASE_URL, filename)
+        }
+        for filename in ['encoder.json', 'vocab.bpe', 'model-lg.jl']
+    ]
