@@ -1,3 +1,5 @@
+.. adapter:
+
 Using Adapters and the DeploymentModel class
 ============================================
 
