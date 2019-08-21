@@ -1,12 +1,13 @@
-Using Auxiliary Info in Your Models
-===================================
+Using Auxiliary Info
+====================
 
 Our base models can also process arbitrary auxiliary information in addition to text, such as style (bolding, italics, etc.), semantics (part-of-speech tags, sentiment tags), or other forms,
 as long as they describe specific spans of text.
 
 .. code-block:: python
 
-    # First we define the extra features we will be providing, as well as a default value that it will take if given data does not cover the text.
+    # First we define the extra features we will be providing, through a dictionary.
+    # We do this by defining values and the defaults that tokens will receive if they are not explicitly labeled.
     # Auxiliary info can take the form of strings, booleans, floats, or ints.
     default = {'capitalized':False, 'part_of_speech':'unknown'}
     
@@ -17,9 +18,12 @@ as long as they describe specific spans of text.
         {'text': 'process automation', 'capitalized': False, 'end': 30, 'start': 12, 'part_of_speech': 'NOUN'}, 
     ]]
 
-    # Our input to the model is now a list containing the text, and then the context
+    # Our input to the model is now a list containing the text, and the context
     trainX = [train_text, train_context]
 
-    # We indicate to the model that we are including auxiliary info by passing our default dictionary in with the kwarg default_context.
+    # Examples with no context must have an empty list as their context
+    assert len(train_text) == len(train_context)
+
+    # We indicate to the model that we are including auxiliary info by passing our default dictionary in with the default_context kwarg.
     model = Classifier(default_context=default)
     model.fit(trainX, trainY)
