@@ -13,6 +13,7 @@ class TCNModel(SourceModel):
     encoder = GPT2Encoder
     featurizer = tcn_featurizer
     settings = {
+        "n_epochs": 5,
         "n_embed_featurizer": 768,
         "n_layer": 3,
         "num_layers_trained": 3,
@@ -21,7 +22,7 @@ class TCNModel(SourceModel):
         "seq_num_heads": 10,
         "kernel_size": 5,
         "act_fn": "gelu",
-        "train_embeddings": True,
+        "train_embeddings": False,
         "lr": 0.001,
         "base_model_path": os.path.join("gpt2", "model-sm.jl"),
         "n_context_embed": 10

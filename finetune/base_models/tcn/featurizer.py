@@ -14,7 +14,7 @@ def tcn_featurizer(
     **kwargs
 ):
     """
-    The transformer element of the finetuning model. Maps from tokens ids to a dense, embedding of the sequence.
+    The featurizer element of the finetuning model. Maps from tokens ids to a dense embedding of the sequence.
 
     :param X: A tensor of token indexes with shape [batch_size, sequence_length, token_idx]
     :param encoder: A TextEncoder object.
@@ -69,7 +69,7 @@ def tcn_featurizer(
                     dilation_rate=dilation_rate,
                     activation=tf.nn.relu,
                     kernel_initializer=tf.initializers.glorot_normal,
-                    name="conv1_" + str(layer_num),
+                    name="conv2_" + str(layer_num),
                 )
                 self.downsample = tf.keras.layers.Conv1D(filters=n_filters, kernel_size=1, padding="same")
 
