@@ -2,7 +2,7 @@ Dataset Loading
 ===============
 
 Finetune supports providing input data as a list or as a data generator.  When a generator is provided as input, finetune
-takes advantage of the :mod:`tf.data` module for data pipelining
+takes advantage of the :mod:`tf.data` module for data pipelining.
 
 
 Providing text and targets in list format:

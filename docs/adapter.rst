@@ -4,7 +4,7 @@ Using Adapters and the DeploymentModel class
 ============================================
 
 Alongside full finetuning, :mod:`finetune` also supports the adapter finetuning strategy from `"Parameter-Efficient Transfer Learning for NLP" <https://arxiv.org/abs/1902.00751>`_.
-This dramatically shrinks the size of serialized model files.  When used in conjunction with the :class:`DeploymentModel` class at inference time, this enables quickly switching between target models.
+This dramatically shrinks the size of serialized model files to ~30mb.  When used in conjunction with the :class:`DeploymentModel` class at inference time, this enables quickly switching between target models.
 
 .. code-block:: python
 
