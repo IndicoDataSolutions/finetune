@@ -16,6 +16,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelBinarizer
 import finetune
 from finetune.errors import FinetuneError
+from finetune.util.positional_embeddings import embedding_preprocessor
 from finetune.encoding.input_encoder import ArrayEncodedOutput, EncodedOutput
 from finetune.util.imbalance import compute_class_weights
 
@@ -371,7 +372,6 @@ class BasePipeline(metaclass=ABCMeta):
 
         if not callable(Y) and train:
             dataset_encoded_list = list(dataset_encoded())
-            class_counts = self._compute_class_counts(dataset_encoded_list)
             self.config.dataset_size = len(dataset_encoded_list)
             if self.config.class_weights is not None:
                 self.config.class_weights = compute_class_weights(
@@ -587,6 +587,25 @@ class BasePipeline(metaclass=ABCMeta):
 
             Xs_tr, Y_tr = self.resampling(Xs_tr, Y_tr)
             self.config.dataset_size = len(Xs_tr)
+
+            # dynamically adjust max_length for less memory/compute usage on datasets with consistently short inputs - set to the smallest power of two that is larger than the longest sequence.
+            # long sequences are already chunked into shorter sequences by this point, but it doesn't matter - if anything was chunked, we wouldn't want to shorten max_length anyway
+            tokens = [self.text_encoder.encode_multi_input(
+                self._format_for_encoding(x),
+                Y=None,
+                max_length=sys.maxsize,
+                pad_token=(self.config.pad_token),
+            )
+                for x in Xs[:10000]]
+            # add 2 to lengths for special tokens
+            lengths = [len(example.tokens) for example in tokens]
+            longest = int(max(lengths))
+            next_power_of_two = 2 ** math.ceil(math.log2(longest))
+            self.config.max_length = min(next_power_of_two, self.config.max_length)
+
+            # we may have shortened max length after examining data - need to update the config in our embedding processor
+            self.saver.variable_transforms[0] = embedding_preprocessor(self, self.config)
+
             val_dataset_unbatched = self._make_dataset(Xs_va, Y_va, C_va, train=False)
             train_dataset_unbatched = self._make_dataset(Xs_tr, Y_tr, C_tr, train=True)
 

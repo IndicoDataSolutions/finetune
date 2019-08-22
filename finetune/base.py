@@ -126,6 +126,7 @@ class BaseModel(object, metaclass=ABCMeta):
             ],
             save_dtype=self.config.save_dtype,
         )
+        self.input_pipeline.saver = self.saver
 
     @abstractmethod
     def _predict_op(self, logits, **kwargs):
