@@ -1,21 +1,18 @@
 import os
 from concurrent.futures import ThreadPoolExecutor
-import itertools
 import logging
 import sys
 
 import joblib
 import numpy as np
 import tensorflow as tf
-from tensorflow.python.training import distribution_strategy_context
-from tensorflow.contrib.estimator.python.estimator.early_stopping import (
-    _StopOnPredicateHook,
-    _get_or_create_stop_var,
-)
+from tensorflow.contrib.estimator.python.estimator.early_stopping import _StopOnPredicateHook
 
-from finetune.util.estimator import PatchedParameterServerStrategy
+
 from finetune.errors import FinetuneError
 from finetune.config import get_config
+from finetune.util.metrics import read_eval_metrics
+
 
 LOGGER = logging.getLogger("finetune")
 
@@ -46,7 +43,7 @@ class SaverHook(_StopOnPredicateHook):
     def stop_if_no_metric_improvement_fn(self):
         if not self.keep_best_model:
             return False
-        eval_results = tf.contrib.estimator.read_eval_metrics(self.estimator.eval_dir())
+        eval_results = read_eval_metrics(self.estimator.eval_dir())
         if len(eval_results) == 0:
             return False
         most_recent_eval = max(eval_results.items(), key=lambda x: x[0])  # last steps.
@@ -208,6 +205,14 @@ class Saver:
         return finetune_obj
 
     def get_scaffold_init_fn(self):
+
+        def load_fn(var, val, sess):
+            if hasattr(var, "_values"):
+                for v in var._values:
+                    v.load(val, sess)
+            else:
+                var.load(val, sess)
+
         def init_fn(scaffold, session, model_portion=None, refresh_base_model=False):
             self.var_val = []
             if self.variables is not None:
@@ -232,9 +237,9 @@ class Saver:
                 if saved_var is not None:
                     for func in self.variable_transforms:
                         saved_var = func(name, saved_var)
-                    var.load(saved_var, session)
+                    load_fn(var, saved_var, session)
                 if zero_out_adapters and "adapter" in name:
-                    var.load(np.zeros(var.get_shape().as_list()), session)
+                    load_fn(var, np.zeros(var.get_shape().as_list()), session)
 
         return init_fn
 
