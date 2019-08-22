@@ -295,8 +295,8 @@ class BaseModel(object, metaclass=ABCMeta):
         else:
             resolved_gpus = all_gpus()
 
-        resolved_gpus = ['/gpu:{}'.format(gpu) for gpu in resolved_gpus]
-        distribute_strategy = tf.distribute.experimental.CentralStorageStrategy(resolved_gpus or None)
+        resolved_gpus_string = ['/gpu:{}'.format(gpu) for gpu in resolved_gpus]
+        distribute_strategy = tf.distribute.experimental.CentralStorageStrategy(resolved_gpus_string or None)
         self.resolved_gpus = resolved_gpus
         return distribute_strategy
 
