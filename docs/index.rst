@@ -37,6 +37,7 @@ Source code for :mod:`finetune` is available `on github <https://github.com/Indi
 
     api
     cachedpredict
+    chunk
     sequencelabeler
     adapter
     auxiliary
