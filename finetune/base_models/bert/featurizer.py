@@ -66,7 +66,7 @@ def bert_featurizer(
         axis=1,
     )
 
-    if config.base_model.__name__ == "RoBERTa":
+    if "roberta" in config.base_model.__name__.lower():
         # Because roberta embeddings include an unused <MASK> token, and our embedding layer size needs to accommodate for that.
         bert_config.vocab_size += 1
         # In our use case (padding token has index 1), roberta's position indexes begin at 2, so our positions embeddings come from indices 2:514.
@@ -89,7 +89,7 @@ def bert_featurizer(
             use_one_hot_embeddings=False,
             scope=None,
             use_pooler=config.bert_use_pooler,
-            roberta=config.base_model.__name__ == "RoBERTa",
+            roberta="roberta" in config.base_model.__name__.lower()
         )
 
         embed_weights = bert.get_embedding_table()

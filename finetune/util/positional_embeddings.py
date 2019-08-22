@@ -46,7 +46,7 @@ def embedding_preprocessor(input_pipeline, config):
 
         elif "position_embeddings" in name:
             length = config.max_length
-            if config.base_model.__name__ == "RoBERTa":
+            if "roberta" in config.base_model.__name__.lower():
                 length += 2
             value = process_pos_embed(value, length, config.interpolate_pos_embed)
 
