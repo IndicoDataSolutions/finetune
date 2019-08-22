@@ -32,7 +32,6 @@ from finetune.saver import Saver, InitializeHook
 from finetune.errors import FinetuneError
 from finetune.model import get_model_fn, PredictMode
 from finetune.util.download import download_data_if_required
-from finetune.util.estimator import PatchedParameterServerStrategy
 from finetune.util.positional_embeddings import embedding_preprocessor
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
 from finetune.base_models import GPTModel, GPTModelSmall
@@ -296,17 +295,8 @@ class BaseModel(object, metaclass=ABCMeta):
         else:
             resolved_gpus = all_gpus()
 
-        num_gpus = len(resolved_gpus)
-        if num_gpus > 1:
-            distribute_strategy = PatchedParameterServerStrategy(
-                visible_gpus=resolved_gpus
-            )
-        elif num_gpus == 1:
-            gpu = resolved_gpus[0]
-            distribute_strategy = OneDeviceStrategy(device="/gpu:{}".format(gpu))
-        else:
-            distribute_strategy = OneDeviceStrategy(device="/cpu:0")
-
+        resolved_gpus = ['/gpu:{}'.format(gpu) for gpu in resolved_gpus]
+        distribute_strategy = tf.distribute.experimental.CentralStorageStrategy(resolved_gpus or None)
         self.resolved_gpus = resolved_gpus
         return distribute_strategy
 

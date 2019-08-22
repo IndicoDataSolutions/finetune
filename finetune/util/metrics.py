@@ -1,9 +1,14 @@
+import os
 from collections import defaultdict
 
-from sklearn.metrics import accuracy_score, recall_score, precision_score
 import numpy as np
 
+from tensorflow.python.platform import gfile
+from tensorflow.python.summary import summary_iterator
+
 from finetune.encoding.input_encoder import NLP
+
+_EVENT_FILE_GLOB_PATTERN = 'events.out.tfevents.*'
 
 
 def _convert_to_token_list(annotations, doc_idx=None):
@@ -231,3 +236,19 @@ def annotation_report(y_true, y_pred, labels=None, target_names=None, sample_wei
     averages = [np.average(seq, weights=counts) for seq in seqs[:-1]] + [np.sum(seqs[-1])]
     report += row_fmt.format(last_line_heading, *averages, width=width, digits=digits)
     return report
+
+
+def read_eval_metrics(eval_dir):
+    eval_metrics_dict = defaultdict(dict)
+    if gfile.Exists(eval_dir):
+        for event_file in gfile.Glob(os.path.join(eval_dir, _EVENT_FILE_GLOB_PATTERN)):
+            for event in summary_iterator.summary_iterator(event_file):
+                if not event.HasField('summary'):
+                    continue
+                metrics = {}
+                for value in event.summary.value:
+                    if value.HasField('simple_value'):
+                        metrics[value.tag] = value.simple_value
+                if metrics:
+                    eval_metrics_dict[event.step].update(metrics)
+    return eval_metrics_dict
