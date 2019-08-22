@@ -29,8 +29,8 @@ setup(
     version="0.8.1",
     install_requires=REQUIREMENTS,
     extras_require={
-        "tf": ["tensorflow==1.13.1"],
-        "tf_gpu": ["tensorflow-gpu==1.13.1"],
+        "tf": ["tensorflow==1.14.0"],
+        "tf_gpu": ["tensorflow-gpu==1.14.0"],
     },
     include_package_data=False
 )
