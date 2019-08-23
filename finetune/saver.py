@@ -146,8 +146,10 @@ class BatchedVarLoad:
         else:
             underlying_vars = [var]
         for v in underlying_vars:
-            self.ops.append(v.initializer)
+            if v.initializer not in self.ops:
+                self.ops.append(v.initializer)
             self.feed[var.initializer.inputs[1]] = val
+
 
 class Saver:
     def __init__(
@@ -250,12 +252,13 @@ class Saver:
                     saved_var = variables_sv[name]
                 elif name in self.fallback.keys():
                     saved_var = self.fallback[name]
-                if saved_var is not None:
+
+                if zero_out_adapters and "adapter" in name:
+                    var_loader.add(var, np.zeros(var.get_shape().as_list()))
+                elif saved_var is not None:
                     for func in self.variable_transforms:
                         saved_var = func(name, saved_var)
                     var_loader.add(var, saved_var)
-                if zero_out_adapters and "adapter" in name:
-                    var_loader.add(var, np.zeros(var.get_shape().as_list()))
             var_loader.run(session)
         return init_fn
 
