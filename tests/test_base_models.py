@@ -222,7 +222,6 @@ class TestClassifierTextCNN(TestModelBase):
         """
         save_file = "tests/saved-models/test-save-load"
         save_file_fp16 = "tests/saved-models/test-save-load_fp16"
-        # TODO: figure out if we need to worry that some predictions are changing when saving in fp16
 
         config = self.default_config(save_adam_vars=False)
         model = Classifier(**config)
@@ -240,7 +239,7 @@ class TestClassifierTextCNN(TestModelBase):
         model.save(save_file_fp16)
         self.assertLess(os.stat(save_file_fp16).st_size, 260000000)
 
-        model = Classifier.load(save_file)
+        model = Classifier.load(save_file_fp16)
         new_predictions = model.predict(valid_sample.Text)
         for i, prediction in enumerate(predictions):
             self.assertEqual(prediction, new_predictions[i])
