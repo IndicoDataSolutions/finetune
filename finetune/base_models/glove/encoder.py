@@ -22,13 +22,15 @@ class GLOVEEncoder(BaseEncoder):
         # Load encoder
         with open(self.encoder_path, "r") as f:
             self.encoder = json.load(f)
-
-        self.special_tokens = ["<UNK>"]
-        self.start = 0
-        self.delimiter = 0
-        self.clf_token = 0
+        self.special_tokens = ["_start_", "_classify_"]
         for token in self.special_tokens:
             self.encoder[token] = len(self.encoder)
+
+        self.decoder = {v: k for k, v in self.encoder.items()}
+        self.start = self.encoder["_start_"]
+        self.clf_token = self.encoder["_classify_"]
+        self.encoder['<UNK>'] = 0
+
         self.UNK_IDX = 0
         self.initialized = True
     
@@ -70,9 +72,9 @@ class GLOVEEncoder(BaseEncoder):
                 token_start = [token.idx]
                 token_end = [token.idx + len(token)]
                 token_id = [self.encoder.get(token.text, self.UNK_IDX)]
-                token_idxs.extend(token_id)
                 token_text = [token.text]
 
+                token_idxs.extend(token_id)
                 token_texts.extend(token_text)
                 token_char_starts = token_start + token_end[:-1]
                 char_ends.extend(token_end)
@@ -85,8 +87,6 @@ class GLOVEEncoder(BaseEncoder):
             if labels is not None:
                 batch_label_idxs.append([label] * len(token_texts))
 
-        print(batch_label_idxs)
-        print(batch_tokens)
         return EncodedOutput(
             token_ids=batch_token_idxs,
             tokens=batch_tokens,
@@ -95,3 +95,10 @@ class GLOVEEncoder(BaseEncoder):
             char_locs=batch_char_ends,
             char_starts=batch_char_starts,
         )
+
+    def decode(self, ids):
+        """
+        Convert a batch of ids [batch_size, id] into text(ish).
+        """
+
+        return " ".join([self.decoder.get(word_idx, "<unk>") for word_idx in ids])
