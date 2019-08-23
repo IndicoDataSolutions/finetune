@@ -126,6 +126,29 @@ class InitializeHook(tf.train.SessionRunHook):
             self.refresh_base_model = False
 
 
+class BatchedVarLoad:
+    """
+    Basic idea pulled from variable.load. Possible this will change in 2.X so worth tracking what
+    that fn changes too and mirror it here.
+    """
+    def __init__(self):
+        self.ops = []
+        self.feed = dict()
+
+    def run(self, session):
+        session.run(self.ops, feed_dict=self.feed)
+        self.ops = []
+        self.feed = dict()
+
+    def add(self, var, val):
+        if hasattr(var, "_values"):
+            underlying_vars = var._values
+        else:
+            underlying_vars = [var]
+        for v in underlying_vars:
+            self.ops.append(v.initializer)
+            self.feed[var.initializer.inputs[1]] = val
+
 class Saver:
     def __init__(
         self,
@@ -205,15 +228,8 @@ class Saver:
         return finetune_obj
 
     def get_scaffold_init_fn(self):
-
-        def load_fn(var, val, sess):
-            if hasattr(var, "_values"):
-                for v in var._values:
-                    v.load(val, sess)
-            else:
-                var.load(val, sess)
-
         def init_fn(scaffold, session, model_portion=None, refresh_base_model=False):
+            var_loader = BatchedVarLoad()
             self.var_val = []
             if self.variables is not None:
                 variables_sv = self.variables
@@ -235,12 +251,13 @@ class Saver:
                 elif name in self.fallback.keys():
                     saved_var = self.fallback[name]
                 if saved_var is not None:
+                    print("saved var found", name)
                     for func in self.variable_transforms:
                         saved_var = func(name, saved_var)
-                    load_fn(var, saved_var, session)
+                    var_loader.add(var, saved_var)
                 if zero_out_adapters and "adapter" in name:
-                    load_fn(var, np.zeros(var.get_shape().as_list()), session)
-
+                    var_loader.add(var, np.zeros(var.get_shape().as_list()))
+            var_loader.run(session)
         return init_fn
 
     def subset_to_load(self, model_portion, refresh_base_model, all_vars):
