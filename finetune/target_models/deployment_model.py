@@ -15,7 +15,9 @@ from finetune.target_models.comparison import ComparisonPipeline, Comparison
 from finetune.target_models.sequence_labeling import SequencePipeline, SequenceLabeler
 from finetune.target_models.association import AssociationPipeline
 from finetune.target_models.classifier import ClassificationPipeline
-from finetune.base_models import GPTModel, GPTModelSmall, BERTModelCased, GPT2Model
+from finetune.base_models.bert.featurizer import bert_featurizer
+from finetune.base_models.gpt.featurizer import gpt_featurizer
+from finetune.base_models.gpt2.featurizer import gpt2_featurizer
 from finetune.model import get_separate_model_fns, PredictMode
 from finetune.errors import FinetuneError
 from finetune.input_pipeline import BasePipeline
@@ -127,7 +129,7 @@ class DeploymentModel(BaseModel):
         :param base_model: One of the base models from finetune.base_models, excluding textcnn.
         :param **kwargs: key-value pairs of config items to override.
         """
-        if featurizer not in [GPTModel, GPTModelSmall, BERTModelCased, GPT2Model]:
+        if featurizer.featurizer not in [gpt2_featurizer, gpt_featurizer, bert_featurizer]:
             raise FinetuneError("Selected base model not supported.")
         self.config = get_config(**kwargs)
         self.validate_config()
