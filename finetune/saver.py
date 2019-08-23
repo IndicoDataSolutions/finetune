@@ -251,7 +251,6 @@ class Saver:
                 elif name in self.fallback.keys():
                     saved_var = self.fallback[name]
                 if saved_var is not None:
-                    print("saved var found", name)
                     for func in self.variable_transforms:
                         saved_var = func(name, saved_var)
                     var_loader.add(var, saved_var)
