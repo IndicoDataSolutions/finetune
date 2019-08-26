@@ -350,23 +350,6 @@ class TestClassifier(unittest.TestCase):
     @pytest.mark.skipif(
         SKIP_LM_TESTS, reason="Bidirectional models do not yet support LM functions"
     )
-    def test_language_model(self):
-        """
-        Ensure saving + loading does not cause errors
-        Ensure saving + loading does not change predictions
-        """
-        model = Classifier()
-        lm_out = model.generate_text("", max_length=5)
-        self.assertEqual(type(lm_out), str)
-        lm_out_2 = model.generate_text("Indico RULE").lower()
-        self.assertEqual(type(lm_out_2), str)
-        start_id = model.input_pipeline.text_encoder.start
-        start_token = model.input_pipeline.text_encoder.decoder[start_id]
-        self.assertIn("{}Indico RULE".format(start_token).lower(), lm_out_2.lower())
-
-    @pytest.mark.skipif(
-        SKIP_LM_TESTS, reason="Bidirectional models do not yet support LM functions"
-    )
     def test_save_load_language_model(self):
         """
         Ensure saving + loading does not cause errors
@@ -374,17 +357,24 @@ class TestClassifier(unittest.TestCase):
         """
         save_file = "tests/saved-models/test-save-load"
         model = Classifier()
+
+        lm_out = model.generate_text("The quick brown fox", 6)
+        start_id = model.input_pipeline.text_encoder.start
+        start_token = model.input_pipeline.text_encoder.decoder[start_id]
+        self.assertNotIn(start_token, lm_out) # Non finetuned models do not use extra tokens
+        
         train_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text, train_sample.Target)
         lm_out = model.generate_text("", 5)
+        self.assertIn(start_token, lm_out.lower())
         self.assertEqual(type(lm_out), str)
         model.save(save_file)
+
         model = Classifier.load(save_file)
         lm_out_2 = model.generate_text("Indico RULE")
         self.assertEqual(type(lm_out_2), str)
-        start_id = model.input_pipeline.text_encoder.start
-        start_token = model.input_pipeline.text_encoder.decoder[start_id]
-        self.assertIn("{}Indico RULE".format(start_token).lower(), lm_out_2.lower())
+        
+        self.assertIn("{}Indico RULE".format(start_token).lower(), lm_out_2.lower()) # Both of these models use extra toks
 
     @pytest.mark.skipif(
         SKIP_LM_TESTS, reason="Bidirectional models do not yet support LM functions"
@@ -403,7 +393,7 @@ class TestClassifier(unittest.TestCase):
         )
         start_id = model.input_pipeline.text_encoder.start
         start_token = model.input_pipeline.text_encoder.decoder[start_id]
-        lm_out = model.generate_text()
+        lm_out = model.generate_text(use_extra_toks=True)
         self.assertEqual(lm_out, "{}_classify_".format(start_token))
 
     def test_validation(self):

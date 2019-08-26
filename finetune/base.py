@@ -596,7 +596,7 @@ class BaseModel(object, metaclass=ABCMeta):
         :return: A string containing the generated text.
         """
         if use_extra_toks is None:
-            use_extra_tokens = self._trained
+            use_extra_toks = self._trained
     
         def dataset_encoded():
             while not dataset_encoded.finished:
@@ -611,12 +611,12 @@ class BaseModel(object, metaclass=ABCMeta):
 
         self.config.use_extra_toks = use_extra_toks
         encoded = self.input_pipeline.text_encoder._encode([seed_text])
-        if encoded == [] and not use_extra_toks:
+        if encoded.token_ids == [] and not use_extra_toks:
             raise ValueError(
                 "If you are not using the extra tokens, you must provide some non-empty seed text"
             )
         start = [self.input_pipeline.text_encoder.start] if use_extra_toks else []
-        token_ids = start
+        token_ids = start 
         if encoded.token_ids is not None and len(encoded.token_ids):
             token_ids += encoded.token_ids[0]
         encoded = EncodedOutput(token_ids=token_ids)
@@ -647,7 +647,7 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         Leave serialization of all tf objects to tf
         """
-        required_fields = ["_load_from_file", "config", "input_pipeline", "default_context"]
+        required_fields = ["_load_from_file", "config", "input_pipeline", "default_context", "_trained"]
         serialized_state = {
             k: v for k, v in self.__dict__.items() if k in required_fields
         }
