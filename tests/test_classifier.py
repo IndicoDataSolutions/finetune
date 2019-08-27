@@ -322,14 +322,22 @@ class TestClassifier(unittest.TestCase):
         """
         Ensure model converges to a reasonable solution for a trivial problem
         """
-        model = Classifier(**self.default_config())
-        n_per_class = self.n_sample * 4
-        trX = ["cat"] * n_per_class + ["finance"] * n_per_class
-        trY = copy(trX)
-        teX = ["feline"] + ["investment"]
+        model = Classifier(**self.default_config(n_epochs=5))
+        
+        n_duplicates = 5
+
+        trX = (
+            ["cat", "kitten", "feline", "meow", "kitty"] * n_duplicates + 
+            ["finance", "investment", "investing", "dividends", "financial"] * n_duplicates
+        )
+        trY = (
+            ['cat'] * (len(trX) // 2) + ['finance'] * (len(trX) // 2)
+        )
+        teX = ["furball", "fiduciary"]
         teY = ["cat"] + ["finance"]
         model.fit(trX, trY)
         predY = model.predict(teX)
+        print(predY)
         self.assertEqual(accuracy_score(teY, predY), 1.00)
 
     def test_reasonable_predictions_smaller_model(self):
