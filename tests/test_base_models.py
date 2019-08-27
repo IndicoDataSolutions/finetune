@@ -505,7 +505,7 @@ class TestDeploymentBert(TestDeploymentModel):
     base_model = BERTModelCased
 
 
-class TestDeploymentGPT(TestDepl#oymentModel):
+class TestDeploymentGPT(TestDeploymentModel):
     base_model = GPTModel
 
 
