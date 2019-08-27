@@ -22,7 +22,7 @@ from sklearn.metrics import accuracy_score, recall_score
 from sklearn.model_selection import train_test_split
 
 from finetune import Classifier, SequenceLabeler
-from finetune.base_models import GPT
+from finetune.base_models import TextCNN, BERTModelCased, GPT2Model, GPTModel, RoBERTa, GPT
 from finetune.config import get_config
 from finetune.util.metrics import (
     sequence_labeling_token_precision,
@@ -169,3 +169,18 @@ class TestAuxiliary(unittest.TestCase):
         for i, prediction in enumerate(predictions):
             self.assertEqual(prediction, new_predictions[i])
     
+class TestAuxiliaryBert(TestAuxiliary):
+    base_model = BERTModelCased
+
+
+class TestAuxiliaryGPT(TestAuxiliary):
+    base_model = GPTModel
+
+
+class TestAuxiliaryGPT2(TestAuxiliary):
+    base_model = GPT2Model
+
+
+class TestAuxiliaryRoberta(TestAuxiliary):
+    base_model = RoBERTa
+                                

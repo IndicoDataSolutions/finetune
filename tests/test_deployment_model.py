@@ -286,7 +286,6 @@ class TestDeploymentModel(unittest.TestCase):
         model.predict(large_dataset)
         model.close()
 
-
     def test_fast_switch(self):
         """
         Ensure model can load/reload weights and predict in reasonable time
@@ -306,6 +305,6 @@ class TestDeploymentModel(unittest.TestCase):
             start = time.time()
             model.load_custom_model(self.comparison_regressor_path)
             predictions = model.predict([['finetune', 'compare']])
-            model.close()
             end = time.time()
             self.assertGreater(2.5, end - start)
+        model.close()

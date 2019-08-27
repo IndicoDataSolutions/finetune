@@ -477,4 +477,3 @@ class DeploymentModel(BaseModel):
         cls, Xs, Y, *, n_splits, test_size, eval_fn, probs, return_all, **kwargs
     ):
         raise NotImplementedError
-
