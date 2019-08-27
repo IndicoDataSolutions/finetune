@@ -402,9 +402,9 @@ class BasePipeline(metaclass=ABCMeta):
             dataset_encoded, types[0], shapes[0]
         )  # 0s cut out the targets
 
-    def _integer_val_size(self, val_size):
+    def _integer_val_size(self, val_size, dataset_size):
         if isinstance(val_size, float):
-            return int(val_size * self.config.dataset_size)
+            return int(val_size * dataset_size)
         return val_size
 
     def validation_settings(self, n_examples, batch_size):
@@ -413,7 +413,7 @@ class BasePipeline(metaclass=ABCMeta):
         """
         if self.config.val_size is not None and self.config.val_interval is not None:
             return (
-                self._integer_val_size(self.config.val_size),
+                self._integer_val_size(self.config.val_size, n_examples),
                 self.config.val_interval,
             )
 
@@ -425,7 +425,7 @@ class BasePipeline(metaclass=ABCMeta):
                 val_size = max(5, int(0.05 * n_examples))
                 val_size = min(100, val_size)
         else:
-            val_size = self._integer_val_size(self.config.val_size)
+            val_size = self._integer_val_size(self.config.val_size, n_examples)
 
         # Auto-select reasonable validation interval
         if self.config.val_interval is None:

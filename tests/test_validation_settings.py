@@ -11,9 +11,10 @@ class TestValidationSettings(unittest.TestCase):
         """
         model = Classifier()
 
-
         val_size, val_interval = model.input_pipeline.validation_settings(n_examples=30, batch_size=4)
         self.assertEqual(val_size, 0)
+
+        model = Classifier(val_size=0.05)
 
         val_size, val_interval = model.input_pipeline.validation_settings(n_examples=80, batch_size=4)
         self.assertEqual(val_size, 5)

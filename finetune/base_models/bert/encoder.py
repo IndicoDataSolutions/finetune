@@ -89,7 +89,6 @@ class BERTEncoder(BaseEncoder):
                 )
                 batch_context.extend(text_context)
                 offset += batch_char_ends[i][-1]
-
         return EncodedOutput(
             token_ids=batch_token_idxs,
             tokens=batch_tokens,

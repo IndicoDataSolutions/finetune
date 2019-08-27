@@ -22,7 +22,6 @@ from bs4.element import Tag
 
 from finetune.base_models import TextCNN, BERTModelCased, GPT2Model, GPTModel, RoBERTa
 from .test_deployment_model import TestDeploymentModel
-from .test_auxiliary import TestAuxiliary
 from finetune import Classifier, Comparison, SequenceLabeler
 from finetune.datasets import generic_download
 from finetune.config import get_config
@@ -506,27 +505,14 @@ class TestDeploymentBert(TestDeploymentModel):
     base_model = BERTModelCased
 
 
-class TestDeploymentGPT(TestDeploymentModel):
+class TestDeploymentGPT(TestDepl#oymentModel):
     base_model = GPTModel
 
 
 class TestDeploymentGPT2(TestDeploymentModel):
     base_model = GPT2Model
 
+
 class TestDeploymentRoberta(TestDeploymentModel):
     base_model = RoBERTa
 
-class TestAuxiliaryBert(TestAuxiliary):
-    base_model = BERTModelCased
-
-
-class TestAuxiliaryGPT(TestAuxiliary):
-    base_model = GPTModel
-
-
-class TestAuxiliaryGPT2(TestAuxiliary):
-    base_model = GPT2Model
-    
-
-class TestAuxiliaryRoberta(TestAuxiliary):
-    base_model = RoBERTa
