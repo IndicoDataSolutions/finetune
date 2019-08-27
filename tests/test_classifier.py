@@ -323,7 +323,7 @@ class TestClassifier(unittest.TestCase):
         Ensure model converges to a reasonable solution for a trivial problem
         """
         model = Classifier(**self.default_config())
-        n_per_class = self.n_sample * 5
+        n_per_class = self.n_sample * 4
         trX = ["cat"] * n_per_class + ["finance"] * n_per_class
         trY = copy(trX)
         teX = ["feline"] + ["investment"]
