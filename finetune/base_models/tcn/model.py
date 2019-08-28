@@ -22,7 +22,7 @@ class TCNModel(SourceModel):
         "n_embed": 3,
         "val_size": "auto",
         "keep_best_model": True,
-        "early_stopping_steps": 1,
+        "early_stopping_steps": 100,
         "kernel_size": 5,
         "train_embeddings": False,
         "lr": 0.1,
