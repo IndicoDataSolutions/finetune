@@ -42,6 +42,7 @@ class SaverHook(_StopOnPredicateHook):
         self.estimator = estimator
 
     def stop_if_no_metric_improvement_fn(self):
+        print("check triggered")
         if not self.keep_best_model:
             return False
         eval_results = read_eval_metrics(self.estimator.eval_dir())
@@ -72,6 +73,7 @@ class SaverHook(_StopOnPredicateHook):
     def after_run(self, run_context, run_values):
         super().after_run(run_context, run_values)
         if self.get_current_weights:
+            print("Best model found")
             self.saver.variables = dict(
                 zip(
                     (var.name for var in self.included),
@@ -239,6 +241,7 @@ class Saver:
             else:
                 variables_sv = dict()
             all_vars = tf.global_variables()
+            print(all_vars)
             zero_out_adapters = False
             if (
                 model_portion != "entire_model"

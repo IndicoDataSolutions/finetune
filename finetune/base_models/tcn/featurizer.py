@@ -50,35 +50,36 @@ def tcn_featurizer(
         clf_token = encoder["_classify_"]
         
         class TemporalBlock:
-            def __init__(self, n_filters, kernel_size, dilation_rate, rate, scope, layer_num):
-                with tf.variable_scope(scope):
-                    self.rate = rate
-                    self.n_filters = n_filters
-                    self.conv1 = tf.keras.layers.Conv1D(
-                        filters=n_filters,
-                        kernel_size=kernel_size,
-                        padding="same",
-                        activation=tf.nn.relu,
-                        dilation_rate=dilation_rate,
-                        kernel_initializer=tf.initializers.glorot_normal,
-                        name="conv1_" + str(layer_num),
-                    )
-                    self.conv2 = tf.keras.layers.Conv1D(
-                        filters=n_filters,
-                        kernel_size=kernel_size,
-                        padding="same",
-                        dilation_rate=dilation_rate,
-                        activation=tf.nn.relu,
-                        kernel_initializer=tf.initializers.glorot_normal,
-                        name="conv2_" + str(layer_num),
-                    )
-                    self.downsample = tf.keras.layers.Conv1D(filters=n_filters, kernel_size=1, padding="same")
+            def __init__(self, n_filters, kernel_size, dilation_rate, rate, scope):
+                self.scope = scope
+                self.rate = rate
+                self.n_filters = n_filters
+                self.conv1 = tf.keras.layers.Conv1D(
+                    filters=n_filters,
+                    kernel_size=kernel_size,
+                    padding="same",
+                    activation=tf.nn.relu,
+                    dilation_rate=dilation_rate,
+                    kernel_initializer=tf.initializers.glorot_normal,
+                    name="conv1",
+                )
+                self.conv2 = tf.keras.layers.Conv1D(
+                    filters=n_filters,
+                    kernel_size=kernel_size,
+                    padding="same",
+                    dilation_rate=dilation_rate,
+                    activation=tf.nn.relu,
+                    kernel_initializer=tf.initializers.glorot_normal,
+                    name="conv2",
+                )
+                self.downsample = tf.keras.layers.Conv1D(filters=n_filters, kernel_size=1, padding="same")
 
             def __call__(self, X):
-                conv1_out = self.conv1(X)
-                conv1_dropout = tf.nn.dropout(conv1_out, rate=self.rate)
-                conv2_out = self.conv2(conv1_dropout)
-                conv2_dropout = tf.nn.dropout(conv2_out, rate=self.rate)
+                with tf.variable_scope(self.scope):
+                    conv1_out = self.conv1(X)
+                    conv1_dropout = tf.nn.dropout(conv1_out, rate=self.rate)
+                    conv2_out = self.conv2(conv1_dropout)
+                    conv2_dropout = tf.nn.dropout(conv2_out, rate=self.rate)
 
                 # residuals
                 if X.get_shape()[-1] == self.n_filters:
@@ -98,7 +99,6 @@ def tcn_featurizer(
                     rate=config.resid_p_drop if train else 0,
                     dilation_rate=2 ** layer_num,
                     scope="Temporal{}".format(layer_num),
-                    layer_num=layer_num
                 )(representation)
 
         seq_feats = tf.reshape(representation, shape=[-1, config.max_length, config.n_filter])
