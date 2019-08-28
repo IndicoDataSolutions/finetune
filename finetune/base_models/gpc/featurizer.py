@@ -2,7 +2,7 @@ import tensorflow as tf
 import math
 from finetune.base_models.gpt.featurizer import dropout, embed, norm, split_heads, merge_heads
 from finetune.util.shapes import shape_list
-
+from finetune.base_models.gpc.ra import recursive_agg
 from finetune.optimizers.recompute_grads import recompute_grad
 import functools
 from tensorflow.python.framework import function
@@ -36,45 +36,18 @@ def batch_to_time(value, dilation):
                           [tf.div(shape[0], dilation), -1, shape[2]])
 
 
-def dilated_causal_max_pool(value, kernel_size, dilation, padding="left"):
-    pool_op = lambda x, padding: causalmax(x, dim=1, pool_len=kernel_size, padding_type=padding)
-    with tf.name_scope("causal_pool"):
-        if dilation > 1:
-            transformed, pad_elements = time_to_batch(value, dilation, pad_with=-1e4)
-            pooled = pool_op(transformed, padding)
-            restored = batch_to_time(pooled, dilation)
-            restored = restored[:, :tf.shape(restored)[1] - pad_elements, :]
-        else:
-            restored = pool_op(value, padding)
-
-        restored.set_shape(value.get_shape())
-        return restored
-
-
-def cascaded_pool(value, kernel_size, dim=1, pool_len=None, corr_nonlin=tf.nn.softmax, causal=True):
+def cascaded_pool(value, kernel_size, dim=1, pool_len=None, causal=True):
     shape = shape_list(value)
     full_pool_len = pool_len or shape[dim]
-    intermediate_vals = []
-    w = tf.get_variable("weighted_mean_max_pool_identity", shape=[shape[-1]], dtype=tf.float32, initializer=tf.random_normal_initializer())
-    if w.dtype != value.dtype:
-        w = tf.cast(w, value.dtype)
-    intermediate_vals.append(value * w)
-    num_pooling_ops = int(math.ceil(math.log(full_pool_len, kernel_size)))
+    aggregated = recursive_agg(value, kernel_size, full_pool_len)
+    num_pooling_ops = shape_list(aggregated)[2]
+
     w_bs = normal_1d_conv_block(
         value, 1, "pool_w_b", value.dtype == tf.float16, output_dim=shape[-1] * num_pooling_ops * 2, causal=causal
     )
-    if corr_nonlin is not None:
-        w_bs = corr_nonlin(w_bs)
-    w_bs = tf.split(w_bs, num_or_size_splits=2 * num_pooling_ops, axis=-1)
-
-    for i in range(num_pooling_ops):
-        value = dilated_causal_max_pool(value, kernel_size=kernel_size, dilation=kernel_size ** i, padding="left" if causal else "even")
-        value_proj = normal_1d_conv_block(
-            value, 1, "pool_project_{}".format(i), value.dtype == tf.float16,
-            output_dim=shape[-1], causal=causal
-        )
-        intermediate_vals.append(value_proj * w_bs[2 * i] + w_bs[2 * i + 1])
-    return tf.reduce_mean(tf.nn.relu(intermediate_vals), 0)
+    w_bs = tf.reshape(w_bs, [shape[0], shape[1], num_pooling_ops, shape[-1], 2])
+    ws, bs = tf.unstack(w_bs, -1)
+    return tf.softmax(w_bs * ws, axis=-1) + bs
 
 
 def causal_conv(value, filter_, dilation, name='causal_conv'):
@@ -94,64 +67,25 @@ def causal_conv(value, filter_, dilation, name='causal_conv'):
         return restored
 
 
-def causalmax(x, dim, pool_len=None, padding_type="left"):
-    kernel_size = [1, 1, 1]
-    pool_len = pool_len or shape_list(x)[dim]
-    kernel_size[dim] = pool_len
-    padding = [[0, 0], [0, 0], [0, 0]]
-    if padding_type == "left":
-        padding[dim] = [pool_len - 1, 0]
-    elif padding_type == "right":
-        padding[dim] = [0, pool_len - 1]
-    elif padding_type == "even":
-        leng = pool_len - 1
-        padding[dim] = [leng // 2, leng - leng // 2]
-    else:
-        raise ValueError("Padding type {} not supported".format(padding_type))
-    padded_x = tf.pad(x, padding, "CONSTANT", constant_values=-1e4)
+def cumulative_state_net(X, name, use_fp16, pool_idx, pdrop, train, pool_kernel_size=2, nominal_pool_length=512):
+    conv_kernel = 4
+    pool_kernel_size = pool_kernel_size or conv_kernel
 
-    kernel_size.insert(2, 1)
-
-    return tf.squeeze(
-        tf.nn.max_pool(
-            value=tf.expand_dims(padded_x, 2),
-            ksize=kernel_size,
-            strides=[1, 1, 1, 1],
-            padding="VALID"
-        ),
-        axis=2
-    )
-
-
-def cummax(x, dim):
-    return causalmax(x, dim, pool_len=None)
-
-
-def cumulative_state_net(X, name, use_fp16, pool_idx, pdrop, train, pool_kernel_size=None, corr_nonlin=None,
-                         nominal_pool_length=512, causal=True):
-    conv_kernels = [4]
-    pool_kernel_size = pool_kernel_size or conv_kernels[-1]
-
-    outputs = []
     nx = shape_list(X)[-1]
-    output_sz = nx // len(conv_kernels)
     with tf.variable_scope(name):
-        for kernel in conv_kernels:
-            outputs.append(normal_1d_conv_block(X, kernel, str(kernel), use_fp16, output_dim=output_sz, causal=causal))
-    outputs_concat = tf.nn.relu(tf.concat(outputs, -1))
-    outputs_concat = dropout(outputs_concat, pdrop, train)
-    cum_pooled = cascaded_pool(outputs_concat, kernel_size=pool_kernel_size, pool_len=nominal_pool_length,
-                               corr_nonlin=corr_nonlin, causal=causal)
-    outputs_cum_pooled = tf.concat([cum_pooled, X], -1)
-    feats = tf.gather_nd(cum_pooled, tf.stack([tf.range(shape_list(X)[0]), pool_idx], 1))
-    feats_weight = tf.get_variable(name="featweights", shape=[nx], initializer=tf.ones_initializer())
-    if use_fp16:
-        feats_weight = tf.cast(feats_weight, tf.float16)
-    feats = feats * feats_weight
-    return normal_1d_conv_block(outputs_cum_pooled, 1, "output_reproject", use_fp16, output_dim=nx, causal=causal), feats
+        output = normal_1d_conv_block(X, conv_kernel, str(conv_kernel), use_fp16, output_dim=nx)
+        output = tf.nn.relu(normal_1d_conv_block(output, conv_kernel, str(conv_kernel), use_fp16, output_dim=nx))
+        output = normal_1d_conv_block(output, conv_kernel, str(conv_kernel), use_fp16, output_dim=nx)
+
+    output = dropout(output, pdrop, train)
+    aggregated = cascaded_pool(output, kernel_size=pool_kernel_size, pool_len=nominal_pool_length)
+
+    feats = tf.gather_nd(aggregated, tf.stack([tf.range(shape_list(X)[0]), pool_idx], 1))
+
+    return tf.nn.relu(normal_1d_conv_block(aggregated, 1, "output_reproject", use_fp16, output_dim=nx)), feats
 
 
-def normal_1d_conv_block(X, kernel_width, layer_name, use_fp16, dilation=1, layer_num=1, output_dim=None, causal=True, sequence_lengths=None):
+def normal_1d_conv_block(X, kernel_width, layer_name, use_fp16, dilation=1, output_dim=None, causal=True):
     # layer_input shape = #batch, seq, embed_dim or batch, channels, seq, embed_dim
     with tf.variable_scope(layer_name):
         # Pad kernel_width (word_wise) - 1 to stop future viewing.
@@ -174,31 +108,9 @@ def normal_1d_conv_block(X, kernel_width, layer_name, use_fp16, dilation=1, laye
             W = tf.cast(W, tf.float16)
             b = tf.cast(b, tf.float16)
 
-        if kernel_width == 1 and causal and sequence_lengths is not None and not use_fp16:
-            pad_mask = tf.reshape(tf.sequence_mask(sequence_lengths, maxlen=shape_list(X)[1]), [-1])
-            non_pad_ids = tf.to_int32(tf.where(pad_mask))
-            dim_origin = tf.shape(pad_mask)
-            x_shape = X.get_shape().as_list()
-            x_nopad = tf.gather_nd(
-                tf.reshape(X, [-1, nx]),
-                indices=self.nonpad_ids,
-            )
-            x_nopad.set_shape([None] + x_shape[1:])
-            conv = causal_conv(tf.expand_dims(x_nopad, axis=0), W, dilation)
-            conv = tf.squeeze(tf.nn.bias_add(conv, b), axis=0)
-            conv = tf.scatter_nd(
-                indices=nonpad_ids,
-                updates=x,
-                shape=tf.concat([dim_origin, tf.shape(conv)[1:]], axis=0),
-            )
-            conv = tf.reshape(conv, shape_list(X))
-
-        else:    
-            conv = causal_conv(padded_input, W, dilation)
-            conv = tf.nn.bias_add(conv, b)
-
-        out = conv
-    return out
+        conv = causal_conv(padded_input, W, dilation)
+        conv = tf.nn.bias_add(conv, b)
+    return conv
 
 
 def enc_dec_mix(enc, dec, enc_mask, dec_mask, n_head=16):
@@ -227,19 +139,14 @@ def enc_dec_mix(enc, dec, enc_mask, dec_mask, n_head=16):
     return merge_heads(tf.matmul(w, v))
 
 
-def block(X, block_name, use_fp16, pool_idx=None, encoder_state=None,
-          train=False, pdrop=0.1, pool_kernel_size=None,
-          nominal_pool_length=512, causal=True):
+def block(X, block_name, use_fp16, pool_idx=None, encoder_state=None, train=False, pdrop=0.1, nominal_pool_length=512):
     with tf.variable_scope(block_name):
-        h1, feats = cumulative_state_net(
-            X, "cumulative_state_net", use_fp16, pool_idx, pdrop, train, pool_kernel_size=pool_kernel_size,
-            nominal_pool_length=nominal_pool_length, causal=causal
-        )
+        h1, feats = cumulative_state_net(X, "cumulative_state_net", use_fp16, pool_idx, pdrop, train,
+            nominal_pool_length=nominal_pool_length)
         # TODO write encoder_decoder interface
         if encoder_state is not None:
             mixed = enc_dec_mix(encoder_state["sequence_features"], h1, encoder_state["pool_idx"], pool_idx)
             h1 = h1 + mixed
-
         return tf.nn.relu(dropout(norm(h1 + X, "norm", fp16=use_fp16, e=1e-2), pdrop, train)), feats
 
 
