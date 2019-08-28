@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>finetune.target_models.mtl &mdash; finetune 0.8.0 documentation</title>
+  <title>finetune.target_models.mtl &mdash; finetune 0.8.1 documentation</title>
   
 
   
@@ -35,7 +35,7 @@
         <link rel="index" title="Index"
               href="../../../genindex.html"/>
         <link rel="search" title="Search" href="../../../search.html"/>
-    <link rel="top" title="finetune 0.8.0 documentation" href="../../../index.html"/>
+    <link rel="top" title="finetune 0.8.1 documentation" href="../../../index.html"/>
         <link rel="up" title="Module code" href="../../index.html"/> 
 
   
@@ -65,7 +65,7 @@
             
             
               <div class="version">
-                0.8
+                0.8.1
               </div>
             
           
@@ -89,8 +89,27 @@
               
             
             
-              <!-- Local TOC -->
-              <div class="local-toc"></div>
+              <p class="caption"><span class="caption-text">General API</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html#docker">Docker</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../basemodels.html">Base Models (e.g. BERT, GPT2, RoBERTa)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../quickstart.html">Finetune Quickstart Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../datasetloading.html">Dataset Loading</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../serializing.html">Saving and Loading Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../config.html">Model Configuration Options</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../resource.html">Resource Management</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Special Features</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../api.html">Finetune API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../cachedpredict.html">Cached Prediction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../chunk.html">Process Long Sequences</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../sequencelabeler.html">SequenceLabeler Class</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../adapter.html">Using Adapters and the DeploymentModel class</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../auxiliary.html">Using Auxiliary Info</a></li>
+</ul>
+
             
           
         </div>
@@ -275,7 +294,7 @@
     <span class="k">return</span> <span class="n">tf</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">task_id_i</span><span class="p">,</span> <span class="n">config</span><span class="o">.</span><span class="n">task_name_to_id</span><span class="p">[</span><span class="n">task</span><span class="p">]),</span> <span class="n">loss_logits</span>
 
 
-<div class="viewcode-block" id="MultiTask"><a class="viewcode-back" href="../../../index.html#finetune.MultiTask">[docs]</a><span class="k">class</span> <span class="nc">MultiTask</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+<div class="viewcode-block" id="MultiTask"><a class="viewcode-back" href="../../../api.html#finetune.MultiTask">[docs]</a><span class="k">class</span> <span class="nc">MultiTask</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Target model for multi task learning. The approach used is to sample mini-batches from each task proportional to</span>
 <span class="sd">    the size of the task for each dataset.</span>
@@ -295,7 +314,7 @@
     <span class="k">def</span> <span class="nf">_get_input_pipeline</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">MultiTaskPipeline</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">)</span>
 
-<div class="viewcode-block" id="MultiTask.cached_predict"><a class="viewcode-back" href="../../../index.html#finetune.MultiTask.cached_predict">[docs]</a>    <span class="k">def</span> <span class="nf">cached_predict</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<div class="viewcode-block" id="MultiTask.cached_predict"><a class="viewcode-back" href="../../../api.html#finetune.MultiTask.cached_predict">[docs]</a>    <span class="k">def</span> <span class="nf">cached_predict</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Context manager that prevents the recreation of the tensorflow graph on every call to BaseModel.predict().</span>
 
@@ -303,7 +322,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">raise</span> <span class="n">FinetuneError</span><span class="p">(</span><span class="s2">&quot;cached_predict is not supported yet for MTL&quot;</span><span class="p">)</span></div>
 
-<div class="viewcode-block" id="MultiTask.featurize"><a class="viewcode-back" href="../../../index.html#finetune.MultiTask.featurize">[docs]</a>    <span class="k">def</span> <span class="nf">featurize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
+<div class="viewcode-block" id="MultiTask.featurize"><a class="viewcode-back" href="../../../api.html#finetune.MultiTask.featurize">[docs]</a>    <span class="k">def</span> <span class="nf">featurize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;                                                                                                                                                                        </span>
 <span class="sd">        Runs featurization on the trained model for any of the tasks the model was trained for. Input and output formats  </span>
 <span class="sd">        are the same as for each of the individial tasks.</span>
@@ -326,7 +345,7 @@
             <span class="n">features</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">pred_model</span><span class="o">.</span><span class="n">featurize</span><span class="p">(</span><span class="n">X</span><span class="p">[</span><span class="n">name</span><span class="p">])</span>
         <span class="k">return</span> <span class="n">features</span></div>
 
-<div class="viewcode-block" id="MultiTask.predict"><a class="viewcode-back" href="../../../index.html#finetune.MultiTask.predict">[docs]</a>    <span class="k">def</span> <span class="nf">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
+<div class="viewcode-block" id="MultiTask.predict"><a class="viewcode-back" href="../../../api.html#finetune.MultiTask.predict">[docs]</a>    <span class="k">def</span> <span class="nf">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Runs inference on the trained model for any of the tasks the model was trained for. Input and output formats</span>
 <span class="sd">        are the same as for each of the individial tasks.</span>
@@ -350,7 +369,7 @@
             <span class="n">predictions</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">pred_model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">X</span><span class="p">[</span><span class="n">name</span><span class="p">])</span>
         <span class="k">return</span> <span class="n">predictions</span></div>
 
-<div class="viewcode-block" id="MultiTask.predict_proba"><a class="viewcode-back" href="../../../index.html#finetune.MultiTask.predict_proba">[docs]</a>    <span class="k">def</span> <span class="nf">predict_proba</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
+<div class="viewcode-block" id="MultiTask.predict_proba"><a class="viewcode-back" href="../../../api.html#finetune.MultiTask.predict_proba">[docs]</a>    <span class="k">def</span> <span class="nf">predict_proba</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Runs probability inference on the trained model for any of the tasks the model was trained for. Falls back</span>
 <span class="sd">        to normal predict when probabilities are not available for a task, eg Regression.</span>
@@ -384,7 +403,7 @@
                 <span class="n">predictions</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">pred_model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">X</span><span class="p">[</span><span class="n">name</span><span class="p">])</span>
         <span class="k">return</span> <span class="n">predictions</span></div>
 
-<div class="viewcode-block" id="MultiTask.finetune"><a class="viewcode-back" href="../../../index.html#finetune.MultiTask.finetune">[docs]</a>    <span class="k">def</span> <span class="nf">finetune</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<div class="viewcode-block" id="MultiTask.finetune"><a class="viewcode-back" href="../../../api.html#finetune.MultiTask.finetune">[docs]</a>    <span class="k">def</span> <span class="nf">finetune</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 
 <span class="sd">        :param X: A dictionary mapping from task name to inputs in the same format required for each of the models.</span>
@@ -480,7 +499,7 @@
     <script type="text/javascript">
         var DOCUMENTATION_OPTIONS = {
             URL_ROOT:'../../../',
-            VERSION:'0.8.0',
+            VERSION:'0.8.1',
             COLLAPSE_INDEX:false,
             FILE_SUFFIX:'.html',
             HAS_SOURCE:  true,

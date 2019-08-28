@@ -1,0 +1,703 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>finetune.target_models.association &mdash; finetune 0.8.1 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  
+  
+    <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  
+
+  
+
+  
+        <link rel="index" title="Index"
+              href="../../../genindex.html"/>
+        <link rel="search" title="Search" href="../../../search.html"/>
+    <link rel="top" title="finetune 0.8.1 documentation" href="../../../index.html"/>
+        <link rel="up" title="Module code" href="../../index.html"/> 
+
+  
+  <script src="../../../_static/js/modernizr.min.js"></script>
+
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+   
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search">
+          
+
+          
+            <a href="../../../index.html" class="icon icon-home"> finetune
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0.8.1
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">General API</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html#docker">Docker</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../basemodels.html">Base Models (e.g. BERT, GPT2, RoBERTa)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../quickstart.html">Finetune Quickstart Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../datasetloading.html">Dataset Loading</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../serializing.html">Saving and Loading Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../config.html">Model Configuration Options</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../resource.html">Resource Management</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Special Features</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../api.html">Finetune API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../cachedpredict.html">Cached Prediction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../chunk.html">Process Long Sequences</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../sequencelabeler.html">SequenceLabeler Class</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../adapter.html">Using Adapters and the DeploymentModel class</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../auxiliary.html">Using Auxiliary Info</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">finetune</a>
+        
+      </nav>
+
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../../index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="../../index.html">Module code</a> &raquo;</li>
+        
+      <li>finetune.target_models.association</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <h1>Source code for finetune.target_models.association</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">itertools</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="k">import</span> <span class="n">Counter</span>
+
+<span class="kn">import</span> <span class="nn">tensorflow</span> <span class="k">as</span> <span class="nn">tf</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+
+<span class="kn">from</span> <span class="nn">finetune.base</span> <span class="k">import</span> <span class="n">BaseModel</span>
+<span class="kn">from</span> <span class="nn">finetune.encoding.target_encoders</span> <span class="k">import</span> <span class="n">SequenceLabelingEncoder</span>
+<span class="kn">from</span> <span class="nn">finetune.nn.target_blocks</span> <span class="k">import</span> <span class="n">association</span>
+<span class="kn">from</span> <span class="nn">finetune.nn.crf</span> <span class="k">import</span> <span class="n">sequence_decode</span>
+<span class="kn">from</span> <span class="nn">finetune.encoding.sequence_encoder</span> <span class="k">import</span> <span class="p">(</span>
+    <span class="n">indico_to_finetune_sequence</span><span class="p">,</span>
+    <span class="n">finetune_to_indico_sequence</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">finetune.input_pipeline</span> <span class="k">import</span> <span class="n">BasePipeline</span>
+<span class="kn">from</span> <span class="nn">finetune.errors</span> <span class="k">import</span> <span class="n">FinetuneError</span>
+<span class="kn">from</span> <span class="nn">finetune.base</span> <span class="k">import</span> <span class="n">LOGGER</span>
+<span class="kn">from</span> <span class="nn">finetune.model</span> <span class="k">import</span> <span class="n">PredictMode</span>
+
+
+<span class="k">class</span> <span class="nc">AssociationPipeline</span><span class="p">(</span><span class="n">BasePipeline</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">multi_label</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">AssociationPipeline</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">multi_label</span> <span class="o">=</span> <span class="n">multi_label</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">association_encoder</span> <span class="o">=</span> <span class="n">SequenceLabelingEncoder</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">association_encoder</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">config</span><span class="o">.</span><span class="n">association_types</span> <span class="o">+</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">pad_token</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">association_pad_idx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">association_encoder</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span>
+            <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">pad_token</span><span class="p">]</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_post_data_initialization</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="n">Y_</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">itertools</span><span class="o">.</span><span class="n">chain</span><span class="o">.</span><span class="n">from_iterable</span><span class="p">([</span><span class="n">y</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">y</span> <span class="ow">in</span> <span class="n">Y</span><span class="p">]))</span> <span class="k">if</span> <span class="n">Y</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_post_data_initialization</span><span class="p">(</span><span class="n">Y_</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">text_to_tokens_mask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="n">pad_token</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">pad_token</span><span class="p">]</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">multi_label</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">pad_token</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">Y</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">Y</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="n">Y</span><span class="p">))</span>
+        <span class="n">out_gen</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_text_to_ids</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="n">Y</span><span class="p">,</span> <span class="n">pad_token</span><span class="o">=</span><span class="p">(</span><span class="n">pad_token</span><span class="p">,</span> <span class="n">pad_token</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">))</span>
+        <span class="n">class_list</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">association_encoder</span><span class="o">.</span><span class="n">classes_</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+        <span class="n">assoc_pad_id</span> <span class="o">=</span> <span class="n">class_list</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">pad_token</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">out</span> <span class="ow">in</span> <span class="n">out_gen</span><span class="p">:</span>
+            <span class="n">feats</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;tokens&quot;</span><span class="p">:</span> <span class="n">out</span><span class="o">.</span><span class="n">token_ids</span><span class="p">,</span> <span class="s2">&quot;mask&quot;</span><span class="p">:</span> <span class="n">out</span><span class="o">.</span><span class="n">mask</span><span class="p">}</span>
+            <span class="k">if</span> <span class="n">Y</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">yield</span> <span class="n">feats</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">labels</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="n">assoc_mat</span> <span class="o">=</span> <span class="p">[</span>
+                    <span class="p">[</span><span class="n">assoc_pad_id</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">labels</span><span class="p">))]</span>
+                    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">labels</span><span class="p">))</span>
+                <span class="p">]</span>
+                <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">l</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">idx</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">labels</span><span class="p">):</span>
+                    <span class="n">labels</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">l</span><span class="p">)</span>
+                    <span class="k">for</span> <span class="n">j</span><span class="p">,</span> <span class="p">(</span><span class="n">_</span><span class="p">,</span> <span class="n">a_t</span><span class="p">,</span> <span class="n">a_i</span><span class="p">,</span> <span class="n">_</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">labels</span><span class="p">):</span>
+                        <span class="k">if</span> <span class="n">a_t</span> <span class="o">!=</span> <span class="n">pad_token</span> <span class="ow">and</span> <span class="n">idx</span> <span class="o">==</span> <span class="n">a_i</span><span class="p">:</span>
+                            <span class="n">assoc_mat</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="n">class_list</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">a_t</span><span class="p">)</span>
+
+                <span class="k">yield</span> <span class="n">feats</span><span class="p">,</span> <span class="p">{</span>
+                    <span class="s2">&quot;labels&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">label_encoder</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">labels</span><span class="p">),</span>
+                    <span class="s2">&quot;associations&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">assoc_mat</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">),</span>
+                <span class="p">}</span>
+
+    <span class="k">def</span> <span class="nf">_compute_class_counts</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">encoded_dataset</span><span class="p">):</span>
+        <span class="n">counter</span> <span class="o">=</span> <span class="n">Counter</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">doc</span><span class="p">,</span> <span class="n">target_arr</span> <span class="ow">in</span> <span class="n">encoded_dataset</span><span class="p">:</span>
+            <span class="n">targets</span> <span class="o">=</span> <span class="n">target_arr</span><span class="p">[</span><span class="s2">&quot;labels&quot;</span><span class="p">][</span><span class="n">doc</span><span class="p">[</span><span class="s2">&quot;mask&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">bool</span><span class="p">)]</span>
+            <span class="n">counter</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">label_encoder</span><span class="o">.</span><span class="n">inverse_transform</span><span class="p">(</span><span class="n">targets</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">counter</span>
+
+    <span class="k">def</span> <span class="nf">_format_for_encoding</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">X</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">_format_for_inference</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[[</span><span class="n">x</span><span class="p">]</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">X</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">feed_shape_type_def</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">TS</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">TensorShape</span>
+        <span class="n">target_shape</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">label_encoder</span><span class="o">.</span><span class="n">target_dim</span><span class="p">]</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">multi_label</span>
+            <span class="k">else</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span><span class="p">]</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="p">(</span>
+                <span class="p">{</span><span class="s2">&quot;tokens&quot;</span><span class="p">:</span> <span class="n">tf</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span> <span class="s2">&quot;mask&quot;</span><span class="p">:</span> <span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">},</span>
+                <span class="p">{</span><span class="s2">&quot;labels&quot;</span><span class="p">:</span> <span class="n">tf</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span> <span class="s2">&quot;associations&quot;</span><span class="p">:</span> <span class="n">tf</span><span class="o">.</span><span class="n">int32</span><span class="p">},</span>
+            <span class="p">),</span>
+            <span class="p">(</span>
+                <span class="p">{</span>
+                    <span class="s2">&quot;tokens&quot;</span><span class="p">:</span> <span class="n">TS</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span><span class="p">,</span> <span class="mi">2</span><span class="p">]),</span>
+                    <span class="s2">&quot;mask&quot;</span><span class="p">:</span> <span class="n">TS</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span><span class="p">]),</span>
+                <span class="p">},</span>
+                <span class="p">{</span>
+                    <span class="s2">&quot;labels&quot;</span><span class="p">:</span> <span class="n">TS</span><span class="p">(</span><span class="n">target_shape</span><span class="p">),</span>
+                    <span class="s2">&quot;associations&quot;</span><span class="p">:</span> <span class="n">TS</span><span class="p">(</span>
+                        <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span><span class="p">]</span>
+                    <span class="p">),</span>
+                <span class="p">},</span>
+            <span class="p">),</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_target_encoder</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">SequenceLabelingEncoder</span><span class="p">()</span>
+
+
+<div class="viewcode-block" id="Association"><a class="viewcode-back" href="../../../api.html#finetune.Association">[docs]</a><span class="k">class</span> <span class="nc">Association</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Labels each token in a sequence as belonging to 1 of N token classes and then builds a set of edges</span>
+<span class="sd">    between the labeled edges.</span>
+
+<span class="sd">    :param config: A :py:class:`finetune.config.Settings` object or None (for default config).</span>
+<span class="sd">    :param \**kwargs: key-value pairs of config items to override.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        For a full list of configuration options, see `finetune.config`.</span>
+
+<span class="sd">        :param n_epochs: defaults to `5`.</span>
+<span class="sd">        :param lr_warmup: defaults to `0.1`,</span>
+<span class="sd">        :param low_memory_mode: defaults to `True`,</span>
+<span class="sd">        :param chunk_long_sequences: defaults to `True`</span>
+<span class="sd">        :param **kwargs: key-value pairs of config items to override.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">multi_label</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_get_input_pipeline</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">AssociationPipeline</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">,</span> <span class="n">multi_label</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_initialize</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">multi_label_sequences</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">FinetuneError</span><span class="p">(</span><span class="s2">&quot;Multi label association not supported&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_initialize</span><span class="p">()</span>
+
+<div class="viewcode-block" id="Association.finetune"><a class="viewcode-back" href="../../../api.html#finetune.Association.finetune">[docs]</a>    <span class="k">def</span> <span class="nf">finetune</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        :param Xs: A list of strings.</span>
+<span class="sd">        :param Y: A list of labels of the same format as sequence labeling but with an option al additional field</span>
+<span class="sd">        of the form:</span>
+<span class="sd">        ```</span>
+<span class="sd">            {</span>
+<span class="sd">                ...</span>
+<span class="sd">                &quot;association&quot;:{</span>
+<span class="sd">                        &quot;index&quot;: a,</span>
+<span class="sd">                        &quot;relationship&quot;: relationship_name</span>
+<span class="sd">                }</span>
+<span class="sd">                ...</span>
+<span class="sd">        ```</span>
+<span class="sd">        where index is the index of the relationship target into the label list and relationship_name is the type of</span>
+<span class="sd">        the relationship.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">association_types</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">FinetuneError</span><span class="p">(</span>
+                <span class="s2">&quot;Please set config.association_types before calling finetune.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">Xs</span><span class="p">,</span> <span class="n">Y_new</span><span class="p">,</span> <span class="n">association_type</span><span class="p">,</span> <span class="n">association_idx</span><span class="p">,</span> <span class="n">idxs</span> <span class="o">=</span> <span class="n">indico_to_finetune_sequence</span><span class="p">(</span>
+            <span class="n">Xs</span><span class="p">,</span>
+            <span class="n">encoder</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">text_encoder</span><span class="p">,</span>
+            <span class="n">labels</span><span class="o">=</span><span class="n">Y</span><span class="p">,</span>
+            <span class="n">multi_label</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">none_value</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">pad_token</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="n">Y</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="nb">list</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">Y_new</span><span class="p">,</span> <span class="n">association_type</span><span class="p">,</span> <span class="n">association_idx</span><span class="p">,</span> <span class="n">idxs</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">Y</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="kc">None</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">finetune</span><span class="p">(</span><span class="n">Xs</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="n">Y</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">prune_probs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">prob_matrix</span><span class="p">,</span> <span class="n">labels</span><span class="p">):</span>
+        <span class="n">viable_edges</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">viable_edges</span>
+        <span class="n">association_types</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">association_encoder</span><span class="o">.</span><span class="n">classes_</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">viable_edges</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">prob_matrix</span>
+
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">l1</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">labels</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">l1</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">viable_edges</span><span class="p">:</span>
+                <span class="n">prob_matrix</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span> <span class="o">=</span> <span class="mf">0.0</span>
+                <span class="k">continue</span>
+
+            <span class="k">elif</span> <span class="kc">None</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">viable_edges</span><span class="p">[</span><span class="n">l1</span><span class="p">]:</span>
+                <span class="n">prob_matrix</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:,</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">association_pad_idx</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.0</span>
+
+            <span class="k">for</span> <span class="bp">cls</span> <span class="ow">in</span> <span class="n">association_types</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">j</span><span class="p">,</span> <span class="n">l2</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">labels</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="n">l1</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">viable_edges</span> <span class="ow">or</span> <span class="n">l2</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span>
+                        <span class="n">c_t</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">c_t</span> <span class="ow">in</span> <span class="n">viable_edges</span><span class="p">[</span><span class="n">l1</span><span class="p">]</span> <span class="k">if</span> <span class="n">c_t</span> <span class="ow">and</span> <span class="n">c_t</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="bp">cls</span>
+                    <span class="p">]:</span>
+                        <span class="n">prob_matrix</span><span class="p">[</span>
+                            <span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">,</span> <span class="n">association_types</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span>
+                        <span class="p">]</span> <span class="o">=</span> <span class="mf">0.0</span>  <span class="c1"># this edge doesnt fit the schema</span>
+
+        <span class="k">return</span> <span class="n">prob_matrix</span>
+
+<div class="viewcode-block" id="Association.predict"><a class="viewcode-back" href="../../../api.html#finetune.Association.predict">[docs]</a>    <span class="k">def</span> <span class="nf">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Produces a list of most likely class labels as determined by the fine-tuned model.</span>
+
+<span class="sd">        :param X: A list / array of text, shape [batch]</span>
+<span class="sd">        :returns: list of class labels.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">pad_token</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">pad_token</span><span class="p">]</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">multi_label</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">pad_token</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">viable_edges</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                <span class="s2">&quot;config.viable_edges is not set, this is probably incorrect.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># TODO(Ben) combine this into the sequence labeling model??</span>
+
+        <span class="n">chunk_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span> <span class="o">-</span> <span class="mi">2</span>
+        <span class="n">step_size</span> <span class="o">=</span> <span class="n">chunk_size</span> <span class="o">//</span> <span class="mi">3</span>
+        <span class="n">arr_encoded</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span>
+            <span class="n">itertools</span><span class="o">.</span><span class="n">chain</span><span class="o">.</span><span class="n">from_iterable</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">_text_to_ids</span><span class="p">(</span>
+                    <span class="p">[</span><span class="n">x</span><span class="p">],</span> <span class="n">pad_token</span><span class="o">=</span><span class="p">(</span><span class="n">pad_token</span><span class="p">,</span> <span class="n">pad_token</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">)</span>
+                <span class="p">)</span>
+                <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">X</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">lens</span> <span class="o">=</span> <span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">a</span><span class="o">.</span><span class="n">char_locs</span><span class="p">)</span> <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">arr_encoded</span><span class="p">]</span>
+        <span class="n">labels</span><span class="p">,</span> <span class="n">batch_probas</span><span class="p">,</span> <span class="n">associations</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[]</span>
+        <span class="n">predict_keys</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">PredictMode</span><span class="o">.</span><span class="n">SEQUENCE</span><span class="p">,</span>
+            <span class="n">PredictMode</span><span class="o">.</span><span class="n">SEQUENCE_PROBAS</span><span class="p">,</span>
+            <span class="n">PredictMode</span><span class="o">.</span><span class="n">ASSOCIATION</span><span class="p">,</span>
+            <span class="n">PredictMode</span><span class="o">.</span><span class="n">ASSOCIATION_PROBAS</span><span class="p">,</span>
+        <span class="p">]</span>
+        <span class="k">for</span> <span class="n">l</span><span class="p">,</span> <span class="n">pred</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">lens</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_inference</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">predict_keys</span><span class="o">=</span><span class="n">predict_keys</span><span class="p">)):</span>
+            <span class="n">pred_labels</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">label_encoder</span><span class="o">.</span><span class="n">inverse_transform</span><span class="p">(</span>
+                <span class="n">pred</span><span class="p">[</span><span class="n">PredictMode</span><span class="o">.</span><span class="n">SEQUENCE</span><span class="p">]</span>
+            <span class="p">)</span>
+            <span class="n">pred_labels</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">label</span> <span class="k">if</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">l</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">pad_token</span>
+                <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">label</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">pred_labels</span><span class="p">)</span>
+            <span class="p">]</span>
+            <span class="n">labels</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">pred_labels</span><span class="p">)</span>
+            <span class="n">batch_probas</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">pred</span><span class="p">[</span><span class="n">PredictMode</span><span class="o">.</span><span class="n">SEQUENCE_PROBAS</span><span class="p">])</span>
+            <span class="n">pred</span><span class="p">[</span><span class="s2">&quot;association_probs&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">prune_probs</span><span class="p">(</span>
+                <span class="n">pred</span><span class="p">[</span><span class="n">PredictMode</span><span class="o">.</span><span class="n">ASSOCIATION_PROBAS</span><span class="p">],</span> <span class="n">pred_labels</span>
+            <span class="p">)</span>
+            <span class="n">most_likely_associations</span><span class="p">,</span> <span class="n">most_likely_class_id</span> <span class="o">=</span> <span class="nb">zip</span><span class="p">(</span>
+                <span class="o">*</span><span class="p">[</span>
+                    <span class="n">np</span><span class="o">.</span><span class="n">unravel_index</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="kc">None</span><span class="p">),</span> <span class="n">a</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+                    <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">pred</span><span class="p">[</span><span class="n">PredictMode</span><span class="o">.</span><span class="n">ASSOCIATION_PROBAS</span><span class="p">]</span>
+                <span class="p">]</span>
+            <span class="p">)</span>
+            <span class="n">associations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="p">(</span>
+                    <span class="n">most_likely_associations</span><span class="p">,</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">association_encoder</span><span class="o">.</span><span class="n">inverse_transform</span><span class="p">(</span>
+                        <span class="n">most_likely_class_id</span>
+                    <span class="p">),</span>
+                    <span class="p">[</span>
+                        <span class="n">prob</span><span class="p">[</span><span class="n">idx</span><span class="p">,</span> <span class="bp">cls</span><span class="p">]</span>
+                        <span class="k">for</span> <span class="n">prob</span><span class="p">,</span> <span class="n">idx</span><span class="p">,</span> <span class="bp">cls</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
+                            <span class="n">pred</span><span class="p">[</span><span class="s2">&quot;association_probs&quot;</span><span class="p">],</span>
+                            <span class="n">most_likely_associations</span><span class="p">,</span>
+                            <span class="n">most_likely_class_id</span><span class="p">,</span>
+                        <span class="p">)</span>
+                    <span class="p">],</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+        <span class="n">all_subseqs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">all_labels</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">all_probs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">all_assocs</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="n">doc_idx</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+        <span class="k">for</span> <span class="n">chunk_idx</span><span class="p">,</span> <span class="p">(</span><span class="n">label_seq</span><span class="p">,</span> <span class="n">proba_seq</span><span class="p">,</span> <span class="n">association</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span>
+            <span class="nb">zip</span><span class="p">(</span><span class="n">labels</span><span class="p">,</span> <span class="n">batch_probas</span><span class="p">,</span> <span class="n">associations</span><span class="p">)</span>
+        <span class="p">):</span>
+            <span class="n">association_idx</span><span class="p">,</span> <span class="n">association_class</span><span class="p">,</span> <span class="n">association_prob</span> <span class="o">=</span> <span class="n">association</span>
+
+            <span class="n">position_seq</span> <span class="o">=</span> <span class="n">arr_encoded</span><span class="p">[</span><span class="n">chunk_idx</span><span class="p">]</span><span class="o">.</span><span class="n">char_locs</span>
+            <span class="n">start_of_doc</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">arr_encoded</span><span class="p">[</span><span class="n">chunk_idx</span><span class="p">]</span><span class="o">.</span><span class="n">token_ids</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+                <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">text_encoder</span><span class="o">.</span><span class="n">start</span>
+            <span class="p">)</span>
+            <span class="n">end_of_doc</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">chunk_idx</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">&gt;=</span> <span class="nb">len</span><span class="p">(</span><span class="n">arr_encoded</span><span class="p">)</span>
+                <span class="ow">or</span> <span class="n">arr_encoded</span><span class="p">[</span><span class="n">chunk_idx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">token_ids</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+                <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">text_encoder</span><span class="o">.</span><span class="n">start</span>
+            <span class="p">)</span>
+            <span class="n">start</span><span class="p">,</span> <span class="n">end</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="kc">None</span>
+            <span class="k">if</span> <span class="n">start_of_doc</span><span class="p">:</span>
+                <span class="c1"># if this is the first chunk in a document, start accumulating from scratch</span>
+                <span class="n">doc_subseqs</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="n">doc_labels</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="n">doc_probs</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="n">doc_assocs</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="n">doc_idx</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="n">start_of_token</span> <span class="o">=</span> <span class="mi">0</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">end_of_doc</span><span class="p">:</span>
+                    <span class="n">end</span> <span class="o">=</span> <span class="n">step_size</span> <span class="o">*</span> <span class="mi">2</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">end_of_doc</span><span class="p">:</span>
+                    <span class="c1"># predict on the rest of sequence</span>
+                    <span class="n">start</span> <span class="o">=</span> <span class="n">step_size</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="c1"># predict only on middle third</span>
+                    <span class="n">start</span><span class="p">,</span> <span class="n">end</span> <span class="o">=</span> <span class="n">step_size</span><span class="p">,</span> <span class="n">step_size</span> <span class="o">*</span> <span class="mi">2</span>
+
+            <span class="n">label_seq</span> <span class="o">=</span> <span class="n">label_seq</span><span class="p">[</span><span class="n">start</span><span class="p">:</span><span class="n">end</span><span class="p">]</span>
+            <span class="n">position_seq</span> <span class="o">=</span> <span class="n">position_seq</span><span class="p">[</span><span class="n">start</span><span class="p">:</span><span class="n">end</span><span class="p">]</span>
+            <span class="n">proba_seq</span> <span class="o">=</span> <span class="n">proba_seq</span><span class="p">[</span><span class="n">start</span><span class="p">:</span><span class="n">end</span><span class="p">]</span>
+            <span class="n">tok_idx_to_subseq</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+            <span class="k">for</span> <span class="n">tok_idx</span><span class="p">,</span> <span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="n">position</span><span class="p">,</span> <span class="n">proba</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span>
+                <span class="nb">zip</span><span class="p">(</span><span class="n">label_seq</span><span class="p">,</span> <span class="n">position_seq</span><span class="p">,</span> <span class="n">proba_seq</span><span class="p">)</span>
+            <span class="p">):</span>
+                <span class="k">if</span> <span class="n">position</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+                    <span class="c1"># indicates padding / special tokens</span>
+                    <span class="k">continue</span>
+
+                <span class="c1"># if there are no current subsequence</span>
+                <span class="c1"># or the current subsequence has the wrong label</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">doc_subseqs</span> <span class="ow">or</span> <span class="n">label</span> <span class="o">!=</span> <span class="n">doc_labels</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
+                    <span class="c1"># start new subsequence</span>
+                    <span class="n">doc_subseqs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">X</span><span class="p">[</span><span class="n">doc_idx</span><span class="p">][</span><span class="n">start_of_token</span><span class="p">:</span><span class="n">position</span><span class="p">])</span>
+                    <span class="n">doc_probs</span><span class="o">.</span><span class="n">append</span><span class="p">([</span><span class="n">proba</span><span class="p">])</span>
+                    <span class="n">doc_assocs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="p">[</span>
+                            <span class="p">(</span>
+                                <span class="n">tok_idx</span><span class="p">,</span>
+                                <span class="n">association_idx</span><span class="p">[</span><span class="n">tok_idx</span><span class="p">],</span>
+                                <span class="n">association_class</span><span class="p">[</span><span class="n">tok_idx</span><span class="p">],</span>
+                                <span class="n">association_prob</span><span class="p">[</span><span class="n">tok_idx</span><span class="p">],</span>
+                            <span class="p">)</span>
+                        <span class="p">]</span>
+                    <span class="p">)</span>
+                    <span class="n">doc_labels</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">label</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="c1"># continue appending to current subsequence</span>
+                    <span class="n">doc_subseqs</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+=</span> <span class="n">X</span><span class="p">[</span><span class="n">doc_idx</span><span class="p">][</span><span class="n">start_of_token</span><span class="p">:</span><span class="n">position</span><span class="p">]</span>
+                    <span class="n">doc_probs</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">proba</span><span class="p">)</span>
+                    <span class="n">doc_assocs</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="p">(</span>
+                            <span class="n">tok_idx</span><span class="p">,</span>
+                            <span class="n">association_idx</span><span class="p">[</span><span class="n">tok_idx</span><span class="p">],</span>
+                            <span class="n">association_class</span><span class="p">[</span><span class="n">tok_idx</span><span class="p">],</span>
+                            <span class="n">association_prob</span><span class="p">[</span><span class="n">tok_idx</span><span class="p">],</span>
+                        <span class="p">)</span>
+                    <span class="p">)</span>
+                <span class="n">tok_idx_to_subseq</span><span class="p">[</span><span class="n">tok_idx</span><span class="p">]</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">doc_labels</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
+                <span class="n">start_of_token</span> <span class="o">=</span> <span class="n">position</span>
+
+            <span class="k">if</span> <span class="n">end_of_doc</span><span class="p">:</span>
+                <span class="c1"># last chunk in a document</span>
+                <span class="n">prob_dicts</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="k">for</span> <span class="n">prob_seq</span> <span class="ow">in</span> <span class="n">doc_probs</span><span class="p">:</span>
+                    <span class="c1"># format probabilities as dictionary</span>
+                    <span class="n">probs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">vstack</span><span class="p">(</span><span class="n">prob_seq</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+                    <span class="n">prob_dicts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="nb">dict</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">label_encoder</span><span class="o">.</span><span class="n">classes_</span><span class="p">,</span> <span class="n">probs</span><span class="p">))</span>
+                    <span class="p">)</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">multi_label</span><span class="p">:</span>
+                        <span class="k">del</span> <span class="n">prob_dicts</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">pad_token</span><span class="p">]</span>
+
+                <span class="n">doc_assocs_by_idx</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="k">for</span> <span class="n">assoc</span> <span class="ow">in</span> <span class="n">doc_assocs</span><span class="p">:</span>
+                    <span class="n">doc_assocs_by_idx</span><span class="o">.</span><span class="n">append</span><span class="p">([])</span>
+                    <span class="k">for</span> <span class="n">from_idx</span><span class="p">,</span> <span class="n">to_idx</span><span class="p">,</span> <span class="bp">cls</span><span class="p">,</span> <span class="n">prob</span> <span class="ow">in</span> <span class="n">assoc</span><span class="p">:</span>
+                        <span class="k">if</span> <span class="p">(</span>
+                            <span class="n">from_idx</span> <span class="ow">in</span> <span class="n">tok_idx_to_subseq</span>
+                            <span class="ow">and</span> <span class="n">to_idx</span> <span class="ow">in</span> <span class="n">tok_idx_to_subseq</span>
+                        <span class="p">):</span>
+                            <span class="n">doc_assocs_by_idx</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                                <span class="p">(</span>
+                                    <span class="n">tok_idx_to_subseq</span><span class="p">[</span><span class="n">from_idx</span><span class="p">],</span>
+                                    <span class="n">tok_idx_to_subseq</span><span class="p">[</span><span class="n">to_idx</span><span class="p">],</span>
+                                    <span class="bp">cls</span><span class="p">,</span>
+                                    <span class="n">prob</span><span class="p">,</span>
+                                <span class="p">)</span>
+                            <span class="p">)</span>
+
+                <span class="n">all_subseqs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">doc_subseqs</span><span class="p">)</span>
+                <span class="n">all_labels</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">doc_labels</span><span class="p">)</span>
+                <span class="n">all_probs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">prob_dicts</span><span class="p">)</span>
+                <span class="n">all_assocs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">doc_assocs_by_idx</span><span class="p">)</span>
+
+        <span class="n">_</span><span class="p">,</span> <span class="n">doc_annotations</span> <span class="o">=</span> <span class="n">finetune_to_indico_sequence</span><span class="p">(</span>
+            <span class="n">raw_texts</span><span class="o">=</span><span class="n">X</span><span class="p">,</span>
+            <span class="n">subseqs</span><span class="o">=</span><span class="n">all_subseqs</span><span class="p">,</span>
+            <span class="n">labels</span><span class="o">=</span><span class="n">all_labels</span><span class="p">,</span>
+            <span class="n">probs</span><span class="o">=</span><span class="n">all_probs</span><span class="p">,</span>
+            <span class="n">none_value</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">pad_token</span><span class="p">,</span>
+            <span class="n">subtoken_predictions</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">subtoken_predictions</span><span class="p">,</span>
+            <span class="n">associations</span><span class="o">=</span><span class="n">all_assocs</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">doc_annotations</span></div>
+
+<div class="viewcode-block" id="Association.featurize"><a class="viewcode-back" href="../../../api.html#finetune.Association.featurize">[docs]</a>    <span class="k">def</span> <span class="nf">featurize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.</span>
+
+<span class="sd">        :param Xs: An iterable of lists or array of text, shape [batch, n_inputs, tokens]</span>
+<span class="sd">        :returns: np.array of features of shape (n_examples, embedding_size).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_featurize</span><span class="p">(</span><span class="n">X</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Association.predict_proba"><a class="viewcode-back" href="../../../api.html#finetune.Association.predict_proba">[docs]</a>    <span class="k">def</span> <span class="nf">predict_proba</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Produces a list of most likely class labels as determined by the fine-tuned model.</span>
+
+<span class="sd">        :param X: A list / array of text, shape [batch]</span>
+<span class="sd">        :returns: list of class labels.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">X</span><span class="p">)</span></div>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_target_model</span><span class="p">(</span>
+        <span class="n">config</span><span class="p">,</span> <span class="n">featurizer_state</span><span class="p">,</span> <span class="n">targets</span><span class="p">,</span> <span class="n">n_outputs</span><span class="p">,</span> <span class="n">train</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">reuse</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+    <span class="p">):</span>
+        <span class="k">return</span> <span class="n">association</span><span class="p">(</span>
+            <span class="n">hidden</span><span class="o">=</span><span class="n">featurizer_state</span><span class="p">[</span><span class="s2">&quot;sequence_features&quot;</span><span class="p">],</span>
+            <span class="n">pool_idx</span><span class="o">=</span><span class="n">featurizer_state</span><span class="p">[</span><span class="s2">&quot;pool_idx&quot;</span><span class="p">],</span>
+            <span class="n">targets</span><span class="o">=</span><span class="n">targets</span><span class="p">,</span>
+            <span class="n">n_targets</span><span class="o">=</span><span class="n">n_outputs</span><span class="p">,</span>
+            <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span>
+            <span class="n">train</span><span class="o">=</span><span class="n">train</span><span class="p">,</span>
+            <span class="n">reuse</span><span class="o">=</span><span class="n">reuse</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_predict_op</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">logits</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+
+        <span class="n">associations</span> <span class="o">=</span> <span class="n">logits</span><span class="p">[</span><span class="s2">&quot;association&quot;</span><span class="p">]</span>
+        <span class="n">logits</span> <span class="o">=</span> <span class="n">logits</span><span class="p">[</span><span class="s2">&quot;sequence&quot;</span><span class="p">]</span>
+
+        <span class="n">trans_mats</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;transition_matrix&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">multi_label</span><span class="p">:</span>
+            <span class="n">logits</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">unstack</span><span class="p">(</span><span class="n">logits</span><span class="p">,</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">label_idxs</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">label_probas</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">logits_i</span><span class="p">,</span> <span class="n">trans_mat_i</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">logits</span><span class="p">,</span> <span class="n">trans_mats</span><span class="p">):</span>
+                <span class="n">idx</span><span class="p">,</span> <span class="n">prob</span> <span class="o">=</span> <span class="n">sequence_decode</span><span class="p">(</span><span class="n">logits_i</span><span class="p">,</span> <span class="n">trans_mat_i</span><span class="p">)</span>
+                <span class="n">label_idxs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span>
+                <span class="n">label_probas</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">prob</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">1</span><span class="p">:])</span>
+            <span class="n">label_idxs</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">label_idxs</span><span class="p">,</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">label_probas</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">label_probas</span><span class="p">,</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">label_idxs</span><span class="p">,</span> <span class="n">label_probas</span> <span class="o">=</span> <span class="n">sequence_decode</span><span class="p">(</span><span class="n">logits</span><span class="p">,</span> <span class="n">trans_mats</span><span class="p">)</span>
+
+        <span class="n">association_prob</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">softmax</span><span class="p">(</span><span class="n">associations</span><span class="p">,</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">association_pred</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">associations</span><span class="p">,</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="p">{</span>
+                <span class="n">PredictMode</span><span class="o">.</span><span class="n">SEQUENCE</span><span class="p">:</span> <span class="n">label_idxs</span><span class="p">,</span>
+                <span class="n">PredictMode</span><span class="o">.</span><span class="n">ASSOCIATION</span><span class="p">:</span> <span class="n">association_pred</span><span class="p">,</span>
+            <span class="p">},</span>
+            <span class="p">{</span>
+                <span class="n">PredictMode</span><span class="o">.</span><span class="n">SEQUENCE_PROBAS</span><span class="p">:</span> <span class="n">label_probas</span><span class="p">,</span>
+                <span class="n">PredictMode</span><span class="o">.</span><span class="n">ASSOCIATION_PROBAS</span><span class="p">:</span> <span class="n">association_prob</span><span class="p">,</span>
+            <span class="p">},</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_predict_proba_op</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">logits</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">tf</span><span class="o">.</span><span class="n">no_op</span><span class="p">()</span></div>
+</pre></div>
+
+           </div>
+           <div class="articleComments">
+            
+           </div>
+          </div>
+          <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2019, Madison May, Ben Townsend, Lily Zhang, Matthew Bayer.
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'../../../',
+            VERSION:'0.8.1',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true,
+            SOURCELINK_SUFFIX: '.txt'
+        };
+    </script>
+      <script type="text/javascript" src="../../../_static/jquery.js"></script>
+      <script type="text/javascript" src="../../../_static/underscore.js"></script>
+      <script type="text/javascript" src="../../../_static/doctools.js"></script>
+
+  
+
+  
+  
+    <script type="text/javascript" src="../../../_static/js/theme.js"></script>
+  
+
+  
+  
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.StickyNav.enable();
+      });
+  </script>
+   
+
+</body>
+</html>

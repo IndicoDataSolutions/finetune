@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Search &mdash; finetune 0.8.1 documentation</title>
+  <title>Dataset Loading &mdash; finetune 0.8.1 documentation</title>
   
 
   
@@ -34,8 +34,10 @@
   
         <link rel="index" title="Index"
               href="genindex.html"/>
-        <link rel="search" title="Search" href="#"/>
-    <link rel="top" title="finetune 0.8.1 documentation" href="index.html"/> 
+        <link rel="search" title="Search" href="search.html"/>
+    <link rel="top" title="finetune 0.8.1 documentation" href="index.html"/>
+        <link rel="next" title="Saving and Loading Models" href="serializing.html"/>
+        <link rel="prev" title="Finetune Quickstart Guide" href="quickstart.html"/> 
 
   
   <script src="_static/js/modernizr.min.js"></script>
@@ -71,7 +73,7 @@
 
           
 <div role="search">
-  <form id="rtd-search-form" class="wy-form" action="#" method="get">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
     <input type="text" name="q" placeholder="Search docs" />
     <input type="hidden" name="check_keywords" value="yes" />
     <input type="hidden" name="area" value="default" />
@@ -89,12 +91,12 @@
             
             
               <p class="caption"><span class="caption-text">General API</span></p>
-<ul>
+<ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="installation.html#docker">Docker</a></li>
 <li class="toctree-l1"><a class="reference internal" href="basemodels.html">Base Models (e.g. BERT, GPT2, RoBERTa)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="quickstart.html">Finetune Quickstart Guide</a></li>
-<li class="toctree-l1"><a class="reference internal" href="datasetloading.html">Dataset Loading</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Dataset Loading</a></li>
 <li class="toctree-l1"><a class="reference internal" href="serializing.html">Saving and Loading Models</a></li>
 <li class="toctree-l1"><a class="reference internal" href="config.html">Model Configuration Options</a></li>
 <li class="toctree-l1"><a class="reference internal" href="resource.html">Resource Management</a></li>
@@ -151,10 +153,14 @@
     
       <li><a href="index.html">Docs</a> &raquo;</li>
         
-      <li>Search</li>
+      <li>Dataset Loading</li>
     
     
       <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/datasetloading.rst.txt" rel="nofollow"> View page source</a>
+          
         
       </li>
     
@@ -166,19 +172,33 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
             
-  <noscript>
-  <div id="fallback" class="admonition warning">
-    <p class="last">
-      Please activate JavaScript to enable the search
-      functionality.
-    </p>
-  </div>
-  </noscript>
+  <div class="section" id="dataset-loading">
+<h1>Dataset Loading<a class="headerlink" href="#dataset-loading" title="Permalink to this headline">¶</a></h1>
+<p>Finetune supports providing input data as a list or as a data generator.  When a generator is provided as input, finetune
+takes advantage of the <code class="xref py py-mod docutils literal notranslate"><span class="pre">tf.data</span></code> module for data pipelining.</p>
+<p>Providing text and targets in list format:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">X</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;german shepherd&#39;</span><span class="p">,</span> <span class="s1">&#39;maine coon&#39;</span><span class="p">,</span> <span class="s1">&#39;persian&#39;</span><span class="p">,</span> <span class="s1">&#39;beagle&#39;</span><span class="p">]</span>
+<span class="n">Y</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;dog&#39;</span><span class="p">,</span> <span class="s1">&#39;cat&#39;</span><span class="p">,</span> <span class="s1">&#39;cat&#39;</span><span class="p">,</span> <span class="s1">&#39;dog&#39;</span><span class="p">]</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">Classifier</span><span class="p">()</span>
+<span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">Y</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Providing data as a generator:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s1">&#39;pets.csv&#39;</span><span class="p">)</span>
 
-  
-  <div id="search-results">
-  
-  </div>
+<span class="c1"># Even if raw data is greedily loaded,</span>
+<span class="c1"># using a generator allows us to defer data preprocessing</span>
+<span class="k">def</span> <span class="nf">text_generator</span><span class="p">():</span>
+    <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">df</span><span class="o">.</span><span class="n">Text</span><span class="o">.</span><span class="n">values</span><span class="p">:</span>
+        <span class="k">yield</span> <span class="n">row</span><span class="o">.</span><span class="n">Text</span>
+
+<span class="c1"># dataset_size must be specified if input is provided as generators</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">Classifier</span><span class="p">(</span><span class="n">dataset_size</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">df</span><span class="p">))</span>
+<span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">text_generator</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+
 
            </div>
            <div class="articleComments">
@@ -186,6 +206,15 @@
            </div>
           </div>
           <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="serializing.html" class="btn btn-neutral float-right" title="Saving and Loading Models" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="quickstart.html" class="btn btn-neutral" title="Finetune Quickstart Guide" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
   
 
   <hr/>
@@ -224,7 +253,6 @@
       <script type="text/javascript" src="_static/jquery.js"></script>
       <script type="text/javascript" src="_static/underscore.js"></script>
       <script type="text/javascript" src="_static/doctools.js"></script>
-      <script type="text/javascript" src="_static/searchtools.js"></script>
 
   
 
@@ -240,14 +268,7 @@
           SphinxRtdTheme.StickyNav.enable();
       });
   </script>
-  
-  <script type="text/javascript">
-    jQuery(function() { Search.loadIndex("searchindex.js"); });
-  </script>
-  
-  <script type="text/javascript" id="searchindexloader"></script>
    
-
 
 </body>
 </html>

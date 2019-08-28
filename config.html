@@ -1,0 +1,337 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Model Configuration Options &mdash; finetune 0.8.1 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  
+  
+    <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  
+
+  
+
+  
+        <link rel="index" title="Index"
+              href="genindex.html"/>
+        <link rel="search" title="Search" href="search.html"/>
+    <link rel="top" title="finetune 0.8.1 documentation" href="index.html"/>
+        <link rel="next" title="Resource Management" href="resource.html"/>
+        <link rel="prev" title="Saving and Loading Models" href="serializing.html"/> 
+
+  
+  <script src="_static/js/modernizr.min.js"></script>
+
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+   
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search">
+          
+
+          
+            <a href="index.html" class="icon icon-home"> finetune
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0.8.1
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">General API</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installation.html#docker">Docker</a></li>
+<li class="toctree-l1"><a class="reference internal" href="basemodels.html">Base Models (e.g. BERT, GPT2, RoBERTa)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Finetune Quickstart Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="datasetloading.html">Dataset Loading</a></li>
+<li class="toctree-l1"><a class="reference internal" href="serializing.html">Saving and Loading Models</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Model Configuration Options</a></li>
+<li class="toctree-l1"><a class="reference internal" href="resource.html">Resource Management</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Special Features</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="api.html">Finetune API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cachedpredict.html">Cached Prediction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="chunk.html">Process Long Sequences</a></li>
+<li class="toctree-l1"><a class="reference internal" href="sequencelabeler.html">SequenceLabeler Class</a></li>
+<li class="toctree-l1"><a class="reference internal" href="adapter.html">Using Adapters and the DeploymentModel class</a></li>
+<li class="toctree-l1"><a class="reference internal" href="auxiliary.html">Using Auxiliary Info</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">finetune</a>
+        
+      </nav>
+
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html">Docs</a> &raquo;</li>
+        
+      <li>Model Configuration Options</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/config.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="model-configuration-options">
+<h1>Model Configuration Options<a class="headerlink" href="#model-configuration-options" title="Permalink to this headline">¶</a></h1>
+<dl class="class">
+<dt id="finetune.config.Settings">
+<em class="property">class </em><code class="descclassname">finetune.config.</code><code class="descname">Settings</code><span class="sig-paren">(</span><em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/config.html#Settings"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.config.Settings" title="Permalink to this definition">¶</a></dt>
+<dd><p>Model configuration options</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>base_model</strong> – Which base model to use - one of {GPT, GPT2, RoBERTa, BERT, TextCNN, TCN}, imported from finetune.base_models. Defaults to <cite>GPT</cite>.</li>
+<li><strong>batch_size</strong> – Number of examples per batch, defaults to <cite>2</cite>.</li>
+<li><strong>visible_gpus</strong> – List of integer GPU ids to spread out computation across, defaults to all available GPUs.</li>
+<li><strong>n_epochs</strong> – Number of iterations through training data, defaults to <cite>3</cite>.</li>
+<li><strong>seed</strong> – Random seed to use for repeatability purposes, defaults to <cite>42</cite>.</li>
+<li><strong>max_length</strong> – Maximum number of subtokens per sequence. Examples longer than this number will be truncated
+(unless <cite>chunk_long_sequences=True</cite> for SequenceLabeler models). Defaults to <cite>512</cite>.</li>
+<li><strong>weight_stddev</strong> – Standard deviation of initial weights.  Defaults to <cite>0.02</cite>.</li>
+<li><strong>chunk_long_sequences</strong> – When True, use a sliding window approach to predict on
+examples that are longer than max length.  Defaults to <cite>False</cite>.</li>
+<li><strong>low_memory_mode</strong> – When True, only store partial gradients on forward pass
+and recompute remaining gradients incrementally in order to save memory.  Defaults to <cite>False</cite>.</li>
+<li><strong>interpolate_pos_embed</strong> – Interpolate positional embeddings when <cite>max_length</cite> differs from it’s original value of
+<cite>512</cite>. Defaults to <cite>False</cite>.</li>
+<li><strong>embed_p_drop</strong> – Embedding dropout probability.  Defaults to <cite>0.1</cite>.</li>
+<li><strong>attn_p_drop</strong> – Attention dropout probability.  Defaults to <cite>0.1</cite>.</li>
+<li><strong>resid_p_drop</strong> – Residual layer fully connected network dropout probability.  Defaults to <cite>0.1</cite>.</li>
+<li><strong>clf_p_drop</strong> – Classifier dropout probability.  Defaults to <cite>0.1</cite>.</li>
+<li><strong>l2_reg</strong> – L2 regularization coefficient. Defaults to <cite>0.01</cite>.</li>
+<li><strong>vector_l2</strong> – Whether to apply weight decay regularization to vectors (biases, normalization etc..). Defaults to False.</li>
+<li><strong>optimizer</strong> – Optimizer to use, current options include AdamW or AdamaxW.</li>
+<li><strong>b1</strong> – Adam b1 parameter.  Defaults to <cite>0.9</cite>.</li>
+<li><strong>b2</strong> – Adam b2 parameter.  Defaults to <cite>0.999</cite>.</li>
+<li><strong>epsilon</strong> – Adam epsilon parameter: Defaults to <cite>1e-8</cite>.</li>
+<li><strong>lr_schedule</strong> – Learning rate schedule – see <cite>finetune/optimizers.py</cite> for more options.</li>
+<li><strong>lr</strong> – Learning rate.  Defaults to <cite>6.25e-5</cite>.</li>
+<li><strong>lr_warmup</strong> – Learning rate warmup (percentage of all batches to warmup for).  Defaults to <cite>0.002</cite>.</li>
+<li><strong>max_grad_norm</strong> – Clip gradients larger than this norm. Defaults to <cite>1.0</cite>.</li>
+<li><strong>shuffle_buffer_size</strong> – How many examples to load into a buffer before shuffling. Defaults to <cite>100</cite>.</li>
+<li><strong>accum_steps</strong> – Number of updates to accumulate before applying. This is used to simulate a higher batch size.</li>
+<li><strong>lm_loss_coef</strong> – Language modeling loss coefficient – a value between <cite>0.0</cite> - <cite>1.0</cite>
+that indicates how to trade off between language modeling loss
+and target model loss.  Usually not beneficial to turn on unless
+dataset size exceeds a few thousand examples.  Defaults to <cite>0.0</cite>.</li>
+<li><strong>tsa_schedule</strong> – Training Signal Annealing Schedule from ‘Unsupervised Data Augmentation for Consistency Training’. One of {“linear_schedule”, “exp_schedule”, “log_schedule”}.  Defaults to <cite>None</cite>.</li>
+<li><strong>summarize_grads</strong> – Include gradient summary information in tensorboard.  Defaults to <cite>False</cite>.</li>
+<li><strong>val_size</strong> – Validation set size if int. Validation set size as percentage of all training data if float.  Validation will not be run by default if n_examples &lt; 50.
+If n_examples &gt; 50, defaults to max(5, min(100, 0.05 * n_examples))</li>
+<li><strong>val_interval</strong> – Evaluate on validation set after <cite>val_interval</cite> batches.
+Defaults to 4 * val_size / batch_size to ensure that too much time is not spent on validation.</li>
+<li><strong>lm_temp</strong> – Language model temperature – a value of <cite>0.0</cite> corresponds to greedy maximum likelihood predictions
+while a value of <cite>1.0</cite> corresponds to random predictions. Defaults to <cite>0.2</cite>.</li>
+<li><strong>seq_num_heads</strong> – Number of attention heads of final attention layer. Defaults to <cite>16</cite>.</li>
+<li><strong>keep_best_model</strong> – Whether or not to keep the highest-performing model weights throughout the train. Defaults to <cite>False</cite>.</li>
+<li><strong>early_stopping_steps</strong> – How many steps to continue with no loss improvement before early stopping. Defaults to <cite>None</cite>.</li>
+<li><strong>subtoken_predictions</strong> – Return predictions at subtoken granularity or token granularity?  Defaults to <cite>False</cite>.</li>
+<li><strong>multi_label_sequences</strong> – Use a multi-labeling approach to sequence labeling to allow overlapping labels.</li>
+<li><strong>multi_label_threshold</strong> – Threshold of sigmoid unit in multi label classifier.
+Can be increased or lowered to trade off precision / recall. Defaults to <cite>0.5</cite>.</li>
+<li><strong>autosave_path</strong> – Save current best model (as measured by validation loss) to this location. Defaults to <cite>None</cite>.</li>
+<li><strong>tensorboard_folder</strong> – Directory for tensorboard logs. Tensorboard logs will not be written
+unless tensorboard_folder is explicitly provided. Defaults to <cite>None</cite>.</li>
+<li><strong>log_device_placement</strong> – Log which device each operation is placed on for debugging purposes.  Defaults to <cite>False</cite>.</li>
+<li><strong>allow_soft_placement</strong> – Allow tf to allocate an operation to a different device if a device is unavailable.  Defaults to <cite>True</cite>.</li>
+<li><strong>save_adam_vars</strong> – Save adam parameters when calling <cite>model.save()</cite>.  Defaults to <cite>True</cite>.</li>
+<li><strong>num_layers_trained</strong> – How many layers to finetune.  Specifying a value less than model’s number of layers will train layers starting from model output. Defaults to <cite>12</cite>.</li>
+<li><strong>train_embeddings</strong> – Should embedding layer be finetuned? Defaults to <cite>True</cite>.</li>
+<li><strong>class_weights</strong> – One of ‘log’, ‘linear’, or ‘sqrt’. Auto-scales gradient updates based on class frequency.  Can also be a dictionary that maps from true class name to loss coefficient. Defaults to <cite>None</cite>.</li>
+<li><strong>oversample</strong> – Should rare classes be oversampled?  Defaults to <cite>False</cite>.</li>
+<li><strong>params_device</strong> – Which device should gradient updates be aggregated on?
+If you are using a single GPU and have more than 4Gb of GPU memory you should set this to GPU PCI number (0, 1, 2, etc.). Defaults to <cite>“cpu”</cite>.</li>
+<li><strong>eval_acc</strong> – if True, calculates accuracy and writes it to the tensorboard summary files for valudation runs.</li>
+<li><strong>save_dtype</strong> – specifies what precision to save model weights with.  Defaults to <cite>np.float32</cite>.</li>
+<li><strong>regression_loss</strong> – the loss to use for regression models. One of <cite>L1</cite> or <cite>L2</cite>, defaults to <cite>L2</cite>.</li>
+<li><strong>prefit_init</strong> – if True, fit target model weigths before finetuning the entire model. Defaults to <cite>False</cite>.</li>
+<li><strong>debugging_logs</strong> – if True, output tensorflow logs and turn off TQDM logging. Defaults to <cite>False</cite>.</li>
+<li><strong>val_set</strong> – Where it is neccessary to use an explicit validation set, provide it here as a tuple (text, labels)</li>
+<li><strong>per_process_gpu_memory_fraction</strong> – fraction of the overall amount of memory that each visible GPU should be allocated, defaults to <cite>1.0</cite>.</li>
+<li><strong>adapter_size</strong> – width of adapter module from ‘Parameter Efficient Transfer Learning’ paper, if defined. defaults to ‘None’.</li>
+<li><strong>n_context_embed</strong> – Dimensionality of auxiliary info embeddings. Only use if passing ‘default_context’ to the model as well. Defaults to <cite>6</cite> for convolutional models, otherwise <cite>32</cite>.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+</div>
+
+
+           </div>
+           <div class="articleComments">
+            
+           </div>
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="resource.html" class="btn btn-neutral float-right" title="Resource Management" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="serializing.html" class="btn btn-neutral" title="Saving and Loading Models" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2019, Madison May, Ben Townsend, Lily Zhang, Matthew Bayer.
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'./',
+            VERSION:'0.8.1',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true,
+            SOURCELINK_SUFFIX: '.txt'
+        };
+    </script>
+      <script type="text/javascript" src="_static/jquery.js"></script>
+      <script type="text/javascript" src="_static/underscore.js"></script>
+      <script type="text/javascript" src="_static/doctools.js"></script>
+
+  
+
+  
+  
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+  
+
+  
+  
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.StickyNav.enable();
+      });
+  </script>
+   
+
+</body>
+</html>

@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Search &mdash; finetune 0.8.1 documentation</title>
+  <title>Base Models (e.g. BERT, GPT2, RoBERTa) &mdash; finetune 0.8.1 documentation</title>
   
 
   
@@ -34,8 +34,10 @@
   
         <link rel="index" title="Index"
               href="genindex.html"/>
-        <link rel="search" title="Search" href="#"/>
-    <link rel="top" title="finetune 0.8.1 documentation" href="index.html"/> 
+        <link rel="search" title="Search" href="search.html"/>
+    <link rel="top" title="finetune 0.8.1 documentation" href="index.html"/>
+        <link rel="next" title="Finetune Quickstart Guide" href="quickstart.html"/>
+        <link rel="prev" title="Installation" href="installation.html"/> 
 
   
   <script src="_static/js/modernizr.min.js"></script>
@@ -71,7 +73,7 @@
 
           
 <div role="search">
-  <form id="rtd-search-form" class="wy-form" action="#" method="get">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
     <input type="text" name="q" placeholder="Search docs" />
     <input type="hidden" name="check_keywords" value="yes" />
     <input type="hidden" name="area" value="default" />
@@ -89,10 +91,10 @@
             
             
               <p class="caption"><span class="caption-text">General API</span></p>
-<ul>
+<ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="installation.html#docker">Docker</a></li>
-<li class="toctree-l1"><a class="reference internal" href="basemodels.html">Base Models (e.g. BERT, GPT2, RoBERTa)</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Base Models (e.g. BERT, GPT2, RoBERTa)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="quickstart.html">Finetune Quickstart Guide</a></li>
 <li class="toctree-l1"><a class="reference internal" href="datasetloading.html">Dataset Loading</a></li>
 <li class="toctree-l1"><a class="reference internal" href="serializing.html">Saving and Loading Models</a></li>
@@ -151,10 +153,14 @@
     
       <li><a href="index.html">Docs</a> &raquo;</li>
         
-      <li>Search</li>
+      <li>Base Models (e.g. BERT, GPT2, RoBERTa)</li>
     
     
       <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/basemodels.rst.txt" rel="nofollow"> View page source</a>
+          
         
       </li>
     
@@ -166,19 +172,20 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
             
-  <noscript>
-  <div id="fallback" class="admonition warning">
-    <p class="last">
-      Please activate JavaScript to enable the search
-      functionality.
-    </p>
-  </div>
-  </noscript>
+  <div class="section" id="base-models-e-g-bert-gpt2-roberta">
+<h1>Base Models (e.g. BERT, GPT2, RoBERTa)<a class="headerlink" href="#base-models-e-g-bert-gpt2-roberta" title="Permalink to this headline">¶</a></h1>
+<p>Finetune defaults to using OpenAI’s GPT base model, but also supports other base model options.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">finetune.base_models</span> <span class="kn">import</span> <span class="n">BERT</span><span class="p">,</span> <span class="n">BERTLarge</span><span class="p">,</span> <span class="n">GPT2</span><span class="p">,</span> <span class="n">GPT2Medium</span><span class="p">,</span> <span class="n">TextCNN</span><span class="p">,</span> <span class="n">TCN</span><span class="p">,</span> <span class="n">RoBERTa</span>
 
-  
-  <div id="search-results">
-  
-  </div>
+<span class="c1"># RoBERTa has provided state-of-the-art results on a variety of natural language tasks, as of late 2019</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">Classifier</span><span class="p">(</span><span class="n">base_model</span><span class="o">=</span><span class="n">RoBERTa</span><span class="p">)</span>
+
+<span class="c1"># TextCNN and TCN are much faster convolutional models, at the expense of downstream task performance</span>
+<span class="n">fast_model</span> <span class="o">=</span> <span class="n">Classifier</span><span class="p">(</span><span class="n">base_model</span><span class="o">=</span><span class="n">TextCNN</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+
 
            </div>
            <div class="articleComments">
@@ -186,6 +193,15 @@
            </div>
           </div>
           <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="quickstart.html" class="btn btn-neutral float-right" title="Finetune Quickstart Guide" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="installation.html" class="btn btn-neutral" title="Installation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
   
 
   <hr/>
@@ -224,7 +240,6 @@
       <script type="text/javascript" src="_static/jquery.js"></script>
       <script type="text/javascript" src="_static/underscore.js"></script>
       <script type="text/javascript" src="_static/doctools.js"></script>
-      <script type="text/javascript" src="_static/searchtools.js"></script>
 
   
 
@@ -240,14 +255,7 @@
           SphinxRtdTheme.StickyNav.enable();
       });
   </script>
-  
-  <script type="text/javascript">
-    jQuery(function() { Search.loadIndex("searchindex.js"); });
-  </script>
-  
-  <script type="text/javascript" id="searchindexloader"></script>
    
-
 
 </body>
 </html>

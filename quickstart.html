@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Search &mdash; finetune 0.8.1 documentation</title>
+  <title>Finetune Quickstart Guide &mdash; finetune 0.8.1 documentation</title>
   
 
   
@@ -34,8 +34,10 @@
   
         <link rel="index" title="Index"
               href="genindex.html"/>
-        <link rel="search" title="Search" href="#"/>
-    <link rel="top" title="finetune 0.8.1 documentation" href="index.html"/> 
+        <link rel="search" title="Search" href="search.html"/>
+    <link rel="top" title="finetune 0.8.1 documentation" href="index.html"/>
+        <link rel="next" title="Dataset Loading" href="datasetloading.html"/>
+        <link rel="prev" title="Base Models (e.g. BERT, GPT2, RoBERTa)" href="basemodels.html"/> 
 
   
   <script src="_static/js/modernizr.min.js"></script>
@@ -71,7 +73,7 @@
 
           
 <div role="search">
-  <form id="rtd-search-form" class="wy-form" action="#" method="get">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
     <input type="text" name="q" placeholder="Search docs" />
     <input type="hidden" name="check_keywords" value="yes" />
     <input type="hidden" name="area" value="default" />
@@ -89,11 +91,11 @@
             
             
               <p class="caption"><span class="caption-text">General API</span></p>
-<ul>
+<ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="installation.html#docker">Docker</a></li>
 <li class="toctree-l1"><a class="reference internal" href="basemodels.html">Base Models (e.g. BERT, GPT2, RoBERTa)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Finetune Quickstart Guide</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Finetune Quickstart Guide</a></li>
 <li class="toctree-l1"><a class="reference internal" href="datasetloading.html">Dataset Loading</a></li>
 <li class="toctree-l1"><a class="reference internal" href="serializing.html">Saving and Loading Models</a></li>
 <li class="toctree-l1"><a class="reference internal" href="config.html">Model Configuration Options</a></li>
@@ -151,10 +153,14 @@
     
       <li><a href="index.html">Docs</a> &raquo;</li>
         
-      <li>Search</li>
+      <li>Finetune Quickstart Guide</li>
     
     
       <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/quickstart.rst.txt" rel="nofollow"> View page source</a>
+          
         
       </li>
     
@@ -166,19 +172,23 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
             
-  <noscript>
-  <div id="fallback" class="admonition warning">
-    <p class="last">
-      Please activate JavaScript to enable the search
-      functionality.
-    </p>
-  </div>
-  </noscript>
+  <div class="section" id="finetune-quickstart-guide">
+<h1>Finetune Quickstart Guide<a class="headerlink" href="#finetune-quickstart-guide" title="Permalink to this headline">¶</a></h1>
+<p>Finetuning the base language model is as easy as calling <code class="xref py py-meth docutils literal notranslate"><span class="pre">Classifier.fit()</span></code>:</p>
+<div class="highlight-python3 notranslate"><div class="highlight"><pre><span></span><span class="n">model</span> <span class="o">=</span> <span class="n">Classifier</span><span class="p">()</span>               <span class="c1"># Load base model</span>
+<span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">trainX</span><span class="p">,</span> <span class="n">trainY</span><span class="p">)</span>          <span class="c1"># Finetune base model on custom data</span>
+<span class="n">predictions</span><span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">testX</span><span class="p">)</span>  <span class="c1"># [&#39;class_2&#39;, &#39;class_1&#39;, &#39;class_3&#39;...]</span>
+<span class="n">probs</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">predict_proba</span><span class="p">(</span><span class="n">testX</span><span class="p">)</span> <span class="c1"># [{&#39;class_1&#39;: 0.23, &#39;class_2&#39;: 0.54, ..}, ..]</span>
+<span class="n">model</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>                   <span class="c1"># Serialize the model to disk</span>
+</pre></div>
+</div>
+<p>Reload saved models from disk by using <code class="xref py py-meth docutils literal notranslate"><span class="pre">Classifier.load()</span></code>:</p>
+<div class="highlight-python3 notranslate"><div class="highlight"><pre><span></span><span class="n">model</span> <span class="o">=</span> <span class="n">Classifier</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+<span class="n">predictions</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">testX</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
 
-  
-  <div id="search-results">
-  
-  </div>
 
            </div>
            <div class="articleComments">
@@ -186,6 +196,15 @@
            </div>
           </div>
           <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="datasetloading.html" class="btn btn-neutral float-right" title="Dataset Loading" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="basemodels.html" class="btn btn-neutral" title="Base Models (e.g. BERT, GPT2, RoBERTa)" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
   
 
   <hr/>
@@ -224,7 +243,6 @@
       <script type="text/javascript" src="_static/jquery.js"></script>
       <script type="text/javascript" src="_static/underscore.js"></script>
       <script type="text/javascript" src="_static/doctools.js"></script>
-      <script type="text/javascript" src="_static/searchtools.js"></script>
 
   
 
@@ -240,14 +258,7 @@
           SphinxRtdTheme.StickyNav.enable();
       });
   </script>
-  
-  <script type="text/javascript">
-    jQuery(function() { Search.loadIndex("searchindex.js"); });
-  </script>
-  
-  <script type="text/javascript" id="searchindexloader"></script>
    
-
 
 </body>
 </html>

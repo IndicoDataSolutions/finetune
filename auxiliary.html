@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Search &mdash; finetune 0.8.1 documentation</title>
+  <title>Using Auxiliary Info &mdash; finetune 0.8.1 documentation</title>
   
 
   
@@ -34,8 +34,9 @@
   
         <link rel="index" title="Index"
               href="genindex.html"/>
-        <link rel="search" title="Search" href="#"/>
-    <link rel="top" title="finetune 0.8.1 documentation" href="index.html"/> 
+        <link rel="search" title="Search" href="search.html"/>
+    <link rel="top" title="finetune 0.8.1 documentation" href="index.html"/>
+        <link rel="prev" title="Using Adapters and the DeploymentModel class" href="adapter.html"/> 
 
   
   <script src="_static/js/modernizr.min.js"></script>
@@ -71,7 +72,7 @@
 
           
 <div role="search">
-  <form id="rtd-search-form" class="wy-form" action="#" method="get">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
     <input type="text" name="q" placeholder="Search docs" />
     <input type="hidden" name="check_keywords" value="yes" />
     <input type="hidden" name="area" value="default" />
@@ -100,13 +101,13 @@
 <li class="toctree-l1"><a class="reference internal" href="resource.html">Resource Management</a></li>
 </ul>
 <p class="caption"><span class="caption-text">Special Features</span></p>
-<ul>
+<ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="api.html">Finetune API Reference</a></li>
 <li class="toctree-l1"><a class="reference internal" href="cachedpredict.html">Cached Prediction</a></li>
 <li class="toctree-l1"><a class="reference internal" href="chunk.html">Process Long Sequences</a></li>
 <li class="toctree-l1"><a class="reference internal" href="sequencelabeler.html">SequenceLabeler Class</a></li>
 <li class="toctree-l1"><a class="reference internal" href="adapter.html">Using Adapters and the DeploymentModel class</a></li>
-<li class="toctree-l1"><a class="reference internal" href="auxiliary.html">Using Auxiliary Info</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Using Auxiliary Info</a></li>
 </ul>
 
             
@@ -151,10 +152,14 @@
     
       <li><a href="index.html">Docs</a> &raquo;</li>
         
-      <li>Search</li>
+      <li>Using Auxiliary Info</li>
     
     
       <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/auxiliary.rst.txt" rel="nofollow"> View page source</a>
+          
         
       </li>
     
@@ -166,19 +171,35 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
             
-  <noscript>
-  <div id="fallback" class="admonition warning">
-    <p class="last">
-      Please activate JavaScript to enable the search
-      functionality.
-    </p>
-  </div>
-  </noscript>
+  <div class="section" id="using-auxiliary-info">
+<h1>Using Auxiliary Info<a class="headerlink" href="#using-auxiliary-info" title="Permalink to this headline">¶</a></h1>
+<p>Our base models can also process arbitrary auxiliary information in addition to text, such as style (bolding, italics, etc.), semantics (part-of-speech tags, sentiment tags), or other forms,
+as long as they describe specific spans of text.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># First we define the extra features we will be providing, through a dictionary.</span>
+<span class="c1"># We do this by defining values and the defaults that tokens will receive if they are not explicitly labeled.</span>
+<span class="c1"># Auxiliary info can take the form of strings, booleans, floats, or ints.</span>
+<span class="n">default</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;capitalized&#39;</span><span class="p">:</span><span class="bp">False</span><span class="p">,</span> <span class="s1">&#39;part_of_speech&#39;</span><span class="p">:</span><span class="s1">&#39;unknown&#39;</span><span class="p">}</span>
 
-  
-  <div id="search-results">
-  
-  </div>
+<span class="c1"># Next we create context tags in a similar format to SequenceLabeling labels, as a list of lists of dictionaries:</span>
+<span class="n">train_text</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;Intelligent process automation&#39;</span><span class="p">]</span>
+<span class="n">train_context</span> <span class="o">=</span> <span class="p">[[</span>
+    <span class="p">{</span><span class="s1">&#39;text&#39;</span><span class="p">:</span> <span class="s1">&#39;Intelligent&#39;</span><span class="p">,</span> <span class="s1">&#39;capitalized&#39;</span><span class="p">:</span> <span class="bp">True</span><span class="p">,</span> <span class="s1">&#39;end&#39;</span><span class="p">:</span> <span class="mi">11</span><span class="p">,</span> <span class="s1">&#39;start&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s1">&#39;part_of_speech&#39;</span><span class="p">:</span> <span class="s1">&#39;ADJ&#39;</span><span class="p">},</span>
+    <span class="p">{</span><span class="s1">&#39;text&#39;</span><span class="p">:</span> <span class="s1">&#39;process automation&#39;</span><span class="p">,</span> <span class="s1">&#39;capitalized&#39;</span><span class="p">:</span> <span class="bp">False</span><span class="p">,</span> <span class="s1">&#39;end&#39;</span><span class="p">:</span> <span class="mi">30</span><span class="p">,</span> <span class="s1">&#39;start&#39;</span><span class="p">:</span> <span class="mi">12</span><span class="p">,</span> <span class="s1">&#39;part_of_speech&#39;</span><span class="p">:</span> <span class="s1">&#39;NOUN&#39;</span><span class="p">},</span>
+<span class="p">]]</span>
+
+<span class="c1"># Our input to the model is now a list containing the text, and the context</span>
+<span class="n">trainX</span> <span class="o">=</span> <span class="p">[</span><span class="n">train_text</span><span class="p">,</span> <span class="n">train_context</span><span class="p">]</span>
+
+<span class="c1"># Examples with no context must have an empty list as their context</span>
+<span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">train_text</span><span class="p">)</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">train_context</span><span class="p">)</span>
+
+<span class="c1"># We indicate to the model that we are including auxiliary info by passing our default dictionary in with the default_context kwarg.</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">Classifier</span><span class="p">(</span><span class="n">default_context</span><span class="o">=</span><span class="n">default</span><span class="p">)</span>
+<span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">trainX</span><span class="p">,</span> <span class="n">trainY</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+
 
            </div>
            <div class="articleComments">
@@ -186,6 +207,13 @@
            </div>
           </div>
           <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+      
+        <a href="adapter.html" class="btn btn-neutral" title="Using Adapters and the DeploymentModel class" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
   
 
   <hr/>
@@ -224,7 +252,6 @@
       <script type="text/javascript" src="_static/jquery.js"></script>
       <script type="text/javascript" src="_static/underscore.js"></script>
       <script type="text/javascript" src="_static/doctools.js"></script>
-      <script type="text/javascript" src="_static/searchtools.js"></script>
 
   
 
@@ -240,14 +267,7 @@
           SphinxRtdTheme.StickyNav.enable();
       });
   </script>
-  
-  <script type="text/javascript">
-    jQuery(function() { Search.loadIndex("searchindex.js"); });
-  </script>
-  
-  <script type="text/javascript" id="searchindexloader"></script>
    
-
 
 </body>
 </html>

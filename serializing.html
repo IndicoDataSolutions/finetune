@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Search &mdash; finetune 0.8.1 documentation</title>
+  <title>Saving and Loading Models &mdash; finetune 0.8.1 documentation</title>
   
 
   
@@ -34,8 +34,10 @@
   
         <link rel="index" title="Index"
               href="genindex.html"/>
-        <link rel="search" title="Search" href="#"/>
-    <link rel="top" title="finetune 0.8.1 documentation" href="index.html"/> 
+        <link rel="search" title="Search" href="search.html"/>
+    <link rel="top" title="finetune 0.8.1 documentation" href="index.html"/>
+        <link rel="next" title="Model Configuration Options" href="config.html"/>
+        <link rel="prev" title="Dataset Loading" href="datasetloading.html"/> 
 
   
   <script src="_static/js/modernizr.min.js"></script>
@@ -71,7 +73,7 @@
 
           
 <div role="search">
-  <form id="rtd-search-form" class="wy-form" action="#" method="get">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
     <input type="text" name="q" placeholder="Search docs" />
     <input type="hidden" name="check_keywords" value="yes" />
     <input type="hidden" name="area" value="default" />
@@ -89,13 +91,13 @@
             
             
               <p class="caption"><span class="caption-text">General API</span></p>
-<ul>
+<ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="installation.html#docker">Docker</a></li>
 <li class="toctree-l1"><a class="reference internal" href="basemodels.html">Base Models (e.g. BERT, GPT2, RoBERTa)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="quickstart.html">Finetune Quickstart Guide</a></li>
 <li class="toctree-l1"><a class="reference internal" href="datasetloading.html">Dataset Loading</a></li>
-<li class="toctree-l1"><a class="reference internal" href="serializing.html">Saving and Loading Models</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Saving and Loading Models</a></li>
 <li class="toctree-l1"><a class="reference internal" href="config.html">Model Configuration Options</a></li>
 <li class="toctree-l1"><a class="reference internal" href="resource.html">Resource Management</a></li>
 </ul>
@@ -151,10 +153,14 @@
     
       <li><a href="index.html">Docs</a> &raquo;</li>
         
-      <li>Search</li>
+      <li>Saving and Loading Models</li>
     
     
       <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/serializing.rst.txt" rel="nofollow"> View page source</a>
+          
         
       </li>
     
@@ -166,19 +172,21 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
             
-  <noscript>
-  <div id="fallback" class="admonition warning">
-    <p class="last">
-      Please activate JavaScript to enable the search
-      functionality.
-    </p>
-  </div>
-  </noscript>
+  <div class="section" id="saving-and-loading-models">
+<h1>Saving and Loading Models<a class="headerlink" href="#saving-and-loading-models" title="Permalink to this headline">¶</a></h1>
+<p>You can use the <code class="xref py py-func docutils literal notranslate"><span class="pre">BaseModel.save()</span></code> and <code class="xref py py-func docutils literal notranslate"><span class="pre">load()</span></code> methods to serialize and deserialize trained models. Note that if you use adapters or only train a subset of layers using the
+<code class="xref py py-attr docutils literal notranslate"><span class="pre">num_layers_trained</span></code> configuration flag, your save files will be much smaller. This is because Finetune only saves out weights that are different than the default weights of the base model.
+If you are trying to optimize for save file size, check out <a class="reference internal" href="adapter.html"><span class="doc">Using Adapters and the DeploymentModel class</span></a>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">model</span> <span class="o">=</span> <span class="n">Classifier</span><span class="p">()</span>
+<span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">train_data</span><span class="p">,</span> <span class="n">train_labels</span><span class="p">)</span>
+<span class="n">model</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">filepath</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">model</span> <span class="o">=</span> <span class="n">Classifier</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">filepath</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
 
-  
-  <div id="search-results">
-  
-  </div>
 
            </div>
            <div class="articleComments">
@@ -186,6 +194,15 @@
            </div>
           </div>
           <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="config.html" class="btn btn-neutral float-right" title="Model Configuration Options" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="datasetloading.html" class="btn btn-neutral" title="Dataset Loading" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
   
 
   <hr/>
@@ -224,7 +241,6 @@
       <script type="text/javascript" src="_static/jquery.js"></script>
       <script type="text/javascript" src="_static/underscore.js"></script>
       <script type="text/javascript" src="_static/doctools.js"></script>
-      <script type="text/javascript" src="_static/searchtools.js"></script>
 
   
 
@@ -240,14 +256,7 @@
           SphinxRtdTheme.StickyNav.enable();
       });
   </script>
-  
-  <script type="text/javascript">
-    jQuery(function() { Search.loadIndex("searchindex.js"); });
-  </script>
-  
-  <script type="text/javascript" id="searchindexloader"></script>
    
-
 
 </body>
 </html>

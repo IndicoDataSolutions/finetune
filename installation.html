@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Search &mdash; finetune 0.8.1 documentation</title>
+  <title>Installation &mdash; finetune 0.8.1 documentation</title>
   
 
   
@@ -34,8 +34,10 @@
   
         <link rel="index" title="Index"
               href="genindex.html"/>
-        <link rel="search" title="Search" href="#"/>
-    <link rel="top" title="finetune 0.8.1 documentation" href="index.html"/> 
+        <link rel="search" title="Search" href="search.html"/>
+    <link rel="top" title="finetune 0.8.1 documentation" href="index.html"/>
+        <link rel="next" title="Base Models (e.g. BERT, GPT2, RoBERTa)" href="basemodels.html"/>
+        <link rel="prev" title="Finetune Quickstart Guide" href="index.html"/> 
 
   
   <script src="_static/js/modernizr.min.js"></script>
@@ -71,7 +73,7 @@
 
           
 <div role="search">
-  <form id="rtd-search-form" class="wy-form" action="#" method="get">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
     <input type="text" name="q" placeholder="Search docs" />
     <input type="hidden" name="check_keywords" value="yes" />
     <input type="hidden" name="area" value="default" />
@@ -89,9 +91,9 @@
             
             
               <p class="caption"><span class="caption-text">General API</span></p>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="installation.html#docker">Docker</a></li>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="#docker">Docker</a></li>
 <li class="toctree-l1"><a class="reference internal" href="basemodels.html">Base Models (e.g. BERT, GPT2, RoBERTa)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="quickstart.html">Finetune Quickstart Guide</a></li>
 <li class="toctree-l1"><a class="reference internal" href="datasetloading.html">Dataset Loading</a></li>
@@ -151,10 +153,14 @@
     
       <li><a href="index.html">Docs</a> &raquo;</li>
         
-      <li>Search</li>
+      <li>Installation</li>
     
     
       <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/installation.rst.txt" rel="nofollow"> View page source</a>
+          
         
       </li>
     
@@ -166,19 +172,41 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
             
-  <noscript>
-  <div id="fallback" class="admonition warning">
-    <p class="last">
-      Please activate JavaScript to enable the search
-      functionality.
-    </p>
-  </div>
-  </noscript>
+  <div class="section" id="installation">
+<h1>Installation<a class="headerlink" href="#installation" title="Permalink to this headline">¶</a></h1>
+<p>Finetune can be installed directly from PyPI by using <cite>pip</cite></p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip install finetune
+</pre></div>
+</div>
+<p>or installed directly from source:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git clone https://github.com/IndicoDataSolutions/finetune
+<span class="nb">cd</span> finetune
+python3 setup.py develop
+python3 -m spacy download en
+</pre></div>
+</div>
+<p>You can optionally run the provided test suite to ensure installation completed successfully.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip3 install pytest
+pytest
+</pre></div>
+</div>
+</div>
+<div class="section" id="docker">
+<h1>Docker<a class="headerlink" href="#docker" title="Permalink to this headline">¶</a></h1>
+<p>If you’d prefer you can also run <a class="reference internal" href="index.html#module-finetune" title="finetune"><code class="xref py py-mod docutils literal notranslate"><span class="pre">finetune</span></code></a> in a docker container. The bash scripts provided assume you have a functional install of <a class="reference external" href="https://docs.docker.com/install">docker</a> and <a class="reference external" href="https://github.com/nvidia/nvidia-docker/wiki/Installation-(version-2.0)">nvidia-docker</a>.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># For usage with NVIDIA GPUs</span>
+./docker/build_gpu_docker.sh  <span class="c1"># builds a docker image</span>
+./docker/start_gpu_docker.sh  <span class="c1"># starts a docker container in the background</span>
+docker <span class="nb">exec</span> -it finetune bash <span class="c1"># starts a bash session in the docker container</span>
+</pre></div>
+</div>
+<p>For CPU-only usage:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>./docker/build_cpu_docker.sh
+./docker/start_cpu_docker.sh
+</pre></div>
+</div>
+</div>
 
-  
-  <div id="search-results">
-  
-  </div>
 
            </div>
            <div class="articleComments">
@@ -186,6 +214,15 @@
            </div>
           </div>
           <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="basemodels.html" class="btn btn-neutral float-right" title="Base Models (e.g. BERT, GPT2, RoBERTa)" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="index.html" class="btn btn-neutral" title="Finetune Quickstart Guide" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
   
 
   <hr/>
@@ -224,7 +261,6 @@
       <script type="text/javascript" src="_static/jquery.js"></script>
       <script type="text/javascript" src="_static/underscore.js"></script>
       <script type="text/javascript" src="_static/doctools.js"></script>
-      <script type="text/javascript" src="_static/searchtools.js"></script>
 
   
 
@@ -240,14 +276,7 @@
           SphinxRtdTheme.StickyNav.enable();
       });
   </script>
-  
-  <script type="text/javascript">
-    jQuery(function() { Search.loadIndex("searchindex.js"); });
-  </script>
-  
-  <script type="text/javascript" id="searchindexloader"></script>
    
-
 
 </body>
 </html>

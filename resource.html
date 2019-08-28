@@ -1,0 +1,291 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Resource Management &mdash; finetune 0.8.1 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  
+  
+    <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  
+
+  
+
+  
+        <link rel="index" title="Index"
+              href="genindex.html"/>
+        <link rel="search" title="Search" href="search.html"/>
+    <link rel="top" title="finetune 0.8.1 documentation" href="index.html"/>
+        <link rel="next" title="Finetune API Reference" href="api.html"/>
+        <link rel="prev" title="Model Configuration Options" href="config.html"/> 
+
+  
+  <script src="_static/js/modernizr.min.js"></script>
+
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+   
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search">
+          
+
+          
+            <a href="index.html" class="icon icon-home"> finetune
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0.8.1
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">General API</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installation.html#docker">Docker</a></li>
+<li class="toctree-l1"><a class="reference internal" href="basemodels.html">Base Models (e.g. BERT, GPT2, RoBERTa)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Finetune Quickstart Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="datasetloading.html">Dataset Loading</a></li>
+<li class="toctree-l1"><a class="reference internal" href="serializing.html">Saving and Loading Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="config.html">Model Configuration Options</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Resource Management</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Special Features</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="api.html">Finetune API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cachedpredict.html">Cached Prediction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="chunk.html">Process Long Sequences</a></li>
+<li class="toctree-l1"><a class="reference internal" href="sequencelabeler.html">SequenceLabeler Class</a></li>
+<li class="toctree-l1"><a class="reference internal" href="adapter.html">Using Adapters and the DeploymentModel class</a></li>
+<li class="toctree-l1"><a class="reference internal" href="auxiliary.html">Using Auxiliary Info</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">finetune</a>
+        
+      </nav>
+
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html">Docs</a> &raquo;</li>
+        
+      <li>Resource Management</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/resource.rst.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <div class="section" id="resource-management">
+<h1>Resource Management<a class="headerlink" href="#resource-management" title="Permalink to this headline">¶</a></h1>
+<p>Finetuning large language models can be very memory and compute intensive. Here are some tips to optimize Finetune if you run into issues.</p>
+<p><strong>GPU Memory</strong></p>
+<p>A machine with a fairly modern gpu (&gt;= 4 GB of memory) is more than enough to run finetune. However, large models can occasionally cause OOM issues,
+especially under certain training conditions. Here are some tips to to help diagnose and solve memory problems:</p>
+<ul>
+<li><p class="first">Because use of large batch sizes is rarely necessary for model convergence, you can reduce batch size to 2-4 and greatly reduce memory use.</p>
+<blockquote>
+<div><ul class="simple">
+<li>If you would like to simulate a larger batch size, use the <code class="xref py py-attr docutils literal notranslate"><span class="pre">accum_steps</span></code> flag to accumulate gradients over a number of steps before updating</li>
+<li>Recall that <code class="xref py py-attr docutils literal notranslate"><span class="pre">batch_size</span></code> is <em>per-gpu</em>. If you are using 3 GPUs with a batch size of 4, you will have an effective batch size of 12.</li>
+</ul>
+</div></blockquote>
+</li>
+<li><p class="first">Finetune supports gradient checkpointing (recalculating some gradients rather than caching) with the <code class="xref py py-attr docutils literal notranslate"><span class="pre">low_memory_mode</span></code> flag, with little noticeable harm to computation speed.</p>
+</li>
+<li><p class="first">Convolutional models such as TextCNN and TCN have a massively smaller footprint than transformer-based models like BERT and GPT, at the expensive of some accuracy.</p>
+</li>
+<li><p class="first">If your dataset contains text that is consistently shorter than 512 tokens, you can lower the model’s <code class="xref py py-attr docutils literal notranslate"><span class="pre">max_length</span></code> parameter for a large improvement in memory use.</p>
+</li>
+<li><p class="first">If you have a very large dataset, ensure that you are not loading the entire file into memory; instead, pass it to a Finetune model with a generator.</p>
+</li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">very_low_memory_model</span> <span class="o">=</span> <span class="n">Classifier</span><span class="p">(</span><span class="n">base_model</span><span class="o">=</span><span class="n">TextCNN</span><span class="p">,</span>
+                                   <span class="n">low_memory_mode</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span>
+                                   <span class="n">batch_size</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+                                   <span class="n">max_length</span><span class="o">=</span><span class="mi">128</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><strong>Model Throughput</strong></p>
+<p>For the transformer-based language models, training and inference are very compute intensive. Here are some tips if you find that your models do not process data as quickly as desired:</p>
+<ul class="simple">
+<li>If model speed is very important, consider switching from a transformer-based model to TextCNN or TCN, as they are much faster at the expense of some accuracy.</li>
+<li>If your examples are all short, consider turning <code class="xref py py-attr docutils literal notranslate"><span class="pre">max_length</span></code> down as much as possible, as it will greatly increase your iterations/sec.</li>
+<li>If you need to use multiple models, and find that loading weights/graph compilation takes a long time, check out <a class="reference internal" href="adapter.html"><span class="doc">Using Adapters and the DeploymentModel class</span></a>.</li>
+<li>Keep in mind that model prediction is much faster than training, so your deployed model will be able to handle many more examples/sec once it is deployed.</li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">very_fast_model</span> <span class="o">=</span> <span class="n">Classifier</span><span class="p">(</span><span class="n">base_model</span><span class="o">=</span><span class="n">TextCNN</span><span class="p">,</span>
+                             <span class="n">max_length</span><span class="o">=</span><span class="mi">128</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+
+
+           </div>
+           <div class="articleComments">
+            
+           </div>
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="api.html" class="btn btn-neutral float-right" title="Finetune API Reference" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="config.html" class="btn btn-neutral" title="Model Configuration Options" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2019, Madison May, Ben Townsend, Lily Zhang, Matthew Bayer.
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'./',
+            VERSION:'0.8.1',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true,
+            SOURCELINK_SUFFIX: '.txt'
+        };
+    </script>
+      <script type="text/javascript" src="_static/jquery.js"></script>
+      <script type="text/javascript" src="_static/underscore.js"></script>
+      <script type="text/javascript" src="_static/doctools.js"></script>
+
+  
+
+  
+  
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+  
+
+  
+  
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.StickyNav.enable();
+      });
+  </script>
+   
+
+</body>
+</html>

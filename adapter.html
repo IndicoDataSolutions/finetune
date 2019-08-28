@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Search &mdash; finetune 0.8.1 documentation</title>
+  <title>Using Adapters and the DeploymentModel class &mdash; finetune 0.8.1 documentation</title>
   
 
   
@@ -34,8 +34,10 @@
   
         <link rel="index" title="Index"
               href="genindex.html"/>
-        <link rel="search" title="Search" href="#"/>
-    <link rel="top" title="finetune 0.8.1 documentation" href="index.html"/> 
+        <link rel="search" title="Search" href="search.html"/>
+    <link rel="top" title="finetune 0.8.1 documentation" href="index.html"/>
+        <link rel="next" title="Using Auxiliary Info" href="auxiliary.html"/>
+        <link rel="prev" title="SequenceLabeler Class" href="sequencelabeler.html"/> 
 
   
   <script src="_static/js/modernizr.min.js"></script>
@@ -71,7 +73,7 @@
 
           
 <div role="search">
-  <form id="rtd-search-form" class="wy-form" action="#" method="get">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
     <input type="text" name="q" placeholder="Search docs" />
     <input type="hidden" name="check_keywords" value="yes" />
     <input type="hidden" name="area" value="default" />
@@ -100,12 +102,12 @@
 <li class="toctree-l1"><a class="reference internal" href="resource.html">Resource Management</a></li>
 </ul>
 <p class="caption"><span class="caption-text">Special Features</span></p>
-<ul>
+<ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="api.html">Finetune API Reference</a></li>
 <li class="toctree-l1"><a class="reference internal" href="cachedpredict.html">Cached Prediction</a></li>
 <li class="toctree-l1"><a class="reference internal" href="chunk.html">Process Long Sequences</a></li>
 <li class="toctree-l1"><a class="reference internal" href="sequencelabeler.html">SequenceLabeler Class</a></li>
-<li class="toctree-l1"><a class="reference internal" href="adapter.html">Using Adapters and the DeploymentModel class</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Using Adapters and the DeploymentModel class</a></li>
 <li class="toctree-l1"><a class="reference internal" href="auxiliary.html">Using Auxiliary Info</a></li>
 </ul>
 
@@ -151,10 +153,14 @@
     
       <li><a href="index.html">Docs</a> &raquo;</li>
         
-      <li>Search</li>
+      <li>Using Adapters and the DeploymentModel class</li>
     
     
       <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/adapter.rst.txt" rel="nofollow"> View page source</a>
+          
         
       </li>
     
@@ -166,19 +172,35 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
             
-  <noscript>
-  <div id="fallback" class="admonition warning">
-    <p class="last">
-      Please activate JavaScript to enable the search
-      functionality.
-    </p>
-  </div>
-  </noscript>
+  <div class="section" id="using-adapters-and-the-deploymentmodel-class">
+<h1>Using Adapters and the DeploymentModel class<a class="headerlink" href="#using-adapters-and-the-deploymentmodel-class" title="Permalink to this headline">¶</a></h1>
+<p>Alongside full finetuning, <a class="reference internal" href="index.html#module-finetune" title="finetune"><code class="xref py py-mod docutils literal notranslate"><span class="pre">finetune</span></code></a> also supports the adapter finetuning strategy from <a class="reference external" href="https://arxiv.org/abs/1902.00751">“Parameter-Efficient Transfer Learning for NLP”</a>.
+This dramatically shrinks the size of serialized model files to ~30mb.  When used in conjunction with the <code class="xref py py-class docutils literal notranslate"><span class="pre">DeploymentModel</span></code> class at inference time, this enables quickly switching between target models.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># First we train and save a model using the adapter finetuning strategy</span>
+<span class="kn">from</span> <span class="nn">finetune</span> <span class="kn">import</span> <span class="n">Classifier</span><span class="p">,</span> <span class="n">DeploymentModel</span>
+<span class="kn">from</span> <span class="nn">finetune.base_models</span> <span class="kn">import</span> <span class="n">GPT</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">Classifier</span><span class="p">(</span><span class="n">adapter_size</span><span class="o">=</span><span class="mi">64</span><span class="p">)</span>
+<span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">Y</span><span class="p">)</span>
+<span class="n">model</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="s1">&#39;adapter-model.jl&#39;</span><span class="p">)</span>
 
-  
-  <div id="search-results">
-  
-  </div>
+<span class="c1"># Then we load it using the DeploymentModel wrapper</span>
+<span class="n">deployment_model</span> <span class="o">=</span> <span class="n">DeploymentModel</span><span class="p">(</span><span class="n">featurizer</span><span class="o">=</span><span class="n">GPT</span><span class="p">)</span>
+
+<span class="c1"># Loading the featurizer only needs to be done once</span>
+<span class="n">deployment_model</span><span class="o">.</span><span class="n">load_featurizer</span><span class="p">()</span>
+
+<span class="c1"># You can then cheaply load + predict with any adapter model that uses the</span>
+<span class="c1"># same base_model and adapter_size</span>
+<span class="n">deployment_model</span><span class="o">.</span><span class="n">load_custom_model</span><span class="p">(</span><span class="s1">&#39;adapter-model.jl&#39;</span><span class="p">)</span>
+<span class="n">predictions</span> <span class="o">=</span> <span class="n">deployment_model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">testX</span><span class="p">)</span>
+
+<span class="c1"># Switching to another model takes only 2 seconds now rather than 20</span>
+<span class="n">deployment_model</span><span class="o">.</span><span class="n">load_custom_model</span><span class="p">(</span><span class="s1">&#39;another-adapter-model.jl&#39;</span><span class="p">)</span>
+<span class="n">predictions</span> <span class="o">=</span> <span class="n">deployment_model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">testX</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+
 
            </div>
            <div class="articleComments">
@@ -186,6 +208,15 @@
            </div>
           </div>
           <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="auxiliary.html" class="btn btn-neutral float-right" title="Using Auxiliary Info" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="sequencelabeler.html" class="btn btn-neutral" title="SequenceLabeler Class" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
   
 
   <hr/>
@@ -224,7 +255,6 @@
       <script type="text/javascript" src="_static/jquery.js"></script>
       <script type="text/javascript" src="_static/underscore.js"></script>
       <script type="text/javascript" src="_static/doctools.js"></script>
-      <script type="text/javascript" src="_static/searchtools.js"></script>
 
   
 
@@ -240,14 +270,7 @@
           SphinxRtdTheme.StickyNav.enable();
       });
   </script>
-  
-  <script type="text/javascript">
-    jQuery(function() { Search.loadIndex("searchindex.js"); });
-  </script>
-  
-  <script type="text/javascript" id="searchindexloader"></script>
    
-
 
 </body>
 </html>
