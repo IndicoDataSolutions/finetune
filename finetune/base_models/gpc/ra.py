@@ -71,7 +71,7 @@ def _dilated_causal_max_pool(value, kernel_size, dilation, padding="left"):
 
 
 try:
-    dense_module = tf.load_op_library(os.path.join(os.path.dirname(__file__), 'libdense.so'))
+    dense_module = tf.load_op_library(os.path.join(os.path.dirname(__file__), 'lib_ra.so'))
 
     @ops.RegisterGradient("Dense")
     def _grad_cc(op, grad0, grad1):
