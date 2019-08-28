@@ -9,21 +9,23 @@ from finetune.util.download import GPT2_BASE_URL, FINETUNE_BASE_FOLDER
 
 
 class TCNModel(SourceModel):
-    is_bidirectional = False
+    is_bidirectional = True
     encoder = GPT2Encoder
     featurizer = tcn_featurizer
     settings = {
-        "n_epochs": 5,
+        "batch_size": 32,
+        "n_epochs": 100,
         "n_embed_featurizer": 768,
         "n_layer": 3,
         "num_layers_trained": 3,
-        "n_filter": 10,
-        "n_embed": 10,
-        "seq_num_heads": 10,
+        "n_filter": 3,
+        "n_embed": 3,
+        "val_size": "auto",
+        "keep_best_model": True,
+        "early_stopping_steps": 1,
         "kernel_size": 5,
-        "act_fn": "gelu",
         "train_embeddings": False,
-        "lr": 0.001,
+        "lr": 0.1,
         "base_model_path": os.path.join("gpt2", "model-sm.jl"),
         "n_context_embed": 10
     }

@@ -13,7 +13,7 @@ from sklearn.model_selection import train_test_split
 
 from finetune import SequenceLabeler
 from finetune.datasets import Dataset
-from finetune.base_models import GPT, GPT2
+from finetune.base_models import GPT, GPT2, TCN
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
 from finetune.util.metrics import annotation_report
 
@@ -75,7 +75,7 @@ if __name__ == "__main__":
     trainX, testX, trainY, testY = train_test_split(
         dataset.texts.values,
         dataset.annotations.values,
-        test_size=0.3,
+        test_size=0.7,
         random_state=42
     )
     model = SequenceLabeler(base_model=GPT2, batch_size=2, val_size=0., max_length=16, chunk_long_sequences=True, subtoken_predictions=True, filter_empty_examples=True)

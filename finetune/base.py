@@ -231,7 +231,7 @@ class BaseModel(object, metaclass=ABCMeta):
                     estimator,
                     val_input_fn,
                     every_n_iter=val_interval,
-                    steps=val_size // batch_size,
+                    steps=math.ceil(val_size / batch_size),
                 )
             )
             early_stopping_interval = val_interval
