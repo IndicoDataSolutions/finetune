@@ -61,6 +61,12 @@ class SequencePipeline(BasePipeline):
             counter.update(self.label_encoder.inverse_transform(targets))
         return counter
 
+    def _filter_empty_examples(self, dataset):
+        if self.config.filter_empty_examples:
+            all_pad_labels = lambda labels: all(label == self.pad_idx for label in labels)
+            dataset = [[x, y] for x, y in dataset if not all_pad_labels(y)]
+        return dataset
+
     def _format_for_encoding(self, X):
         return [X]
 
@@ -84,7 +90,7 @@ class SequencePipeline(BasePipeline):
                     {
                         "tokens": TS([self.config.max_length, 2]),
                         "mask": TS([self.config.max_length]),
-                        "context": TS([self.config.max_length, self.context_dim]),
+                        "context": TS([self.config.max_length, self.config.context_dim]),
                     },
                     TS(target_shape),
                 ),

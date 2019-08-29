@@ -7,6 +7,7 @@ import joblib
 import numpy as np
 import tensorflow as tf
 from tensorflow.contrib.estimator.python.estimator.early_stopping import _StopOnPredicateHook
+from tensorflow.estimator import SessionRunHook
 
 
 from finetune.errors import FinetuneError
@@ -91,7 +92,7 @@ class SaverHook(_StopOnPredicateHook):
             )
 
 
-class InitializeHook(tf.train.SessionRunHook):
+class InitializeHook(SessionRunHook):
     def __init__(self, saver, model_portion="entire_model"):
         self.saver = saver
         self.model_portion = model_portion

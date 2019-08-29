@@ -87,9 +87,9 @@ class DeploymentPipeline(BasePipeline):
             self.pipeline.use_auxiliary_info = True
             self.pipeline.label_encoders = self.label_encoders
             self.pipeline.context_labels = self.context_labels
-            self.pipeline.context_dim = self.context_dim
+            self.pipeline.context_dim = self.config.context_dim
             self.pipeline.label_stats = self.label_stats
-            self.pipeline.default_context = self.default_context
+            self.pipeline.default_context = self.config.default_context
         return self.pipeline_type
 
     def get_text_token_mask(self, *X):

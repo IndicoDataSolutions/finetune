@@ -78,7 +78,7 @@ if __name__ == "__main__":
         test_size=0.3,
         random_state=42
     )
-    model = SequenceLabeler(base_model=GPT2, batch_size=2, val_size=0., chunk_long_sequences=True, subtoken_predictions=True)
+    model = SequenceLabeler(base_model=GPT2, batch_size=2, val_size=0., max_length=16, chunk_long_sequences=True, subtoken_predictions=True, filter_empty_examples=True)
     model.fit(trainX, trainY)
     predictions = model.predict(testX)
     print(predictions)
