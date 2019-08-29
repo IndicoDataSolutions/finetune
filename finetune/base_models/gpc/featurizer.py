@@ -36,17 +36,21 @@ def batch_to_time(value, dilation):
                           [tf.div(shape[0], dilation), -1, shape[2]])
 
 
-def cascaded_pool(value, kernel_size, dim=1, pool_len=None, causal=True):
+def cascaded_pool(value, kernel_size, dim=1, pool_len=None):
     shape = shape_list(value)
     full_pool_len = pool_len or shape[dim]
     aggregated = recursive_agg(value, kernel_size, full_pool_len)
     num_pooling_ops = shape_list(aggregated)[2]
 
     ws = normal_1d_conv_block(
-        value, 1, "pool_w_b", value.dtype == tf.float16, output_dim=shape[-1] * num_pooling_ops, causal=causal
+        value, 1, "pool_w", value.dtype == tf.float16, output_dim=shape[-1]
     )
-    ws = tf.reshape(ws, [shape[0], shape[1], num_pooling_ops, shape[-1]])
-    return tf.reduce_mean(aggregated * tf.nn.sigmoid(ws), 2)
+    wt = normal_1d_conv_block(
+        value, 1, "pool_t", value.dtype == tf.float16, output_dim=num_pooling_ops
+    )
+    wt = tf.expand_dims(tf.nn.softmax(wt), -1)
+    
+    return tf.reduce_mean(aggregated * wt, 2) * tf.nn.sigmoid(ws)
 
 
 def causal_conv(value, filter_, dilation, name='causal_conv'):
@@ -66,7 +70,7 @@ def causal_conv(value, filter_, dilation, name='causal_conv'):
         return restored
 
 
-def cumulative_state_net(X, name, use_fp16, pool_idx, pdrop, train, pool_kernel_size=2, nominal_pool_length=512):
+def cumulative_state_net(X, name, use_fp16, pdrop, train, pool_kernel_size=2, nominal_pool_length=512):
     conv_kernel = 4
     pool_kernel_size = pool_kernel_size or conv_kernel
 
@@ -79,9 +83,7 @@ def cumulative_state_net(X, name, use_fp16, pool_idx, pdrop, train, pool_kernel_
     output = dropout(output, pdrop, train)
     aggregated = cascaded_pool(output, kernel_size=pool_kernel_size, pool_len=nominal_pool_length)
 
-    feats = tf.gather_nd(aggregated, tf.stack([tf.range(shape_list(X)[0]), pool_idx], 1))
-
-    return tf.nn.relu(normal_1d_conv_block(aggregated, 1, "output_reproject", use_fp16, output_dim=nx)), feats
+    return tf.nn.relu(normal_1d_conv_block(aggregated, 1, "output_reproject", use_fp16, output_dim=nx))
 
 
 def normal_1d_conv_block(X, kernel_width, layer_name, use_fp16, dilation=1, output_dim=None, causal=True):
@@ -95,7 +97,10 @@ def normal_1d_conv_block(X, kernel_width, layer_name, use_fp16, dilation=1, outp
         else:
             paddings = [[0, 0], [left_pad // 2, left_pad - (left_pad // 2)], [0, 0]]
 
-        padded_input = tf.pad(X, paddings, "CONSTANT")
+        if kernel_width > 1:
+            padded_input = tf.pad(X, paddings, "CONSTANT")
+        else:
+            padded_input = X
 
         nx = shape_list(X)[-1]
         if output_dim is None:
@@ -140,13 +145,12 @@ def enc_dec_mix(enc, dec, enc_mask, dec_mask, n_head=16):
 
 def block(X, block_name, use_fp16, pool_idx=None, encoder_state=None, train=False, pdrop=0.1, nominal_pool_length=512):
     with tf.variable_scope(block_name):
-        h1, feats = cumulative_state_net(X, "cumulative_state_net", use_fp16, pool_idx, pdrop, train,
-            nominal_pool_length=nominal_pool_length)
+        h1 = cumulative_state_net(X, "cumulative_state_net", use_fp16, pdrop, train, nominal_pool_length=nominal_pool_length)
         # TODO write encoder_decoder interface
         if encoder_state is not None:
             mixed = enc_dec_mix(encoder_state["sequence_features"], h1, encoder_state["pool_idx"], pool_idx)
             h1 = h1 + mixed
-        return tf.nn.relu(dropout(norm(h1 + X, "norm", fp16=use_fp16, e=1e-2), pdrop, train)), feats
+        return tf.nn.relu(dropout(norm(h1 + X, "norm", fp16=use_fp16, e=1e-2), pdrop, train))
 
 
 def featurizer(X, encoder, config, train=False, reuse=None, encoder_state=None):
@@ -169,7 +173,7 @@ def featurizer(X, encoder, config, train=False, reuse=None, encoder_state=None):
 
     x_shape = tf.shape(X)
 
-    with tf.variable_scope('model/featurizer', reuse=reuse, use_resource=True):
+    with tf.variable_scope('model/featurizer', reuse=reuse):
         encoder._lazy_init()
         clf_token = encoder['_classify_']
         pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
@@ -202,26 +206,25 @@ def featurizer(X, encoder, config, train=False, reuse=None, encoder_state=None):
                 ):
                     h = tf.stop_gradient(h)
 
-                def block_fn_fwd(inp, pool_idxi):
-                    return block(inp, block_name='block%d_' % layer, use_fp16=config.use_fp16,
-                                 pool_idx=pool_idxi, encoder_state=encoder_state, train=train,
+                block_fn_fwd = functools.partial(block, block_name='block%d_' % layer, use_fp16=config.use_fp16,
+                                 pool_idx=None, encoder_state=encoder_state, train=train,
                                  pdrop=config.resid_p_drop)
 
                 if config.low_memory_mode and train:
-                    block_fn_fwd = tf.contrib.layers.recompute_grad(block_fn_fwd)
-                h, feats_i = block_fn_fwd(h, pool_idx)
-                feats.append(feats_i)
+                    block_fn_fwd = recompute_grad(block_fn_fwd, use_entire_scope=True)
+                h = block_fn_fwd(h)
+                #feats.append(feats_i)
 
         h = normal_1d_conv_block(h, 1, "output", config.use_fp16, dilation=1)
 
         mask = tf.expand_dims(tf.sequence_mask(pool_idx, maxlen=tf.shape(h)[1], dtype=h.dtype), -1)
 
-        if config.feat_mode == "final_state":
-            clf_h = tf.reshape(feats[-1], shape=initial_shape[: -2] + [config.n_embed])
-        if config.feat_mode == "mean_state":
-            clf_h = tf.reshape(tf.reduce_mean(feats, 0), shape=initial_shape[: -2] + [config.n_embed])
-        if config.feat_mode == "max_state":
-            clf_h = tf.reshape(tf.reduce_max(feats, 0), shape=initial_shape[: -2] + [config.n_embed])
+#        if config.feat_mode == "final_state":
+#            clf_h = tf.reshape(feats[-1], shape=initial_shape[: -2] + [config.n_embed])
+#        if config.feat_mode == "mean_state":
+#            clf_h = tf.reshape(tf.reduce_mean(feats, 0), shape=initial_shape[: -2] + [config.n_embed])
+#        if config.feat_mode == "max_state":
+#            clf_h = tf.reshape(tf.reduce_max(feats, 0), shape=initial_shape[: -2] + [config.n_embed])
 
         if config.feat_mode == "clf_tok":
             clf_h = tf.gather_nd(h, tf.stack([tf.range(shape_list(h)[0]), pool_idx], 1))

@@ -120,7 +120,7 @@ class AdafactorOptimizer(tf.train.Optimizer):
 
     """
 
-    def __init__(self, multiply_by_parameter_scale=True, adafactor_learning_rate=None, decay_rate=None,
+    def __init__(self, multiply_by_parameter_scale=True, learning_rate=0.01, decay_rate=None,
                  adafactor_beta1=0.0, clipping_threshold=1.0, factored=True, parameter_encoding=None, use_locking=False,
                  name="Adafactor", epsilon1=1e-30, epsilon2=1e-3, **kwargs):
         """Construct a new Adafactor optimizer.
@@ -151,9 +151,10 @@ class AdafactorOptimizer(tf.train.Optimizer):
         """
         super(AdafactorOptimizer, self).__init__(use_locking, name)
         self._multiply_by_parameter_scale = multiply_by_parameter_scale
-        if adafactor_learning_rate is None:
-            adafactor_learning_rate = self._learning_rate_default(multiply_by_parameter_scale)
-        self._learning_rate = adafactor_learning_rate
+        if learning_rate is None:
+            raise ValueError("Set Yo Learning rate")
+            learning_rate = self._learning_rate_default(multiply_by_parameter_scale)
+        self._learning_rate = learning_rate
         if decay_rate is None:
             decay_rate = self._decay_rate_default()
         self._decay_rate = decay_rate
@@ -213,7 +214,7 @@ class AdafactorOptimizer(tf.train.Optimizer):
         Instead of using the value, we could impute the scale from the shape,
         as initializers do.
 
-        Args:
+       Args:
           var: a variable or Tensor.
         Returns:
           a Scalar
@@ -282,7 +283,7 @@ class AdafactorOptimizer(tf.train.Optimizer):
         return adafactor_decay_rate_pow(0.8)
 
     def _learning_rate_default(self, multiply_by_parameter_scale):
-        learning_rate = tf.minimum(tf.rsqrt(step_num() + 1.0), 0.001)
+        learning_rate = tf.minimum(tf.rsqrt(step_num() + 1.0), 0.01)
         if not multiply_by_parameter_scale:
             learning_rate *= 0.05
         return learning_rate
