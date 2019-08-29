@@ -42,12 +42,11 @@ def cascaded_pool(value, kernel_size, dim=1, pool_len=None, causal=True):
     aggregated = recursive_agg(value, kernel_size, full_pool_len)
     num_pooling_ops = shape_list(aggregated)[2]
 
-    w_bs = normal_1d_conv_block(
-        value, 1, "pool_w_b", value.dtype == tf.float16, output_dim=shape[-1] * num_pooling_ops * 2, causal=causal
+    ws = normal_1d_conv_block(
+        value, 1, "pool_w_b", value.dtype == tf.float16, output_dim=shape[-1] * num_pooling_ops, causal=causal
     )
-    w_bs = tf.reshape(w_bs, [shape[0], shape[1], num_pooling_ops, shape[-1], 2])
-    ws, bs = tf.unstack(w_bs, -1)
-    return tf.softmax(w_bs * ws, axis=-1) + bs
+    ws = tf.reshape(ws, [shape[0], shape[1], num_pooling_ops, shape[-1]])
+    return tf.reduce_mean(aggregated * tf.nn.sigmoid(ws), 2)
 
 
 def causal_conv(value, filter_, dilation, name='causal_conv'):
@@ -73,9 +72,9 @@ def cumulative_state_net(X, name, use_fp16, pool_idx, pdrop, train, pool_kernel_
 
     nx = shape_list(X)[-1]
     with tf.variable_scope(name):
-        output = normal_1d_conv_block(X, conv_kernel, str(conv_kernel), use_fp16, output_dim=nx)
-        output = tf.nn.relu(normal_1d_conv_block(output, conv_kernel, str(conv_kernel), use_fp16, output_dim=nx))
-        output = normal_1d_conv_block(output, conv_kernel, str(conv_kernel), use_fp16, output_dim=nx)
+        output = tf.nn.relu(normal_1d_conv_block(X, conv_kernel, "1-" + str(conv_kernel), use_fp16, output_dim=nx))
+        output = tf.nn.relu(normal_1d_conv_block(output, conv_kernel, "2-" + str(conv_kernel), use_fp16, output_dim=nx))
+        output = normal_1d_conv_block(output, conv_kernel, "3-" + str(conv_kernel), use_fp16, output_dim=nx)
 
     output = dropout(output, pdrop, train)
     aggregated = cascaded_pool(output, kernel_size=pool_kernel_size, pool_len=nominal_pool_length)
@@ -213,7 +212,7 @@ def featurizer(X, encoder, config, train=False, reuse=None, encoder_state=None):
                 h, feats_i = block_fn_fwd(h, pool_idx)
                 feats.append(feats_i)
 
-        h = normal_1d_conv_block(h, 1, "output", config.use_fp16, dilation=1, layer_num=(config.n_layer + 1) * 2 + 1)
+        h = normal_1d_conv_block(h, 1, "output", config.use_fp16, dilation=1)
 
         mask = tf.expand_dims(tf.sequence_mask(pool_idx, maxlen=tf.shape(h)[1], dtype=h.dtype), -1)
 

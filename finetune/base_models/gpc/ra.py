@@ -81,6 +81,7 @@ try:
         return dense_module.dense(inp, kernel_length, pool_len, int(math.ceil(math.log(pool_len, kernel_length))))[0]
 
 except NotFoundError:
+    raise Exception("WE WANT THE OTHER RA KERNELS")
 
     def recursive_agg(value, kernel_size, pool_len, causal=True):
         full_pool_len = pool_len

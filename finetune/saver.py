@@ -177,7 +177,8 @@ class Saver:
             print(all_vars)
             for var in all_vars:
                 saved_var = variables_sv.get(var.name, self.fallback.get(var.name, None))
-                if saved_var is not None:
+                if saved_var is not None and saved_var.shape == tuple(var.get_shape().as_list()):
+                    print("init for {}".format(var.name))
                     for func in self.variable_transforms:
                         saved_var = func(var.name, saved_var)
                     print("Success:", var)
