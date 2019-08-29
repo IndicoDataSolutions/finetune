@@ -21,6 +21,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.data import Dataset
 from tensorflow.contrib.distribute import OneDeviceStrategy
+from tensorflow.distribute.experimental import CentralStorageStrategy
 from sklearn.model_selection import train_test_split
 import joblib
 
@@ -296,7 +297,12 @@ class BaseModel(object, metaclass=ABCMeta):
             resolved_gpus = all_gpus()
 
         resolved_gpus_string = ['/gpu:{}'.format(gpu) for gpu in resolved_gpus]
-        distribute_strategy = tf.distribute.experimental.CentralStorageStrategy(resolved_gpus_string or None)
+        if len(resolved_gpus_string) == 1:
+            distribute_strategy = OneDeviceStrategy(resolved_gpus_string[0])
+        else:
+            if self.config.per_process_gpu_memory_fraction is not None:
+                warnings.warn("Setting `per_process_gpu_memory_fraction` is currently unsupported in multi-gpu environments.")
+            distribute_strategy = CentralStorageStrategy(resolved_gpus_string or None)
         self.resolved_gpus = resolved_gpus
         return distribute_strategy
 
