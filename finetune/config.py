@@ -329,9 +329,22 @@ def get_default_config():
 
         # For experimental conv model
         use_conv=False,
-        kernel_width=3,
-        use_fp16=True,
-        use_timing=False,
+        use_fp16=False,
+        use_timing=True,
+        scale_loss=False,
+        loss_scale_every_n_steps=2500,
+        in_memory_finetune=None,
+        sampled_softmax=None,
+        xla=False,
+        beam_search_alpha=0.6,
+        beam_size=10,
+        decoder_sample_from=40,
+        sample_temp=1.0,
+        target_model_init_from_base_model=True,
+        feat_mode="final_state",
+        cache_weights_to_file=False,
+        use_mirrored_distribution=False
+
 
         # Location of model weights
         base_model=GPTModel,

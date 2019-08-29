@@ -15,11 +15,16 @@ from finetune.optimizers.adamw import AdamWOptimizer
 from finetune.util.imbalance import class_weight_tensor
 from finetune.errors import FinetuneError
 from finetune.base_models import GPTModel, GPTModelSmall
+from finetune.optimizers.adafactor import AdafactorWOptimizer, AdafactorOptimizer
 
 LOGGER = logging.getLogger("finetune")
 
-OPTIMIZERS = {"AdamW": AdamWOptimizer, "AdamaxW": AdamaxWOptimizer}
-
+OPTIMIZERS = {
+    "AdamW": AdamWOptimizer,
+    "AdamaxW": AdamaxWOptimizer,
+    "AdafactorW": AdafactorWOptimizer,
+    "Adafactor": AdafactorOptimizer
+}
 
 class PredictMode:
     FEATURIZE = "FEAT"
@@ -35,30 +40,18 @@ class PredictMode:
     EXPLAIN = "EXPLAIN"
 
 
-def get_model_fn(
-        *,
-        target_model_fn,
-        predict_op,
-        predict_proba_op,
-        build_target_model,
-        build_lm,
-        encoder,
-        target_dim,
-        label_encoder,
-        build_explain,
-        context_dim,
-        n_replicas
-):
-    def language_model_op(X, M, params, featurizer_state):
-        language_model_state = language_model(
-            X=X,
-            M=M,
-            config=params,
-            embed_weights=featurizer_state["embed_weights"],
-            hidden=featurizer_state["sequence_features"],
-        )
+def language_model_op(X, M, params, featurizer_state, mode, encoder):
+    language_model_state = language_model(
+        X=X,
+        M=M,
+        config=params,
+        embed_weights=featurizer_state['embed_weights'],
+        hidden=featurizer_state['sequence_features'],
+        train=mode == tf.estimator.ModeKeys.TRAIN,
+    )
+    lm_logits = language_model_state["logits"]
 
-        lm_logits = language_model_state["logits"]
+    if lm_logits is not None:
 
         lm_logit_mask = np.zeros(
             [1, lm_logits.get_shape().as_list()[-1]], dtype=np.float32
@@ -70,9 +63,26 @@ def get_model_fn(
             lm_logit_mask[:, encoder.delimiter] = -np.inf
             lm_logit_mask[:, encoder.clf_token] = -np.inf
 
-        lm_logits += lm_logit_mask
+            lm_logits += lm_logit_mask
         lm_predict_op = sample_with_temperature(lm_logits, params.lm_temp)
-        return lm_predict_op, language_model_state
+    else:
+        lm_predict_op = tf.no_op()
+    return lm_predict_op, language_model_state
+
+
+def get_model_fn(
+    target_model_fn,
+    predict_op,
+    predict_proba_op,
+    build_target_model,
+    build_lm,
+    encoder,
+    target_dim,
+    label_encoder,
+    saver,
+    build_explain,
+    context_dim,
+):
 
     def target_model_op(featurizer_state, Y, params, mode, **kwargs):
         weighted_tensor = None
@@ -91,8 +101,10 @@ def get_model_fn(
                 train=(mode == tf.estimator.ModeKeys.TRAIN),
                 max_length=params.max_length,
                 class_weights=weighted_tensor,
+                label_encoder=label_encoder,
                 **kwargs
             )
+            
         return target_model_state
 
     def _model_fn(features, labels, mode, params):
@@ -136,10 +148,7 @@ def get_model_fn(
                     "attention_weights"
                 ]
 
-            if params.base_model in [GPTModel, GPTModelSmall]:
-                predictions[PredictMode.ATTENTION] = featurizer_state[
-                    "attention_weights"
-                ]
+            predictions = {PredictMode.FEATURIZE: featurizer_state["features"]}
 
             if build_target_model:
                 target_model_state = target_model_op(
@@ -182,7 +191,8 @@ def get_model_fn(
 
             if build_lm:
                 lm_predict_op, language_model_state = language_model_op(
-                    X=X, M=M, params=params, featurizer_state=featurizer_state
+                    X=X, M=M, params=params, featurizer_state=featurizer_state,
+                    mode=mode, encoder=encoder
                 )
                 if (
                     mode == tf.estimator.ModeKeys.TRAIN
@@ -222,7 +232,6 @@ def get_model_fn(
                 params.trained_variables = [v for v in tf.global_variables()]
 
             def optimizer(lr):
-
                 Optimizer = OPTIMIZERS.get(params.optimizer, None)
                 if Optimizer is None:
                     raise FinetuneError(
@@ -258,8 +267,14 @@ def get_model_fn(
                     opt.apply_gradients, decay_var_list=decay_var_list
                 )
 
+                decay_var_list = [v for v in tf.global_variables() if len(v.get_shape()) > 1 or params.vector_l2]
+                opt.apply_gradients = functools.partial(opt.apply_gradients, decay_var_list=decay_var_list)
+
                 if params.dont_optimize_zero_gradients:
                     opt = dont_optimize_zeros(opt)
+
+                if params.scale_loss:
+                    opt = tf.train.experimental.enable_mixed_precision_graph_rewrite(opt)
 
                 return opt
 
@@ -268,12 +283,22 @@ def get_model_fn(
                 if params.summarize_grads
                 else None
             )
+            if not params.scale_loss:
+                clip_gradients = float(params.max_grad_norm)
+            else:
+                def clip_gradients(grads_n_vars):
+                    clipped = []
+                    for g, v in grads_n_vars:
+                        if g is not None:
+                            clipped.append((tf.clip_by_norm(g, float(params.max_grad_norm)), v))
+                    return clipped
+
             train_op = tf.contrib.layers.optimize_loss(
                 loss=train_loss,
                 global_step=tf.train.get_or_create_global_step(),
                 learning_rate=tf.constant(params.lr),
                 optimizer=optimizer,
-                clip_gradients=float(params.max_grad_norm),
+                clip_gradients=clip_gradients,
                 learning_rate_decay_fn=lr_decay,
                 increment_global_step=True,
                 summaries=summaries,

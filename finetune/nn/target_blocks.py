@@ -1,9 +1,7 @@
 import functools
-import numpy as np
 import tensorflow as tf
 from tensorflow.contrib.crf import crf_log_likelihood
 
-from finetune.base_models import TextCNN
 from finetune.base_models.gpt.featurizer import attn, dropout, norm
 from finetune.util.shapes import shape_list, merge_leading_dims
 from finetune.optimizers.recompute_grads import recompute_grad
@@ -23,8 +21,9 @@ def perceptron(x, ny, config, w_init=None, b_init=None):
     """
     w_init = w_init or tf.random_normal_initializer(stddev=config.weight_stddev)
     b_init = b_init or tf.constant_initializer(0)
-    with tf.variable_scope("perceptron"):
-        nx = config.n_embed
+
+    with tf.variable_scope('perceptron'):
+        nx = shape_list(x)[-1]
         if config.use_auxiliary_info:
             nx += config.n_context_embed
         w = tf.get_variable("w", [nx, ny], initializer=w_init)
@@ -32,7 +31,7 @@ def perceptron(x, ny, config, w_init=None, b_init=None):
         return tf.matmul(x, w) + b
 
 
-def language_model(*, X, M, embed_weights, hidden, config, reuse=None):
+def language_model(*, X, M, embed_weights, hidden, config, reuse=None, train=False):
     """
     A language model output and loss for the language modelling objective described in the original finetune paper.
     This language model uses weights that are tied to the input embedding.
@@ -50,37 +49,29 @@ def language_model(*, X, M, embed_weights, hidden, config, reuse=None):
     X = merge_leading_dims(X, 3)
     M = merge_leading_dims(M, 2)
     hidden = merge_leading_dims(hidden, 3)
+
     batch, seq, _ = shape_list(X)
-    with tf.variable_scope("model/language-model", reuse=reuse):
+    vocab_size, hidden_dim = shape_list(embed_weights)
+
+    with tf.variable_scope('model/language-model', reuse=reuse):
         # language model ignores last hidden state because we don't have a target
         sliced_hidden = hidden[:, :-1]
-        lm_h = tf.reshape(
-            sliced_hidden, [-1, config.n_embed]
-        )  # [batch, seq_len, embed] --> [batch * seq_len, embed]
+        lm_h = tf.reshape(sliced_hidden, [-1, config.n_embed])  # [batch, seq_len, embed] --> [batch * seq_len, embed]
+
         lm_logits = tf.matmul(lm_h, embed_weights, transpose_b=True)  # tied weights
-        lm_logits = tf.reshape(lm_logits, [batch, seq - 1, tf.shape(embed_weights)[0]])
-
-        lm_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
-            logits=lm_logits, labels=X[:, 1:, 0]
+        lm_logits = tf.cast(lm_logits, tf.float32)
+        lm_losses = tf.losses.sparse_softmax_cross_entropy(
+            logits=lm_logits,
+            labels=tf.reshape(X[:, 1:, 0], [-1]),
+            weights=tf.reshape(M[:, 1:], [-1])
         )
 
-        perplexity = tf.reduce_sum(tf.exp(lm_losses) * M[:, 1:], 1) / tf.reduce_sum(
-            M[:, 1:], 1
-        )
+        sliced_hidden_shape = tf.shape(sliced_hidden)
+        logits = tf.reshape(lm_logits, shape=tf.concat([sliced_hidden_shape[:-1], [vocab_size]], axis=0))
+        perplexity = tf.reduce_sum(tf.exp(lm_losses) * M[:, 1:], 1) / tf.reduce_sum(M[:, 1:], 1)
 
-        lm_losses = tf.reshape(lm_losses, [shape_list(X)[0], shape_list(X)[1] - 1])
-
-        # tf.maximum op prevents divide by zero error when mask is all 0s
-        lm_losses = tf.reduce_sum(lm_losses * M[:, 1:], 1) / tf.maximum(
-            tf.reduce_sum(M[:, 1:], 1), 1
-        )
-
-        lm_logits_shape = shape_list(lm_logits)
-        sliced_hidden_shape = shape_list(sliced_hidden)
         return {
-            "logits": tf.reshape(
-                lm_logits, shape=sliced_hidden_shape[:-1] + [lm_logits_shape[-1]]
-            ),
+            "logits": logits,
             "losses": lm_losses,
             "perplexity": perplexity,
         }
