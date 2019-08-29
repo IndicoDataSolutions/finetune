@@ -3,8 +3,6 @@ from abc import ABCMeta
 import numpy as np
 from sklearn.preprocessing import LabelEncoder, MultiLabelBinarizer, OrdinalEncoder
 
-from finetune.errors import FinetuneError
-
 
 class BaseEncoder(metaclass=ABCMeta):
     @property
@@ -80,6 +78,38 @@ class OneHotLabelEncoder(LabelEncoder, BaseEncoder):
         return ys
 
 
+class Seq2SeqLabelEncoder(BaseEncoder):
+    def __init__(self, encoder, max_len, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.encoder = encoder
+        self.max_len = max_len
+
+    def fit(self, y):
+        return
+    
+    @property
+    def target_dim(self):
+        return self.encoder.vocab_size
+
+    def fit_transform(self, y):
+        return self.transform(y)
+
+    def transform(self, y):
+        output = []
+        for y_i in y:
+            out = self.encoder.encode_multi_input([[y_i]], max_length=self.max_len).token_ids
+            seq_length = len(out)
+            x = np.zeros((self.max_len, 2), dtype=np.int32)
+        
+            x[:seq_length, 0] = out
+            x[:, 1] = np.arange(self.encoder.vocab_size, self.encoder.vocab_size + self.max_len)
+            output.append(x)
+        return output
+
+    def inverse_transform(self, y):
+        return [self.encoder.decode(y_i.tolist()) for y_i in y]
+
+
 class OrdinalRegressionEncoder(OrdinalEncoder, BaseEncoder):
 
     def __init__(self):
@@ -126,6 +156,7 @@ class OrdinalRegressionEncoder(OrdinalEncoder, BaseEncoder):
     @property
     def target_labels(self):
         raise ValueError
+
 
 class SequenceLabelingEncoder(LabelEncoder, BaseEncoder):
     pass

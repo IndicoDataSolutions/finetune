@@ -18,23 +18,23 @@ import tqdm
 import numpy as np
 import tensorflow as tf
 from tensorflow.data import Dataset
-from tensorflow.contrib.distribute import OneDeviceStrategy
-from tensorflow.distribute.experimental import CentralStorageStrategy
 from tensorflow.compat.v1 import logging as tf_logging
+
 from sklearn.model_selection import train_test_split
 import joblib
 
-import finetune
 from finetune.util import list_transpose
 from finetune.encoding.input_encoder import EncodedOutput
 from finetune.config import get_config, all_gpus, assert_valid_config, get_default_config
 from finetune.saver import Saver, InitializeHook
 from finetune.errors import FinetuneError
 from finetune.model import get_model_fn, PredictMode
+
 from finetune.util.download import download_data_if_required
 from finetune.util.positional_embeddings import embedding_preprocessor
 from finetune.base_models import GPTModel, GPTModelSmall
 
+from finetune.util.in_memory_finetune import InMemoryFinetune
 
 LOGGER = logging.getLogger("finetune")
 
@@ -113,10 +113,9 @@ class BaseModel(object, metaclass=ABCMeta):
         self.saver = Saver(
             fallback_filename=self.config.base_model_path,
             exclude_matches=None if self.config.save_adam_vars else "Adam",
-            variable_transforms=[
-                embedding_preprocessor(self.input_pipeline, self.config)
-            ],
+            variable_transforms=[embedding_preprocessor(self.input_pipeline, self.config)],
             save_dtype=self.config.save_dtype,
+            target_model_init_from_base_model=self.config.target_model_init_from_base_model
         )
 
     @abstractmethod
@@ -228,8 +227,24 @@ class BaseModel(object, metaclass=ABCMeta):
                 steps_per_epoch=steps_per_epoch,
                 early_stopping_steps=self.config.early_stopping_steps,
                 eval_frequency=early_stopping_interval,
+                cache_weights_to_file=self.config.cache_weights_to_file
             )
         )
+
+        if self.config.in_memory_finetune is not None:
+            for f in self.config.in_memory_finetune:
+                train_hooks.append(InMemoryFinetune(
+                    config_to_eval=f["config"],
+                    finetune=self,
+                    eval_dir=estimator.eval_dir(),
+                    X=f["X"],
+                    Y=f["Y"],
+                    X_test=f["X_test"],
+                    Y_test=f["Y_test"],
+                    name=f["name"],
+                    every_n_iter=f["every_n_iter"]
+                ))
+
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             if self.config.prefit_init:
@@ -279,11 +294,15 @@ class BaseModel(object, metaclass=ABCMeta):
 
         resolved_gpus_string = ['/gpu:{}'.format(gpu) for gpu in resolved_gpus]
         if len(resolved_gpus_string) == 1:
-            distribute_strategy = OneDeviceStrategy(resolved_gpus_string[0])
+            distribute_strategy = tf.contrib.distribute.OneDeviceStrategy(resolved_gpus_string[0])
         else:
             if self.config.per_process_gpu_memory_fraction is not None:
                 warnings.warn("Setting `per_process_gpu_memory_fraction` is currently unsupported in multi-gpu environments.")
-            distribute_strategy = CentralStorageStrategy(resolved_gpus_string or None)
+            if self.config.use_mirrored_distribution:
+                distribute_strategy = tf.distribute.MirroredStrategy()
+            else:
+                distribute_strategy = tf.distribute.experimental.CentralStorageStrategy(resolved_gpus_string or None)
+
         self.resolved_gpus = resolved_gpus
         return distribute_strategy
 
@@ -296,6 +315,10 @@ class BaseModel(object, metaclass=ABCMeta):
             conf.gpu_options.per_process_gpu_memory_fraction = (
                 self.config.per_process_gpu_memory_fraction
             )
+        optimizer_options = conf.graph_options.optimizer_options
+        if self.config.xla:                                                     
+            optimizer_options.global_jit_level = tf.OptimizerOptions.ON_1 
+
         distribute_strategy = self._distribute_strategy(self.config.visible_gpus)
         config = tf.estimator.RunConfig(
             tf_random_seed=self.config.seed,
