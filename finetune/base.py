@@ -22,13 +22,14 @@ import tensorflow as tf
 from tensorflow.data import Dataset
 from tensorflow.contrib.distribute import OneDeviceStrategy
 from tensorflow.distribute.experimental import CentralStorageStrategy
+from tensorflow.compat.v1 import logging as tf_logging
 from sklearn.model_selection import train_test_split
 import joblib
 
 import finetune
 from finetune.util import list_transpose
 from finetune.encoding.input_encoder import EncodedOutput
-from finetune.config import get_config, all_gpus, assert_valid_config
+from finetune.config import get_config, all_gpus, assert_valid_config, get_default_config
 from finetune.saver import Saver, InitializeHook
 from finetune.errors import FinetuneError
 from finetune.model import get_model_fn, PredictMode
@@ -62,25 +63,24 @@ class BaseModel(object, metaclass=ABCMeta):
 
         atexit.register(cleanup)
 
-        self.default_context = kwargs.pop("default_context", None)
-        if self.default_context is not None and type(self.default_context) != dict:
+
+        self.config = get_config(**kwargs)
+        if self.config.default_context is not None and type(self.config.default_context) != dict:
             raise FinetuneError(
                 "Invalid default given: Need a dictionary of auxiliary info fields and default values."
             )
-        self.config = get_config(**kwargs)
+        self.config.use_auxiliary_info = self.config.default_context is not None
 
-        self.config.use_auxiliary_info = self.default_context is not None
         self.resolved_gpus = None
         self.validate_config()
         download_data_if_required(self.config.base_model)
         self.input_pipeline = self._get_input_pipeline()
-        self.input_pipeline.default_context = self.default_context
         self._trained = False
         self._initialize()
         if self.config.debugging_logs:
             os.environ["TF_CPP_MIN_LOG_LEVEL"] = "0"
-            tf.logging.set_verbosity(tf.logging.DEBUG)
-
+            tf_logging.set_verbosity(tf_logging.DEBUG)
+    
     def validate_config(self):
         if (
             self.config.num_layers_trained != self.config.n_layer
@@ -173,7 +173,7 @@ class BaseModel(object, metaclass=ABCMeta):
             context = self.fill_in_context_gaps(Xs, context)
         else:
             context = None
-            self.input_pipeline.context_dim = None
+            self.input_pipeline.config.context_dim = None
 
         batch_size = batch_size or self.config.batch_size
         val_input_fn, train_input_fn, val_size, val_interval = self.input_pipeline.get_train_input_fns(
@@ -345,7 +345,7 @@ class BaseModel(object, metaclass=ABCMeta):
             label_encoder=self.input_pipeline.label_encoder,
             saver=self.saver,
             build_explain=build_explain,
-            context_dim=context_dim or self.input_pipeline.context_dim,
+            context_dim=context_dim or self.input_pipeline.config.context_dim,
         )
         hooks = [InitializeHook(self.saver)]
         est = tf.estimator.Estimator(
@@ -368,7 +368,7 @@ class BaseModel(object, metaclass=ABCMeta):
             target_dim=self.input_pipeline.target_dim,
             label_encoder=self.input_pipeline.label_encoder,
             saver=self.saver,
-            context_dim=self.input_pipeline.context_dim,
+            context_dim=self.input_pipeline.config.context_dim,
         )
 
         featurizer_est = tf.estimator.Estimator(
@@ -720,9 +720,18 @@ class BaseModel(object, metaclass=ABCMeta):
             )
 
         assert_valid_config(**kwargs)
+
         saver = Saver()
         model = saver.load(path)
+
+        # Backwards compatability
+        # Ensure old models get new default settings
+        for setting, default in get_default_config().items():
+            if not hasattr(model.config, setting):
+                model.config.update({setting: default})
+
         model.config.update(kwargs)
+        model.input_pipeline.config = model.config
         download_data_if_required(model.config.base_model)
         saver.set_fallback(model.config.base_model_path)
         model._initialize()
@@ -805,7 +814,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
     def generate_default(self, text, start):
         assert len(text) > 0
-        template = deepcopy(self.default_context)
+        template = deepcopy(self.config.default_context)
         template["token"] = text
         template["start"] = start
         template["end"] = start + len(text)

@@ -315,6 +315,7 @@ def get_default_config():
         multi_label_sequences=False,
         multi_label_threshold=0.5,
         chunk_long_sequences=True,
+        filter_empty_examples=False, 
 
         # Regression Params
         regression_loss="L2",
@@ -346,6 +347,8 @@ def get_default_config():
         # Auxiliary Information
         use_auxiliary_info=False,
         n_context_embed=32,
+        default_context=None,
+        context_dim=None
     )
     return settings
 

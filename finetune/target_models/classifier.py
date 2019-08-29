@@ -37,7 +37,7 @@ class ClassificationPipeline(BasePipeline):
                     {
                         "tokens": TS([self.config.max_length, 2]),
                         "mask": TS([self.config.max_length]),
-                        "context": TS([self.config.max_length, self.context_dim]),
+                        "context": TS([self.config.max_length, self.config.context_dim]),
                     },
                     TS([self.target_dim]),
                 ),

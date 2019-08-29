@@ -32,8 +32,8 @@ from finetune.datasets.reuters import Reuters
 
 
 class TestAuxiliary(unittest.TestCase):
-    default_context = {"token": "", "pos": "filler", "capitalized": "False"}
     base_model = GPT
+    default_context = {"token": "", "pos": "filler", "capitalized": "False"}
 
     @classmethod
     def create_context(cls, nlp, text, default):
@@ -108,6 +108,7 @@ class TestAuxiliary(unittest.TestCase):
             "n_epochs": 3,
             "base_model": self.base_model,
             "val_size": 0,
+            "default_context": self.default_context
         }
         defaults.update(kwargs)
         return dict(get_config(**defaults))
@@ -122,7 +123,7 @@ class TestAuxiliary(unittest.TestCase):
             random.randint(0, 1) for _ in range(len(trainY))
         ]  # random labels just to make sure there are no errors -> reasonable predictions tests are in sequence_label
         model = Classifier(
-            default_context=self.default_context, **self.default_config()
+            **self.default_config()
         )
         model.fit(trainX, trainY)
         _ = model.predict(testX)
@@ -134,7 +135,7 @@ class TestAuxiliary(unittest.TestCase):
         """
         (trainX, testX, trainY, testY) = self.dataset
         model = SequenceLabeler(
-            default_context=self.default_context, **self.default_config()
+            **self.default_config()
         )
 
         model.fit(trainX, trainY)
@@ -156,7 +157,7 @@ class TestAuxiliary(unittest.TestCase):
         """
         save_file = "tests/saved-models/test-save-load"
         config = self.default_config(save_adam_vars=False, n_epochs=1)
-        model = Classifier(default_context=self.default_context, **config)
+        model = Classifier(**config)
 
         (trainX, testX, trainY, _) = self.dataset
         trainY = [random.randint(0, 1) for _ in range(len(trainY))]
