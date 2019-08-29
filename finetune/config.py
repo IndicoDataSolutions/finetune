@@ -250,7 +250,7 @@ def get_default_config():
         weight_stddev=0.02,
         save_dtype=None,
         val_set=None,
-        per_process_gpu_memory_fraction=0.9,
+        per_process_gpu_memory_fraction=None,
         adapter_size=None,  # from Parameter Efficient Transfer Learning paper
         
         # Regularization
