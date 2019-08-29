@@ -31,17 +31,14 @@ def embedding_preprocessor(input_pipeline, config):
     def process_embeddings(name, value):
         if "/we:0" in name:
             vocab_size = input_pipeline.text_encoder.vocab_size
-            word_embeddings = value[
-                : vocab_size - len(input_pipeline.text_encoder.special_tokens)
-            ]
-            special_embed = value[len(word_embeddings) : vocab_size]
+            word_embeddings = value[: vocab_size]
             positional_embed = value[vocab_size:]
 
             positional_embed = process_pos_embed(
                 positional_embed, config.max_length, config.interpolate_pos_embed
             )
             value = np.concatenate(
-                (word_embeddings, special_embed, positional_embed), axis=0
+                (word_embeddings, positional_embed), axis=0
             )
 
         elif "position_embeddings" in name:

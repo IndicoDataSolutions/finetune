@@ -90,7 +90,7 @@ class BaseEncoder(object):
     def __setitem__(self, key, value):
         self.encoder[key] = value
 
-    def _encode(self, texts, labels=None):
+    def _encode(self, texts, labels=None, stochastic=None):
         """
         Convert a batch of raw text to a batch of byte-pair encoded token indices.
         """
