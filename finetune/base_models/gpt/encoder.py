@@ -124,6 +124,7 @@ class GPTEncoder(BaseEncoder):
         """
         Convert a batch of raw text to a batch of byte-pair encoded token indices.
         """
+
         self._lazy_init()
         batch_tokens = []
         batch_token_idxs = []
