@@ -26,7 +26,6 @@ class BasePipeline(metaclass=ABCMeta):
     def __init__(self, config):
         self.config = config
         self.text_encoder = self.config.base_model.get_encoder()
-        self.context_dim = None
         self.label_encoder = None
         self.target_dim = None
         self.pad_idx_ = None
@@ -54,7 +53,7 @@ class BasePipeline(metaclass=ABCMeta):
                     {
                         "tokens": TS([self.config.max_length, 2]),
                         "mask": TS([self.config.max_length]),
-                        "context": TS([self.config.max_length, self.context_dim]),
+                        "context": TS([self.config.max_length, self.config.context_dim]),
                     },
                     TS([self.target_dim]),
                 ),
@@ -92,7 +91,7 @@ class BasePipeline(metaclass=ABCMeta):
 
         if encoded_output.context is not None:
             context_arr = np.zeros(
-                (self.config.max_length, self.context_dim), dtype=np.float32
+                (self.config.max_length, self.config.context_dim), dtype=np.float32
             )
         else:
             context_arr = None
@@ -206,7 +205,7 @@ class BasePipeline(metaclass=ABCMeta):
             keys = [
                 k
                 for k in pads_removed[0].keys()
-                if k not in ignore and k in self.default_context.keys()
+                if k not in ignore and k in self.config.default_context.keys()
             ]
             characteristics = {
                 k: [dictionary[k] for dictionary in pads_removed] for k in keys
@@ -245,7 +244,7 @@ class BasePipeline(metaclass=ABCMeta):
                 }
                 self.label_stats[label] = stats
 
-            self.context_dim = len(
+            self.config.context_dim = len(
                 continuous_labels
             )  # Sum over features to determine dimensionality of each feature vector.
 
@@ -254,7 +253,7 @@ class BasePipeline(metaclass=ABCMeta):
             ) in (
                 self.label_encoders.values()
             ):  # since categorical labels use LabelBinarizer, they use varying dimensions each for each one-hot-encoding, while numerical features only use 1 dimension, so we sum over all for the total dimension.
-                self.context_dim += (
+                self.config.context_dim += (
                     1 if len(encoder.classes_) <= 2 else len(encoder.classes_)
                 )  # Binary encodings with only two classes are given with one bit. Encodings with n > 2 classes are given with n bits. (Thanks sklearn)
             return True
@@ -267,9 +266,9 @@ class BasePipeline(metaclass=ABCMeta):
                 if type(sample[idx]) == str and sample[idx] == self.config.pad_token:
                     padded_indices.append(idx)
                 else:
-                    if not set(self.default_context.keys()).issubset(set(sample[idx].keys())):
+                    if not set(self.config.default_context.keys()).issubset(set(sample[idx].keys())):
                         missing = str(
-                            set(self.default_context.keys()).difference(set(sample[idx].keys()))
+                            set(self.config.default_context.keys()).difference(set(sample[idx].keys()))
                         )
 
                         raise FinetuneError(
@@ -280,7 +279,7 @@ class BasePipeline(metaclass=ABCMeta):
                     tokens_with_context.append(sample[idx])
             characteristics = {
                 k: [dictionary[k] for dictionary in tokens_with_context]
-                for k in self.default_context.keys()
+                for k in self.config.default_context.keys()
             }
 
             # make sure all features cover the same number of tokens, and calculate total num tokens
@@ -296,7 +295,7 @@ class BasePipeline(metaclass=ABCMeta):
                 num_tokens = new_length
 
             vector = np.zeros(
-                (num_tokens + len(padded_indices), self.context_dim), dtype=np.float32
+                (num_tokens + len(padded_indices), self.config.context_dim), dtype=np.float32
             )  # Feature vector for one document. Add 2 for the special tokens at beginning/end
             current_index = 0
 
@@ -345,6 +344,10 @@ class BasePipeline(metaclass=ABCMeta):
         target_arrs = np.asarray([target_arr for doc, target_arr in encoded_dataset])
         return Counter(self.label_encoder.inverse_transform(target_arrs))
 
+    def _filter_empty_examples(self, dataset):
+        # No-op for all classes but SequenceLabeler
+        return dataset
+
     def _dataset_with_targets(self, Xs, Y, train, context=None):
         if not callable(Xs) and not callable(Y):
             if self.config.use_auxiliary_info:
@@ -371,6 +374,7 @@ class BasePipeline(metaclass=ABCMeta):
 
         if not callable(Y) and train:
             dataset_encoded_list = list(dataset_encoded())
+            dataset_encoded_list = self._filter_empty_examples(dataset_encoded_list)
             class_counts = self._compute_class_counts(dataset_encoded_list)
             self.config.dataset_size = len(dataset_encoded_list)
             if self.config.class_weights is not None:
