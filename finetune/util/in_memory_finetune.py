@@ -34,19 +34,24 @@ class InMemoryFinetune(tf.train.SessionRunHook):
 
     def _evaluate(self, session):
         try:
-            from finetune import Classifier
-            model = Classifier(**self._config_to_finetune)
+            with tf.Graph().as_default():
+                from finetune import Classifier
+                model = Classifier(**self._config_to_finetune)
 
-            if self._current_finetune.saver.variables:
-                model.saver.variables = {
-                    k: v.copy() for k, v in self._current_finetune.saver.variables.items() if "global_step" not in k and "Adam" not in k
+                if self._current_finetune.saver.variables:
+                    model.saver.variables = {
+                        k: v.copy() for k, v in self._current_finetune.saver.variables.items()
+                        if "global_step" not in k and "Adam" not in k
+                    }
+
+                model.saver.fallback_ = {
+                    k: v for k, v in self._current_finetune.saver.fallback.items() if "global_step" not in k
                 }
-            model.saver.fallback_ = {k:v for k, v in self._current_finetune.saver.fallback.items() if "global_step" not in k}
-            train_x, train_y = self.train_data
-            model.fit(train_x, train_y)
-            test_x, test_y = self.test_data
-            test_accuracy = np.mean(model.predict(test_x) == test_y)
-            train_accuracy = np.mean(model.predict(train_x) == train_y)
+                train_x, train_y = self.train_data
+                model.fit(train_x, train_y)
+                test_x, test_y = self.test_data
+                test_accuracy = np.mean(model.predict(test_x) == test_y)
+                train_accuracy = np.mean(model.predict(train_x) == train_y)
         except IOError as e:
             traceback.print_exc(file=sys.stdout)
             test_accuracy = -1.0
