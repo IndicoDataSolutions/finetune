@@ -51,12 +51,8 @@ class TestModelBase(unittest.TestCase):
             lm_loss_coef=0.0,
             **cls.model_specific_config
         )
-
-        return dict(
-            get_config(
-                **kwargs, **{k: v for k, v in defaults.items() if k not in kwargs}
-            )
-        )
+        defaults.update(kwargs)
+        return defaults
 
 
 class TestClassifierTextCNN(TestModelBase):

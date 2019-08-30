@@ -1,7 +1,9 @@
+import copy
+
+from finetune.errors import FinetuneError
 from finetune.target_models.classifier import Classifier, ClassificationPipeline
 from finetune.target_models.regressor import Regressor, RegressionPipeline
 from finetune.base import BaseModel
-import copy
 
 
 class MultiFieldClassificationPipeline(ClassificationPipeline):
