@@ -2,8 +2,8 @@ import os
 from urllib.parse import urljoin
 
 from finetune.base_models import SourceModel
-from finetune.base_models.gpc.encoder import GPCEncoder
-from finetune.base_models.gpc.featurizer import featurizer
+from finetune.base_models.oscar.encoder import GPCEncoder
+from finetune.base_models.oscar.featurizer import featurizer
 from finetune.util.download import FINETUNE_BASE_FOLDER, OSCAR_BASE_URL
 
 REQUIRED_FILES = [
