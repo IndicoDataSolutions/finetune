@@ -20,7 +20,9 @@ import requests
 from bs4 import BeautifulSoup as bs
 from bs4.element import Tag
 
-from finetune.base_models import TextCNN, BERTModelCased, GPT2Model, GPTModel, RoBERTa, TCNModel, DistilBERT
+from finetune.base_models import TextCNN, BERTModelCased, GPT2Model, GPTModel, RoBERTa, OSCAR, TCNModel, DistilBERT
+from .test_deployment_model import TestDeploymentModel
+
 from finetune import Classifier, Comparison, SequenceLabeler
 from finetune.datasets import generic_download
 from finetune.config import get_config
@@ -500,3 +502,13 @@ class TestClassifierDistilBERT(TestClassifierTextCNN):
 
 class TestSequenceLabelerDistilBERT(TestSequenceLabelerTextCNN):
     base_model = DistilBERT
+
+
+class TestSequenceLabelerOscar(TestSequenceLabelerTextCNN):
+    model_specific_config = {"n_epochs": 2, "lr": 1e-4}
+    base_model = OSCAR
+
+
+class TestClassifierOscar(TestClassifierTextCNN):
+    model_specific_config = {"n_epochs": 2, "lr": 1e-4}
+    base_model = OSCAR

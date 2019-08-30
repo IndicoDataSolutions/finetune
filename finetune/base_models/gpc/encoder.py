@@ -10,12 +10,17 @@ from finetune.encoding.input_encoder import BaseEncoder, EncodedOutput, get_pair
 import sentencepiece as spm
 
 FINETUNE_FOLDER = os.path.dirname(finetune.__file__)
-ENCODER_PATH = os.path.join(FINETUNE_FOLDER, 'model', 'gpc', 'encoder')
+ENCODER_PATH = os.path.join(FINETUNE_FOLDER, 'model', 'oscar', 'encoder')
 WEIRD_SPM_CHAR = "▁"
 
 
 def train_tokenizer(filename, vocab_size=128000):
-    spm.SentencePieceTrainer.train('--input={} --model_prefix={} --user_defined_symbols=<_start_>,<_delimiter_>,<_classify_> --unk_id=0 --vocab_size={} --input_sentence_size=10000000 --shuffle_input_sentence=true --max_sentence_length=10000000 --character_coverage=0.9999'.format(filename, ENCODER_PATH, vocab_size))
+    spm.SentencePieceTrainer.train(
+        (
+            "--input={} --model_prefix={} --user_defined_symbols=<_start_>,<_delimiter_>,<_classify_> --unk_id=0 "
+            "--vocab_size={} --input_sentence_size=10000000 --shuffle_input_sentence=true"
+            " --max_sentence_length=10000000 --character_coverage=0.9999"
+        ).format(filename, ENCODER_PATH, vocab_size))
 
 
 class GPCEncoder(BaseEncoder):
@@ -38,7 +43,7 @@ class GPCEncoder(BaseEncoder):
 
         self.initialized = True
 
-    def _encode(self, texts, labels=None, stochastic=None):
+    def _encode(self, texts, labels=None, context=None, stochastic=False):
         """
         Convert a batch of raw text to a batch of byte-pair encoded token indices.
         """
@@ -48,15 +53,20 @@ class GPCEncoder(BaseEncoder):
         batch_token_idxs = []
         batch_label_idxs = []
         batch_character_locs = []
+        batch_char_starts = []
+        batch_context = []
         label = None
+        offset = 0
 
         for i, text in enumerate(texts):
+            text = text.replace(WEIRD_SPM_CHAR, "_")
             if labels is not None:
                 label = labels[i]
 
             subtokens = []
             subtoken_idxs = []
             tok_pos = []
+            char_starts = []
             token_start = 0
             if stochastic:
                 encoded = self.encoder.sample_encode_as_pieces(text, -1, 0.1)
@@ -68,19 +78,30 @@ class GPCEncoder(BaseEncoder):
                 subtoken_idxs.append(self.encoder.piece_to_id(token))
                 raw_text = token.replace(WEIRD_SPM_CHAR, "")
                 tok_pos.append(token_start + len(raw_text))
+                char_starts.append(token_start)
                 token_start += len(raw_text)
 
             batch_tokens.append(subtokens)
             batch_token_idxs.append(subtoken_idxs)
             batch_character_locs.append(tok_pos)
+            batch_char_starts.append(char_starts)
             if labels is not None:
                 batch_label_idxs.append([label] * len(subtoken_idxs))
+
+            if context is not None:
+                text_context = self.line_up_context(
+                    context, batch_character_locs[i], batch_tokens[i], subtoken_idxs, offset
+                )
+                batch_context.extend(text_context)
+                offset += batch_character_locs[i][-1]
 
         return EncodedOutput(
             token_ids=batch_token_idxs,
             tokens=batch_tokens,
             labels=batch_label_idxs,
             char_locs=batch_character_locs,
+            char_starts=batch_char_starts,
+            context=batch_context
         )
 
     def decode(self, token_ids):
