@@ -26,7 +26,8 @@ class ComparisonRegressor(BaseModel):
     :param config: A :py:class:`finetune.config.Settings` object or None (for default config).
     :param \**kwargs: key-value pairs of config items to override.
     """
-
+    defaults = {"chunk_long_sequences": False}
+    
     def _get_input_pipeline(self):
         return ComparisonRegressionPipeline(self.config)
 
