@@ -253,7 +253,8 @@ def get_default_config():
         val_set=None,
         per_process_gpu_memory_fraction=None,
         adapter_size=None,  # from Parameter Efficient Transfer Learning paper
-        
+        use_mirrored_distribution=False,
+
         # Regularization
         embed_p_drop=0.1,
         attn_p_drop=0.1,
@@ -270,6 +271,7 @@ def get_default_config():
         eval_acc=False,
         val_size=0.,
         val_interval=None,
+        in_memory_finetune=None,
 
         # Debugging
         log_device_placement=False,
@@ -277,6 +279,7 @@ def get_default_config():
         tensorboard_folder=None,
         summarize_grads=False,
         debugging_logs=False,
+        cache_weights_to_file=False,
 
         # Partial Fitting
         num_layers_trained=12,
@@ -328,23 +331,16 @@ def get_default_config():
         assocation_loss_weight=100.0,
 
         # For experimental conv model
-        use_conv=False,
         use_fp16=False,
         use_timing=True,
         scale_loss=False,
-        loss_scale_every_n_steps=2500,
-        in_memory_finetune=None,
-        sampled_softmax=None,
         xla=False,
         beam_search_alpha=0.6,
         beam_size=10,
         decoder_sample_from=40,
         sample_temp=1.0,
-        target_model_init_from_base_model=True,
         feat_mode="final_state",
-        cache_weights_to_file=False,
-        use_mirrored_distribution=False
-
+        target_model_init_from_base_model=False,
 
         # Location of model weights
         base_model=GPTModel,

@@ -9,6 +9,7 @@ from finetune.util.beam_search import beam_search
 from finetune.base_models.gpc.featurizer import featurizer as gpc_featurizer
 from finetune.errors import FinetuneError
 
+
 class S2SPipeline(BasePipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -120,9 +121,7 @@ class S2S(BaseModel):
             
             def symbols_to_logits_fn(input_symbols, i, state):
                 # [batch_size, decoded_ids] to [batch_size, vocab_size]
-                input_symbols = tf.Print(input_symbols, [input_symbols])
                 leng = shape_list(input_symbols)[1]
-                leng = tf.Print(leng, ["INPUT SIZE IS", tf.shape(input_symbols)])
                 pos_embed = encoder.vocab_size + tf.range(leng)
                 pos_embed = tf.tile([pos_embed], [shape_list(input_symbols)[0], 1])
                 inp = tf.pad(tf.stack([input_symbols, pos_embed], -1), [[0,0], [0, 1], [0, 0]] )
@@ -178,6 +177,8 @@ class S2S(BaseModel):
 class LMPred(S2S):
     @staticmethod
     def _target_model(config, featurizer_state, targets, n_outputs, train=False, reuse=None, label_encoder=None, **kwargs):
-        print("Please use batch size of one its weird otherwise and your input is truncated")
         start_tokens = featurizer_state["encoded_input"]
-        return S2S._target_model(config, None, targets, n_outputs, train=train, reuse=reuse, label_encoder=label_encoder, embed_weights=featurizer_state["embed_weights"], start_tokens=start_tokens)
+        return S2S._target_model(
+            config, None, targets, n_outputs, train=train, reuse=reuse, label_encoder=label_encoder,
+            embed_weights=featurizer_state["embed_weights"], start_tokens=start_tokens
+        )

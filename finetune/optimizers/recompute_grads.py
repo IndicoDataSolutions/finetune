@@ -158,7 +158,6 @@ def _recompute_grad(fn, args, use_entire_scope):
             outputs = [outputs]
         outputs = list(outputs)
         input_vars = inputs + variables
-        print(input_vars)
         grads = tf.gradients(outputs, input_vars, output_grads)
 
         grad_inputs = grads[:len(inputs)]
