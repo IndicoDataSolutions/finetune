@@ -53,12 +53,13 @@ class SaverHook(_StopOnPredicateHook):
             self.get_current_weights = True
         steps_diff = most_recent_eval[0] - best_eval[0]
         tf.logging.info("No improvement in {} steps".format(steps_diff))
+
         if (
             steps_diff > self.early_stopping_steps
             and most_recent_eval[0] > self.steps_per_epoch
         ):
             LOGGER.info(
-                "No decrease in loss in {} steps, early stopping triggered.".format(
+                "Early stopping triggered.".format(
                     steps_diff
                 )
             )
