@@ -2,6 +2,7 @@ import numpy as np
 import tensorflow as tf
 import copy
 
+from finetune.errors import FinetuneError
 from finetune.base import BaseModel
 from finetune.target_models.classifier import Classifier, ClassificationPipeline
 from finetune.encoding.input_encoder import ArrayEncodedOutput
