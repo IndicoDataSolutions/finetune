@@ -175,10 +175,11 @@ class TestDeploymentModel(unittest.TestCase):
             'max_length': 256,
             'n_epochs': 3,
             'adapter_size': 64,
-            'base_model': cls.base_model
+            'base_model': cls.base_model,
+            'chunk_long_sequences': False
         }
         defaults.update(kwargs)
-        return dict(get_config(**defaults))
+        return defaults
 
     def default_seq_config(cls, **kwargs):
         d = dict(

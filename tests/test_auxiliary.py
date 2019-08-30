@@ -137,7 +137,6 @@ class TestAuxiliary(unittest.TestCase):
         model = SequenceLabeler(
             **self.default_config()
         )
-
         model.fit(trainX, trainY)
         preds = model.predict(testX)
         token_precision = sequence_labeling_token_precision(preds, testY)

@@ -234,6 +234,8 @@ class DeploymentModel(BaseModel):
         self.input_pipeline._format_for_encoding = (
             original_model.input_pipeline._format_for_encoding
         )
+        self.config.chunk_long_sequences = original_model.config.chunk_long_sequences
+        self.input_pipeline.config.chunk_long_sequences = original_model.config.chunk_long_sequences
 
         # auxiliary info attributes
         if original_model.config.use_auxiliary_info:
