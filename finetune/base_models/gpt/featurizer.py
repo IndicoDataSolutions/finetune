@@ -9,13 +9,11 @@ from finetune.nn.activations import act_fns
 from finetune.nn.nn_utils import dropout, norm
 
 
-def mask_attn_weights(w, fp16=False):
+def mask_attn_weights(w):
     n = shape_list(w)[-1]
     b = tf.matrix_band_part(tf.ones([n, n]), -1, 0)
     b = tf.reshape(b, [1, 1, n, n])
-    if fp16:
-        b = tf.cast(b, tf.float16)
-    w = w * b + (-1e4 if fp16 else -1e9) * (1 - b)
+    w = w * b + -1e9 * (1 - b)
     return w
 
 
@@ -43,7 +41,7 @@ def attn_weights(q, k, v, scale=False, mask=True, explain=False):
 
     if scale:
         n_state = shape_list(v)[-1]
-        w = w * tf.rsqrt(tf.cast(n_state, tf.float16 if fp16 else tf.float32))
+        w = w * tf.rsqrt(tf.cast(n_state, tf.float32))
 
     if mask:
         if explain:

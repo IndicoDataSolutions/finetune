@@ -20,6 +20,7 @@ from finetune.target_models.ordinal_regressor import OrdinalRegressor, Compariso
 from finetune.target_models.language_model import LanguageModel
 from finetune.target_models.mtl import MultiTask
 from finetune.target_models.deployment_model import DeploymentModel
+from finetune.target_models.s2s import LMPred
 
 __version__, VERSION, version = ("0.8.5",) * 3
 
