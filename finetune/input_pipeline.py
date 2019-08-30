@@ -422,7 +422,7 @@ class BasePipeline(metaclass=ABCMeta):
             )
 
         # Auto-select reasonable validation size
-        if self.config.val_size is 'auto':
+        if self.config.val_size == 'auto':
             if n_examples < 50 and not self.config.keep_best_model:
                 val_size = 0
             else:

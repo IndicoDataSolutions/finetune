@@ -3,6 +3,49 @@ from finetune.base_models.gpt.featurizer import dropout, embed, norm
 from finetune.nn.add_auxiliary import add_auxiliary
 
 
+        
+class TemporalBlock:
+    def __init__(self, n_filters, kernel_size, dilation_rate, rate, scope):
+        self.scope = scope
+        self.rate = rate
+        self.n_filters = n_filters
+        self.conv1 = tf.keras.layers.Conv1D(
+            filters=n_filters,
+            kernel_size=kernel_size,
+            padding="same",
+            activation=tf.nn.relu,
+            dilation_rate=dilation_rate,
+            kernel_initializer=tf.initializers.glorot_normal,
+            name="conv1",
+        )
+        self.conv2 = tf.keras.layers.Conv1D(
+            filters=n_filters,
+            kernel_size=kernel_size,
+            padding="same",
+            dilation_rate=dilation_rate,
+            activation=tf.nn.relu,
+            kernel_initializer=tf.initializers.glorot_normal,
+            name="conv2",
+        )
+        self.downsample = tf.keras.layers.Conv1D(filters=n_filters, kernel_size=1, padding="same")
+
+    def __call__(self, X):
+        with tf.variable_scope(self.scope):
+            conv1_out = self.conv1(X)
+            conv1_dropout = tf.nn.dropout(conv1_out, rate=self.rate)
+            conv2_out = self.conv2(conv1_dropout)
+            conv2_dropout = tf.nn.dropout(conv2_out, rate=self.rate)
+
+        # residuals
+        if X.get_shape()[-1] == self.n_filters:
+            output = conv2_dropout + X
+        else:
+            downsampled_out = self.downsample(X)
+            output = conv2_dropout + downsampled_out
+
+        return output
+
+
 def tcn_featurizer(
     X,
     encoder,
@@ -48,47 +91,6 @@ def tcn_featurizer(
 
         # keep track of the classify token
         clf_token = encoder["_classify_"]
-        
-        class TemporalBlock:
-            def __init__(self, n_filters, kernel_size, dilation_rate, rate, scope):
-                self.scope = scope
-                self.rate = rate
-                self.n_filters = n_filters
-                self.conv1 = tf.keras.layers.Conv1D(
-                    filters=n_filters,
-                    kernel_size=kernel_size,
-                    padding="same",
-                    activation=tf.nn.relu,
-                    dilation_rate=dilation_rate,
-                    kernel_initializer=tf.initializers.glorot_normal,
-                    name="conv1",
-                )
-                self.conv2 = tf.keras.layers.Conv1D(
-                    filters=n_filters,
-                    kernel_size=kernel_size,
-                    padding="same",
-                    dilation_rate=dilation_rate,
-                    activation=tf.nn.relu,
-                    kernel_initializer=tf.initializers.glorot_normal,
-                    name="conv2",
-                )
-                self.downsample = tf.keras.layers.Conv1D(filters=n_filters, kernel_size=1, padding="same")
-
-            def __call__(self, X):
-                with tf.variable_scope(self.scope):
-                    conv1_out = self.conv1(X)
-                    conv1_dropout = tf.nn.dropout(conv1_out, rate=self.rate)
-                    conv2_out = self.conv2(conv1_dropout)
-                    conv2_dropout = tf.nn.dropout(conv2_out, rate=self.rate)
-
-                # residuals
-                if X.get_shape()[-1] == self.n_filters:
-                    output = conv2_dropout + X
-                else:
-                    downsampled_out = self.downsample(X)
-                    output = conv2_dropout + downsampled_out
-
-                return output
 
         with tf.variable_scope("tcn_stack"):
             representation = h
