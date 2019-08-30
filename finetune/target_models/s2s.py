@@ -6,7 +6,7 @@ from finetune.input_pipeline import BasePipeline
 from finetune.util.shapes import shape_list
 from finetune.nn.target_blocks import language_model
 from finetune.util.beam_search import beam_search
-from finetune.base_models.gpc.featurizer import featurizer as gpc_featurizer
+from finetune.base_models.oscar.featurizer import featurizer as gpc_featurizer
 from finetune.errors import FinetuneError
 
 
