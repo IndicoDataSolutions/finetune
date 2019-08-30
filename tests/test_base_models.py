@@ -47,7 +47,6 @@ class TestModelBase(unittest.TestCase):
             base_model=cls.base_model,
             batch_size=2,
             max_length=128,
-            val_size=0,
             lm_loss_coef=0.0,
             **cls.model_specific_config
         )
@@ -381,15 +380,6 @@ class TestSequenceLabelerTextCNN(TestModelBase):
             texts, annotations, test_size=0.1
         )
 
-        reweighted_model = SequenceLabeler(
-            **self.default_config(class_weights={"Named Entity": 100.0})
-        )
-        reweighted_model.fit(train_texts, train_annotations)
-        reweighted_predictions = reweighted_model.predict(test_texts)
-        reweighted_token_recall = sequence_labeling_token_recall(
-            test_annotations, reweighted_predictions
-        )
-
         self.model.fit(train_texts, train_annotations)
         predictions = self.model.predict(test_texts)
         probas = self.model.predict_proba(test_texts)
@@ -414,10 +404,6 @@ class TestSequenceLabelerTextCNN(TestModelBase):
         self.assertIn("Named Entity", overlap_recall)
 
         self.model.save(self.save_file)
-
-        self.assertGreater(
-            reweighted_token_recall["Named Entity"], token_recall["Named Entity"]
-        )
 
     def test_cached_predict(self):
         """
@@ -512,3 +498,10 @@ class TestDeploymentGPT2(TestDeploymentModel):
 class TestDeploymentRoberta(TestDeploymentModel):
     base_model = RoBERTa
 
+
+class TestClassifierTCN(TestClassifierTextCNN):
+    base_model = TCNModel
+
+
+class TestSequenceLabelerTCN(TestSequenceLabelerTextCNN):
+    base_model = TCNModel
