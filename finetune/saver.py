@@ -70,29 +70,25 @@ class SaverHook(_StopOnPredicateHook):
         super().begin()
         self.included = tf.global_variables()
 
-    def after_run(self, run_context, run_values):
-        super().after_run(run_context, run_values)
-        if self.get_current_weights:
+    def _get_weights(self, session):
+        if not self.keep_best_model or self.saver.variables is None or self.get_current_weights:
             self.saver.variables = dict(
                 zip(
                     (var.name for var in self.included),
-                    run_context.session.run(self.included),
+                    session.run(self.included),
                 )
             )
             if self.cache_weights_to_file:
                 joblib.dump(self.saver.variables, os.path.join(self.estimator.eval_dir(), "..", "weights.jl"))
             self.get_current_weights = False
 
+    def after_run(self, run_context, run_values):
+        super().after_run(run_context, run_values)
+        self._get_weights(session=run_context.session)
+
     def end(self, session):
         self.stop_if_no_metric_improvement_fn()
-        if (
-            not self.keep_best_model
-            or self.saver.variables is None
-            or self.get_current_weights
-        ):
-            self.saver.variables = dict(
-                zip((var.name for var in self.included), session.run(self.included))
-            )
+        self._get_weights(session=session)
 
 
 class InitializeHook(SessionRunHook):

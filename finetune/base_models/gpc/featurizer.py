@@ -3,7 +3,15 @@ from finetune.base_models.gpt.featurizer import dropout, embed, split_heads, mer
 from finetune.util.shapes import shape_list
 from finetune.base_models.gpc.ra import recursive_agg
 from finetune.optimizers.recompute_grads import recompute_grad
+from finetune.nn.add_auxiliary import add_auxiliary
+
 import functools
+
+
+def cast_maybe(t, dtype):
+    if t.dtype == dtype:
+        return t
+    return tf.cast(t, dtype=dtype)
 
 
 def norm(x, scope, axis=-1, e=None, fp16=False, debug=False):
@@ -139,7 +147,7 @@ def enc_dec_mix(enc, dec, enc_mask, dec_mask, n_head=16):
         k = split_heads(k, n_head, k=True)
         v = split_heads(v, n_head)
         w = tf.matmul(q, k)
-        w = w * tf.rsqrt(tf.cast(dec_seq, tf.float32))
+        w = w * tf.rsqrt(cast_maybe(dec_seq, tf.float32))
         
         enc_mask = tf.reshape(tf.sequence_mask(enc_mask, maxlen=enc_seq, dtype=enc.dtype), [batch, 1, 1, enc_seq])
         dec_mask = tf.reshape(tf.sequence_mask(dec_mask, maxlen=dec_seq, dtype=enc.dtype), [batch, 1, dec_seq, 1])
@@ -159,7 +167,7 @@ def block(X, block_name, use_fp16, pool_idx=None, encoder_state=None, train=Fals
         return tf.nn.relu(dropout(norm(h1 + X, "norm", fp16=use_fp16, e=1e-2), pdrop, train))
 
 
-def featurizer(X, encoder, config, train=False, reuse=None, encoder_state=None, **kwargs):
+def featurizer(X, encoder, config, train=False, reuse=None, encoder_state=None, context=None, context_dim=None, **kwargs):
     """
     The main element of the OSCAR model. Maps from tokens ids to a dense, embedding of the sequence.
 
@@ -239,9 +247,14 @@ def featurizer(X, encoder, config, train=False, reuse=None, encoder_state=None, 
         else:
             seq_feats = h
 
+        if config.use_auxiliary_info:
+            clf_h, seq_feats = add_auxiliary(
+                context, context_dim, clf_h, seq_feats, config, train
+            )
+
         return {
             'embed_weights': embed_weights,
-            'features': tf.cast(clf_h, tf.float32),
+            'features': cast_maybe(clf_h, tf.float32),
             'sequence_features': seq_feats,
             'pool_idx': pool_idx,
             'encoded_input': X[:, :tf.reduce_min(pool_idx) - 1, 0]
