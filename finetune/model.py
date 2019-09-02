@@ -204,7 +204,7 @@ def get_model_fn(
                 0.0,
                 lr
                 * schedules[params.lr_schedule](
-                    tf.to_float(global_step) / total_num_steps
+                    tf.to_float(global_step) / total_num_steps, warmup=params.lr_warmup
                 ),
             )
 
