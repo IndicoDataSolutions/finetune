@@ -134,8 +134,7 @@ class DeploymentModel(BaseModel):
         if "base_model" in kwargs:
             if featurizer and kwargs["base_model"] != featurizer:
                 raise FinetuneError("Base model passed in config does not match featurizer argument")
-            if not featurizer:
-                featurizer = kwargs["base_model"]
+            featurizer = kwargs.pop("base_model")
 
         super().__init__(base_model=featurizer, **kwargs)
         if featurizer.featurizer not in [gpt2_featurizer, gpt_featurizer, bert_featurizer]:
