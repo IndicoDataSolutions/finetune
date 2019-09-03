@@ -129,14 +129,16 @@ class DeploymentModel(BaseModel):
         :param base_model: One of the base models from finetune.base_models, excluding textcnn.
         :param **kwargs: key-value pairs of config items to override.
         """
+        self.input_pipeline = None
+
+        if "base_model" in kwargs:
+            if featurizer and kwargs["base_model"] != featurizer:
+                raise FinetuneError("Base model passed in config does not match featurizer argument")
+        super().__init__(base_model=featurizer, **kwargs)
         if featurizer.featurizer not in [gpt2_featurizer, gpt_featurizer, bert_featurizer]:
             raise FinetuneError("Selected base model not supported.")
-        self.config = get_config(**kwargs)
         self.validate_config()
-        self.input_pipeline = DeploymentPipeline(self.config)
-        super().__init__(**kwargs)
         self.config.use_auxiliary_info = auxiliary_info
-        self.config.base_model = featurizer
         self.task = TaskMode.CLASSIFICATION
         self.input_pipeline.task = self.task
         self.featurizer_loaded = False
@@ -311,6 +313,8 @@ class DeploymentModel(BaseModel):
         return estimator
 
     def _get_input_pipeline(self):
+        if self.input_pipeline is None:
+            self.input_pipeline = DeploymentPipeline(self.config)
         return self.input_pipeline
 
     def featurize(self, X):
@@ -455,13 +459,13 @@ class DeploymentModel(BaseModel):
     def attention_weights(self, Xs):
         raise NotImplementedError
 
-    def generate_text(self, seed_text, max_length, use_extra_toks):
+    def generate_text(self, *args, **kwargs):
         raise NotImplementedError
 
     def save(self, path):
         raise NotImplementedError
 
-    def create_base_model(self, filename, exists_ok):
+    def create_base_model(self, *args, **kwargs):
         raise NotImplementedError
 
     def cached_predict(self):
@@ -470,12 +474,11 @@ class DeploymentModel(BaseModel):
     def load(cls, path, **kwargs):
         raise NotImplementedError
 
-    def finetune_grid_search(
-        cls, Xs, Y, *, test_size, eval_fn, probs, return_all, **kwargs
-    ):
+
+    @classmethod
+    def finetune_grid_search(cls, *args, **kwargs):
         raise NotImplementedError
 
-    def finetune_grid_search_cv(
-        cls, Xs, Y, *, n_splits, test_size, eval_fn, probs, return_all, **kwargs
-    ):
+    @classmethod
+    def finetune_grid_search_cv(cls, *args, **kwargs):
         raise NotImplementedError
