@@ -175,7 +175,6 @@ class TestDeploymentModel(unittest.TestCase):
             'max_length': 256,
             'n_epochs': 3,
             'adapter_size': 64,
-            'base_model': cls.base_model,
             'chunk_long_sequences': False
         }
         defaults.update(kwargs)
@@ -201,7 +200,6 @@ class TestDeploymentModel(unittest.TestCase):
             n_epochs=1,
             l2_reg=0,
             lm_loss_coef=0.,
-            base_model=cls.base_model,
             val_size=0.,
         )
         d.update(kwargs)
