@@ -219,6 +219,8 @@ class DeploymentModel(BaseModel):
         ):  # previous model did not use adapters, so we have to update everything
             self.predict_hooks.feat_hook.refresh_base_model = True
 
+
+
     def _update_pipeline(self, original_model):
         """
         Refresh necessary attributes of DeploymentModel's input_pipeline so that it can support a newly loaded model
