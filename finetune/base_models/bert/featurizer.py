@@ -65,6 +65,11 @@ def bert_featurizer(
         ),
         axis=1,
     )
+    lengths = tf.where(
+         tf.equal(lengths, 0),
+         tf.ones_like(lengths) * tf.cast(seq_length, dtype=lengths.dtype),
+         lengths,
+    )
 
     if "roberta" in config.base_model.__name__.lower():
         # Because roberta embeddings include an unused <MASK> token, and our embedding layer size needs to accommodate for that.
