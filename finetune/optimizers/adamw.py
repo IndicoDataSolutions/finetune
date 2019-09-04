@@ -6,7 +6,7 @@ import tensorflow as tf
 
 
 class AdamWOptimizer(AdamWOptimizerBroken):
-    def _resource_scatter_add(self, x, i, v):
+    def _resource_scatter_add(self, x, i, v, _=None):
         with ops.control_dependencies(
                 [resource_variable_ops.resource_scatter_add(x.handle, i, v)]):
             return tf.convert_to_tensor(x)
