@@ -1,5 +1,7 @@
 import tensorflow as tf
-from finetune.base_models.gpt.featurizer import dropout, embed, norm
+
+from finetune.util.shapes import lengths_from_eos_idx
+from finetune.base_models.gpt.featurizer import dropout, embed
 from finetune.nn.add_auxiliary import add_auxiliary
 
 
@@ -48,6 +50,21 @@ def textcnn_featurizer(
 
         # keep track of the classify token
         clf_token = encoder["_classify_"]
+
+        # mask out the values past the classify token before performing pooling
+        pool_idx = tf.cast(
+            tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1),
+            tf.int32,
+        )
+        # mask is past the classify token (i.e. make those results extremely negative)
+        mask = tf.expand_dims(
+            1.0
+            - tf.sequence_mask(
+                pool_idx, maxlen=tf.shape(h)[1], dtype=tf.float32
+            ),
+            -1,
+        )
+
         # Convolutional Layer (this is all the same layer, just different filter sizes)
         pool_layers = []
         conv_layers = []
@@ -62,25 +79,13 @@ def textcnn_featurizer(
                 kernel_initializer=tf.initializers.glorot_normal,
             )
             conv_layers.append(conv)
-            # mask out the values past the classify token before performing pooling
-            pool_idx = tf.cast(
-                tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1),
-                tf.int32,
-            )
-            # mask is past the classify token (i.e. make those results extremely negative)
-            mask = tf.expand_dims(
-                1.0
-                - tf.sequence_mask(
-                    pool_idx, maxlen=tf.shape(conv)[1], dtype=tf.float32
-                ),
-                -1,
-            )
             pool = tf.reduce_max(conv + mask * -1e9, 1)
             pool_layers.append(pool)
 
         # Concat the output of the convolutional layers for use in sequence embedding
         conv_seq = tf.concat(conv_layers, axis=2)
         seq_feats = tf.reshape(conv_seq, shape=[-1, config.max_length, config.n_embed])
+
         # Concatenate the univariate vectors as features for classification
         clf_h = tf.concat(pool_layers, axis=1)
         clf_h = tf.reshape(
@@ -89,15 +94,17 @@ def textcnn_featurizer(
 
         # note that, due to convolution and pooling, the dimensionality of the features is much smaller than in the
         # transformer base models
-
         if config.use_auxiliary_info:
             clf_h, seq_feats = add_auxiliary(
                 context, context_dim, clf_h, seq_feats, config, train
             )
 
+        lengths = lengths_from_eos_idx(eos_idx=pool_idx, max_length=tf.shape(seq_feats)[1])
+
         return {
             "embed_weights": embed_weights,
             "features": clf_h,  # [batch_size, n_embed] for classify, [batch_size, 1, n_embed] for comparison, etc.
             "sequence_features": seq_feats,  # [batch_size, seq_len, n_embed]
-            "pool_idx": pool_idx,  # [batch_size]
+            "eos_idx": pool_idx,  # [batch_size]
+            "lengths": lengths
         }

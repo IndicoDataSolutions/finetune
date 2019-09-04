@@ -309,7 +309,7 @@ def sequence_labeler(
     multilabel=False,
     train=False,
     reuse=None,
-    pool_idx=None,
+    lengths=None,
     **kwargs
 ):
     """
@@ -326,10 +326,10 @@ def sequence_labeler(
     :param hidden: The output of the featurizer. [batch_size, sequence_length, embed_dim]
     :param targets: The placeholder representing the sequence labeling targets. [batch_size, sequence_length]
     :param n_targets: A python int containing the number of classes that the model should be learning to predict over.
-    :param dropout_placeholder:
     :param config: A config object, containing all parameters for the featurizer.
     :param train: If this flag is true, dropout and losses are added to the graph.
     :param reuse: Should reuse be set within this scope.
+    :param lengths: The number of non-padding tokens in the input.
     :param kwargs: Spare arguments.
     :return: dict containing:
         "logits": The un-normalised log probabilities of each class being in each location. For usable predictions,
@@ -388,14 +388,8 @@ def sequence_labeler(
         default_lengths = kwargs.get("max_length") * tf.ones(
             tf.shape(hidden)[0], dtype=tf.int32
         )
-        if pool_idx is None:
-            pool_idx = default_lengths
-        else:
-            pool_idx = tf.where(
-                tf.equal(pool_idx, 0),
-                default_lengths,
-                tf.cast(pool_idx, dtype=tf.int32),
-            )
+        if lengths is None:
+            lengths = default_lengths
 
         with tf.device("CPU:0"):
             if multilabel:
@@ -417,7 +411,7 @@ def sequence_labeler(
                         log_likelihood += crf_log_likelihood(
                             logits[-1],
                             targets_individual[i],
-                            pool_idx,
+                            lengths,
                             transition_params=transition_params[-1],
                         )[0]
                 logits = tf.stack(logits, axis=-1)
@@ -427,7 +421,7 @@ def sequence_labeler(
                 )
                 if targets is not None:
                     log_likelihood, _ = crf_log_likelihood(
-                        logits, targets, pool_idx, transition_params=transition_params
+                        logits, targets, lengths, transition_params=transition_params
                     )
 
         return {
@@ -438,13 +432,13 @@ def sequence_labeler(
 
 
 def association(
-    hidden, pool_idx, targets, n_targets, config, train=False, reuse=None, **kwargs
+    hidden, lengths, targets, n_targets, config, train=False, reuse=None, **kwargs
 ):
     """
     An Attention based sequence labeler model with association.
 
     :param hidden: The output of the featurizer. [batch_size, sequence_length, embed_dim]
-    :param pool_idx: the index of the classify tokens along the sequence dimension. [batch_size]
+    :param lengths: The number of non-padding tokens in the input.
     :param targets: A dict containing:
      'labels': The sequence labeling targets. [batch_size, sequence_length],
      'associations': A matrix of class ids for the associations [batch_size, sequence_length, seqence_length]
@@ -534,7 +528,7 @@ def association(
                 transition_params=transition_params,
             )
             sequence_mask = tf.sequence_mask(
-                pool_idx + 1, maxlen=length, dtype=tf.float32
+                lengths, maxlen=length, dtype=tf.float32
             )
             mask = tf.expand_dims(sequence_mask, 1) * tf.expand_dims(sequence_mask, 2)
 
