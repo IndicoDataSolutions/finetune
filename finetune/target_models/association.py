@@ -418,7 +418,7 @@ class Association(BaseModel):
     ):
         return association(
             hidden=featurizer_state["sequence_features"],
-            pool_idx=featurizer_state["pool_idx"],
+            lengths=featurizer_state["lengths"],
             targets=targets,
             n_targets=n_outputs,
             config=config,
