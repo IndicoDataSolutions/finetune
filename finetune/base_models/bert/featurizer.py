@@ -58,18 +58,20 @@ def bert_featurizer(
 
     seq_length = tf.shape(delimiters)[1]
 
-    lengths = tf.argmax(
+    eos_idx = tf.argmax(
         tf.cast(delimiters, tf.float32)
         * tf.expand_dims(
             tf.range(tf.cast(seq_length, tf.float32), dtype=tf.float32), 0
         ),
         axis=1,
     )
-    lengths = tf.where(
-         tf.equal(lengths, 0),
-         tf.ones_like(lengths) * tf.cast(seq_length, dtype=lengths.dtype),
-         lengths,
+    eos_idx = tf.where(
+         tf.equal(eos_idx, 0),
+         tf.ones_like(eos_idx) * tf.cast(seq_length, dtype=eos_idx.dtype),
+         eos_idx,
     )
+    
+    lengths = eos_idx + 1 # Length includes the eos token.
 
     if "roberta" in config.base_model.__name__.lower():
         # Because roberta embeddings include an unused <MASK> token, and our embedding layer size needs to accommodate for that.
@@ -77,7 +79,7 @@ def bert_featurizer(
         # In our use case (padding token has index 1), roberta's position indexes begin at 2, so our positions embeddings come from indices 2:514.
         bert_config.max_position_embeddings += 2
 
-    mask = tf.sequence_mask(lengths + 1, maxlen=seq_length, dtype=tf.float32)
+    mask = tf.sequence_mask(lengths, maxlen=seq_length, dtype=tf.float32)
 
     if config.num_layers_trained not in [config.n_layer, 0]:
         raise ValueError(
@@ -117,7 +119,7 @@ def bert_featurizer(
             "embed_weights": embed_weights,
             "features": features,
             "sequence_features": sequence_features,
-            "pool_idx": lengths,
+            "pool_idx": eos_idx,
         }
         if config.num_layers_trained == 0:
             output_state = {k: tf.stop_gradient(v) for k, v in output_state.items()}
