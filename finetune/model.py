@@ -3,9 +3,7 @@ import functools
 
 import numpy as np
 import tensorflow as tf
-from tensorflow.contrib.opt.python.training.weight_decay_optimizers import (
-    AdamWOptimizer,
-)
+
 
 from finetune.nn.target_blocks import language_model
 from finetune.util.text_generation import sample_with_temperature
@@ -13,6 +11,7 @@ from finetune.optimizers.zero_grad import dont_optimize_zeros
 from finetune.optimizers.gradient_accumulation import get_grad_accumulation_optimizer
 from finetune.optimizers.learning_rate_schedules import schedules
 from finetune.optimizers.adamax import AdamaxWOptimizer
+from finetune.optimizers.adamw import AdamWOptimizer
 from finetune.util.imbalance import class_weight_tensor
 from finetune.errors import FinetuneError
 from finetune.base_models import GPTModel, GPTModelSmall
@@ -247,7 +246,7 @@ def get_model_fn(
                 decay_var_list = [
                     v
                     for v in tf.global_variables()
-                    if len(v.get_shape()) > 1 or params.vector_l2
+                    if len(v.get_shape()) > 1 or params.vector_l2 and "OptimizeLoss" not in v.name
                 ]
 
                 if params.adapter_size is not None:
