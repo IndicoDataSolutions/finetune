@@ -138,13 +138,11 @@ class BatchedVarLoad:
         self.feed = dict()
 
     def run(self, session):
-        return
         session.run(self.ops, feed_dict=self.feed)
         self.ops = []
         self.feed = dict()
 
     def add(self, var, val):
-        return
         if hasattr(var, "_values"):
             underlying_vars = var._values
         else:
