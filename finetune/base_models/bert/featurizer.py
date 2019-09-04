@@ -1,5 +1,6 @@
 import tensorflow as tf
 from finetune.nn.add_auxiliary import add_auxiliary
+from finetune.util.shapes import lengths_from_eos_idx
 from finetune.base_models.bert.modeling import (
     BertConfig,
     BertModel,
@@ -65,13 +66,8 @@ def bert_featurizer(
         ),
         axis=1,
     )
-    eos_idx = tf.where(
-         tf.equal(eos_idx, 0),
-         tf.ones_like(eos_idx) * tf.cast(seq_length, dtype=eos_idx.dtype),
-         eos_idx,
-    )
-    
-    lengths = eos_idx + 1 # Length includes the eos token.
+
+    lengths = lengths_from_eos_idx(eos_idx=eos_idx, max_length=seq_length)
 
     if "roberta" in config.base_model.__name__.lower():
         # Because roberta embeddings include an unused <MASK> token, and our embedding layer size needs to accommodate for that.
@@ -119,7 +115,8 @@ def bert_featurizer(
             "embed_weights": embed_weights,
             "features": features,
             "sequence_features": sequence_features,
-            "pool_idx": eos_idx,
+            "lengths": lengths,
+            "eos_idx": eos_idx,
         }
         if config.num_layers_trained == 0:
             output_state = {k: tf.stop_gradient(v) for k, v in output_state.items()}

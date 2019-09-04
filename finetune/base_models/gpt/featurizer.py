@@ -4,7 +4,7 @@ import numpy as np
 import tensorflow as tf
 
 from finetune.optimizers.recompute_grads import recompute_grad
-from finetune.util.shapes import shape_list
+from finetune.util.shapes import shape_list, lengths_from_eos_idx
 from finetune.nn.activations import act_fns
 from finetune.nn.nn_utils import dropout, norm
 from finetune.nn.add_auxiliary import add_auxiliary
@@ -360,11 +360,14 @@ def gpt_featurizer(
                 context, context_dim, clf_h, seq_feats, config, train
             )
 
+        lengths = lengths_from_eos_idx(eos_idx=pool_idx, max_length=shape_list(X)[0])
+
         out = {
             "embed_weights": embed_weights,
             "features": clf_h,
             "sequence_features": seq_feats,
-            "pool_idx": pool_idx,
+            "eos_idx": pool_idx,
+            "lengths": lengths,
             "attention_weights": w,  # [n_heads, seq_len, seq_len]
         }
 

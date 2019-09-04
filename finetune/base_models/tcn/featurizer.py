@@ -1,9 +1,10 @@
 import tensorflow as tf
-from finetune.base_models.gpt.featurizer import dropout, embed, norm
+
+from finetune.util.shapes import lengths_from_eos_idx
+from finetune.base_models.gpt.featurizer import dropout, embed
 from finetune.nn.add_auxiliary import add_auxiliary
 
 
-        
 class TemporalBlock:
     def __init__(self, n_filters, kernel_size, dilation_rate, rate, scope):
         self.scope = scope
@@ -133,9 +134,11 @@ def tcn_featurizer(
         # note that, due to convolution and pooling, the dimensionality of the features is much smaller than in the
         # transformer base models
 
+        lengths = lengths_from_eos_idx(eos_idx=pool_idx, max_length=config.max_length)
         return {
             "embed_weights": embed_weights,
             "features": clf_h,  # [batch_size, n_embed] for classify, [batch_size, 1, n_embed] for comparison, etc.
             "sequence_features": seq_feats,  # [batch_size, seq_len, n_embed]
-            "pool_idx": pool_idx,  # [batch_size]
+            "eos_idx": pool_idx,  # [batch_size]
+            "lengths": lengths
         }

@@ -378,7 +378,7 @@ class SequenceLabeler(BaseModel):
             train=train,
             multilabel=config.multi_label_sequences,
             reuse=reuse,
-            pool_idx=featurizer_state["pool_idx"],
+            lengths=featurizer_state["lengths"],
             **kwargs
         )
 
