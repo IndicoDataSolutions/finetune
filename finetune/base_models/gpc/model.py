@@ -40,5 +40,8 @@ class GPCModelFP16(SourceModel):
         'num_layers_trained':12,
         "stochastic_tokens":False,
         "low_memory_mode": True,
-        "lr": 0.01
+        "lr": 0.001,
+        "lr_warmup": 0.2,
+        "max_grad_norm": 0.1,
+        "resid_p_drop": 0.0
     }

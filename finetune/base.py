@@ -293,7 +293,14 @@ class BaseModel(object, metaclass=ABCMeta):
             encoder=self.input_pipeline.text_encoder,
             target_dim=self.input_pipeline.target_dim,
             label_encoder=self.input_pipeline.label_encoder,
-            saver=self.saver
+            saver=self.saver,
+            num_steps=self.config.n_epochs * self._n_steps(
+                n_examples=self.input_pipeline.dataset_size,
+                batch_size=self.config.batch_size,
+                n_gpus=max(1, len(self.resolved_gpus)
+            )
+        )
+
         )
         hooks = [InitializeHook(self.saver)]
         est = tf.estimator.Estimator(

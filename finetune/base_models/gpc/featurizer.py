@@ -80,7 +80,7 @@ def cumulative_state_net(X, name, use_fp16, pdrop, train, pool_kernel_size=2, no
         output = tf.nn.relu(normal_1d_conv_block(output, conv_kernel, "2-" + str(conv_kernel), use_fp16, output_dim=nx))
         output = normal_1d_conv_block(output, conv_kernel, "3-" + str(conv_kernel), use_fp16, output_dim=nx)
 
-    output = dropout(output, pdrop, train)
+#    output = dropout(output, pdrop, train)
     aggregated = cascaded_pool(output, kernel_size=pool_kernel_size, pool_len=nominal_pool_length)
 
     return tf.nn.relu(normal_1d_conv_block(aggregated, 1, "output_reproject", use_fp16, output_dim=nx))
@@ -150,7 +150,7 @@ def block(X, block_name, use_fp16, pool_idx=None, encoder_state=None, train=Fals
         if encoder_state is not None:
             mixed = enc_dec_mix(encoder_state["sequence_features"], h1, encoder_state["pool_idx"], pool_idx)
             h1 = h1 + mixed
-        return tf.nn.relu(dropout(norm(h1 + X, "norm", fp16=use_fp16, e=1e-2), pdrop, train))
+        return tf.nn.relu(norm(h1 + X, "norm", fp16=use_fp16, e=1e-2))
 
 
 def featurizer(X, encoder, config, train=False, reuse=None, encoder_state=None):

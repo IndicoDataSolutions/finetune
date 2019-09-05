@@ -68,7 +68,18 @@ def _dilated_causal_max_pool(value, kernel_size, dilation, padding="left"):
 
         restored.set_shape(value.get_shape())
         return restored
-
+    
+def recursive_agg_tf(value, kernel_size, pool_len, causal=True):
+    full_pool_len = pool_len
+    num_pooling_ops = int(math.ceil(math.log(full_pool_len, kernel_size)))
+    
+    intermediate_vals = [value]
+    for i in range(num_pooling_ops - 1):
+        value = _dilated_causal_max_pool(value, kernel_size=kernel_size, dilation=kernel_size ** i,
+                                         padding="left" if causal else "even")
+        intermediate_vals.append(value)
+        
+    return tf.stack(intermediate_vals, 2)
 
 try:
     dense_module = tf.load_op_library(os.path.join(os.path.dirname(__file__), 'lib_ra.so'))
@@ -81,16 +92,6 @@ try:
         return dense_module.dense(inp, kernel_length, pool_len, int(math.ceil(math.log(pool_len, kernel_length))))[0]
 
 except NotFoundError:
-    raise Exception("WE WANT THE OTHER RA KERNELS")
+    #raise Exception("WE WANT THE OTHER RA KERNELS")
 
-    def recursive_agg(value, kernel_size, pool_len, causal=True):
-        full_pool_len = pool_len
-        num_pooling_ops = int(math.ceil(math.log(full_pool_len, kernel_size)))
-
-        intermediate_vals = []
-        for i in range(num_pooling_ops):
-            value = _dilated_causal_max_pool(value, kernel_size=kernel_size, dilation=kernel_size ** i,
-                                            padding="left" if causal else "even")
-            intermediate_vals.append(value)
-
-        return tf.stack(intermediate_vals, 2)
+    recursive_agg = recursive_agg_tf

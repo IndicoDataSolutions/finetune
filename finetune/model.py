@@ -61,7 +61,7 @@ def language_model_op(X, M, params, featurizer_state, mode, encoder):
     return lm_predict_op, language_model_state
 
 def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_model, build_lm, encoder, target_dim,
-                 label_encoder, saver):
+                 label_encoder, saver, num_steps):
 
     def target_model_op(featurizer_state, Y, params, mode, **kwargs):
         weighted_tensor = None
@@ -156,10 +156,9 @@ def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_mod
                     predictions[PredictMode.LM_PERPLEXITY] = language_model_state["perplexity"]
 
         if mode == tf.estimator.ModeKeys.TRAIN:
-            total_num_steps = params.n_epochs * params.dataset_size//params.batch_size
             lr_decay = lambda lr, global_step: tf.maximum(
                 0.0,
-                lr * schedules[params.lr_schedule](tf.to_float(global_step) / total_num_steps)
+                lr * schedules[params.lr_schedule](tf.to_float(global_step) / num_steps, warmup=params.lr_warmup)
             )
 
             def optimizer(lr):
