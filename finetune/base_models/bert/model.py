@@ -6,6 +6,7 @@ from finetune.base_models.bert.encoder import (
     BERTEncoder,
     BERTEncoderMultuilingal,
     BERTEncoderLarge,
+    DistillBERTEncoder
 )
 
 from finetune.base_models.bert.roberta_encoder import RoBERTaEncoder
@@ -198,3 +199,31 @@ class RoBERTaLarge(SourceModel):
 
    
 ZuckerBERT = RoBERTa
+
+
+class DistillBert(SourceModel):
+    is_bidirectional = True
+    encoder = DistillBERTEncoder
+    featurizer = bert_featurizer
+    settings = {
+        "n_embed": 768,
+        "n_epochs": 8,
+        "n_heads": 12,
+        "n_layer": 6,
+        "num_layers_trained": 6,
+        "act_fn": "gelu",
+        "lr_warmup": 0.1,
+        "lr": 1e-5,
+        "l2_reg": 0.01,
+        "bert_use_pooler": False,
+        "bert_use_type_embed": False,
+        "bert_intermediate_size": 3072,
+        "base_model_path": os.path.join("bert", "distillbert.jl"),
+    }
+    required_files = [
+        {
+            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", filename),
+            "url": urljoin(BERT_BASE_URL, filename),
+        }
+        for filename in ["distillbert.jl", "distillbert_vocab.txt"]
+    ]

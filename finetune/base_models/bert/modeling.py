@@ -141,7 +141,8 @@ class BertModel(object):
             use_one_hot_embeddings=False,
             scope=None,
             use_pooler=True,
-            roberta=False
+            roberta=False,
+            use_token_type=True
     ):
         """Constructor for BertModel.
 
@@ -172,9 +173,6 @@ class BertModel(object):
         if input_mask is None:
             input_mask = tf.ones(shape=[batch_size, seq_length], dtype=tf.int32)
 
-        if token_type_ids is None:
-            token_type_ids = tf.zeros(shape=[batch_size, seq_length], dtype=tf.int32)
-
         with tf.variable_scope(scope, default_name="bert"):
             with tf.variable_scope("embeddings"):
                 # Perform embedding lookup on the word ids.
@@ -190,7 +188,7 @@ class BertModel(object):
                 # normalize and perform dropout.
                 self.embedding_output = embedding_postprocessor(
                     input_tensor=self.embedding_output,
-                    use_token_type=True,
+                    use_token_type=use_token_type,
                     token_type_ids=token_type_ids,
                     token_type_vocab_size=config.type_vocab_size,
                     token_type_embedding_name="token_type_embeddings",
