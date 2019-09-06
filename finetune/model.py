@@ -36,19 +36,8 @@ class PredictMode:
     EXPLAIN = "EXPLAIN"
 
 
-def get_model_fn(
-    target_model_fn,
-    predict_op,
-    predict_proba_op,
-    build_target_model,
-    build_lm,
-    encoder,
-    target_dim,
-    label_encoder,
-    saver,
-    build_explain,
-    context_dim,
-):
+def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_model, build_lm, encoder, target_dim,
+                 label_encoder, saver, build_explain, context_dim, n_replicas):
     def language_model_op(X, M, params, featurizer_state):
         language_model_state = language_model(
             X=X,
@@ -198,7 +187,7 @@ def get_model_fn(
                     ]
 
         if mode == tf.estimator.ModeKeys.TRAIN:
-            total_num_steps = params.n_epochs * params.dataset_size // params.batch_size
+            total_num_steps = params.n_epochs * params.dataset_size // (params.batch_size * n_replicas)
             lr_decay = lambda lr, global_step: tf.maximum(
                 0.0,
                 lr
