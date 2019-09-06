@@ -9,7 +9,6 @@ from sklearn.model_selection import train_test_split
 from finetune import Classifier
 from finetune.datasets import Dataset, generic_download
 from finetune.base_models.gpt.model import GPTModel
-from finetune.base_models import DistillBert
 logging.basicConfig(level=logging.DEBUG)
 
 SST_FILENAME = "SST-binary.csv"
@@ -50,7 +49,7 @@ if __name__ == "__main__":
         val_size=0.0, 
         max_length=64,
         prefit_init=True,
-        base_model=DistillBert
+        base_model=GPTModel
     )
     trainX, testX, trainY, testY = train_test_split(dataset.Text.values, dataset.Target.values, test_size=0.3, random_state=42)
     model.fit(trainX, trainY)
