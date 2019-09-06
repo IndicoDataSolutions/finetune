@@ -15,7 +15,6 @@ from finetune.optimizers.adamw import AdamWOptimizer
 from finetune.util.imbalance import class_weight_tensor
 from finetune.errors import FinetuneError
 from finetune.base_models import GPTModel, GPTModelSmall
-from finetune.saver import InitializeHook
 
 LOGGER = logging.getLogger("finetune")
 
@@ -36,8 +35,20 @@ class PredictMode:
     EXPLAIN = "EXPLAIN"
 
 
-def get_model_fn(target_model_fn, predict_op, predict_proba_op, build_target_model, build_lm, encoder, target_dim,
-                 label_encoder, saver, build_explain, context_dim, n_replicas):
+def get_model_fn(
+        *,
+        target_model_fn,
+        predict_op,
+        predict_proba_op,
+        build_target_model,
+        build_lm,
+        encoder,
+        target_dim,
+        label_encoder,
+        build_explain,
+        context_dim,
+        n_replicas
+):
     def language_model_op(X, M, params, featurizer_state):
         language_model_state = language_model(
             X=X,
