@@ -329,11 +329,8 @@ class BaseModel(object, metaclass=ABCMeta):
         )
         return config
 
-    def get_estimator(
-        self, force_build_lm=False, build_explain=False, context_dim=None
-    ):
+    def get_estimator(self, force_build_lm=False, build_explain=False, context_dim=None):
         config = self._get_estimator_config()
-
         model_fn = get_model_fn(
             target_model_fn=self._target_model,
             predict_op=self._predict_op,
@@ -346,7 +343,9 @@ class BaseModel(object, metaclass=ABCMeta):
             saver=self.saver,
             build_explain=build_explain,
             context_dim=context_dim or self.input_pipeline.config.context_dim,
+            n_replicas=max(1, len(self.resolved_gpus))
         )
+
         hooks = [InitializeHook(self.saver)]
         est = tf.estimator.Estimator(
             model_dir=self.estimator_dir,
