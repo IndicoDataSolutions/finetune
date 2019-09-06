@@ -10,7 +10,7 @@ VOCAB_PATH_MULTILINGUAL = os.path.join(
     FINETUNE_FOLDER, "model", "bert", "vocab_multi.txt"
 )
 VOCAB_PATH_LARGE = os.path.join(FINETUNE_FOLDER, "model", "bert", "vocab_large.txt")
-
+VOCAB_PATH_DISTILLBERT = os.path.join(FINETUNE_FOLDER, "model", "bert", "distillbert_vocab.txt")
 
 class BERTEncoder(BaseEncoder):
     """
@@ -125,3 +125,11 @@ class BERTEncoderMultuilingal(BERTEncoder):
             encoder_path=encoder_path, vocab_path=vocab_path, lower_case=lower_case
         )
 
+
+class DistillBERTEncoder(BERTEncoder):
+    def __init__(
+        self, encoder_path=None, vocab_path=VOCAB_PATH_DISTILLBERT, lower_case=False
+    ):
+        super().__init__(
+            encoder_path=encoder_path, vocab_path=vocab_path, lower_case=lower_case
+        )

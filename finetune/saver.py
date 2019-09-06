@@ -247,6 +247,7 @@ class Saver:
                 all_vars, zero_out_adapters = self.subset_to_load(
                     model_portion, refresh_base_model, all_vars
                 )
+            print(self.fallback.keys())
             for var in all_vars:
                 name = var.name
                 saved_var = None
@@ -261,6 +262,8 @@ class Saver:
                     for func in self.variable_transforms:
                         saved_var = func(name, saved_var)
                     var_loader.add(var, saved_var)
+                else:
+                    print("Uninitialized:", var.name)
             var_loader.run(session)
         return init_fn
 
