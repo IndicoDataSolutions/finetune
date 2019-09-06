@@ -347,6 +347,7 @@ def get_default_config():
         # BERT only
         bert_intermediate_size=None,
         bert_use_pooler=True,
+        bert_use_type_embed=True,
         
         # Auxiliary Information
         use_auxiliary_info=False,
