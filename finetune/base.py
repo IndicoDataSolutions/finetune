@@ -340,7 +340,6 @@ class BaseModel(object, metaclass=ABCMeta):
             encoder=self.input_pipeline.text_encoder,
             target_dim=self.input_pipeline.target_dim,
             label_encoder=self.input_pipeline.label_encoder,
-            saver=self.saver,
             build_explain=build_explain,
             context_dim=context_dim or self.input_pipeline.config.context_dim,
             n_replicas=max(1, len(self.resolved_gpus))
