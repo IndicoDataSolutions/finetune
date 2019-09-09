@@ -342,7 +342,6 @@ def gpt_featurizer(
             )
             h_out = h_out[:, : initial_shape[1]]
 
-        pool_idx = tf.Print(pool_idx, [pool_idx, lengths_from_eos_idx(eos_idx=pool_idx, max_length=shape_list(X)[0])])
         # Use hidden state at classifier token as input to final proj. + softmax
         clf_h = tf.reshape(h_out, [-1, config.n_embed])  # [batch * seq_len, embed]
         clf_h = tf.gather(
