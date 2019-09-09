@@ -76,9 +76,9 @@ class GPT2Encoder(BaseEncoder):
         self.errors = errors
         self.byte_encoder = bytes_to_unicode()
         self.byte_decoder = {v: k for k, v in self.byte_encoder.items()}
-        self.start = self.encoder["<|endoftext|>"]
-        self.delimiter = self.encoder["_delimiter_"]
-        self.clf_token = self.encoder["_classify_"]
+        self.start_token = self.encoder["<|endoftext|>"]
+        self.delimiter_token = self.encoder["_delimiter_"]
+        self.end_token = self.encoder["_classify_"]
         self.cache = {}
 
         # Should haved added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
