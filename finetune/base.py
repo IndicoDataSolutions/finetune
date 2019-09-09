@@ -970,10 +970,10 @@ class BaseModel(object, metaclass=ABCMeta):
             batch_probas = [None]*len(labels)
 
         for chunk_idx, (label_seq, proba_seq) in enumerate(zip(labels, batch_probas)):
-            position_seq = arr_encoded[chunk_idx].char_locs
+            position_seq = flat_array_encoded[chunk_idx].char_locs
             start_of_doc = chunk_idx == 0 or sequence_id[chunk_idx - 1] != sequence_id[chunk_idx]
             end_of_doc = (
-                chunk_idx + 1 >= len(arr_encoded) or
+                chunk_idx + 1 == len(flat_array_encoded) or
                 sequence_id[chunk_idx] != sequence_id[chunk_idx + 1]
             )
             print(start_of_doc, end_of_doc)
