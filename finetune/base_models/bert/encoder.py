@@ -33,9 +33,9 @@ class BERTEncoder(BaseEncoder):
             vocab_file=self.vocab_path, do_lower_case=self.lower_case
         )
 
-        self.start = self.tokenizer.convert_tokens_to_ids(["[CLS]"])[0]
-        self.delimiter = self.tokenizer.convert_tokens_to_ids(["[SEP]"])[0]
-        self.clf_token = self.delimiter
+        self.start_token = self.tokenizer.convert_tokens_to_ids(["[CLS]"])[0]
+        self.delimiter_token = self.tokenizer.convert_tokens_to_ids(["[SEP]"])[0]
+        self.end_token = self.delimiter
         self.initialized = True
 
     @property

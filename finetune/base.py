@@ -63,7 +63,6 @@ class BaseModel(object, metaclass=ABCMeta):
 
         atexit.register(cleanup)
 
-
         self.config = get_config(**kwargs)
         if self.config.default_context is not None and type(self.config.default_context) != dict:
             raise FinetuneError(
@@ -940,25 +939,28 @@ class BaseModel(object, metaclass=ABCMeta):
             context = X[1]
             text = X[0]
             assert len(context) == len(text)
-            arr_encoded = list(
-                itertools.chain.from_iterable(
-                    self.input_pipeline._text_to_ids([x], context=c) if sequence_labeling else self.input_pipeline._text_to_ids(x, context=c)
-                    for x, c in zip(text, context)
-                )
-            )
+            arr_encoded = [
+                self.input_pipeline._text_to_ids([x], context=c) if sequence_labeling else self.input_pipeline._text_to_ids(x, context=c)
+                for x, c in zip(text, context)
+            ]
         else:
             text = X
-            arr_encoded = list(
-                itertools.chain.from_iterable(
-                    self.input_pipeline._text_to_ids(x) for x in self.input_pipeline._format_for_inference(X)
-                )
-            )
+            arr_encoded = [
+                self.input_pipeline._text_to_ids(x) for x in self.input_pipeline._format_for_inference(X)
+            ]
+
+        flat_array_encoded = []
+        sequence_id = []
+        for i, ae in enumerate(arr_encoded):
+            for sample in ae:
+                flat_array_encoded.append(sample)
+                sequence_id.append(i)
 
         if self.config.use_auxiliary_info:
             X = [text, context]
 
         labels, batch_probas = [], []
-        for pred in self._inference(X, predict_keys=[PredictMode.PROBAS, PredictMode.NORMAL], n_examples=len(arr_encoded)):
+        for pred in self._inference(X, predict_keys=[PredictMode.PROBAS, PredictMode.NORMAL], n_examples=len(flat_array_encoded)):
             labels.append(self.input_pipeline.label_encoder.inverse_transform(
                 pred[PredictMode.NORMAL] if hasattr(self,'multi_label') else [pred[PredictMode.NORMAL]] # only wrap in list if not sequence labeling
             ))
@@ -967,13 +969,12 @@ class BaseModel(object, metaclass=ABCMeta):
         if not batch_probas:
             batch_probas = [None]*len(labels)
 
-        doc_idx = -1
         for chunk_idx, (label_seq, proba_seq) in enumerate(zip(labels, batch_probas)):
             position_seq = arr_encoded[chunk_idx].char_locs
-            start_of_doc = arr_encoded[chunk_idx].token_ids[0][0] == self.input_pipeline.text_encoder.start_token
+            start_of_doc = chunk_idx == 0 or sequence_id[chunk_idx - 1] != sequence_id[chunk_idx]
             end_of_doc = (
-                    chunk_idx + 1 >= len(arr_encoded) or
-                    arr_encoded[chunk_idx + 1].token_ids[0][0] == self.input_pipeline.text_encoder.start_token
+                chunk_idx + 1 >= len(arr_encoded) or
+                sequence_id[chunk_idx] != sequence_id[chunk_idx + 1]
             )
             print(start_of_doc, end_of_doc)
             yield position_seq, start_of_doc, end_of_doc, label_seq, proba_seq
