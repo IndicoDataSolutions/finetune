@@ -619,7 +619,7 @@ class BaseModel(object, metaclass=ABCMeta):
             raise ValueError(
                 "If you are not using the extra tokens, you must provide some non-empty seed text"
             )
-        start = [self.input_pipeline.text_encoder.start] if use_extra_toks else []
+        start = [self.input_pipeline.text_encoder.start_token] if use_extra_toks else []
         token_ids = start 
         if encoded.token_ids is not None and len(encoded.token_ids):
             token_ids += encoded.token_ids[0]
@@ -970,10 +970,10 @@ class BaseModel(object, metaclass=ABCMeta):
         doc_idx = -1
         for chunk_idx, (label_seq, proba_seq) in enumerate(zip(labels, batch_probas)):
             position_seq = arr_encoded[chunk_idx].char_locs
-            start_of_doc = arr_encoded[chunk_idx].token_ids[0][0] == self.input_pipeline.text_encoder.start
+            start_of_doc = arr_encoded[chunk_idx].token_ids[0][0] == self.input_pipeline.text_encoder.start_token
             end_of_doc = (
                     chunk_idx + 1 >= len(arr_encoded) or
-                    arr_encoded[chunk_idx + 1].token_ids[0][0] == self.input_pipeline.text_encoder.start
+                    arr_encoded[chunk_idx + 1].token_ids[0][0] == self.input_pipeline.text_encoder.start_token
             )
             yield position_seq, start_of_doc, end_of_doc, label_seq, proba_seq
 
