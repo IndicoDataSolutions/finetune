@@ -647,14 +647,21 @@ class BasePipeline(metaclass=ABCMeta):
         return list(X)
 
     def _text_to_ids(self, Xs, Y=None, pad_token=None, context=None):
+        add_eos_bos_to_chunk = True
+
         if context is None and self.config.use_auxiliary_info:
             context = Xs[0]
             Xs = Xs[1]
         Xs = self._format_for_encoding(Xs)
         if self.config.chunk_long_sequences and len(Xs) == 1:
             # can only chunk single sequence inputs
-            chunk_size = self.config.max_length - 2
+
+            chunk_size = self.config.max_length
             step_size = chunk_size // 3
+
+            if add_eos_bos_to_chunk:
+                step_size -= 2
+
             encoded = self.text_encoder.encode_multi_input(
                 Xs,
                 Y=Y,
@@ -676,7 +683,13 @@ class BasePipeline(metaclass=ABCMeta):
                 for field in EncodedOutput._fields:
                     field_value = getattr(encoded, field)
                     if field_value is not None:
-                        d[field] = field_value[start:end]
+                        fv = field_value[start:end]
+                        if add_eos_bos_to_chunk:
+                            if fv[0] != self.text_encoder.start_token:
+                                fv = [self.text_encoder.start_token] + fv
+                            if fv[-1] != self.text_encoder.end_token:
+                                fv = fv + [self.text_encoder.end_token]
+                        d[field] = fv
                 if self.config.use_auxiliary_info:
                     d["context"] = processed_context[
                         start:end

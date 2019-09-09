@@ -45,7 +45,7 @@ def _merge_confidences(annotation):
 
 
 def round_to_nearest_start_and_end(label, token_starts, token_ends, text):
-    # Update label start / end / text to align with nearest token start and end
+    # Update label start / end / text to align with nearest token start_token and end
     # Applies in-place modification to `label` obj.
     start_distances = np.abs(np.asarray(token_starts) - label["start"])
     end_distances = np.abs(np.asarray(token_ends) - label["end"])
@@ -71,7 +71,7 @@ def finetune_to_indico_sequence(
         Raw text for X,
         Labels as a list of dicts, with each dict in the form:
         {
-            'start': <Character index of the start of the labeled sequence>,
+            'start': <Character index of the start_token of the labeled sequence>,
             'end': <Character index of the end of the labeled sequence>,
             'label': <A categorical label (int or string) that represents the category of the subsequence,
             'text': <Optionally, a field with the subsequence contained between the start and end.
@@ -235,7 +235,7 @@ def overlap_handler(current_annotation, annotation, text, multi_label):
     2) [ < > ]
     3) < [ ] >
     """
-    if current_annotation["start"] <= annotation["start"]:
+    if current_annotation["start"] <= annotation["start_token"]:
         first, second = current_annotation, annotation
     else:
         first, second = annotation, current_annotation
@@ -249,7 +249,7 @@ def overlap_handler(current_annotation, annotation, text, multi_label):
         "start": first["start"],
         "end": second["start"],
         "label": first["label"],
-        "text": text[first["start"] : second["start"]],
+        "text": text[first["start"] : second["start_token"]],
     }
 
     if multi_label:
@@ -307,7 +307,7 @@ def indico_to_finetune_sequence(
 
     The Labeled substring, or finetune internal, format is as follows.
     Each item of the data is a list strings of the form:{
-            'start': <Character index of the start of the
+            'start': <Character index of the start_token of the
         ["The quick brown", "fox", "jumped over the lazy", ...]
     With the corresponding labels:
         ["PAD", "animal", "PAD", ...]

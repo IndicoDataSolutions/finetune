@@ -141,7 +141,7 @@ class GPTEncoder(BaseEncoder):
         label = None
         offset = (
             0
-        )  # tracks offset between this fields' character_locs, which start at 0, and the 'start' keys in context which track the entire document (not just this field)
+        )  # tracks offset between this fields' character_locs, which start at 0, and the 'start_token' keys in context which track the entire document (not just this field)
         skipped = 0
         for i, text in enumerate(texts):
             if labels is not None:
