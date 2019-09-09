@@ -49,6 +49,10 @@ class SequencePipeline(BasePipeline):
             else:
                 feats = {"tokens": out.token_ids, "mask": out.mask}
 
+            if self.config.filter_empty_examples:
+                if all(label == pad_token for label in out.labels):
+                    continue
+            
             if Y is None:
                 yield feats
             if Y is not None:
@@ -60,12 +64,6 @@ class SequencePipeline(BasePipeline):
             targets = target_arr[doc["mask"].astype(np.bool)]
             counter.update(self.label_encoder.inverse_transform(targets))
         return counter
-
-    def _filter_empty_examples(self, dataset):
-        if self.config.filter_empty_examples:
-            all_pad_labels = lambda labels: all(label == self.pad_idx for label in labels)
-            dataset = [[x, y] for x, y in dataset if not all_pad_labels(y)]
-        return dataset
 
     def _format_for_encoding(self, X):
         return [X]

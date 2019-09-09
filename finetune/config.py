@@ -143,7 +143,7 @@ class Settings(dict):
         dataset size exceeds a few thousand examples.  Defaults to `0.0`.
     :param tsa_schedule: Training Signal Annealing Schedule from 'Unsupervised Data Augmentation for Consistency Training'. One of {"linear_schedule", "exp_schedule", "log_schedule"}.  Defaults to `None`.
     :param summarize_grads: Include gradient summary information in tensorboard.  Defaults to `False`.
-    :param val_size: Validation set size if int. Validation set size as percentage of all training data if float.  Validation will not be run by default if n_examples < 50.
+    :param val_size: Validation set size if int. Validation set size as percentage of all training data if float.  Defaults to 0.  If value "auto" is provided, validation will not be run by default if n_examples < 50.
         If n_examples > 50, defaults to max(5, min(100, 0.05 * n_examples))
     :param val_interval: Evaluate on validation set after `val_interval` batches.
         Defaults to 4 * val_size / batch_size to ensure that too much time is not spent on validation.

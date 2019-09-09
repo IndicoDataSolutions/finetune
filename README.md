@@ -12,9 +12,8 @@ Finetune currently supports TensorFlow implementations of the following models:
 4. **GPT2**, from ["Language Models are Unsupervised Multitask Learners"](https://d4mucfpksywv.cloudfront.net/better-language-models/language-models.pdf)
 5. **TextCNN**, from ["Convolutional Neural Networks for Sentence Classification"](https://arxiv.org/abs/1408.5882)
 6. **Temporal Convolution Network**, from ["An Empirical Evaluation of Generic Convolutional and Recurrent Networks for Sequence Modeling"](https://arxiv.org/pdf/1803.01271.pdf)
+7. **DistilBERT** from ["Smaller, faster, cheaper, lighter: Introducing DistilBERT, a distilled version of BERT"](https://medium.com/huggingface/distilbert-8cf3380435b5)
 
-
-Huge thanks to Alec Radford and Jeff Wu for their hard work and quality research.
 
 | Section | Description |
 |-|-|
@@ -42,12 +41,12 @@ from finetune.base_models import BERT, RoBERTa, GPT, GPT2, TextCNN, TCN
 model = Classifier(base_model=BERT)
 ```
 
-Optimize your model with a variety of configurables. A detailed list of all config items can be found HERE.
+Optimize your model with a variety of configurables. A detailed list of all config items can be found [in the finetune docs](https://finetune.indico.io/config.html).
 ```python3
 model = Classifier(low_memory_mode=True, lr_schedule="warmup_linear", max_length=512, l2_reg=0.01, oversample=True, ...)
 ```
 
-The library supports finetuning for a number of tasks. A detailed description of all target models can be found HERE.
+The library supports finetuning for a number of tasks. A detailed description of all target models can be found [in the finetune API reference](https://finetune.indico.io/api.html).
 ```python3
 from finetune import *
 models = (Classifier, MultiLabelClassifier, MultiFieldClassifier, MultipleChoice, # Classify one or more inputs into one or more classes
