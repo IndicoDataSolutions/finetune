@@ -47,9 +47,9 @@ if __name__ == "__main__":
         batch_size=2, 
         lr_warmup=0.1,
         val_size=0.0, 
-        max_length=64,
-        prefit_init=True,
-        base_model=GPTModel
+        max_length=8,
+        base_model=GPTModel,
+        debugging_logs=True
     )
     trainX, testX, trainY, testY = train_test_split(dataset.Text.values, dataset.Target.values, test_size=0.3, random_state=42)
     model.fit(trainX, trainY)
