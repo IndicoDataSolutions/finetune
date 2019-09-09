@@ -656,12 +656,13 @@ class BasePipeline(metaclass=ABCMeta):
         if self.config.chunk_long_sequences and len(Xs) == 1:
             # can only chunk single sequence inputs
 
-            chunk_size = self.config.max_length
-            step_size = chunk_size // 3
-
             if add_eos_bos_to_chunk:
-                step_size -= 2
-
+                chunk_size = self.config.max_length - 2
+            else:
+                chunk_size = self.config.max_length
+                
+            step_size = chunk_size // 3
+            
             encoded = self.text_encoder.encode_multi_input(
                 Xs,
                 Y=Y,
