@@ -26,7 +26,7 @@ REQUIREMENTS = [
 setup(
     name="finetune",
     packages=find_packages(),
-    version="0.8.2",
+    version="0.8.3",
     install_requires=REQUIREMENTS,
     extras_require={
         "tf": ["tensorflow==1.14.0"],

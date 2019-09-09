@@ -22,7 +22,7 @@ from finetune.target_models.language_model import LanguageModel
 from finetune.target_models.mtl import MultiTask
 from finetune.target_models.deployment_model import DeploymentModel
 
-__version__, VERSION, version = ("0.8.2",) * 3
+__version__, VERSION, version = ("0.8.3",) * 3
 
 
 # Logging configuration
