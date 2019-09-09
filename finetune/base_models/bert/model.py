@@ -6,7 +6,7 @@ from finetune.base_models.bert.encoder import (
     BERTEncoder,
     BERTEncoderMultuilingal,
     BERTEncoderLarge,
-    DistillBERTEncoder
+    DistilBERTEncoder
 )
 
 from finetune.base_models.bert.roberta_encoder import RoBERTaEncoder
@@ -201,9 +201,9 @@ class RoBERTaLarge(SourceModel):
 ZuckerBERT = RoBERTa
 
 
-class DistillBert(SourceModel):
+class DistilBERT(SourceModel):
     is_bidirectional = True
-    encoder = DistillBERTEncoder
+    encoder = DistilBERTEncoder
     featurizer = bert_featurizer
     settings = {
         "n_embed": 768,
