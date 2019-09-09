@@ -344,10 +344,6 @@ class BasePipeline(metaclass=ABCMeta):
         target_arrs = np.asarray([target_arr for doc, target_arr in encoded_dataset])
         return Counter(self.label_encoder.inverse_transform(target_arrs))
 
-    def _filter_empty_examples(self, dataset):
-        # No-op for all classes but SequenceLabeler
-        return dataset
-
     def _dataset_with_targets(self, Xs, Y, train, context=None):
         if not callable(Xs) and not callable(Y):
             if self.config.use_auxiliary_info:
@@ -374,7 +370,6 @@ class BasePipeline(metaclass=ABCMeta):
 
         if not callable(Y) and train:
             dataset_encoded_list = list(dataset_encoded())
-            dataset_encoded_list = self._filter_empty_examples(dataset_encoded_list)
             class_counts = self._compute_class_counts(dataset_encoded_list)
             self.config.dataset_size = len(dataset_encoded_list)
             if self.config.class_weights is not None:

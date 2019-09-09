@@ -14,9 +14,9 @@ Finetune currently supports TensorFlow implementations of the following models:
 4. **GPT2**, from `Language Models are Unsupervised Multitask Learners <https://d4mucfpksywv.cloudfront.net/better-language-models/language-models.pdf>`_.
 5. **TextCNN**, from `Convolutional Neural Networks for Sentence Classification <https://arxiv.org/abs/1408.5882>`_.
 6. **Temporal Convolution Network**, from `An Empirical Evaluation of Generic Convolutional and Recurrent Networks for Sequence Modeling <https://arxiv.org/pdf/1803.01271.pdf>`_.
+7. **DistilBERT**, from `Smaller, faster, cheaper, lighter: Introducing DistilBERT, a distilled version of BERT <https://medium.com/huggingface/distilbert-8cf3380435b5>`_.
 
 
-Huge thanks to Alec Radford and Jeff Wu for their hard work and quality research.
 Source code for :mod:`finetune` is available `on github <https://github.com/IndicoDataSolutions/finetune>`_.
 
 .. toctree::
