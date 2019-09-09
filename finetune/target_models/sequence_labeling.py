@@ -48,14 +48,13 @@ class SequencePipeline(BasePipeline):
                 }
             else:
                 feats = {"tokens": out.token_ids, "mask": out.mask}
-
-            if self.config.filter_empty_examples:
-                if all(label == pad_token for label in out.labels):
-                    continue
             
             if Y is None:
                 yield feats
             if Y is not None:
+                if self.config.filter_empty_examples:
+                    if all(label == pad_token for label in out.labels):
+                        continue
                 yield feats, self.label_encoder.transform(out.labels)
 
     def _compute_class_counts(self, encoded_dataset):
