@@ -53,7 +53,7 @@ def sequence_labeling_token_counts(true, predicted):
         # correct + false negatives
         for true_token in true_tokens:
             for pred_token in pred_tokens:
-                if (pred_token['start'] == true_token['start'] and 
+                if (pred_token['start'] == true_token['start_token'] and
                     pred_token['end'] == true_token['end']):
 
                     if pred_token['label'] == true_token['label']:
@@ -69,7 +69,7 @@ def sequence_labeling_token_counts(true, predicted):
         # false positives
         for pred_token in pred_tokens:
             for true_token in true_tokens:
-                if (pred_token['start'] == true_token['start'] and 
+                if (pred_token['start'] == true_token['start_token'] and
                     pred_token['end'] == true_token['end']):
                     break
             else:
@@ -138,7 +138,7 @@ def sequences_overlap(true_seq, pred_seq):
     """
     Boolean return value indicates whether or not seqs overlap
     """
-    start_contained = (pred_seq['start'] < true_seq['end'] and pred_seq['start'] >= true_seq['start'])
+    start_contained = (pred_seq['start'] < true_seq['end'] and pred_seq['start_token'] >= true_seq['start_token'])
     end_contained = (pred_seq['end'] > true_seq['start'] and pred_seq['end'] <= true_seq['end'])
     return start_contained or end_contained
 

@@ -1,17 +1,11 @@
 """
 Convert plain text to format accepted by model (token idxs + special tokens).
 """
-import re
-import json
-import os
 import warnings
 import functools
 from collections import namedtuple
-import codecs
 
-import ftfy
 import spacy
-import numpy as np
 import tensorflow as tf
 
 
@@ -65,7 +59,7 @@ def _flatten(nested_lists):
 
 class BaseEncoder(object):
     """
-    Base class for GPT and GPT-2 encoding
+    Base class for encoding
     Translates raw texts into structured token arrays
     """
 
@@ -79,9 +73,9 @@ class BaseEncoder(object):
         # Required public attributes -- consider refactor to prevent requiring direct
         # access of these attributes
         self.special_tokens = None
-        self.start = None
-        self.delimiter = None
-        self.clf_token = None
+        self.start_token = None
+        self.delimiter_token = None
+        self.end_token = None
         self.encoder = None
         self.decoder = None
 
@@ -130,9 +124,9 @@ class BaseEncoder(object):
         :param end: Override the default classify token
         :return: Formatted outputs of the form. [batch, num_tokens] where num_tokens' <= max_length
         """
-        start = start or special_tokens or self.start
-        delimiter = delimiter or special_tokens or self.delimiter
-        clf_token = end or special_tokens or self.clf_token
+        start = start or special_tokens or self.start_token
+        delimiter = delimiter or special_tokens or self.delimiter_token
+        clf_token = end or special_tokens or self.end_token
 
         num_samples = len(encoded)
         adjusted_max_length = max_length - num_samples - 1
