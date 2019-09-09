@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Base Models (e.g. BERT, GPT2, RoBERTa) &mdash; finetune 0.8.1 documentation</title>
+  <title>Base Models (e.g. BERT, GPT2, RoBERTa, DistilBERT) &mdash; finetune 0.8.2 documentation</title>
   
 
   
@@ -35,7 +35,7 @@
         <link rel="index" title="Index"
               href="genindex.html"/>
         <link rel="search" title="Search" href="search.html"/>
-    <link rel="top" title="finetune 0.8.1 documentation" href="index.html"/>
+    <link rel="top" title="finetune 0.8.2 documentation" href="index.html"/>
         <link rel="next" title="Finetune Quickstart Guide" href="quickstart.html"/>
         <link rel="prev" title="Installation" href="installation.html"/> 
 
@@ -66,7 +66,7 @@
             
             
               <div class="version">
-                0.8.1
+                0.8.2
               </div>
             
           
@@ -94,7 +94,7 @@
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="installation.html#docker">Docker</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Base Models (e.g. BERT, GPT2, RoBERTa)</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Base Models (e.g. BERT, GPT2, RoBERTa, DistilBERT)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="quickstart.html">Finetune Quickstart Guide</a></li>
 <li class="toctree-l1"><a class="reference internal" href="datasetloading.html">Dataset Loading</a></li>
 <li class="toctree-l1"><a class="reference internal" href="serializing.html">Saving and Loading Models</a></li>
@@ -153,7 +153,7 @@
     
       <li><a href="index.html">Docs</a> &raquo;</li>
         
-      <li>Base Models (e.g. BERT, GPT2, RoBERTa)</li>
+      <li>Base Models (e.g. BERT, GPT2, RoBERTa, DistilBERT)</li>
     
     
       <li class="wy-breadcrumbs-aside">
@@ -172,15 +172,22 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
             
-  <div class="section" id="base-models-e-g-bert-gpt2-roberta">
-<h1>Base Models (e.g. BERT, GPT2, RoBERTa)<a class="headerlink" href="#base-models-e-g-bert-gpt2-roberta" title="Permalink to this headline">¶</a></h1>
+  <div class="section" id="base-models-e-g-bert-gpt2-roberta-distilbert">
+<h1>Base Models (e.g. BERT, GPT2, RoBERTa, DistilBERT)<a class="headerlink" href="#base-models-e-g-bert-gpt2-roberta-distilbert" title="Permalink to this headline">¶</a></h1>
 <p>Finetune defaults to using OpenAI’s GPT base model, but also supports other base model options.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">finetune.base_models</span> <span class="kn">import</span> <span class="n">BERT</span><span class="p">,</span> <span class="n">BERTLarge</span><span class="p">,</span> <span class="n">GPT2</span><span class="p">,</span> <span class="n">GPT2Medium</span><span class="p">,</span> <span class="n">TextCNN</span><span class="p">,</span> <span class="n">TCN</span><span class="p">,</span> <span class="n">RoBERTa</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">finetune.base_models</span> <span class="kn">import</span> <span class="n">BERT</span><span class="p">,</span> <span class="n">BERTLarge</span><span class="p">,</span> <span class="n">GPT2</span><span class="p">,</span> <span class="n">GPT2Medium</span><span class="p">,</span> <span class="n">GPT2Large</span><span class="p">,</span> <span class="n">TextCNN</span><span class="p">,</span> <span class="n">TCN</span><span class="p">,</span> <span class="n">RoBERTa</span><span class="p">,</span> <span class="n">DistilBERT</span>
 
 <span class="c1"># RoBERTa has provided state-of-the-art results on a variety of natural language tasks, as of late 2019</span>
 <span class="n">model</span> <span class="o">=</span> <span class="n">Classifier</span><span class="p">(</span><span class="n">base_model</span><span class="o">=</span><span class="n">RoBERTa</span><span class="p">)</span>
 
-<span class="c1"># TextCNN and TCN are much faster convolutional models, at the expense of downstream task performance</span>
+<span class="c1"># The GPT and GPT2 model families allow experimentation with text generation</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">LanguageModel</span><span class="p">(</span><span class="n">base_model</span><span class="o">=</span><span class="n">GPT2</span><span class="p">)</span>
+
+<span class="c1"># DistilBERT offers competetive finetuning performance with faster training and inference times thanks to its low parameter count</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">Classifier</span><span class="p">(</span><span class="n">base_model</span><span class="o">=</span><span class="n">DistilBERT</span><span class="p">)</span>
+
+<span class="c1"># TextCNN and TCN are much faster convolutional models trained from scratch.</span>
+<span class="c1"># They generally underperform their language model counterparts but may be appropriate if runtime is a concern</span>
 <span class="n">fast_model</span> <span class="o">=</span> <span class="n">Classifier</span><span class="p">(</span><span class="n">base_model</span><span class="o">=</span><span class="n">TextCNN</span><span class="p">)</span>
 </pre></div>
 </div>
@@ -230,7 +237,7 @@
     <script type="text/javascript">
         var DOCUMENTATION_OPTIONS = {
             URL_ROOT:'./',
-            VERSION:'0.8.1',
+            VERSION:'0.8.2',
             COLLAPSE_INDEX:false,
             FILE_SUFFIX:'.html',
             HAS_SOURCE:  true,

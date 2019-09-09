@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Finetune Quickstart Guide &mdash; finetune 0.8.1 documentation</title>
+  <title>Finetune Quickstart Guide &mdash; finetune 0.8.2 documentation</title>
   
 
   
@@ -35,7 +35,7 @@
         <link rel="index" title="Index"
               href="genindex.html"/>
         <link rel="search" title="Search" href="search.html"/>
-    <link rel="top" title="finetune 0.8.1 documentation" href="#"/>
+    <link rel="top" title="finetune 0.8.2 documentation" href="#"/>
         <link rel="next" title="Installation" href="installation.html"/> 
 
   
@@ -65,7 +65,7 @@
             
             
               <div class="version">
-                0.8.1
+                0.8.2
               </div>
             
           
@@ -93,7 +93,7 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="installation.html#docker">Docker</a></li>
-<li class="toctree-l1"><a class="reference internal" href="basemodels.html">Base Models (e.g. BERT, GPT2, RoBERTa)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="basemodels.html">Base Models (e.g. BERT, GPT2, RoBERTa, DistilBERT)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="quickstart.html">Finetune Quickstart Guide</a></li>
 <li class="toctree-l1"><a class="reference internal" href="datasetloading.html">Dataset Loading</a></li>
 <li class="toctree-l1"><a class="reference internal" href="serializing.html">Saving and Loading Models</a></li>
@@ -184,15 +184,15 @@
 <li><strong>GPT2</strong>, from <a class="reference external" href="https://d4mucfpksywv.cloudfront.net/better-language-models/language-models.pdf">Language Models are Unsupervised Multitask Learners</a>.</li>
 <li><strong>TextCNN</strong>, from <a class="reference external" href="https://arxiv.org/abs/1408.5882">Convolutional Neural Networks for Sentence Classification</a>.</li>
 <li><strong>Temporal Convolution Network</strong>, from <a class="reference external" href="https://arxiv.org/pdf/1803.01271.pdf">An Empirical Evaluation of Generic Convolutional and Recurrent Networks for Sequence Modeling</a>.</li>
+<li><strong>DistilBERT</strong>, from <a class="reference external" href="https://medium.com/huggingface/distilbert-8cf3380435b5">Smaller, faster, cheaper, lighter: Introducing DistilBERT, a distilled version of BERT</a>.</li>
 </ol>
-<p>Huge thanks to Alec Radford and Jeff Wu for their hard work and quality research.
-Source code for <a class="reference internal" href="#module-finetune" title="finetune"><code class="xref py py-mod docutils literal notranslate"><span class="pre">finetune</span></code></a> is available <a class="reference external" href="https://github.com/IndicoDataSolutions/finetune">on github</a>.</p>
+<p>Source code for <a class="reference internal" href="#module-finetune" title="finetune"><code class="xref py py-mod docutils literal notranslate"><span class="pre">finetune</span></code></a> is available <a class="reference external" href="https://github.com/IndicoDataSolutions/finetune">on github</a>.</p>
 <div class="toctree-wrapper compound">
 <p class="caption"><span class="caption-text">General API</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="installation.html#docker">Docker</a></li>
-<li class="toctree-l1"><a class="reference internal" href="basemodels.html">Base Models (e.g. BERT, GPT2, RoBERTa)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="basemodels.html">Base Models (e.g. BERT, GPT2, RoBERTa, DistilBERT)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="quickstart.html">Finetune Quickstart Guide</a></li>
 <li class="toctree-l1"><a class="reference internal" href="datasetloading.html">Dataset Loading</a></li>
 <li class="toctree-l1"><a class="reference internal" href="serializing.html">Saving and Loading Models</a></li>
@@ -302,7 +302,7 @@ python3 -m spacy download en
     <script type="text/javascript">
         var DOCUMENTATION_OPTIONS = {
             URL_ROOT:'./',
-            VERSION:'0.8.1',
+            VERSION:'0.8.2',
             COLLAPSE_INDEX:false,
             FILE_SUFFIX:'.html',
             HAS_SOURCE:  true,

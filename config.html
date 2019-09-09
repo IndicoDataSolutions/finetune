@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Model Configuration Options &mdash; finetune 0.8.1 documentation</title>
+  <title>Model Configuration Options &mdash; finetune 0.8.2 documentation</title>
   
 
   
@@ -35,7 +35,7 @@
         <link rel="index" title="Index"
               href="genindex.html"/>
         <link rel="search" title="Search" href="search.html"/>
-    <link rel="top" title="finetune 0.8.1 documentation" href="index.html"/>
+    <link rel="top" title="finetune 0.8.2 documentation" href="index.html"/>
         <link rel="next" title="Resource Management" href="resource.html"/>
         <link rel="prev" title="Saving and Loading Models" href="serializing.html"/> 
 
@@ -66,7 +66,7 @@
             
             
               <div class="version">
-                0.8.1
+                0.8.2
               </div>
             
           
@@ -94,7 +94,7 @@
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="installation.html#docker">Docker</a></li>
-<li class="toctree-l1"><a class="reference internal" href="basemodels.html">Base Models (e.g. BERT, GPT2, RoBERTa)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="basemodels.html">Base Models (e.g. BERT, GPT2, RoBERTa, DistilBERT)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="quickstart.html">Finetune Quickstart Guide</a></li>
 <li class="toctree-l1"><a class="reference internal" href="datasetloading.html">Dataset Loading</a></li>
 <li class="toctree-l1"><a class="reference internal" href="serializing.html">Saving and Loading Models</a></li>
@@ -192,7 +192,7 @@
 (unless <cite>chunk_long_sequences=True</cite> for SequenceLabeler models). Defaults to <cite>512</cite>.</li>
 <li><strong>weight_stddev</strong> – Standard deviation of initial weights.  Defaults to <cite>0.02</cite>.</li>
 <li><strong>chunk_long_sequences</strong> – When True, use a sliding window approach to predict on
-examples that are longer than max length.  Defaults to <cite>False</cite>.</li>
+examples that are longer than max length.  The progress bar will display the number of chunks processed rather than the number of examples. Defaults to <cite>True</cite>.</li>
 <li><strong>low_memory_mode</strong> – When True, only store partial gradients on forward pass
 and recompute remaining gradients incrementally in order to save memory.  Defaults to <cite>False</cite>.</li>
 <li><strong>interpolate_pos_embed</strong> – Interpolate positional embeddings when <cite>max_length</cite> differs from it’s original value of
@@ -212,6 +212,7 @@ and recompute remaining gradients incrementally in order to save memory.  Defaul
 <li><strong>lr_warmup</strong> – Learning rate warmup (percentage of all batches to warmup for).  Defaults to <cite>0.002</cite>.</li>
 <li><strong>max_grad_norm</strong> – Clip gradients larger than this norm. Defaults to <cite>1.0</cite>.</li>
 <li><strong>shuffle_buffer_size</strong> – How many examples to load into a buffer before shuffling. Defaults to <cite>100</cite>.</li>
+<li><strong>dataset_size</strong> – Must be specified in order to calculate the learning rate schedule when the inputs provided are generators rather than static datasets.</li>
 <li><strong>accum_steps</strong> – Number of updates to accumulate before applying. This is used to simulate a higher batch size.</li>
 <li><strong>lm_loss_coef</strong> – Language modeling loss coefficient – a value between <cite>0.0</cite> - <cite>1.0</cite>
 that indicates how to trade off between language modeling loss
@@ -219,7 +220,7 @@ and target model loss.  Usually not beneficial to turn on unless
 dataset size exceeds a few thousand examples.  Defaults to <cite>0.0</cite>.</li>
 <li><strong>tsa_schedule</strong> – Training Signal Annealing Schedule from ‘Unsupervised Data Augmentation for Consistency Training’. One of {“linear_schedule”, “exp_schedule”, “log_schedule”}.  Defaults to <cite>None</cite>.</li>
 <li><strong>summarize_grads</strong> – Include gradient summary information in tensorboard.  Defaults to <cite>False</cite>.</li>
-<li><strong>val_size</strong> – Validation set size if int. Validation set size as percentage of all training data if float.  Validation will not be run by default if n_examples &lt; 50.
+<li><strong>val_size</strong> – Validation set size if int. Validation set size as percentage of all training data if float.  Defaults to 0.  If value “auto” is provided, validation will not be run by default if n_examples &lt; 50.
 If n_examples &gt; 50, defaults to max(5, min(100, 0.05 * n_examples))</li>
 <li><strong>val_interval</strong> – Evaluate on validation set after <cite>val_interval</cite> batches.
 Defaults to 4 * val_size / batch_size to ensure that too much time is not spent on validation.</li>
@@ -306,7 +307,7 @@ If you are using a single GPU and have more than 4Gb of GPU memory you should se
     <script type="text/javascript">
         var DOCUMENTATION_OPTIONS = {
             URL_ROOT:'./',
-            VERSION:'0.8.1',
+            VERSION:'0.8.2',
             COLLAPSE_INDEX:false,
             FILE_SUFFIX:'.html',
             HAS_SOURCE:  true,

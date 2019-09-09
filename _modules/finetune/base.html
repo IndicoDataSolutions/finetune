@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>finetune.base &mdash; finetune 0.8.1 documentation</title>
+  <title>finetune.base &mdash; finetune 0.8.2 documentation</title>
   
 
   
@@ -35,7 +35,7 @@
         <link rel="index" title="Index"
               href="../../genindex.html"/>
         <link rel="search" title="Search" href="../../search.html"/>
-    <link rel="top" title="finetune 0.8.1 documentation" href="../../index.html"/>
+    <link rel="top" title="finetune 0.8.2 documentation" href="../../index.html"/>
         <link rel="up" title="Module code" href="../index.html"/> 
 
   
@@ -65,7 +65,7 @@
             
             
               <div class="version">
-                0.8.1
+                0.8.2
               </div>
             
           
@@ -93,7 +93,7 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../installation.html#docker">Docker</a></li>
-<li class="toctree-l1"><a class="reference internal" href="../../basemodels.html">Base Models (e.g. BERT, GPT2, RoBERTa)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../basemodels.html">Base Models (e.g. BERT, GPT2, RoBERTa, DistilBERT)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../quickstart.html">Finetune Quickstart Guide</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../datasetloading.html">Dataset Loading</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../serializing.html">Saving and Loading Models</a></li>
@@ -195,13 +195,15 @@
 <span class="kn">import</span> <span class="nn">tensorflow</span> <span class="k">as</span> <span class="nn">tf</span>
 <span class="kn">from</span> <span class="nn">tensorflow.data</span> <span class="k">import</span> <span class="n">Dataset</span>
 <span class="kn">from</span> <span class="nn">tensorflow.contrib.distribute</span> <span class="k">import</span> <span class="n">OneDeviceStrategy</span>
+<span class="kn">from</span> <span class="nn">tensorflow.distribute.experimental</span> <span class="k">import</span> <span class="n">CentralStorageStrategy</span>
+<span class="kn">from</span> <span class="nn">tensorflow.compat.v1</span> <span class="k">import</span> <span class="n">logging</span> <span class="k">as</span> <span class="n">tf_logging</span>
 <span class="kn">from</span> <span class="nn">sklearn.model_selection</span> <span class="k">import</span> <span class="n">train_test_split</span>
 <span class="kn">import</span> <span class="nn">joblib</span>
 
 <span class="kn">import</span> <span class="nn">finetune</span>
 <span class="kn">from</span> <span class="nn">finetune.util</span> <span class="k">import</span> <span class="n">list_transpose</span>
 <span class="kn">from</span> <span class="nn">finetune.encoding.input_encoder</span> <span class="k">import</span> <span class="n">EncodedOutput</span>
-<span class="kn">from</span> <span class="nn">finetune.config</span> <span class="k">import</span> <span class="n">get_config</span><span class="p">,</span> <span class="n">all_gpus</span><span class="p">,</span> <span class="n">assert_valid_config</span>
+<span class="kn">from</span> <span class="nn">finetune.config</span> <span class="k">import</span> <span class="n">get_config</span><span class="p">,</span> <span class="n">all_gpus</span><span class="p">,</span> <span class="n">assert_valid_config</span><span class="p">,</span> <span class="n">get_default_config</span>
 <span class="kn">from</span> <span class="nn">finetune.saver</span> <span class="k">import</span> <span class="n">Saver</span><span class="p">,</span> <span class="n">InitializeHook</span>
 <span class="kn">from</span> <span class="nn">finetune.errors</span> <span class="k">import</span> <span class="n">FinetuneError</span>
 <span class="kn">from</span> <span class="nn">finetune.model</span> <span class="k">import</span> <span class="n">get_model_fn</span><span class="p">,</span> <span class="n">PredictMode</span>
@@ -235,25 +237,24 @@
 
         <span class="n">atexit</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="n">cleanup</span><span class="p">)</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">default_context</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;default_context&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">default_context</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">default_context</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">dict</span><span class="p">:</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="o">=</span> <span class="n">get_config</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">default_context</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">default_context</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">dict</span><span class="p">:</span>
             <span class="k">raise</span> <span class="n">FinetuneError</span><span class="p">(</span>
                 <span class="s2">&quot;Invalid default given: Need a dictionary of auxiliary info fields and default values.&quot;</span>
             <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="o">=</span> <span class="n">get_config</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">use_auxiliary_info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">default_context</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">use_auxiliary_info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">default_context</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">resolved_gpus</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">validate_config</span><span class="p">()</span>
         <span class="n">download_data_if_required</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">base_model</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_input_pipeline</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">default_context</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">default_context</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_trained</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_initialize</span><span class="p">()</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">debugging_logs</span><span class="p">:</span>
             <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;TF_CPP_MIN_LOG_LEVEL&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;0&quot;</span>
-            <span class="n">tf</span><span class="o">.</span><span class="n">logging</span><span class="o">.</span><span class="n">set_verbosity</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">logging</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">)</span>
-
+            <span class="n">tf_logging</span><span class="o">.</span><span class="n">set_verbosity</span><span class="p">(</span><span class="n">tf_logging</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">)</span>
+    
     <span class="k">def</span> <span class="nf">validate_config</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">if</span> <span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">num_layers_trained</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">n_layer</span>
@@ -346,7 +347,7 @@
             <span class="n">context</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">fill_in_context_gaps</span><span class="p">(</span><span class="n">Xs</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">context</span> <span class="o">=</span> <span class="kc">None</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">context_dim</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">context_dim</span> <span class="o">=</span> <span class="kc">None</span>
 
         <span class="n">batch_size</span> <span class="o">=</span> <span class="n">batch_size</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">batch_size</span>
         <span class="n">val_input_fn</span><span class="p">,</span> <span class="n">train_input_fn</span><span class="p">,</span> <span class="n">val_size</span><span class="p">,</span> <span class="n">val_interval</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">get_train_input_fns</span><span class="p">(</span>
@@ -404,7 +405,7 @@
                     <span class="n">estimator</span><span class="p">,</span>
                     <span class="n">val_input_fn</span><span class="p">,</span>
                     <span class="n">every_n_iter</span><span class="o">=</span><span class="n">val_interval</span><span class="p">,</span>
-                    <span class="n">steps</span><span class="o">=</span><span class="n">val_size</span> <span class="o">//</span> <span class="n">batch_size</span><span class="p">,</span>
+                    <span class="n">steps</span><span class="o">=</span><span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">val_size</span> <span class="o">/</span> <span class="n">batch_size</span><span class="p">),</span>
                 <span class="p">)</span>
             <span class="p">)</span>
             <span class="n">early_stopping_interval</span> <span class="o">=</span> <span class="n">val_interval</span>
@@ -470,7 +471,12 @@
             <span class="n">resolved_gpus</span> <span class="o">=</span> <span class="n">all_gpus</span><span class="p">()</span>
 
         <span class="n">resolved_gpus_string</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;/gpu:</span><span class="si">{}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">gpu</span><span class="p">)</span> <span class="k">for</span> <span class="n">gpu</span> <span class="ow">in</span> <span class="n">resolved_gpus</span><span class="p">]</span>
-        <span class="n">distribute_strategy</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">distribute</span><span class="o">.</span><span class="n">experimental</span><span class="o">.</span><span class="n">CentralStorageStrategy</span><span class="p">(</span><span class="n">resolved_gpus_string</span> <span class="ow">or</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">resolved_gpus_string</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">distribute_strategy</span> <span class="o">=</span> <span class="n">OneDeviceStrategy</span><span class="p">(</span><span class="n">resolved_gpus_string</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">per_process_gpu_memory_fraction</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s2">&quot;Setting `per_process_gpu_memory_fraction` is currently unsupported in multi-gpu environments.&quot;</span><span class="p">)</span>
+            <span class="n">distribute_strategy</span> <span class="o">=</span> <span class="n">CentralStorageStrategy</span><span class="p">(</span><span class="n">resolved_gpus_string</span> <span class="ow">or</span> <span class="kc">None</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">resolved_gpus</span> <span class="o">=</span> <span class="n">resolved_gpus</span>
         <span class="k">return</span> <span class="n">distribute_strategy</span>
 
@@ -497,11 +503,8 @@
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">config</span>
 
-    <span class="k">def</span> <span class="nf">get_estimator</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">force_build_lm</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">build_explain</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">context_dim</span><span class="o">=</span><span class="kc">None</span>
-    <span class="p">):</span>
+    <span class="k">def</span> <span class="nf">get_estimator</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">force_build_lm</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">build_explain</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">context_dim</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="n">config</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_estimator_config</span><span class="p">()</span>
-
         <span class="n">model_fn</span> <span class="o">=</span> <span class="n">get_model_fn</span><span class="p">(</span>
             <span class="n">target_model_fn</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_target_model</span><span class="p">,</span>
             <span class="n">predict_op</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_predict_op</span><span class="p">,</span>
@@ -511,10 +514,11 @@
             <span class="n">encoder</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">text_encoder</span><span class="p">,</span>
             <span class="n">target_dim</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">target_dim</span><span class="p">,</span>
             <span class="n">label_encoder</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">label_encoder</span><span class="p">,</span>
-            <span class="n">saver</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">saver</span><span class="p">,</span>
             <span class="n">build_explain</span><span class="o">=</span><span class="n">build_explain</span><span class="p">,</span>
-            <span class="n">context_dim</span><span class="o">=</span><span class="n">context_dim</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">context_dim</span><span class="p">,</span>
+            <span class="n">context_dim</span><span class="o">=</span><span class="n">context_dim</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">context_dim</span><span class="p">,</span>
+            <span class="n">n_replicas</span><span class="o">=</span><span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">resolved_gpus</span><span class="p">))</span>
         <span class="p">)</span>
+
         <span class="n">hooks</span> <span class="o">=</span> <span class="p">[</span><span class="n">InitializeHook</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">saver</span><span class="p">)]</span>
         <span class="n">est</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">estimator</span><span class="o">.</span><span class="n">Estimator</span><span class="p">(</span>
             <span class="n">model_dir</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">estimator_dir</span><span class="p">,</span>
@@ -536,7 +540,7 @@
             <span class="n">target_dim</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">target_dim</span><span class="p">,</span>
             <span class="n">label_encoder</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">label_encoder</span><span class="p">,</span>
             <span class="n">saver</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">saver</span><span class="p">,</span>
-            <span class="n">context_dim</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">context_dim</span><span class="p">,</span>
+            <span class="n">context_dim</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">context_dim</span><span class="p">,</span>
         <span class="p">)</span>
 
         <span class="n">featurizer_est</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">estimator</span><span class="o">.</span><span class="n">Estimator</span><span class="p">(</span>
@@ -888,9 +892,18 @@
             <span class="p">)</span>
 
         <span class="n">assert_valid_config</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
         <span class="n">saver</span> <span class="o">=</span> <span class="n">Saver</span><span class="p">()</span>
         <span class="n">model</span> <span class="o">=</span> <span class="n">saver</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+
+        <span class="c1"># Backwards compatability</span>
+        <span class="c1"># Ensure old models get new default settings</span>
+        <span class="k">for</span> <span class="n">setting</span><span class="p">,</span> <span class="n">default</span> <span class="ow">in</span> <span class="n">get_default_config</span><span class="p">()</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">config</span><span class="p">,</span> <span class="n">setting</span><span class="p">):</span>
+                <span class="n">model</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="n">setting</span><span class="p">:</span> <span class="n">default</span><span class="p">})</span>
+
         <span class="n">model</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">model</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">config</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">config</span>
         <span class="n">download_data_if_required</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">base_model</span><span class="p">)</span>
         <span class="n">saver</span><span class="o">.</span><span class="n">set_fallback</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">base_model_path</span><span class="p">)</span>
         <span class="n">model</span><span class="o">.</span><span class="n">_initialize</span><span class="p">()</span>
@@ -973,7 +986,7 @@
 
     <span class="k">def</span> <span class="nf">generate_default</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">text</span><span class="p">,</span> <span class="n">start</span><span class="p">):</span>
         <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">text</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span>
-        <span class="n">template</span> <span class="o">=</span> <span class="n">deepcopy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">default_context</span><span class="p">)</span>
+        <span class="n">template</span> <span class="o">=</span> <span class="n">deepcopy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">default_context</span><span class="p">)</span>
         <span class="n">template</span><span class="p">[</span><span class="s2">&quot;token&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">text</span>
         <span class="n">template</span><span class="p">[</span><span class="s2">&quot;start&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">start</span>
         <span class="n">template</span><span class="p">[</span><span class="s2">&quot;end&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">start</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
@@ -1177,7 +1190,7 @@
     <script type="text/javascript">
         var DOCUMENTATION_OPTIONS = {
             URL_ROOT:'../../',
-            VERSION:'0.8.1',
+            VERSION:'0.8.2',
             COLLAPSE_INDEX:false,
             FILE_SUFFIX:'.html',
             HAS_SOURCE:  true,

@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Finetune API Reference &mdash; finetune 0.8.1 documentation</title>
+  <title>Finetune API Reference &mdash; finetune 0.8.2 documentation</title>
   
 
   
@@ -35,7 +35,7 @@
         <link rel="index" title="Index"
               href="genindex.html"/>
         <link rel="search" title="Search" href="search.html"/>
-    <link rel="top" title="finetune 0.8.1 documentation" href="index.html"/>
+    <link rel="top" title="finetune 0.8.2 documentation" href="index.html"/>
         <link rel="next" title="Cached Prediction" href="cachedpredict.html"/>
         <link rel="prev" title="Resource Management" href="resource.html"/> 
 
@@ -66,7 +66,7 @@
             
             
               <div class="version">
-                0.8.1
+                0.8.2
               </div>
             
           
@@ -94,7 +94,7 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="installation.html#docker">Docker</a></li>
-<li class="toctree-l1"><a class="reference internal" href="basemodels.html">Base Models (e.g. BERT, GPT2, RoBERTa)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="basemodels.html">Base Models (e.g. BERT, GPT2, RoBERTa, DistilBERT)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="quickstart.html">Finetune Quickstart Guide</a></li>
 <li class="toctree-l1"><a class="reference internal" href="datasetloading.html">Dataset Loading</a></li>
 <li class="toctree-l1"><a class="reference internal" href="serializing.html">Saving and Loading Models</a></li>
@@ -3142,7 +3142,7 @@ weights while avoiding slow graph recompilation.</p>
 
 <dl class="method">
 <dt id="finetune.DeploymentModel.create_base_model">
-<code class="descname">create_base_model</code><span class="sig-paren">(</span><em>filename</em>, <em>exists_ok</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/deployment_model.html#DeploymentModel.create_base_model"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.DeploymentModel.create_base_model" title="Permalink to this definition">¶</a></dt>
+<code class="descname">create_base_model</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/deployment_model.html#DeploymentModel.create_base_model"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.DeploymentModel.create_base_model" title="Permalink to this definition">¶</a></dt>
 <dd><p>Saves the current weights into the correct file format to be used as a base model.
 :param filename: the path to save the base model relative to finetune’s base model filestore.
 :param exists_ok: Whether to replace the model if it exists.</p>
@@ -3177,9 +3177,9 @@ These features are the same features that are fed into the target_model.</p>
 <dd><p>Ensure all tokens are covered by context; if they are not, fill in gaps with the default style as given from the user</p>
 </dd></dl>
 
-<dl class="method">
+<dl class="classmethod">
 <dt id="finetune.DeploymentModel.finetune_grid_search">
-<code class="descname">finetune_grid_search</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>test_size</em>, <em>eval_fn</em>, <em>probs</em>, <em>return_all</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/deployment_model.html#DeploymentModel.finetune_grid_search"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.DeploymentModel.finetune_grid_search" title="Permalink to this definition">¶</a></dt>
+<em class="property">classmethod </em><code class="descname">finetune_grid_search</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/deployment_model.html#DeploymentModel.finetune_grid_search"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.DeploymentModel.finetune_grid_search" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs grid search over config items defined using “GridSearchable” objects and returns either full results or
 the config object that relates to the best results. The default config contains grid searchable objects for the
 most important parameters to search over.</p>
@@ -3207,9 +3207,9 @@ form [(config, eval_fn output), … ]</p>
 </table>
 </dd></dl>
 
-<dl class="method">
+<dl class="classmethod">
 <dt id="finetune.DeploymentModel.finetune_grid_search_cv">
-<code class="descname">finetune_grid_search_cv</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>n_splits</em>, <em>test_size</em>, <em>eval_fn</em>, <em>probs</em>, <em>return_all</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/deployment_model.html#DeploymentModel.finetune_grid_search_cv"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.DeploymentModel.finetune_grid_search_cv" title="Permalink to this definition">¶</a></dt>
+<em class="property">classmethod </em><code class="descname">finetune_grid_search_cv</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/deployment_model.html#DeploymentModel.finetune_grid_search_cv"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.DeploymentModel.finetune_grid_search_cv" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs cross validated grid search over config items defined using “GridSearchable” objects and returns either full results or
 the config object that relates to the best results. The default config contains grid searchable objects for the
 most important parameters to search over.</p>
@@ -3248,7 +3248,7 @@ form [(config, eval_fn output), … ]</p>
 
 <dl class="method">
 <dt id="finetune.DeploymentModel.generate_text">
-<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text</em>, <em>max_length</em>, <em>use_extra_toks</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/deployment_model.html#DeploymentModel.generate_text"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.DeploymentModel.generate_text" title="Permalink to this definition">¶</a></dt>
+<code class="descname">generate_text</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/deployment_model.html#DeploymentModel.generate_text"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.DeploymentModel.generate_text" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
 Temperature parameter for decoding is set in the config.
 :param max_length: The maximum length to decode to.
@@ -3392,7 +3392,7 @@ Should not be used to save / restore a training model.</dd>
     <script type="text/javascript">
         var DOCUMENTATION_OPTIONS = {
             URL_ROOT:'./',
-            VERSION:'0.8.1',
+            VERSION:'0.8.2',
             COLLAPSE_INDEX:false,
             FILE_SUFFIX:'.html',
             HAS_SOURCE:  true,
