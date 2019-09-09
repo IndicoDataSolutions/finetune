@@ -114,7 +114,7 @@ class Classifier(BaseModel):
         if probas:
             return all_probs
         else:
-            return all_labels
+            return np.asarray(all_labels)
 
     def predict_proba(self, X):
         """

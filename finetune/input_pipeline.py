@@ -697,7 +697,6 @@ class BasePipeline(metaclass=ABCMeta):
                     ]  # forced since encoded is immutable'
                 else:
                     d['context'] = None
-                print(d)
                 yield self._array_format(EncodedOutput(**d), pad_token=pad_token)
         else:
             encoder_out = self.text_encoder.encode_multi_input(
