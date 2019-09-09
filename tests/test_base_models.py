@@ -20,7 +20,7 @@ import requests
 from bs4 import BeautifulSoup as bs
 from bs4.element import Tag
 
-from finetune.base_models import TextCNN, BERTModelCased, GPT2Model, GPTModel, RoBERTa, TCNModel
+from finetune.base_models import TextCNN, BERTModelCased, GPT2Model, GPTModel, RoBERTa, TCNModel, DistilBERT
 from .test_deployment_model import TestDeploymentModel
 from finetune import Classifier, Comparison, SequenceLabeler
 from finetune.datasets import generic_download
@@ -473,6 +473,7 @@ class TestSequenceLabelerRoberta(TestSequenceLabelerTextCNN):
     model_specific_config = {"n_epochs": 2, "lr": 1e-4}
     base_model = RoBERTa
 
+
 class TestClassifierRoberta(TestClassifierTextCNN):
     model_specific_config = {"n_epochs": 2, "lr": 1e-4}
     base_model = RoBERTa
@@ -505,3 +506,11 @@ class TestClassifierTCN(TestClassifierTextCNN):
 
 class TestSequenceLabelerTCN(TestSequenceLabelerTextCNN):
     base_model = TCNModel
+
+
+class TestClassifierDistilBERT(TestClassifierTextCNN):
+    base_model = DistilBERT
+
+
+class TestSequenceLabelerDistilBERT(TestSequenceLabelerTextCNN):
+    base_model = DistilBERT
