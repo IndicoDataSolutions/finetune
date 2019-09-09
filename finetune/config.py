@@ -116,7 +116,7 @@ class Settings(dict):
         (unless `chunk_long_sequences=True` for SequenceLabeler models). Defaults to `512`.
     :param weight_stddev: Standard deviation of initial weights.  Defaults to `0.02`.
     :param chunk_long_sequences: When True, use a sliding window approach to predict on
-        examples that are longer than max length.  Defaults to `False`.
+        examples that are longer than max length.  The progress bar will display the number of chunks processed rather than the number of examples. Defaults to `True`.  
     :param low_memory_mode: When True, only store partial gradients on forward pass
         and recompute remaining gradients incrementally in order to save memory.  Defaults to `False`.
     :param interpolate_pos_embed: Interpolate positional embeddings when `max_length` differs from it's original value of
@@ -136,6 +136,7 @@ class Settings(dict):
     :param lr_warmup: Learning rate warmup (percentage of all batches to warmup for).  Defaults to `0.002`.
     :param max_grad_norm: Clip gradients larger than this norm. Defaults to `1.0`.
     :param shuffle_buffer_size: How many examples to load into a buffer before shuffling. Defaults to `100`.
+    :param dataset_size: Must be specified in order to calculate the learning rate schedule when the inputs provided are generators rather than static datasets.  
     :param accum_steps: Number of updates to accumulate before applying. This is used to simulate a higher batch size.
     :param lm_loss_coef: Language modeling loss coefficient -- a value between `0.0` - `1.0`
         that indicates how to trade off between language modeling loss
