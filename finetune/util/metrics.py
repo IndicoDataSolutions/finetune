@@ -53,7 +53,7 @@ def sequence_labeling_token_counts(true, predicted):
         # correct + false negatives
         for true_token in true_tokens:
             for pred_token in pred_tokens:
-                if (pred_token['start'] == true_token['start_token'] and
+                if (pred_token['start'] == true_token['start'] and
                     pred_token['end'] == true_token['end']):
 
                     if pred_token['label'] == true_token['label']:
@@ -69,7 +69,7 @@ def sequence_labeling_token_counts(true, predicted):
         # false positives
         for pred_token in pred_tokens:
             for true_token in true_tokens:
-                if (pred_token['start'] == true_token['start_token'] and
+                if (pred_token['start'] == true_token['start'] and
                     pred_token['end'] == true_token['end']):
                     break
             else:
