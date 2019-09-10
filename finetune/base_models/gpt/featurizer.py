@@ -287,7 +287,7 @@ def gpt_featurizer(
 
         X = tf.reshape(X, [-1, config.max_length, 2])
 
-        clf_token = encoder["_classify_"]
+        clf_token = encoder.end_token
         pool_idx = tf.cast(
             tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32
         )
