@@ -248,7 +248,6 @@ class BaseEncoder(object):
 
     def __setstate__(self, state):
         self.__init__()
-        self._lazy_init()
 
     def __getstate__(self):
         return {"Encoder": None}

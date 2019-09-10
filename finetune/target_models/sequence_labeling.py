@@ -48,7 +48,6 @@ class SequencePipeline(BasePipeline):
                 }
             else:
                 feats = {"tokens": out.token_ids, "mask": out.mask}
-            
             if Y is None:
                 yield feats
             if Y is not None:

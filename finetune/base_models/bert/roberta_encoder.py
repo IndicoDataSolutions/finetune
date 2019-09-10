@@ -98,7 +98,7 @@ class RoBERTaEncoder(BaseEncoder):
         self.encoder["<UNK>"] = 3
         self.start_token = 0  # bos from roberta
         self.delimiter_token = 2  # eos from roberta
-        self.clf_token = 2  # eos from roberta
+        self.end_token = 2  # eos from roberta
         self.UNK_IDX = 3  # unk from roberta
 
         self.cache = {}
