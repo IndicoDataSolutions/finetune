@@ -976,7 +976,6 @@ class BaseModel(object, metaclass=ABCMeta):
                 chunk_idx + 1 == len(flat_array_encoded) or
                 sequence_id[chunk_idx] != sequence_id[chunk_idx + 1]
             )
-            print(start_of_doc, end_of_doc)
             yield position_seq, start_of_doc, end_of_doc, label_seq, proba_seq
 
     def __del__(self):
