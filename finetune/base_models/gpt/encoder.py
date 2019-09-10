@@ -78,8 +78,6 @@ class GPTEncoder(BaseEncoder):
         self.delimiter_token = self.encoder["_delimiter_"]
         self.end_token = self.encoder["_classify_"]
         self.initialized = True
-        print("INITIALIZED")
-        exit(0)
 
     def _token_length(self, token):
         return len(token.strip().replace("</w>", ""))

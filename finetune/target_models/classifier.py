@@ -95,10 +95,8 @@ class Classifier(BaseModel):
         for _, start_of_doc, end_of_doc, _, proba in self.process_long_sequence(X):
             start, end = 0, None
             doc_probs.append(proba)
-            print(np.argmax(proba))
 
             if end_of_doc:
-                print(doc_probs)
                 # last chunk in a document
                 mean_pool = np.mean(doc_probs, axis=0)
                 pred = np.argmax(mean_pool)
