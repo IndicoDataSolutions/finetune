@@ -91,16 +91,14 @@ class Classifier(BaseModel):
         """
         all_labels = []
         all_probs = []
-
+        doc_probs = []
         for _, start_of_doc, end_of_doc, _, proba in self.process_long_sequence(X):
             start, end = 0, None
-            if start_of_doc:
-                # if this is the first chunk in a document, start accumulating from scratch
-                doc_probs = []
-
             doc_probs.append(proba)
+            print(np.argmax(proba))
 
             if end_of_doc:
+                print(doc_probs)
                 # last chunk in a document
                 mean_pool = np.mean(doc_probs, axis=0)
                 pred = np.argmax(mean_pool)
@@ -110,6 +108,7 @@ class Classifier(BaseModel):
                 label = np.squeeze(label).tolist()
                 all_labels.append(label)
                 all_probs.append(mean_pool)
+                doc_probs = []
 
         if probas:
             return all_probs
