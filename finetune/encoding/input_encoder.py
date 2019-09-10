@@ -59,7 +59,7 @@ def _flatten(nested_lists):
 
 class BaseEncoder(object):
     """
-    Base class for encoding
+    Base class for text encoders.
     Translates raw texts into structured token arrays
     """
 
@@ -78,6 +78,9 @@ class BaseEncoder(object):
         self.end_token = None
         self.encoder = None
         self.decoder = None
+
+    def _lazy_init(self):
+        pass
 
     @property
     def vocab_size(self):
@@ -242,3 +245,10 @@ class BaseEncoder(object):
         batch_context.append(expanded_context)
         assert len(expanded_context) == len(subtoken_idxs)
         return batch_context
+
+    def __setstate__(self, state):
+        self.__init__()
+        self._lazy_init()
+
+    def __getstate__(self):
+        return {"Encoder": None}

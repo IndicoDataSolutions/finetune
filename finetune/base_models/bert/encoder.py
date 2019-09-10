@@ -12,6 +12,7 @@ VOCAB_PATH_MULTILINGUAL = os.path.join(
 VOCAB_PATH_LARGE = os.path.join(FINETUNE_FOLDER, "model", "bert", "vocab_large.txt")
 VOCAB_PATH_DISTILBERT = os.path.join(FINETUNE_FOLDER, "model", "bert", "distillbert_vocab.txt")
 
+
 class BERTEncoder(BaseEncoder):
     """
     A modified wrapper for a public python BPE tokenizer. The modifications allow encoding directly into the formats
