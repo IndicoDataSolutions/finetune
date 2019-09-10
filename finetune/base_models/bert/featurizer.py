@@ -54,7 +54,7 @@ def bert_featurizer(
     X.set_shape([None, None, None])
     # To fit the interface of finetune we are going to compute the mask and type id at runtime.
     input_ids = X[:, :, 0]  # slice off pos-embed ids.
-    delimiters = tf.cast(tf.equal(input_ids, encoder.delimiter), tf.int32)
+    delimiters = tf.cast(tf.equal(input_ids, encoder.delimiter_token), tf.int32)
 
     token_type_ids = tf.cumsum(delimiters, exclusive=True, axis=1)
 
