@@ -35,7 +35,7 @@ class BERTEncoder(BaseEncoder):
 
         self.start_token = self.tokenizer.convert_tokens_to_ids(["[CLS]"])[0]
         self.delimiter_token = self.tokenizer.convert_tokens_to_ids(["[SEP]"])[0]
-        self.end_token = self.delimiter
+        self.end_token = self.delimiter_token
         self.initialized = True
 
     @property
