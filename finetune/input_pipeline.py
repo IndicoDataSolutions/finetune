@@ -495,9 +495,7 @@ class BasePipeline(metaclass=ABCMeta):
 
         return internal_gen()
 
-    def get_train_input_fns(
-        self, Xs, Y=None, context=None, batch_size=None, val_size=None
-    ):
+    def get_train_input_fns(self, Xs, Y=None, context=None, batch_size=None, val_size=None):
         self.epoch = 1
         batch_size = batch_size or self.config.batch_size
 
@@ -647,8 +645,6 @@ class BasePipeline(metaclass=ABCMeta):
         return list(X)
 
     def _text_to_ids(self, Xs, Y=None, pad_token=None, context=None):
-        add_eos_bos_to_chunk = True
-
         if context is None and self.config.use_auxiliary_info:
             context = Xs[0]
             Xs = Xs[1]
@@ -656,7 +652,7 @@ class BasePipeline(metaclass=ABCMeta):
         if self.config.chunk_long_sequences and len(Xs) == 1:
             # can only chunk single sequence inputs
 
-            if add_eos_bos_to_chunk:
+            if self.config.add_eos_bos_to_chunk:
                 chunk_size = self.config.max_length - 2
             else:
                 chunk_size = self.config.max_length
@@ -685,7 +681,7 @@ class BasePipeline(metaclass=ABCMeta):
                     field_value = getattr(encoded, field)
                     if field_value is not None:
                         fv = field_value[start:end]
-                        if add_eos_bos_to_chunk:
+                        if self.config.add_eos_bos_to_chunk:
                             if fv[0] != self.text_encoder.start_token:
                                 fv = [self.text_encoder.start_token] + fv
                             if fv[-1] != self.text_encoder.end_token:
