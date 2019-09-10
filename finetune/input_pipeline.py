@@ -14,6 +14,7 @@ import tensorflow as tf
 from tensorflow.python.data import Dataset
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelBinarizer
+from sklearn.utils import shuffle as dataset_shuffle
 import finetune
 from finetune.errors import FinetuneError
 from finetune.encoding.input_encoder import ArrayEncodedOutput, EncodedOutput
@@ -553,34 +554,32 @@ class BasePipeline(metaclass=ABCMeta):
         else:
             self._skip_tqdm = 0
             if self.config.val_set is None:
-                if self.config.val_size == 0:
-                    Xs_tr, Xs_va, Y_tr, Y_va, C_tr, C_va = Xs, [], Y, [], context, []
-                else:
-                    if context:
+                if context:
+                    if self.config.val_size > 0:
                         raise FinetuneError(
                             "Validation set with auxiliary info not yet supported."
                         )
-                        Xs_tr, Xs_va, Y_tr, Y_va, C_tr, C_va = train_test_split(
-                            Xs,
-                            Y,
-                            context,
-                            test_size=self.config.val_size,
-                            random_state=self.config.seed,
-                        )
-                    else:
-                        Xs_tr, Xs_va, Y_tr, Y_va = train_test_split(
-                            Xs,
-                            Y,
-                            test_size=self.config.val_size,
-                            random_state=self.config.seed,
-                        )
-                        C_tr, C_va = None, None
+                    Xs_tr, Xs_va, Y_tr, Y_va, C_tr, C_va = train_test_split(
+                        Xs,
+                        Y,
+                        context,
+                        test_size=self.config.val_size,
+                        random_state=self.config.seed,
+                    )
+                else:
+                    Xs_tr, Xs_va, Y_tr, Y_va = train_test_split(
+                        Xs,
+                        Y,
+                        test_size=self.config.val_size,
+                        random_state=self.config.seed,
+                    )
+                    C_tr, C_va = None, None
             else:
-                Xs_tr, Y_tr, C_tr = Xs, Y, context
+                Xs_tr, Y_tr, C_tr = dataset_shuffle(Xs, Y, context, random_state=self.config.seed)
                 if context:
                     Xs_va, Y_va, C_va = self.config.val_set
                 else:
-                    Xs_va, Y_va, C_va = self.config.val_set
+                    Xs_va, Y_va = self.config.val_set
 
             Xs_tr, Y_tr = self.resampling(Xs_tr, Y_tr)
             self.config.dataset_size = len(Xs_tr)

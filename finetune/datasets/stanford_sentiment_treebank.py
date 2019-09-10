@@ -11,6 +11,8 @@ from finetune.datasets import Dataset, generic_download
 from finetune.base_models.gpt.model import GPTModel
 logging.basicConfig(level=logging.DEBUG)
 
+from sklearn.metrics import classification_report
+
 SST_FILENAME = "SST-binary.csv"
 DATA_PATH = os.path.join('Data', 'Classify', SST_FILENAME)
 CHECKSUM = "02136b7176f44ff8bec6db2665fc769a"
@@ -47,13 +49,11 @@ if __name__ == "__main__":
         n_epochs=3,
         batch_size=2, 
         lr_warmup=0.1,
-        max_length=16,
-        base_model=GPTModel,
-        class_weights={0: 0.1, 1: 0.9}
+        max_length=64,
+        base_model=GPTModel
     )
     trainX, testX, trainY, testY = train_test_split(dataset.Text.values, dataset.Target.values, test_size=0.3, random_state=42)
     model.fit(trainX, trainY)
     preds = model.predict(testX)
     print(preds, testY)
-    accuracy = np.mean(preds == testY)
-    print('Test Accuracy: {:0.2f}'.format(accuracy))
+    print(classification_report(testY, preds))
