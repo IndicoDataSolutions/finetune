@@ -553,33 +553,30 @@ class BasePipeline(metaclass=ABCMeta):
             )
         else:
             self._skip_tqdm = 0
-            if self.config.val_set is None:
-                if context:
-                    if self.config.val_size > 0:
-                        raise FinetuneError(
-                            "Validation set with auxiliary info not yet supported."
-                        )
-                    Xs_tr, Xs_va, Y_tr, Y_va, C_tr, C_va = train_test_split(
-                        Xs,
-                        Y,
-                        context,
-                        test_size=self.config.val_size,
-                        random_state=self.config.seed,
+            if context:
+                to_shuffle = (Xs, Y, context)
+                if self.config.val_size > 0:
+                    raise FinetuneError(
+                        "Validation set with auxiliary info not yet supported."
                     )
-                else:
-                    Xs_tr, Xs_va, Y_tr, Y_va = train_test_split(
-                        Xs,
-                        Y,
-                        test_size=self.config.val_size,
-                        random_state=self.config.seed,
-                    )
-                    C_tr, C_va = None, None
             else:
-                Xs_tr, Y_tr, C_tr = dataset_shuffle(Xs, Y, context, random_state=self.config.seed)
-                if context:
-                    Xs_va, Y_va, C_va = self.config.val_set
-                else:
-                    Xs_va, Y_va = self.config.val_set
+                to_shuffle = (Xs, Y)
+                
+            if self.config.val_size > 0 and self.config.val_set is None:
+                shuffled_split = train_test_split(*to_shuffle, test_size=self.config.val_size, random_state=self.config.seed)
+                train_split = shuffled_split[0::2]
+                val_split = shuffled_split[1::2]
+            else:
+                train_split = dataset_shuffle(*to_shuffle, random_state=self.config.seed)
+                val_split = self.config.val_set or ([] for _ in train_split)
+
+            if context:
+                Xs_tr, Y_tr, C_tr = train_split
+                Xs_va, Y_va, C_va = val_split
+            else:
+                C_tr, C_va = None, None
+                Xs_tr, Y_tr = train_split
+                Xs_va, Y_va = val_split
 
             Xs_tr, Y_tr = self.resampling(Xs_tr, Y_tr)
             self.config.dataset_size = len(Xs_tr)
