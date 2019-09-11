@@ -648,10 +648,7 @@ class BasePipeline(metaclass=ABCMeta):
         if self.config.chunk_long_sequences and len(Xs) == 1:
             # can only chunk single sequence inputs
 
-            if self.config.add_eos_bos_to_chunk:
-                chunk_size = self.config.max_length - 2
-            else:
-                chunk_size = self.config.max_length
+            chunk_size = self.config.max_length - 2
                 
             step_size = chunk_size // 3
             
@@ -670,18 +667,27 @@ class BasePipeline(metaclass=ABCMeta):
             length = len(encoded.token_ids)
             assert length == len(encoded.token_ids)
             starts = list(range(0, length, step_size))
+            field_starts_and_ends = dict()
+            for field in EncodedOutput._fields:
+                field_value = getattr(encoded, field)
+                if field_value is not None:
+                    field_starts_and_ends[field] = (field_value[0], field_value[-1])
+                                
             for start in starts:
                 d = dict()
                 end = start + chunk_size
+                
+
                 for field in EncodedOutput._fields:
                     field_value = getattr(encoded, field)
                     if field_value is not None:
                         fv = field_value[start:end]
                         if self.config.add_eos_bos_to_chunk:
-                            if fv[0] != self.text_encoder.start_token:
-                                fv = [self.text_encoder.start_token] + fv
-                            if fv[-1] != self.text_encoder.end_token:
-                                fv = fv + [self.text_encoder.end_token]
+                            start_token, end_token = field_starts_and_ends[field]
+                            if fv[0] != start_token:
+                                fv = [start_token] + fv
+                            if fv[-1] != end_token:
+                                fv = fv + [end_token]
                         d[field] = fv
                 if self.config.use_auxiliary_info:
                     d["context"] = processed_context[
