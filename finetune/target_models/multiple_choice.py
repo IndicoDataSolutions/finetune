@@ -14,11 +14,11 @@ class MultipleChoicePipeline(BasePipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def _post_data_initialization(self, Y, context=None):
-        super()._post_data_initialization(Y, context)
+    def _post_data_initialization(self, Y):
+        super()._post_data_initialization(Y)
         self.target_dim = self.target_dim_
 
-    def _text_to_ids(self, Xs, Y=None, context=None, pad_token=None):
+    def _text_to_ids(self, Xs, Y=None, pad_token=None):
         """
         Format multi question examples as a list of IDs
         """

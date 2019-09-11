@@ -28,7 +28,6 @@ class TextCNNModel(SourceModel):
         "lr": 0.01,
         "seq_num_heads": len(kernel_sizes) * 2,
         "base_model_path": os.path.join("gpt2", "model-sm.jl"),
-        "n_context_embed": len(kernel_sizes) * 2,
     }
     required_files = [
         {

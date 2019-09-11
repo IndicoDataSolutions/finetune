@@ -8,12 +8,10 @@ import tensorflow as tf
 from collections import namedtuple
 from tensorflow.python.data import Dataset
 
-from finetune.config import get_config
-from finetune.saver import Saver, InitializeHook
+from finetune.saver import InitializeHook
 from finetune.base import BaseModel
-from finetune.target_models.comparison import ComparisonPipeline, Comparison
+from finetune.target_models.comparison import ComparisonPipeline
 from finetune.target_models.sequence_labeling import SequencePipeline, SequenceLabeler
-from finetune.target_models.association import AssociationPipeline
 from finetune.target_models.classifier import ClassificationPipeline
 from finetune.base_models.bert.featurizer import bert_featurizer
 from finetune.base_models.gpt.featurizer import gpt_featurizer
@@ -30,7 +28,6 @@ class TaskMode:
     SEQUENCE_LABELING = "Sequence_Labeling"
     CLASSIFICATION = "Classification"
     COMPARISON = "Comparison"
-    ASSOCIATION = "Association"
 
 
 class DeploymentPipeline(BasePipeline):
@@ -42,11 +39,9 @@ class DeploymentPipeline(BasePipeline):
     def _target_encoder(self):
         raise NotImplementedError
 
-    def _dataset_without_targets(self, Xs, train, context):
+    def _dataset_without_targets(self, Xs, train):
         if not callable(Xs):
             Xs_fn = lambda: self.wrap_tqdm(Xs, train)
-            if context:
-                Xs = list(zip(Xs, context))
         else:
             Xs_fn = lambda: self.wrap_tqdm(Xs(), train)
 
@@ -71,7 +66,6 @@ class DeploymentPipeline(BasePipeline):
             "Classification": ClassificationPipeline,
             "Comparison": ComparisonPipeline,
             "Sequence_Labeling": SequencePipeline,
-            "Association": AssociationPipeline,
         }
         self.pipeline_type = pipelines[self.task]
         if (
@@ -83,13 +77,6 @@ class DeploymentPipeline(BasePipeline):
                 )
             else:
                 self.pipeline = self.pipeline_type(self.config)
-        if self.config.use_auxiliary_info:
-            self.pipeline.use_auxiliary_info = True
-            self.pipeline.label_encoders = self.label_encoders
-            self.pipeline.context_labels = self.context_labels
-            self.pipeline.context_dim = self.config.context_dim
-            self.pipeline.label_stats = self.label_stats
-            self.pipeline.default_context = self.config.default_context
         return self.pipeline_type
 
     def get_text_token_mask(self, *X):
@@ -122,7 +109,7 @@ class DeploymentModel(BaseModel):
     :param \**kwargs: key-value pairs of config items to override.
     """
 
-    def __init__(self, featurizer=None, auxiliary_info=False, **kwargs):
+    def __init__(self, featurizer=None, **kwargs):
         """
         For a full list of configuration options, see `finetune.config`.
 
@@ -140,47 +127,37 @@ class DeploymentModel(BaseModel):
         if featurizer.featurizer not in [gpt2_featurizer, gpt_featurizer, bert_featurizer]:
             raise FinetuneError("Selected base model not supported.")
         self.validate_config()
-        self.config.use_auxiliary_info = auxiliary_info
         self.task = TaskMode.CLASSIFICATION
         self.input_pipeline.task = self.task
         self.featurizer_loaded = False
         self.adapters = False
         self.loaded_custom_previously = False
 
-    def load_featurizer(self, override=False):
+    def load_featurizer(self):
         """
         Performs graph compilation of the featurizer, saving most compilation overhead from occurring at predict time. Should
         be called after initialization but BEFORE any calls to load_custom_model or predict.
         """
-        if (
-            override or not self.config.use_auxiliary_info
-        ) and not self.featurizer_loaded:
+        if not self.featurizer_loaded:
             self.featurizer_est = self._get_estimator("featurizer")
             self.predict_hooks.feat_hook.model_portion = "whole_featurizer"
             for hook in self.predict_hooks:
                 hook.need_to_refresh = True
-
-            if not self.config.use_auxiliary_info:
-                output = self.predict(
-                    ["finetune"], exclude_target=True
-                )  # run arbitrary predict call to compile featurizer graph
+            self.predict(["finetune"], exclude_target=True)  # run arbitrary predict call to compile featurizer graph
             self.featurizer_loaded = True
-        elif not self.featurizer_loaded:
-            LOGGER.warning(
-                "Delaying featurizer loading until the first call of predict, since auxiliary_info is turned on and the default schema for the information has not yet been supplied."
-            )
 
     def load_custom_model(self, path):
         """
         Load in target model, and either adapters or entire featurizer from file. Must be called after load_featurizer.
         """
-        if not self.featurizer_loaded and not self.config.use_auxiliary_info:
-            raise FinetuneError(
-                "Need to call load_featurizer before loading weights from file."
-            )
+        if not self.featurizer_loaded:
+            raise FinetuneError("Need to call load_featurizer before loading weights from file.")
 
         original_model = self.saver.load(path)
         original_model._trained = True
+
+        if original_model.config.base_model.featurizer != self.config.base_model.featurizer:
+            raise FinetuneError("You cannot mix featurizer types in the same deployment model instance.")
 
         if original_model.config.adapter_size != self.config.adapter_size:
             raise FinetuneError("adapter_size in config is compatible with this model")
@@ -188,11 +165,8 @@ class DeploymentModel(BaseModel):
             raise FinetuneError("Loaded file has incompatible base model.")
         if original_model.config.max_length != self.config.max_length:
             raise FinetuneError(
-                "Loaded model has a different config.max_length than current value. Changing max_length between loads is not yet supported."
-            )
-        if original_model.config.use_auxiliary_info != self.config.use_auxiliary_info:
-            raise FinetuneError(
-                "Loaded model has a different config.use_auxiliary_info than this DeploymentModel's value at initialization. Changing this flag is incompatible with the cached predict of the DeploymentModel."
+                "Loaded model has a different config.max_length than current value."
+                " Changing max_length between loads is not yet supported."
             )
 
         self.adapters = original_model.config.adapter_size is not None
@@ -203,7 +177,7 @@ class DeploymentModel(BaseModel):
         self._to_pull = 0
         self.loaded_custom_previously = True
         self._update_pipeline(original_model)
-        self.load_featurizer(override=True)
+        self.load_featurizer()
         for hook in self.predict_hooks:
             hook.need_to_refresh = True
         if original_model.config.adapter_size is None:
@@ -218,8 +192,6 @@ class DeploymentModel(BaseModel):
             not self.adapters or not self.loaded_custom_previously
         ):  # previous model did not use adapters, so we have to update everything
             self.predict_hooks.feat_hook.refresh_base_model = True
-
-
 
     def _update_pipeline(self, original_model):
         """
@@ -242,25 +214,8 @@ class DeploymentModel(BaseModel):
         )
         self.config.chunk_long_sequences = original_model.config.chunk_long_sequences
         self.input_pipeline.config.chunk_long_sequences = original_model.config.chunk_long_sequences
-
-        # auxiliary info attributes
-        if original_model.config.use_auxiliary_info:
-            self.config.use_auxiliary_info = True
-            self.input_pipeline.config.use_auxiliary_info = True
-            self.input_pipeline.label_encoders = (
-                original_model.input_pipeline.label_encoders
-            )
-            self.input_pipeline.context_labels = (
-                original_model.input_pipeline.context_labels
-            )
-            self.input_pipeline.context_dim = original_model.input_pipeline.context_dim
-            self.input_pipeline.label_stats = original_model.input_pipeline.label_stats
-            self.input_pipeline.default_context = (
-                original_model.input_pipeline.default_context
-            )
-        else:
-            self.config.use_auxiliary_info = False
-            self.input_pipeline.config.use_auxiliary_info = False
+        self.config.add_eos_bos_to_chunk = original_model.config.add_eos_bos_to_chunk
+        self.input_pipeline.config.add_eos_bos_to_chunk = original_model.config.add_eos_bos_to_chunk
 
         if isinstance(original_model.input_pipeline, SequencePipeline):
             self.task = TaskMode.SEQUENCE_LABELING
@@ -272,8 +227,6 @@ class DeploymentModel(BaseModel):
             self.task = TaskMode.COMPARISON
         elif isinstance(original_model.input_pipeline, BasePipeline):
             self.task = TaskMode.CLASSIFICATION
-        elif isinstance(original_model.input_pipeline, AssociationPipeline):
-            self.task = TaskMode.ASSOCIATION
         else:
             raise FinetuneError("Invalid pipeline in loaded file.")
         self.input_pipeline.task = self.task
@@ -292,15 +245,10 @@ class DeploymentModel(BaseModel):
             build_target_model=self.input_pipeline.target_dim is not None,
             encoder=self.input_pipeline.text_encoder,
             target_dim=self.input_pipeline.target_dim if portion == "target" else None,
-            label_encoder=self.input_pipeline.label_encoder
-            if portion == "target"
-            else None,
+            label_encoder=self.input_pipeline.label_encoder if portion == "target" else None,
             saver=self.saver,
             portion=portion,
             build_attn=not isinstance(self.input_pipeline, ComparisonPipeline),
-            context_dim=self.input_pipeline.context_dim
-            if hasattr(self.input_pipeline, "context_dim")
-            else None,
         )
 
         estimator = tf.estimator.Estimator(
@@ -341,13 +289,7 @@ class DeploymentModel(BaseModel):
         exclude_target=False,
         n_examples=None,
     ):
-        if self.config.use_auxiliary_info:
-            context = Xs[1]
-            Xs = Xs[0]
-            Xs = self.input_pipeline._format_for_inference(Xs)
-            Xs = list(zip(Xs, context))
-        else:
-            Xs = self.input_pipeline._format_for_inference(Xs)
+        Xs = self.input_pipeline._format_for_inference(Xs)
         self._data = Xs
         self._closed = False
         n = n_examples or len(self._data)
@@ -369,17 +311,15 @@ class DeploymentModel(BaseModel):
 
         num_batches = math.ceil(n / self.config.batch_size)
         features = [None] * n
-        for i in tqdm.tqdm(
-            range(num_batches), total=num_batches, desc="Featurization by Batch"
-        ):
+        for i in tqdm.tqdm(range(num_batches), total=num_batches, desc="Featurization by Batch"):
             y = next(self._predictions)
             for j in range(
                 self.config.batch_size
             ):  # this loop needed since yield_single_examples is False. In this case, n = # of predictions * batch_size
                 single_example = {key: value[j] for key, value in y.items()}
-                if (
-                    self.config.batch_size * i + j > n - 1
-                ):  # this is a result of the generator using cached_example and to_pull. If this is the last batch, we need to check that all examples come from self._data and are not cached examples
+                if self.config.batch_size * i + j > n - 1:
+                    #  this is a result of the generator using cached_example and to_pull. If this is the last batch,
+                    #  we need to check that all examples come from self._data and are not cached examples
                     break
                 features[self.config.batch_size * i + j] = single_example
 

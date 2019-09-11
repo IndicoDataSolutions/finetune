@@ -1,36 +1,27 @@
 import os
 import unittest
-import logging
 import shutil
-import string
-import gc
 import json
-from copy import copy
 import random
 import time
 from pathlib import Path
-from unittest.mock import MagicMock
 import warnings
 
 # prevent excessive warning logs
 warnings.filterwarnings('ignore')
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
-import pytest
-
-import tensorflow as tf
 import pandas as pd
 import numpy as np
-from sklearn.metrics import accuracy_score, recall_score
 from sklearn.model_selection import train_test_split
 
-from finetune import Classifier, Regressor, DeploymentModel, SequenceLabeler, ComparisonRegressor
+from finetune.base_models import BERTModelCased, GPT2Model, RoBERTa
+from finetune import Classifier, DeploymentModel, SequenceLabeler, ComparisonRegressor
 from finetune.base_models import GPTModel
 from finetune.datasets import generic_download
-from finetune.config import get_config
-from finetune.errors import FinetuneError
 
 SST_FILENAME = "SST-binary.csv"
+
 
 class TestDeploymentModel(unittest.TestCase):
     n_sample = 20
@@ -43,16 +34,11 @@ class TestDeploymentModel(unittest.TestCase):
     classifier_dataset_path = os.path.join(
         'Data', 'Classify', 'SST-binary.csv'
     )
-    sequence_dataset_path = os.path.join(
-        'Data', 'Sequence', 'reuters.xml'
-    )
-    processed_path = os.path.join('Data', 'Sequence', 'reuters.json')
 
     @classmethod
     def _download_data(cls):
-        
-        #Download Stanford Sentiment Treebank to data directory
-        
+        # Download Stanford Sentiment Treebank to data directory
+
         path = Path(cls.classifier_dataset_path)
         if path.exists():
             return
@@ -65,49 +51,11 @@ class TestDeploymentModel(unittest.TestCase):
             filename=SST_FILENAME
         )
 
-        #Download Reuters Dataset to enso `data` directory
-        
-        path = Path(cls.sequence_dataset_path)
-        if not path.exists():
-            path.parent.mkdir(parents=True, exist_ok=True)
-
-        if not os.path.exists(cls.sequence_dataset_path):
-            url = "https://raw.githubusercontent.com/dice-group/n3-collection/master/reuters.xml"
-            r = requests.get(url)
-            with open(cls.sequence_dataset_path, "wb") as fp:
-                fp.write(r.content)
-
-        with codecs.open(cls.sequence_dataset_path, "r", "utf-8") as infile:
-            soup = bs(infile, "html.parser")
-
-        docs = []
-        docs_labels = []
-        for elem in soup.find_all("document"):
-            texts = []
-            labels = []
-
-            # Loop through each child of the element under "textwithnamedentities"
-            for c in elem.find("textwithnamedentities").children:
-                if type(c) == Tag:
-                    if c.name == "namedentityintext":
-                        label = "Named Entity"  # part of a named entity
-                    else:
-                        label = "<PAD>"  # irrelevant word
-                    texts.append(c.text)
-                    labels.append(label)
-
-            docs.append(texts)
-            docs_labels.append(labels)
-
-
-        with open(cls.processed_path, 'wt') as fp:
-            json.dump((docs, docs_labels), fp)
-
     @classmethod
     def setUpClass(cls):
         cls._download_data()
         
-        #dataset preparation
+        # dataset preparation
         cls.classifier_dataset = pd.read_csv(cls.classifier_dataset_path, nrows=cls.n_sample * 10)
 
         path = os.path.join(os.path.dirname(__file__), "data", "testdata.json")
@@ -117,25 +65,19 @@ class TestDeploymentModel(unittest.TestCase):
         cls.animals = ["dog", "cat", "horse", "cow", "pig", "sheep", "goat", "chicken", "guinea pig", "donkey", "turkey", "duck", "camel", "goose", "llama", "rabbit", "fox"]
         cls.numbers = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen"]
         
-        #train and save sequence labeler for later use
-        try:
-            cls.s = SequenceLabeler.load(cls.sequence_labeler_path, **cls.default_seq_config(cls))
-        except FileNotFoundError:
-            cls.s = SequenceLabeler(**cls.default_seq_config(cls))
-            cls.s.fit(cls.texts * 10, cls.labels * 10)
-            cls.s.save(cls.sequence_labeler_path)
+        # train and save sequence labeler for later use
+        cls.s = SequenceLabeler(**cls.default_seq_config())
+        cls.s.fit(cls.texts * 10, cls.labels * 10)
+        cls.s.save(cls.sequence_labeler_path)
         
-        #train and save classifier for later use
+        # train and save classifier for later use
         train_sample = cls.classifier_dataset.sample(n=cls.n_sample*10)
-        try:
-            cls.cl = Classifier.load(cls.classifier_path)
-        except FileNotFoundError:
-            cls.cl = Classifier(**cls.default_config(cls))
-            cls.cl.fit(train_sample.Text, train_sample.Target)
-            cls.cl.save(cls.classifier_path)
+        cls.cl = Classifier(**cls.default_config())
+        cls.cl.fit(train_sample.Text, train_sample.Target)
+        cls.cl.save(cls.classifier_path)
 
         if cls.do_comparison:
-            #train and save comparison regressor for use
+            # train and save comparison regressor for use
             cls.cr = ComparisonRegressor()
     
             n_per = 150
@@ -151,13 +93,10 @@ class TestDeploymentModel(unittest.TestCase):
             data = similar + different
 
             cls.x_tr, cls.x_te, cls.t_tr, cls.t_te = train_test_split(data, targets, test_size=0.3, random_state=42)
-            
-            try:
-                cls.cr = ComparisonRegressor.load(cls.comparison_regressor_path, **cls.default_config(cls))
-            except FileNotFoundError:
-                cls.cr = ComparisonRegressor(**cls.default_config(cls))
-                cls.cr.fit(cls.x_tr, cls.t_tr)
-                cls.cr.save(cls.comparison_regressor_path)
+
+            cls.cr = ComparisonRegressor(**cls.default_config())
+            cls.cr.fit(cls.x_tr, cls.t_tr)
+            cls.cr.save(cls.comparison_regressor_path)
 
     def setUp(self):
         try:
@@ -165,21 +104,24 @@ class TestDeploymentModel(unittest.TestCase):
         except FileExistsError:
             warnings.warn("tests/saved-models still exists, it is possible that some test is not cleaning up properly.")
 
-    @classmethod  
+    @classmethod
     def tearDownClass(cls):
         shutil.rmtree("tests/saved-models/")
 
+    @classmethod
     def default_config(cls, **kwargs):
         defaults = {
             'batch_size': 2,
             'max_length': 256,
             'n_epochs': 3,
             'adapter_size': 64,
-            'chunk_long_sequences': False
+            'chunk_long_sequences': False,
+            'base_model': cls.base_model
         }
         defaults.update(kwargs)
         return defaults
 
+    @classmethod
     def default_seq_config(cls, **kwargs):
         d = dict(
             batch_size=2,
@@ -191,18 +133,6 @@ class TestDeploymentModel(unittest.TestCase):
             interpolate_pos_embed=False,
         )
         d.update(**kwargs)
-        return d
-
-    def default_comp_config(cls, **kwargs):
-        d = dict(
-            batch_size=2,
-            max_length=256,
-            n_epochs=1,
-            l2_reg=0,
-            lm_loss_coef=0.,
-            val_size=0.,
-        )
-        d.update(kwargs)
         return d
 
     def test_cached_predict(self):
@@ -231,7 +161,7 @@ class TestDeploymentModel(unittest.TestCase):
         """
         model = DeploymentModel(featurizer=self.base_model, **self.default_config())
         model.load_featurizer()
-        #test transitioning from any of [sequence labeling, comparison, default] to any other
+        # test transitioning from any of [sequence labeling, comparison, default] to any other
         model.load_custom_model(self.classifier_path)
         if self.do_comparison:
             model.load_custom_model(self.comparison_regressor_path)
@@ -250,26 +180,25 @@ class TestDeploymentModel(unittest.TestCase):
         model = DeploymentModel(featurizer=self.base_model, **self.default_seq_config())
         model.load_featurizer()
         
-        #test same output as weights loaded with Classifier model
+        # test same output as weights loaded with Classifier model
         valid_sample = self.classifier_dataset.sample(n=self.n_sample)
         model.load_custom_model(self.classifier_path)
         deployment_preds = model.predict_proba(valid_sample.Text.values)
         model.close()
         classifier_preds = self.cl.predict_proba(valid_sample.Text.values)
-        
         for c_pred, d_pred in zip(classifier_preds, deployment_preds):
             self.assertTrue(list(c_pred.keys()) == list(d_pred.keys()))
             for c_pred_val, d_pred_val in zip(c_pred.values(), d_pred.values()):
                 np.testing.assert_almost_equal(c_pred_val, d_pred_val, decimal=4)
         
         if self.do_comparison:
-            #test same output as weights loaded with Comparison Regressor model
+            # test same output as weights loaded with Comparison Regressor model
             model = DeploymentModel(featurizer=self.base_model, **self.default_seq_config())
             model.load_featurizer()
             model.load_custom_model(self.comparison_regressor_path)
             deployment_preds = model.predict(self.x_te)
             model.close()
-            compregressor = ComparisonRegressor.load(self.comparison_regressor_path,  **self.default_comp_config())
+            compregressor = ComparisonRegressor.load(self.comparison_regressor_path)
             compregressor_preds = compregressor.predict(self.x_te)
             for c_pred, d_pred in zip(compregressor_preds, deployment_preds):
                 np.testing.assert_almost_equal(c_pred, d_pred, decimal=4)
@@ -296,14 +225,30 @@ class TestDeploymentModel(unittest.TestCase):
 
         start = time.time()
         model.load_custom_model(self.sequence_labeler_path)
-        predictions = model.predict(['finetune sequence'])
+        model.predict(['finetune sequence'])
         end = time.time()
         self.assertGreater(2.5, end - start)
 
         if self.do_comparison:
             start = time.time()
             model.load_custom_model(self.comparison_regressor_path)
-            predictions = model.predict([['finetune', 'compare']])
+            model.predict([['finetune', 'compare']])
             end = time.time()
             self.assertGreater(2.5, end - start)
         model.close()
+
+
+class TestDeploymentBert(TestDeploymentModel):
+    base_model = BERTModelCased
+
+
+class TestDeploymentGPT(TestDeploymentModel):
+    base_model = GPTModel
+
+
+class TestDeploymentGPT2(TestDeploymentModel):
+    base_model = GPT2Model
+
+
+class TestDeploymentRoberta(TestDeploymentModel):
+    base_model = RoBERTa

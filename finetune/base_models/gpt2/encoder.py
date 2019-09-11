@@ -1,6 +1,6 @@
 import os
 import json
-import itertools
+import traceback
 import regex as re
 from functools import lru_cache
 
@@ -128,7 +128,7 @@ class GPT2Encoder(BaseEncoder):
         self.cache[token] = word
         return word
 
-    def _encode(self, texts, labels=None, context=None):
+    def _encode(self, texts, labels=None):
         """
         Convert a sample of raw text to a list of byte-pair encoded token indices.
         """
@@ -136,15 +136,11 @@ class GPT2Encoder(BaseEncoder):
         batch_tokens = []
         batch_token_idxs = []
         batch_label_idxs = []
-        batch_char_ends = (
-            []
-        )  # to account for the fact that some BPEs have different lengths than their original tokens (e.g. special characters such as bullets)
-        batch_context = []
+        batch_char_ends = []
+        # to account for the fact that some BPEs have different lengths than their original tokens
+        # (e.g. special characters such as bullets)
         batch_char_starts = []
         label = None
-        offset = (
-            0
-        )  # tracks offset between this fields' character_locs, which start at 0, and the 'start' keys in context which track the entire document (not just this field)
 
         skipped = 0
         for i, text in enumerate(texts):  # text = one label span
@@ -159,7 +155,6 @@ class GPT2Encoder(BaseEncoder):
 
             tokens = re.findall(self.pat, text)
             if not tokens:
-                offset += len(text)  # for spans that are just whitespace
                 skipped += 1
                 continue
             i -= skipped
@@ -204,19 +199,10 @@ class GPT2Encoder(BaseEncoder):
             if labels is not None:
                 batch_label_idxs.append([label] * len(subtoken_idxs))
 
-            # Context is tokenwise, so we need to duplicate contexts for each subtoken of a token, and to match length of labels
-            if context is not None:
-                text_context = self.line_up_context(
-                    context, batch_char_ends[i], batch_tokens[i], subtoken_idxs, offset
-                )
-                batch_context.extend(text_context)
-                offset += batch_char_ends[i][-1]
-
         return EncodedOutput(
             token_ids=batch_token_idxs,
             tokens=batch_tokens,
             labels=batch_label_idxs,
-            context=batch_context,
             char_locs=batch_char_ends,
             char_starts=batch_char_starts,
         )

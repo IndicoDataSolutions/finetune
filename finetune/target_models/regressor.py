@@ -1,4 +1,3 @@
-import tensorflow as tf
 import numpy as np
 
 from finetune.base import BaseModel

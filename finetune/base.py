@@ -10,8 +10,6 @@ from copy import deepcopy
 import tempfile
 import time
 import sys
-import shutil
-import glob
 from contextlib import contextmanager
 import pathlib
 import logging
@@ -35,7 +33,6 @@ from finetune.errors import FinetuneError
 from finetune.model import get_model_fn, PredictMode
 from finetune.util.download import download_data_if_required
 from finetune.util.positional_embeddings import embedding_preprocessor
-from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
 from finetune.base_models import GPTModel, GPTModelSmall
 
 
@@ -46,6 +43,7 @@ class BaseModel(object, metaclass=ABCMeta):
     """
     A sklearn-style task agnostic base class for finetuning a Transformer language model.
     """
+    defaults = dict()
 
     def __init__(self, **kwargs):
         """
@@ -62,14 +60,9 @@ class BaseModel(object, metaclass=ABCMeta):
                 BaseModel.__del__(strong_self)
 
         atexit.register(cleanup)
-
-        self.config = get_config(**kwargs)
-        if self.config.default_context is not None and type(self.config.default_context) != dict:
-            raise FinetuneError(
-                "Invalid default given: Need a dictionary of auxiliary info fields and default values."
-            )
-        self.config.use_auxiliary_info = self.config.default_context is not None
-
+        d = deepcopy(self.defaults)
+        d.update(kwargs)
+        self.config = get_config(**d)
         self.resolved_gpus = None
         self.validate_config()
         download_data_if_required(self.config.base_model)
@@ -158,7 +151,6 @@ class BaseModel(object, metaclass=ABCMeta):
             not callable(Xs)
             and Y is not None
             and len(Xs) != len(Y)
-            and not self.config.use_auxiliary_info
         ):
             raise FinetuneError(
                 "Mismatch between number of examples ({}) and number of targets ({}) provided.".format(
@@ -166,17 +158,9 @@ class BaseModel(object, metaclass=ABCMeta):
                 )
             )
 
-        if self.config.use_auxiliary_info:
-            context = Xs[1]
-            Xs = Xs[0]
-            context = self.fill_in_context_gaps(Xs, context)
-        else:
-            context = None
-            self.input_pipeline.config.context_dim = None
-
         batch_size = batch_size or self.config.batch_size
         val_input_fn, train_input_fn, val_size, val_interval = self.input_pipeline.get_train_input_fns(
-            Xs, Y, context=context, batch_size=batch_size
+            Xs, Y, batch_size=batch_size
         )
 
         if self.config.keep_best_model:
@@ -262,7 +246,6 @@ class BaseModel(object, metaclass=ABCMeta):
                 for weight in self.saver.variables:
                     if (
                         weight.startswith("model/target/")
-                        or "context_embedding" in weight
                     ):
                         w = self.saver.variables[weight]
                         if len(w.shape) == 1:
@@ -282,7 +265,6 @@ class BaseModel(object, metaclass=ABCMeta):
             estimator.train(train_input_fn, hooks=train_hooks, steps=num_steps)
         
         self._trained = True
-
 
     def _distribute_strategy(self, visible_gpus):
         """
@@ -328,7 +310,7 @@ class BaseModel(object, metaclass=ABCMeta):
         )
         return config
 
-    def get_estimator(self, force_build_lm=False, build_explain=False, context_dim=None):
+    def get_estimator(self, force_build_lm=False, build_explain=False):
         config = self._get_estimator_config()
         model_fn = get_model_fn(
             target_model_fn=self._target_model,
@@ -340,7 +322,6 @@ class BaseModel(object, metaclass=ABCMeta):
             target_dim=self.input_pipeline.target_dim,
             label_encoder=self.input_pipeline.label_encoder,
             build_explain=build_explain,
-            context_dim=context_dim or self.input_pipeline.config.context_dim,
             n_replicas=max(1, len(self.resolved_gpus))
         )
 
@@ -353,38 +334,6 @@ class BaseModel(object, metaclass=ABCMeta):
         )
 
         return est, hooks
-
-    def get_separate_estimators(self, force_build_lm=False):
-        fns = get_separate_model_fns(
-            target_model_fn=self._target_model,
-            predict_op=self._predict_op,
-            predict_proba_op=self._predict_proba_op,
-            build_target_model=self.input_pipeline.target_dim is not None,
-            build_lm=force_build_lm or self.config.lm_loss_coef > 0.0,
-            encoder=self.input_pipeline.text_encoder,
-            target_dim=self.input_pipeline.target_dim,
-            label_encoder=self.input_pipeline.label_encoder,
-            saver=self.saver,
-            context_dim=self.input_pipeline.config.context_dim,
-        )
-
-        featurizer_est = tf.estimator.Estimator(
-            model_dir=self.estimator_dir,
-            model_fn=fns["featurizer_model_fn"],
-            config=config,
-            params=self.config,
-        )
-
-        target_est = tf.estimator.Estimator(
-            model_dir=self.estimator_dir,
-            model_fn=fns["target_model_fn"],
-            config=config,
-            params=self.config,
-        )
-
-        hooks = [InitializeHook(self.saver)]
-
-        return featurizer_est, target_est, hooks
 
     def close(self):
         self._closed = True
@@ -441,14 +390,11 @@ class BaseModel(object, metaclass=ABCMeta):
         self._cached_predict = False
         self.close()
 
-    def _cached_inference(self, Xs, predict_keys=None, n_examples=None, context=None):
+    def _cached_inference(self, Xs, predict_keys=None, n_examples=None):
         """
         Ensure graph is not rebuilt on subsequent calls to .predict()
         """
-        if context:
-            self._data = list(zip(Xs, context))
-        else:
-            self._data = Xs
+        self._data = Xs
         self._closed = False
         n = n_examples or len(self._data)
         if self._predictions is None:
@@ -474,20 +420,14 @@ class BaseModel(object, metaclass=ABCMeta):
         return predictions
 
     def _inference(self, Xs, predict_keys=None, n_examples=None):
-        if self.config.use_auxiliary_info:
-            context = Xs[1]
-            Xs = Xs[0]
-            context = self.fill_in_context_gaps(Xs, context)
-        else:
-            context = None
         Xs = self.input_pipeline._format_for_inference(Xs)
 
         if self._cached_predict:
             return self._cached_inference(
-                Xs=Xs, context=context, predict_keys=predict_keys, n_examples=n_examples
+                Xs=Xs, predict_keys=predict_keys, n_examples=n_examples
             )
         else:
-            input_fn = self.input_pipeline.get_predict_input_fn(Xs, context=context)
+            input_fn = self.input_pipeline.get_predict_input_fn(Xs)
             estimator, hooks = self.get_estimator(
                 build_explain=PredictMode.EXPLAIN in predict_keys
             )
@@ -629,7 +569,7 @@ class BaseModel(object, metaclass=ABCMeta):
             input_fn=get_input_fn, predict_keys=[PredictMode.GENERATE_TEXT], hooks=hooks
         )
 
-        EOS = self.input_pipeline.text_encoder.clf_token
+        EOS = self.input_pipeline.text_encoder.end_token
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
             for i in range(
@@ -650,7 +590,7 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         Leave serialization of all tf objects to tf
         """
-        required_fields = ["_load_from_file", "config", "input_pipeline", "default_context", "_trained"]
+        required_fields = ["_load_from_file", "config", "input_pipeline", "_trained"]
         serialized_state = {
             k: v for k, v in self.__dict__.items() if k in required_fields
         }
@@ -725,7 +665,10 @@ class BaseModel(object, metaclass=ABCMeta):
         # Ensure old models get new default settings
         for setting, default in get_default_config().items():
             if not hasattr(model.config, setting):
-                model.config.update({setting: default})
+                if setting == "add_eos_bos_to_chunk":
+                    model.config.add_eos_bos_to_chunk = False
+                else:
+                    model.config.update({setting: default})
 
         model.config.update(kwargs)
         model.input_pipeline.config = model.config
@@ -736,86 +679,6 @@ class BaseModel(object, metaclass=ABCMeta):
         model._trained = True
         return model
 
-    def context_span_to_label_span(self, batch_context_spans, batch_text_chunks=None):
-        """
-        Copy relevant context spans into each corresponding label span as denoted by batch_text_chunks
-        """
-        context_new = []
-        for i in range(len(batch_text_chunks)):
-            text_chunks = batch_text_chunks[i]
-            example_context = batch_context_spans[i]
-            chunks_context = []
-            start = end = 0
-            for text_chunk in text_chunks:
-                end += len(text_chunk)
-                chunk_context = sorted(
-                    [
-                        c
-                        for c in example_context
-                        if c["start"] < end and c["end"] > start
-                    ],
-                    key=lambda c: c["start"],
-                )
-                start += len(text_chunk)
-                chunks_context.append(chunk_context)
-            context_new.append(list(itertools.chain.from_iterable(chunks_context)))
-        return context_new
-
-    def fill_in_context_gaps(self, X, context):
-        """
-        Ensure all tokens are covered by context; if they are not, fill in gaps with the default style as given from the user
-        """
-        if len(X) != len(context):
-            raise FinetuneError(
-                "Length conflict between context spans and X - Make sure every text sample has associated context list. If a sample has no context, please use [] as its context."
-            )
-
-        filled_contexts = []
-        for spans, text in zip(context, X):
-            if type(text) == list:
-                text = "".join(text)
-            spans = sorted([c for c in spans], key=lambda c: c["start"])
-
-            filled_in_spans = []
-            num_spans = len(spans)
-
-            if num_spans == 0:
-                filler = self.generate_default(text, 0)
-                filled_contexts.append([filler])
-                continue
-
-            for i, span in enumerate(spans):
-                filler = None
-                if i == 0:  # make sure first span starts at 0
-                    start = span["start"]
-                    if start != 0:
-                        filler = self.generate_default(text[:start], 0)
-                        filled_in_spans.append(filler)
-                filled_in_spans.append(span)
-                if (
-                    i + 1 == num_spans
-                ):  # make sure last span ends at end of document - this is a separate if rather than elif because if spans has len 1, it is both the first and the last
-                    end = span["end"]
-                    if end < len(text) - 1:
-                        filler = self.generate_default(text[end:], end)
-                        filled_in_spans.append(filler)
-                if i > 0 and i + 1 < num_spans:
-                    next_span = spans[i + 1]
-                    if span["end"] != next_span["start"]:
-                        filler = self.generate_default(
-                            text[span["end"] : next_span["start"]], span["end"]
-                        )
-                        filled_in_spans.append(filler)
-            filled_contexts.append(filled_in_spans)
-        return filled_contexts
-
-    def generate_default(self, text, start):
-        assert len(text) > 0
-        template = deepcopy(self.config.default_context)
-        template["token"] = text
-        template["start"] = start
-        template["end"] = start + len(text)
-        return template
 
     @classmethod
     def finetune_grid_search(
@@ -933,21 +796,9 @@ class BaseModel(object, metaclass=ABCMeta):
         return max(aggregated_results, key=lambda x: x[1])[0]
 
     def process_long_sequence(self, X):
-        context = None
-        sequence_labeling = hasattr(self,'multi_label')
-        if self.config.use_auxiliary_info:
-            context = X[1]
-            text = X[0]
-            assert len(context) == len(text)
-            arr_encoded = [
-                self.input_pipeline._text_to_ids([x], context=c) if sequence_labeling else self.input_pipeline._text_to_ids(x, context=c)
-                for x, c in zip(text, context)
-            ]
-        else:
-            text = X
-            arr_encoded = [
-                self.input_pipeline._text_to_ids(x) for x in self.input_pipeline._format_for_inference(X)
-            ]
+        arr_encoded = [
+            self.input_pipeline._text_to_ids(x) for x in self.input_pipeline._format_for_inference(X)
+        ]
 
         flat_array_encoded = []
         sequence_id = []
@@ -956,14 +807,12 @@ class BaseModel(object, metaclass=ABCMeta):
                 flat_array_encoded.append(sample)
                 sequence_id.append(i)
 
-        if self.config.use_auxiliary_info:
-            X = [text, context]
-
         labels, batch_probas = [], []
         for pred in self._inference(X, predict_keys=[PredictMode.PROBAS, PredictMode.NORMAL], n_examples=len(flat_array_encoded)):
-            labels.append(self.input_pipeline.label_encoder.inverse_transform(
-                pred[PredictMode.NORMAL] if hasattr(self,'multi_label') else [pred[PredictMode.NORMAL]] # only wrap in list if not sequence labeling
-            ))
+            normal_pred = pred[PredictMode.NORMAL]
+            if not hasattr(self, 'multi_label'):
+                normal_pred = np.expand_dims(normal_pred, 0)
+            labels.append(self.input_pipeline.label_encoder.inverse_transform(normal_pred))
             batch_probas.append(pred[PredictMode.PROBAS])
 
         if not batch_probas:

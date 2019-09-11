@@ -27,32 +27,16 @@ class ClassificationPipeline(BasePipeline):
 
     def feed_shape_type_def(self):
         TS = tf.TensorShape
-        if self.config.use_auxiliary_info:
-            return (
-                (
-                    {"tokens": tf.int32, "mask": tf.float32, "context": tf.float32},
-                    tf.float32,
-                ),
-                (
-                    {
-                        "tokens": TS([self.config.max_length, 2]),
-                        "mask": TS([self.config.max_length]),
-                        "context": TS([self.config.max_length, self.config.context_dim]),
-                    },
-                    TS([self.target_dim]),
-                ),
-            )
-        else:
-            return (
-                ({"tokens": tf.int32, "mask": tf.float32}, tf.float32),
-                (
-                    {
-                        "tokens": TS([self.config.max_length, 2]),
-                        "mask": TS([self.config.max_length]),
-                    },
-                    TS([self.target_dim]),
-                ),
-            )
+        return (
+            ({"tokens": tf.int32, "mask": tf.float32}, tf.float32),
+            (
+                {
+                    "tokens": TS([self.config.max_length, 2]),
+                    "mask": TS([self.config.max_length]),
+                },
+                TS([self.target_dim]),
+            ),
+        )
 
 
 class Classifier(BaseModel):

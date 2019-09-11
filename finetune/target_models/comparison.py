@@ -12,7 +12,7 @@ class ComparisonPipeline(ClassificationPipeline):
     def _format_for_encoding(self, X):
         return [X]
 
-    def _text_to_ids(self, pair, Y=None, pad_token=None, context=None):
+    def _text_to_ids(self, pair, Y=None, pad_token=None):
         """
         Format comparison examples as a list of IDs
 
@@ -57,9 +57,7 @@ class Comparison(Classifier):
     defaults = {"chunk_long_sequences": False}
 
     def __init__(self, **kwargs):
-        d = copy.deepcopy(Comparison.defaults)
-        d.update(kwargs)
-        super().__init__(**d)
+        super().__init__(**kwargs)
         if self.config.chunk_long_sequences:
             raise FinetuneError(
                 "Multifield model is incompatible with chunk_long_sequences = True in config."

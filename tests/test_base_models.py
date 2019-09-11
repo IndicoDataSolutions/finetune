@@ -21,7 +21,6 @@ from bs4 import BeautifulSoup as bs
 from bs4.element import Tag
 
 from finetune.base_models import TextCNN, BERTModelCased, GPT2Model, GPTModel, RoBERTa, TCNModel, DistilBERT
-from .test_deployment_model import TestDeploymentModel
 from finetune import Classifier, Comparison, SequenceLabeler
 from finetune.datasets import generic_download
 from finetune.config import get_config
@@ -91,7 +90,10 @@ class TestClassifierTextCNN(TestModelBase):
             pass
 
     def tearDown(self):
-        shutil.rmtree("tests/saved-models/")
+        try:
+            shutil.rmtree("tests/saved-models/")
+        except FileNotFoundError:
+            pass
 
     def test_multiple_models_fit_predict(self):
         """
@@ -481,22 +483,6 @@ class TestClassifierRoberta(TestClassifierTextCNN):
 
 class TestComparisonRoberta(TestComparisonTextCNN):
     model_specific_config = {"n_epochs": 2, "lr": 1e-4}
-    base_model = RoBERTa
-
-
-class TestDeploymentBert(TestDeploymentModel):
-    base_model = BERTModelCased
-
-
-class TestDeploymentGPT(TestDeploymentModel):
-    base_model = GPTModel
-
-
-class TestDeploymentGPT2(TestDeploymentModel):
-    base_model = GPT2Model
-
-
-class TestDeploymentRoberta(TestDeploymentModel):
     base_model = RoBERTa
 
 

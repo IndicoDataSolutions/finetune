@@ -19,7 +19,6 @@ EncodedOutput = namedtuple(
         "labels",  # list of list of labels
         "char_locs",  # list of list of character locations (ints)
         "char_starts",  # list of list of character starts (locs are character ends) (ints)
-        "context",  # list of list of context token characteristics
     ],
 )
 EncodedOutput.__new__.__defaults__ = (None,) * len(EncodedOutput._fields)
@@ -31,8 +30,6 @@ ArrayEncodedOutput = namedtuple(
         "labels",  # object array shape (batch, seq_length)
         "char_locs",  # list of list of char_locs (int) passed through from `EncoderOutput`
         "mask",  # int array shape (batch, seq_length)
-        "context",  # list of list of context token characteristics
-        "context_dim",  # int specifying the dimensionality of each context vector
     ],
 )
 ArrayEncodedOutput.__new__.__defaults__ = (None,) * len(ArrayEncodedOutput._fields)
@@ -163,9 +160,7 @@ class BaseEncoder(object):
     def _token_length(self, token):
         return len(token)
 
-    def encode_multi_input(
-        self, Xs, Y=None, max_length=None, pad_token=None, context=None
-    ):
+    def encode_multi_input(self, Xs, Y=None, max_length=None, pad_token=None):
         """
         Encodes the text for passing to the model, also tracks the location of each token to allow reconstruction.
         It can also, optionally, construct a per-token labels as required for training.
@@ -178,21 +173,19 @@ class BaseEncoder(object):
         tokens = []
         positions = []
         labels = []
-        contexts = []
 
         # for each field in that example
         for field in Xs:
             assert isinstance(
                 field, (list, tuple)
-            ), "This should be a list of strings, instead it's {}".format(
-                tf.contrib.framework.nest.map_structure(type, field)
+            ), "This should be a list of strings, instead it's {} {}".format(
+                tf.contrib.framework.nest.map_structure(type, field), Xs
             )
-            encoded = self._encode(field, labels=Y, context=context)
+            encoded = self._encode(field, labels=Y)
             token_ids.append(_flatten(encoded.token_ids))
             tokens.append(_flatten(encoded.tokens))
             positions.append(_flatten(encoded.char_locs))
             labels.append(_flatten(encoded.labels))
-            contexts.append(_flatten(encoded.context))
             if len(tokens[-1]) > (max_length - 2):
                 warnings.warn(
                     "Some examples are longer than the max_length. Please trim documents or increase `max_length`. "
@@ -208,13 +201,6 @@ class BaseEncoder(object):
             encoded=positions, max_length=max_length, special_tokens=-1
         )
 
-        if context is None:
-            contexts = None
-        else:
-            contexts = self._cut_and_concat(
-                encoded=contexts, max_length=max_length, special_tokens=pad_token
-            )
-
         if Y is None:
             labels = None
         else:
@@ -227,24 +213,7 @@ class BaseEncoder(object):
             tokens=tokens,
             labels=labels,
             char_locs=locations,
-            context=contexts,
         )
-
-    def line_up_context(self, context, char_locs, tokens, subtoken_idxs, offset):
-        batch_context = []
-        original_tokens = []
-        for char_loc, token in zip(char_locs, tokens):
-            original_token = 0
-            for subtoken_idx in range(len(context)):
-                if char_loc + offset > context[subtoken_idx]["end"]:
-                    original_token += 1
-            original_tokens.append(original_token)
-        expanded_context = [None] * len(original_tokens)
-        for j in range(len(expanded_context)):
-            expanded_context[j] = context[original_tokens[j]]
-        batch_context.append(expanded_context)
-        assert len(expanded_context) == len(subtoken_idxs)
-        return batch_context
 
     def __setstate__(self, state):
         self.__init__()

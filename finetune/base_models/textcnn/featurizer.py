@@ -2,7 +2,6 @@ import tensorflow as tf
 
 from finetune.util.shapes import lengths_from_eos_idx
 from finetune.base_models.gpt.featurizer import dropout, embed
-from finetune.nn.add_auxiliary import add_auxiliary
 
 
 def textcnn_featurizer(
@@ -11,8 +10,6 @@ def textcnn_featurizer(
     config,
     train=False,
     reuse=None,
-    context=None,
-    context_dim=None,
     **kwargs
 ):
     """
@@ -94,11 +91,6 @@ def textcnn_featurizer(
 
         # note that, due to convolution and pooling, the dimensionality of the features is much smaller than in the
         # transformer base models
-        if config.use_auxiliary_info:
-            clf_h, seq_feats = add_auxiliary(
-                context, context_dim, clf_h, seq_feats, config, train
-            )
-
         lengths = lengths_from_eos_idx(eos_idx=pool_idx, max_length=tf.shape(seq_feats)[1])
 
         return {
