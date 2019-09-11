@@ -27,6 +27,7 @@ class AssociationPipeline(BasePipeline):
         self.association_pad_idx = self.association_encoder.transform(
             [self.config.pad_token]
         )
+        self.config.add_eos_bos_to_chunk = False
 
     def _post_data_initialization(self, Y, context=None):
         Y_ = list(itertools.chain.from_iterable([y[0] for y in Y])) if Y else None

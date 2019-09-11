@@ -725,7 +725,10 @@ class BaseModel(object, metaclass=ABCMeta):
         # Ensure old models get new default settings
         for setting, default in get_default_config().items():
             if not hasattr(model.config, setting):
-                model.config.update({setting: default})
+                if setting == "add_eos_bos_to_chunk":
+                    model.config.add_eos_bos_to_chunk = False
+                else:
+                    model.config.update({setting: default})
 
         model.config.update(kwargs)
         model.input_pipeline.config = model.config
