@@ -7,7 +7,6 @@ from finetune.optimizers.recompute_grads import recompute_grad
 from finetune.util.shapes import shape_list, lengths_from_eos_idx
 from finetune.nn.activations import act_fns
 from finetune.nn.nn_utils import dropout, norm
-from finetune.nn.add_auxiliary import add_auxiliary
 
 
 def mask_attn_weights(w):
@@ -229,8 +228,6 @@ def gpt_featurizer(
     train=False,
     reuse=None,
     explain=False,
-    context=None,
-    context_dim=None,
     **kwargs
 ):
     """
@@ -255,42 +252,15 @@ def gpt_featurizer(
             shape=[encoder.vocab_size + config.max_length, config.n_embed],
             initializer=tf.random_normal_initializer(stddev=config.weight_stddev),
         )
-        with tf.variable_scope("context_embedding"):
-            if config.use_auxiliary_info:
-                context_embed_weights = tf.get_variable(
-                    name="ce",
-                    shape=[context_dim, config.n_context_embed],
-                    initializer=tf.random_normal_initializer(
-                        stddev=config.weight_stddev
-                    ),
-                )
-
-                context_weighted_avg = tf.get_variable(
-                    name="cwa",
-                    shape=[context_dim],
-                    initializer=tf.random_normal_initializer(
-                        stddev=config.weight_stddev
-                    ),
-                )
-
         if config.train_embeddings:
             embed_weights = dropout(embed_weights, config.embed_p_drop, train)
-            if config.use_auxiliary_info:
-                context_embed_weights = dropout(
-                    context_embed_weights, config.embed_p_drop, train
-                )
-                context_weighted_avg = dropout(
-                    context_weighted_avg, config.embed_p_drop, train
-                )
         else:
             embed_weights = tf.stop_gradient(embed_weights)
 
         X = tf.reshape(X, [-1, config.max_length, 2])
 
         clf_token = encoder.end_token
-        pool_idx = tf.cast(
-            tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32
-        )
+        pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
 
         if explain:
             X = add_explain_tokens(X, config.max_length, pool_idx)
@@ -354,11 +324,6 @@ def gpt_featurizer(
         seq_feats = tf.reshape(
             h, shape=tf.concat((initial_shape[:-1], [config.n_embed]), 0)
         )
-
-        if config.use_auxiliary_info:
-            clf_h, seq_feats = add_auxiliary(
-                context, context_dim, clf_h, seq_feats, config, train
-            )
 
         lengths = lengths_from_eos_idx(eos_idx=pool_idx, max_length=shape_list(X)[0])
 

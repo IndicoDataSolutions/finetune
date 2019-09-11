@@ -150,7 +150,7 @@ class BatchedVarLoad:
         for v in underlying_vars:
             if v.initializer not in self.ops:
                 self.ops.append(v.initializer)
-            self.feed[var.initializer.inputs[1]] = val
+            self.feed[v.initializer.inputs[1]] = val
 
 
 class Saver:
@@ -247,6 +247,7 @@ class Saver:
                 all_vars, zero_out_adapters = self.subset_to_load(
                     model_portion, refresh_base_model, all_vars
                 )
+
             for var in all_vars:
                 name = var.name
                 saved_var = None
@@ -257,7 +258,7 @@ class Saver:
 
                 if zero_out_adapters and "adapter" in name:
                     var_loader.add(var, np.zeros(var.get_shape().as_list()))
-                elif saved_var is not None:
+                if saved_var is not None:
                     for func in self.variable_transforms:
                         saved_var = func(name, saved_var)
                     var_loader.add(var, saved_var)

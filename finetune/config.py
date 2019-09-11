@@ -177,7 +177,6 @@ class Settings(dict):
     :param val_set: Where it is neccessary to use an explicit validation set, provide it here as a tuple (text, labels)
     :param per_process_gpu_memory_fraction: fraction of the overall amount of memory that each visible GPU should be allocated, defaults to `1.0`.
     :param adapter_size: width of adapter module from 'Parameter Efficient Transfer Learning' paper, if defined. defaults to 'None'.
-    :param n_context_embed: Dimensionality of auxiliary info embeddings. Only use if passing 'default_context' to the model as well. Defaults to `6` for convolutional models, otherwise `32`.
     """
 
     def get_grid_searchable(self):
@@ -350,7 +349,7 @@ def get_default_config():
         bert_intermediate_size=None,
         bert_use_pooler=True,
         bert_use_type_embed=True,
-        
+
         # Auxiliary Information
         use_auxiliary_info=False,
         n_context_embed=32,

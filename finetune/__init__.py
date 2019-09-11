@@ -15,7 +15,6 @@ from finetune.target_models.sequence_labeling import SequenceLabeler
 from finetune.target_models.comparison import Comparison
 from finetune.target_models.multi_label_classifier import MultiLabelClassifier
 from finetune.target_models.multiple_choice import MultipleChoice
-from finetune.target_models.association import Association
 from finetune.target_models.comparison_regressor import ComparisonRegressor
 from finetune.target_models.ordinal_regressor import OrdinalRegressor, ComparisonOrdinalRegressor
 from finetune.target_models.language_model import LanguageModel

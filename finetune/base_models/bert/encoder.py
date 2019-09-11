@@ -47,7 +47,7 @@ class BERTEncoder(BaseEncoder):
     def _token_length(self, token):
         return len(token.strip().replace("##", ""))
 
-    def _encode(self, texts, labels=None, context=None):
+    def _encode(self, texts, labels=None):
         """
         Convert a batch of raw text to a batch of byte-pair encoded token indices.
         """
@@ -56,7 +56,6 @@ class BERTEncoder(BaseEncoder):
         batch_token_idxs = []
         batch_label_idxs = []
         batch_char_ends = []
-        batch_context = []
         batch_char_starts = []
         label = None
         offset = 0
@@ -83,18 +82,10 @@ class BERTEncoder(BaseEncoder):
             if labels is not None:
                 batch_label_idxs.append([label] * len(subtokens))
 
-            # Context is tokenwise, so we need to duplicate contexts for each subtoken of a token, and to match length of labels
-            if context is not None:
-                text_context = self.line_up_context(
-                    context, batch_char_ends[i], batch_tokens[i], subtoken_idxs, offset
-                )
-                batch_context.extend(text_context)
-                offset += batch_char_ends[i][-1]
         return EncodedOutput(
             token_ids=batch_token_idxs,
             tokens=batch_tokens,
             labels=batch_label_idxs,
-            context=batch_context,
             char_locs=batch_char_ends,
             char_starts=batch_char_starts,
         )

@@ -1,6 +1,5 @@
-import warnings
-
 import tensorflow as tf
+import numpy as np
 
 from finetune.base import BaseModel
 from finetune.encoding.target_encoders import MultilabelClassificationEncoder
@@ -46,7 +45,20 @@ class MultiLabelClassifier(BaseModel):
         :returns: list of class labels.
         """
         self.config._threshold = threshold or self.config.multi_label_threshold
-        return self._predict(X)
+        all_labels = []
+        for _, start_of_doc, end_of_doc, _, proba in self.process_long_sequence(X):
+            if start_of_doc:
+                # if this is the first chunk in a document, start accumulating from scratch
+                doc_probs = []
+
+            doc_probs.append(proba)
+
+            if end_of_doc:
+                # last chunk in a document
+                means = np.mean(doc_probs, axis=0)
+                label = self.input_pipeline.label_encoder.inverse_transform(np.expand_dims(means, 0) > threshold)[0]
+                all_labels.append(list(label))
+        return all_labels
 
     def predict_proba(self, X):
         """

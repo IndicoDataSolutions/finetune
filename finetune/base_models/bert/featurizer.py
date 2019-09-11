@@ -1,12 +1,7 @@
 import tensorflow as tf
-from finetune.nn.add_auxiliary import add_auxiliary
 from finetune.util.shapes import lengths_from_eos_idx
-from finetune.base_models.bert.modeling import (
-    BertConfig,
-    BertModel,
-    dropout,
-    layer_norm,
-)
+from finetune.base_models.bert.roberta_encoder import RoBERTaEncoder
+from finetune.base_models.bert.modeling import BertConfig, BertModel
 
 
 def bert_featurizer(
@@ -15,8 +10,6 @@ def bert_featurizer(
     config,
     train=False,
     reuse=None,
-    context=None,
-    context_dim=None,
     **kwargs
 ):
     """
@@ -32,6 +25,8 @@ def bert_featurizer(
         features: The output of the featurizer_final state.
         sequence_features: The output of the featurizer at each timestep.
     """
+
+    is_roberta = RoBERTaEncoder == config.base_model.encoder
 
     bert_config = BertConfig(
         vocab_size=encoder.vocab_size,
@@ -70,10 +65,12 @@ def bert_featurizer(
 
     lengths = lengths_from_eos_idx(eos_idx=eos_idx, max_length=seq_length)
 
-    if "roberta" in config.base_model.__name__.lower():
-        # Because roberta embeddings include an unused <MASK> token, and our embedding layer size needs to accommodate for that.
+    if is_roberta:
+        # Because roberta embeddings include an unused <MASK> token, and our embedding
+        #  layer size needs to accommodate for that.
         bert_config.vocab_size += 1
-        # In our use case (padding token has index 1), roberta's position indexes begin at 2, so our positions embeddings come from indices 2:514.
+        # In our use case (padding token has index 1), roberta's position indexes begin at 2, so our
+        # positions embeddings come from indices 2:514.
         bert_config.max_position_embeddings += 2
 
     mask = tf.sequence_mask(lengths, maxlen=seq_length, dtype=tf.float32)
@@ -94,7 +91,7 @@ def bert_featurizer(
             scope=None,
             use_pooler=config.bert_use_pooler,
             use_token_type=config.bert_use_type_embed,
-            roberta="roberta" in config.base_model.__name__.lower()
+            roberta=is_roberta
         )
 
         embed_weights = bert.get_embedding_table()
@@ -106,12 +103,6 @@ def bert_featurizer(
             bert.get_sequence_output(),
             shape=tf.concat((initial_shape[:-1], [config.n_embed]), 0),
         )
-
-        if config.use_auxiliary_info:
-            with tf.variable_scope("context_embedding"):
-                features, sequence_features = add_auxiliary(
-                    context, context_dim, features, sequence_features, config, train
-                )
 
         output_state = {
             "embed_weights": embed_weights,

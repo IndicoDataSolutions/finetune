@@ -46,7 +46,6 @@ def get_model_fn(
         target_dim,
         label_encoder,
         build_explain,
-        context_dim,
         n_replicas
 ):
     def language_model_op(X, M, params, featurizer_state):
@@ -66,9 +65,9 @@ def get_model_fn(
         lm_logit_mask[:, encoder.vocab_size :] = -np.inf
 
         if "use_extra_toks" in params and not params.use_extra_toks:
-            lm_logit_mask[:, encoder.start] = -np.inf
-            lm_logit_mask[:, encoder.delimiter] = -np.inf
-            lm_logit_mask[:, encoder.clf_token] = -np.inf
+            lm_logit_mask[:, encoder.start_token] = -np.inf
+            lm_logit_mask[:, encoder.delimiter_token] = -np.inf
+            lm_logit_mask[:, encoder.end_token] = -np.inf
 
         lm_logits += lm_logit_mask
         lm_predict_op = sample_with_temperature(lm_logits, params.lm_temp)
@@ -109,9 +108,6 @@ def get_model_fn(
         train = estimator_mode == tf.estimator.ModeKeys.TRAIN
         X = features["tokens"]
         M = features["mask"]
-        C = features.get("context", None)
-        if params.use_auxiliary_info:
-            assert C is not None
         task_id = features.get("task_id", None)
         Y = labels
         pred_op = None
@@ -123,8 +119,6 @@ def get_model_fn(
                 encoder=encoder,
                 config=params,
                 train=train,
-                context=C,
-                context_dim=context_dim,
                 explain=build_explain,
             )
             predictions = {
@@ -317,26 +311,23 @@ def get_separate_model_fns(
     saver,
     portion,
     build_attn,
-    context_dim,
 ):
     def _featurizer_model_fn(features, labels, mode, params):
         assert (
             mode == tf.estimator.ModeKeys.PREDICT
         ), "mode MUST be predict - model fns should not be separated on train"
         X = features["tokens"]
-        C = features.get("context", None)
         featurizer_state = params.base_model.get_featurizer(
             X,
             encoder=encoder,
             config=params,
             train=False,
-            context=C,
-            context_dim=context_dim,
         )
         predictions = {
             "features": featurizer_state["features"],
             "sequence_features": featurizer_state["sequence_features"],
             "eos_idx": featurizer_state["eos_idx"],
+            "lengths": featurizer_state["lengths"],
         }
 
         if params.base_model in [GPTModel, GPTModelSmall] and build_attn:
@@ -351,8 +342,6 @@ def get_separate_model_fns(
         assert (
             mode == tf.estimator.ModeKeys.PREDICT
         ), "Separated estimators are only supported for inference."
-        estimator_mode = mode
-        pred_op = None
         predictions = {}
         featurizer_state = features
 

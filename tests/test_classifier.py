@@ -367,7 +367,7 @@ class TestClassifier(unittest.TestCase):
         model = Classifier()
 
         lm_out = model.generate_text("The quick brown fox", 6)
-        start_id = model.input_pipeline.text_encoder.start
+        start_id = model.input_pipeline.text_encoder.start_token
         start_token = model.input_pipeline.text_encoder.decoder[start_id]
         self.assertNotIn(start_token, lm_out) # Non finetuned models do not use extra tokens
         
@@ -399,7 +399,7 @@ class TestClassifier(unittest.TestCase):
                 [{PredictMode.GENERATE_TEXT: 100 * [model.input_pipeline.text_encoder["_classify_"]]}]
             )
         )
-        start_id = model.input_pipeline.text_encoder.start
+        start_id = model.input_pipeline.text_encoder.start_token
         start_token = model.input_pipeline.text_encoder.decoder[start_id]
         lm_out = model.generate_text(use_extra_toks=True)
         self.assertEqual(lm_out, "{}_classify_".format(start_token))

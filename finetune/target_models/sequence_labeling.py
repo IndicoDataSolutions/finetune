@@ -1,12 +1,11 @@
 import itertools
 import copy
-import math
 from collections import Counter
 
 import tensorflow as tf
 import numpy as np
 
-from finetune.base import BaseModel, PredictMode
+from finetune.base import BaseModel
 from finetune.encoding.target_encoders import (
     SequenceLabelingEncoder,
     SequenceMultiLabelingEncoder,
@@ -26,28 +25,18 @@ class SequencePipeline(BasePipeline):
         super(SequencePipeline, self).__init__(config)
         self.multi_label = multi_label
 
-    def _post_data_initialization(self, Y, context=None):
+    def _post_data_initialization(self, Y):
         Y_ = list(itertools.chain.from_iterable(Y)) if Y is not None else None
-        super()._post_data_initialization(Y_, context)
+        super()._post_data_initialization(Y_)
 
-    def text_to_tokens_mask(self, X, Y=None, context=None):
+    def text_to_tokens_mask(self, X, Y=None):
         pad_token = (
             [self.config.pad_token] if self.multi_label else self.config.pad_token
         )
-        if context is None and self.config.use_auxiliary_info:
-            context = X[1]
-            X = X[0]
 
-        out_gen = self._text_to_ids(X, Y=Y, pad_token=pad_token, context=context)
+        out_gen = self._text_to_ids(X, Y=Y, pad_token=pad_token)
         for out in out_gen:
-            if self.config.use_auxiliary_info:
-                feats = {
-                    "tokens": out.token_ids,
-                    "mask": out.mask,
-                    "context": out.context,
-                }
-            else:
-                feats = {"tokens": out.token_ids, "mask": out.mask}
+            feats = {"tokens": out.token_ids, "mask": out.mask}
             if Y is None:
                 yield feats
             if Y is not None:
@@ -76,32 +65,16 @@ class SequencePipeline(BasePipeline):
             if self.multi_label
             else [self.config.max_length]
         )
-        if self.config.use_auxiliary_info:
-            return (
-                (
-                    {"tokens": tf.int32, "mask": tf.float32, "context": tf.float32},
-                    tf.float32,
-                ),
-                (
-                    {
-                        "tokens": TS([self.config.max_length, 2]),
-                        "mask": TS([self.config.max_length]),
-                        "context": TS([self.config.max_length, self.config.context_dim]),
-                    },
-                    TS(target_shape),
-                ),
-            )
-        else:
-            return (
-                ({"tokens": tf.int32, "mask": tf.float32}, tf.float32),
-                (
-                    {
-                        "tokens": TS([self.config.max_length, 2]),
-                        "mask": TS([self.config.max_length]),
-                    },
-                    TS(target_shape),
-                ),
-            )
+        return (
+            ({"tokens": tf.int32, "mask": tf.float32}, tf.float32),
+            (
+                {
+                    "tokens": TS([self.config.max_length, 2]),
+                    "mask": TS([self.config.max_length]),
+                },
+                TS(target_shape),
+            ),
+        )
 
     def _target_encoder(self):
         if self.multi_label:
@@ -132,7 +105,6 @@ def _spacy_token_predictions(raw_text, tokens, probas, positions):
     Go from GPT subtoken level predictions, to spacy token predictions
     """
     to_combine = []
-    spacy_attn = []
 
     spacy_token_starts, spacy_token_ends = zip(
         *[(token.idx, token.idx + len(token.text)) for token in NLP(raw_text)]
@@ -168,7 +140,7 @@ class SequenceLabeler(BaseModel):
     :param \**kwargs: key-value pairs of config items to override.
     """
 
-    defaults = {"n_epochs": 5, "lr_warmup": 0.1, "add_eos_bos_to_chunk": False}
+    defaults = {"n_epochs": 5, "add_eos_bos_to_chunk": False}
 
     def __init__(self, **kwargs):
         """
@@ -201,11 +173,7 @@ class SequenceLabeler(BaseModel):
         return super()._initialize()
 
     def finetune(self, Xs, Y=None, batch_size=None):
-        context = None
-        if self.config.use_auxiliary_info:
-            context = Xs[1]
-            Xs = Xs[0]
-        Xs_new, Y_new, _, _, _ = indico_to_finetune_sequence(
+        Xs, Y_new, _, _, _ = indico_to_finetune_sequence(
             Xs,
             encoder=self.input_pipeline.text_encoder,
             labels=Y,
@@ -214,12 +182,6 @@ class SequenceLabeler(BaseModel):
         )
 
         Y = Y_new if Y is not None else None
-
-        if self.config.use_auxiliary_info:
-            context_new = context
-            Xs = [Xs_new, context_new]
-        else:
-            Xs = Xs_new
         return super().finetune(Xs, Y=Y, batch_size=batch_size)
 
     def predict(self, X, per_token=False):
@@ -230,11 +192,6 @@ class SequenceLabeler(BaseModel):
         :param per_token: If True, return raw probabilities and labels on a per token basis
         :returns: list of class labels.
         """
-        if self.config.use_auxiliary_info:
-            X_with_context = copy.deepcopy(X)
-            X = X[0]
-        else:
-            X_with_context = X
         all_subseqs = []
         all_labels = []
         all_probs = []
@@ -242,13 +199,7 @@ class SequenceLabeler(BaseModel):
         chunk_size = self.config.max_length - 2
         step_size = chunk_size // 3
         doc_idx = -1
-        for (
-            position_seq,
-            start_of_doc,
-            end_of_doc,
-            label_seq,
-            proba_seq,
-        ) in self.process_long_sequence(X_with_context):
+        for position_seq, start_of_doc, end_of_doc, label_seq, proba_seq in self.process_long_sequence(X):
             start, end = 0, None
             if start_of_doc:
                 # if this is the first chunk in a document, start accumulating from scratch

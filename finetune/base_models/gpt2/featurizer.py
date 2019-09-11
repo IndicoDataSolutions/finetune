@@ -6,7 +6,6 @@ from finetune.util.shapes import shape_list, lengths_from_eos_idx
 from finetune.optimizers.recompute_grads import recompute_grad
 from finetune.nn.activations import gelu
 from finetune.base_models.gpt.featurizer import norm, dropout, adapter
-from finetune.nn.add_auxiliary import add_auxiliary
 
 
 def softmax(x, axis=-1):
@@ -162,8 +161,6 @@ def gpt2_featurizer(
     config,
     train=False,
     reuse=None,
-    context=None,
-    context_dim=None,
     **kwargs
 ):
     initial_shape = tf.shape(X)
@@ -223,11 +220,6 @@ def gpt2_featurizer(
         seq_feats = tf.reshape(
             h, shape=tf.concat((initial_shape[:-1], [config.n_embed]), 0)
         )
-
-        if config.use_auxiliary_info:
-            clf_h, seq_feats = add_auxiliary(
-                context, context_dim, clf_h, seq_feats, config, train
-            )
 
         lengths = lengths_from_eos_idx(eos_idx=pool_idx, max_length=shape_list(X)[0])
 

@@ -9,6 +9,7 @@ from finetune.input_pipeline import BasePipeline
 from finetune.target_models.comparison_regressor import ComparisonRegressionPipeline
 from finetune.target_models.comparison import Comparison
 
+
 class OrdinalRegressionPipeline(BasePipeline):
     def _target_encoder(self):
         return OrdinalRegressionEncoder()

@@ -186,9 +186,6 @@ class FullTokenizer(object):
     def tokenize(self, text):
         split_tokens = []
         split_idxs = []
-        original_subtoken_positions = (
-            []
-        )  # to account for shift in BPE creation needed to line up auxiliary info spans
         original_tok_pos = []
         char_starts = []
 

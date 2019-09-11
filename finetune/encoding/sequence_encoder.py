@@ -235,7 +235,7 @@ def overlap_handler(current_annotation, annotation, text, multi_label):
     2) [ < > ]
     3) < [ ] >
     """
-    if current_annotation["start"] <= annotation["start_token"]:
+    if current_annotation["start"] <= annotation["start"]:
         first, second = current_annotation, annotation
     else:
         first, second = annotation, current_annotation
@@ -249,7 +249,7 @@ def overlap_handler(current_annotation, annotation, text, multi_label):
         "start": first["start"],
         "end": second["start"],
         "label": first["label"],
-        "text": text[first["start"] : second["start_token"]],
+        "text": text[first["start"] : second["start"]],
     }
 
     if multi_label:

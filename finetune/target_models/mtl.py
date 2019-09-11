@@ -50,7 +50,7 @@ class MultiTaskPipeline(BasePipeline):
         return self.dataset_size_
 
     def get_train_input_fns(
-        self, Xs, Y=None, context=None, batch_size=None, val_size=None
+        self, Xs, Y=None, batch_size=None, val_size=None
     ):
         val_funcs = {}
         val_sizes = {}
@@ -60,26 +60,18 @@ class MultiTaskPipeline(BasePipeline):
         input_funcs = []
 
         for task_name in self.config.tasks:
-            input_pipelines[task_name] = self.config.tasks[
-                task_name
-            ]._get_input_pipeline(self)
+            input_pipelines[task_name] = self.config.tasks[task_name]._get_input_pipeline(self)
             task_tuple = input_pipelines[task_name].get_train_input_fns(
                 Xs[task_name], Y[task_name], batch_size=batch_size, val_size=val_size
             )
             self.dataset_size_ += self.config.dataset_size
             frequencies.append(self.config.dataset_size)
 
-            (
-                val_func,
-                input_func,
-                val_sizes[task_name],
-                val_intervals[task_name],
-            ) = task_tuple
+            (val_func, input_func, val_sizes[task_name], val_intervals[task_name]) = task_tuple
             task_id = self.config.task_name_to_id[task_name]
 
-            input_func_normalised, val_func_normalised = get_input_fns(
-                task_id, input_func, val_func
-            )
+            input_func_normalised, val_func_normalised = get_input_fns(task_id, input_func, val_func)
+
             input_funcs.append(input_func_normalised)
             val_funcs[task_name] = val_func_normalised
             val_funcs[task_name + "_train"] = get_train_eval_dataset(
@@ -100,9 +92,7 @@ class MultiTaskPipeline(BasePipeline):
         raise FinetuneError("This should never be used??")
 
 
-def get_loss_logits_fn(
-    task, featurizer_state, config, targets_i, train, reuse, task_id_i
-):
+def get_loss_logits_fn(task, featurizer_state, config, targets_i, train, reuse, task_id_i):
     def loss_logits():
         with tf.variable_scope("target_model_{}".format(task)):
             target_model_out = config.tasks[task]._target_model(
@@ -129,6 +119,8 @@ class MultiTask(BaseModel):
         eg. `{"sst": Classifier, "ner": SequenceLabeler}`
     :param \**kwargs: key-value pairs of config items to override. Note: The same config is used for each base task.
     """
+
+    defaults = {"chunk_long_sequences": False}
 
     def __init__(self, tasks, **kwargs):
         super().__init__(**kwargs)
