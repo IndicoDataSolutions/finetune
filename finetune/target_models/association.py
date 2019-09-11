@@ -281,12 +281,12 @@ class Association(BaseModel):
             position_seq = arr_encoded[chunk_idx].char_locs
             start_of_doc = (
                 arr_encoded[chunk_idx].token_ids[0][0]
-                == self.input_pipeline.text_encoder.start
+                == self.input_pipeline.text_encoder.start_token
             )
             end_of_doc = (
                 chunk_idx + 1 >= len(arr_encoded)
                 or arr_encoded[chunk_idx + 1].token_ids[0][0]
-                == self.input_pipeline.text_encoder.start
+                == self.input_pipeline.text_encoder.start_token
             )
             start, end = 0, None
             if start_of_doc:
