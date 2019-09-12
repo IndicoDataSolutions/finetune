@@ -16,11 +16,10 @@ REQUIRED_FILES = [
 
 BASE_OSCAR_SETTINGS = {
     'n_embed': 768,
-    "base_model_path": os.path.join("oscar", "fresh_start.jl"),
+    "base_model_path": os.path.join("oscar", "oscarV1.jl"),
     'n_layer': 12,
     'num_layers_trained': 12,
     'lr_warmup': 0.1,
-    "xla": True,
     "use_mirrored_distribution": True,
     'feat_mode': 'clf_tok',
 }
@@ -34,8 +33,8 @@ class GPCModel(SourceModel):
         **BASE_OSCAR_SETTINGS,
         'n_epochs': 3,
         'batch_size': 3,
-        'l2_reg': 0.1,
-        'lr': 0.0001,
+        'l2_reg': 0.00,
+        'lr': 1e-5,
     }
     required_files = REQUIRED_FILES
 
@@ -47,10 +46,11 @@ class GPCModelFP16(SourceModel):
     settings = {
         **BASE_OSCAR_SETTINGS,
         "optimizer": "Adafactor",
-        "use_fp16": True,
-        "scale_loss": True,
         "low_memory_mode": True,
         "cache_weights_to_file": True,
-        "lr": 0.01
+        "lr": 0.01,
+        "use_fp16": True,
+        "scale_loss": True,
+        
     }
     required_files = REQUIRED_FILES

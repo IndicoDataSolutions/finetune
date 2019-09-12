@@ -9,6 +9,7 @@ from sklearn.model_selection import train_test_split
 from finetune import Classifier
 from finetune.datasets import Dataset, generic_download
 from finetune.base_models.gpt.model import GPTModel
+from finetune.base_models.oscar.model import GPCModel
 logging.basicConfig(level=logging.DEBUG)
 
 from sklearn.metrics import classification_report
@@ -47,7 +48,7 @@ if __name__ == "__main__":
         debugging_logs=True,
         interpolate_pos_embed=False, 
         n_epochs=3,
-        batch_size=2, 
+        batch_size=2,
         lr_warmup=0.1,
         max_length=64,
         base_model=GPTModel
@@ -57,3 +58,4 @@ if __name__ == "__main__":
     preds = model.predict(testX)
     print(preds, testY)
     print(classification_report(testY, preds))
+
