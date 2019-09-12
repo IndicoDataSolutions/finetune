@@ -341,6 +341,7 @@ def get_default_config():
         sample_temp=1.0,
         feat_mode="final_state",
         target_model_init_from_base_model=False,
+        oscar_use_fused_kernel=True,
 
         # Location of model weights
         base_model=GPTModel,
