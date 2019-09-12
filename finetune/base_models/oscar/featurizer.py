@@ -1,7 +1,7 @@
 import tensorflow as tf
 from finetune.base_models.gpt.featurizer import dropout, embed, split_heads, merge_heads
 from finetune.util.shapes import shape_list
-from finetune.base_models.oscar.ra import recursive_agg
+from finetune.base_models.oscar.ra import recursive_agg, recursive_agg_tf
 from finetune.optimizers.recompute_grads import recompute_grad
 from finetune.nn.add_auxiliary import add_auxiliary
 
@@ -55,10 +55,15 @@ def batch_to_time(value, dilation):
                           [tf.div(shape[0], dilation), -1, shape[2]])
 
 
-def cascaded_pool(value, kernel_size, dim=1, pool_len=None):
+def cascaded_pool(value, kernel_size, dim=1, pool_len=None, use_fused_kernel=True):
     shape = shape_list(value)
     full_pool_len = pool_len or shape[dim]
-    aggregated = recursive_agg(value, kernel_size, full_pool_len)
+    if use_fused_kernel:
+        ra =recursive_agg
+    else:
+        ra = recursive_agg_tf
+        
+    aggregated = ra(value, kernel_size, full_pool_len)
     num_pooling_ops = shape_list(aggregated)[2]
 
     ws = normal_1d_conv_block(
@@ -67,7 +72,9 @@ def cascaded_pool(value, kernel_size, dim=1, pool_len=None):
     wt = normal_1d_conv_block(
         value, 1, "pool_t", value.dtype == tf.float16, output_dim=num_pooling_ops
     )
-    wt = tf.expand_dims(tf.nn.softmax(wt), -1)
+    weights = tf.nn.softmax(wt)
+#    weights = tf.Print(weights, [weights[0, -1]], summarize=10)
+    wt = tf.expand_dims(weights, -1)
     
     return tf.reduce_mean(aggregated * wt, 2) * tf.nn.sigmoid(ws)
 
@@ -85,7 +92,7 @@ def causal_conv(value, filter_, dilation, name='causal_conv'):
         return restored
 
 
-def cumulative_state_net(X, name, use_fp16, pdrop, train, pool_kernel_size=2, nominal_pool_length=512):
+def cumulative_state_net(X, name, use_fp16, pdrop, train, pool_kernel_size=2, nominal_pool_length=512, use_fused_kernel=True):
     conv_kernel = 4
     pool_kernel_size = pool_kernel_size or conv_kernel
 
@@ -96,7 +103,7 @@ def cumulative_state_net(X, name, use_fp16, pdrop, train, pool_kernel_size=2, no
         output = normal_1d_conv_block(output, conv_kernel, "3-" + str(conv_kernel), use_fp16, output_dim=nx)
 
     output = dropout(output, pdrop, train)
-    aggregated = cascaded_pool(output, kernel_size=pool_kernel_size, pool_len=nominal_pool_length)
+    aggregated = cascaded_pool(output, kernel_size=pool_kernel_size, pool_len=nominal_pool_length, use_fused_kernel=use_fused_kernel)
 
     return tf.nn.relu(normal_1d_conv_block(aggregated, 1, "output_reproject", use_fp16, output_dim=nx))
 
@@ -158,9 +165,9 @@ def enc_dec_mix(enc, dec, enc_mask, dec_mask, n_head=16):
     return merge_heads(tf.matmul(w, v))
 
 
-def block(X, block_name, use_fp16, pool_idx=None, encoder_state=None, train=False, pdrop=0.1, nominal_pool_length=512):
+def block(X, block_name, use_fp16, pool_idx=None, encoder_state=None, train=False, pdrop=0.1, nominal_pool_length=512, use_fused_kernel=True):
     with tf.variable_scope(block_name):
-        h1 = cumulative_state_net(X, "cumulative_state_net", use_fp16, pdrop, train, nominal_pool_length=nominal_pool_length)
+        h1 = cumulative_state_net(X, "cumulative_state_net", use_fp16, pdrop, train, nominal_pool_length=nominal_pool_length, use_fused_kernel=use_fused_kernel)
         if encoder_state is not None:
             mixed = enc_dec_mix(encoder_state["sequence_features"], h1, encoder_state["pool_idx"], pool_idx)
             h1 = h1 + mixed
@@ -222,7 +229,7 @@ def featurizer(X, encoder, config, train=False, reuse=None, encoder_state=None, 
                 block_fn_fwd = functools.partial(
                     block, block_name='block%d_' % layer, use_fp16=config.use_fp16,
                     pool_idx=None, encoder_state=encoder_state, train=train,
-                    pdrop=config.resid_p_drop
+                    pdrop=config.resid_p_drop, use_fused_kernel=config.oscar_use_fused_kernel
                 )
 
                 if config.low_memory_mode and train:

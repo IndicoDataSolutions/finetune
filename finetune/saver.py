@@ -72,6 +72,7 @@ class SaverHook(_StopOnPredicateHook):
 
     def _get_weights(self, session):
         if not self.keep_best_model or self.saver.variables is None or self.get_current_weights:
+            print("Getting weights")
             self.saver.variables = dict(
                 zip(
                     (var.name for var in self.included),
@@ -84,11 +85,13 @@ class SaverHook(_StopOnPredicateHook):
 
     def after_run(self, run_context, run_values):
         super().after_run(run_context, run_values)
-        self._get_weights(session=run_context.session)
+        if self.get_current_weights:
+            self._get_weights(session=run_context.session)
 
     def end(self, session):
         self.stop_if_no_metric_improvement_fn()
-        self._get_weights(session=session)
+        if not self.keep_best_model or self.saver.variables is None or self.get_current_weights:
+            self._get_weights(session=session)
 
 
 class InitializeHook(SessionRunHook):
@@ -272,7 +275,7 @@ class Saver:
                 elif (self.target_model_init_from_base_model and
                       name.startswith("model/target/") and
                       name.replace("model/target/", "") in self.fallback.keys()):
-                    saved_var = self.fallback[name]
+                    saved_var = self.fallback[name.replace("model/target/", "")]
 
                 if zero_out_adapters and "adapter" in name:
                     var_loader.add(var, np.zeros(var.get_shape().as_list()))
