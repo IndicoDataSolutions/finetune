@@ -31,10 +31,13 @@ class GPCModel(SourceModel):
     featurizer = featurizer
     settings = {
         **BASE_OSCAR_SETTINGS,
-        'n_epochs': 3,
-        'batch_size': 3,
-        'l2_reg': 0.00,
-        'lr': 1e-5,
+        'feat_mode': 'clf_tok',
+        'lr_warmup': 0.1,
+        'n_epochs': 30,
+        'lr': 5e-05,
+        'l2_reg': 0.01,
+        'val_size': 0,
+        'batch_size': 4
     }
     required_files = REQUIRED_FILES
 
