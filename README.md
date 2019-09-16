@@ -93,7 +93,7 @@ pip3 install tensorflow-gpu --upgrade # or tensorflow-cpu
 python3 -m spacy download en          # download spacy tokenizer
 ```
 
-In order to run `finetune` on your host, you'll need a working copy of CUDA >= 8.0, libcudnn >= 6, tensorflow-gpu >= 1.6 and up to date nvidia-driver versions.
+In order to run `finetune` on your host, you'll need a working copy of tensorflow-gpu >= 1.14.0 and up to date nvidia-driver versions.
 
 You can optionally run the provided test suite to ensure installation completed successfully.
 
