@@ -79,9 +79,9 @@ def get_model_fn(
     encoder,
     target_dim,
     label_encoder,
-    saver,
     build_explain,
     context_dim,
+    n_replicas,
 ):
 
     def target_model_op(featurizer_state, Y, params, mode, **kwargs):
