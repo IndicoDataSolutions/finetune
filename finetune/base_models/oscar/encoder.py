@@ -36,9 +36,9 @@ class GPCEncoder(BaseEncoder):
         self.encoder = spm.SentencePieceProcessor()
         self.encoder.Load(ENCODER_PATH + ".model")
 
-        self.start = self.encoder.piece_to_id('<_start_>')
-        self.delimiter = self.encoder.piece_to_id('<_delimiter_>')
-        self.clf_token = self.encoder.piece_to_id('<_classify_>')
+        self.start_token = self.encoder.piece_to_id('<_start_>')
+        self.delimiter_token = self.encoder.piece_to_id('<_delimiter_>')
+        self.end_token = self.encoder.piece_to_id('<_classify_>')
         self.cache = {}
 
         self.initialized = True
