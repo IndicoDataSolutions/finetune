@@ -196,7 +196,7 @@ def featurizer(X, encoder, config, train=False, reuse=None, encoder_state=None, 
 
     with tf.variable_scope('model/featurizer', reuse=reuse):
         encoder._lazy_init()
-        clf_token = encoder.clf_token
+        clf_token = encoder.end_token
         pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
         if encoder_state is None:
             embed_weights = tf.get_variable("we", [encoder.vocab_size + config.max_length, config.n_embed],
