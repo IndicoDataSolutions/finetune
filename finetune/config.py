@@ -359,13 +359,14 @@ def get_default_config():
     return settings
 
 
-def get_config(**kwargs):
+def get_config(error_on_invalid_keywords=True, **kwargs):
     """
     Gets a config object containing all the default parameters for each variant of the model.
 
     :param **kwargs: Keyword arguments to override default values.
     :return: Config object.    """
-    assert_valid_config(**kwargs)
+    if error_on_invalid_keywords:
+        assert_valid_config(**kwargs)
     config = get_default_config()
     config.base_model = kwargs.get("base_model", config.base_model)
     config.update(config.base_model.settings)
