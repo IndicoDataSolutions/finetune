@@ -228,7 +228,10 @@ class Saver:
 
     def load(self, path):
         self.variables, finetune_obj = joblib.load(path)
-        finetune_obj.config = get_config(**dict(finetune_obj.config))
+        finetune_obj.config = get_config(
+            error_on_invalid_keywords=False, 
+            **dict(finetune_obj.config)
+        )
         return finetune_obj
 
     def get_scaffold_init_fn(self):
