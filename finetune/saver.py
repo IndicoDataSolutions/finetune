@@ -14,10 +14,33 @@ from tensorflow.contrib.estimator.python.estimator.early_stopping import _StopOn
 from tensorflow.python.platform import gfile
 from tensorflow.python.summary import summary_iterator
 
-
 from finetune.util.estimator import PatchedParameterServerStrategy
 from finetune.errors import FinetuneError
 
+class BatchedVarLoad:
+    """
+    Basic idea pulled from variable.load. Possible this will change in 2.X so worth tracking what
+    that fn changes too and mirror it here.
+    """
+    def __init__(self):
+        self.ops = []
+        self.feed = dict()
+        
+    def run(self, session):
+        session.run(self.ops, feed_dict=self.feed)
+        self.ops = []
+        self.feed = dict()
+        
+    def add(self, var, val):
+        if hasattr(var, "_values"):
+            underlying_vars = var._values
+        else:
+            underlying_vars = [var]
+        for v in underlying_vars:
+            if v.initializer not in self.ops:
+                self.ops.append(v.initializer)
+            self.feed[v.initializer.inputs[1]] = val
+                                                                                                                                                        
 LOGGER = logging.getLogger('finetune')
 
 _EVENT_FILE_GLOB_PATTERN = 'events.out.tfevents.*'
@@ -165,6 +188,7 @@ class Saver:
     def get_scaffold_init_fn(self):
         
         def init_fn(scaffold, session):
+            var_loader = BatchedVarLoad()
             self.fallback # force gathering the variables and populating self.variables, this is a hack
             if self.variables is not None:
                 variables_sv = self.variables
@@ -176,17 +200,16 @@ class Saver:
             self.var_val = []
             print(all_vars)
             for var in all_vars:
+                if "global_step" in var.name:
+                    continue
                 saved_var = variables_sv.get(var.name, self.fallback.get(var.name, None))
                 if saved_var is not None and saved_var.shape == tuple(var.get_shape().as_list()):
                     print("init for {}".format(var.name))
                     for func in self.variable_transforms:
                         saved_var = func(var.name, saved_var)
                     print("Success:", var)
-                    if hasattr(var, "_values"):
-                        for v in var._values:
-                            v.load(saved_var, session)
-                    else:
-                        var_init = var.load(saved_var, session)
+                    var_loader.add(var, saved_var)
+            var_loader.run(session)
                         
         return init_fn
 
