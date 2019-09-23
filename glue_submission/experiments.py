@@ -344,7 +344,7 @@ def WNLI_train(data_folder, output_folder, gpu_num):
     model.save("WNLI_glue.jl")
 
 
-def run(fn):
+
     gpu_map = dict(enumerate(os.environ["CUDA_VISIBLE_DEVICES"].split(",")))
     print(gpu_map)
     pool_id = multiprocessing.current_process()._identity[0]
