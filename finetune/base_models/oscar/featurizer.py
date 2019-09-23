@@ -105,7 +105,7 @@ def cumulative_state_net(X, name, use_fp16, pdrop, train, pool_kernel_size=2, no
     output = dropout(output, pdrop, train)
     aggregated = cascaded_pool(output, kernel_size=pool_kernel_size, pool_len=nominal_pool_length, use_fused_kernel=use_fused_kernel)
 
-    return tf.nn.relu(normal_1d_conv_block(aggregated, 1, "output_reproject", use_fp16, output_dim=nx))
+    return normal_1d_conv_block(aggregated, 1, "output_reproject", use_fp16, output_dim=nx)
 
 
 def normal_1d_conv_block(X, kernel_width, layer_name, use_fp16, dilation=1, output_dim=None, causal=True):
