@@ -16,7 +16,7 @@ REQUIRED_FILES = [
 
 BASE_OSCAR_SETTINGS = {
     'n_embed': 768,
-    "base_model_path": os.path.join("oscar", "oscar_main.jl"),
+    "base_model_path": os.path.join("oscar", "oscar23.jl"),#oscar_main.jl"),
     'n_layer': 12,
     'num_layers_trained': 12,
     'lr_warmup': 0.1,
@@ -31,13 +31,13 @@ class GPCModel(SourceModel):
     featurizer = featurizer
     settings = {
         **BASE_OSCAR_SETTINGS,
-        'feat_mode': 'clf_tok',
-        'lr_warmup': 0.1,
-        'n_epochs': 30,
-        'lr': 5e-05,
-        'l2_reg': 0.01,
-        'val_size': 0,
-        'batch_size': 4
+        'feat_mode': 'max_tok',
+        'l2_reg': 0.0,
+        'lr': 0.0001,
+        'batch_size': 8,
+        'resid_p_drop': 0.0,
+        'n_epochs': 8,
+        'lr_warmup': 0.1
     }
     required_files = REQUIRED_FILES
 
