@@ -513,6 +513,18 @@ class BaseModel(object, metaclass=ABCMeta):
             "'attention_weights' only supported for GPTModel and GPTModelSmall base models."
         )
 
+    def oscar_saliences(self, Xs):
+        raw_preds = self._inference(Xs, predict_keys=[PredictMode.OSCAR_SALIENCE])
+        encoded = [self.input_pipeline.text_encoder.encode_multi_input([[x]], max_length=self.config.max_length).tokens for x in Xs]
+        out = list()
+        for pred, enc in zip(raw_preds, encoded):
+            l_enc = len(enc)
+            x_out = []
+            for layer_pred in pred:
+                x_out.append(layer_pred[:l_enc, :l_enc])
+            out.append((enc, x_out))
+        return out
+
     def _featurize(self, Xs):
         raw_preds = self._inference(Xs, predict_keys=[PredictMode.FEATURIZE])
         return np.asarray(raw_preds)
