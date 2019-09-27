@@ -50,6 +50,7 @@ class GPCModelFP16(SourceModel):
         **GPCModel.settings,
         "use_fp16": True,
         "scale_loss": True,
+        "low_memory_mode": True,
         
     }
     required_files = REQUIRED_FILES
