@@ -16,7 +16,6 @@ def warmup_constant(x, warmup=0.002, *args):
     s = tf.cast(x <= warmup, tf.float32)
     return s*(x/warmup) + (1-s)*1
 
-
 def warmup_linear(x, warmup=0.002, *args):
     s = tf.cast(x <= warmup, tf.float32)
     return (s*(x/warmup) + (1-s))*(1-x)
