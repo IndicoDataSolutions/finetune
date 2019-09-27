@@ -59,6 +59,7 @@ def _dilated_causal_max_pool(value, kernel_size, dilation):
         restored.set_shape(value.get_shape())
         return restored
 
+
 def recursive_agg_tf(value, kernel_size, pool_len):
     full_pool_len = pool_len
     num_pooling_ops = int(math.ceil(math.log(full_pool_len, kernel_size)))
@@ -69,7 +70,8 @@ def recursive_agg_tf(value, kernel_size, pool_len):
         intermediate_vals.append(value)
 
     return tf.stack(intermediate_vals, 2)
-    
+
+
 try:
     # TODO: figure out how to ship this in a way that will build with finetune.
     ra_module = tf.load_op_library(os.path.join(os.path.dirname(__file__), 'lib_ra.so'))
@@ -81,7 +83,13 @@ try:
     def recursive_agg(inp, kernel_length, pool_len):
         return ra_module.dense(inp, kernel_length, pool_len, int(math.ceil(math.log(pool_len, kernel_length))))[0]
 
+    def recursive_agg_with_argmax(inp, kernel_length, pool_len):
+        return ra_module.dense(inp, kernel_length, pool_len, int(math.ceil(math.log(pool_len, kernel_length))))
+
 except NotFoundError:
     warnings.warn("Failed to load Oscar's optimised kernels. Falling back to tensorflow version.")
 
     recursive_agg = recursive_agg_tf
+
+    def recursive_agg_with_argmax(*args):
+        raise ValueError("You need to be able to use the fused kernels to be able to use argmax")
