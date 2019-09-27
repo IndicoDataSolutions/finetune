@@ -49,6 +49,7 @@ class GPCModelFP16(SourceModel):
     settings = {
         **GPCModel.settings,
         "use_fp16": True,
+        "low_memory_mode": True,
         "scale_loss": True,
         
     }
