@@ -567,12 +567,17 @@ class BasePipeline(metaclass=ABCMeta):
                         random_state=self.config.seed,
                     )
                 else:
-                    Xs_tr, Xs_va, Y_tr, Y_va = train_test_split(
-                        Xs,
-                        Y,
-                        test_size=self.config.val_size,
-                        random_state=self.config.seed,
-                    )
+                    if self.config.val_size > 0:
+                        Xs_tr, Xs_va, Y_tr, Y_va = train_test_split(
+                            Xs,
+                            Y,
+                            test_size=self.config.val_size,
+                            random_state=self.config.seed,
+                        )
+                    else:
+                        Xs_tr, Y_tr  = dataset_shuffle(Xs, Y, random_state=self.config.seed)
+                        Xs_va = []
+                        Y_va = []
                     C_tr, C_va = None, None
             else:
                 Xs_tr, Y_tr, C_tr = dataset_shuffle(Xs, Y, context, random_state=self.config.seed)
