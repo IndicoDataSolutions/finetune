@@ -1,5 +1,4 @@
 import tensorflow as tf
-
 from finetune.base import BaseModel
 from finetune.encoding.target_encoders import Seq2SeqLabelEncoder
 from finetune.input_pipeline import BasePipeline
@@ -147,13 +146,13 @@ class S2S(BaseModel):
             
             beams, probs, _ = beam_search(
                 symbols_to_logits_fn=symbols_to_logits_fn,
-                initial_ids=kwargs.get("start_tokens", tf.constant([encoder.start for _ in range(config.batch_size)], dtype=tf.int32)),
+                initial_ids=kwargs.get("start_tokens", tf.constant([encoder.start_token for _ in range(config.batch_size)], dtype=tf.int32)),
                 beam_size=config.beam_size,
                 decode_length=config.max_length,
                 vocab_size=encoder.vocab_size,
                 alpha=config.beam_search_alpha,
                 states={"featurizer_state": featurizer_state} if featurizer_state is not None else {},
-                eos_id=encoder.clf_token,
+                eos_id=encoder.end_token,
                 stop_early=True,
                 use_top_k_with_unique=True,
                 temperature=config.sample_temp,
