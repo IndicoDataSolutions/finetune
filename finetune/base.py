@@ -348,7 +348,7 @@ class BaseModel(object, metaclass=ABCMeta):
             n_replicas=max(1, len(self.resolved_gpus))
         )
 
-        hooks = [InitializeHook(self.saver)]
+        hooks = [InitializeHook(self.saver), TimingHook()]
         est = tf.estimator.Estimator(
             model_dir=self.estimator_dir,
             model_fn=model_fn,
@@ -866,3 +866,15 @@ class BaseModel(object, metaclass=ABCMeta):
     def __del__(self):
         if hasattr(self, "_tmp_dir") and self._tmp_dir is not None:
             self._tmp_dir.cleanup()
+
+
+
+class TimingHook(tf.estimator.SessionRunHook):
+    def before_run(self, run_context):
+        if not hasattr(self, "time"):
+            self.time = time.time()
+            LOGGER.warning("Starting timer")
+        return super().before_run(run_context)
+
+    def end(self, session):
+        LOGGER.warning("Execution time was: {}".format(time.time() - self.time))
