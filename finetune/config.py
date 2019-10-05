@@ -341,6 +341,8 @@ def get_default_config():
         feat_mode="final_state",
         target_model_init_from_base_model=False,
         oscar_use_fused_kernel=True,
+        balance_lm_loss=False,
+        seq_decode_len=512,
 
         # Location of model weights
         base_model=GPTModel,
