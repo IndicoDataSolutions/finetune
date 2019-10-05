@@ -1,5 +1,5 @@
 import tensorflow as tf
-from finetune.base import BaseModel
+from finetune.base import BaseModel, PredictMode
 from finetune.encoding.target_encoders import Seq2SeqLabelEncoder
 from finetune.input_pipeline import BasePipeline
 from finetune.util.shapes import shape_list
@@ -65,6 +65,7 @@ class S2S(BaseModel):
         :returns: np.array of features of shape (n_examples, embedding_size).
         """
         return super().featurize(X)
+
 
     def predict(self, X):
         """
@@ -143,12 +144,12 @@ class S2S(BaseModel):
                     return output_state["logits"][:, i, :]
                 else:
                     return output_state["logits"][:, i, :], state
-            
+            start_tokens = kwargs.get("start_tokens", tf.constant([encoder.start_token for _ in range(config.batch_size)], dtype=tf.int32))
             beams, probs, _ = beam_search(
                 symbols_to_logits_fn=symbols_to_logits_fn,
-                initial_ids=kwargs.get("start_tokens", tf.constant([encoder.start_token for _ in range(config.batch_size)], dtype=tf.int32)),
+                initial_ids=start_tokens,
                 beam_size=config.beam_size,
-                decode_length=config.max_length,
+                decode_length=tf.minimum(config.max_length, tf.shape(start_tokens)[1] + config.seq_decode_len),
                 vocab_size=encoder.vocab_size,
                 alpha=config.beam_search_alpha,
                 states={"featurizer_state": featurizer_state} if featurizer_state is not None else {},
