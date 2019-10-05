@@ -207,7 +207,7 @@ def featurizer(X, encoder, config, train=False, reuse=None, encoder_state=None, 
         X = tf.reshape(X, shape=[-1] + initial_shape[-2:])
 
     x_shape = tf.shape(X)
-    log_salience = True
+    log_salience = False
     with tf.variable_scope('model/featurizer', reuse=reuse):
         encoder._lazy_init()
         clf_token = encoder.end_token
@@ -288,5 +288,5 @@ def featurizer(X, encoder, config, train=False, reuse=None, encoder_state=None, 
             'sequence_features': seq_feats,
             'pool_idx': pool_idx,
             'encoded_input': X[:, :tf.reduce_min(pool_idx) - 1, 0],
-            'per_layer_salience': tf.stack(saliences, 1) # Batch, layer, time, in, out
+            'per_layer_salience': tf.stack(saliences, 1) if log_salience else None # Batch, layer, time, in, out
         }
