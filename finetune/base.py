@@ -610,8 +610,9 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         if path is None:
             return
-
-        path = os.path.abspath(path)
+        
+        if isinstance(path, str):
+            path = os.path.abspath(path)
         self.saver.save(self, path)
 
     def create_base_model(self, filename, exists_ok=False):
@@ -648,7 +649,7 @@ class BaseModel(object, metaclass=ABCMeta):
         :param path: string path name to load model from.  Same value as previously provided to :meth:`save`. Must be a folder.
         :param **kwargs: key-value pairs of config items to override.
         """
-        if type(path) != str:
+        if type(path) != str and not hasattr(path, "write"):
             instance = path
             raise FinetuneError(
                 'The .load() method can only be called on the class, not on an instance. Try `{}.load("{}") instead.'.format(
