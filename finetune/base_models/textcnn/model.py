@@ -19,6 +19,7 @@ class TextCNNModel(SourceModel):
         "n_epochs": 100,
         "keep_best_model": True,
         "early_stopping_steps": 100,
+        "val_size": "auto"
         "num_layers_trained": 1,
         "kernel_sizes": kernel_sizes,
         "num_filters_per_size": 2,
