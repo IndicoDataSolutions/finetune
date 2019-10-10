@@ -214,8 +214,7 @@ class Saver:
         names, values = variables.keys(), variables.values()
         if isinstance(path, str):
             folder = os.path.dirname(path)
-            if not os.path.exists(folder) and mkdir:
-                os.mkdir(folder)
+            os.makedirs(folder, exist_ok=True)
         if self.save_dtype is not None:
             LOGGER.info("Saving with {} precision.".format(self.save_dtype.__name__))
             values = [a.astype(self.save_dtype) for a in values]
