@@ -22,7 +22,7 @@ def warmup_linear(x, warmup=0.002, *args):
 
 def exp_decay_oscar(x, warmup=0.001):
     s = tf.cast(x <= warmup, tf.float32)
-    return s * (x / warmup) + (1-s) * (1 / (1.005 ** (1000 * x)))
+    return s * (x / warmup) + (1-s) * (1 / (1.005 ** (1000 * (x - warmup) / (1 - warmup))))
 
 schedules = {
     'warmup_cosine': warmup_cosine,

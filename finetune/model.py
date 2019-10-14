@@ -311,7 +311,7 @@ def get_model_fn(
                 learning_rate_decay_fn=lr_decay,
                 increment_global_step=True,
                 summaries=summaries,
-                colocate_gradients_with_ops=False,
+                colocate_gradients_with_ops=True,
                 variables=params.trained_variables,
             )
 

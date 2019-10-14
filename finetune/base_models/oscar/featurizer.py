@@ -72,14 +72,16 @@ def cascaded_pool(value, kernel_size, dim=1, pool_len=None, use_fused_kernel=Tru
     wt = normal_1d_conv_block(
         value, 1, "pool_t", value.dtype == tf.float16, output_dim=num_pooling_ops
     )
-    weights = tf.nn.softmax(wt)
-    wt = tf.expand_dims(weights, -1)
-
-    weighted_over_time = tf.reduce_mean(aggregated * wt, 2) * tf.nn.sigmoid(ws)
+    wt = tf.nn.softmax(wt)
+    ws = tf.nn.sigmoid(ws)
+    shape_agg = shape_list(aggregated)
+    
+    aggregated_combined = tf.reshape(aggregated * tf.expand_dims(wt, 3) * tf.expand_dims(ws, 2), [shape_agg[0], shape_agg[1], shape_agg[2] * shape_agg[3]])
+    aggregated_projected = normal_1d_conv_block(aggregated_combined, 1, "combine", value.dtype == tf.float16, output_dim=shape[-1])
 
     if log_salience:
         salience = tf.map_fn(
-            lambda t: tf.reduce_mean(tf.abs(tf.gradients([weighted_over_time[:, t]], [value])[0]), -1),
+            lambda t: tf.reduce_mean(tf.abs(tf.gradients([aggregated_projected[:, t]], [value])[0]), -1),
             tf.range(shape[1]),
             dtype=tf.float32
         )
@@ -87,7 +89,7 @@ def cascaded_pool(value, kernel_size, dim=1, pool_len=None, use_fused_kernel=Tru
     else:
         salience = None
 
-    return weighted_over_time, salience
+    return aggregated_projected, salience
 
 
 def causal_conv(value, filter_, dilation, name='causal_conv'):
@@ -104,12 +106,12 @@ def causal_conv(value, filter_, dilation, name='causal_conv'):
 
 
 def cumulative_state_net(X, name, use_fp16, pdrop, train, pool_kernel_size=2, nominal_pool_length=512, use_fused_kernel=True, log_salience=False):
-    conv_kernel = 4
+    conv_kernel = 1
     pool_kernel_size = pool_kernel_size or conv_kernel
 
     nx = shape_list(X)[-1]
     with tf.variable_scope(name):
-        output = tf.nn.relu(normal_1d_conv_block(X, conv_kernel, "1-" + str(conv_kernel), use_fp16, output_dim=nx))
+        output = tf.nn.relu(normal_1d_conv_block(X, conv_kernel, "1-" + str(conv_kernel), use_fp16, output_dim=nx * 4))
         output = tf.nn.relu(normal_1d_conv_block(output, conv_kernel, "2-" + str(conv_kernel), use_fp16, output_dim=nx))
         output = normal_1d_conv_block(output, conv_kernel, "3-" + str(conv_kernel), use_fp16, output_dim=nx)
 

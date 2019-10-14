@@ -31,6 +31,7 @@ class GPCModel(SourceModel):
     featurizer = featurizer
     settings = {
         **BASE_OSCAR_SETTINGS,
+        "base_model_path": os.path.join("oscar", "oscar23.jl"),
         'feat_mode': 'max_tok',
         'l2_reg': 0.0,
         'lr': 0.0001,
@@ -48,6 +49,7 @@ class GPCModelFP16(SourceModel):
     featurizer = featurizer
     settings = {
         **GPCModel.settings,
+        "base_model_path": os.path.join("oscar", "oscar23.jl"),
         "use_fp16": True,
         "low_memory_mode": True,
         "scale_loss": True,
@@ -63,12 +65,12 @@ class GPCModelFP16Pretrain(SourceModel):
     featurizer = featurizer
     settings = {
         **BASE_OSCAR_SETTINGS,
+        "base_model_path": "fresh_start.jl",
         "optimizer": "Adafactor",
         "low_memory_mode": True,
         "cache_weights_to_file": True,
         "lr": 0.01,
         "use_fp16": True,
-        "scale_loss": True,
-
+        "scale_loss": True
     }
     required_files = REQUIRED_FILES
