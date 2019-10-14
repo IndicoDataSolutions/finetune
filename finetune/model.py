@@ -227,13 +227,13 @@ def get_model_fn(
                 # the bias values in 1dconv if this layer exists (since it also has a 'b' in its name/scope).
                 params.trained_variables = [
                     v
-                    for v in tf.global_variables()
+                    for v in tf.trainable_variables()
                     if "adapter" in v.name
                     or "target" in v.name
                     or any(scope in v.name for scope in norm_variable_scopes)
                 ]
             else:
-                params.trained_variables = [v for v in tf.global_variables()]
+                params.trained_variables = [v for v in tf.trainable_variables()]
 
             def optimizer(lr):
                 Optimizer = OPTIMIZERS.get(params.optimizer, None)
@@ -278,7 +278,7 @@ def get_model_fn(
                     opt = dont_optimize_zeros(opt)
 
                 if params.scale_loss:
-                    opt = tf.train.experimental.enable_mixed_precision_graph_rewrite(opt)
+                    opt = tf.train.experimental.MixedPrecisionLossScaleOptimizer(opt, "dynamic")
 
                 return opt
 
