@@ -44,7 +44,7 @@ class TestOscarFeatures(unittest.TestCase):
         metrics = read_eval_metrics(os.path.join(model.estimator_dir, "finetuning"))
         for step, metric in metrics.items():
             self.assertEqual(len(metric), 2) # train and test
-            for key, value in metric:
+            for key, value in metric.items():
                 self.assertGreaterEqual(value, 0)
                 self.assertLessEqual(value, 1)
                 self.assertIn("finetuning", key)
