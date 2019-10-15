@@ -79,3 +79,18 @@ class InMemoryFinetune(tf.train.SessionRunHook):
     def end(self, session):
         self._evaluate(session)
 
+def make_in_memory_finetune_hooks(finetune):
+    hooks = []
+    for f in self.config.in_memory_finetune:
+        hooks.append(InMemoryFinetune(
+            config_to_eval=f["config"],
+            finetune=self,
+            eval_dir=estimator.eval_dir(),
+            X=f["X"],
+            Y=f["Y"],
+            X_test=f["X_test"],
+            Y_test=f["Y_test"],
+            name=f["name"],
+            every_n_iter=f["every_n_iter"]
+        ))
+    return hooks
