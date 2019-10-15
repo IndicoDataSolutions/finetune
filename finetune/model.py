@@ -80,7 +80,6 @@ def get_model_fn(
     target_dim,
     label_encoder,
     build_explain,
-    context_dim,
     n_replicas,
 ):
 
@@ -277,15 +276,6 @@ def get_model_fn(
                 if params.summarize_grads
                 else None
             )
-            if not params.scale_loss:
-                clip_gradients = float(params.max_grad_norm)
-            else:
-                def clip_gradients(grads_n_vars):
-                    clipped = []
-                    for g, v in grads_n_vars:
-                        if g is not None:
-                            clipped.append((tf.clip_by_norm(g, float(params.max_grad_norm)), v))
-                    return clipped
 
             train_op = tf.contrib.layers.optimize_loss(
                 loss=train_loss,
@@ -296,7 +286,7 @@ def get_model_fn(
                 learning_rate_decay_fn=lr_decay,
                 increment_global_step=True,
                 summaries=summaries,
-                colocate_gradients_with_ops=False,
+                colocate_gradients_with_ops=True,
                 variables=params.trained_variables,
             )
 

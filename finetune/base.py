@@ -232,7 +232,7 @@ class BaseModel(object, metaclass=ABCMeta):
         )
 
         if self.config.in_memory_finetune is not None:
-            train_hooks.extend(make_in_memory_finetune_hooks(self))
+            train_hooks.extend(make_in_memory_finetune_hooks(self, estimator))
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
