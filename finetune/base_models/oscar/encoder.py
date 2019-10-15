@@ -29,7 +29,7 @@ class GPCEncoder(BaseEncoder):
     def __init__(self, encoder_path=ENCODER_PATH, vocab_path=None):
         super().__init__(encoder_path=encoder_path, vocab_path=vocab_path)
 
-    def _lazy_init(self, errors='replace'):
+    def _lazy_init(self):
         if self.initialized:
             return
 
