@@ -252,7 +252,8 @@ def get_default_config():
         val_set=None,
         per_process_gpu_memory_fraction=None,
         adapter_size=None,  # from Parameter Efficient Transfer Learning paper
-        use_mirrored_distribution=False,
+        distribution_strategy="central_storage",
+        xla=True,
 
         # Regularization
         embed_p_drop=0.1,
@@ -333,7 +334,6 @@ def get_default_config():
         use_fp16=False,
         use_timing=True,
         scale_loss=False,
-        xla=False,
         beam_search_alpha=0.6,
         beam_size=10,
         decoder_sample_from=40,
