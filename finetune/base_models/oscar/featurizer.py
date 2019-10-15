@@ -1,7 +1,7 @@
 import tensorflow as tf
 from finetune.base_models.gpt.featurizer import dropout, embed, split_heads, merge_heads
 from finetune.util.shapes import shape_list
-from finetune.base_models.oscar.ra import recursive_agg, recursive_agg_tf, recursive_agg_with_argmax
+from finetune.base_models.oscar.ra import recursive_agg, recursive_agg_tf
 from finetune.optimizers.recompute_grads import recompute_grad
 from finetune.nn.add_auxiliary import add_auxiliary
 

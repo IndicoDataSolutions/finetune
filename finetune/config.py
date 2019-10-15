@@ -243,6 +243,7 @@ def get_default_config():
         shuffle_buffer_size=100,
         dataset_size=None,
         batch_size=2,
+        predict_batch_size=20,
         visible_gpus=None,  # defaults to all available
         n_epochs=GridSearchable(3, [1, 2, 3, 4]),
         seed=42,
