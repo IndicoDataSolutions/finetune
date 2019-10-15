@@ -108,7 +108,7 @@ class S2S(BaseModel):
             embed_weights = target_feat_state["embed_weights"]
             return language_model(
                 X=targets,
-                M=tf.sequence_mask(target_feat_state["pool_idx"] + 1, maxlen=shape_list(embed_weights)[1], dtype=tf.float32), # +1 because we want to predict the clf token as an eos token
+                M=tf.sequence_mask(target_feat_state["eos_idx"] + 1, maxlen=shape_list(embed_weights)[1], dtype=tf.float32), # +1 because we want to predict the clf token as an eos token
                 embed_weights=embed_weights,
                 config=config,
                 reuse=reuse, train=train,
@@ -134,7 +134,7 @@ class S2S(BaseModel):
                 )
                 output_state = language_model(
                     X=inp,
-                    M=tf.sequence_mask(target_feat_state["pool_idx"] + 1, maxlen=leng + 1, dtype=tf.float32), # +1 because we want to predict the clf token as an eos token
+                    M=tf.sequence_mask(target_feat_state["eos_idx"] + 1, maxlen=leng + 1, dtype=tf.float32), # +1 because we want to predict the clf token as an eos token
                     embed_weights=embed_weights[:encoder.vocab_size, :],
                     config=config,
                     reuse=reuse, train=train,

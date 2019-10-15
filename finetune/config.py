@@ -254,7 +254,7 @@ def get_default_config():
         per_process_gpu_memory_fraction=None,
         adapter_size=None,  # from Parameter Efficient Transfer Learning paper
         distribution_strategy="central_storage",
-        xla=True,
+        xla=False,
 
         # Regularization
         embed_p_drop=0.1,

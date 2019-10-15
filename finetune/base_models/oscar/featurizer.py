@@ -1,9 +1,8 @@
 import tensorflow as tf
 from finetune.base_models.gpt.featurizer import dropout, embed, split_heads, merge_heads
-from finetune.util.shapes import shape_list
+from finetune.util.shapes import shape_list, lengths_from_eos_idx
 from finetune.base_models.oscar.ra import recursive_agg, recursive_agg_tf
 from finetune.optimizers.recompute_grads import recompute_grad
-from finetune.nn.add_auxiliary import add_auxiliary
 
 import functools
 
@@ -254,15 +253,11 @@ def featurizer(X, encoder, config, train=False, reuse=None, encoder_state=None, 
         else:
             seq_feats = h
 
-        if config.use_auxiliary_info:
-            clf_h, seq_feats = add_auxiliary(
-                context, context_dim, clf_h, seq_feats, config, train
-            )
-
         return {
             'embed_weights': embed_weights,
             'features': cast_maybe(clf_h, tf.float32),
             'sequence_features': seq_feats,
-            'pool_idx': pool_idx,
-            'encoded_input': X[:, :tf.reduce_min(pool_idx) - 1, 0],
+            'eos_idx': pool_idx,
+            'encoded_input': X[:, :tf.reduce_min(pool_idx), 0],
+            'lengths': lengths_from_eos_idx(eos_idx=pool_idx, max_length=shape_list(X)[0])
         }
