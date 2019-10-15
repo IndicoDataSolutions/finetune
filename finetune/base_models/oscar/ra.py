@@ -83,13 +83,6 @@ try:
     def recursive_agg(inp, kernel_length, pool_len):
         return ra_module.dense(inp, kernel_length, pool_len, int(math.ceil(math.log(pool_len, kernel_length))))[0]
 
-    def recursive_agg_with_argmax(inp, kernel_length, pool_len):
-        return ra_module.dense(inp, kernel_length, pool_len, int(math.ceil(math.log(pool_len, kernel_length))))
-
 except NotFoundError:
     warnings.warn("Failed to load Oscar's optimised kernels. Falling back to tensorflow version.")
-
     recursive_agg = recursive_agg_tf
-
-    def recursive_agg_with_argmax(*args):
-        raise ValueError("You need to be able to use the fused kernels to be able to use argmax")

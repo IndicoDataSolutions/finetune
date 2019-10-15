@@ -16,12 +16,22 @@ REQUIRED_FILES = [
 
 BASE_OSCAR_SETTINGS = {
     'n_embed': 768,
-    "base_model_path": os.path.join("oscar", "oscar23.jl"),#oscar_main.jl"),
+    "base_model_path": os.path.join("oscar", "oscar23.jl"),
     'n_layer': 12,
     'num_layers_trained': 12,
     'lr_warmup': 0.1,
-    "distribution_strategy":"central_storage",
+    "distribution_strategy": "mirrored",
     'feat_mode': 'clf_tok',
+    "l2_reg": 0.05,
+    "batch_size": 8,
+    "lr": 0.0001,
+    "n_epochs": 2,
+    "resid_p_drop": 0.01,
+    "feat_mode": "clf_tok",
+    "max_grad_norm": 1.0,
+    "embed_p_drop": 0.01,
+    "lr_schedule": "warmup_linear",
+    "lm_loss_coef": 0.5,
 }
 
 
@@ -29,16 +39,7 @@ class GPCModel(SourceModel):
     is_bidirectional = False
     encoder = GPCEncoder
     featurizer = featurizer
-    settings = {
-        **BASE_OSCAR_SETTINGS,
-        'feat_mode': 'max_tok',
-        'l2_reg': 0.0,
-        'lr': 0.0001,
-        'batch_size': 8,
-        'resid_p_drop': 0.0,
-        'n_epochs': 8,
-        'lr_warmup': 0.1
-    }
+    settings = BASE_OSCAR_SETTINGS
     required_files = REQUIRED_FILES
 
 
@@ -51,8 +52,6 @@ class GPCModelFP16(SourceModel):
         "use_fp16": True,
         "low_memory_mode": True,
         "scale_loss": True,
-        "low_memory_mode": True,
-        
     }
     required_files = REQUIRED_FILES
 
@@ -62,13 +61,16 @@ class GPCModelFP16Pretrain(SourceModel):
     encoder = GPCEncoder
     featurizer = featurizer
     settings = {
-        **BASE_OSCAR_SETTINGS,
+        **GPCModelFP16.settings,
+        "base_model_path": os.path.join("oscar", "fresh_start.jl"),
         "optimizer": "Adafactor",
-        "low_memory_mode": True,
         "cache_weights_to_file": True,
-        "lr": 0.01,
-        "use_fp16": True,
-        "scale_loss": True,
-
+        "lr": 1e-4,
+        "batch_size": 60,
+        "keep_best_model": True,
+        "val_interval": 1000,
+        "val_size": 2000,
+        "lr_schedule": "exp_decay_oscar",
+        "n_epochs": 4,
     }
     required_files = REQUIRED_FILES
