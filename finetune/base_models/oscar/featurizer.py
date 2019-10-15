@@ -14,7 +14,7 @@ def cast_maybe(t, dtype):
     return tf.cast(t, dtype=dtype)
 
 
-def norm(x, scope, axis=-1, e=None, fp16=False, debug=False):
+def norm(x, scope, axis=-1, e=None, fp16=False):
     with tf.variable_scope(scope):
         e = e or 1e-5
         n_state = shape_list(x)[-1]
@@ -25,8 +25,6 @@ def norm(x, scope, axis=-1, e=None, fp16=False, debug=False):
             b = tf.cast(b, tf.float16)
         u = tf.reduce_mean(x, axis=axis, keepdims=True)
         s = tf.reduce_mean(tf.square(x - u), axis=axis, keepdims=True)
-        if debug:
-            u = tf.Print(u, [u[0, 0], s[0, 0]])
         x = (x - u) * tf.rsqrt(s + e)
         x = x * g + b
         return x
@@ -55,7 +53,7 @@ def batch_to_time(value, dilation):
                           [tf.div(shape[0], dilation), -1, shape[2]])
 
 
-def cascaded_pool(value, kernel_size, dim=1, pool_len=None, use_fused_kernel=True, log_salience=False):
+def cascaded_pool(value, kernel_size, dim=1, pool_len=None, use_fused_kernel=True):
     shape = shape_list(value)
     full_pool_len = pool_len or shape[dim]
     if use_fused_kernel:
@@ -77,17 +75,7 @@ def cascaded_pool(value, kernel_size, dim=1, pool_len=None, use_fused_kernel=Tru
 
     weighted_over_time = tf.reduce_mean(aggregated * wt, 2) * tf.nn.sigmoid(ws)
 
-    if log_salience:
-        salience = tf.map_fn(
-            lambda t: tf.reduce_mean(tf.abs(tf.gradients([weighted_over_time[:, t]], [value])[0]), -1),
-            tf.range(shape[1]),
-            dtype=tf.float32
-        )
-        salience = tf.transpose(salience, [1, 0, 2])
-    else:
-        salience = None
-
-    return weighted_over_time, salience
+    return weighted_over_time
 
 
 def causal_conv(value, filter_, dilation, name='causal_conv'):
@@ -103,7 +91,7 @@ def causal_conv(value, filter_, dilation, name='causal_conv'):
         return restored
 
 
-def cumulative_state_net(X, name, use_fp16, pdrop, train, pool_kernel_size=2, nominal_pool_length=512, use_fused_kernel=True, log_salience=False):
+def cumulative_state_net(X, name, use_fp16, pdrop, train, pool_kernel_size=2, nominal_pool_length=512, use_fused_kernel=True):
     conv_kernel = 4
     pool_kernel_size = pool_kernel_size or conv_kernel
 
@@ -114,9 +102,9 @@ def cumulative_state_net(X, name, use_fp16, pdrop, train, pool_kernel_size=2, no
         output = normal_1d_conv_block(output, conv_kernel, "3-" + str(conv_kernel), use_fp16, output_dim=nx)
 
     output = dropout(output, pdrop, train)
-    aggregated, salience = cascaded_pool(output, kernel_size=pool_kernel_size, pool_len=nominal_pool_length, use_fused_kernel=use_fused_kernel, log_salience=log_salience)
+    aggregated = cascaded_pool(output, kernel_size=pool_kernel_size, pool_len=nominal_pool_length, use_fused_kernel=use_fused_kernel)
 
-    return normal_1d_conv_block(aggregated, 1, "output_reproject", use_fp16, output_dim=nx), salience
+    return normal_1d_conv_block(aggregated, 1, "output_reproject", use_fp16, output_dim=nx)
 
 
 def normal_1d_conv_block(X, kernel_width, layer_name, use_fp16, dilation=1, output_dim=None, causal=True):
@@ -176,15 +164,13 @@ def enc_dec_mix(enc, dec, enc_mask, dec_mask, n_head=16):
     return merge_heads(tf.matmul(w, v))
 
 
-def block(X, block_name, use_fp16, pool_idx=None, encoder_state=None, train=False, pdrop=0.1, nominal_pool_length=512, use_fused_kernel=True, log_salience=False):
+def block(X, block_name, use_fp16, pool_idx=None, encoder_state=None, train=False, pdrop=0.1, nominal_pool_length=512, use_fused_kernel=True):
     with tf.variable_scope(block_name):
-        h1, salience = cumulative_state_net(X, "cumulative_state_net", use_fp16, pdrop, train, nominal_pool_length=nominal_pool_length, use_fused_kernel=use_fused_kernel, log_salience=log_salience)
+        h1 = cumulative_state_net(X, "cumulative_state_net", use_fp16, pdrop, train, nominal_pool_length=nominal_pool_length, use_fused_kernel=use_fused_kernel)
         if encoder_state is not None:
             mixed = enc_dec_mix(encoder_state["sequence_features"], h1, encoder_state["pool_idx"], pool_idx)
             h1 = h1 + mixed
         output = tf.nn.relu(dropout(norm(h1 + X, "norm", fp16=use_fp16, e=1e-2), pdrop, train))
-        if salience is not None:
-            return output, salience
         return output
 
 
@@ -207,7 +193,6 @@ def featurizer(X, encoder, config, train=False, reuse=None, encoder_state=None, 
         X = tf.reshape(X, shape=[-1] + initial_shape[-2:])
 
     x_shape = tf.shape(X)
-    log_salience = False
     with tf.variable_scope('model/featurizer', reuse=reuse):
         encoder._lazy_init()
         clf_token = encoder.end_token
@@ -218,7 +203,7 @@ def featurizer(X, encoder, config, train=False, reuse=None, encoder_state=None, 
         else:
             embed_weights = encoder_state["embed_weights"]
 
-        if config.use_fp16:
+        if config.oscar_use_fp16:
             embed_weights = tf.cast(embed_weights, tf.float16)
 
         if config.train_embeddings:
@@ -228,12 +213,11 @@ def featurizer(X, encoder, config, train=False, reuse=None, encoder_state=None, 
 
         X = tf.reshape(X, [-1, x_shape[1], 2])
 
-        if config.use_timing:
+        if config.oscar_use_timing:
             h = embed(X, embed_weights)
         else:
             h = embed_no_timing(X, embed_weights)
 
-        saliences = []
         for layer in range(config.n_layer):
             with tf.variable_scope('h%d_' % layer):
                 if (
@@ -243,31 +227,24 @@ def featurizer(X, encoder, config, train=False, reuse=None, encoder_state=None, 
                     h = tf.stop_gradient(h)
 
                 block_fn_fwd = functools.partial(
-                    block, block_name='block%d_' % layer, use_fp16=config.use_fp16,
+                    block, block_name='block%d_' % layer, use_fp16=config.oscar_use_fp16,
                     pool_idx=None, encoder_state=encoder_state, train=train,
                     pdrop=config.resid_p_drop, use_fused_kernel=config.oscar_use_fused_kernel,
-                    log_salience=log_salience
                 )
 
                 if config.low_memory_mode and train:
-                    assert not log_salience
                     block_fn_fwd = recompute_grad(block_fn_fwd, use_entire_scope=True)
-                if log_salience:
-                    h, salience = block_fn_fwd(h)
-                else:
-                    salience = None
-                    h = block_fn_fwd(h)
-                saliences.append(salience)
+                h = block_fn_fwd(h)
 
-        h = normal_1d_conv_block(h, 1, "output", config.use_fp16, dilation=1)
+        h = normal_1d_conv_block(h, 1, "output", config.oscar_use_fp16, dilation=1)
 
         mask = tf.expand_dims(tf.sequence_mask(pool_idx, maxlen=tf.shape(h)[1], dtype=h.dtype), -1)
 
-        if config.feat_mode == "clf_tok":
+        if config.oscar_feat_mode == "clf_tok":
             clf_h = tf.gather_nd(h, tf.stack([tf.range(shape_list(h)[0]), pool_idx], 1))
-        elif config.feat_mode == "mean_tok":
+        elif config.oscar_feat_mode == "mean_tok":
             clf_h = tf.reduce_sum(h * mask, 1) / tf.reduce_sum(h)
-        elif config.feat_mode == "max_tok":
+        elif config.oscar_feat_mode == "max_tok":
             clf_h = tf.reduce_max(h - (1e5 * (1.0 - mask)), 1)
         else:
             raise ValueError("config.feat_mode should be one of clf_tok, mean_tok or max_tok")
@@ -288,5 +265,4 @@ def featurizer(X, encoder, config, train=False, reuse=None, encoder_state=None, 
             'sequence_features': seq_feats,
             'pool_idx': pool_idx,
             'encoded_input': X[:, :tf.reduce_min(pool_idx) - 1, 0],
-            'per_layer_salience': tf.stack(saliences, 1) if log_salience else None # Batch, layer, time, in, out
         }

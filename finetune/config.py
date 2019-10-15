@@ -330,19 +330,20 @@ def get_default_config():
         association_types=None,
         assocation_loss_weight=100.0,
 
-        # For experimental conv model
-        use_fp16=False,
-        use_timing=True,
-        scale_loss=False,
+        # LMPred and S2S specicif params
         beam_search_alpha=0.6,
         beam_size=10,
         decoder_sample_from=40,
         sample_temp=1.0,
-        feat_mode="final_state",
         target_model_init_from_base_model=False,
-        oscar_use_fused_kernel=True,
-        balance_lm_loss=False,
         seq_decode_len=512,
+
+        # Oscar only
+        oscar_use_fp16=False,
+        scale_loss=False,
+        oscar_use_timing=True,
+        oscar_feat_mode="final_state",
+        oscar_use_fused_kernel=True,
 
         # Location of model weights
         base_model=GPTModel,
