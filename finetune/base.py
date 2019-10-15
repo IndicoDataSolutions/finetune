@@ -345,7 +345,7 @@ class BaseModel(object, metaclass=ABCMeta):
             n_replicas=max(1, len(self.resolved_gpus))
         )
 
-        hooks = [InitializeHook(self.saver), TimingHook()]
+        hooks = [InitializeHook(self.saver)]
         est = tf.estimator.Estimator(
             model_dir=self.estimator_dir,
             model_fn=model_fn,
@@ -509,18 +509,6 @@ class BaseModel(object, metaclass=ABCMeta):
         raise NotImplementedError(
             "'attention_weights' only supported for GPTModel and GPTModelSmall base models."
         )
-
-    def oscar_saliences(self, Xs):
-        raw_preds = self._inference(Xs, predict_keys=[PredictMode.OSCAR_SALIENCE])
-        encoded = [self.input_pipeline.text_encoder.encode_multi_input([[x]], max_length=self.config.max_length).tokens for x in Xs]
-        out = list()
-        for pred, enc in zip(raw_preds, encoded):
-            l_enc = len(enc)
-            x_out = []
-            for layer_pred in pred:
-                x_out.append(layer_pred[:l_enc, :l_enc])
-            out.append((enc, x_out))
-        return out
 
     def _featurize(self, Xs):
         raw_preds = self._inference(Xs, predict_keys=[PredictMode.FEATURIZE])
@@ -863,15 +851,3 @@ class BaseModel(object, metaclass=ABCMeta):
     def __del__(self):
         if hasattr(self, "_tmp_dir") and self._tmp_dir is not None:
             self._tmp_dir.cleanup()
-
-
-
-class TimingHook(tf.estimator.SessionRunHook):
-    def before_run(self, run_context):
-        if not hasattr(self, "time"):
-            self.time = time.time()
-            LOGGER.warning("Starting timer")
-        return super().before_run(run_context)
-
-    def end(self, session):
-        LOGGER.warning("Execution time was: {}".format(time.time() - self.time))

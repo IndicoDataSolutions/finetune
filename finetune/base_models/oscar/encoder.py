@@ -77,6 +77,11 @@ class GPCEncoder(BaseEncoder):
                 subtokens.append(token)
                 subtoken_idxs.append(self.encoder.piece_to_id(token))
                 raw_text = token.replace(WEIRD_SPM_CHAR, "")
+                token_start_temp = text.find(raw_text, token_start)
+                if token_start_temp == -1:
+                    LOGGER.warning("SentencePiece produced a token {} not found in the original string {}".format(raw_text, text))
+                else:
+                    token_start = token_start_temp
                 tok_pos.append(token_start + len(raw_text))
                 char_starts.append(token_start)
                 token_start += len(raw_text)
