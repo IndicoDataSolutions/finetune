@@ -157,11 +157,7 @@ def get_model_fn(
                     or mode == tf.estimator.ModeKeys.EVAL
                 ) and Y is not None:
                     target_loss = tf.reduce_mean(target_model_state["losses"])
-                    if params.balance_lm_loss:
-                        # Train Loss is currently lm_loss_coef
-                        train_loss = lm_loss_coef * train_loss * tf.stop_gradient(target_loss / train_loss) + target_loss
-                    else:
-                        train_loss += (1 - lm_loss_coef) * target_loss
+                    train_loss += (1 - lm_loss_coef) * target_loss
                     tf.summary.scalar("TargetModelLoss", target_loss)
                 if mode == tf.estimator.ModeKeys.PREDICT or tf.estimator.ModeKeys.EVAL:
                     logits = target_model_state["logits"]
