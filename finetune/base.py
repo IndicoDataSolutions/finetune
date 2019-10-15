@@ -34,7 +34,7 @@ from finetune.util.download import download_data_if_required
 from finetune.util.positional_embeddings import embedding_preprocessor
 from finetune.base_models import GPTModel, GPTModelSmall
 
-from finetune.util.in_memory_finetune import InMemoryFinetune
+from finetune.util.in_memory_finetune import make_in_memory_finetune_hooks
 
 LOGGER = logging.getLogger("finetune")
 
@@ -232,18 +232,7 @@ class BaseModel(object, metaclass=ABCMeta):
         )
 
         if self.config.in_memory_finetune is not None:
-            for f in self.config.in_memory_finetune:
-                train_hooks.append(InMemoryFinetune(
-                    config_to_eval=f["config"],
-                    finetune=self,
-                    eval_dir=estimator.eval_dir(),
-                    X=f["X"],
-                    Y=f["Y"],
-                    X_test=f["X_test"],
-                    Y_test=f["Y_test"],
-                    name=f["name"],
-                    every_n_iter=f["every_n_iter"]
-                ))
+            train_hooks.extend(make_in_memory_finetune_hooks(self))
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -287,6 +276,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         Side effect: sets self.resolved_gpus for future use in computing steps per epoch
         """
+        
         if isinstance(visible_gpus, (list, tuple)):
             resolved_gpus = all_gpus(visible_gpus=tuple(visible_gpus))
         else:
@@ -298,10 +288,17 @@ class BaseModel(object, metaclass=ABCMeta):
         else:
             if self.config.per_process_gpu_memory_fraction is not None:
                 warnings.warn("Setting `per_process_gpu_memory_fraction` is currently unsupported in multi-gpu environments.")
-            if self.config.use_mirrored_distribution:
-                distribute_strategy = tf.distribute.MirroredStrategy()
-            else:
-                distribute_strategy = tf.distribute.experimental.CentralStorageStrategy(resolved_gpus_string or None)
+
+            if isinstance(self.config.distribution_strategy, str):
+                if self.config.distribution_strategy.lower() == "mirrored":
+                    distribute_strategy = tf.distribute.MirroredStrategy()
+                elif self.config.distribution_strategy.lower() == "central_storage":
+                    distribute_strategy = tf.distribute.experimental.CentralStorageStrategy(resolved_gpus_string or None)
+                else:
+                    raise FinetuneError("Distribute strategy {} is not supported, please try \"mirrored\" or \"central_storage\" or an instance of tf.distribute.Strategy")
+            elif isinstance(self.config.distribution_strategy, tf.distribute.Strategy):
+                distribute_strategy = self.config.distribution_strategy
+                    
 
         self.resolved_gpus = resolved_gpus
         return distribute_strategy

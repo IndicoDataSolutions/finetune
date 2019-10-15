@@ -20,7 +20,7 @@ BASE_OSCAR_SETTINGS = {
     'n_layer': 12,
     'num_layers_trained': 12,
     'lr_warmup': 0.1,
-    "use_mirrored_distribution": True,
+    "distribution_strategy":"central_storage",
     'feat_mode': 'clf_tok',
 }
 
