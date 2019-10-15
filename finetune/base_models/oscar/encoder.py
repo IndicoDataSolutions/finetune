@@ -1,6 +1,7 @@
 import os
 import json
 import regex as re
+import logging
 from functools import lru_cache
 
 import numpy as np
@@ -13,6 +14,7 @@ FINETUNE_FOLDER = os.path.dirname(finetune.__file__)
 ENCODER_PATH = os.path.join(FINETUNE_FOLDER, 'model', 'oscar', 'encoder')
 WEIRD_SPM_CHAR = "▁"
 
+LOGGER = logging.getLogger("finetune")
 
 def train_tokenizer(filename, vocab_size=128000):
     spm.SentencePieceTrainer.train(
