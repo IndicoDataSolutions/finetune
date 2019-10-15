@@ -49,7 +49,12 @@ class SequencePipeline(BasePipeline):
         counter = Counter()
         for doc, target_arr in encoded_dataset:
             targets = target_arr[doc["mask"].astype(np.bool)]
-            counter.update(self.label_encoder.inverse_transform(targets))
+            unencoded = self.label_encoder.inverse_transform(targets)
+            if self.multi_label:
+                for label in unencoded:
+                    counter.update(label)
+            else:
+                counter.update(unencoded)
         return counter
 
     def _format_for_encoding(self, X):

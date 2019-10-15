@@ -364,15 +364,6 @@ def sequence_labeler(
                 )
             logits = seq_lab_internal(hidden)
 
-        class_weights = kwargs.get("class_weights")
-        if class_weights is not None and train:
-            class_weights = tf.reshape(class_weights, [1, 1, -1])
-            one_hot_class_weights = class_weights * tf.one_hot(targets, depth=n_targets)
-            per_token_weights = tf.reduce_sum(
-                one_hot_class_weights, axis=-1, keep_dims=True
-            )
-            logits = class_reweighting(per_token_weights)(logits)
-
         log_likelihood = 0.0
 
         default_lengths = kwargs.get("max_length") * tf.ones(
@@ -380,7 +371,8 @@ def sequence_labeler(
         )
         if lengths is None:
             lengths = default_lengths
-
+            
+        class_weights = kwargs.get("class_weights")
         with tf.device("CPU:0"):
             if multilabel:
                 transition_params = []
@@ -398,14 +390,29 @@ def sequence_labeler(
                         )
                     )
                     if targets is not None and i != pad_id:
+                        if class_weights is not None:
+                            is_pos_cls = tf.cast(targets_individual[i], dtype=tf.float32)
+                            class_weight = tf.expand_dims(class_weights[i] * is_pos_cls + class_weights[pad_id] * (1.0 - is_pos_cls), -1)
+                            logits_i = class_reweighting(class_weight)(logits[-1])
+                        else:
+                            logits_i = logits[i]
+                            
                         log_likelihood += crf_log_likelihood(
-                            logits[-1],
+                            logits_i,
                             targets_individual[i],
                             lengths,
                             transition_params=transition_params[-1],
                         )[0]
                 logits = tf.stack(logits, axis=-1)
             else:
+                if class_weights is not None and train:
+                    class_weights = tf.reshape(class_weights, [1, 1, -1])
+                    one_hot_class_weights = class_weights * tf.one_hot(targets, depth=n_targets)
+                    per_token_weights = tf.reduce_sum(
+                        one_hot_class_weights, axis=-1, keep_dims=True
+                    )
+                    logits = class_reweighting(per_token_weights)(logits)
+                                                                                                          
                 transition_params = tf.get_variable(
                     "Transition_matrix", shape=[n_targets, n_targets]
                 )

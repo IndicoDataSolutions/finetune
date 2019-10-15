@@ -47,8 +47,8 @@ def class_weight_tensor(class_weights, target_dim, label_encoder):
     Convert from dictionary of class weights to tf tensor
     """
     class_weight_arr = np.ones(target_dim, dtype=np.float32)
-    for class_name, class_weight in class_weights.items():
-        idx = LabelEncoder.transform(label_encoder, [class_name])[0]
-        class_weight_arr[idx] = class_weight
+    for i, cls in enumerate(label_encoder.target_labels):
+        class_weight_arr[i] = class_weights.get(cls, 1.0)
+
     class_weight_tensor = tf.convert_to_tensor(class_weight_arr)
     return class_weight_tensor
