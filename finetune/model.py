@@ -38,7 +38,6 @@ class PredictMode:
     ASSOCIATION = "ASSOCIATION"
     ASSOCIATION_PROBAS = "ASSOCIATION_PROBA"
     EXPLAIN = "EXPLAIN"
-    OSCAR_SALIENCE = "OSCAR_SALIENCE"
 
 
 def language_model_op(X, M, params, featurizer_state, mode, encoder):
@@ -139,11 +138,6 @@ def get_model_fn(
                 PredictMode.FEATURIZE: featurizer_state["features"], 
                 PredictMode.SEQUENCE: featurizer_state["sequence_features"]
             }
-
-            if "per_layer_salience" in featurizer_state and featurizer_state["per_layer_salience"] is not None:
-                predictions[PredictMode.OSCAR_SALIENCE] = featurizer_state[
-                    "per_layer_salience"
-                ]
 
             if params.base_model in [GPTModel, GPTModelSmall]:
                 predictions[PredictMode.ATTENTION] = featurizer_state[
