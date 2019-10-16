@@ -91,7 +91,7 @@ class DeploymentPipeline(BasePipeline):
         return shapes[0]
 
     def get_target_input_fn(self, features, batch_size=None):
-        batch_size = batch_size or self.config.batch_size
+        batch_size = batch_size or self.config.predict_batch_size
         features = pd.DataFrame(features).to_dict("list")
         for key in features:
             features[key] = np.array(features[key])
@@ -309,19 +309,19 @@ class DeploymentModel(BaseModel):
 
         self._clear_prediction_queue()
 
-        num_batches = math.ceil(n / self.config.batch_size)
+        num_batches = math.ceil(n / self.config.predict_batch_size)
         features = [None] * n
         for i in tqdm.tqdm(range(num_batches), total=num_batches, desc="Featurization by Batch"):
             y = next(self._predictions)
             for j in range(
-                self.config.batch_size
+                self.config.predict_batch_size
             ):  # this loop needed since yield_single_examples is False. In this case, n = # of predictions * batch_size
                 single_example = {key: value[j] for key, value in y.items()}
-                if self.config.batch_size * i + j > n - 1:
+                if self.config.predict_batch_size * i + j > n - 1:
                     #  this is a result of the generator using cached_example and to_pull. If this is the last batch,
                     #  we need to check that all examples come from self._data and are not cached examples
                     break
-                features[self.config.batch_size * i + j] = single_example
+                features[self.config.predict_batch_size * i + j] = single_example
 
         if exclude_target:  # to initialize featurizer weights in load_featurizer
             return features

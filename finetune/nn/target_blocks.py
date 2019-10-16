@@ -23,7 +23,7 @@ def perceptron(x, ny, config, w_init=None, b_init=None):
     b_init = b_init or tf.constant_initializer(0)
 
     with tf.variable_scope('perceptron'):
-        nx = shape_list(x)[-1]
+        nx = config.n_embed
         w = tf.get_variable("w", [nx, ny], initializer=w_init)
         b = tf.get_variable("b", [ny], initializer=b_init)
         return tf.matmul(x, w) + b

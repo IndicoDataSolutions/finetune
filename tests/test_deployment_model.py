@@ -112,6 +112,7 @@ class TestDeploymentModel(unittest.TestCase):
     def default_config(cls, **kwargs):
         defaults = {
             'batch_size': 2,
+            'predict_batch_size': 2,
             'max_length': 256,
             'n_epochs': 3,
             'adapter_size': 64,
