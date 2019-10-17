@@ -119,7 +119,7 @@ class BasePipeline(metaclass=ABCMeta):
 
     def _post_data_initialization(self, Y=None):
         if Y is not None:
-            if self.label_encoder is not None:
+            if self.label_encoder is None:
                 self.label_encoder = self._target_encoder()
                 if not callable(Y):
                     self.label_encoder.fit(Y)
