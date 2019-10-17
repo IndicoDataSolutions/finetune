@@ -12,6 +12,8 @@ import time
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 import pytest
+from pytest import approx
+
 import tensorflow as tf
 import numpy as np
 from sklearn.metrics import accuracy_score
@@ -208,7 +210,9 @@ class TestSequenceLabeler(unittest.TestCase):
             assert len(preds) == 2
 
         for uncached_pred, cached_pred in zip(uncached_preds, preds):
-            self.assertEqual(str(uncached_pred), str(cached_pred))
+            for a, b in zip(tf.nest.flatten(uncached_pred),  tf.nest.flatten(cached_pred)):
+                if a != b and a != approx(b, abs=1e-5):
+                    raise Exception("Predictions are not equal")
 
         first_prediction_time = (first - start)
         second_prediction_time = (second - first)
