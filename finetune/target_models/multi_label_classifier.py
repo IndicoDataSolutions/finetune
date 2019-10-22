@@ -15,7 +15,9 @@ class MultilabelClassificationPipeline(BasePipeline):
 
 class MultiLabelClassifier(BaseModel):
     """ 
-    Classifies a single document into upto N of N categories.
+    Classifies a single document into up to N of N categories.
+
+    Implemented via a sum of N sigmoid losses applied a linear projection of the base model's output representation.
     
     :param config: A :py:class:`finetune.config.Settings` object or None (for default config).
     :param \**kwargs: key-value pairs of config items to override.
