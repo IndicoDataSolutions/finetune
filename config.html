@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Model Configuration Options &mdash; finetune 0.8.2 documentation</title>
+  <title>Model Configuration Options &mdash; finetune 0.8.3 documentation</title>
   
 
   
@@ -35,7 +35,7 @@
         <link rel="index" title="Index"
               href="genindex.html"/>
         <link rel="search" title="Search" href="search.html"/>
-    <link rel="top" title="finetune 0.8.2 documentation" href="index.html"/>
+    <link rel="top" title="finetune 0.8.3 documentation" href="index.html"/>
         <link rel="next" title="Resource Management" href="resource.html"/>
         <link rel="prev" title="Saving and Loading Models" href="serializing.html"/> 
 
@@ -66,7 +66,7 @@
             
             
               <div class="version">
-                0.8.2
+                0.8.3
               </div>
             
           
@@ -183,16 +183,15 @@
 <col class="field-body" />
 <tbody valign="top">
 <tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
-<li><strong>base_model</strong> – Which base model to use - one of {GPT, GPT2, RoBERTa, BERT, TextCNN, TCN}, imported from finetune.base_models. Defaults to <cite>GPT</cite>.</li>
 <li><strong>batch_size</strong> – Number of examples per batch, defaults to <cite>2</cite>.</li>
 <li><strong>visible_gpus</strong> – List of integer GPU ids to spread out computation across, defaults to all available GPUs.</li>
 <li><strong>n_epochs</strong> – Number of iterations through training data, defaults to <cite>3</cite>.</li>
-<li><strong>seed</strong> – Random seed to use for repeatability purposes, defaults to <cite>42</cite>.</li>
+<li><strong>random_seed</strong> – Random seed to use for repeatability purposes, defaults to <cite>42</cite>.</li>
 <li><strong>max_length</strong> – Maximum number of subtokens per sequence. Examples longer than this number will be truncated
 (unless <cite>chunk_long_sequences=True</cite> for SequenceLabeler models). Defaults to <cite>512</cite>.</li>
 <li><strong>weight_stddev</strong> – Standard deviation of initial weights.  Defaults to <cite>0.02</cite>.</li>
 <li><strong>chunk_long_sequences</strong> – When True, use a sliding window approach to predict on
-examples that are longer than max length.  The progress bar will display the number of chunks processed rather than the number of examples. Defaults to <cite>True</cite>.</li>
+examples that are longer than max length.  Defaults to <cite>False</cite>.</li>
 <li><strong>low_memory_mode</strong> – When True, only store partial gradients on forward pass
 and recompute remaining gradients incrementally in order to save memory.  Defaults to <cite>False</cite>.</li>
 <li><strong>interpolate_pos_embed</strong> – Interpolate positional embeddings when <cite>max_length</cite> differs from it’s original value of
@@ -211,24 +210,19 @@ and recompute remaining gradients incrementally in order to save memory.  Defaul
 <li><strong>lr</strong> – Learning rate.  Defaults to <cite>6.25e-5</cite>.</li>
 <li><strong>lr_warmup</strong> – Learning rate warmup (percentage of all batches to warmup for).  Defaults to <cite>0.002</cite>.</li>
 <li><strong>max_grad_norm</strong> – Clip gradients larger than this norm. Defaults to <cite>1.0</cite>.</li>
-<li><strong>shuffle_buffer_size</strong> – How many examples to load into a buffer before shuffling. Defaults to <cite>100</cite>.</li>
-<li><strong>dataset_size</strong> – Must be specified in order to calculate the learning rate schedule when the inputs provided are generators rather than static datasets.</li>
 <li><strong>accum_steps</strong> – Number of updates to accumulate before applying. This is used to simulate a higher batch size.</li>
 <li><strong>lm_loss_coef</strong> – Language modeling loss coefficient – a value between <cite>0.0</cite> - <cite>1.0</cite>
 that indicates how to trade off between language modeling loss
 and target model loss.  Usually not beneficial to turn on unless
 dataset size exceeds a few thousand examples.  Defaults to <cite>0.0</cite>.</li>
-<li><strong>tsa_schedule</strong> – Training Signal Annealing Schedule from ‘Unsupervised Data Augmentation for Consistency Training’. One of {“linear_schedule”, “exp_schedule”, “log_schedule”}.  Defaults to <cite>None</cite>.</li>
 <li><strong>summarize_grads</strong> – Include gradient summary information in tensorboard.  Defaults to <cite>False</cite>.</li>
-<li><strong>val_size</strong> – Validation set size if int. Validation set size as percentage of all training data if float.  Defaults to 0.  If value “auto” is provided, validation will not be run by default if n_examples &lt; 50.
+<li><strong>val_size</strong> – Validation set size if int. Validation set size as percentage of all training data if float.  Validation will not be run by default if n_examples &lt; 50.
 If n_examples &gt; 50, defaults to max(5, min(100, 0.05 * n_examples))</li>
 <li><strong>val_interval</strong> – Evaluate on validation set after <cite>val_interval</cite> batches.
 Defaults to 4 * val_size / batch_size to ensure that too much time is not spent on validation.</li>
 <li><strong>lm_temp</strong> – Language model temperature – a value of <cite>0.0</cite> corresponds to greedy maximum likelihood predictions
 while a value of <cite>1.0</cite> corresponds to random predictions. Defaults to <cite>0.2</cite>.</li>
 <li><strong>seq_num_heads</strong> – Number of attention heads of final attention layer. Defaults to <cite>16</cite>.</li>
-<li><strong>keep_best_model</strong> – Whether or not to keep the highest-performing model weights throughout the train. Defaults to <cite>False</cite>.</li>
-<li><strong>early_stopping_steps</strong> – How many steps to continue with no loss improvement before early stopping. Defaults to <cite>None</cite>.</li>
 <li><strong>subtoken_predictions</strong> – Return predictions at subtoken granularity or token granularity?  Defaults to <cite>False</cite>.</li>
 <li><strong>multi_label_sequences</strong> – Use a multi-labeling approach to sequence labeling to allow overlapping labels.</li>
 <li><strong>multi_label_threshold</strong> – Threshold of sigmoid unit in multi label classifier.
@@ -239,7 +233,7 @@ unless tensorboard_folder is explicitly provided. Defaults to <cite>None</cite>.
 <li><strong>log_device_placement</strong> – Log which device each operation is placed on for debugging purposes.  Defaults to <cite>False</cite>.</li>
 <li><strong>allow_soft_placement</strong> – Allow tf to allocate an operation to a different device if a device is unavailable.  Defaults to <cite>True</cite>.</li>
 <li><strong>save_adam_vars</strong> – Save adam parameters when calling <cite>model.save()</cite>.  Defaults to <cite>True</cite>.</li>
-<li><strong>num_layers_trained</strong> – How many layers to finetune.  Specifying a value less than model’s number of layers will train layers starting from model output. Defaults to <cite>12</cite>.</li>
+<li><strong>num_layers_trained</strong> – How many layers to finetune.  Specifying a value less than 12 will train layers starting from model output. Defaults to <cite>12</cite>.</li>
 <li><strong>train_embeddings</strong> – Should embedding layer be finetuned? Defaults to <cite>True</cite>.</li>
 <li><strong>class_weights</strong> – One of ‘log’, ‘linear’, or ‘sqrt’. Auto-scales gradient updates based on class frequency.  Can also be a dictionary that maps from true class name to loss coefficient. Defaults to <cite>None</cite>.</li>
 <li><strong>oversample</strong> – Should rare classes be oversampled?  Defaults to <cite>False</cite>.</li>
@@ -253,7 +247,6 @@ If you are using a single GPU and have more than 4Gb of GPU memory you should se
 <li><strong>val_set</strong> – Where it is neccessary to use an explicit validation set, provide it here as a tuple (text, labels)</li>
 <li><strong>per_process_gpu_memory_fraction</strong> – fraction of the overall amount of memory that each visible GPU should be allocated, defaults to <cite>1.0</cite>.</li>
 <li><strong>adapter_size</strong> – width of adapter module from ‘Parameter Efficient Transfer Learning’ paper, if defined. defaults to ‘None’.</li>
-<li><strong>n_context_embed</strong> – Dimensionality of auxiliary info embeddings. Only use if passing ‘default_context’ to the model as well. Defaults to <cite>6</cite> for convolutional models, otherwise <cite>32</cite>.</li>
 </ul>
 </td>
 </tr>
@@ -307,7 +300,7 @@ If you are using a single GPU and have more than 4Gb of GPU memory you should se
     <script type="text/javascript">
         var DOCUMENTATION_OPTIONS = {
             URL_ROOT:'./',
-            VERSION:'0.8.2',
+            VERSION:'0.8.3',
             COLLAPSE_INDEX:false,
             FILE_SUFFIX:'.html',
             HAS_SOURCE:  true,

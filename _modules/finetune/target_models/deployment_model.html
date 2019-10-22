@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>finetune.target_models.deployment_model &mdash; finetune 0.8.2 documentation</title>
+  <title>finetune.target_models.deployment_model &mdash; finetune 0.8.3 documentation</title>
   
 
   
@@ -35,7 +35,7 @@
         <link rel="index" title="Index"
               href="../../../genindex.html"/>
         <link rel="search" title="Search" href="../../../search.html"/>
-    <link rel="top" title="finetune 0.8.2 documentation" href="../../../index.html"/>
+    <link rel="top" title="finetune 0.8.3 documentation" href="../../../index.html"/>
         <link rel="up" title="Module code" href="../../index.html"/> 
 
   
@@ -65,7 +65,7 @@
             
             
               <div class="version">
-                0.8.2
+                0.8.3
               </div>
             
           
@@ -189,16 +189,13 @@
 <span class="kn">from</span> <span class="nn">finetune.target_models.sequence_labeling</span> <span class="k">import</span> <span class="n">SequencePipeline</span><span class="p">,</span> <span class="n">SequenceLabeler</span>
 <span class="kn">from</span> <span class="nn">finetune.target_models.association</span> <span class="k">import</span> <span class="n">AssociationPipeline</span>
 <span class="kn">from</span> <span class="nn">finetune.target_models.classifier</span> <span class="k">import</span> <span class="n">ClassificationPipeline</span>
-<span class="kn">from</span> <span class="nn">finetune.base_models.bert.featurizer</span> <span class="k">import</span> <span class="n">bert_featurizer</span>
-<span class="kn">from</span> <span class="nn">finetune.base_models.gpt.featurizer</span> <span class="k">import</span> <span class="n">gpt_featurizer</span>
-<span class="kn">from</span> <span class="nn">finetune.base_models.gpt2.featurizer</span> <span class="k">import</span> <span class="n">gpt2_featurizer</span>
+<span class="kn">from</span> <span class="nn">finetune.base_models</span> <span class="k">import</span> <span class="n">GPTModel</span><span class="p">,</span> <span class="n">GPTModelSmall</span><span class="p">,</span> <span class="n">BERTModelCased</span><span class="p">,</span> <span class="n">GPT2Model</span>
 <span class="kn">from</span> <span class="nn">finetune.model</span> <span class="k">import</span> <span class="n">get_separate_model_fns</span><span class="p">,</span> <span class="n">PredictMode</span>
 <span class="kn">from</span> <span class="nn">finetune.errors</span> <span class="k">import</span> <span class="n">FinetuneError</span>
 <span class="kn">from</span> <span class="nn">finetune.input_pipeline</span> <span class="k">import</span> <span class="n">BasePipeline</span>
 
-<span class="n">LOGGER</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">&quot;finetune&quot;</span><span class="p">)</span>
-<span class="n">PredictHook</span> <span class="o">=</span> <span class="n">namedtuple</span><span class="p">(</span><span class="s2">&quot;InitializeHook&quot;</span><span class="p">,</span> <span class="s2">&quot;feat_hook target_hook&quot;</span><span class="p">)</span>
-
+<span class="n">LOGGER</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s1">&#39;finetune&#39;</span><span class="p">)</span>
+<span class="n">PredictHook</span> <span class="o">=</span> <span class="n">namedtuple</span><span class="p">(</span><span class="s1">&#39;InitializeHook&#39;</span><span class="p">,</span> <span class="s1">&#39;feat_hook target_hook&#39;</span><span class="p">)</span>
 
 <span class="k">class</span> <span class="nc">TaskMode</span><span class="p">:</span>
     <span class="n">SEQUENCE_LABELING</span> <span class="o">=</span> <span class="s2">&quot;Sequence_Labeling&quot;</span>
@@ -208,6 +205,7 @@
 
 
 <span class="k">class</span> <span class="nc">DeploymentPipeline</span><span class="p">(</span><span class="n">BasePipeline</span><span class="p">):</span>
+
     <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">pipeline_type</span> <span class="o">=</span> <span class="kc">None</span>
@@ -216,75 +214,45 @@
     <span class="k">def</span> <span class="nf">_target_encoder</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span>
 
-    <span class="k">def</span> <span class="nf">_dataset_without_targets</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">,</span> <span class="n">train</span><span class="p">,</span> <span class="n">context</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_dataset_without_targets</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">,</span> <span class="n">train</span><span class="p">):</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">callable</span><span class="p">(</span><span class="n">Xs</span><span class="p">):</span>
             <span class="n">Xs_fn</span> <span class="o">=</span> <span class="k">lambda</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">wrap_tqdm</span><span class="p">(</span><span class="n">Xs</span><span class="p">,</span> <span class="n">train</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">context</span><span class="p">:</span>
-                <span class="n">Xs</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">Xs</span><span class="p">,</span> <span class="n">context</span><span class="p">))</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">Xs_fn</span> <span class="o">=</span> <span class="k">lambda</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">wrap_tqdm</span><span class="p">(</span><span class="n">Xs</span><span class="p">(),</span> <span class="n">train</span><span class="p">)</span>
-
-        <span class="n">dataset_encoded</span> <span class="o">=</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">itertools</span><span class="o">.</span><span class="n">chain</span><span class="o">.</span><span class="n">from_iterable</span><span class="p">(</span>
-            <span class="nb">map</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">get_text_token_mask</span><span class="p">,</span> <span class="n">Xs_fn</span><span class="p">())</span>
-        <span class="p">)</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">callable</span><span class="p">(</span><span class="n">Xs</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">chunk_long_sequences</span><span class="p">:</span>
-            <span class="c1"># Adjust dataset size to account for long documents being chunked</span>
-            <span class="n">dataset_encoded_list</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">dataset_encoded</span><span class="p">())</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">dataset_size</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">dataset_encoded_list</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">_</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">get_active_pipeline</span><span class="p">()</span>
-            <span class="p">)</span>  <span class="c1"># Call of dataset_encoded will refresh self.pipeline; if it is not called, still need to refresh</span>
-
-        <span class="n">types</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">feed_shape_type_def</span><span class="p">()</span>
+        
+        <span class="n">dataset_encoded</span> <span class="o">=</span> <span class="k">lambda</span><span class="p">:</span> <span class="n">itertools</span><span class="o">.</span><span class="n">chain</span><span class="o">.</span><span class="n">from_iterable</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">get_text_token_mask</span><span class="p">,</span> <span class="n">Xs_fn</span><span class="p">()))</span>
+        <span class="n">types</span><span class="p">,</span> <span class="n">shapes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">feed_shape_type_def</span><span class="p">()</span>
 
         <span class="k">return</span> <span class="n">Dataset</span><span class="o">.</span><span class="n">from_generator</span><span class="p">(</span><span class="n">dataset_encoded</span><span class="p">,</span> <span class="n">output_types</span><span class="o">=</span><span class="n">types</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
-
+        
     <span class="k">def</span> <span class="nf">get_active_pipeline</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="n">pipelines</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="s2">&quot;Classification&quot;</span><span class="p">:</span> <span class="n">ClassificationPipeline</span><span class="p">,</span>
-            <span class="s2">&quot;Comparison&quot;</span><span class="p">:</span> <span class="n">ComparisonPipeline</span><span class="p">,</span>
-            <span class="s2">&quot;Sequence_Labeling&quot;</span><span class="p">:</span> <span class="n">SequencePipeline</span><span class="p">,</span>
-            <span class="s2">&quot;Association&quot;</span><span class="p">:</span> <span class="n">AssociationPipeline</span><span class="p">,</span>
-        <span class="p">}</span>
+        <span class="n">pipelines</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;Classification&#39;</span><span class="p">:</span><span class="n">ClassificationPipeline</span><span class="p">,</span> <span class="s1">&#39;Comparison&#39;</span><span class="p">:</span><span class="n">ComparisonPipeline</span><span class="p">,</span> <span class="s1">&#39;Sequence_Labeling&#39;</span><span class="p">:</span><span class="n">SequencePipeline</span><span class="p">,</span> <span class="s1">&#39;Association&#39;</span><span class="p">:</span><span class="n">AssociationPipeline</span><span class="p">}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">pipeline_type</span> <span class="o">=</span> <span class="n">pipelines</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">task</span><span class="p">]</span>
-        <span class="k">if</span> <span class="p">(</span>
-            <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pipeline</span><span class="p">)</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pipeline_type</span>
-        <span class="p">):</span>  <span class="c1"># to prevent instantiating the same type of pipeline repeatedly</span>
+        <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pipeline</span><span class="p">)</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pipeline_type</span><span class="p">:</span>  <span class="c1">#to prevent instantiating the same type of pipeline repeatedly</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pipeline_type</span> <span class="o">==</span> <span class="n">SequencePipeline</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">pipeline</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pipeline_type</span><span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">,</span> <span class="n">multi_label</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">multi_label</span>
-                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">pipeline</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pipeline_type</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">,</span> <span class="n">multi_label</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">multi_label</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">pipeline</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pipeline_type</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">use_auxiliary_info</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">pipeline</span><span class="o">.</span><span class="n">use_auxiliary_info</span> <span class="o">=</span> <span class="kc">True</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">pipeline</span><span class="o">.</span><span class="n">label_encoders</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">label_encoders</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">pipeline</span><span class="o">.</span><span class="n">context_labels</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context_labels</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">pipeline</span><span class="o">.</span><span class="n">context_dim</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">context_dim</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">pipeline</span><span class="o">.</span><span class="n">label_stats</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">label_stats</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">pipeline</span><span class="o">.</span><span class="n">default_context</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">default_context</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">pipeline_type</span>
 
-    <span class="k">def</span> <span class="nf">get_text_token_mask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">X</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">get_text_token_mask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
         <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_active_pipeline</span><span class="p">()</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">pipeline</span><span class="o">.</span><span class="n">text_to_tokens_mask</span><span class="p">(</span><span class="o">*</span><span class="n">X</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">pipeline</span><span class="o">.</span><span class="n">text_to_tokens_mask</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">get_shapes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_active_pipeline</span><span class="p">()</span>
-        <span class="n">_</span><span class="p">,</span> <span class="n">shapes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pipeline</span><span class="o">.</span><span class="n">feed_shape_type_def</span><span class="p">()</span>
-        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;dataset&quot;</span><span class="p">):</span>
+        <span class="n">types</span><span class="p">,</span> <span class="n">shapes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pipeline</span><span class="o">.</span><span class="n">feed_shape_type_def</span><span class="p">()</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s1">&#39;dataset&#39;</span><span class="p">):</span>
+            <span class="mi">1</span><span class="o">/</span><span class="mi">0</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">dataset</span><span class="o">.</span><span class="n">output_shapes</span> <span class="o">=</span> <span class="n">shapes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
         <span class="k">return</span> <span class="n">shapes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
 
     <span class="k">def</span> <span class="nf">get_target_input_fn</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">features</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="n">batch_size</span> <span class="o">=</span> <span class="n">batch_size</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">batch_size</span>
-        <span class="n">features</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">features</span><span class="p">)</span><span class="o">.</span><span class="n">to_dict</span><span class="p">(</span><span class="s2">&quot;list&quot;</span><span class="p">)</span>
+        <span class="n">features</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">features</span><span class="p">)</span><span class="o">.</span><span class="n">to_dict</span><span class="p">(</span><span class="s1">&#39;list&#39;</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">features</span><span class="p">:</span>
             <span class="n">features</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">features</span><span class="p">[</span><span class="n">key</span><span class="p">])</span>
-        <span class="k">return</span> <span class="n">tf</span><span class="o">.</span><span class="n">estimator</span><span class="o">.</span><span class="n">inputs</span><span class="o">.</span><span class="n">numpy_input_fn</span><span class="p">(</span>
-            <span class="n">features</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">shuffle</span><span class="o">=</span><span class="kc">False</span>
-        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">tf</span><span class="o">.</span><span class="n">estimator</span><span class="o">.</span><span class="n">inputs</span><span class="o">.</span><span class="n">numpy_input_fn</span><span class="p">(</span><span class="n">features</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">shuffle</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="DeploymentModel"><a class="viewcode-back" href="../../../api.html#finetune.DeploymentModel">[docs]</a><span class="k">class</span> <span class="nc">DeploymentModel</span><span class="p">(</span><span class="n">BaseModel</span><span class="p">):</span>
@@ -295,105 +263,67 @@
 <span class="sd">    :param config: A :py:class:`finetune.config.Settings` object or None (for default config).</span>
 <span class="sd">    :param \**kwargs: key-value pairs of config items to override.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">featurizer</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">auxiliary_info</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">featurizer</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        For a full list of configuration options, see `finetune.config`.</span>
 
 <span class="sd">        :param base_model: One of the base models from finetune.base_models, excluding textcnn.</span>
 <span class="sd">        :param **kwargs: key-value pairs of config items to override.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span> <span class="o">=</span> <span class="kc">None</span>
-
-        <span class="k">if</span> <span class="s2">&quot;base_model&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">featurizer</span> <span class="ow">and</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;base_model&quot;</span><span class="p">]</span> <span class="o">!=</span> <span class="n">featurizer</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="n">FinetuneError</span><span class="p">(</span><span class="s2">&quot;Base model passed in config does not match featurizer argument&quot;</span><span class="p">)</span>
-            <span class="n">featurizer</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;base_model&quot;</span><span class="p">)</span>
-
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">base_model</span><span class="o">=</span><span class="n">featurizer</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">featurizer</span><span class="o">.</span><span class="n">featurizer</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="n">gpt2_featurizer</span><span class="p">,</span> <span class="n">gpt_featurizer</span><span class="p">,</span> <span class="n">bert_featurizer</span><span class="p">]:</span>
+        <span class="k">if</span> <span class="n">featurizer</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="n">GPTModel</span><span class="p">,</span> <span class="n">GPTModelSmall</span><span class="p">,</span> <span class="n">BERTModelCased</span><span class="p">,</span> <span class="n">GPT2Model</span><span class="p">]:</span>
             <span class="k">raise</span> <span class="n">FinetuneError</span><span class="p">(</span><span class="s2">&quot;Selected base model not supported.&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="o">=</span> <span class="n">get_config</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">validate_config</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">use_auxiliary_info</span> <span class="o">=</span> <span class="n">auxiliary_info</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span> <span class="o">=</span> <span class="n">DeploymentPipeline</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">base_model</span> <span class="o">=</span> <span class="n">featurizer</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">task</span> <span class="o">=</span> <span class="n">TaskMode</span><span class="o">.</span><span class="n">CLASSIFICATION</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">task</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">task</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">featurizer_loaded</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">adapters</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">loaded_custom_previously</span> <span class="o">=</span> <span class="kc">False</span>
 
-<div class="viewcode-block" id="DeploymentModel.load_featurizer"><a class="viewcode-back" href="../../../api.html#finetune.DeploymentModel.load_featurizer">[docs]</a>    <span class="k">def</span> <span class="nf">load_featurizer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">override</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<div class="viewcode-block" id="DeploymentModel.load_featurizer"><a class="viewcode-back" href="../../../api.html#finetune.DeploymentModel.load_featurizer">[docs]</a>    <span class="k">def</span> <span class="nf">load_featurizer</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Performs graph compilation of the featurizer, saving most compilation overhead from occurring at predict time. Should</span>
 <span class="sd">        be called after initialization but BEFORE any calls to load_custom_model or predict.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="p">(</span>
-            <span class="n">override</span> <span class="ow">or</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">use_auxiliary_info</span>
-        <span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">featurizer_loaded</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">featurizer_est</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_estimator</span><span class="p">(</span><span class="s2">&quot;featurizer&quot;</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">predict_hooks</span><span class="o">.</span><span class="n">feat_hook</span><span class="o">.</span><span class="n">model_portion</span> <span class="o">=</span> <span class="s2">&quot;whole_featurizer&quot;</span>
-            <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">predict_hooks</span><span class="p">:</span>
-                <span class="n">hook</span><span class="o">.</span><span class="n">need_to_refresh</span> <span class="o">=</span> <span class="kc">True</span>
-
-            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">use_auxiliary_info</span><span class="p">:</span>
-                <span class="n">output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span>
-                    <span class="p">[</span><span class="s2">&quot;finetune&quot;</span><span class="p">],</span> <span class="n">exclude_target</span><span class="o">=</span><span class="kc">True</span>
-                <span class="p">)</span>  <span class="c1"># run arbitrary predict call to compile featurizer graph</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">featurizer_loaded</span> <span class="o">=</span> <span class="kc">True</span>
-        <span class="k">elif</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">featurizer_loaded</span><span class="p">:</span>
-            <span class="n">LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
-                <span class="s2">&quot;Delaying featurizer loading until the first call of predict, since auxiliary_info is turned on and the default schema for the information has not yet been supplied.&quot;</span>
-            <span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">featurizer_est</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_estimator</span><span class="p">(</span><span class="s1">&#39;featurizer&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">predict_hooks</span><span class="o">.</span><span class="n">feat_hook</span><span class="o">.</span><span class="n">model_portion</span> <span class="o">=</span> <span class="s1">&#39;whole_featurizer&#39;</span>
+        <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">predict_hooks</span><span class="p">:</span>
+            <span class="n">hook</span><span class="o">.</span><span class="n">need_to_refresh</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="n">output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">predict</span><span class="p">([</span><span class="s1">&#39;finetune&#39;</span><span class="p">],</span> <span class="n">exclude_target</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="c1">#run arbitrary predict call to compile featurizer graph</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">featurizer_loaded</span> <span class="o">=</span> <span class="kc">True</span></div>
 
 <div class="viewcode-block" id="DeploymentModel.load_custom_model"><a class="viewcode-back" href="../../../api.html#finetune.DeploymentModel.load_custom_model">[docs]</a>    <span class="k">def</span> <span class="nf">load_custom_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Load in target model, and either adapters or entire featurizer from file. Must be called after load_featurizer.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">featurizer_loaded</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">use_auxiliary_info</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="n">FinetuneError</span><span class="p">(</span>
-                <span class="s2">&quot;Need to call load_featurizer before loading weights from file.&quot;</span>
-            <span class="p">)</span>
-
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">featurizer_loaded</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">FinetuneError</span><span class="p">(</span><span class="s1">&#39;Need to call load_featurizer before loading weights from file.&#39;</span><span class="p">)</span>
         <span class="n">original_model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">saver</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
-        <span class="n">original_model</span><span class="o">.</span><span class="n">_trained</span> <span class="o">=</span> <span class="kc">True</span>
-
-        <span class="k">if</span> <span class="n">original_model</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">adapter_size</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">adapter_size</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="n">FinetuneError</span><span class="p">(</span><span class="s2">&quot;adapter_size in config is compatible with this model&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">original_model</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">adapter_size</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Loading without adapters will result in slightly slower load time than models that use adapters, and will also slow the next switch to an adapter model.&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">predict_hooks</span><span class="o">.</span><span class="n">feat_hook</span><span class="o">.</span><span class="n">model_portion</span> <span class="o">=</span> <span class="s1">&#39;whole_featurizer&#39;</span> <span class="c1">#need to load everything from save file, rather than standard base model file</span>
+        <span class="k">elif</span> <span class="n">original_model</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">adapter_size</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">adapter_size</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">FinetuneError</span><span class="p">(</span><span class="s1">&#39;adapter_size in config is compatible with this model&#39;</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">base_model</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">type</span><span class="p">(</span><span class="n">original_model</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">base_model</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="n">FinetuneError</span><span class="p">(</span><span class="s2">&quot;Loaded file has incompatible base model.&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="n">FinetuneError</span><span class="p">(</span><span class="s1">&#39;Loaded file has incompatible base model.&#39;</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">original_model</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">max_length</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="n">FinetuneError</span><span class="p">(</span>
-                <span class="s2">&quot;Loaded model has a different config.max_length than current value. Changing max_length between loads is not yet supported.&quot;</span>
-            <span class="p">)</span>
-        <span class="k">if</span> <span class="n">original_model</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">use_auxiliary_info</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">use_auxiliary_info</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="n">FinetuneError</span><span class="p">(</span>
-                <span class="s2">&quot;Loaded model has a different config.use_auxiliary_info than this DeploymentModel&#39;s value at initialization. Changing this flag is incompatible with the cached predict of the DeploymentModel.&quot;</span>
-            <span class="p">)</span>
+            <span class="k">raise</span> <span class="n">FinetuneError</span><span class="p">(</span><span class="s1">&#39;Loaded model has a different config.max_length than current value. Changing max_length between loads is not yet supported.&#39;</span><span class="p">)</span>
 
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">adapters</span> <span class="ow">or</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">loaded_custom_previously</span><span class="p">:</span> <span class="c1">#previous model did not use adapters, so we have to update everything</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">predict_hooks</span><span class="o">.</span><span class="n">feat_hook</span><span class="o">.</span><span class="n">refresh_base_model</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">adapters</span> <span class="o">=</span> <span class="n">original_model</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">adapter_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_target_model</span> <span class="o">=</span> <span class="n">original_model</span><span class="o">.</span><span class="n">_target_model</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_predict_op</span> <span class="o">=</span> <span class="n">original_model</span><span class="o">.</span><span class="n">_predict_op</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_predict_proba_op</span> <span class="o">=</span> <span class="n">original_model</span><span class="o">.</span><span class="n">_predict_proba_op</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_to_pull</span> <span class="o">=</span> <span class="mi">0</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">loaded_custom_previously</span> <span class="o">=</span> <span class="kc">True</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_update_pipeline</span><span class="p">(</span><span class="n">original_model</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">load_featurizer</span><span class="p">(</span><span class="n">override</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">predict_hooks</span><span class="p">:</span>
             <span class="n">hook</span><span class="o">.</span><span class="n">need_to_refresh</span> <span class="o">=</span> <span class="kc">True</span>
-        <span class="k">if</span> <span class="n">original_model</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">adapter_size</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
-                <span class="s2">&quot;Loading without adapters will result in slightly slower load time than models that use adapters, and will also slow the next switch to an adapter model.&quot;</span>
-            <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">predict_hooks</span><span class="o">.</span><span class="n">feat_hook</span><span class="o">.</span><span class="n">model_portion</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="s2">&quot;whole_featurizer&quot;</span>
-            <span class="p">)</span>  <span class="c1"># need to load everything from save file, rather than standard base model file</span>
-
-        <span class="k">if</span> <span class="p">(</span>
-            <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">adapters</span> <span class="ow">or</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">loaded_custom_previously</span>
-        <span class="p">):</span>  <span class="c1"># previous model did not use adapters, so we have to update everything</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">predict_hooks</span><span class="o">.</span><span class="n">feat_hook</span><span class="o">.</span><span class="n">refresh_base_model</span> <span class="o">=</span> <span class="kc">True</span></div>
-
-
+        <span class="bp">self</span><span class="o">.</span><span class="n">_to_pull</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">loaded_custom_previously</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_update_pipeline</span><span class="p">(</span><span class="n">original_model</span><span class="p">)</span></div>
 
     <span class="k">def</span> <span class="nf">_update_pipeline</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">original_model</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -402,41 +332,12 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">target_dim</span> <span class="o">=</span> <span class="n">original_model</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">target_dim</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">label_encoder</span> <span class="o">=</span> <span class="n">original_model</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">label_encoder</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">text_encoder</span> <span class="o">=</span> <span class="n">original_model</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">text_encoder</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">_target_encoder</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">original_model</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">_target_encoder</span>
-        <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">_post_data_initialization</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">original_model</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">_post_data_initialization</span>
-        <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">_format_for_inference</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">original_model</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">_format_for_inference</span>
-        <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">_format_for_encoding</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">original_model</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">_format_for_encoding</span>
-        <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">chunk_long_sequences</span> <span class="o">=</span> <span class="n">original_model</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">chunk_long_sequences</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">chunk_long_sequences</span> <span class="o">=</span> <span class="n">original_model</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">chunk_long_sequences</span>
-
-        <span class="c1"># auxiliary info attributes</span>
-        <span class="k">if</span> <span class="n">original_model</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">use_auxiliary_info</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">use_auxiliary_info</span> <span class="o">=</span> <span class="kc">True</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">use_auxiliary_info</span> <span class="o">=</span> <span class="kc">True</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">label_encoders</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="n">original_model</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">label_encoders</span>
-            <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">context_labels</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="n">original_model</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">context_labels</span>
-            <span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">context_dim</span> <span class="o">=</span> <span class="n">original_model</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">context_dim</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">label_stats</span> <span class="o">=</span> <span class="n">original_model</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">label_stats</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">default_context</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="n">original_model</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">default_context</span>
-            <span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">use_auxiliary_info</span> <span class="o">=</span> <span class="kc">False</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">use_auxiliary_info</span> <span class="o">=</span> <span class="kc">False</span>
-
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">original_model</span><span class="o">.</span><span class="n">input_pipeline</span><span class="p">,</span> <span class="n">SequencePipeline</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">_target_encoder</span> <span class="o">=</span> <span class="n">original_model</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">_target_encoder</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">_post_data_initialization</span> <span class="o">=</span> <span class="n">original_model</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">_post_data_initialization</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">_format_for_inference</span> <span class="o">=</span> <span class="n">original_model</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">_format_for_inference</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">_format_for_encoding</span> <span class="o">=</span> <span class="n">original_model</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">_format_for_encoding</span>
+        
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">original_model</span><span class="o">.</span><span class="n">input_pipeline</span><span class="p">,</span> <span class="n">SequencePipeline</span><span class="p">)</span> <span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">task</span> <span class="o">=</span> <span class="n">TaskMode</span><span class="o">.</span><span class="n">SEQUENCE_LABELING</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">multi_label</span> <span class="o">=</span> <span class="n">original_model</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">multi_label</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">multi_label</span> <span class="o">=</span> <span class="n">original_model</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">multi_label_sequences</span>
@@ -453,46 +354,39 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">task</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">task</span>
 
     <span class="k">def</span> <span class="nf">_get_estimator</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">portion</span><span class="p">):</span>
-        <span class="k">assert</span> <span class="n">portion</span> <span class="ow">in</span> <span class="p">[</span>
-            <span class="s2">&quot;featurizer&quot;</span><span class="p">,</span>
-            <span class="s2">&quot;target&quot;</span><span class="p">,</span>
-        <span class="p">],</span> <span class="s2">&quot;Can only split model into featurizer and target.&quot;</span>
+        <span class="k">assert</span> <span class="n">portion</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;featurizer&#39;</span><span class="p">,</span> <span class="s1">&#39;target&#39;</span><span class="p">],</span> <span class="s2">&quot;Can only split model into featurizer and target.&quot;</span>
         <span class="n">config</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_estimator_config</span><span class="p">()</span>
 
         <span class="n">fn</span> <span class="o">=</span> <span class="n">get_separate_model_fns</span><span class="p">(</span>
-            <span class="n">target_model_fn</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_target_model</span> <span class="k">if</span> <span class="n">portion</span> <span class="o">==</span> <span class="s2">&quot;target&quot;</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">target_model_fn</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_target_model</span> <span class="k">if</span> <span class="n">portion</span> <span class="o">==</span> <span class="s1">&#39;target&#39;</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span> 
             <span class="n">predict_op</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_predict_op</span><span class="p">,</span>
             <span class="n">predict_proba_op</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_predict_proba_op</span><span class="p">,</span>
             <span class="n">build_target_model</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">target_dim</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">,</span>
             <span class="n">encoder</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">text_encoder</span><span class="p">,</span>
-            <span class="n">target_dim</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">target_dim</span> <span class="k">if</span> <span class="n">portion</span> <span class="o">==</span> <span class="s2">&quot;target&quot;</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
-            <span class="n">label_encoder</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">label_encoder</span>
-            <span class="k">if</span> <span class="n">portion</span> <span class="o">==</span> <span class="s2">&quot;target&quot;</span>
-            <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">target_dim</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">target_dim</span> <span class="k">if</span> <span class="n">portion</span> <span class="o">==</span> <span class="s1">&#39;target&#39;</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">label_encoder</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">label_encoder</span> <span class="k">if</span> <span class="n">portion</span> <span class="o">==</span> <span class="s1">&#39;target&#39;</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
             <span class="n">saver</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">saver</span><span class="p">,</span>
             <span class="n">portion</span><span class="o">=</span><span class="n">portion</span><span class="p">,</span>
-            <span class="n">build_attn</span><span class="o">=</span><span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="p">,</span> <span class="n">ComparisonPipeline</span><span class="p">),</span>
-            <span class="n">context_dim</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">context_dim</span>
-            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="p">,</span> <span class="s2">&quot;context_dim&quot;</span><span class="p">)</span>
-            <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">build_attn</span><span class="o">=</span><span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="p">,</span> <span class="n">ComparisonPipeline</span><span class="p">)</span>
         <span class="p">)</span>
 
         <span class="n">estimator</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">estimator</span><span class="o">.</span><span class="n">Estimator</span><span class="p">(</span>
-            <span class="n">model_dir</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">estimator_dir</span><span class="p">,</span> <span class="n">model_fn</span><span class="o">=</span><span class="n">fn</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span>
+            <span class="n">model_dir</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">estimator_dir</span><span class="p">,</span>
+            <span class="n">model_fn</span><span class="o">=</span><span class="n">fn</span><span class="p">,</span>
+            <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span>
+            <span class="n">params</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span>
         <span class="p">)</span>
 
-        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;predict_hooks&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">portion</span> <span class="o">==</span> <span class="s2">&quot;featurizer&quot;</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="s1">&#39;predict_hooks&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">portion</span> <span class="o">==</span> <span class="s1">&#39;featurizer&#39;</span><span class="p">:</span>
             <span class="k">for</span> <span class="n">hook</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">predict_hooks</span><span class="p">:</span>
                 <span class="n">hook</span><span class="o">.</span><span class="n">need_to_refresh</span> <span class="o">=</span> <span class="kc">True</span>
-        <span class="k">elif</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;predict_hooks&quot;</span><span class="p">):</span>
-            <span class="n">feat_hook</span> <span class="o">=</span> <span class="n">InitializeHook</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">saver</span><span class="p">,</span> <span class="n">model_portion</span><span class="o">=</span><span class="s2">&quot;featurizer&quot;</span><span class="p">)</span>
-            <span class="n">target_hook</span> <span class="o">=</span> <span class="n">InitializeHook</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">saver</span><span class="p">,</span> <span class="n">model_portion</span><span class="o">=</span><span class="s2">&quot;target&quot;</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="s1">&#39;predict_hooks&#39;</span><span class="p">):</span>
+            <span class="n">feat_hook</span> <span class="o">=</span> <span class="n">InitializeHook</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">saver</span><span class="p">,</span> <span class="n">model_portion</span><span class="o">=</span><span class="s1">&#39;featurizer&#39;</span><span class="p">)</span>
+            <span class="n">target_hook</span> <span class="o">=</span> <span class="n">InitializeHook</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">saver</span><span class="p">,</span> <span class="n">model_portion</span><span class="o">=</span><span class="s1">&#39;target&#39;</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">predict_hooks</span> <span class="o">=</span> <span class="n">PredictHook</span><span class="p">(</span><span class="n">feat_hook</span><span class="p">,</span> <span class="n">target_hook</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">estimator</span>
 
     <span class="k">def</span> <span class="nf">_get_input_pipeline</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span> <span class="o">=</span> <span class="n">DeploymentPipeline</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span>
 
 <div class="viewcode-block" id="DeploymentModel.featurize"><a class="viewcode-back" href="../../../api.html#finetune.DeploymentModel.featurize">[docs]</a>    <span class="k">def</span> <span class="nf">featurize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
@@ -503,84 +397,58 @@
 <span class="sd">        :returns: np.array of features of shape (n_examples, embedding_size).</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">features</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">exclude_targets</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">features</span><span class="p">[</span><span class="s2">&quot;features&quot;</span><span class="p">]</span></div>
+        <span class="k">return</span> <span class="n">features</span><span class="p">[</span><span class="s1">&#39;features&#39;</span><span class="p">]</span></div>
 
     <span class="k">def</span> <span class="nf">_get_input_fn</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">gen</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">get_predict_input_fn</span><span class="p">(</span><span class="n">gen</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">_inference</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">Xs</span><span class="p">,</span>
-        <span class="n">predict_keys</span><span class="o">=</span><span class="p">[</span><span class="n">PredictMode</span><span class="o">.</span><span class="n">NORMAL</span><span class="p">],</span>
-        <span class="n">exclude_target</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="n">n_examples</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-    <span class="p">):</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">use_auxiliary_info</span><span class="p">:</span>
-            <span class="n">context</span> <span class="o">=</span> <span class="n">Xs</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
-            <span class="n">Xs</span> <span class="o">=</span> <span class="n">Xs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-            <span class="n">Xs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">_format_for_inference</span><span class="p">(</span><span class="n">Xs</span><span class="p">)</span>
-            <span class="n">Xs</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">Xs</span><span class="p">,</span> <span class="n">context</span><span class="p">))</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">Xs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">_format_for_inference</span><span class="p">(</span><span class="n">Xs</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_inference</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">,</span> <span class="n">predict_keys</span><span class="o">=</span><span class="p">[</span><span class="n">PredictMode</span><span class="o">.</span><span class="n">NORMAL</span><span class="p">],</span> <span class="n">exclude_target</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">n_examples</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="n">Xs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">_format_for_inference</span><span class="p">(</span><span class="n">Xs</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_data</span> <span class="o">=</span> <span class="n">Xs</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_closed</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="n">n</span> <span class="o">=</span> <span class="n">n_examples</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">adapters</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">predict_hooks</span><span class="o">.</span><span class="n">feat_hook</span><span class="o">.</span><span class="n">model_portion</span> <span class="o">=</span> <span class="s2">&quot;featurizer&quot;</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">predict_hooks</span><span class="o">.</span><span class="n">feat_hook</span><span class="o">.</span><span class="n">model_portion</span> <span class="o">=</span> <span class="s1">&#39;featurizer&#39;</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">predict_hooks</span><span class="o">.</span><span class="n">feat_hook</span><span class="o">.</span><span class="n">model_portion</span> <span class="o">=</span> <span class="s2">&quot;whole_featurizer&quot;</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">predict_hooks</span><span class="o">.</span><span class="n">feat_hook</span><span class="o">.</span><span class="n">model_portion</span> <span class="o">=</span> <span class="s1">&#39;whole_featurizer&#39;</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_predictions</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">featurizer_est</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_estimator</span><span class="p">(</span><span class="s2">&quot;featurizer&quot;</span><span class="p">)</span>
+            <span class="n">featurizer_est</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_estimator</span><span class="p">(</span><span class="s1">&#39;featurizer&#39;</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_predictions</span> <span class="o">=</span> <span class="n">featurizer_est</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span>
-                <span class="n">input_fn</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_get_input_fn</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_data_generator</span><span class="p">),</span>
-                <span class="n">predict_keys</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-                <span class="n">hooks</span><span class="o">=</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">predict_hooks</span><span class="o">.</span><span class="n">feat_hook</span><span class="p">],</span>
-                <span class="n">yield_single_examples</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-            <span class="p">)</span>
+                    <span class="n">input_fn</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_get_input_fn</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_data_generator</span><span class="p">),</span> <span class="n">predict_keys</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">hooks</span><span class="o">=</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">predict_hooks</span><span class="o">.</span><span class="n">feat_hook</span><span class="p">],</span> <span class="n">yield_single_examples</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_clear_prediction_queue</span><span class="p">()</span>
 
         <span class="n">num_batches</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">n</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)</span>
-        <span class="n">features</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="n">n</span>
-        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">tqdm</span><span class="o">.</span><span class="n">tqdm</span><span class="p">(</span>
-            <span class="nb">range</span><span class="p">(</span><span class="n">num_batches</span><span class="p">),</span> <span class="n">total</span><span class="o">=</span><span class="n">num_batches</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s2">&quot;Featurization by Batch&quot;</span>
-        <span class="p">):</span>
+        <span class="n">features</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span><span class="o">*</span><span class="n">n</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">tqdm</span><span class="o">.</span><span class="n">tqdm</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">num_batches</span><span class="p">),</span> <span class="n">total</span><span class="o">=</span><span class="n">num_batches</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s2">&quot;Featurization by Batch&quot;</span><span class="p">):</span>
             <span class="n">y</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_predictions</span><span class="p">)</span>
-            <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">batch_size</span>
-            <span class="p">):</span>  <span class="c1"># this loop needed since yield_single_examples is False. In this case, n = # of predictions * batch_size</span>
-                <span class="n">single_example</span> <span class="o">=</span> <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="n">value</span><span class="p">[</span><span class="n">j</span><span class="p">]</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">y</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
-                <span class="k">if</span> <span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">*</span> <span class="n">i</span> <span class="o">+</span> <span class="n">j</span> <span class="o">&gt;</span> <span class="n">n</span> <span class="o">-</span> <span class="mi">1</span>
-                <span class="p">):</span>  <span class="c1"># this is a result of the generator using cached_example and to_pull. If this is the last batch, we need to check that all examples come from self._data and are not cached examples</span>
+            <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">batch_size</span><span class="p">):</span> <span class="c1">#this loop needed since yield_single_examples is False. In this case, n = # of predictions * batch_size</span>
+                <span class="n">single_example</span> <span class="o">=</span> <span class="p">{</span><span class="n">key</span><span class="p">:</span><span class="n">value</span><span class="p">[</span><span class="n">j</span><span class="p">]</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span><span class="n">value</span> <span class="ow">in</span> <span class="n">y</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">*</span> <span class="n">i</span> <span class="o">+</span> <span class="n">j</span> <span class="o">&gt;</span> <span class="n">n</span><span class="o">-</span><span class="mi">1</span><span class="p">:</span> <span class="c1">#this is a result of the generator using cached_example and to_pull. If this is the last batch, we need to check that all examples come from self._data and are not cached examples</span>
                     <span class="k">break</span>
                 <span class="n">features</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">*</span> <span class="n">i</span> <span class="o">+</span> <span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="n">single_example</span>
 
-        <span class="k">if</span> <span class="n">exclude_target</span><span class="p">:</span>  <span class="c1"># to initialize featurizer weights in load_featurizer</span>
+        <span class="k">if</span> <span class="n">exclude_target</span><span class="p">:</span> <span class="c1">#to initialize featurizer weights in load_featurizer</span>
             <span class="k">return</span> <span class="n">features</span>
 
         <span class="n">preds</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">if</span> <span class="n">features</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">predict_hooks</span><span class="o">.</span><span class="n">target_hook</span><span class="o">.</span><span class="n">need_to_refresh</span> <span class="o">=</span> <span class="kc">True</span>
-            <span class="n">target_est</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_estimator</span><span class="p">(</span><span class="s2">&quot;target&quot;</span><span class="p">)</span>
+            <span class="n">target_est</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_estimator</span><span class="p">(</span><span class="s1">&#39;target&#39;</span><span class="p">)</span>
             <span class="n">target_fn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">get_target_input_fn</span><span class="p">(</span><span class="n">features</span><span class="p">)</span>
             <span class="n">preds</span> <span class="o">=</span> <span class="n">target_est</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span>
-                <span class="n">input_fn</span><span class="o">=</span><span class="n">target_fn</span><span class="p">,</span>
-                <span class="n">predict_keys</span><span class="o">=</span><span class="n">predict_keys</span><span class="p">,</span>
-                <span class="n">hooks</span><span class="o">=</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">predict_hooks</span><span class="o">.</span><span class="n">target_hook</span><span class="p">],</span>
-            <span class="p">)</span>
+                    <span class="n">input_fn</span><span class="o">=</span><span class="n">target_fn</span><span class="p">,</span> <span class="n">predict_keys</span><span class="o">=</span><span class="n">predict_keys</span><span class="p">,</span> <span class="n">hooks</span><span class="o">=</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">predict_hooks</span><span class="o">.</span><span class="n">target_hook</span><span class="p">])</span>
 
-        <span class="n">predictions</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="n">n</span>
+        <span class="n">predictions</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span><span class="o">*</span><span class="n">n</span>
 
         <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">tqdm</span><span class="o">.</span><span class="n">tqdm</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">),</span> <span class="n">total</span><span class="o">=</span><span class="n">n</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="s2">&quot;Target Model&quot;</span><span class="p">):</span>
             <span class="n">y</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">preds</span><span class="p">)</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="n">y</span> <span class="o">=</span> <span class="n">y</span><span class="p">[</span><span class="n">predict_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">predict_keys</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span> <span class="k">else</span> <span class="n">y</span>
             <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="n">FinetuneError</span><span class="p">(</span>
-                    <span class="s2">&quot;Cannot call `predict()` on a model that has not been fit.&quot;</span>
-                <span class="p">)</span>
+                <span class="k">raise</span> <span class="n">FinetuneError</span><span class="p">(</span><span class="s2">&quot;Cannot call `predict()` on a model that has not been fit.&quot;</span><span class="p">)</span>
             <span class="n">predictions</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">y</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_clear_prediction_queue</span><span class="p">()</span>
@@ -599,9 +467,7 @@
             <span class="n">raw_preds</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_inference</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">exclude_target</span><span class="o">=</span><span class="n">exclude_target</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">exclude_target</span><span class="p">:</span>
                 <span class="k">return</span> <span class="n">raw_preds</span>
-            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">label_encoder</span><span class="o">.</span><span class="n">inverse_transform</span><span class="p">(</span>
-                <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">raw_preds</span><span class="p">)</span>
-            <span class="p">)</span></div>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_pipeline</span><span class="o">.</span><span class="n">label_encoder</span><span class="o">.</span><span class="n">inverse_transform</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">raw_preds</span><span class="p">))</span></div>
 
 <div class="viewcode-block" id="DeploymentModel.predict_proba"><a class="viewcode-back" href="../../../api.html#finetune.DeploymentModel.predict_proba">[docs]</a>    <span class="k">def</span> <span class="nf">predict_proba</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -620,9 +486,7 @@
         <span class="k">raise</span> <span class="ne">NotImplementedError</span>
 
     <span class="nd">@staticmethod</span>
-    <span class="k">def</span> <span class="nf">_target_model</span><span class="p">(</span>
-        <span class="n">config</span><span class="p">,</span> <span class="n">featurizer_state</span><span class="p">,</span> <span class="n">targets</span><span class="p">,</span> <span class="n">n_outputs</span><span class="p">,</span> <span class="n">train</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">reuse</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
-    <span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_target_model</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">featurizer_state</span><span class="p">,</span> <span class="n">targets</span><span class="p">,</span> <span class="n">n_outputs</span><span class="p">,</span> <span class="n">train</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">reuse</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span>
 
     <span class="k">def</span> <span class="nf">_predict_op</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">logits</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
@@ -637,29 +501,25 @@
     <span class="k">def</span> <span class="nf">attention_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Xs</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span>
 
-<div class="viewcode-block" id="DeploymentModel.generate_text"><a class="viewcode-back" href="../../../api.html#finetune.DeploymentModel.generate_text">[docs]</a>    <span class="k">def</span> <span class="nf">generate_text</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<div class="viewcode-block" id="DeploymentModel.generate_text"><a class="viewcode-back" href="../../../api.html#finetune.DeploymentModel.generate_text">[docs]</a>    <span class="k">def</span> <span class="nf">generate_text</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed_text</span><span class="p">,</span> <span class="n">max_length</span><span class="p">,</span> <span class="n">use_extra_toks</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
-
+    
 <div class="viewcode-block" id="DeploymentModel.save"><a class="viewcode-back" href="../../../api.html#finetune.DeploymentModel.save">[docs]</a>    <span class="k">def</span> <span class="nf">save</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
 
-<div class="viewcode-block" id="DeploymentModel.create_base_model"><a class="viewcode-back" href="../../../api.html#finetune.DeploymentModel.create_base_model">[docs]</a>    <span class="k">def</span> <span class="nf">create_base_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<div class="viewcode-block" id="DeploymentModel.create_base_model"><a class="viewcode-back" href="../../../api.html#finetune.DeploymentModel.create_base_model">[docs]</a>    <span class="k">def</span> <span class="nf">create_base_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">filename</span><span class="p">,</span> <span class="n">exists_ok</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
-
-<div class="viewcode-block" id="DeploymentModel.cached_predict"><a class="viewcode-back" href="../../../api.html#finetune.DeploymentModel.cached_predict">[docs]</a>    <span class="k">def</span> <span class="nf">cached_predict</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
-
+    
 <div class="viewcode-block" id="DeploymentModel.load"><a class="viewcode-back" href="../../../api.html#finetune.DeploymentModel.load">[docs]</a>    <span class="k">def</span> <span class="nf">load</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
 
-
-<div class="viewcode-block" id="DeploymentModel.finetune_grid_search"><a class="viewcode-back" href="../../../api.html#finetune.DeploymentModel.finetune_grid_search">[docs]</a>    <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">finetune_grid_search</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<div class="viewcode-block" id="DeploymentModel.finetune_grid_search"><a class="viewcode-back" href="../../../api.html#finetune.DeploymentModel.finetune_grid_search">[docs]</a>    <span class="k">def</span> <span class="nf">finetune_grid_search</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">Xs</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">test_size</span><span class="p">,</span> <span class="n">eval_fn</span><span class="p">,</span> <span class="n">probs</span><span class="p">,</span> <span class="n">return_all</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
 
-<div class="viewcode-block" id="DeploymentModel.finetune_grid_search_cv"><a class="viewcode-back" href="../../../api.html#finetune.DeploymentModel.finetune_grid_search_cv">[docs]</a>    <span class="nd">@classmethod</span>
-    <span class="k">def</span> <span class="nf">finetune_grid_search_cv</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<div class="viewcode-block" id="DeploymentModel.finetune_grid_search_cv"><a class="viewcode-back" href="../../../api.html#finetune.DeploymentModel.finetune_grid_search_cv">[docs]</a>    <span class="k">def</span> <span class="nf">finetune_grid_search_cv</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">Xs</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">n_splits</span><span class="p">,</span> <span class="n">test_size</span><span class="p">,</span> <span class="n">eval_fn</span><span class="p">,</span> <span class="n">probs</span><span class="p">,</span>
+                                <span class="n">return_all</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">NotImplementedError</span></div></div>
+
 </pre></div>
 
            </div>
@@ -696,7 +556,7 @@
     <script type="text/javascript">
         var DOCUMENTATION_OPTIONS = {
             URL_ROOT:'../../../',
-            VERSION:'0.8.2',
+            VERSION:'0.8.3',
             COLLAPSE_INDEX:false,
             FILE_SUFFIX:'.html',
             HAS_SOURCE:  true,

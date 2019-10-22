@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>Finetune API Reference &mdash; finetune 0.8.2 documentation</title>
+  <title>Finetune API Reference &mdash; finetune 0.8.3 documentation</title>
   
 
   
@@ -35,7 +35,7 @@
         <link rel="index" title="Index"
               href="genindex.html"/>
         <link rel="search" title="Search" href="search.html"/>
-    <link rel="top" title="finetune 0.8.2 documentation" href="index.html"/>
+    <link rel="top" title="finetune 0.8.3 documentation" href="index.html"/>
         <link rel="next" title="Cached Prediction" href="cachedpredict.html"/>
         <link rel="prev" title="Resource Management" href="resource.html"/> 
 
@@ -66,7 +66,7 @@
             
             
               <div class="version">
-                0.8.2
+                0.8.3
               </div>
             
           
@@ -214,12 +214,6 @@
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.Classifier.context_span_to_label_span">
-<code class="descname">context_span_to_label_span</code><span class="sig-paren">(</span><em>batch_context_spans</em>, <em>batch_text_chunks=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Classifier.context_span_to_label_span" title="Permalink to this definition">¶</a></dt>
-<dd><p>Copy relevant context spans into each corresponding label span as denoted by batch_text_chunks</p>
-</dd></dl>
-
-<dl class="method">
 <dt id="finetune.Classifier.create_base_model">
 <code class="descname">create_base_model</code><span class="sig-paren">(</span><em>filename</em>, <em>exists_ok=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Classifier.create_base_model" title="Permalink to this definition">¶</a></dt>
 <dd><p>Saves the current weights into the correct file format to be used as a base model.
@@ -241,19 +235,6 @@
 </tr>
 </tbody>
 </table>
-</dd></dl>
-
-<dl class="method">
-<dt id="finetune.Classifier.featurize_sequence">
-<code class="descname">featurize_sequence</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Classifier.featurize_sequence" title="Permalink to this definition">¶</a></dt>
-<dd><p>Base method to get raw token-level features out of the model.
-These features are the same features that are fed into the target_model.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="finetune.Classifier.fill_in_context_gaps">
-<code class="descname">fill_in_context_gaps</code><span class="sig-paren">(</span><em>X</em>, <em>context</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Classifier.fill_in_context_gaps" title="Permalink to this definition">¶</a></dt>
-<dd><p>Ensure all tokens are covered by context; if they are not, fill in gaps with the default style as given from the user</p>
 </dd></dl>
 
 <dl class="method">
@@ -346,7 +327,7 @@ form [(config, eval_fn output), … ]</p>
 
 <dl class="method">
 <dt id="finetune.Classifier.generate_text">
-<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Classifier.generate_text" title="Permalink to this definition">¶</a></dt>
+<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=True</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Classifier.generate_text" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
 Temperature parameter for decoding is set in the config.
 :param max_length: The maximum length to decode to.
@@ -375,7 +356,7 @@ Temperature parameter for decoding is set in the config.
 
 <dl class="method">
 <dt id="finetune.Classifier.predict">
-<code class="descname">predict</code><span class="sig-paren">(</span><em>X</em>, <em>probas=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/classifier.html#Classifier.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Classifier.predict" title="Permalink to this definition">¶</a></dt>
+<code class="descname">predict</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/classifier.html#Classifier.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.Classifier.predict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Produces a list of most likely class labels as determined by the fine-tuned model.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -387,8 +368,6 @@ Temperature parameter for decoding is set in the config.
 </tr>
 </tbody>
 </table>
-<p>Chunk idx for prediction.  Dividers at <cite>step_size</cite> increments.
-[  1  |  1  |  2  |  3  |  3  ]</p>
 </dd></dl>
 
 <dl class="method">
@@ -459,12 +438,6 @@ Should not be used to save / restore a training model.</dd>
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.Regressor.context_span_to_label_span">
-<code class="descname">context_span_to_label_span</code><span class="sig-paren">(</span><em>batch_context_spans</em>, <em>batch_text_chunks=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Regressor.context_span_to_label_span" title="Permalink to this definition">¶</a></dt>
-<dd><p>Copy relevant context spans into each corresponding label span as denoted by batch_text_chunks</p>
-</dd></dl>
-
-<dl class="method">
 <dt id="finetune.Regressor.create_base_model">
 <code class="descname">create_base_model</code><span class="sig-paren">(</span><em>filename</em>, <em>exists_ok=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Regressor.create_base_model" title="Permalink to this definition">¶</a></dt>
 <dd><p>Saves the current weights into the correct file format to be used as a base model.
@@ -486,19 +459,6 @@ Should not be used to save / restore a training model.</dd>
 </tr>
 </tbody>
 </table>
-</dd></dl>
-
-<dl class="method">
-<dt id="finetune.Regressor.featurize_sequence">
-<code class="descname">featurize_sequence</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Regressor.featurize_sequence" title="Permalink to this definition">¶</a></dt>
-<dd><p>Base method to get raw token-level features out of the model.
-These features are the same features that are fed into the target_model.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="finetune.Regressor.fill_in_context_gaps">
-<code class="descname">fill_in_context_gaps</code><span class="sig-paren">(</span><em>X</em>, <em>context</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Regressor.fill_in_context_gaps" title="Permalink to this definition">¶</a></dt>
-<dd><p>Ensure all tokens are covered by context; if they are not, fill in gaps with the default style as given from the user</p>
 </dd></dl>
 
 <dl class="method">
@@ -591,7 +551,7 @@ form [(config, eval_fn output), … ]</p>
 
 <dl class="method">
 <dt id="finetune.Regressor.generate_text">
-<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Regressor.generate_text" title="Permalink to this definition">¶</a></dt>
+<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=True</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Regressor.generate_text" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
 Temperature parameter for decoding is set in the config.
 :param max_length: The maximum length to decode to.
@@ -701,12 +661,6 @@ Should not be used to save / restore a training model.</dd>
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.SequenceLabeler.context_span_to_label_span">
-<code class="descname">context_span_to_label_span</code><span class="sig-paren">(</span><em>batch_context_spans</em>, <em>batch_text_chunks=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.SequenceLabeler.context_span_to_label_span" title="Permalink to this definition">¶</a></dt>
-<dd><p>Copy relevant context spans into each corresponding label span as denoted by batch_text_chunks</p>
-</dd></dl>
-
-<dl class="method">
 <dt id="finetune.SequenceLabeler.create_base_model">
 <code class="descname">create_base_model</code><span class="sig-paren">(</span><em>filename</em>, <em>exists_ok=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.SequenceLabeler.create_base_model" title="Permalink to this definition">¶</a></dt>
 <dd><p>Saves the current weights into the correct file format to be used as a base model.
@@ -728,19 +682,6 @@ Should not be used to save / restore a training model.</dd>
 </tr>
 </tbody>
 </table>
-</dd></dl>
-
-<dl class="method">
-<dt id="finetune.SequenceLabeler.featurize_sequence">
-<code class="descname">featurize_sequence</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.SequenceLabeler.featurize_sequence" title="Permalink to this definition">¶</a></dt>
-<dd><p>Base method to get raw token-level features out of the model.
-These features are the same features that are fed into the target_model.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="finetune.SequenceLabeler.fill_in_context_gaps">
-<code class="descname">fill_in_context_gaps</code><span class="sig-paren">(</span><em>X</em>, <em>context</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.SequenceLabeler.fill_in_context_gaps" title="Permalink to this definition">¶</a></dt>
-<dd><p>Ensure all tokens are covered by context; if they are not, fill in gaps with the default style as given from the user</p>
 </dd></dl>
 
 <dl class="classmethod">
@@ -814,7 +755,7 @@ form [(config, eval_fn output), … ]</p>
 
 <dl class="method">
 <dt id="finetune.SequenceLabeler.generate_text">
-<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.SequenceLabeler.generate_text" title="Permalink to this definition">¶</a></dt>
+<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=True</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.SequenceLabeler.generate_text" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
 Temperature parameter for decoding is set in the config.
 :param max_length: The maximum length to decode to.
@@ -930,12 +871,6 @@ between the labeled edges.</p>
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.Association.context_span_to_label_span">
-<code class="descname">context_span_to_label_span</code><span class="sig-paren">(</span><em>batch_context_spans</em>, <em>batch_text_chunks=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Association.context_span_to_label_span" title="Permalink to this definition">¶</a></dt>
-<dd><p>Copy relevant context spans into each corresponding label span as denoted by batch_text_chunks</p>
-</dd></dl>
-
-<dl class="method">
 <dt id="finetune.Association.create_base_model">
 <code class="descname">create_base_model</code><span class="sig-paren">(</span><em>filename</em>, <em>exists_ok=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Association.create_base_model" title="Permalink to this definition">¶</a></dt>
 <dd><p>Saves the current weights into the correct file format to be used as a base model.
@@ -957,19 +892,6 @@ between the labeled edges.</p>
 </tr>
 </tbody>
 </table>
-</dd></dl>
-
-<dl class="method">
-<dt id="finetune.Association.featurize_sequence">
-<code class="descname">featurize_sequence</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Association.featurize_sequence" title="Permalink to this definition">¶</a></dt>
-<dd><p>Base method to get raw token-level features out of the model.
-These features are the same features that are fed into the target_model.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="finetune.Association.fill_in_context_gaps">
-<code class="descname">fill_in_context_gaps</code><span class="sig-paren">(</span><em>X</em>, <em>context</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Association.fill_in_context_gaps" title="Permalink to this definition">¶</a></dt>
-<dd><p>Ensure all tokens are covered by context; if they are not, fill in gaps with the default style as given from the user</p>
 </dd></dl>
 
 <dl class="method">
@@ -1076,7 +998,7 @@ form [(config, eval_fn output), … ]</p>
 
 <dl class="method">
 <dt id="finetune.Association.generate_text">
-<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Association.generate_text" title="Permalink to this definition">¶</a></dt>
+<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=True</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Association.generate_text" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
 Temperature parameter for decoding is set in the config.
 :param max_length: The maximum length to decode to.
@@ -1186,12 +1108,6 @@ Should not be used to save / restore a training model.</dd>
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.Comparison.context_span_to_label_span">
-<code class="descname">context_span_to_label_span</code><span class="sig-paren">(</span><em>batch_context_spans</em>, <em>batch_text_chunks=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Comparison.context_span_to_label_span" title="Permalink to this definition">¶</a></dt>
-<dd><p>Copy relevant context spans into each corresponding label span as denoted by batch_text_chunks</p>
-</dd></dl>
-
-<dl class="method">
 <dt id="finetune.Comparison.create_base_model">
 <code class="descname">create_base_model</code><span class="sig-paren">(</span><em>filename</em>, <em>exists_ok=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Comparison.create_base_model" title="Permalink to this definition">¶</a></dt>
 <dd><p>Saves the current weights into the correct file format to be used as a base model.
@@ -1213,19 +1129,6 @@ Should not be used to save / restore a training model.</dd>
 </tr>
 </tbody>
 </table>
-</dd></dl>
-
-<dl class="method">
-<dt id="finetune.Comparison.featurize_sequence">
-<code class="descname">featurize_sequence</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Comparison.featurize_sequence" title="Permalink to this definition">¶</a></dt>
-<dd><p>Base method to get raw token-level features out of the model.
-These features are the same features that are fed into the target_model.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="finetune.Comparison.fill_in_context_gaps">
-<code class="descname">fill_in_context_gaps</code><span class="sig-paren">(</span><em>X</em>, <em>context</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Comparison.fill_in_context_gaps" title="Permalink to this definition">¶</a></dt>
-<dd><p>Ensure all tokens are covered by context; if they are not, fill in gaps with the default style as given from the user</p>
 </dd></dl>
 
 <dl class="method">
@@ -1318,7 +1221,7 @@ form [(config, eval_fn output), … ]</p>
 
 <dl class="method">
 <dt id="finetune.Comparison.generate_text">
-<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Comparison.generate_text" title="Permalink to this definition">¶</a></dt>
+<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=True</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.Comparison.generate_text" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
 Temperature parameter for decoding is set in the config.
 :param max_length: The maximum length to decode to.
@@ -1428,12 +1331,6 @@ Should not be used to save / restore a training model.</dd>
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.MultiFieldClassifier.context_span_to_label_span">
-<code class="descname">context_span_to_label_span</code><span class="sig-paren">(</span><em>batch_context_spans</em>, <em>batch_text_chunks=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldClassifier.context_span_to_label_span" title="Permalink to this definition">¶</a></dt>
-<dd><p>Copy relevant context spans into each corresponding label span as denoted by batch_text_chunks</p>
-</dd></dl>
-
-<dl class="method">
 <dt id="finetune.MultiFieldClassifier.create_base_model">
 <code class="descname">create_base_model</code><span class="sig-paren">(</span><em>filename</em>, <em>exists_ok=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldClassifier.create_base_model" title="Permalink to this definition">¶</a></dt>
 <dd><p>Saves the current weights into the correct file format to be used as a base model.
@@ -1455,19 +1352,6 @@ Should not be used to save / restore a training model.</dd>
 </tr>
 </tbody>
 </table>
-</dd></dl>
-
-<dl class="method">
-<dt id="finetune.MultiFieldClassifier.featurize_sequence">
-<code class="descname">featurize_sequence</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldClassifier.featurize_sequence" title="Permalink to this definition">¶</a></dt>
-<dd><p>Base method to get raw token-level features out of the model.
-These features are the same features that are fed into the target_model.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="finetune.MultiFieldClassifier.fill_in_context_gaps">
-<code class="descname">fill_in_context_gaps</code><span class="sig-paren">(</span><em>X</em>, <em>context</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldClassifier.fill_in_context_gaps" title="Permalink to this definition">¶</a></dt>
-<dd><p>Ensure all tokens are covered by context; if they are not, fill in gaps with the default style as given from the user</p>
 </dd></dl>
 
 <dl class="method">
@@ -1560,7 +1444,7 @@ form [(config, eval_fn output), … ]</p>
 
 <dl class="method">
 <dt id="finetune.MultiFieldClassifier.generate_text">
-<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldClassifier.generate_text" title="Permalink to this definition">¶</a></dt>
+<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=True</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldClassifier.generate_text" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
 Temperature parameter for decoding is set in the config.
 :param max_length: The maximum length to decode to.
@@ -1670,12 +1554,6 @@ Should not be used to save / restore a training model.</dd>
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.MultiFieldRegressor.context_span_to_label_span">
-<code class="descname">context_span_to_label_span</code><span class="sig-paren">(</span><em>batch_context_spans</em>, <em>batch_text_chunks=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldRegressor.context_span_to_label_span" title="Permalink to this definition">¶</a></dt>
-<dd><p>Copy relevant context spans into each corresponding label span as denoted by batch_text_chunks</p>
-</dd></dl>
-
-<dl class="method">
 <dt id="finetune.MultiFieldRegressor.create_base_model">
 <code class="descname">create_base_model</code><span class="sig-paren">(</span><em>filename</em>, <em>exists_ok=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldRegressor.create_base_model" title="Permalink to this definition">¶</a></dt>
 <dd><p>Saves the current weights into the correct file format to be used as a base model.
@@ -1697,19 +1575,6 @@ Should not be used to save / restore a training model.</dd>
 </tr>
 </tbody>
 </table>
-</dd></dl>
-
-<dl class="method">
-<dt id="finetune.MultiFieldRegressor.featurize_sequence">
-<code class="descname">featurize_sequence</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldRegressor.featurize_sequence" title="Permalink to this definition">¶</a></dt>
-<dd><p>Base method to get raw token-level features out of the model.
-These features are the same features that are fed into the target_model.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="finetune.MultiFieldRegressor.fill_in_context_gaps">
-<code class="descname">fill_in_context_gaps</code><span class="sig-paren">(</span><em>X</em>, <em>context</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldRegressor.fill_in_context_gaps" title="Permalink to this definition">¶</a></dt>
-<dd><p>Ensure all tokens are covered by context; if they are not, fill in gaps with the default style as given from the user</p>
 </dd></dl>
 
 <dl class="method">
@@ -1802,7 +1667,7 @@ form [(config, eval_fn output), … ]</p>
 
 <dl class="method">
 <dt id="finetune.MultiFieldRegressor.generate_text">
-<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldRegressor.generate_text" title="Permalink to this definition">¶</a></dt>
+<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=True</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiFieldRegressor.generate_text" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
 Temperature parameter for decoding is set in the config.
 :param max_length: The maximum length to decode to.
@@ -1912,12 +1777,6 @@ Should not be used to save / restore a training model.</dd>
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.MultiLabelClassifier.context_span_to_label_span">
-<code class="descname">context_span_to_label_span</code><span class="sig-paren">(</span><em>batch_context_spans</em>, <em>batch_text_chunks=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiLabelClassifier.context_span_to_label_span" title="Permalink to this definition">¶</a></dt>
-<dd><p>Copy relevant context spans into each corresponding label span as denoted by batch_text_chunks</p>
-</dd></dl>
-
-<dl class="method">
 <dt id="finetune.MultiLabelClassifier.create_base_model">
 <code class="descname">create_base_model</code><span class="sig-paren">(</span><em>filename</em>, <em>exists_ok=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiLabelClassifier.create_base_model" title="Permalink to this definition">¶</a></dt>
 <dd><p>Saves the current weights into the correct file format to be used as a base model.
@@ -1939,19 +1798,6 @@ Should not be used to save / restore a training model.</dd>
 </tr>
 </tbody>
 </table>
-</dd></dl>
-
-<dl class="method">
-<dt id="finetune.MultiLabelClassifier.featurize_sequence">
-<code class="descname">featurize_sequence</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiLabelClassifier.featurize_sequence" title="Permalink to this definition">¶</a></dt>
-<dd><p>Base method to get raw token-level features out of the model.
-These features are the same features that are fed into the target_model.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="finetune.MultiLabelClassifier.fill_in_context_gaps">
-<code class="descname">fill_in_context_gaps</code><span class="sig-paren">(</span><em>X</em>, <em>context</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiLabelClassifier.fill_in_context_gaps" title="Permalink to this definition">¶</a></dt>
-<dd><p>Ensure all tokens are covered by context; if they are not, fill in gaps with the default style as given from the user</p>
 </dd></dl>
 
 <dl class="method">
@@ -2044,7 +1890,7 @@ form [(config, eval_fn output), … ]</p>
 
 <dl class="method">
 <dt id="finetune.MultiLabelClassifier.generate_text">
-<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiLabelClassifier.generate_text" title="Permalink to this definition">¶</a></dt>
+<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=True</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiLabelClassifier.generate_text" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
 Temperature parameter for decoding is set in the config.
 :param max_length: The maximum length to decode to.
@@ -2155,12 +2001,6 @@ Should not be used to save / restore a training model.</dd>
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.OrdinalRegressor.context_span_to_label_span">
-<code class="descname">context_span_to_label_span</code><span class="sig-paren">(</span><em>batch_context_spans</em>, <em>batch_text_chunks=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.OrdinalRegressor.context_span_to_label_span" title="Permalink to this definition">¶</a></dt>
-<dd><p>Copy relevant context spans into each corresponding label span as denoted by batch_text_chunks</p>
-</dd></dl>
-
-<dl class="method">
 <dt id="finetune.OrdinalRegressor.create_base_model">
 <code class="descname">create_base_model</code><span class="sig-paren">(</span><em>filename</em>, <em>exists_ok=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.OrdinalRegressor.create_base_model" title="Permalink to this definition">¶</a></dt>
 <dd><p>Saves the current weights into the correct file format to be used as a base model.
@@ -2182,19 +2022,6 @@ Should not be used to save / restore a training model.</dd>
 </tr>
 </tbody>
 </table>
-</dd></dl>
-
-<dl class="method">
-<dt id="finetune.OrdinalRegressor.featurize_sequence">
-<code class="descname">featurize_sequence</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.OrdinalRegressor.featurize_sequence" title="Permalink to this definition">¶</a></dt>
-<dd><p>Base method to get raw token-level features out of the model.
-These features are the same features that are fed into the target_model.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="finetune.OrdinalRegressor.fill_in_context_gaps">
-<code class="descname">fill_in_context_gaps</code><span class="sig-paren">(</span><em>X</em>, <em>context</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.OrdinalRegressor.fill_in_context_gaps" title="Permalink to this definition">¶</a></dt>
-<dd><p>Ensure all tokens are covered by context; if they are not, fill in gaps with the default style as given from the user</p>
 </dd></dl>
 
 <dl class="method">
@@ -2287,7 +2114,7 @@ form [(config, eval_fn output), … ]</p>
 
 <dl class="method">
 <dt id="finetune.OrdinalRegressor.generate_text">
-<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.OrdinalRegressor.generate_text" title="Permalink to this definition">¶</a></dt>
+<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=True</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.OrdinalRegressor.generate_text" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
 Temperature parameter for decoding is set in the config.
 :param max_length: The maximum length to decode to.
@@ -2398,12 +2225,6 @@ Should not be used to save / restore a training model.</dd>
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.ComparisonOrdinalRegressor.context_span_to_label_span">
-<code class="descname">context_span_to_label_span</code><span class="sig-paren">(</span><em>batch_context_spans</em>, <em>batch_text_chunks=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.ComparisonOrdinalRegressor.context_span_to_label_span" title="Permalink to this definition">¶</a></dt>
-<dd><p>Copy relevant context spans into each corresponding label span as denoted by batch_text_chunks</p>
-</dd></dl>
-
-<dl class="method">
 <dt id="finetune.ComparisonOrdinalRegressor.create_base_model">
 <code class="descname">create_base_model</code><span class="sig-paren">(</span><em>filename</em>, <em>exists_ok=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.ComparisonOrdinalRegressor.create_base_model" title="Permalink to this definition">¶</a></dt>
 <dd><p>Saves the current weights into the correct file format to be used as a base model.
@@ -2425,19 +2246,6 @@ Should not be used to save / restore a training model.</dd>
 </tr>
 </tbody>
 </table>
-</dd></dl>
-
-<dl class="method">
-<dt id="finetune.ComparisonOrdinalRegressor.featurize_sequence">
-<code class="descname">featurize_sequence</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.ComparisonOrdinalRegressor.featurize_sequence" title="Permalink to this definition">¶</a></dt>
-<dd><p>Base method to get raw token-level features out of the model.
-These features are the same features that are fed into the target_model.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="finetune.ComparisonOrdinalRegressor.fill_in_context_gaps">
-<code class="descname">fill_in_context_gaps</code><span class="sig-paren">(</span><em>X</em>, <em>context</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.ComparisonOrdinalRegressor.fill_in_context_gaps" title="Permalink to this definition">¶</a></dt>
-<dd><p>Ensure all tokens are covered by context; if they are not, fill in gaps with the default style as given from the user</p>
 </dd></dl>
 
 <dl class="method">
@@ -2530,7 +2338,7 @@ form [(config, eval_fn output), … ]</p>
 
 <dl class="method">
 <dt id="finetune.ComparisonOrdinalRegressor.generate_text">
-<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.ComparisonOrdinalRegressor.generate_text" title="Permalink to this definition">¶</a></dt>
+<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=True</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.ComparisonOrdinalRegressor.generate_text" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
 Temperature parameter for decoding is set in the config.
 :param max_length: The maximum length to decode to.
@@ -2559,15 +2367,15 @@ Temperature parameter for decoding is set in the config.
 
 <dl class="method">
 <dt id="finetune.ComparisonOrdinalRegressor.predict">
-<code class="descname">predict</code><span class="sig-paren">(</span><em>pairs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/ordinal_regressor.html#ComparisonOrdinalRegressor.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.ComparisonOrdinalRegressor.predict" title="Permalink to this definition">¶</a></dt>
-<dd><p>Produces a floating point prediction determined by the fine-tuned model.</p>
+<code class="descname">predict</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.ComparisonOrdinalRegressor.predict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Produces a list of most likely class labels as determined by the fine-tuned model.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>pairs</strong> – Array of text, shape [batch, 2]</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>X</strong> – list or array of text to embed.</td>
 </tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">list of floats, shape [batch]</td>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">list of class labels.</td>
 </tr>
 </tbody>
 </table>
@@ -2643,12 +2451,6 @@ eg. <cite>{“sst”: Classifier, “ner”: SequenceLabeler}</cite></li>
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.MultiTask.context_span_to_label_span">
-<code class="descname">context_span_to_label_span</code><span class="sig-paren">(</span><em>batch_context_spans</em>, <em>batch_text_chunks=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiTask.context_span_to_label_span" title="Permalink to this definition">¶</a></dt>
-<dd><p>Copy relevant context spans into each corresponding label span as denoted by batch_text_chunks</p>
-</dd></dl>
-
-<dl class="method">
 <dt id="finetune.MultiTask.create_base_model">
 <code class="descname">create_base_model</code><span class="sig-paren">(</span><em>filename</em>, <em>exists_ok=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiTask.create_base_model" title="Permalink to this definition">¶</a></dt>
 <dd><p>Saves the current weights into the correct file format to be used as a base model.
@@ -2671,19 +2473,6 @@ are the same as for each of the individial tasks.</p>
 </tr>
 </tbody>
 </table>
-</dd></dl>
-
-<dl class="method">
-<dt id="finetune.MultiTask.featurize_sequence">
-<code class="descname">featurize_sequence</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiTask.featurize_sequence" title="Permalink to this definition">¶</a></dt>
-<dd><p>Base method to get raw token-level features out of the model.
-These features are the same features that are fed into the target_model.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="finetune.MultiTask.fill_in_context_gaps">
-<code class="descname">fill_in_context_gaps</code><span class="sig-paren">(</span><em>X</em>, <em>context</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiTask.fill_in_context_gaps" title="Permalink to this definition">¶</a></dt>
-<dd><p>Ensure all tokens are covered by context; if they are not, fill in gaps with the default style as given from the user</p>
 </dd></dl>
 
 <dl class="method">
@@ -2779,7 +2568,7 @@ form [(config, eval_fn output), … ]</p>
 
 <dl class="method">
 <dt id="finetune.MultiTask.generate_text">
-<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiTask.generate_text" title="Permalink to this definition">¶</a></dt>
+<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=True</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.MultiTask.generate_text" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
 Temperature parameter for decoding is set in the config.
 :param max_length: The maximum length to decode to.
@@ -2892,12 +2681,6 @@ Should not be used to save / restore a training model.</dd>
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.LanguageModel.context_span_to_label_span">
-<code class="descname">context_span_to_label_span</code><span class="sig-paren">(</span><em>batch_context_spans</em>, <em>batch_text_chunks=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModel.context_span_to_label_span" title="Permalink to this definition">¶</a></dt>
-<dd><p>Copy relevant context spans into each corresponding label span as denoted by batch_text_chunks</p>
-</dd></dl>
-
-<dl class="method">
 <dt id="finetune.LanguageModel.create_base_model">
 <code class="descname">create_base_model</code><span class="sig-paren">(</span><em>filename</em>, <em>exists_ok=False</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModel.create_base_model" title="Permalink to this definition">¶</a></dt>
 <dd><p>Saves the current weights into the correct file format to be used as a base model.
@@ -2919,19 +2702,6 @@ Should not be used to save / restore a training model.</dd>
 </tr>
 </tbody>
 </table>
-</dd></dl>
-
-<dl class="method">
-<dt id="finetune.LanguageModel.featurize_sequence">
-<code class="descname">featurize_sequence</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModel.featurize_sequence" title="Permalink to this definition">¶</a></dt>
-<dd><p>Base method to get raw token-level features out of the model.
-These features are the same features that are fed into the target_model.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="finetune.LanguageModel.fill_in_context_gaps">
-<code class="descname">fill_in_context_gaps</code><span class="sig-paren">(</span><em>X</em>, <em>context</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModel.fill_in_context_gaps" title="Permalink to this definition">¶</a></dt>
-<dd><p>Ensure all tokens are covered by context; if they are not, fill in gaps with the default style as given from the user</p>
 </dd></dl>
 
 <dl class="method">
@@ -3024,7 +2794,7 @@ form [(config, eval_fn output), … ]</p>
 
 <dl class="method">
 <dt id="finetune.LanguageModel.generate_text">
-<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModel.generate_text" title="Permalink to this definition">¶</a></dt>
+<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text=''</em>, <em>max_length=None</em>, <em>use_extra_toks=True</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.LanguageModel.generate_text" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
 Temperature parameter for decoding is set in the config.
 :param max_length: The maximum length to decode to.
@@ -3113,7 +2883,7 @@ Should not be used to save / restore a training model.</dd>
 <h2><code class="docutils literal notranslate"><span class="pre">DeploymentModel</span></code><a class="headerlink" href="#deploymentmodel" title="Permalink to this headline">¶</a></h2>
 <dl class="class">
 <dt id="finetune.DeploymentModel">
-<em class="property">class </em><code class="descclassname">finetune.</code><code class="descname">DeploymentModel</code><span class="sig-paren">(</span><em>featurizer=None</em>, <em>auxiliary_info=False</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/deployment_model.html#DeploymentModel"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.DeploymentModel" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="descclassname">finetune.</code><code class="descname">DeploymentModel</code><span class="sig-paren">(</span><em>featurizer</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/deployment_model.html#DeploymentModel"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.DeploymentModel" title="Permalink to this definition">¶</a></dt>
 <dd><p>Implements inference in arbitrary tasks in a cached manner by loading weights efficiently, allowing for quick interchanging of
 weights while avoiding slow graph recompilation.</p>
 <table class="docutils field-list" frame="void" rules="none">
@@ -3130,19 +2900,13 @@ weights while avoiding slow graph recompilation.</p>
 </table>
 <dl class="method">
 <dt id="finetune.DeploymentModel.cached_predict">
-<code class="descname">cached_predict</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/deployment_model.html#DeploymentModel.cached_predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.DeploymentModel.cached_predict" title="Permalink to this definition">¶</a></dt>
+<code class="descname">cached_predict</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#finetune.DeploymentModel.cached_predict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Context manager that prevents the recreation of the tensorflow graph on every call to BaseModel.predict().</p>
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.DeploymentModel.context_span_to_label_span">
-<code class="descname">context_span_to_label_span</code><span class="sig-paren">(</span><em>batch_context_spans</em>, <em>batch_text_chunks=None</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.DeploymentModel.context_span_to_label_span" title="Permalink to this definition">¶</a></dt>
-<dd><p>Copy relevant context spans into each corresponding label span as denoted by batch_text_chunks</p>
-</dd></dl>
-
-<dl class="method">
 <dt id="finetune.DeploymentModel.create_base_model">
-<code class="descname">create_base_model</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/deployment_model.html#DeploymentModel.create_base_model"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.DeploymentModel.create_base_model" title="Permalink to this definition">¶</a></dt>
+<code class="descname">create_base_model</code><span class="sig-paren">(</span><em>filename</em>, <em>exists_ok</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/deployment_model.html#DeploymentModel.create_base_model"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.DeploymentModel.create_base_model" title="Permalink to this definition">¶</a></dt>
 <dd><p>Saves the current weights into the correct file format to be used as a base model.
 :param filename: the path to save the base model relative to finetune’s base model filestore.
 :param exists_ok: Whether to replace the model if it exists.</p>
@@ -3165,21 +2929,8 @@ weights while avoiding slow graph recompilation.</p>
 </dd></dl>
 
 <dl class="method">
-<dt id="finetune.DeploymentModel.featurize_sequence">
-<code class="descname">featurize_sequence</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.DeploymentModel.featurize_sequence" title="Permalink to this definition">¶</a></dt>
-<dd><p>Base method to get raw token-level features out of the model.
-These features are the same features that are fed into the target_model.</p>
-</dd></dl>
-
-<dl class="method">
-<dt id="finetune.DeploymentModel.fill_in_context_gaps">
-<code class="descname">fill_in_context_gaps</code><span class="sig-paren">(</span><em>X</em>, <em>context</em><span class="sig-paren">)</span><a class="headerlink" href="#finetune.DeploymentModel.fill_in_context_gaps" title="Permalink to this definition">¶</a></dt>
-<dd><p>Ensure all tokens are covered by context; if they are not, fill in gaps with the default style as given from the user</p>
-</dd></dl>
-
-<dl class="classmethod">
 <dt id="finetune.DeploymentModel.finetune_grid_search">
-<em class="property">classmethod </em><code class="descname">finetune_grid_search</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/deployment_model.html#DeploymentModel.finetune_grid_search"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.DeploymentModel.finetune_grid_search" title="Permalink to this definition">¶</a></dt>
+<code class="descname">finetune_grid_search</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>test_size</em>, <em>eval_fn</em>, <em>probs</em>, <em>return_all</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/deployment_model.html#DeploymentModel.finetune_grid_search"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.DeploymentModel.finetune_grid_search" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs grid search over config items defined using “GridSearchable” objects and returns either full results or
 the config object that relates to the best results. The default config contains grid searchable objects for the
 most important parameters to search over.</p>
@@ -3207,9 +2958,9 @@ form [(config, eval_fn output), … ]</p>
 </table>
 </dd></dl>
 
-<dl class="classmethod">
+<dl class="method">
 <dt id="finetune.DeploymentModel.finetune_grid_search_cv">
-<em class="property">classmethod </em><code class="descname">finetune_grid_search_cv</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/deployment_model.html#DeploymentModel.finetune_grid_search_cv"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.DeploymentModel.finetune_grid_search_cv" title="Permalink to this definition">¶</a></dt>
+<code class="descname">finetune_grid_search_cv</code><span class="sig-paren">(</span><em>Xs</em>, <em>Y</em>, <em>*</em>, <em>n_splits</em>, <em>test_size</em>, <em>eval_fn</em>, <em>probs</em>, <em>return_all</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/deployment_model.html#DeploymentModel.finetune_grid_search_cv"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.DeploymentModel.finetune_grid_search_cv" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs cross validated grid search over config items defined using “GridSearchable” objects and returns either full results or
 the config object that relates to the best results. The default config contains grid searchable objects for the
 most important parameters to search over.</p>
@@ -3248,7 +2999,7 @@ form [(config, eval_fn output), … ]</p>
 
 <dl class="method">
 <dt id="finetune.DeploymentModel.generate_text">
-<code class="descname">generate_text</code><span class="sig-paren">(</span><em>*args</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/deployment_model.html#DeploymentModel.generate_text"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.DeploymentModel.generate_text" title="Permalink to this definition">¶</a></dt>
+<code class="descname">generate_text</code><span class="sig-paren">(</span><em>seed_text</em>, <em>max_length</em>, <em>use_extra_toks</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/deployment_model.html#DeploymentModel.generate_text"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.DeploymentModel.generate_text" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
 Temperature parameter for decoding is set in the config.
 :param max_length: The maximum length to decode to.
@@ -3283,7 +3034,7 @@ Temperature parameter for decoding is set in the config.
 
 <dl class="method">
 <dt id="finetune.DeploymentModel.load_featurizer">
-<code class="descname">load_featurizer</code><span class="sig-paren">(</span><em>override=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/deployment_model.html#DeploymentModel.load_featurizer"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.DeploymentModel.load_featurizer" title="Permalink to this definition">¶</a></dt>
+<code class="descname">load_featurizer</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/finetune/target_models/deployment_model.html#DeploymentModel.load_featurizer"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#finetune.DeploymentModel.load_featurizer" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs graph compilation of the featurizer, saving most compilation overhead from occurring at predict time. Should
 be called after initialization but BEFORE any calls to load_custom_model or predict.</p>
 </dd></dl>
@@ -3392,7 +3143,7 @@ Should not be used to save / restore a training model.</dd>
     <script type="text/javascript">
         var DOCUMENTATION_OPTIONS = {
             URL_ROOT:'./',
-            VERSION:'0.8.2',
+            VERSION:'0.8.3',
             COLLAPSE_INDEX:false,
             FILE_SUFFIX:'.html',
             HAS_SOURCE:  true,
