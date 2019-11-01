@@ -289,7 +289,7 @@ def get_model_fn(
         if params.eval_acc and pred_op is not None:
             LOGGER.info("Adding evaluation metrics, Accuracy")
             labels_dense = tf.argmax(labels, -1)
-            metrics = {"Accuracy": tf.metrics.accuracy(pred_op, labels_dense)}
+            metrics = {"Accuracy": tf.metrics.accuracy(tf.argmax(pred_op, -1), labels_dense)}
         else:
             metrics = None
 
