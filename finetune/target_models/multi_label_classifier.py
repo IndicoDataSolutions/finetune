@@ -30,6 +30,11 @@ class MultiLabelClassifier(BaseModel):
     def _get_input_pipeline(self):
         return MultilabelClassificationPipeline(self.config)
 
+    def _get_threshold(self, threshold):
+        if threshold is None:
+            return self.config.multi_label_threshold
+        return threshold
+
     def featurize(self, X):
         """
         Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
@@ -46,7 +51,7 @@ class MultiLabelClassifier(BaseModel):
         :param X: list or array of text to embed.
         :returns: list of class labels.
         """
-        self.config._threshold = threshold or self.config.multi_label_threshold
+        threshold = self._get_threshold(threshold)
         all_labels = []
         for _, start_of_doc, end_of_doc, _, proba in self.process_long_sequence(X):
             if start_of_doc:
@@ -58,7 +63,7 @@ class MultiLabelClassifier(BaseModel):
             if end_of_doc:
                 # last chunk in a document
                 means = np.mean(doc_probs, axis=0)
-                label = self.input_pipeline.label_encoder.inverse_transform(np.expand_dims(means, 0) > threshold)[0]
+                label = self.input_pipeline.label_encoder.inverse_transform(np.expand_dims(means, 0) > self.config._threshold)[0]
                 all_labels.append(list(label))
         return all_labels
 
@@ -93,7 +98,7 @@ class MultiLabelClassifier(BaseModel):
         )
 
     def _predict_op(self, logits, **kwargs):
-        threshold = kwargs.get("threshold", self.config.multi_label_threshold)
+        threshold = self._get_threshold(kwargs.get("threshold", None))
         return tf.cast(tf.nn.sigmoid(logits) > threshold, tf.int32)
 
     def _predict_proba_op(self, logits, **kwargs):
