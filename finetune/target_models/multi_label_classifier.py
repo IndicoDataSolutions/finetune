@@ -63,7 +63,7 @@ class MultiLabelClassifier(BaseModel):
             if end_of_doc:
                 # last chunk in a document
                 means = np.mean(doc_probs, axis=0)
-                label = self.input_pipeline.label_encoder.inverse_transform(np.expand_dims(means, 0) > self.config._threshold)[0]
+                label = self.input_pipeline.label_encoder.inverse_transform(np.expand_dims(means, 0) > threshold)[0]
                 all_labels.append(list(label))
         return all_labels
 
