@@ -149,7 +149,7 @@ class Settings(dict):
     :param val_interval: Evaluate on validation set after `val_interval` batches.
         Defaults to 4 * val_size / batch_size to ensure that too much time is not spent on validation.
     :param lm_temp: Language model temperature -- a value of `0.0` corresponds to greedy maximum likelihood predictions
-        while a value of `1.0` corresponds to random predictions. Defaults to `0.2`.
+        while a value of `1.0` corresponds to random predictions. Defaults to `0.6`.
     :param seq_num_heads: Number of attention heads of final attention layer. Defaults to `16`.
     :param keep_best_model: Whether or not to keep the highest-performing model weights throughout the train. Defaults to `False`.
     :param early_stopping_steps: How many steps to continue with no loss improvement before early stopping. Defaults to `None`.
@@ -305,7 +305,7 @@ def get_default_config():
 
         # Language Model Settings
         lm_loss_coef=0.0,
-        lm_temp=0.2,
+        lm_temp=0.6,
 
         # Sequence Labeling
         seq_num_heads=16,
