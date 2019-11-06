@@ -12,6 +12,7 @@ class GPT2Model(SourceModel):
     encoder = GPT2Encoder
     featurizer = gpt2_featurizer
     settings = {
+        'max_length': 1024,
         'n_embed': 768,
         'n_heads': 12,
         'n_layer': 12,
@@ -34,6 +35,7 @@ class GPT2Model345(SourceModel):
     encoder = GPT2Encoder
     featurizer = gpt2_featurizer
     settings = {
+        'max_length': 1024,
         'n_embed': 1024,
         'n_heads': 16,
         'n_layer': 24,
@@ -57,6 +59,7 @@ class GPT2Model762(SourceModel):
     encoder = GPT2Encoder
     featurizer = gpt2_featurizer
     settings = {
+        'max_length': 1024,
         'n_embed': 1280,
         'n_heads': 20,
         'n_layer': 36,
@@ -82,6 +85,7 @@ class GPT2Model1558(SourceModel):
     featurizer = gpt2_featurizer
 
     settings = {
+        'max_length': 1024,
         'n_embed': 1600,
         'n_heads': 25,
         'n_layer': 48,
