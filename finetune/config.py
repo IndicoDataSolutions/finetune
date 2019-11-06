@@ -24,7 +24,7 @@ def finetune_model_path(path):
 
 def nvidia_device_ids():
     sp = subprocess.Popen(
-        ["nvidia-smi -L"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
+        ["nvidia-smi", "-L"], stdout=subprocess.PIPE, stderr=subprocess.PIPE
     )
     response = sp.communicate()[0]
     gpu_list = response.decode("utf-8").strip().split("\n")
