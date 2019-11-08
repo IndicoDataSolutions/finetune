@@ -18,6 +18,7 @@ from finetune.target_models.multiple_choice import MultipleChoice
 from finetune.target_models.comparison_regressor import ComparisonRegressor
 from finetune.target_models.ordinal_regressor import OrdinalRegressor, ComparisonOrdinalRegressor
 from finetune.target_models.language_model import LanguageModel
+from finetune.target_models.masked_language_model import MaskedLanguageModel
 from finetune.target_models.mtl import MultiTask
 from finetune.target_models.deployment_model import DeploymentModel
 from finetune.target_models.s2s import LMPred
