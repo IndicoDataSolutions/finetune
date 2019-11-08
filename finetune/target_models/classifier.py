@@ -100,6 +100,8 @@ class Classifier(BaseModel):
         if probas:
             return all_probs
         else:
+            print(all_labels)
+            print(X)
             assert len(all_labels) == len(X)
             return np.asarray(all_labels)
 
@@ -135,6 +137,7 @@ class Classifier(BaseModel):
     def _target_model(
         self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
     ):
+        self._add_context_embed(featurizer_state)
         if "explain_out" in featurizer_state:
             shape = tf.shape(featurizer_state["explain_out"])  # batch, seq, hidden
             flat_explain = tf.reshape(

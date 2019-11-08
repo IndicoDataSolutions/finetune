@@ -391,7 +391,7 @@ class BasePipeline(metaclass=ABCMeta):
                 Xs_tr, Y_tr, _ = self.resampling(Xs_tr, Y_tr)
                 self.config.dataset_size = len(Xs_tr)
                 val_dataset_unbatched = self._make_dataset(Xs_va, Y_va, train=False)
-                train_dataset_unbatched = self._make_dataset(Xs_tr, Y_tr, train=True, update_hook=update_hook)
+                train_dataset_unbatched = self._make_dataset(Xs_tr, Y_tr, train=True)
 
         if self.config.chunk_long_sequences or self.config.class_weights:
             # Certain settings require that the entire dataset be encoded before compiling the graph
