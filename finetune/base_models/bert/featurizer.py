@@ -26,7 +26,8 @@ def bert_featurizer(
         sequence_features: The output of the featurizer at each timestep.
     """
 
-    is_roberta = RoBERTaEncoder == config.base_model.encoder
+    is_roberta = issubclass(config.base_model.encoder, RoBERTaEncoder)
+    is_roberta_v1 = (not config.base_model_path.endswith('-v2.jl'))
 
     bert_config = BertConfig(
         vocab_size=encoder.vocab_size,
@@ -66,11 +67,12 @@ def bert_featurizer(
     lengths = lengths_from_eos_idx(eos_idx=eos_idx, max_length=seq_length)
 
     if is_roberta:
-        # Because roberta embeddings include an unused <MASK> token, and our embedding
-        #  layer size needs to accommodate for that.
-        bert_config.vocab_size += 1
         # In our use case (padding token has index 1), roberta's position indexes begin at 2, so our
         # positions embeddings come from indices 2:514.
+        if is_roberta_v1:
+            # v1 vocab didn't include MASK token although the embedding did
+            bert_config.vocab_size += 1
+
         bert_config.max_position_embeddings += 2
 
     mask = tf.sequence_mask(lengths, maxlen=seq_length, dtype=tf.float32)

@@ -20,7 +20,7 @@ class SourceModel(metaclass=ABCMeta):
         raise NotImplementedError
 
     @classmethod
-    def get_encoder(cls, **kwargs):
+    def get_encoder(cls, config=None, **kwargs):
         return cls.encoder(**kwargs)
 
     @classmethod

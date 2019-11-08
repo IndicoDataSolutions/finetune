@@ -5,7 +5,7 @@ import numpy as np
 import tensorflow as tf
 
 
-from finetune.nn.target_blocks import language_model
+from finetune.nn.target_blocks import language_model, masked_language_model
 from finetune.util.text_generation import sample_with_temperature
 from finetune.optimizers.zero_grad import dont_optimize_zeros
 from finetune.optimizers.gradient_accumulation import get_grad_accumulation_optimizer
@@ -71,19 +71,33 @@ def language_model_op(X, M, params, featurizer_state, mode, encoder):
     return lm_predict_op, language_model_state
 
 
+def masked_language_model_op(X, M, mlm_weights, mlm_ids, mlm_positions, params, featurizer_state, mode):
+    return masked_language_model(
+        X=X,
+        M=M,
+        mlm_weights=mlm_weights,
+        mlm_ids=mlm_ids,
+        mlm_positions=mlm_positions,
+        config=params,
+        embed_weights=featurizer_state["embed_weights"],
+        hidden=featurizer_state["sequence_features"],
+        train=(mode == tf.estimator.ModeKeys.TRAIN)
+    )
+    return language_model_state
+
+
 def get_model_fn(
     target_model_fn,
     predict_op,
     predict_proba_op,
     build_target_model,
-    build_lm,
+    lm_type,
     encoder,
     target_dim,
     label_encoder,
     build_explain,
     n_replicas,
 ):
-
     def target_model_op(featurizer_state, Y, params, mode, **kwargs):
         weighted_tensor = None
         if params.class_weights is not None:
@@ -108,10 +122,6 @@ def get_model_fn(
         return target_model_state
 
     def _model_fn(features, labels, mode, params):
-        if params.base_model.is_bidirectional and build_lm:
-            raise ValueError(
-                "Bert models do not support functions that require the language model."
-            )
         if not build_target_model:
             lm_loss_coef = 1.0
         else:
@@ -186,11 +196,27 @@ def get_model_fn(
                             "explanation"
                         ]
 
-            if build_lm:
-                lm_predict_op, language_model_state = language_model_op(
-                    X=X, M=M, params=params, featurizer_state=featurizer_state,
-                    mode=mode, encoder=encoder
-                )
+            if lm_type is not None:
+                if lm_type.lower() == 'lm':
+                    lm_predict_op, language_model_state = language_model_op(
+                        X=X, M=M, params=params, featurizer_state=featurizer_state, mode=mode, encoder=encoder
+                    )
+                elif lm_type.lower() == 'mlm':
+                    language_model_state = masked_language_model_op(
+                        X=X, 
+                        M=M, 
+                        mlm_weights=features['mlm_weights'],
+                        mlm_ids=features['mlm_ids'],
+                        mlm_positions=features['mlm_positions'],
+                        params=params, 
+                        featurizer_state=featurizer_state,
+                        mode=mode
+                    )
+                    # No support for any form of text generation for MLM for now
+                    lm_predict_op = None
+                else: 
+                    raise FinetuneError("Unsupport `lm_type` option: {}".format(lm_type))
+
                 if (
                     mode == tf.estimator.ModeKeys.TRAIN
                     or mode == tf.estimator.ModeKeys.EVAL
@@ -199,7 +225,8 @@ def get_model_fn(
                     train_loss += lm_loss_coef * lm_loss
                     tf.summary.scalar("LanguageModelLoss", lm_loss)
                 if mode == tf.estimator.ModeKeys.PREDICT:
-                    predictions[PredictMode.GENERATE_TEXT] = lm_predict_op
+                    if lm_predict_op is not None:
+                        predictions[PredictMode.GENERATE_TEXT] = lm_predict_op
                     predictions[PredictMode.LM_PERPLEXITY] = language_model_state[
                         "perplexity"
                     ]

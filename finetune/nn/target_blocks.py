@@ -7,7 +7,8 @@ from finetune.util.shapes import shape_list, merge_leading_dims
 from finetune.optimizers.recompute_grads import recompute_grad
 from finetune.optimizers.tsa_schedules import get_tsa_threshold, tsa_loss
 from finetune.errors import FinetuneError
-
+from finetune.nn.activations import act_fns
+from finetune.nn.nn_utils import norm
 
 def perceptron(x, ny, config, w_init=None, b_init=None):
     """
@@ -29,6 +30,62 @@ def perceptron(x, ny, config, w_init=None, b_init=None):
         w = tf.get_variable("w", [nx, ny], initializer=w_init)
         b = tf.get_variable("b", [ny], initializer=b_init)
         return tf.matmul(x, w) + b
+
+
+def gather_indexes(sequence_tensor, positions):
+    """Gathers the vectors at the specific positions over a minibatch."""
+    sequence_shape = shape_list(sequence_tensor)
+    batch_size = sequence_shape[0]
+    seq_length = sequence_shape[1]
+    width = sequence_shape[2]
+
+    flat_offsets = tf.reshape(
+        tf.range(0, batch_size, dtype=tf.int32) * seq_length, [-1, 1]
+    )
+    flat_positions = tf.reshape(positions + flat_offsets, [-1])
+    flat_sequence_tensor = tf.reshape(sequence_tensor, [batch_size * seq_length, width])
+    output_tensor = tf.gather(flat_sequence_tensor, flat_positions)
+    return output_tensor
+
+
+def masked_language_model(*, X, M, mlm_weights, mlm_positions, mlm_ids, embed_weights, hidden, config, reuse=None, train=False):
+    X = merge_leading_dims(X, 3)
+    M = merge_leading_dims(M, 2)
+    hidden = merge_leading_dims(hidden, 3)
+    batch, seq, _ = shape_list(X)
+    with tf.variable_scope('model/masked-language-model'):
+        gathered_hidden = gather_indexes(hidden, mlm_positions)
+        final_proj = tf.layers.dense(
+            gathered_hidden,
+            units=config.n_embed,
+            activation=act_fns[config.act_fn],
+            kernel_initializer=tf.random_normal_initializer(stddev=config.weight_stddev),
+            name='dense'
+        )
+        normed_proj = norm(final_proj, 'LayerNorm')
+        n_vocab = shape_list(embed_weights)[0]
+        output_bias = tf.get_variable(
+            "output_bias",
+            shape=[n_vocab],
+            initializer=tf.zeros_initializer()
+        )
+        logits = tf.matmul(normed_proj, embed_weights, transpose_b=True)
+        logits = tf.nn.bias_add(logits, output_bias)
+        
+        mlm_ids = tf.reshape(mlm_ids, [-1])
+        mlm_weights = tf.reshape(mlm_weights, [-1])
+
+        log_probs = tf.nn.log_softmax(logits, axis=-1)
+        one_hot_labels = tf.one_hot(mlm_ids, depth=n_vocab, dtype=tf.float32)
+        per_example_loss = -tf.reduce_sum(log_probs * one_hot_labels, axis=[-1])
+        numerator = tf.reduce_sum(mlm_weights * per_example_loss)
+        denominator = tf.reduce_sum(mlm_weights) + 1e-5
+        mlm_loss = numerator / denominator
+
+        return {
+            "logits": logits,
+            "losses": mlm_loss,
+        }
 
 
 def language_model(*, X, M, embed_weights, hidden, config, reuse=None, train=False):
@@ -57,7 +114,6 @@ def language_model(*, X, M, embed_weights, hidden, config, reuse=None, train=Fal
         # language model ignores last hidden state because we don't have a target
         sliced_hidden = hidden[:, :-1]
         lm_h = tf.reshape(sliced_hidden, [-1, config.n_embed])  # [batch, seq_len, embed] --> [batch * seq_len, embed]
-
         lm_logits = tf.matmul(lm_h, embed_weights, transpose_b=True)  # tied weights
         lm_logits = tf.cast(lm_logits, tf.float32)
         lm_losses = tf.losses.sparse_softmax_cross_entropy(
@@ -280,8 +336,6 @@ def class_reweighting(class_weights):
     @tf.custom_gradient
     def custom_grad(logits):
         def grad(g):
-            # class_weights = tf.Print(class_weights, [class_weights])
-            # g = tf.print(g, [g])
             new_g = g * class_weights
             ratio = tf.norm(g) / tf.norm(new_g)
             return new_g * ratio

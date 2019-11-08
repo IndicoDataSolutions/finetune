@@ -2,6 +2,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 import logging
 import sys
+import warnings
 
 import joblib
 import numpy as np
@@ -15,6 +16,9 @@ from finetune.util.metrics import read_eval_metrics
 
 LOGGER = logging.getLogger("finetune")
 
+
+def should_be_randomly_initialized(name):
+    return "OptimizeLoss" in name or "global_step" in name
 
 class SaverHook(_StopOnPredicateHook):
     def __init__(
