@@ -24,6 +24,8 @@ def perceptron(x, ny, config, w_init=None, b_init=None):
 
     with tf.variable_scope('perceptron'):
         nx = config.n_embed
+        if config.use_auxiliary_info:
+            nx += config.n_context_embed
         w = tf.get_variable("w", [nx, ny], initializer=w_init)
         b = tf.get_variable("b", [ny], initializer=b_init)
         return tf.matmul(x, w) + b

@@ -66,10 +66,10 @@ class Comparison(Classifier):
     def _get_input_pipeline(self):
         return ComparisonPipeline(self.config)
 
-    @staticmethod
     def _target_model(
-        config,
+        self,
         *,
+        config,
         featurizer_state,
         targets,
         n_outputs,
@@ -84,8 +84,8 @@ class Comparison(Classifier):
         featurizer_state["features"] = tf.abs(
             tf.reduce_sum(featurizer_state["features"], 1)
         )
-        return Classifier._target_model(
-            config,
+        return super(Comparison, self)._target_model(
+            config=config,
             featurizer_state=featurizer_state,
             targets=targets,
             n_outputs=n_outputs,

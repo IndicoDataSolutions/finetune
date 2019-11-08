@@ -88,10 +88,12 @@ class OrdinalRegressor(BaseModel):
         """
         return super().finetune(X, Y=Y, batch_size=batch_size)
 
-    @staticmethod
     def _target_model(
-        config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
+        self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
     ):
+        super(OrdinalRegressor, self)._target_model(
+            config=config, featurizer_state=featurizer_state, targets=targets, n_outputs=n_outputs,
+            train=train, reuse=reuse, **kwargs)
         return ordinal_regressor(
             hidden=featurizer_state["features"],
             targets=targets,
@@ -135,10 +137,14 @@ class ComparisonOrdinalRegressor(OrdinalRegressor):
     def _get_input_pipeline(self):
         return ComparisonOrdinalRegressionPipeline(self.config)
 
-    @staticmethod
+    @classmethod
     def _target_model(
-        config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
+        self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
     ):
+        # we want to inherit from the grandparent, i.e. BaseModel
+        super(OrdinalRegressor, self)._target_model(
+            config=config, featurizer_state=featurizer_state, targets=targets, n_outputs=n_outputs,
+            train=train, reuse=reuse, **kwargs)
         featurizer_state["sequence_features"] = tf.abs(
             tf.reduce_sum(featurizer_state["sequence_features"], 1)
         )

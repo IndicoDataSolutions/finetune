@@ -385,9 +385,8 @@ class DeploymentModel(BaseModel):
     def get_eval_fn(cls):
         raise NotImplementedError
 
-    @staticmethod
     def _target_model(
-        config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
+        self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
     ):
         raise NotImplementedError
 

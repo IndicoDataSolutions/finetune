@@ -110,10 +110,12 @@ class MultipleChoice(BaseModel):
         self.input_pipeline.target_dim_ = len(answers[0])
         return super().finetune(list(zip(questions, answers)), Y=labels)
 
-    @staticmethod
     def _target_model(
-        config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
+        self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
     ):
+        super(MultipleChoice, self)._target_model(
+            config=config, featurizer_state=featurizer_state, targets=targets, n_outputs=n_outputs,
+            train=train, reuse=reuse, **kwargs)
         return multi_choice_question(
             hidden=featurizer_state["features"],
             targets=targets,
