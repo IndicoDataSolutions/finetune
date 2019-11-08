@@ -317,10 +317,13 @@ class SequenceLabeler(BaseModel):
         """
         return self.predict(X)
 
-    @staticmethod
+    @classmethod
     def _target_model(
-        config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
+        cls, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
     ):
+        super(cls, SequenceLabeler)._target_model(
+            config=config, featurizer_state=featurizer_state, targets=targets, n_outputs=n_outputs,
+            train=train, reuse=reuse, **kwargs)
         return sequence_labeler(
             hidden=featurizer_state["sequence_features"],
             targets=targets,
