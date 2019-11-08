@@ -32,6 +32,7 @@ from finetune.model import get_model_fn, PredictMode
 
 from finetune.util.download import download_data_if_required
 from finetune.util.positional_embeddings import embedding_preprocessor
+from finetune.util.shapes import shape_list
 from finetune.base_models import GPTModel, GPTModelSmall
 
 from finetune.util.in_memory_finetune import make_in_memory_finetune_hooks
@@ -72,7 +73,7 @@ class BaseModel(object, metaclass=ABCMeta):
         if self.config.debugging_logs:
             os.environ["TF_CPP_MIN_LOG_LEVEL"] = "0"
             tf_logging.set_verbosity(tf_logging.DEBUG)
-    
+
     def validate_config(self):
         if (
             self.config.num_layers_trained != self.config.n_layer
@@ -126,9 +127,9 @@ class BaseModel(object, metaclass=ABCMeta):
     def _predict_proba_op(self, logits, **kwargs):
         raise NotImplementedError
 
-    @staticmethod
     @abstractmethod
     def _target_model(
+        self,
         *,
         config,
         featurizer_state,
@@ -138,8 +139,17 @@ class BaseModel(object, metaclass=ABCMeta):
         reuse=None,
         **kwargs
     ):
-        # Overridden by subclass to attach a target model onto the shared base featurizer.
-        raise NotImplementedError
+        if "context" in featurizer_state:
+            context_embed = featurizer_state["context"]
+            for key in ['features', 'explain_out']:
+                if key in featurizer_state:
+                    featurizer_state[key] = tf.concat(
+                        (featurizer_state[key], tf.reduce_mean(context_embed, 1)), -1
+                    )
+
+            featurizer_state['sequence_features'] = tf.concat(
+                (featurizer_state['sequence_features'], context_embed), -1
+            )
 
     def _n_steps(self, n_examples, batch_size, n_gpus):
         steps = int(math.ceil(n_examples / (batch_size * n_gpus)))
@@ -439,7 +449,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         return predictions
 
-    def _inference(self, Xs, predict_keys=None, n_examples=None):
+    def _inference(self, Xs, predict_keys=None, n_examples=None, context=None):
         Xs = self.input_pipeline._format_for_inference(Xs)
 
         if self._cached_predict:
@@ -447,7 +457,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 Xs=Xs, predict_keys=predict_keys, n_examples=n_examples
             )
         else:
-            input_fn = self.input_pipeline.get_predict_input_fn(Xs)
+            input_fn = self.input_pipeline.get_predict_input_fn(Xs, context)
             estimator, hooks = self.get_estimator(
                 build_explain=PredictMode.EXPLAIN in predict_keys
             )
@@ -474,20 +484,20 @@ class BaseModel(object, metaclass=ABCMeta):
         """ An alias for finetune. """
         return self.finetune(*args, **kwargs)
 
-    def _predict(self, Xs):
-        raw_preds = self._inference(Xs, predict_keys=[PredictMode.NORMAL])
+    def _predict(self, Xs, context=None):
+        raw_preds = self._inference(Xs, predict_keys=[PredictMode.NORMAL], context=context)
         return self.input_pipeline.label_encoder.inverse_transform(
             np.asarray(raw_preds)
         )
 
-    def predict(self, Xs):
-        return self._predict(Xs)
+    def predict(self, Xs, context=None):
+        return self._predict(Xs, context=context)
 
-    def _predict_proba(self, Xs):
+    def _predict_proba(self, Xs, context=None):
         """
         Produce raw numeric outputs for proba predictions
         """
-        raw_preds = self._inference(Xs, predict_keys=[PredictMode.PROBAS])
+        raw_preds = self._inference(Xs, predict_keys=[PredictMode.PROBAS], context=context)
         return raw_preds
 
     def predict_proba(self, *args, **kwargs):
@@ -816,7 +826,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         return max(aggregated_results, key=lambda x: x[1])[0]
 
-    def process_long_sequence(self, X):
+    def process_long_sequence(self, X, context=None):
         arr_encoded = [
             self.input_pipeline._text_to_ids(x) for x in self.input_pipeline._format_for_inference(X)
         ]
@@ -829,7 +839,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 sequence_id.append(i)
 
         labels, batch_probas = [], []
-        for pred in self._inference(X, predict_keys=[PredictMode.PROBAS, PredictMode.NORMAL], n_examples=len(flat_array_encoded)):
+        for pred in self._inference(X, predict_keys=[PredictMode.PROBAS, PredictMode.NORMAL], n_examples=len(flat_array_encoded), context=context):
             normal_pred = pred[PredictMode.NORMAL]
             if not hasattr(self, 'multi_label'):
                 normal_pred = np.expand_dims(normal_pred, 0)

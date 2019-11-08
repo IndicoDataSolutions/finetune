@@ -17,7 +17,7 @@ from sklearn.preprocessing import LabelBinarizer
 from sklearn.utils import shuffle as dataset_shuffle
 import finetune
 from finetune.errors import FinetuneError
-from finetune.encoding.input_encoder import ArrayEncodedOutput, EncodedOutput
+from finetune.encoding.input_encoder import ArrayEncodedOutput, EncodedOutput, tokenize_context
 from finetune.util.imbalance import compute_class_weights
 
 LOGGER = logging.getLogger("finetune")
@@ -107,11 +107,17 @@ class BasePipeline(metaclass=ABCMeta):
         )
         return output
 
-    def text_to_tokens_mask(self, X, Y=None):
+    def text_to_tokens_mask(self, X, Y=None, context=None):
         out_gen = self._text_to_ids(X, pad_token=self.config.pad_token)
 
-        for out in out_gen:
-            feats = {"tokens": out.token_ids, "mask": out.mask}
+        for i, out in enumerate(out_gen):
+            if context is None:
+                feats = {"tokens": out.token_ids, "mask": out.mask}
+            else:
+                context_array = get_context_array(context[i])
+                tokenized_context = tokenize_context(context_array, out)
+                feats = {"tokens": out.token_ids, "mask": out.mask, "context": tokenized_context}
+
             if Y is None:
                 yield feats
             else:
@@ -139,16 +145,18 @@ class BasePipeline(metaclass=ABCMeta):
         target_arrs = np.asarray([target_arr for doc, target_arr in encoded_dataset])
         return Counter(self.label_encoder.inverse_transform(target_arrs))
 
-    def _dataset_with_targets(self, Xs, Y, train):
+    def _dataset_with_targets(self, Xs, Y, train, context=None):
+        if context is None:
+            context = [None] * len(Xs)
         if not callable(Xs) and not callable(Y):
-            dataset = lambda: zip(Xs, Y)
+            dataset = lambda: zip(Xs, Y, context)
         elif callable(Xs) and callable(Y):
-            dataset = lambda: zip(Xs(), Y())
+            dataset = lambda: zip(Xs(), Y(), context)
         else:
             raise ValueError( "Either neither or both of Xs and Y should be callable, not a mixture")
 
         dataset_encoded = lambda: itertools.chain.from_iterable(
-            map(lambda xy: self.text_to_tokens_mask(*xy), dataset())
+            map(lambda xyc: self.text_to_tokens_mask(*xyc), dataset())
         )
 
         if not callable(Y) and train:
@@ -164,14 +172,17 @@ class BasePipeline(metaclass=ABCMeta):
             lambda: self.wrap_tqdm(dataset_encoded(), train), *shape_def
         )
 
-    def _dataset_without_targets(self, Xs, train):
+    def _dataset_without_targets(self, Xs, train, context=None):
+        if context is None:
+            context = [None] * len(Xs)
+        Xs = list(zip(Xs, [None] * len(Xs), context))
         if not callable(Xs):
             Xs_fn = lambda: self.wrap_tqdm(Xs, train)
         else:
             Xs_fn = lambda: self.wrap_tqdm(Xs(), train)
 
         dataset_encoded = lambda: itertools.chain.from_iterable(
-            map(self.text_to_tokens_mask, Xs_fn())
+            map(lambda xyc: self.text_to_tokens_mask(*xyc), Xs_fn())
         )
         if not callable(Xs) and self.config.chunk_long_sequences:
             # Adjust dataset size to account for long documents being chunked
@@ -220,11 +231,11 @@ class BasePipeline(metaclass=ABCMeta):
     def resampling(self, Xs, Y):
         return Xs, Y
 
-    def _make_dataset(self, Xs, Y, train=False):
+    def _make_dataset(self, Xs, Y, train=False, context=None):
         if Y is not None:
-            dataset = lambda: self._dataset_with_targets(Xs, Y, train=train)
+            dataset = lambda: self._dataset_with_targets(Xs, Y, train=train, context=context)
         else:
-            dataset = lambda: self._dataset_without_targets(Xs, train=train)
+            dataset = lambda: self._dataset_without_targets(Xs, train=train, context=context)
         return dataset
 
     def wrap_tqdm(self, gen, train):
@@ -272,7 +283,7 @@ class BasePipeline(metaclass=ABCMeta):
 
         return internal_gen()
 
-    def get_train_input_fns(self, Xs, Y=None, batch_size=None, val_size=None):
+    def get_train_input_fns(self, Xs, Y=None, batch_size=None, val_size=None, context=None):
         self.epoch = 1
         batch_size = batch_size or self.config.batch_size
 
@@ -305,7 +316,7 @@ class BasePipeline(metaclass=ABCMeta):
 
         if callable(Xs) or Y is None:
             self._skip_tqdm = val_size
-            dataset = self._make_dataset(Xs, Y, train=True)
+            dataset = self._make_dataset(Xs, Y, train=True, context=context)
             val_dataset_unbatched = (
                 lambda: dataset()
                 .shuffle(
@@ -336,8 +347,8 @@ class BasePipeline(metaclass=ABCMeta):
 
             Xs_tr, Y_tr = self.resampling(Xs_tr, Y_tr)
             self.config.dataset_size = len(Xs_tr)
-            val_dataset_unbatched = self._make_dataset(Xs_va, Y_va, train=False)
-            train_dataset_unbatched = self._make_dataset(Xs_tr, Y_tr, train=True)
+            val_dataset_unbatched = self._make_dataset(Xs_va, Y_va, train=False, context=context)
+            train_dataset_unbatched = self._make_dataset(Xs_tr, Y_tr, train=True, context=context)
 
         if self.config.chunk_long_sequences or self.config.class_weights:
             # Certain settings require that the entire dataset be encoded before compiling the graph
@@ -363,9 +374,9 @@ class BasePipeline(metaclass=ABCMeta):
             self.config.val_interval,
         )
 
-    def get_predict_input_fn(self, Xs, batch_size=None):
+    def get_predict_input_fn(self, Xs, batch_size=None, context=None):
         batch_size = batch_size or self.config.predict_batch_size
-        tf_dataset = lambda: self._dataset_without_targets(Xs, train=None).batch(batch_size)
+        tf_dataset = lambda: self._dataset_without_targets(Xs, train=None, context=context).batch(batch_size)
         return tf_dataset
 
     @property
