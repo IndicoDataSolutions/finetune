@@ -157,6 +157,11 @@ class MultipleChoice(BaseModel):
     def _target_model(
         self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
     ):
+        if "context" in featurizer_state:
+            context_embed = featurizer_state["context"]
+            featurizer_state['features'] = tf.concat(
+                (featurizer_state['features'], tf.reduce_mean(context_embed, 2)), -1
+            )
         return multi_choice_question(
             hidden=featurizer_state["features"],
             targets=targets,

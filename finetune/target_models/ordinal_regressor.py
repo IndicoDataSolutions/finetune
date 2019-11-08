@@ -91,6 +91,7 @@ class OrdinalRegressor(BaseModel):
     def _target_model(
         self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
     ):
+        self._add_context_embed(featurizer_state)
         return ordinal_regressor(
             hidden=featurizer_state["features"],
             targets=targets,
@@ -137,6 +138,10 @@ class ComparisonOrdinalRegressor(OrdinalRegressor):
     def _target_model(
         self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
     ):
+        # we want to inherit from the grandparent, i.e. BaseModel
+        super(OrdinalRegressor, self)._target_model(
+            config=config, featurizer_state=featurizer_state, targets=targets, n_outputs=n_outputs,
+            train=train, reuse=reuse, **kwargs)
         featurizer_state["sequence_features"] = tf.abs(
             tf.reduce_sum(featurizer_state["sequence_features"], 1)
         )
