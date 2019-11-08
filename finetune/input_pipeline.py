@@ -26,7 +26,7 @@ LOGGER = logging.getLogger("finetune")
 class BasePipeline(metaclass=ABCMeta):
     def __init__(self, config):
         self.config = config
-        self.text_encoder = self.config.base_model.get_encoder()
+        self.text_encoder = self.config.base_model.get_encoder(self.config)
         self.label_encoder = None
         self.target_dim = None
         self.pad_idx_ = None

@@ -9,8 +9,9 @@ from finetune.base_models.bert.encoder import (
     DistilBERTEncoder
 )
 
-from finetune.base_models.bert.roberta_encoder import RoBERTaEncoder
+from finetune.base_models.bert.roberta_encoder import RoBERTaEncoder, RoBERTaEncoderV2
 from finetune.base_models.bert.featurizer import bert_featurizer
+from finetune.base_models.gpt2 import encoder as gpt2_encoder
 from finetune.util.download import BERT_BASE_URL, GPT2_BASE_URL, ROBERTA_BASE_URL, FINETUNE_BASE_FOLDER
 
 
@@ -19,6 +20,7 @@ class BERTModelCased(SourceModel):
     encoder = BERTEncoder
     featurizer = bert_featurizer
     settings = {
+        "lm_type": "mlm",
         "n_embed": 768,
         "n_epochs": 8,
         "n_heads": 12,
@@ -28,14 +30,14 @@ class BERTModelCased(SourceModel):
         "lr": 1e-5,
         "l2_reg": 0.01,
         "bert_intermediate_size": 3072,
-        "base_model_path": os.path.join("bert", "bert_small_cased.jl"),
+        "base_model_path": os.path.join("bert", "bert_small_cased-v2.jl"),
     }
     required_files = [
         {
             "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", filename),
             "url": urljoin(BERT_BASE_URL, filename),
         }
-        for filename in ["bert_small_cased.jl", "vocab.txt"]
+        for filename in ["bert_small_cased-v2.jl", "vocab.txt"]
     ]
 
 
@@ -44,6 +46,7 @@ class BERTModelLargeCased(SourceModel):
     encoder = BERTEncoderLarge
     featurizer = bert_featurizer
     settings = {
+        "lm_type": "mlm",
         "n_embed": 1024,
         "n_epochs": 8,
         "n_heads": 16,
@@ -54,14 +57,14 @@ class BERTModelLargeCased(SourceModel):
         "lr": 1e-5,
         "l2_reg": 0.01,
         "bert_intermediate_size": 4096,
-        "base_model_path": os.path.join("bert", "bert_large_cased.jl"),
+        "base_model_path": os.path.join("bert", "bert_large_cased-v2.jl"),
     }
     required_files = [
         {
             "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", filename),
             "url": urljoin(BERT_BASE_URL, filename),
         }
-        for filename in ["bert_large_cased.jl", "vocab_large.txt"]
+        for filename in ["bert_large_cased-v2.jl", "vocab_large.txt"]
     ]
 
 
@@ -70,6 +73,7 @@ class BERTModelLargeWWMCased(SourceModel):
     encoder = BERTEncoderLarge
     featurizer = bert_featurizer
     settings = {
+        "lm_type": "mlm",
         "n_embed": 1024,
         "n_epochs": 8,
         "n_heads": 16,
@@ -80,14 +84,14 @@ class BERTModelLargeWWMCased(SourceModel):
         "lr": 1e-5,
         "l2_reg": 0.01,
         "bert_intermediate_size": 4096,
-        "base_model_path": os.path.join("bert", "bert_wwm_large_cased.jl"),
+        "base_model_path": os.path.join("bert", "bert_wwm_large_cased-v2.jl"),
     }
     required_files = [
         {
             "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", filename),
             "url": urljoin(BERT_BASE_URL, filename),
         }
-        for filename in ["bert_wwm_large_cased.jl", "vocab_large.txt"]
+        for filename in ["bert_wwm_large_cased-v2.jl", "vocab_large.txt"]
     ]
 
 
@@ -96,6 +100,7 @@ class BERTModelMultilingualCased(SourceModel):
     encoder = BERTEncoderMultuilingal
     featurizer = bert_featurizer
     settings = {
+        "lm_type": "mlm",
         "n_embed": 768,
         "n_epochs": 8,
         "n_heads": 12,
@@ -105,22 +110,23 @@ class BERTModelMultilingualCased(SourceModel):
         "lr": 1e-5,
         "l2_reg": 0.01,
         "bert_intermediate_size": 3072,
-        "base_model_path": os.path.join("bert", "bert_small_multi_cased.jl"),
+        "base_model_path": os.path.join("bert", "bert_small_multi_cased-v2.jl"),
     }
     required_files = [
         {
             "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", filename),
             "url": urljoin(BERT_BASE_URL, filename),
         }
-        for filename in ["bert_small_multi_cased.jl", "vocab_multi.txt"]
+        for filename in ["bert_small_multi_cased-v2.jl", "vocab_multi.txt"]
     ]
 
 
 class RoBERTa(SourceModel):
     is_bidirectional = True
-    encoder = RoBERTaEncoder
+    encoder = RoBERTaEncoderV2
     featurizer = bert_featurizer
     settings = {
+        "lm_type": "mlm",
         "n_embed": 768,
         "n_epochs": 8,
         "n_heads": 12,
@@ -133,34 +139,43 @@ class RoBERTa(SourceModel):
         "bert_intermediate_size": 3072,
         "bert_use_pooler": False,
         "max_length": 512,
-        "base_model_path": os.path.join("bert", "roberta-model-sm.jl"),
+        "base_model_path": os.path.join("bert", "roberta-model-sm-v2.jl"),
     }
     required_files = [
         {
             "file": os.path.join(
-                FINETUNE_BASE_FOLDER, "model", "bert", "roberta-model-sm.jl"
+                FINETUNE_BASE_FOLDER, "model", "bert", "roberta-model-sm-v2.jl"
             ),
-            "url": urljoin(ROBERTA_BASE_URL, "roberta-model-sm.jl"),
+            "url": urljoin(ROBERTA_BASE_URL, "roberta-model-sm-v2.jl"),
         },
         {
             "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "dict.txt"),
             "url": urljoin(ROBERTA_BASE_URL, "dict.txt"),
         },
         {
-            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "gpt2", "vocab.bpe"),
-            "url": urljoin(GPT2_BASE_URL, "vocab.bpe"),
+            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "roberta_vocab.bpe"),
+            "url": urljoin(GPT2_BASE_URL, "roberta_vocab.bpe"),
         },
         {
-            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "gpt2", "encoder.json"),
-            "url": urljoin(GPT2_BASE_URL, "encoder.json"),
+            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "roberta_encoder.json"),
+            "url": urljoin(GPT2_BASE_URL, "roberta_encoder.json"),
         },
     ]
 
-class RoBERTaLarge(SourceModel):
+    @classmethod
+    def get_encoder(cls, config=None, **kwargs):
+        if config is not None and not config.base_model_path.endswith('-v2'):
+            return cls.encoder(**kwargs)
+        else:
+            return RoBERTaEncoder(**kwargs)
+
+
+class RoBERTaLarge(RoBERTa):
     is_bidirectional = True
-    encoder = RoBERTaEncoder
+    encoder = RoBERTaEncoderV2
     featurizer = bert_featurizer
     settings = {
+        "lm_type": "mlm",
         "n_embed": 1024,
         "n_epochs": 8,
         "n_heads": 16,
@@ -174,26 +189,26 @@ class RoBERTaLarge(SourceModel):
         "bert_intermediate_size": 4096,
         "bert_use_pooler": False,
         "max_length": 512,
-        "base_model_path": os.path.join("bert", "roberta-model-lg.jl"),
+        "base_model_path": os.path.join("bert", "roberta-model-lg-v2.jl"),
     }
     required_files = [
         {
             "file": os.path.join(
-                FINETUNE_BASE_FOLDER, "model", "bert", "roberta-model-lg.jl"
+                FINETUNE_BASE_FOLDER, "model", "bert", "roberta-model-lg-v2.jl"
             ),
-            "url": urljoin(ROBERTA_BASE_URL, "roberta-model-lg.jl"),
+            "url": urljoin(ROBERTA_BASE_URL, "roberta-model-lg-v2.jl"),
         },
         {
             "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "dict.txt"),
             "url": urljoin(ROBERTA_BASE_URL, "dict.txt"),
         },
         {
-            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "gpt2", "vocab.bpe"),
-            "url": urljoin(GPT2_BASE_URL, "vocab.bpe"),
+            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "roberta_vocab.bpe"),
+            "url": urljoin(GPT2_BASE_URL, "roberta_vocab.bpe"),
         },
         {
-            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "gpt2", "encoder.json"),
-            "url": urljoin(GPT2_BASE_URL, "encoder.json"),
+            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "roberta_encoder.json"),
+            "url": urljoin(GPT2_BASE_URL, "roberta_encoder.json"),
         },
     ]
 
@@ -206,6 +221,7 @@ class DistilBERT(SourceModel):
     encoder = DistilBERTEncoder
     featurizer = bert_featurizer
     settings = {
+        "max_length": 512,
         "n_embed": 768,
         "n_epochs": 8,
         "n_heads": 12,
