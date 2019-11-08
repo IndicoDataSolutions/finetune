@@ -220,3 +220,20 @@ class BaseEncoder(object):
 
     def __getstate__(self):
         return {"Encoder": None}
+
+def tokenize_context(context, encoded_output):
+    """ Tokenize the context corresponding to a sequence of text """
+    # TODO: assess correctness
+    batch_context = []
+    original_tokens = []
+    for char_loc, token in zip(encoded_output.char_locs, encoded_output.tokens):
+        original_token = 0
+        for subtoken_idx in range(len(context)):
+            if char_loc > context[subtoken_idx]["end"]:
+                original_token += 1
+        original_tokens.append(original_token)
+    expanded_context = [None] * len(original_tokens)
+    for j in range(len(expanded_context)):
+        expanded_context[j] = context[original_tokens[j]]
+    assert len(expanded_context) == len(encoded_output.subtoken_idxs)
+    return expanded_context

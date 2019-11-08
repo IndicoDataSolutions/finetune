@@ -16,6 +16,7 @@ from finetune.util.imbalance import class_weight_tensor
 from finetune.errors import FinetuneError
 from finetune.base_models import GPTModel, GPTModelSmall
 from finetune.optimizers.adafactor import AdafactorWOptimizer, AdafactorOptimizer
+from finetune.nn.auxiliary import embed_context
 
 LOGGER = logging.getLogger("finetune")
 
@@ -120,6 +121,7 @@ def get_model_fn(
         train = estimator_mode == tf.estimator.ModeKeys.TRAIN
         X = features["tokens"]
         M = features["mask"]
+        context = features.get("context", None)
         task_id = features.get("task_id", None)
         Y = labels
         pred_op = None
@@ -133,6 +135,8 @@ def get_model_fn(
                 train=train,
                 explain=build_explain,
             )
+            if context is not None:
+                featurizer_state = embed_context(context, featurizer_state)
             predictions = {
                 PredictMode.FEATURIZE: featurizer_state["features"], 
                 PredictMode.SEQUENCE: featurizer_state["sequence_features"]

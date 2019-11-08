@@ -95,13 +95,13 @@ class MultiTaskPipeline(BasePipeline):
 def get_loss_logits_fn(task, featurizer_state, config, targets_i, train, reuse, task_id_i):
     def loss_logits():
         with tf.variable_scope("target_model_{}".format(task)):
-            target_model_out = config.tasks[task]._target_model(
+            target_model_out = config.tasks[task]()._target_model(
                 config=config,
                 featurizer_state=featurizer_state,
                 targets=targets_i,
                 n_outputs=config.task_input_pipelines[task].target_dim,
                 train=train,
-                reuse=reuse,
+                reuse=reuse
             )
             logits = target_model_out["logits"]
             logits.set_shape(None)
@@ -240,8 +240,9 @@ class MultiTask(BaseModel):
             )
         return super().finetune(X, Y=Y, batch_size=batch_size)
 
-    @staticmethod
     def _target_model(
+        self,
+        *,
         config,
         featurizer_state,
         targets,
@@ -251,6 +252,9 @@ class MultiTask(BaseModel):
         task_id=None,
         **kwargs
     ):
+        super(MultiTask, self)._target_model(
+            config=config, featurizer_state=featurizer_state, targets=targets, n_outputs=n_outputs,
+            train=train, reuse=reuse, task_id=task_id, **kwargs)
         pred_fn_pairs = []
         featurizer_state["features"] = tf.cond(
             tf.equal(tf.shape(featurizer_state["features"])[1], 1),
