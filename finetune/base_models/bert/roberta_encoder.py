@@ -6,10 +6,14 @@ import numpy as np
 
 import finetune
 from finetune.encoding.input_encoder import EncodedOutput
-from finetune.base_models.gpt2.encoder import GPT2Encoder, bytes_to_unicode, ENCODER_PATH, VOCAB_PATH
+from finetune.base_models.gpt2.encoder import GPT2Encoder, bytes_to_unicode
+from finetune.base_models.gpt2 import encoder as gpt2_encoder
+
 
 FINETUNE_FOLDER = os.path.dirname(finetune.__file__)
 DICT_PATH = os.path.join(FINETUNE_FOLDER, "model", "bert", "dict.txt")
+ENCODER_PATH = os.path.join(FINETUNE_FOLDER, "model", "bert", "roberta_encoder.json")
+VOCAB_PATH = os.path.join(FINETUNE_FOLDER, "model", "bert", "roberta_vocab.bpe")
 
 
 class RoBERTaEncoder(GPT2Encoder):
@@ -18,7 +22,7 @@ class RoBERTaEncoder(GPT2Encoder):
     required for finetune. Particularly with respect to formatting with multiple inputs.
     """
 
-    def __init__(self, encoder_path=ENCODER_PATH, vocab_path=VOCAB_PATH):
+    def __init__(self, encoder_path=gpt2_encoder.ENCODER_PATH, vocab_path=gpt2_encoder.VOCAB_PATH):
         super().__init__(encoder_path=encoder_path, vocab_path=vocab_path)
         self.freqs = {}
         index = 0
@@ -31,7 +35,8 @@ class RoBERTaEncoder(GPT2Encoder):
                         "Incorrect dictionary format, expected '<token> <cnt>'"
                     )
                 if "madeupword" in line[:idx]:
-                    break
+                    index += 1
+                    continue
                 token_idx = int(line[:idx])
                 self.freqs[str(token_idx + 4)] = (
                     index + 4
@@ -51,11 +56,11 @@ class RoBERTaEncoder(GPT2Encoder):
         # Load BPE
         with open(self.vocab_path, "r", encoding="utf-8") as f:
             bpe_data = f.read()
+
         bpe_merges = [
             tuple(merge_str.split()) for merge_str in bpe_data.split("\n")[1:-1]
         ]
         self.bpe_ranks = dict(zip(bpe_merges, range(len(bpe_merges))))
-
         self.decoder = {v: k for k, v in self.encoder.items()}
         self.errors = errors
         self.byte_encoder = bytes_to_unicode()
@@ -69,7 +74,8 @@ class RoBERTaEncoder(GPT2Encoder):
         self.delimiter_token = 2  # eos from roberta
         self.end_token = 2  # eos from roberta
         self.UNK_IDX = 3  # unk from roberta
-
+        # If base model file doesn't contain a mask token, use <UNK> token idx
+        self.mask_token = self.encoder.get("<mask>", 3)
         self.cache = {}
 
         # Should haved added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
@@ -164,3 +170,15 @@ class RoBERTaEncoder(GPT2Encoder):
             char_locs=batch_char_ends,
             char_starts=batch_char_starts,
         )
+
+
+class RoBERTaEncoderV2(RoBERTaEncoder):
+    """
+    A modified wrapper for a public python BPE tokenizer. The modifications allow encoding directly into the formats
+    required for finetune. Particularly with respect to formatting with multiple inputs.
+
+    Now with support for MLM objective
+    """
+
+    def __init__(self, encoder_path=ENCODER_PATH, vocab_path=VOCAB_PATH):
+        super().__init__(encoder_path=encoder_path, vocab_path=vocab_path)

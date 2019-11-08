@@ -311,6 +311,11 @@ def get_default_config():
         # Language Model Settings
         lm_loss_coef=0.0,
         lm_temp=0.6,
+        lm_type='lm',
+        mask_proba=0.15,
+
+        # Masked Language Model Settings
+        max_masked_tokens=128,
 
         # Sequence Labeling
         seq_num_heads=16,

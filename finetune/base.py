@@ -345,13 +345,14 @@ class BaseModel(object, metaclass=ABCMeta):
         return config
 
     def get_estimator(self, force_build_lm=False, build_explain=False):
+        build_lm = force_build_lm or self.config.lm_loss_coef > 0.0
         config = self._get_estimator_config()
         model_fn = get_model_fn(
             target_model_fn=self._target_model,
             predict_op=self._predict_op,
             predict_proba_op=self._predict_proba_op,
             build_target_model=self.input_pipeline.target_dim is not None,
-            build_lm=force_build_lm or self.config.lm_loss_coef > 0.0,
+            lm_type=self.config.lm_type if build_lm else None,
             encoder=self.input_pipeline.text_encoder,
             target_dim=self.input_pipeline.target_dim,
             label_encoder=self.input_pipeline.label_encoder,
