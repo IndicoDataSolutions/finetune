@@ -38,14 +38,14 @@ class MultiFieldClassifier(Classifier):
     def _get_input_pipeline(self):
         return MultiFieldClassificationPipeline(self.config)
 
-    def finetune(self, Xs, Y=None, batch_size=None):
+    def finetune(self, Xs, Y=None, batch_size=None, context=None):
         """
         :param \*Xs: lists of text inputs, shape [batch, n_fields]
         :param Y: integer or string-valued class labels. It is necessary for the items of Y to be sortable.
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
         """
-        return BaseModel.finetune(self, Xs, Y=Y, batch_size=batch_size)
+        return BaseModel.finetune(self, Xs, Y=Y, batch_size=batch_size, context=context)
 
     def predict(self, Xs):
         """

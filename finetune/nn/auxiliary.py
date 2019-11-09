@@ -3,7 +3,7 @@ from finetune.nn.nn_utils import dropout, norm
 from finetune.util.shapes import shape_list
 
 
-def embed_context(context, clf_h, seq_feats, config, train):
+def embed_context(context, featurizer_state, config, train):
     # context.set_shape([None, config.max_length, context_dim])
     context_dim = shape_list(context)[-1]
     context_embed_weights = tf.get_variable(	
@@ -35,4 +35,5 @@ def embed_context(context, clf_h, seq_feats, config, train):
         )  # [batch_size, seq_length, context_dim] * [context_dim, n_embed] = [batch_size, seq_length, n_embed]	
         c_embed = norm(c_embed, tf.get_variable_scope())
         # c_embed = tf.reduce_mean(c_embed, axis=1)
-        return c_embed
+    featurizer_state['context'] = c_embed
+    return featurizer_state
