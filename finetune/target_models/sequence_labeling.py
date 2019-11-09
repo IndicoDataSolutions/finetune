@@ -65,21 +65,22 @@ class SequencePipeline(BasePipeline):
 
     def feed_shape_type_def(self):
         TS = tf.TensorShape
+        types = {"tokens": tf.int32, "mask": tf.float32}
+        shapes = {
+            "tokens": TS([self.config.max_length, 2]),
+            "mask": TS([self.config.max_length]),
+        }
+        types, shapes = self._add_context_info_if_present(types, shapes)
         target_shape = (
             [self.config.max_length, self.label_encoder.target_dim]
             if self.multi_label
             else [self.config.max_length]
         )
         return (
-            ({"tokens": tf.int32, "mask": tf.float32}, tf.float32),
-            (
-                {
-                    "tokens": TS([self.config.max_length, 2]),
-                    "mask": TS([self.config.max_length]),
-                },
-                TS(target_shape),
-            ),
+            (types, tf.float32,),
+            (shapes, TS(target_shape),),
         )
+
 
     def _target_encoder(self):
         if self.multi_label:
@@ -177,7 +178,7 @@ class SequenceLabeler(BaseModel):
         self.multi_label = self.config.multi_label_sequences
         return super()._initialize()
 
-    def finetune(self, Xs, Y=None, batch_size=None):
+    def finetune(self, Xs, Y=None, batch_size=None, context=None):
         Xs, Y_new, _, _, _ = indico_to_finetune_sequence(
             Xs,
             encoder=self.input_pipeline.text_encoder,
@@ -187,7 +188,7 @@ class SequenceLabeler(BaseModel):
         )
 
         Y = Y_new if Y is not None else None
-        return super().finetune(Xs, Y=Y, batch_size=batch_size)
+        return super().finetune(Xs, Y=Y, batch_size=batch_size, context=context)
 
     def predict(self, X, per_token=False):
         """

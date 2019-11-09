@@ -14,9 +14,13 @@ class ComparisonRegressionPipeline(ComparisonPipeline):
 
     def feed_shape_type_def(self):
         TS = tf.TensorShape
-        return ({"tokens": tf.int32, "mask": tf.int32}, tf.float32), (
-            {"tokens": TS([2, self.config.max_length, 2]), "mask": TS([2, self.config.max_length])},
-            TS([self.target_dim]))
+        types = {"tokens": tf.int32, "mask": tf.int32}
+        shapes = {"tokens": TS([2, self.config.max_length, 2]), "mask": TS([2, self.config.max_length])}
+        types, shapes = self._add_context_info_if_present(types, shapes)
+        return (
+            (types, tf.float32,),
+            (shapes, TS([self.target_dim]),),
+        )
 
 
 class ComparisonRegressor(BaseModel):
@@ -73,14 +77,14 @@ class ComparisonRegressor(BaseModel):
         return self._featurize(pairs)
     
     
-    def finetune(self, pairs, Y=None, batch_size=None):
+    def finetune(self, pairs, Y=None, batch_size=None, context=None):
         """
         :param pairs: Array of text, shape [batch_size, 2]
         :param Y: floating point targets
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
         """
-        return super().finetune(pairs, Y=Y, batch_size=batch_size)
+        return super().finetune(pairs, Y=Y, batch_size=batch_size, context=context)
     
     def _predict_op(self, logits, **kwargs):
         return logits

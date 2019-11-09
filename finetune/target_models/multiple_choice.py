@@ -40,16 +40,17 @@ class MultipleChoicePipeline(BasePipeline):
 
     def feed_shape_type_def(self):
         TS = tf.TensorShape
+        types = {"tokens": tf.int32, "mask": tf.float32}
+        shapes = {
+            "tokens": TS([self.target_dim, self.config.max_length, 2]),
+            "mask": TS([self.target_dim, self.config.max_length]),
+        }
+        types, shapes = self._add_context_info_if_present(types, shapes)
         return (
-            ({"tokens": tf.int32, "mask": tf.float32}, tf.float32),
-            (
-                {
-                    "tokens": TS([self.target_dim, self.config.max_length, 2]),
-                    "mask": TS([self.target_dim, self.config.max_length]),
-                },
-                TS([]),
-            ),
+            (types, tf.float32,),
+            (shapes, TS([]),),
         )
+
 
     def _target_encoder(self):
         return IDEncoder()
@@ -69,7 +70,7 @@ class MultipleChoice(BaseModel):
     def _get_input_pipeline(self):
         return MultipleChoicePipeline(self.config)
 
-    def finetune(self, questions, answers, correct_answer, fit_lm_only=False):
+    def finetune(self, questions, answers, correct_answer, fit_lm_only=False, context=None):
         """
         :param questions: List or array of text, shape [batch]
         :param answers: List or array of text, shape [batch, n_answers], must contain the correct answer for each entry.
@@ -108,7 +109,7 @@ class MultipleChoice(BaseModel):
 
         labels = None if fit_lm_only else answer_idx
         self.input_pipeline.target_dim_ = len(answers[0])
-        return super().finetune(list(zip(questions, answers)), Y=labels)
+        return super().finetune(list(zip(questions, answers)), Y=labels, context=context)
 
     def _target_model(
         self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs

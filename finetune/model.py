@@ -136,7 +136,7 @@ def get_model_fn(
                 explain=build_explain,
             )
             if context is not None:
-                featurizer_state = embed_context(context, featurizer_state)
+                featurizer_state = embed_context(context, featurizer_state, params, train)
             predictions = {
                 PredictMode.FEATURIZE: featurizer_state["features"], 
                 PredictMode.SEQUENCE: featurizer_state["sequence_features"]

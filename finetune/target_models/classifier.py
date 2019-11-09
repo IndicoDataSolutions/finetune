@@ -26,17 +26,7 @@ class ClassificationPipeline(BasePipeline):
         return OneHotLabelEncoder()
 
     def feed_shape_type_def(self):
-        TS = tf.TensorShape
-        return (
-            ({"tokens": tf.int32, "mask": tf.float32}, tf.float32),
-            (
-                {
-                    "tokens": TS([self.config.max_length, 2]),
-                    "mask": TS([self.config.max_length]),
-                },
-                TS([self.target_dim]),
-            ),
-        )
+        return super(ClassificationPipeline, self).feed_shape_type_def()
 
 
 class Classifier(BaseModel):
@@ -62,7 +52,7 @@ class Classifier(BaseModel):
         """
         return super().featurize(X)
 
-    def predict(self, X, probas=False):
+    def predict(self, X, probas=False, context=None):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
@@ -76,7 +66,7 @@ class Classifier(BaseModel):
         all_labels = []
         all_probs = []
         doc_probs = []
-        for _, start_of_doc, end_of_doc, _, proba in self.process_long_sequence(X):
+        for _, start_of_doc, end_of_doc, _, proba in self.process_long_sequence(X, context=context):
             start, end = 0, None
             doc_probs.append(proba)
 
@@ -95,10 +85,12 @@ class Classifier(BaseModel):
         if probas:
             return all_probs
         else:
+            print(all_labels)
+            print(X)
             assert len(all_labels) == len(X)
             return np.asarray(all_labels)
 
-    def predict_proba(self, X):
+    def predict_proba(self, X, context=None):
         """
         Produces a probability distribution over classes for each example in X.
 
@@ -106,21 +98,21 @@ class Classifier(BaseModel):
         :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
         """
         # this is simply a vector of probabilities, not a dict from classes to class probs
-        raw_probas = self.predict(X, probas=True)
+        raw_probas = self.predict(X, probas=True, context=context)
         classes = self.input_pipeline.label_encoder.classes_
         formatted_predictions = []
         for probas in raw_probas:
             formatted_predictions.append(dict(zip(classes, probas)))
         return formatted_predictions
 
-    def finetune(self, X, Y=None, batch_size=None):
+    def finetune(self, X, Y=None, batch_size=None, context=None):
         """
         :param X: list or array of text.
         :param Y: integer or string-valued class labels.
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
         """
-        return super().finetune(X, Y=Y, batch_size=batch_size)
+        return super().finetune(X, Y=Y, batch_size=batch_size, context=context)
 
     @classmethod
     def get_eval_fn(cls):
