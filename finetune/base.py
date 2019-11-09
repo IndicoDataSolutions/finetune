@@ -155,7 +155,7 @@ class BaseModel(object, metaclass=ABCMeta):
         steps = int(math.ceil(n_examples / (batch_size * n_gpus)))
         return steps
 
-    def finetune(self, Xs, Y=None, batch_size=None):
+    def finetune(self, Xs, Y=None, batch_size=None, context=None):
         if (
             not callable(Xs)
             and Y is not None
@@ -169,7 +169,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         batch_size = batch_size or self.config.batch_size
         val_input_fn, train_input_fn, val_size, val_interval = self.input_pipeline.get_train_input_fns(
-            Xs, Y, batch_size=batch_size
+            Xs, Y, batch_size=batch_size, context=context
         )
 
         if self.config.keep_best_model:
@@ -457,7 +457,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 Xs=Xs, predict_keys=predict_keys, n_examples=n_examples
             )
         else:
-            input_fn = self.input_pipeline.get_predict_input_fn(Xs, context)
+            input_fn = self.input_pipeline.get_predict_input_fn(Xs, context=context)
             estimator, hooks = self.get_estimator(
                 build_explain=PredictMode.EXPLAIN in predict_keys
             )

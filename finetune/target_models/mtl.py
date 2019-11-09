@@ -221,7 +221,7 @@ class MultiTask(BaseModel):
                 predictions[name] = pred_model.predict(X[name])
         return predictions
 
-    def finetune(self, X, Y=None, batch_size=None):
+    def finetune(self, X, Y=None, batch_size=None, context=None):
         """
 
         :param X: A dictionary mapping from task name to inputs in the same format required for each of the models.
@@ -238,7 +238,7 @@ class MultiTask(BaseModel):
             X[t], Y[t], *_ = indico_to_finetune_sequence(
                 X[t], labels=Y[t], multi_label=False, none_value="<PAD>"
             )
-        return super().finetune(X, Y=Y, batch_size=batch_size)
+        return super().finetune(X, Y=Y, batch_size=batch_size, context=context)
 
     def _target_model(
         self,
