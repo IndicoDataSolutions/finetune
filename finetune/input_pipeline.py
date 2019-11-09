@@ -42,17 +42,25 @@ class BasePipeline(metaclass=ABCMeta):
         # Overridden by subclass to produce the right target encoding for a given target model.
         raise NotImplementedError
 
+    def _add_context_info_if_present(self, types, shapes):
+        if self.config.use_auxiliary_info:
+            TS = tf.TensorShape
+            types["context"] = tf.float32
+            shapes["context"] = TS([self.config.max_length, self.config.context_dim])
+        return types, shapes
+
+
     def feed_shape_type_def(self):
         TS = tf.TensorShape
+        types = {"tokens": tf.int32, "mask": tf.float32}
+        shapes = {
+            "tokens": TS([self.config.max_length, 2]),
+            "mask": TS([self.config.max_length]),
+        }
+        types, shapes = self._add_context_info_if_present(types, shapes)
         return (
-            ({"tokens": tf.int32, "mask": tf.float32}, tf.float32),
-            (
-                {
-                    "tokens": TS([self.config.max_length, 2]),
-                    "mask": TS([self.config.max_length]),
-                },
-                TS([self.target_dim]),
-            ),
+            (types, tf.float32,),
+            (shapes, TS([self.target_dim]),),
         )
 
     def _array_format(self, encoded_output, pad_token=None):
@@ -109,15 +117,12 @@ class BasePipeline(metaclass=ABCMeta):
 
     def text_to_tokens_mask(self, X, Y=None, context=None):
         out_gen = self._text_to_ids(X, pad_token=self.config.pad_token)
-
         for i, out in enumerate(out_gen):
             if context is None:
                 feats = {"tokens": out.token_ids, "mask": out.mask}
             else:
-                context_array = get_context_array(context[i])
-                tokenized_context = tokenize_context(context_array, out)
+                tokenized_context = tokenize_context(context, out)
                 feats = {"tokens": out.token_ids, "mask": out.mask, "context": tokenized_context}
-
             if Y is None:
                 yield feats
             else:
@@ -146,18 +151,27 @@ class BasePipeline(metaclass=ABCMeta):
         return Counter(self.label_encoder.inverse_transform(target_arrs))
 
     def _dataset_with_targets(self, Xs, Y, train, context=None):
-        if context is None:
-            context = [None] * len(Xs)
-        if not callable(Xs) and not callable(Y):
-            dataset = lambda: zip(Xs, Y, context)
-        elif callable(Xs) and callable(Y):
-            dataset = lambda: zip(Xs(), Y(), context)
-        else:
-            raise ValueError( "Either neither or both of Xs and Y should be callable, not a mixture")
+        if context:
+            if not callable(Xs) and not callable(Y):
+                dataset = lambda: zip(Xs, Y, context)
+            elif callable(Xs) and callable(Y):
+                dataset = lambda: zip(Xs(), Y(), context)
+            else:
+                raise ValueError( "Either neither or both of Xs and Y should be callable, not a mixture")
 
-        dataset_encoded = lambda: itertools.chain.from_iterable(
-            map(lambda xyc: self.text_to_tokens_mask(*xyc), dataset())
-        )
+            dataset_encoded = lambda: itertools.chain.from_iterable(
+                map(lambda xyc: self.text_to_tokens_mask(*xyc), dataset())
+            )
+        else:
+            if not callable(Xs) and not callable(Y):
+                dataset = lambda: zip(Xs, Y)
+            elif callable(Xs) and callable(Y):
+                dataset = lambda: zip(Xs(), Y())
+            else:
+                raise ValueError( "Either neither or both of Xs and Y should be callable, not a mixture")
+            dataset_encoded = lambda: itertools.chain.from_iterable(
+                map(lambda xy: self.text_to_tokens_mask(*xy), dataset())
+            )
 
         if not callable(Y) and train:
             dataset_encoded_list = list(dataset_encoded())
@@ -173,17 +187,26 @@ class BasePipeline(metaclass=ABCMeta):
         )
 
     def _dataset_without_targets(self, Xs, train, context=None):
-        if context is None:
-            context = [None] * len(Xs)
-        Xs = list(zip(Xs, [None] * len(Xs), context))
-        if not callable(Xs):
-            Xs_fn = lambda: self.wrap_tqdm(Xs, train)
+        if context:
+            # we assume that X must have known length if we also provide context so this is safe
+            if callable(Xs):
+                Xs_ = Xs()
+            else:
+                Xs_ = Xs
+            Xs_gen = lambda: zip(Xs_, [None] * len(Xs_), context)
+            Xs_fn = lambda: self.wrap_tqdm(Xs_gen(), train)
+            dataset_encoded = lambda: itertools.chain.from_iterable(
+                map(lambda xyc: self.text_to_tokens_mask(*xyc), Xs_fn())
+            )
         else:
-            Xs_fn = lambda: self.wrap_tqdm(Xs(), train)
+            if not callable(Xs):
+                Xs_fn = lambda: self.wrap_tqdm(Xs, train)
+            else:
+                Xs_fn = lambda: self.wrap_tqdm(Xs(), train)
+            dataset_encoded = lambda: itertools.chain.from_iterable(
+                map(self.text_to_tokens_mask, Xs_fn())
+            )
 
-        dataset_encoded = lambda: itertools.chain.from_iterable(
-            map(lambda xyc: self.text_to_tokens_mask(*xyc), Xs_fn())
-        )
         if not callable(Xs) and self.config.chunk_long_sequences:
             # Adjust dataset size to account for long documents being chunked
             dataset_encoded_list = list(dataset_encoded())

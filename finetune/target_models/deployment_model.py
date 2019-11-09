@@ -378,7 +378,7 @@ class DeploymentModel(BaseModel):
         """
         return super().predict_proba(X)
 
-    def finetune(self, X, Y=None, batch_size=None):
+    def finetune(self, X, Y=None, batch_size=None, context=None):
         raise NotImplementedError
 
     @classmethod
