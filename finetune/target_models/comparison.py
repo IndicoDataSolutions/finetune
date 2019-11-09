@@ -34,15 +34,15 @@ class ComparisonPipeline(ClassificationPipeline):
 
     def feed_shape_type_def(self):
         TS = tf.TensorShape
+        types = {"tokens": tf.int32, "mask": tf.float32}
+        shapes = {
+            "tokens": TS([2, self.config.max_length, 2]),
+            "mask": TS([None, self.config.max_length]),
+        }
+        types, shapes = self._add_context_info_if_present(types, shapes)
         return (
-            ({"tokens": tf.int32, "mask": tf.float32}, tf.float32),
-            (
-                {
-                    "tokens": TS([2, self.config.max_length, 2]),
-                    "mask": TS([None, self.config.max_length]),
-                },
-                TS([self.target_dim]),
-            ),
+            (types, tf.float32,),
+            (shapes, TS([self.target_dim]),),
         )
 
 

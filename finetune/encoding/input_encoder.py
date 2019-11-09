@@ -3,10 +3,11 @@ Convert plain text to format accepted by model (token idxs + special tokens).
 """
 import warnings
 import functools
-from collections import namedtuple
+from collections import namedtuple, Counter
 
 import spacy
 import tensorflow as tf
+import numpy as np
 
 
 NLP = spacy.load("en", disable=["parser", "tagger", "ner", "textcat"])
@@ -221,19 +222,40 @@ class BaseEncoder(object):
     def __getstate__(self):
         return {"Encoder": None}
 
+def get_default_context(context_by_char_loc):
+    """ Use mean for numeric values, majority otherwise. """
+    context_values = [c[1] for c in context_by_char_loc]
+    print('context_valeus[0]', context_values[0])
+    num_keys = len(context_values[0])
+    default_values = []
+    for k in range(num_keys):
+        values = [c[k] for c in context_values]
+        print('values', values)
+        if isinstance(values[0], str) or isinstance(values[0], bool):
+            default_value = Counter(values).most_common(1)[0][0]
+        else:
+            default_value = np.mean(values)
+        default_values.append(default_value)
+    return default_values
+
 def tokenize_context(context, encoded_output):
-    """ Tokenize the context corresponding to a sequence of text """
-    # TODO: assess correctness
-    batch_context = []
-    original_tokens = []
-    for char_loc, token in zip(encoded_output.char_locs, encoded_output.tokens):
-        original_token = 0
-        for subtoken_idx in range(len(context)):
-            if char_loc > context[subtoken_idx]["end"]:
-                original_token += 1
-        original_tokens.append(original_token)
-    expanded_context = [None] * len(original_tokens)
-    for j in range(len(expanded_context)):
-        expanded_context[j] = context[original_tokens[j]]
-    assert len(expanded_context) == len(encoded_output.subtoken_idxs)
+    """ Tokenize the context corresponding to a single sequence of text """
+    seq_len = len(encoded_output.token_ids)
+    context_keys = list(k for k in sorted(context[0].keys()) if k not in ['token', 'start', 'end'])
+    context_by_char_loc = sorted([(c['end'], [c[k] for k in context_keys]) for c in context], key=lambda c: c[0])
+    # default context is the sequence majority
+    default_context = get_default_context(context_by_char_loc)
+    current_context = 0
+    tokenized_context = []
+    for char_loc in encoded_output.char_locs:
+        # Note: this assumes that the tokenization will never lump multiple tokens into one
+        if char_loc == -1:
+            tokenized_context.append(default_context)
+        else:
+            if char_loc > context_by_char_loc[current_context][0]:
+                current_context += 1
+            tokenized_context.append(context_by_char_loc[current_context][1])
+    # padded value doesn't matter since it will be masked out
+    expanded_context = np.pad(tokenized_context, ((0, seq_len - len(tokenized_context)), (0, 0)), 'constant')
+    assert len(expanded_context) == len(encoded_output.token_ids)
     return expanded_context
