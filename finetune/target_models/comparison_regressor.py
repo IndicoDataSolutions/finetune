@@ -51,7 +51,7 @@ class ComparisonRegressor(BaseModel):
             **kwargs
         )
 
-    def predict(self, pairs):
+    def predict(self, pairs, context=None):
         """
         Produces a floating point prediction determined by the fine-tuned model.
 
@@ -59,9 +59,9 @@ class ComparisonRegressor(BaseModel):
         :param pairs: Array of text, shape [batch, 2]
         :returns: list of floats, shape [batch]
         """
-        return super().predict(pairs)
+        return super().predict(pairs, context=context)
 
-    def predict_proba(self, pairs):
+    def predict_proba(self, pairs, context=None):
         """
         Not implemented in regression task.
         """

@@ -225,12 +225,10 @@ class BaseEncoder(object):
 def get_default_context(context_by_char_loc):
     """ Use mean for numeric values, majority otherwise. """
     context_values = [c[1] for c in context_by_char_loc]
-    print('context_valeus[0]', context_values[0])
     num_keys = len(context_values[0])
     default_values = []
     for k in range(num_keys):
         values = [c[k] for c in context_values]
-        print('values', values)
         if isinstance(values[0], str) or isinstance(values[0], bool):
             default_value = Counter(values).most_common(1)[0][0]
         else:
