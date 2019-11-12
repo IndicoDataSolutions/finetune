@@ -133,7 +133,7 @@ class MultipleChoice(BaseModel):
     def _predict_proba_op(self, logits, **kwargs):
         return tf.nn.softmax(logits, -1)
 
-    def predict(self, questions, answers):
+    def predict(self, questions, answers, context=None):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
@@ -142,10 +142,10 @@ class MultipleChoice(BaseModel):
         :param answers: List or array of text, shape [batch, n_answers]
         :returns: list of class labels.
         """
-        raw_ids = BaseModel.predict(self, list(zip(questions, answers)))
+        raw_ids = BaseModel.predict(self, list(zip(questions, answers)), context=context)
         return [ans[i] for ans, i in zip(answers, raw_ids)]
 
-    def predict_proba(self, questions, answers):
+    def predict_proba(self, questions, answers, context=None):
         """
         Produces a probability distribution over classes for each example in X.
 
@@ -155,7 +155,7 @@ class MultipleChoice(BaseModel):
         :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
         """
         answers = list_transpose(answers)
-        raw_probas = self._predict_proba(zip(questions, answers))
+        raw_probas = self._predict_proba(zip(questions, answers), context=context)
 
         formatted_predictions = []
         for probas, *answers_per_sample in zip(raw_probas, *answers):

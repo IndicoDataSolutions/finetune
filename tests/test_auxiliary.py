@@ -78,56 +78,31 @@ class TestAuxiliary(unittest.TestCase):
     default_context = {"token": "", "pos": "filler", "capitalized": "False"}
 
     @classmethod
-    def create_context(cls, nlp, text, default):
-        to_search = text
-        removed = 0
-        doc = nlp(text)
-        context = []
-        for token in doc:
-            token_context = copy.deepcopy(default)
-            start = to_search.find(token.text)
-            assert start != -1
-            to_search = to_search[start + len(token.text) :]
-            end = start + len(token.text)
-            token_context = {}
-            token_context["token"] = token.text
-            token_context["pos"] = token.pos_ if token.pos_ != "PROPN" else "NOUN"
-            token_context["capitalized"] = (
-                "False" if token.text.lower() == token.text else "True"
-            )
-            token_context["start"] = start + removed
-            token_context["end"] = end + removed
-            context.append(token_context)
-            removed += end
-        return context
-
-    @classmethod
-    def setUpClass(cls):
-        nlp = spacy.load("en_core_web_sm")
-
-        random.seed(42)
-        np.random.seed(42)
-        dataset = Reuters().dataframe
-        dataset["annotations"] = [
-            json.loads(annotation) for annotation in dataset["annotations"]
+    def setUpClass(self):
+        self.trainX = ['i like apples'] * 2
+        self.trainY = ['A', 'B']
+        self.trainY_seq = [
+            [
+                {'start': 0, 'end': 1, 'label': 'NOUN', 'text': 'i'},
+                {'start': 7, 'end': 13, 'label': 'NOUN', 'text': 'apples'},
+            ],
+            [
+                {'start': 0, 'end': 1, 'label': 'NOUN', 'text': 'i'},
+                {'start': 7, 'end': 13, 'label': 'NOUN', 'text': 'apples'},
+            ]
         ]
-        trainX, testX, trainY, testY = train_test_split(
-            dataset.texts.values,
-            dataset.annotations.values,
-            test_size=0.3,
-            random_state=42,
-        )
-
-        train_context, test_context = [], []
-        for text in trainX:
-            context = cls.create_context(nlp, text, cls.default_context)
-            train_context.append(context)
-
-        for text in testX:
-            context = cls.create_context(nlp, text, cls.default_context)
-            test_context.append(context)
-
-        cls.dataset = (trainX, testX, trainY, testY, train_context, test_context)
+        self.train_context = [
+            [
+                {'token': 'i', 'start': 0, 'end': 1, 'pos_x':2, 'pos_y': 3},
+                {'token': 'like', 'start': 2, 'end': 6, 'pos_x':3, 'pos_y': 3},
+                {'token': 'apples', 'start': 7, 'end': 13, 'pos_x':4, 'pos_y': 3},
+            ],
+            [
+                {'token': 'i', 'start': 0, 'end': 1, 'pos_x':2, 'pos_y': 10},
+                {'token': 'like', 'start': 2, 'end': 6, 'pos_x':3, 'pos_y': 10},
+                {'token': 'apples', 'start': 7, 'end': 13, 'pos_x':4, 'pos_y': 10},
+            ]
+        ]
 
     def setUp(self):
         try:
@@ -145,107 +120,78 @@ class TestAuxiliary(unittest.TestCase):
         defaults = {
             "batch_size": 2,
             "max_length": 256,
-            "n_epochs": 1,
+            "n_epochs": 3,
             "base_model": self.base_model,
             "val_size": 0,
-            "use_auxiliary_info": True
-            # "default_context": self.default_context
+            "use_auxiliary_info": True,
+            "context_dim": 2
         }
         defaults.update(kwargs)
         return dict(get_config(**defaults))
     
-    def test_simple_auxiliary(self):
+    def test_classifier_auxiliary(self):
         """
         Ensure model training does not error out
         Ensure model returns predictions
         """
-        trainX = ['i like apples'] * 2
-        trainY = ['q', 'w']
-        train_context = [
-            [
-                {'token': 'i', 'start': 0, 'end': 1, 'pos_x':2, 'pos_y': 3},
-                {'token': 'like', 'start': 2, 'end': 6, 'pos_x':3, 'pos_y': 3},
-                {'token': 'i', 'start': 7, 'end': 13, 'pos_x':4, 'pos_y': 3},
-            ],
-            [
-                {'token': 'i', 'start': 0, 'end': 1, 'pos_x':2, 'pos_y': 10},
-                {'token': 'like', 'start': 2, 'end': 6, 'pos_x':3, 'pos_y': 10},
-                {'token': 'i', 'start': 7, 'end': 13, 'pos_x':4, 'pos_y': 10},
-            ]
-        ]
         model = Classifier(
             **self.default_config()
         )
-        model.fit(trainX, trainY, context=train_context)
-        _ = model.predict(["everything's only $80"])
-        _ = model.predict(trainX, context=train_context)
+        model.fit(self.trainX, self.trainY, context=self.train_context)
+        _ = model.predict(self.trainX, context=self.train_context)
         # test cached predict
-        _ = model.predict(trainX, context=train_context)
+        _ = model.predict(self.trainX, context=self.train_context)
 
-    def test_simple_no_auxiliary(self):
+    def test_classifier_no_auxiliary(self):
         """
         Ensure model training does not error out
         Ensure model returns predictions
         """
-        trainX = ['i like apples'] * 2
-        trainY = ['q', 'w']
-        train_context = [
-            [
-                {'token': 'i', 'start': 0, 'end': 1, 'pos_x':2, 'pos_y': 3},
-                {'token': 'like', 'start': 2, 'end': 6, 'pos_x':3, 'pos_y': 3},
-                {'token': 'i', 'start': 7, 'end': 13, 'pos_x':4, 'pos_y': 3},
-            ],
-            [
-                {'token': 'i', 'start': 0, 'end': 1, 'pos_x':2, 'pos_y': 10},
-                {'token': 'like', 'start': 2, 'end': 6, 'pos_x':3, 'pos_y': 10},
-                {'token': 'i', 'start': 7, 'end': 13, 'pos_x':4, 'pos_y': 10},
-            ]
-        ]
-        config = self.default_config().copy()
-        config.update({'use_auxiliary_info': False, 'context_dim': None})
+        config = self.default_config(use_auxiliary_info=False, context_dim=None)
         model = Classifier(
             **config
         )
-        model.fit(trainX, trainY)
-        _ = model.predict(trainX)
+        model.fit(self.trainX, self.trainY)
+        _ = model.predict(self.trainX)
         # test cached predict
-        _ = model.predict(trainX)
-
-    def test_auxiliary_classifier(self):
-        """
-        Ensure model training does not error out
-        Ensure model returns predictions
-        """
-        (trainX, testX, trainY, _, train_context, test_context) = self.dataset
-        trainY = [
-            random.randint(0, 1) for _ in range(len(trainY))
-        ]  # random labels just to make sure there are no errors -> reasonable predictions tests are in sequence_label
-        model = Classifier(
-            **self.default_config()
-        )
-        model.fit(trainX, trainY, context=train_context)
-        _ = model.predict(testX, context=test_context)
+        _ = model.predict(self.trainX)
     
-    def test_auxiliary_sequence_labeler(self):
+    def _evaluate_sequence_preds(self, preds):
+        token_precision = sequence_labeling_token_precision(preds, self.trainY_seq)
+        token_recall = sequence_labeling_token_recall(preds, self.trainY_seq)
+        self.assertIn("NOUN", token_precision)
+        self.assertIn("NOUN", token_recall)
+        token_precision = np.mean(list(token_precision.values()))
+        token_recall = np.mean(list(token_recall.values()))
+        print(token_precision)
+        print(token_recall)
+        self.assertGreater(token_precision, 0.6)
+        self.assertGreater(token_recall, 0.6)
+
+
+    def test_sequence_labeler_no_auxiliary(self):
         """
         Ensure model training does not error out
         Ensure model returns reasonable predictions
         """
-        (trainX, testX, trainY, testY) = self.dataset
-        model = SequenceLabeler(
-            **self.default_config()
-        )
-        model.fit(trainX, trainY)
-        preds = model.predict(testX)
-        token_precision = sequence_labeling_token_precision(preds, testY)
-        token_recall = sequence_labeling_token_recall(preds, testY)
-        self.assertIn("Named Entity", token_precision)
-        self.assertIn("Named Entity", token_recall)
-        token_precision = np.mean(list(token_precision.values()))
-        token_recall = np.mean(list(token_recall.values()))
-        self.assertGreater(token_precision, 0.6)
-        self.assertGreater(token_recall, 0.6)
+        
+        model = SequenceLabeler(**self.default_config(use_auxiliary_info=False))
+        model.fit(self.trainX, self.trainY_seq)
+        preds = model.predict(self.trainX)
+        self._evaluate_sequence_preds(preds)
+        
 
+    def test_sequence_labeler_auxiliary(self):
+        """
+        Ensure model training does not error out
+        Ensure model returns reasonable predictions
+        """
+        
+        model = SequenceLabeler(**self.default_config())
+        model.fit(self.trainX, self.trainY_seq, context=self.train_context)
+        preds = model.predict(self.trainX, context=self.train_context)
+        print(preds)
+        self._evaluate_sequence_preds(preds)
     
     def test_save_load(self):
         """
@@ -256,14 +202,12 @@ class TestAuxiliary(unittest.TestCase):
         config = self.default_config(save_adam_vars=False, n_epochs=1)
         model = Classifier(**config)
 
-        (trainX, testX, trainY, _) = self.dataset
-        trainY = [random.randint(0, 1) for _ in range(len(trainY))]
-        model.fit(trainX, trainY)
-        predictions = model.predict(testX)
+        model.fit(self.trainX, self.trainY, context=self.train_context)
+        predictions = model.predict(self.trainX, context=self.train_context)
         model.save(save_file)
 
         model = Classifier.load(save_file)
-        new_predictions = model.predict(testX)
+        new_predictions = model.predict(self.trainX, context=self.train_context)
         for i, prediction in enumerate(predictions):
             self.assertEqual(prediction, new_predictions[i])
     

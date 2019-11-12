@@ -47,23 +47,23 @@ class MultiFieldClassifier(Classifier):
         """
         return BaseModel.finetune(self, Xs, Y=Y, batch_size=batch_size, context=context)
 
-    def predict(self, Xs):
+    def predict(self, Xs, context=None):
         """
         Produces list of most likely class labels as determined by the fine-tuned model.
 
         :param \*Xs: lists of text inputs, shape [batch, n_fields]
         :returns: list of class labels.
         """
-        return BaseModel.predict(self, Xs)
+        return BaseModel.predict(self, Xs, context=context)
 
-    def predict_proba(self, Xs):
+    def predict_proba(self, Xs, context=None):
         """
         Produces probability distribution over classes for each example in X.
 
         :param \*Xs: lists of text inputs, shape [batch, n_fields]
         :returns: list of dictionaries.  Each dictionary maps from X2 class label to its assigned class probability.
         """
-        return BaseModel.predict_proba(self, Xs)
+        return BaseModel.predict_proba(self, Xs, context=context)
 
     def featurize(self, Xs):
         """
