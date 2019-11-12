@@ -279,8 +279,8 @@ class DeploymentModel(BaseModel):
         features = self.predict(X, exclude_targets=True)
         return features["features"]
 
-    def _get_input_fn(self, gen):
-        return self.input_pipeline.get_predict_input_fn(gen)
+    def _get_input_fn(self, gen, context=None):
+        return self.input_pipeline.get_predict_input_fn(gen, context=context)
 
     def _inference(
         self,
@@ -288,6 +288,7 @@ class DeploymentModel(BaseModel):
         predict_keys=[PredictMode.NORMAL],
         exclude_target=False,
         n_examples=None,
+        context=None
     ):
         Xs = self.input_pipeline._format_for_inference(Xs)
         self._data = Xs
@@ -301,7 +302,7 @@ class DeploymentModel(BaseModel):
         if self._predictions is None:
             featurizer_est = self._get_estimator("featurizer")
             self._predictions = featurizer_est.predict(
-                input_fn=self._get_input_fn(self._data_generator),
+                input_fn=self._get_input_fn(self._data_generator, context=context),
                 predict_keys=None,
                 hooks=[self.predict_hooks.feat_hook],
                 yield_single_examples=False,
@@ -352,7 +353,7 @@ class DeploymentModel(BaseModel):
         self._clear_prediction_queue()
         return predictions
 
-    def predict(self, X, exclude_target=False):
+    def predict(self, X, exclude_target=False, context=None):
         """
         Performs inference using the weights and targets from the model in filepath used for load_custom_model. 
 
@@ -360,7 +361,7 @@ class DeploymentModel(BaseModel):
         :returns: list of class labels.
         """
         if self.task == TaskMode.SEQUENCE_LABELING and not exclude_target:
-            return SequenceLabeler.predict(self, X)
+            return SequenceLabeler.predict(self, X, context=context)
         else:
             raw_preds = self._inference(X, exclude_target=exclude_target)
             if exclude_target:
@@ -369,14 +370,14 @@ class DeploymentModel(BaseModel):
                 np.asarray(raw_preds)
             )
 
-    def predict_proba(self, X):
+    def predict_proba(self, X, context=None):
         """
         Produces a probability distribution over classes for each example in X.
 
         :param X: list or array of text to embed.
         :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
         """
-        return super().predict_proba(X)
+        return super().predict_proba(X, context=context)
 
     def finetune(self, X, Y=None, batch_size=None, context=None):
         raise NotImplementedError

@@ -44,7 +44,7 @@ class MultiLabelClassifier(BaseModel):
         """
         return super().featurize(X)
 
-    def predict(self, X, threshold=None):
+    def predict(self, X, threshold=None, context=None):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
@@ -53,7 +53,7 @@ class MultiLabelClassifier(BaseModel):
         """
         threshold = self._get_threshold(threshold)
         all_labels = []
-        for _, start_of_doc, end_of_doc, _, proba in self.process_long_sequence(X):
+        for _, start_of_doc, end_of_doc, _, proba in self.process_long_sequence(X, context=context):
             if start_of_doc:
                 # if this is the first chunk in a document, start accumulating from scratch
                 doc_probs = []
@@ -67,14 +67,14 @@ class MultiLabelClassifier(BaseModel):
                 all_labels.append(list(label))
         return all_labels
 
-    def predict_proba(self, X):
+    def predict_proba(self, X, context=None):
         """
         Produces a probability distribution over classes for each example in X.
 
         :param X: list or array of text to embed.
         :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
         """
-        return super().predict_proba(X)
+        return super().predict_proba(X, context=None)
 
     def finetune(self, X, Y=None, batch_size=None, context=None):
         """

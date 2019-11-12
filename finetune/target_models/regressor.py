@@ -33,7 +33,7 @@ class Regressor(BaseModel):
         """
         return self._featurize(X)
 
-    def predict(self, X):
+    def predict(self, X, context=None):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
@@ -41,7 +41,7 @@ class Regressor(BaseModel):
         :returns: list of class labels.
         """
         all_labels=[]
-        for _, start_of_doc, end_of_doc, label, _ in self.process_long_sequence(X):
+        for _, start_of_doc, end_of_doc, label, _ in self.process_long_sequence(X, context=context):
             if start_of_doc:
                 # if this is the first chunk in a document, start accumulating from scratch
                 doc_labels = []
@@ -55,7 +55,7 @@ class Regressor(BaseModel):
                 all_labels.append(list(label))
         return all_labels
 
-    def predict_proba(self, X):
+    def predict_proba(self, X, context=None):
         """
         Produces a probability distribution over classes for each example in X.
 

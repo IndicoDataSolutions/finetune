@@ -373,8 +373,7 @@ def get_default_config():
         # Auxiliary Information
         use_auxiliary_info=False,
         n_context_embed=32,
-        # default_context=None,
-        context_dim=2  # number of context dimensions to be inserted
+        context_dim=None  # number of context dimensions to be inserted
     )
     return settings
 
