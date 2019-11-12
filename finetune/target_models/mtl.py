@@ -50,7 +50,7 @@ class MultiTaskPipeline(BasePipeline):
         return self.dataset_size_
 
     def get_train_input_fns(
-        self, Xs, Y=None, batch_size=None, val_size=None
+        self, Xs, Y=None, batch_size=None, val_size=None, context=None
     ):
         val_funcs = {}
         val_sizes = {}
@@ -62,7 +62,7 @@ class MultiTaskPipeline(BasePipeline):
         for task_name in self.config.tasks:
             input_pipelines[task_name] = self.config.tasks[task_name]._get_input_pipeline(self)
             task_tuple = input_pipelines[task_name].get_train_input_fns(
-                Xs[task_name], Y[task_name], batch_size=batch_size, val_size=val_size
+                Xs[task_name], Y[task_name], batch_size=batch_size, val_size=val_size, context=context
             )
             self.dataset_size_ += self.config.dataset_size
             frequencies.append(self.config.dataset_size)
@@ -163,7 +163,7 @@ class MultiTask(BaseModel):
             features[name] = pred_model.featurize(X[name])
         return features
 
-    def predict(self, X):
+    def predict(self, X, context=None):
         """
         Runs inference on the trained model for any of the tasks the model was trained for. Input and output formats
         are the same as for each of the individial tasks.
@@ -184,10 +184,10 @@ class MultiTask(BaseModel):
                 k.replace("/target_model_{}".format(name), ""): v
                 for k, v in self.saver.variables.items()
             }
-            predictions[name] = pred_model.predict(X[name])
+            predictions[name] = pred_model.predict(X[name], context=context)
         return predictions
 
-    def predict_proba(self, X):
+    def predict_proba(self, X, context=None):
         """
         Runs probability inference on the trained model for any of the tasks the model was trained for. Falls back
         to normal predict when probabilities are not available for a task, eg Regression.
@@ -210,7 +210,7 @@ class MultiTask(BaseModel):
                 for k, v in self.saver.variables.items()
             }
             try:
-                predictions[name] = pred_model.predict_proba(X[name])
+                predictions[name] = pred_model.predict_proba(X[name], context=context)
             except FinetuneError as e:
                 LOGGER.warning(
                     (
@@ -218,7 +218,7 @@ class MultiTask(BaseModel):
                         "Falling back to regular predictions for this task."
                     ).format(name, e)
                 )
-                predictions[name] = pred_model.predict(X[name])
+                predictions[name] = pred_model.predict(X[name], context=context)
         return predictions
 
     def finetune(self, X, Y=None, batch_size=None, context=None):

@@ -18,6 +18,7 @@ from finetune.encoding.sequence_encoder import (
 )
 from finetune.encoding.input_encoder import NLP
 from finetune.input_pipeline import BasePipeline
+from finetune.encoding.input_encoder import tokenize_context
 
 
 class SequencePipeline(BasePipeline):
@@ -29,7 +30,7 @@ class SequencePipeline(BasePipeline):
         Y_ = list(itertools.chain.from_iterable(Y)) if Y is not None else None
         super()._post_data_initialization(Y_)
 
-    def text_to_tokens_mask(self, X, Y=None):
+    def text_to_tokens_mask(self, X, Y=None, context=None):
         pad_token = (
             [self.config.pad_token] if self.multi_label else self.config.pad_token
         )
@@ -37,6 +38,9 @@ class SequencePipeline(BasePipeline):
         out_gen = self._text_to_ids(X, Y=Y, pad_token=pad_token)
         for out in out_gen:
             feats = {"tokens": out.token_ids, "mask": out.mask}
+            if context:
+                tokenized_context = tokenize_context(context, out)
+                feats['context'] = tokenized_context
             if Y is None:
                 yield feats
             if Y is not None:
@@ -190,7 +194,7 @@ class SequenceLabeler(BaseModel):
         Y = Y_new if Y is not None else None
         return super().finetune(Xs, Y=Y, batch_size=batch_size, context=context)
 
-    def predict(self, X, per_token=False):
+    def predict(self, X, per_token=False, context=None):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
@@ -205,7 +209,8 @@ class SequenceLabeler(BaseModel):
         chunk_size = self.config.max_length - 2
         step_size = chunk_size // 3
         doc_idx = -1
-        for position_seq, start_of_doc, end_of_doc, label_seq, proba_seq in self.process_long_sequence(X):
+        for position_seq, start_of_doc, end_of_doc, label_seq, proba_seq in self.process_long_sequence(X, context=context):
+            print('position_seq', position_seq)
             start, end = 0, None
             if start_of_doc:
                 # if this is the first chunk in a document, start accumulating from scratch
@@ -276,6 +281,13 @@ class SequenceLabeler(BaseModel):
             none_value=self.config.pad_token,
             subtoken_predictions=self.config.subtoken_predictions,
         )
+        print(    X,
+                    all_subseqs,
+                    all_labels,
+                    all_probs,
+                    all_positions,
+                    doc_annotations,
+                )
 
         if per_token:
             return [
@@ -309,20 +321,19 @@ class SequenceLabeler(BaseModel):
         """
         return self._featurize(X)
 
-    def predict_proba(self, X):
+    def predict_proba(self, X, context=None):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
         :param X: A list / array of text, shape [batch]
         :returns: list of class labels.
         """
-        return self.predict(X)
+        return self.predict(X, context=context)
 
-    @classmethod
     def _target_model(
-        cls, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
+        self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
     ):
-        super(cls, SequenceLabeler)._target_model(
+        super(SequenceLabeler, self)._target_model(
             config=config, featurizer_state=featurizer_state, targets=targets, n_outputs=n_outputs,
             train=train, reuse=reuse, **kwargs)
         return sequence_labeler(
