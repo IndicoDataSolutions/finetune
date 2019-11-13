@@ -49,12 +49,12 @@ class SequencePipeline(BasePipeline):
         counter = Counter()
         for doc, target_arr in encoded_dataset:
             targets = target_arr[doc["mask"].astype(np.bool)]
-            unencoded = self.label_encoder.inverse_transform(targets)
+            decoded_targets = self.label_encoder.inverse_transform(targets)
             if self.multi_label:
-                for label in unencoded:
+                for label in decoded_targets:
                     counter.update(label)
             else:
-                counter.update(unencoded)
+                counter.update(decoded_targets)
         return counter
 
     def _format_for_encoding(self, X):
@@ -336,18 +336,19 @@ class SequenceLabeler(BaseModel):
 
     def _predict_op(self, logits, **kwargs):
         trans_mats = kwargs.get("transition_matrix")
+        sequence_length = kwargs.get("sequence_length")
         if self.multi_label:
             logits = tf.unstack(logits, axis=-1)
             label_idxs = []
             label_probas = []
             for logits_i, trans_mat_i in zip(logits, trans_mats):
-                idx, prob = sequence_decode(logits_i, trans_mat_i)
+                idx, prob = sequence_decode(logits_i, trans_mat_i, sequence_length, use_gpu_op=True)
                 label_idxs.append(idx)
                 label_probas.append(prob[:, :, 1:])
             label_idxs = tf.stack(label_idxs, axis=-1)
             label_probas = tf.stack(label_probas, axis=-1)
         else:
-            label_idxs, label_probas = sequence_decode(logits, trans_mats)
+            label_idxs, label_probas = sequence_decode(logits, trans_mats, sequence_length, use_gpu_op=False)
         return label_idxs, label_probas
 
     def _predict_proba_op(self, logits, **kwargs):
