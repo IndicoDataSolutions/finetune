@@ -251,8 +251,8 @@ class BasePipeline(metaclass=ABCMeta):
 
         return int(val_size), int(val_interval)
 
-    def resampling(self, Xs, Y):
-        return Xs, Y
+    def resampling(self, Xs, Y, context=None):
+        return Xs, Y, context
 
     def _make_dataset(self, Xs, Y, train=False, context=None):
         if Y is not None:
@@ -360,18 +360,32 @@ class BasePipeline(metaclass=ABCMeta):
             )
         else:
             self._skip_tqdm = 0
-            to_shuffle = (Xs, Y)
-                
-            if self.config.val_size > 0 and self.config.val_set is None:
-                Xs_tr, Xs_va, Y_tr, Y_va = train_test_split(*to_shuffle, test_size=self.config.val_size, random_state=self.config.seed)
-            else:
-                Xs_tr, Y_tr = dataset_shuffle(*to_shuffle, random_state=self.config.seed)
-                Xs_va, Y_va = self.config.val_set or ([], [])
+            if context:
+                to_shuffle = (Xs, Y, context)
 
-            Xs_tr, Y_tr = self.resampling(Xs_tr, Y_tr)
-            self.config.dataset_size = len(Xs_tr)
-            val_dataset_unbatched = self._make_dataset(Xs_va, Y_va, train=False, context=context)
-            train_dataset_unbatched = self._make_dataset(Xs_tr, Y_tr, train=True, context=context)
+                if self.config.val_size > 0 and self.config.val_set is None:
+                    Xs_tr, Xs_va, Y_tr, Y_va, c_tr, c_va = train_test_split(*to_shuffle, test_size=self.config.val_size, random_state=self.config.seed)
+                else:
+                    Xs_tr, Y_tr, c_tr = dataset_shuffle(*to_shuffle, random_state=self.config.seed)
+                    Xs_va, Y_va, c_va = self.config.val_set or ([], [], [])
+
+                Xs_tr, Y_tr, c_tr = self.resampling(Xs_tr, Y_tr, c_tr)
+                self.config.dataset_size = len(Xs_tr)
+                val_dataset_unbatched = self._make_dataset(Xs_va, Y_va, train=False, context=c_va)
+                train_dataset_unbatched = self._make_dataset(Xs_tr, Y_tr, train=True, context=c_tr)
+            else:
+                to_shuffle = (Xs, Y)
+
+                if self.config.val_size > 0 and self.config.val_set is None:
+                    Xs_tr, Xs_va, Y_tr, Y_va = train_test_split(*to_shuffle, test_size=self.config.val_size, random_state=self.config.seed)
+                else:
+                    Xs_tr, Y_tr = dataset_shuffle(*to_shuffle, random_state=self.config.seed)
+                    Xs_va, Y_va = self.config.val_set or ([], [])
+
+                Xs_tr, Y_tr, _ = self.resampling(Xs_tr, Y_tr)
+                self.config.dataset_size = len(Xs_tr)
+                val_dataset_unbatched = self._make_dataset(Xs_va, Y_va, train=False)
+                train_dataset_unbatched = self._make_dataset(Xs_tr, Y_tr, train=True)
 
         if self.config.chunk_long_sequences or self.config.class_weights:
             # Certain settings require that the entire dataset be encoded before compiling the graph
