@@ -222,37 +222,24 @@ class BaseEncoder(object):
     def __getstate__(self):
         return {"Encoder": None}
 
-def get_default_context(context_by_char_loc):
-    """ Use mean for numeric values, majority otherwise. """
-    context_values = [c[1] for c in context_by_char_loc]
-    num_keys = len(context_values[0])
-    default_values = []
-    for k in range(num_keys):
-        values = [c[k] for c in context_values]
-        if isinstance(values[0], str) or isinstance(values[0], bool):
-            default_value = Counter(values).most_common(1)[0][0]
-        else:
-            default_value = np.mean(values)
-        default_values.append(default_value)
-    return default_values
 
-def tokenize_context(context, encoded_output):
+def tokenize_context(context, encoded_output, config):
     """ Tokenize the context corresponding to a single sequence of text """
     seq_len = len(encoded_output.token_ids)
     context_keys = list(k for k in sorted(context[0].keys()) if k not in ['token', 'start', 'end'])
     context_by_char_loc = sorted([(c['end'], [c[k] for k in context_keys]) for c in context], key=lambda c: c[0])
     # default context is the sequence majority
-    default_context = get_default_context(context_by_char_loc)
-    current_context = 0
+    default_context = [config.default_context[k] for k in context_keys]
+    current_char_loc = 0
     tokenized_context = []
     for char_loc in encoded_output.char_locs:
         # Note: this assumes that the tokenization will never lump multiple tokens into one
         if char_loc == -1:
             tokenized_context.append(default_context)
         else:
-            if char_loc > context_by_char_loc[current_context][0]:
-                current_context += 1
-            tokenized_context.append(context_by_char_loc[current_context][1])
+            if char_loc > context_by_char_loc[current_char_loc][0]:
+                current_char_loc += 1
+            tokenized_context.append(context_by_char_loc[current_char_loc][1])
     # padded value doesn't matter since it will be masked out
     expanded_context = np.pad(tokenized_context, ((0, seq_len - len(tokenized_context)), (0, 0)), 'constant')
     assert len(expanded_context) == len(encoded_output.token_ids)

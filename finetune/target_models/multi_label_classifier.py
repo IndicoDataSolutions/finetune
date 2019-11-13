@@ -74,7 +74,7 @@ class MultiLabelClassifier(BaseModel):
         :param X: list or array of text to embed.
         :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
         """
-        return super().predict_proba(X, context=None)
+        return super().predict_proba(X, context=context)
 
     def finetune(self, X, Y=None, batch_size=None, context=None):
         """
@@ -86,9 +86,7 @@ class MultiLabelClassifier(BaseModel):
         return super().finetune(X, Y=Y, batch_size=batch_size, context=context)
 
     def _target_model(self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
-        super(MultiLabelClassifier, self)._target_model(
-            config=config, featurizer_state=featurizer_state, targets=targets, n_outputs=n_outputs,
-            train=train, reuse=reuse, **kwargs)
+        self._add_context_embed(featurizer_state)
         return multi_classifier(
             hidden=featurizer_state['features'],
             targets=targets,

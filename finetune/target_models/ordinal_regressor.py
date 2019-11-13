@@ -91,9 +91,7 @@ class OrdinalRegressor(BaseModel):
     def _target_model(
         self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
     ):
-        super(OrdinalRegressor, self)._target_model(
-            config=config, featurizer_state=featurizer_state, targets=targets, n_outputs=n_outputs,
-            train=train, reuse=reuse, **kwargs)
+        self._add_context_embed(featurizer_state)
         return ordinal_regressor(
             hidden=featurizer_state["features"],
             targets=targets,
@@ -137,7 +135,6 @@ class ComparisonOrdinalRegressor(OrdinalRegressor):
     def _get_input_pipeline(self):
         return ComparisonOrdinalRegressionPipeline(self.config)
 
-    @classmethod
     def _target_model(
         self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
     ):

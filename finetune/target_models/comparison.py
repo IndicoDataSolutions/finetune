@@ -5,7 +5,7 @@ import copy
 from finetune.errors import FinetuneError
 from finetune.base import BaseModel
 from finetune.target_models.classifier import Classifier, ClassificationPipeline
-from finetune.encoding.input_encoder import ArrayEncodedOutput
+from finetune.encoding.input_encoder import ArrayEncodedOutput, tokenize_context
 
 
 class ComparisonPipeline(ClassificationPipeline):
@@ -32,6 +32,35 @@ class ComparisonPipeline(ClassificationPipeline):
         kwargs["mask"] = np.stack([arr_forward.mask, arr_backward.mask], 0)
         yield ArrayEncodedOutput(**kwargs)
 
+    def text_to_tokens_mask(self, pair, Y=None, context=None):
+        out_gen = self._text_to_ids(pair, pad_token=self.config.pad_token)
+        for i, out in enumerate(out_gen):
+            if context is None:
+                feats = {"tokens": out.token_ids, "mask": out.mask}
+            else:
+                out_forward = ArrayEncodedOutput(
+                    token_ids=out.token_ids[0],
+                    tokens=out.token_ids[0],
+                    labels=None,
+                    char_locs=out.char_locs,
+                    mask=out.mask[0],
+                )
+                out_backward = ArrayEncodedOutput(
+                    token_ids=out.token_ids[1],
+                    tokens=out.token_ids[1],
+                    labels=None,
+                    char_locs=out.char_locs,
+                    mask=out.mask[1],
+                )
+                tokenized_context_forward = tokenize_context(context[0], out_forward, self.config)
+                tokenized_context_backward = tokenize_context(context[1], out_backward, self.config)
+                tokenized_context = [tokenized_context_forward, tokenized_context_backward]
+                feats = {"tokens": out.token_ids, "mask": out.mask, "context": tokenized_context}
+            if Y is None:
+                yield feats
+            else:
+                yield feats, self.label_encoder.transform([Y])[0]
+
     def feed_shape_type_def(self):
         TS = tf.TensorShape
         types = {"tokens": tf.int32, "mask": tf.float32}
@@ -39,7 +68,10 @@ class ComparisonPipeline(ClassificationPipeline):
             "tokens": TS([2, self.config.max_length, 2]),
             "mask": TS([None, self.config.max_length]),
         }
-        types, shapes = self._add_context_info_if_present(types, shapes)
+        if self.config.use_auxiliary_info:
+            TS = tf.TensorShape
+            types["context"] = tf.float32
+            shapes["context"] = TS([2, self.config.max_length, self.config.context_dim])
         return (
             (types, tf.float32,),
             (shapes, TS([self.target_dim]),),
@@ -78,12 +110,18 @@ class Comparison(Classifier):
         **kwargs
     ):
         featurizer_state = featurizer_state.copy()
+        print('features before ', featurizer_state['features'])
         featurizer_state["sequence_features"] = tf.abs(
             tf.reduce_sum(featurizer_state["sequence_features"], 1)
         )
         featurizer_state["features"] = tf.abs(
             tf.reduce_sum(featurizer_state["features"], 1)
         )
+        # to go from [batch, 2, max_length, n_context_embed] -> [batch, max_length, n_context_embed]
+        if 'context' in featurizer_state:
+            featurizer_state["context"] = tf.abs(
+                tf.reduce_sum(featurizer_state["context"], 1)
+            )
         return super(Comparison, self)._target_model(
             config=config,
             featurizer_state=featurizer_state,

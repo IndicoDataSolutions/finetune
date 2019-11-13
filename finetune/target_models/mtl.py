@@ -252,9 +252,7 @@ class MultiTask(BaseModel):
         task_id=None,
         **kwargs
     ):
-        super(MultiTask, self)._target_model(
-            config=config, featurizer_state=featurizer_state, targets=targets, n_outputs=n_outputs,
-            train=train, reuse=reuse, task_id=task_id, **kwargs)
+        self._add_context_embed(featurizer_state)
         pred_fn_pairs = []
         featurizer_state["features"] = tf.cond(
             tf.equal(tf.shape(featurizer_state["features"])[1], 1),
