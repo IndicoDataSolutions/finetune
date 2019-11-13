@@ -81,26 +81,25 @@ class TestAuxiliary(unittest.TestCase):
     def setUpClass(self):
         self.trainX = ['i like apples'] * 2
         self.trainY = ['A', 'B']
+        # labels could only be inferred given context
         self.trainY_seq = [
             [
-                {'start': 0, 'end': 1, 'label': 'NOUN', 'text': 'i'},
-                {'start': 7, 'end': 13, 'label': 'NOUN', 'text': 'apples'},
+                {'start': 0, 'end': 1, 'label': 'IMPORTANT', 'text': 'i'},
             ],
             [
-                {'start': 0, 'end': 1, 'label': 'NOUN', 'text': 'i'},
-                {'start': 7, 'end': 13, 'label': 'NOUN', 'text': 'apples'},
+                {'start': 7, 'end': 13, 'label': 'IMPORTANT', 'text': 'apples'},
             ]
         ]
         self.train_context = [
             [
-                {'token': 'i', 'start': 0, 'end': 1, 'pos_x':2, 'pos_y': 3},
-                {'token': 'like', 'start': 2, 'end': 6, 'pos_x':3, 'pos_y': 3},
-                {'token': 'apples', 'start': 7, 'end': 13, 'pos_x':4, 'pos_y': 3},
+                {'token': 'i', 'start': 0, 'end': 1, 'bold': True},
+                {'token': 'like', 'start': 2, 'end': 6, 'bold': False},
+                {'token': 'apples', 'start': 7, 'end': 13, 'bold': False},
             ],
             [
-                {'token': 'i', 'start': 0, 'end': 1, 'pos_x':2, 'pos_y': 10},
-                {'token': 'like', 'start': 2, 'end': 6, 'pos_x':3, 'pos_y': 10},
-                {'token': 'apples', 'start': 7, 'end': 13, 'pos_x':4, 'pos_y': 10},
+                {'token': 'i', 'start': 0, 'end': 1,  'bold': False},
+                {'token': 'like', 'start': 2, 'end': 6,  'bold': False},
+                {'token': 'apples', 'start': 7, 'end': 13,  'bold': True},
             ]
         ]
 
@@ -120,11 +119,12 @@ class TestAuxiliary(unittest.TestCase):
         defaults = {
             "batch_size": 2,
             "max_length": 256,
-            "n_epochs": 3,
+            "n_epochs": 1000,
             "base_model": self.base_model,
             "val_size": 0,
             "use_auxiliary_info": True,
-            "context_dim": 2
+            "context_dim": 1,
+            "val_set": (self.trainX, self.trainY, self.train_context)
         }
         defaults.update(kwargs)
         return dict(get_config(**defaults))
@@ -147,7 +147,7 @@ class TestAuxiliary(unittest.TestCase):
         Ensure model training does not error out
         Ensure model returns predictions
         """
-        config = self.default_config(use_auxiliary_info=False, context_dim=None)
+        config = self.default_config(use_auxiliary_info=False, context_dim=None, val_set=(self.trainX, self.trainY))
         model = Classifier(
             **config
         )
@@ -156,17 +156,21 @@ class TestAuxiliary(unittest.TestCase):
         # test cached predict
         _ = model.predict(self.trainX)
     
-    def _evaluate_sequence_preds(self, preds):
-        token_precision = sequence_labeling_token_precision(preds, self.trainY_seq)
-        token_recall = sequence_labeling_token_recall(preds, self.trainY_seq)
-        self.assertIn("NOUN", token_precision)
-        self.assertIn("NOUN", token_recall)
+    def _evaluate_sequence_preds(self, preds, includes_context):
+        token_precision = sequence_labeling_token_precision(self.trainY_seq, preds)
+        token_recall = sequence_labeling_token_recall(self.trainY_seq, preds)
+        self.assertIn("IMPORTANT", token_precision)
+        self.assertIn("IMPORTANT", token_recall)
         token_precision = np.mean(list(token_precision.values()))
         token_recall = np.mean(list(token_recall.values()))
         print(token_precision)
         print(token_recall)
-        self.assertGreater(token_precision, 0.6)
-        self.assertGreater(token_recall, 0.6)
+        if includes_context:
+            self.assertEqual(token_precision, 1.0)
+            self.assertEqual(token_recall, 1.0)
+        else:
+            self.assertLessEqual(token_precision, 1.0)
+            self.assertLessEqual(token_recall, 1.0)
 
 
     def test_sequence_labeler_no_auxiliary(self):
@@ -175,10 +179,10 @@ class TestAuxiliary(unittest.TestCase):
         Ensure model returns reasonable predictions
         """
         
-        model = SequenceLabeler(**self.default_config(use_auxiliary_info=False))
+        model = SequenceLabeler(**self.default_config(use_auxiliary_info=False, val_set=(self.trainX, self.trainY)))
         model.fit(self.trainX, self.trainY_seq)
         preds = model.predict(self.trainX)
-        self._evaluate_sequence_preds(preds)
+        self._evaluate_sequence_preds(preds, False)
         
 
     def test_sequence_labeler_auxiliary(self):
@@ -190,8 +194,7 @@ class TestAuxiliary(unittest.TestCase):
         model = SequenceLabeler(**self.default_config())
         model.fit(self.trainX, self.trainY_seq, context=self.train_context)
         preds = model.predict(self.trainX, context=self.train_context)
-        print(preds)
-        self._evaluate_sequence_preds(preds)
+        self._evaluate_sequence_preds(preds, True)
     
     def test_save_load(self):
         """
