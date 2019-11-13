@@ -10,11 +10,11 @@ import numpy as np
 
 class InMemoryFinetune(tf.train.SessionRunHook):
 
-    def __init__(self, config_to_eval, finetune, eval_dir, X, Y, X_test, Y_test, name=None, every_n_iter=100):
+    def __init__(self, config_to_eval, model, eval_dir, X, Y, X_test, Y_test, name=None, every_n_iter=100):
         if every_n_iter is None or every_n_iter <= 0:
             raise ValueError('invalid every_n_iter=%s.' % every_n_iter)
 
-        self._current_finetune = finetune
+        self._current_finetune = model
         self._config_to_finetune = config_to_eval
         self._name = name
         self._every_n_iter = every_n_iter
@@ -79,12 +79,12 @@ class InMemoryFinetune(tf.train.SessionRunHook):
     def end(self, session):
         self._evaluate(session)
 
-def make_in_memory_finetune_hooks(finetune, estimator):
+def make_in_memory_finetune_hooks(model, estimator):
     hooks = []
     for f in finetune.config.in_memory_finetune:
         hooks.append(InMemoryFinetune(
             config_to_eval=f["config"],
-            finetune=finetune,
+            model=model,
             eval_dir=estimator.eval_dir(),
             X=f["X"],
             Y=f["Y"],
