@@ -139,6 +139,10 @@ class BaseModel(object, metaclass=ABCMeta):
         reuse=None,
         **kwargs
     ):
+        # Overridden by subclass to attach a target model onto the shared base featurizer.
+        raise NotImplementedError
+
+    def _add_context_embed(self, featurizer_state):
         if "context" in featurizer_state:
             context_embed = featurizer_state["context"]
             for key in ['features', 'explain_out']:
