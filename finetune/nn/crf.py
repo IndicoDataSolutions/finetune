@@ -37,16 +37,24 @@ def viterbi_decode(score, transition_params):
     return viterbi, np_softmax(trellis, axis=-1)
 
 
-def sequence_decode(logits, transition_matrix):
+def sequence_decode(logits, transition_matrix, sequence_length, use_gpu_op):
     """ A simple py_func wrapper around the Viterbi decode allowing it to be included in the tensorflow graph. """
-
-    def _sequence_decode(logits, transition_matrix):
-        all_predictions = []
-        all_logits = []
-        for logit in logits:
-            viterbi_sequence, viterbi_logits = viterbi_decode(logit, transition_matrix)
-            all_predictions.append(viterbi_sequence)
-            all_logits.append(viterbi_logits)
-        return np.array(all_predictions, dtype=np.int32), np.array(all_logits, dtype=np.float32)
-
-    return tf.py_func(_sequence_decode, [logits, transition_matrix], [tf.int32, tf.float32])
+    if use_gpu_op:
+        tags, _ = tf.contrib.crf.crf_decode(
+            logits,
+            transition_matrix,
+            sequence_length
+        )
+        probs = tf.nn.softmax(logits, -1)
+        return tags, probs
+    else:
+        def _sequence_decode(logits, transition_matrix):
+            all_predictions = []
+            all_logits = []
+            for logit in logits:
+                viterbi_sequence, viterbi_logits = viterbi_decode(logit, transition_matrix)
+                all_predictions.append(viterbi_sequence)
+                all_logits.append(viterbi_logits)
+            return np.array(all_predictions, dtype=np.int32), np.array(all_logits, dtype=np.float32)
+        
+        return tf.py_func(_sequence_decode, [logits, transition_matrix], [tf.int32, tf.float32])

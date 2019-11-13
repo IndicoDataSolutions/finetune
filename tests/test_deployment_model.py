@@ -99,10 +99,15 @@ class TestDeploymentModel(unittest.TestCase):
             cls.cr.save(cls.comparison_regressor_path)
 
     def setUp(self):
+        self.models = []
         try:
             os.mkdir("tests/saved-models")
         except FileExistsError:
             warnings.warn("tests/saved-models still exists, it is possible that some test is not cleaning up properly.")
+
+    def tearDown(self):
+        while self.models:
+            self.models.pop().close()
 
     @classmethod
     def tearDownClass(cls):
@@ -111,8 +116,8 @@ class TestDeploymentModel(unittest.TestCase):
     @classmethod
     def default_config(cls, **kwargs):
         defaults = {
-            'batch_size': 2,
-            'predict_batch_size': 2,
+            'batch_size': 1,
+            'predict_batch_size': 1,
             'max_length': 256,
             'n_epochs': 3,
             'adapter_size': 64,
@@ -126,6 +131,7 @@ class TestDeploymentModel(unittest.TestCase):
     def default_seq_config(cls, **kwargs):
         d = dict(
             batch_size=2,
+            predict_batch_size=2,
             max_length=256,
             lm_loss_coef=0.0,
             val_size=0,
@@ -141,6 +147,8 @@ class TestDeploymentModel(unittest.TestCase):
         Ensure second call to predict is faster than first, including loading.
         """
         model = DeploymentModel(featurizer=self.base_model, **self.default_config())
+        self.models.append(model)
+        
         model.load_featurizer()
 
         valid_sample = self.classifier_dataset.sample(n=self.n_sample)
@@ -154,13 +162,14 @@ class TestDeploymentModel(unittest.TestCase):
         first_prediction_time = (first - start)
         second_prediction_time = (second - first)
         self.assertLess(second_prediction_time, first_prediction_time)
-        model.close()
-
+        
     def test_switching_models(self):
         """
         Ensure model can switch out weights without erroring out
         """
         model = DeploymentModel(featurizer=self.base_model, **self.default_config())
+        self.models.append(model)
+        
         model.load_featurizer()
         # test transitioning from any of [sequence labeling, comparison, default] to any other
         model.load_custom_model(self.classifier_path)
@@ -172,7 +181,7 @@ class TestDeploymentModel(unittest.TestCase):
         if self.do_comparison:
             model.load_custom_model(self.comparison_regressor_path)
         model.load_custom_model(self.classifier_path)
-        model.close()
+        
 
     def test_reasonable_predictions(self):
         """
@@ -180,11 +189,13 @@ class TestDeploymentModel(unittest.TestCase):
         """
         model = DeploymentModel(featurizer=self.base_model, **self.default_seq_config())
         model.load_featurizer()
+        self.models.append(model)
         
         # test same output as weights loaded with Classifier model
         valid_sample = self.classifier_dataset.sample(n=self.n_sample)
         model.load_custom_model(self.classifier_path)
         deployment_preds = model.predict_proba(valid_sample.Text.values)
+        self.models.remove(model)
         model.close()
         classifier_preds = self.cl.predict_proba(valid_sample.Text.values)
         for c_pred, d_pred in zip(classifier_preds, deployment_preds):
@@ -195,10 +206,10 @@ class TestDeploymentModel(unittest.TestCase):
         if self.do_comparison:
             # test same output as weights loaded with Comparison Regressor model
             model = DeploymentModel(featurizer=self.base_model, **self.default_seq_config())
+            self.models.append(model)
             model.load_featurizer()
             model.load_custom_model(self.comparison_regressor_path)
             deployment_preds = model.predict(self.x_te)
-            model.close()
             compregressor = ComparisonRegressor.load(self.comparison_regressor_path)
             compregressor_preds = compregressor.predict(self.x_te)
             for c_pred, d_pred in zip(compregressor_preds, deployment_preds):
@@ -210,16 +221,17 @@ class TestDeploymentModel(unittest.TestCase):
         """
         large_dataset = self.animals*100
         model = DeploymentModel(featurizer=self.base_model, **self.default_config())
+        self.models.append(model)
         model.load_featurizer()
         model.load_custom_model(self.classifier_path)
         model.predict(large_dataset)
-        model.close()
 
     def test_fast_switch(self):
         """
         Ensure model can load/reload weights and predict in reasonable time
         """
         model = DeploymentModel(featurizer=self.base_model, **self.default_config())
+        self.models.append(model)
         model.load_featurizer()
         model.load_custom_model(self.classifier_path)
         model.predict(['finetune'])
@@ -236,7 +248,6 @@ class TestDeploymentModel(unittest.TestCase):
             model.predict([['finetune', 'compare']])
             end = time.time()
             self.assertGreater(2.5, end - start)
-        model.close()
 
 
 class TestDeploymentBert(TestDeploymentModel):
