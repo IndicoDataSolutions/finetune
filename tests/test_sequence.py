@@ -245,7 +245,7 @@ class TestSequenceLabeler(unittest.TestCase):
 
         # test ValueError raised when raw text is passed along with character idxs and doesn't match
         self.model.config.chunk_long_sequences = True
-        self.model.config.max_length = 18
+        self.model.config.max_length = 20
         with self.assertRaises(ValueError):
             self.model.fit(["Text about a dog."], [[{"start": 0, "end": 5, "text": "cat", "label": "dog"}]])
 

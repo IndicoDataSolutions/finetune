@@ -373,7 +373,8 @@ def sequence_labeler(
             lengths = default_lengths
             
         class_weights = kwargs.get("class_weights")
-        with tf.device("CPU:0"):
+        
+        with tf.device("CPU:0" if train else logits.device):
             if multilabel:
                 transition_params = []
                 logits_individual = tf.unstack(logits, n_targets, axis=-1)
@@ -424,7 +425,7 @@ def sequence_labeler(
         return {
             "logits": logits,
             "losses": -log_likelihood,
-            "predict_params": {"transition_matrix": transition_params},
+            "predict_params": {"transition_matrix": transition_params, "sequence_length": lengths},
         }
 
 
