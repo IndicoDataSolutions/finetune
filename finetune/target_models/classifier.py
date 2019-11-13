@@ -15,7 +15,7 @@ from finetune.base_models.gpt.encoder import finetune_to_indico_explain
 
 class ClassificationPipeline(BasePipeline):
     def resampling(self, Xs, Y, context=None):
-        if context:
+        if context is not None:
             if self.config.oversample:
                 idxs, Ys, contexts = shuffle(
                     *RandomOverSampler().fit_sample([[i] for i in range(len(Xs))], Y, context)
@@ -131,9 +131,7 @@ class Classifier(BaseModel):
     def _target_model(
         self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
     ):
-        super(Classifier, self)._target_model(
-            config=config, featurizer_state=featurizer_state, targets=targets, n_outputs=n_outputs,
-            train=train, reuse=reuse, **kwargs)
+        self._add_context_embed(featurizer_state)
         if "explain_out" in featurizer_state:
             shape = tf.shape(featurizer_state["explain_out"])  # batch, seq, hidden
             flat_explain = tf.reshape(

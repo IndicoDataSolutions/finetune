@@ -75,9 +75,7 @@ class Regressor(BaseModel):
 
     @classmethod
     def _target_model(self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
-        super(Regressor, self)._target_model(
-            config=config, featurizer_state=featurizer_state, targets=targets, n_outputs=n_outputs,
-            train=train, reuse=reuse, **kwargs)
+        self._add_context_embed(featurizer_state)
         return regressor(
             hidden=featurizer_state['features'],
             targets=targets, 

@@ -121,7 +121,7 @@ class BasePipeline(metaclass=ABCMeta):
             if context is None:
                 feats = {"tokens": out.token_ids, "mask": out.mask}
             else:
-                tokenized_context = tokenize_context(context, out)
+                tokenized_context = tokenize_context(context, out, self.config)
                 feats = {"tokens": out.token_ids, "mask": out.mask, "context": tokenized_context}
             if Y is None:
                 yield feats
@@ -151,13 +151,13 @@ class BasePipeline(metaclass=ABCMeta):
         return Counter(self.label_encoder.inverse_transform(target_arrs))
 
     def _dataset_with_targets(self, Xs, Y, train, context=None):
-        if context:
-            if not callable(Xs) and not callable(Y):
+        if context is not None:
+            if not callable(Xs) and not callable(Y) and not callable(context):
                 dataset = lambda: zip(Xs, Y, context)
-            elif callable(Xs) and callable(Y):
+            elif callable(Xs) and callable(Y) and callable(context):
                 dataset = lambda: zip(Xs(), Y(), context)
             else:
-                raise ValueError( "Either neither or both of Xs and Y should be callable, not a mixture")
+                raise ValueError( "Either none or all of Xs and Y and context should be callable, not a mixture")
 
             dataset_encoded = lambda: itertools.chain.from_iterable(
                 map(lambda xyc: self.text_to_tokens_mask(*xyc), dataset())
@@ -187,7 +187,7 @@ class BasePipeline(metaclass=ABCMeta):
         )
 
     def _dataset_without_targets(self, Xs, train, context=None):
-        if context:
+        if context is not None:
             # we assume that X must have known length if we also provide context so this is safe
             if callable(Xs):
                 Xs_ = Xs()
@@ -360,7 +360,7 @@ class BasePipeline(metaclass=ABCMeta):
             )
         else:
             self._skip_tqdm = 0
-            if context:
+            if context is not None:
                 to_shuffle = (Xs, Y, context)
 
                 if self.config.val_size > 0 and self.config.val_set is None:
