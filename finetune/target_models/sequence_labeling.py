@@ -38,8 +38,8 @@ class SequencePipeline(BasePipeline):
         out_gen = self._text_to_ids(X, Y=Y, pad_token=pad_token)
         for out in out_gen:
             feats = {"tokens": out.token_ids, "mask": out.mask}
-            if context:
-                tokenized_context = tokenize_context(context, out)
+            if context is not None:
+                tokenized_context = tokenize_context(context, out, self.config)
                 feats['context'] = tokenized_context
             if Y is None:
                 yield feats
@@ -210,7 +210,6 @@ class SequenceLabeler(BaseModel):
         step_size = chunk_size // 3
         doc_idx = -1
         for position_seq, start_of_doc, end_of_doc, label_seq, proba_seq in self.process_long_sequence(X, context=context):
-            print('position_seq', position_seq)
             start, end = 0, None
             if start_of_doc:
                 # if this is the first chunk in a document, start accumulating from scratch
@@ -281,13 +280,6 @@ class SequenceLabeler(BaseModel):
             none_value=self.config.pad_token,
             subtoken_predictions=self.config.subtoken_predictions,
         )
-        print(    X,
-                    all_subseqs,
-                    all_labels,
-                    all_probs,
-                    all_positions,
-                    doc_annotations,
-                )
 
         if per_token:
             return [
@@ -333,9 +325,7 @@ class SequenceLabeler(BaseModel):
     def _target_model(
         self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
     ):
-        super(SequenceLabeler, self)._target_model(
-            config=config, featurizer_state=featurizer_state, targets=targets, n_outputs=n_outputs,
-            train=train, reuse=reuse, **kwargs)
+        self._add_context_embed(featurizer_state)
         return sequence_labeler(
             hidden=featurizer_state["sequence_features"],
             targets=targets,

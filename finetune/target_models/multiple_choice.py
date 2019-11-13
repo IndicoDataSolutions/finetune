@@ -8,6 +8,7 @@ import tensorflow as tf
 
 from finetune.nn.target_blocks import multi_choice_question
 from finetune.util import list_transpose
+from finetune.encoding.input_encoder import tokenize_context
 
 
 class MultipleChoicePipeline(BasePipeline):
@@ -35,6 +36,31 @@ class MultipleChoicePipeline(BasePipeline):
         kwargs["mask"] = np.stack([arr.mask for arr in arrays], 0)
         yield ArrayEncodedOutput(**kwargs)
 
+    def text_to_tokens_mask(self, pair, Y=None, context=None):
+        out_gen = self._text_to_ids(pair, pad_token=self.config.pad_token)
+        for i, out in enumerate(out_gen):
+            if context is None:
+                feats = {"tokens": out.token_ids, "mask": out.mask}
+            else:
+                num_answers = len(out.tokens)
+                tokenized_context = []
+                for answer_idx in range(num_answers):
+                    out_instance = ArrayEncodedOutput(
+                        token_ids=out.token_ids[answer_idx],
+                        tokens=out.token_ids[answer_idx],
+                        labels=None,
+                        char_locs=out.char_locs,
+                        mask=out.mask[answer_idx],
+                    )
+                    context_instance = context[0] + context[answer_idx + 1]
+                    tokenized_context.append(tokenize_context(context_instance, out_instance, self.config))
+                feats = {"tokens": out.token_ids, "mask": out.mask, "context": tokenized_context}
+            if Y is None:
+                yield feats
+            else:
+                yield feats, self.label_encoder.transform([Y])[0]
+
+
     def _format_for_encoding(self, X):
         return [[field] for field in X]
 
@@ -45,7 +71,10 @@ class MultipleChoicePipeline(BasePipeline):
             "tokens": TS([self.target_dim, self.config.max_length, 2]),
             "mask": TS([self.target_dim, self.config.max_length]),
         }
-        types, shapes = self._add_context_info_if_present(types, shapes)
+        if self.config.use_auxiliary_info:
+            TS = tf.TensorShape
+            types["context"] = tf.float32
+            shapes["context"] = TS([self.target_dim, self.config.max_length, self.config.context_dim])
         return (
             (types, tf.float32,),
             (shapes, TS([]),),
@@ -114,9 +143,11 @@ class MultipleChoice(BaseModel):
     def _target_model(
         self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
     ):
-        super(MultipleChoice, self)._target_model(
-            config=config, featurizer_state=featurizer_state, targets=targets, n_outputs=n_outputs,
-            train=train, reuse=reuse, **kwargs)
+        if "context" in featurizer_state:
+            context_embed = featurizer_state["context"]
+            featurizer_state['features'] = tf.concat(
+                (featurizer_state['features'], tf.reduce_mean(context_embed, 2)), -1
+            )
         return multi_choice_question(
             hidden=featurizer_state["features"],
             targets=targets,

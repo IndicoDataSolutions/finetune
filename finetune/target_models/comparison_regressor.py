@@ -16,7 +16,10 @@ class ComparisonRegressionPipeline(ComparisonPipeline):
         TS = tf.TensorShape
         types = {"tokens": tf.int32, "mask": tf.int32}
         shapes = {"tokens": TS([2, self.config.max_length, 2]), "mask": TS([2, self.config.max_length])}
-        types, shapes = self._add_context_info_if_present(types, shapes)
+        if self.config.use_auxiliary_info:
+            TS = tf.TensorShape
+            types["context"] = tf.float32
+            shapes["context"] = TS([2, self.config.max_length, self.config.context_dim])
         return (
             (types, tf.float32,),
             (shapes, TS([self.target_dim]),),
@@ -36,11 +39,11 @@ class ComparisonRegressor(BaseModel):
         return ComparisonRegressionPipeline(self.config)
 
     def _target_model(self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
-        super(ComparisonRegressor, self)._target_model(
-            config=config, featurizer_state=featurizer_state, targets=targets, n_outputs=n_outputs,
-            train=train, reuse=reuse, **kwargs)
         featurizer_state["sequence_features"] = tf.abs(tf.reduce_sum(featurizer_state["sequence_features"], 1))
         featurizer_state["features"] = tf.abs(tf.reduce_sum(featurizer_state["features"], 1))
+        if 'context' in featurizer_state:
+            featurizer_state["context"] = tf.abs(tf.reduce_sum(featurizer_state["context"], 1))
+        self._add_context_embed(featurizer_state)
         return regressor(
             hidden=featurizer_state['features'],
             targets=targets, 
