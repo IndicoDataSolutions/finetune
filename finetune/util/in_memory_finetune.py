@@ -81,7 +81,7 @@ class InMemoryFinetune(tf.train.SessionRunHook):
 
 def make_in_memory_finetune_hooks(model, estimator):
     hooks = []
-    for f in finetune.config.in_memory_finetune:
+    for f in model.config.in_memory_finetune:
         hooks.append(InMemoryFinetune(
             config_to_eval=f["config"],
             model=model,
