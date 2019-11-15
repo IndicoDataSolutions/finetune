@@ -30,3 +30,5 @@ as long as they describe specific spans of text.
     # For multiple_choice, context must be given to both the question and answers. Specifically, for a given input, the context should be a list of n dictionary lists where the first corresponds to the question and the subsequent n-1 correspond to the answers.
 
     # See tests/test_auxiliary.py for examples.
+
+    # POINT OF CAUTION: auxiliary info currently does not work correctly with chunk_long_sequences=True or mlm=True.
