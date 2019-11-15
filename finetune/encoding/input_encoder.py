@@ -153,7 +153,6 @@ class BaseEncoder(object):
         for d in encoded:
             joined += d[:cut_len] + [delimiter]
         joined = joined[:-1] + [clf_token]
-
         return joined
 
     def _token_length(self, token):
@@ -189,18 +188,33 @@ class BaseEncoder(object):
         return {"Encoder": None}
 
 
+def get_relevant_context_for_chunk(context, encoded_output):
+    # this is not always right given the tokenization might change the tokens and thus the length
+    start_idx = encoded_output.char_starts[1]
+    final_idx = encoded_output.char_locs[-2]
+    new_context = []
+    for span in context:
+        if span['end'] >= start_idx:
+            new_context.append(span)
+    return new_context
+
+
 def tokenize_context(context, encoded_output, config):
     """ Tokenize the context corresponding to a single sequence of text """
+    # in the edge case where the chunk is just a single end token, we don't need to alter our context chunk
+    if len(encoded_output.char_locs) > 1:
+        context = get_relevant_context_for_chunk(context, encoded_output)
     seq_len = len(encoded_output.token_ids)
     context_keys = list(k for k in sorted(context[0].keys()) if k not in ['token', 'start', 'end'])
     context_by_char_loc = sorted([(c['end'], [c[k] for k in context_keys]) for c in context], key=lambda c: c[0])
-    # default context is the sequence majority
+    # default context is set by user in config
     default_context = [config.default_context[k] for k in context_keys]
     current_char_loc = 0
     tokenized_context = []
     for char_loc in encoded_output.token_ends:
         # Note: this assumes that the tokenization will never lump multiple tokens into one
-        if char_loc == -1:
+        # (this would not be the case if multiple context spans make up the same token)
+        if char_loc == -1 or token == '\n</w>':
             tokenized_context.append(default_context)
         else:
             if char_loc > context_by_char_loc[current_char_loc][0]:
@@ -209,6 +223,7 @@ def tokenize_context(context, encoded_output, config):
                     raise ValueError("Context cannot be fully matched as it appears to not cover the end of the sequence")
 
             tokenized_context.append(context_by_char_loc[current_char_loc][1])
+    assert len(tokenized_context) == len(encoded_output.char_locs)
     # padded value doesn't matter since it will be masked out
     expanded_context = np.pad(tokenized_context, ((0, seq_len - len(tokenized_context)), (0, 0)), 'constant')
     assert len(expanded_context) == len(encoded_output.token_ids)

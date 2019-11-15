@@ -23,6 +23,7 @@ REQUIREMENTS = [
     "lxml>=4.3.3",
     "sentencepiece>=0.1.83",
     "tabulate>=0.8.6,<0.9.0", 
+    "cython>=0.29.14"
 ]
 
 setup(

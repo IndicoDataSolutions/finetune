@@ -21,7 +21,8 @@ from finetune.util.metrics import (
     sequence_labeling_token_recall,
 )
 from finetune.datasets.reuters import Reuters
-from finetune.encoding.input_encoder import tokenize_context, ArrayEncodedOutput
+from finetune.encoding.input_encoder import tokenize_context, ArrayEncodedOutput, get_relevant_context_for_chunk
+from finetune.target_models.classifier import ClassificationPipeline
 
 
 # prevent excessive warning logs
@@ -29,8 +30,14 @@ warnings.filterwarnings("ignore")
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 class TestAuxiliaryTokenization(unittest.TestCase):
-    def test_tokenize_context(self):
-        encoded_output = ArrayEncodedOutput(
+    def setUp(self):
+        self.context = [
+            {'token': "everything's", 'start': 0, 'end': 12, 'left': 10, 'bold': False},
+            {'token': "only", 'start': 13, 'end': 17, 'left': 20, 'bold': False},
+            {'token': "$80", 'start': 18, 'end': 21, 'left': 30, 'bold': True},
+        ]
+
+        self.encoded_output = ArrayEncodedOutput(
             token_ids=[
                 [40478, 40481],
                 [ 1180, 40482],
@@ -45,13 +52,10 @@ class TestAuxiliaryTokenization(unittest.TestCase):
             token_starts=[-1, 0, 10, 13, 18, 19, -1],
             mask=[0, 1, 1, 1, 1, 1, 0],
         )
-        context = [
-            {'token': "everything's", 'start': 0, 'end': 12, 'left': 10, 'bold': False},
-            {'token': "only", 'start': 13, 'end': 17, 'left': 20, 'bold': False},
-            {'token': "$80", 'start': 18, 'end': 21, 'left': 30, 'bold': True},
-        ]
+
+    def test_tokenize_context(self):
         config = get_config(**{'default_context': {'left': 0, 'bold': False}})
-        expanded_context = tokenize_context(context, encoded_output, config)
+        expanded_context = tokenize_context(self.context, self.encoded_output, config)
         expected = [
             [False, 0],
             [False, 10],
@@ -59,9 +63,40 @@ class TestAuxiliaryTokenization(unittest.TestCase):
             [False, 20],
             [True, 30],
             [True, 30],
-            [False, 0]
+            [False, 0],
+        ]
+        np.testing.assert_array_equal(expanded_context, expected)
+
+    def test_tokenize_context_newline(self):
+        text = "everything's\nonly $80\n"
+        config = get_config(**{'default_context': {'left': 0, 'bold': False}, 'max_length': 9})
+        # any target model pipeline will do
+        pipeline = ClassificationPipeline(config)
+        encoded_output = list(pipeline._text_to_ids(text, pad_token=config.pad_token))[0]
+        # char_locs = encoded_output.char_locs
+        expanded_context = tokenize_context(self.context, encoded_output, config)
+        expected = [
+            [False, 0],
+            [False, 10],
+            [False, 10],
+            [False, 0],
+            [False, 20],
+            [True, 30],
+            [True, 30],
+            [False, 0],
+            [0, 0],
         ]
         np.testing.assert_array_equal(expected, expanded_context)
+
+    def test_get_relevant_context_for_chunk(self):
+        d = {}
+        for field in self.encoded_output._fields:
+            field_value = getattr(self.encoded_output, field)[3:]
+            d[field] = field_value
+        encoded_output = ArrayEncodedOutput(**d)
+        results = get_relevant_context_for_chunk(self.context, encoded_output)
+        self.assertEqual(results, self.context[1:])
+
 
 class TestAuxiliary(unittest.TestCase):
     base_model = GPT
@@ -85,19 +120,14 @@ class TestAuxiliary(unittest.TestCase):
         ]
         self.train_context = [
             [
-                {'token': 'i', 'start': 0, 'end': 1, 'bold': True},
-                {'token': 'like', 'start': 2, 'end': 6, 'bold': False},
-                {'token': 'apples', 'start': 7, 'end': 13, 'bold': False},
+                {'token': 'i', 'start': 0, 'end': 1, 'bold': True, 'italic': False},
+                {'token': 'like', 'start': 2, 'end': 6, 'bold': False, 'italic': False},
+                {'token': 'apples', 'start': 7, 'end': 13, 'bold': False, 'italic': False},
             ],
             [
-                {'token': 'i', 'start': 0, 'end': 1, 'bold': False},
-                {'token': 'like', 'start': 2, 'end': 6, 'bold': True},
-                {'token': 'apples', 'start': 7, 'end': 13, 'bold': False},
-            ],
-            [
-                {'token': 'i', 'start': 0, 'end': 1,  'bold': False},
-                {'token': 'like', 'start': 2, 'end': 6,  'bold': False},
-                {'token': 'apples', 'start': 7, 'end': 13,  'bold': True},
+                {'token': 'i', 'start': 0, 'end': 1,  'bold': False, 'italic': False},
+                {'token': 'like', 'start': 2, 'end': 6,  'bold': False, 'italic': False},
+                {'token': 'apples', 'start': 7, 'end': 13,  'bold': True, 'italic': False},
             ]
         ]
 
@@ -123,8 +153,9 @@ class TestAuxiliary(unittest.TestCase):
             "base_model": self.base_model,
             "val_size": 0,
             "use_auxiliary_info": True,
-            "context_dim": 1,
-            "default_context": {'bold': False}
+            "context_dim": 2,
+            "val_set": (self.trainX, self.trainY, self.train_context),
+            "default_context": {'bold': False, 'italic': False}
         }
         defaults.update(kwargs)
         return dict(get_config(**defaults))
@@ -141,6 +172,30 @@ class TestAuxiliary(unittest.TestCase):
         _ = model.predict(self.trainX, context=self.train_context)
         # test cached predict
         _ = model.predict(self.trainX, context=self.train_context)
+
+    def test_classifier_auxiliary_context_gaps(self):
+        """
+        Ensure model training does not error out
+        Ensure model returns predictions
+        """
+        trainX = ['i like\n apples'] * 2
+        train_context = [
+            [
+                {'token': 'i', 'start': 0, 'end': 1, 'bold': True, 'italic': True},
+                {'token': 'like', 'start': 2, 'end': 6, 'bold': False, 'italic': True},
+                {'token': 'apples', 'start': 9, 'end': 15, 'bold': False, 'italic': True},
+            ],
+            [
+                {'token': 'i', 'start': 0, 'end': 1,  'bold': False, 'italic': True},
+                {'token': 'like', 'start': 2, 'end': 6,  'bold': False, 'italic': True},
+                {'token': 'apples', 'start': 9, 'end': 15,  'bold': True, 'italic': True},
+            ]
+        ]
+        model = Classifier(
+            **self.default_config()
+        )
+        model.fit(trainX, self.trainY, context=train_context)
+        _ = model.predict(trainX, context=train_context)
 
     def test_classifier_no_auxiliary(self):
         """
@@ -191,6 +246,7 @@ class TestAuxiliary(unittest.TestCase):
         preds = model.predict(self.trainX, context=self.train_context)
         self._evaluate_sequence_preds(preds, includes_context=True)
 
+
     def test_comparison_auxiliary(self):
         """
         Ensure model training does not error out
@@ -229,10 +285,10 @@ class TestAuxiliary(unittest.TestCase):
         answers = [['happy', 'sad', 'neutral', 'not satisfied'], ['happy', 'sad', 'neutral', 'not satisfied']]
         correct_answers = ['happy', 'sad']
         answer_context = [
-            [{'start': 0, 'end': 5, 'token': 'happy', 'bold': False}],
-            [{'start': 0, 'end': 3, 'token': 'sad', 'bold': False}],
-            [{'start': 0, 'end': 7, 'token': 'neutral', 'bold': False}],
-            [{'start': 0, 'end': 3, 'token': 'not', 'bold': False}, {'start': 4, 'end': 13, 'token': 'satisfied', 'bold': False}],
+            [{'start': 0, 'end': 5, 'token': 'happy', 'bold': False, 'italic': False}],
+            [{'start': 0, 'end': 3, 'token': 'sad', 'bold': False, 'italic': False}],
+            [{'start': 0, 'end': 7, 'token': 'neutral', 'bold': False, 'italic': False}],
+            [{'start': 0, 'end': 3, 'token': 'not', 'bold': False, 'italic': False}, {'start': 4, 'end': 13, 'token': 'satisfied', 'bold': False, 'italic': False}],
         ]
         # context looks like [[{}, {}, {}], [{}], [{}], [{}], [{}, {}]] where the first list is for the question
         # and the subsequent ones are for each answer
