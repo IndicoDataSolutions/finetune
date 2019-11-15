@@ -16,6 +16,6 @@ def embed_context(context, featurizer_state, config, train):
             shape=[config.n_context_embed],	
             initializer=tf.zeros_initializer(),	
         )
-        c_embed = tf.add(tf.multiply(context, context_weight), context_bias)
+        c_embed = tf.add(tf.tensordot(context, context_weight, axes=[[2], [0]]), context_bias)
     featurizer_state['context'] = c_embed
     return featurizer_state
