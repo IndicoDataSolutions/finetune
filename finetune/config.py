@@ -243,6 +243,7 @@ def get_default_config():
         shuffle_buffer_size=100,
         dataset_size=None,
         batch_size=2,
+        predict_batch_size=20,
         visible_gpus=None,  # defaults to all available
         n_epochs=GridSearchable(3, [1, 2, 3, 4]),
         seed=42,
@@ -252,7 +253,9 @@ def get_default_config():
         val_set=None,
         per_process_gpu_memory_fraction=None,
         adapter_size=None,  # from Parameter Efficient Transfer Learning paper
-        
+        distribution_strategy="central_storage",
+        xla=False,
+
         # Regularization
         embed_p_drop=0.1,
         attn_p_drop=0.1,
@@ -269,6 +272,7 @@ def get_default_config():
         eval_acc=False,
         val_size=0.,
         val_interval=None,
+        in_memory_finetune=None,
 
         # Debugging
         log_device_placement=False,
@@ -276,6 +280,7 @@ def get_default_config():
         tensorboard_folder=None,
         summarize_grads=False,
         debugging_logs=False,
+        cache_weights_to_file=False,
 
         # Partial Fitting
         num_layers_trained=12,
@@ -325,6 +330,21 @@ def get_default_config():
         viable_edges=None,
         association_types=None,
         assocation_loss_weight=100.0,
+
+        # LMPred and S2S specicif params
+        beam_search_alpha=0.6,
+        beam_size=10,
+        decoder_sample_from=40,
+        sample_temp=1.0,
+        target_model_init_from_base_model=False,
+        seq_decode_len=512,
+
+        # Oscar only
+        oscar_use_fp16=False,
+        scale_loss=False,
+        oscar_use_timing=True,
+        oscar_feat_mode="final_state",
+        oscar_use_fused_kernel=True,
 
         # Location of model weights
         base_model=GPTModel,

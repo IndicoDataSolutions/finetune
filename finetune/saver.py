@@ -6,14 +6,12 @@ import sys
 import joblib
 import numpy as np
 import tensorflow as tf
-from tensorflow.contrib.estimator.python.estimator.early_stopping import _StopOnPredicateHook
 from tensorflow.estimator import SessionRunHook
-
+from tensorflow.contrib.estimator.python.estimator.early_stopping import _StopOnPredicateHook
 
 from finetune.errors import FinetuneError
 from finetune.config import get_config
 from finetune.util.metrics import read_eval_metrics
-
 
 LOGGER = logging.getLogger("finetune")
 
@@ -27,6 +25,7 @@ class SaverHook(_StopOnPredicateHook):
         early_stopping_steps,
         steps_per_epoch,
         eval_frequency,
+        cache_weights_to_file=False
     ):
         super().__init__(
             self.stop_if_no_metric_improvement_fn,
@@ -40,6 +39,7 @@ class SaverHook(_StopOnPredicateHook):
         self.early_stopping_steps = early_stopping_steps or sys.maxsize
         self.steps_per_epoch = steps_per_epoch
         self.estimator = estimator
+        self.cache_weights_to_file = cache_weights_to_file
 
     def stop_if_no_metric_improvement_fn(self):
         if not self.keep_best_model:
@@ -70,27 +70,27 @@ class SaverHook(_StopOnPredicateHook):
         super().begin()
         self.included = tf.global_variables()
 
-    def after_run(self, run_context, run_values):
-        super().after_run(run_context, run_values)
-        if self.get_current_weights:
+    def _get_weights(self, session):
+        if not self.keep_best_model or self.saver.variables is None or self.get_current_weights:
             self.saver.variables = dict(
                 zip(
                     (var.name for var in self.included),
-                    run_context.session.run(self.included),
+                    session.run(self.included),
                 )
             )
+            if self.cache_weights_to_file:
+                joblib.dump(self.saver.variables, os.path.join(self.estimator.eval_dir(), "..", "weights.jl"))
             self.get_current_weights = False
+
+    def after_run(self, run_context, run_values):
+        super().after_run(run_context, run_values)
+        if self.get_current_weights:
+            self._get_weights(session=run_context.session)
 
     def end(self, session):
         self.stop_if_no_metric_improvement_fn()
-        if (
-            not self.keep_best_model
-            or self.saver.variables is None
-            or self.get_current_weights
-        ):
-            self.saver.variables = dict(
-                zip((var.name for var in self.included), session.run(self.included))
-            )
+        if not self.keep_best_model or self.saver.variables is None or self.get_current_weights:
+            self._get_weights(session=session)
 
 
 class InitializeHook(SessionRunHook):
@@ -160,6 +160,7 @@ class Saver:
         exclude_matches=None,
         variable_transforms=None,
         save_dtype=None,
+        target_model_init_from_base_model=False
     ):
         self.variable_transforms = variable_transforms or []
         self.exclude_matches = exclude_matches
@@ -167,6 +168,7 @@ class Saver:
         self.save_dtype = save_dtype
         if fallback_filename is not None:
             self.set_fallback(fallback_filename)
+        self.target_model_init_from_base_model = target_model_init_from_base_model
 
     def set_fallback(self, fallback_filename):
         self.tpe = ThreadPoolExecutor()
@@ -182,6 +184,12 @@ class Saver:
             self.fallback_ = self.fallback_future.result()
             self.fallback_future = None
             self.tpe.shutdown()
+            if self.target_model_init_from_base_model:
+                if self.variables is None:
+                    self.variables = dict()
+                for k, v in self.fallback_.items():
+                    self.variables['model/target/' + k] = v
+                
         return self.fallback_
 
     def get_saver_hook(
@@ -191,6 +199,7 @@ class Saver:
         steps_per_epoch,
         early_stopping_steps,
         eval_frequency,
+        cache_weights_to_file
     ):
         return SaverHook(
             self,
@@ -199,6 +208,7 @@ class Saver:
             steps_per_epoch=steps_per_epoch,
             early_stopping_steps=early_stopping_steps,
             eval_frequency=eval_frequency,
+            cache_weights_to_file=cache_weights_to_file
         )
 
     def save(self, finetune_obj, path, mkdir=True):
@@ -235,14 +245,17 @@ class Saver:
         return finetune_obj
 
     def get_scaffold_init_fn(self):
+
         def init_fn(scaffold, session, model_portion=None, refresh_base_model=False):
             var_loader = BatchedVarLoad()
             self.var_val = []
+
             if self.variables is not None:
                 variables_sv = self.variables
             else:
                 variables_sv = dict()
             all_vars = tf.global_variables()
+
             zero_out_adapters = False
             if (
                 model_portion != "entire_model"
@@ -251,13 +264,21 @@ class Saver:
                     model_portion, refresh_base_model, all_vars
                 )
 
+            global_step_var = tf.train.get_global_step()
+
             for var in all_vars:
+                if global_step_var is not None and global_step_var.name == var.name:
+                    continue
                 name = var.name
                 saved_var = None
                 if name in variables_sv.keys():
                     saved_var = variables_sv[name]
                 elif name in self.fallback.keys():
                     saved_var = self.fallback[name]
+                elif (self.target_model_init_from_base_model and
+                      name.startswith("model/target/") and
+                      name.replace("model/target/", "") in self.fallback.keys()):
+                    saved_var = self.fallback[name.replace("model/target/", "")]
 
                 if zero_out_adapters and "adapter" in name:
                     var_loader.add(var, np.zeros(var.get_shape().as_list()))

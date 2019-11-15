@@ -100,7 +100,7 @@ def _fn_with_custom_grad(fn, inputs, grad_fn, use_global_vars=False, use_entire_
     return id_out
 
 
-def recompute_grad(fn, use_entire_scope):
+def recompute_grad(fn, use_entire_scope=False):
     """Decorator that recomputes the function on the backwards pass.
     Args:
       fn: a function that takes Tensors (all as positional arguments) and returns
@@ -157,7 +157,9 @@ def _recompute_grad(fn, args, use_entire_scope):
         if not isinstance(outputs, (list, tuple)):
             outputs = [outputs]
         outputs = list(outputs)
-        grads = tf.gradients(outputs, inputs + variables, output_grads)
+        input_vars = inputs + variables
+        grads = tf.gradients(outputs, input_vars, output_grads)
+
         grad_inputs = grads[:len(inputs)]
         grad_vars = grads[len(inputs):]
         return grad_inputs, grad_vars

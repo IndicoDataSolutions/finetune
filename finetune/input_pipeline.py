@@ -119,12 +119,14 @@ class BasePipeline(metaclass=ABCMeta):
 
     def _post_data_initialization(self, Y=None):
         if Y is not None:
-            self.label_encoder = self._target_encoder()
-            if not callable(Y):
-                self.label_encoder.fit(Y)
-            else:
-                Y_fit = list(itertools.islice(Y(), 10000))
-                self.label_encoder.fit(Y_fit)
+            if self.label_encoder is None:
+                self.label_encoder = self._target_encoder()
+                if not callable(Y):
+                    self.label_encoder.fit(Y)
+                else:
+                    Y_fit = list(itertools.islice(Y(), 10000))
+                    self.label_encoder.fit(Y_fit)
+                    
             self.config.pad_idx = self.pad_idx
 
             target_dim = self.label_encoder.target_dim
@@ -362,7 +364,7 @@ class BasePipeline(metaclass=ABCMeta):
         )
 
     def get_predict_input_fn(self, Xs, batch_size=None):
-        batch_size = batch_size or self.config.batch_size
+        batch_size = batch_size or self.config.predict_batch_size
         tf_dataset = lambda: self._dataset_without_targets(Xs, train=None).batch(batch_size)
         return tf_dataset
 
