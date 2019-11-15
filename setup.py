@@ -20,8 +20,9 @@ REQUIREMENTS = [
     "imblearn>=0.0",
     "nltk>=3.2.4",
     "regex>=2019.03.12",
-    "lxml>=4.3.3"
-    "sentencepiece>=0.1.83"
+    "lxml>=4.4.1",
+    "sentencepiece>=0.1.83",
+    "cython>=0.29.14"
 ]
 
 setup(

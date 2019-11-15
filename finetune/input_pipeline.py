@@ -110,6 +110,7 @@ class BasePipeline(metaclass=ABCMeta):
             tokens=encoded_output.tokens,
             labels=labels_arr,
             char_locs=encoded_output.char_locs,
+            char_starts=encoded_output.char_starts,
             mask=mask,
         )
         return output

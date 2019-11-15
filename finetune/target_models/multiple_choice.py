@@ -60,6 +60,7 @@ class MultipleChoicePipeline(BasePipeline):
                         tokens=out.token_ids[answer_idx],
                         labels=None,
                         char_locs=out.char_locs,
+                        char_starts=out.char_starts,
                         mask=out.mask[answer_idx],
                     )
                     context_instance = context[0] + context[answer_idx + 1]
