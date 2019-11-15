@@ -1,3 +1,5 @@
+import os
+
 import tensorflow as tf
 from finetune.util.shapes import lengths_from_eos_idx
 from finetune.base_models.bert.roberta_encoder import RoBERTaEncoder
@@ -27,7 +29,7 @@ def bert_featurizer(
     """
 
     is_roberta = issubclass(config.base_model.encoder, RoBERTaEncoder)
-    is_roberta_v1 = (not config.base_model_path.endswith('-v2.jl'))
+    is_roberta_v1 = (config.base_model_path == os.path.join("bert", "roberta-model-sm-v2.jl"))
 
     bert_config = BertConfig(
         vocab_size=encoder.vocab_size,

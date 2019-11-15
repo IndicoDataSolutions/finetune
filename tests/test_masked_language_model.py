@@ -4,12 +4,13 @@ import warnings
 from pathlib import Path
 
 import pandas as pd
+import numpy as np
 
 # prevent excessive warning logs
 warnings.filterwarnings('ignore')
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
-from finetune import MaskedLanguageModel
+from finetune import MaskedLanguageModel, Classifier
 from finetune.errors import FinetuneError
 from finetune.base_models import GPT2, BERT, RoBERTa
 
@@ -47,7 +48,6 @@ class TestMaskedLanguageModel(unittest.TestCase):
             warnings.warn(
                 "tests/saved-models still exists, it is possible that some test is not cleaning up properly."
             )
-            pass
 
     def test_fit_predict_bert(self):
         """
@@ -62,21 +62,25 @@ class TestMaskedLanguageModel(unittest.TestCase):
         with self.assertRaises(Exception):
             predictions = model.predict(valid_sample.Text)
 
-    def test_fit_predict_roberta(self):
+    def test_create_new_base_model_roberta(self):
         """
         Ensure we can fit / save / re-load RoBERTa models trained with MLM objective
         """
         model = MaskedLanguageModel(base_model=RoBERTa)
-        save_file = "tests/saved-models/test-mlm"
+        save_file = "bert/test-mlm.jl"
         sample = self.dataset.sample(n=self.n_sample)
         model.fit(sample.Text)
 
         with self.assertRaises(Exception):
             predictions = model.predict(sample.Text)
 
-        model.save(save_file)
-        model = MaskedLanguageModel.load(save_file)
-        model.fit(sample.Text)
+        model.create_base_model(save_file)
+        model = Classifier(base_model=RoBERTa, base_model_path=save_file)
+        model.fit(sample.Text.values, sample.Target.values)
+
+        predictions = model.predict(sample.Text.values)
+        for prediction in predictions:
+            self.assertIsInstance(prediction, (np.int, np.int64))
 
     def test_exception_gpt2(self):
         """
