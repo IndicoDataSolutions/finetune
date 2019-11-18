@@ -107,6 +107,7 @@ class TestAuxiliary(unittest.TestCase):
 
     def default_config(self, **kwargs):
         defaults = {
+            'lr': 1e-4,
             "batch_size": 2,
             "max_length": 32,
             "n_epochs": 1,  # we mostly are making sure nothing errors out
@@ -160,7 +161,6 @@ class TestAuxiliary(unittest.TestCase):
             self.assertLessEqual(token_precision, 1.0)
             self.assertLessEqual(token_recall, 1.0)
 
-
     def test_sequence_labeler_no_auxiliary(self):
         """
         Ensure model training does not error out
@@ -170,7 +170,6 @@ class TestAuxiliary(unittest.TestCase):
         model.fit(self.trainX, self.trainY_seq)
         preds = model.predict(self.trainX)
         self._evaluate_sequence_preds(preds, includes_context=False)
-        
 
     def test_sequence_labeler_auxiliary(self):
         """
@@ -194,7 +193,6 @@ class TestAuxiliary(unittest.TestCase):
         train_context = [
             [self.train_context[i], self.train_context[j]] for i in [0, 1] for j in [0, 1]
         ]
-        print(train_context)
         model.fit(trainX, trainY, context=train_context)
         preds = model.predict(trainX, context=train_context)
 
@@ -209,7 +207,6 @@ class TestAuxiliary(unittest.TestCase):
         train_context = [
             [self.train_context[i], self.train_context[j]] for i in [0, 1] for j in [0, 1]
         ]
-        print(train_context)
         model.fit(trainX, trainY, context=train_context)
         preds = model.predict(trainX, context=train_context)
 
@@ -231,7 +228,6 @@ class TestAuxiliary(unittest.TestCase):
         # context looks like [[{}, {}, {}], [{}], [{}], [{}], [{}, {}]] where the first list is for the question
         # and the subsequent ones are for each answer
         train_context = [[self.train_context[0]] + answer_context] + [[self.train_context[1]] + answer_context]
-        print(train_context)
         model.fit(questions, answers, correct_answers, context=train_context)
         preds = model.predict(questions, answers, context=train_context)
 
