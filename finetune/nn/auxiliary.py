@@ -8,8 +8,8 @@ def embed_context(context, featurizer_state, config, train):
         context_dim = shape_list(context)[-1]
         context_weight = tf.get_variable(
             name="ce",	
-            shape=[context_dim, config.n_context_embed],	
-            initializer=tf.random_normal_initializer(stddev=config.weight_stddev),	
+            shape=[context_dim, config.n_context_embed],
+            initializer=tf.random_normal_initializer(stddev=config.context_embed_stddev),	
         )
         context_bias = tf.get_variable(
             name="ca",	
