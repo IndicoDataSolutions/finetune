@@ -1,4 +1,5 @@
 import os
+import glob
 import unittest
 import warnings
 from pathlib import Path
@@ -88,6 +89,10 @@ class TestMaskedLanguageModel(unittest.TestCase):
         """
         with self.assertRaises(FinetuneError):
             model = MaskedLanguageModel(base_model=GPT2)
+
+    def tearDown(self):
+        for f in glob.glob('bert/test/test-mlm.*'):
+            os.remove(f)
 
 if __name__ == '__main__':
     unittest.main()
