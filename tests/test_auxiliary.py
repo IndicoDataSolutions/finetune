@@ -61,7 +61,6 @@ class TestAuxiliaryTokenization(unittest.TestCase):
             [True, 30],
             [False, 0]
         ]
-        print(expanded_context)
         np.testing.assert_array_equal(expected, expanded_context)
 
 class TestAuxiliary(unittest.TestCase):
@@ -109,14 +108,13 @@ class TestAuxiliary(unittest.TestCase):
     def default_config(self, **kwargs):
         defaults = {
             "batch_size": 2,
-            "max_length": 256,
+            "max_length": 32,
             "n_epochs": 1,  # we mostly are making sure nothing errors out
             "base_model": self.base_model,
             "val_size": 0,
             "use_auxiliary_info": True,
             "context_dim": 1,
-            "val_set": (self.trainX, self.trainY, self.train_context),
-            "default_context": {'bold': False}
+            "default_context": {'bold': False, 'unrelated': True}
         }
         defaults.update(kwargs)
         return dict(get_config(**defaults))
@@ -155,8 +153,6 @@ class TestAuxiliary(unittest.TestCase):
         self.assertIn("IMPORTANT", token_recall)
         token_precision = np.mean(list(token_precision.values()))
         token_recall = np.mean(list(token_recall.values()))
-        print(token_precision)
-        print(token_recall)
         if includes_context:
             self.assertEqual(token_precision, 1.0)
             self.assertEqual(token_recall, 1.0)
@@ -173,7 +169,7 @@ class TestAuxiliary(unittest.TestCase):
         model = SequenceLabeler(**self.default_config(use_auxiliary_info=False, val_set=(self.trainX, self.trainY)))
         model.fit(self.trainX, self.trainY_seq)
         preds = model.predict(self.trainX)
-        self._evaluate_sequence_preds(preds, False)
+        self._evaluate_sequence_preds(preds, includes_context=False)
         
 
     def test_sequence_labeler_auxiliary(self):
@@ -185,7 +181,7 @@ class TestAuxiliary(unittest.TestCase):
         model = SequenceLabeler(**self.default_config(n_epochs=1500))
         model.fit(self.trainX, self.trainY_seq, context=self.train_context)
         preds = model.predict(self.trainX, context=self.train_context)
-        self._evaluate_sequence_preds(preds, True)
+        self._evaluate_sequence_preds(preds, includes_context=True)
 
     def test_comparison_auxiliary(self):
         """
