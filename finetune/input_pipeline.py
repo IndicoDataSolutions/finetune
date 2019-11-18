@@ -389,7 +389,8 @@ class BasePipeline(metaclass=ABCMeta):
 
         if self.config.chunk_long_sequences or self.config.class_weights:
             # Certain settings require that the entire dataset be encoded before compiling the graph
-            train_dataset_unbatched()
+            with tf.Graph().as_default():
+                train_dataset_unbatched()
 
         val_dataset = (
             lambda: val_dataset_unbatched()
