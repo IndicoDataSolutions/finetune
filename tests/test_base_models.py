@@ -319,7 +319,7 @@ class TestSequenceLabelerTextCNN(TestModelBase):
     @classmethod
     def _download_reuters(cls):
         """
-        Download Stanford Sentiment Treebank to enso `data` directory
+        Download Reuters to test directory
         """
         path = Path(cls.dataset_path)
         if not path.exists():
