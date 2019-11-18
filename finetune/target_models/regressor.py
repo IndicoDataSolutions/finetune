@@ -73,7 +73,6 @@ class Regressor(BaseModel):
         """
         return super().finetune(X, Y=Y, batch_size=batch_size, context=context)
 
-    @classmethod
     def _target_model(self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
         self._add_context_embed(featurizer_state)
         return regressor(
