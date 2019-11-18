@@ -11,7 +11,7 @@ REQUIRED_FILES = [
         "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "oscar", filename),
         "url": urljoin(OSCAR_BASE_URL, filename),
     }
-    for filename in ["encoder.model", "encoder.vocab", "fresh_start.jl"]
+    for filename in ["encoder.model", "encoder.vocab", "fresh_start.jl", "oscar23.jl"]
 ]
 
 BASE_OSCAR_SETTINGS = {
