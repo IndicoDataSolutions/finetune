@@ -69,18 +69,18 @@ class TestAuxiliaryTokenization(unittest.TestCase):
         np.testing.assert_array_equal(expanded_context, expected)
 
     def test_tokenize_context_newline(self):
-        text = "everything's\nonly $80\n"
+        text = "everything's\nonly $80\n"  # NOTE: GPT tokenizer strips ending newline
         config = get_config(**{'default_context': {'left': 0, 'bold': False}, 'max_length': 9})
         # any target model pipeline will do
         pipeline = ClassificationPipeline(config)
         encoded_output = list(pipeline._text_to_ids(text, pad_token=config.pad_token))[0]
-        # char_locs = encoded_output.char_locs
+        print(encoded_output.tokens)
         expanded_context = tokenize_context(self.context, encoded_output, config)
         expected = [
             [False, 0],
             [False, 10],
             [False, 10],
-            [False, 0],
+            [False, 10],
             [False, 20],
             [True, 30],
             [True, 30],
