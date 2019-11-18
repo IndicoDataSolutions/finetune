@@ -5,13 +5,12 @@ import regex as re
 import numpy as np
 
 import finetune
-from finetune.encoding.input_encoder import EncodedOutput
+from finetune.encoding.input_encoder import EncodedOutput, BaseEncoder
 from finetune.base_models.gpt2.encoder import GPT2Encoder, bytes_to_unicode
 from finetune.base_models.gpt2 import encoder as gpt2_encoder
 
 
 FINETUNE_FOLDER = os.path.dirname(finetune.__file__)
-DICT_PATH = os.path.join(FINETUNE_FOLDER, "model", "bert", "dict.txt")
 ENCODER_PATH = os.path.join(FINETUNE_FOLDER, "model", "bert", "roberta_encoder.json")
 VOCAB_PATH = os.path.join(FINETUNE_FOLDER, "model", "bert", "roberta_vocab.bpe")
 
@@ -21,12 +20,14 @@ class RoBERTaEncoder(GPT2Encoder):
     A modified wrapper for a public python BPE tokenizer. The modifications allow encoding directly into the formats
     required for finetune. Particularly with respect to formatting with multiple inputs.
     """
+    offset = 4
+    dict_path = os.path.join(FINETUNE_FOLDER, "model", "bert", "dict.txt")
 
     def __init__(self, encoder_path=gpt2_encoder.ENCODER_PATH, vocab_path=gpt2_encoder.VOCAB_PATH):
-        super().__init__(encoder_path=encoder_path, vocab_path=vocab_path)
+        BaseEncoder.__init__(self, encoder_path=encoder_path, vocab_path=vocab_path)
         self.freqs = {}
         index = 0
-        with open(DICT_PATH, "r", encoding="utf-8") as freq_dict:
+        with open(self.dict_path, "r", encoding="utf-8") as freq_dict:
             lines = freq_dict.readlines()
             for line in lines:
                 idx = line.rfind(" ")
@@ -38,8 +39,8 @@ class RoBERTaEncoder(GPT2Encoder):
                     index += 1
                     continue
                 token_idx = int(line[:idx])
-                self.freqs[str(token_idx + 4)] = (
-                    index + 4
+                self.freqs[str(token_idx + self.offset)] = (
+                    index + self.offset
                 )  # add 4 for the special tokens at beginning
                 index += 1
 
@@ -51,7 +52,8 @@ class RoBERTaEncoder(GPT2Encoder):
         with open(self.encoder_path, "r") as f:
             self.encoder = json.load(f)
             # shift all indices forward four places to make place for embeddings for start, pad, delim, clf
-            self.encoder.update((token, idx + 4) for token, idx in self.encoder.items())
+            if self.offset != 0:
+                self.encoder.update((token, idx + self.offset) for token, idx in self.encoder.items())
 
         # Load BPE
         with open(self.vocab_path, "r", encoding="utf-8") as f:
@@ -179,6 +181,8 @@ class RoBERTaEncoderV2(RoBERTaEncoder):
 
     Now with support for MLM objective
     """
+    offset = 4
+    dict_path = os.path.join(FINETUNE_FOLDER, "model", "bert", "roberta_dict.txt")
 
     def __init__(self, encoder_path=ENCODER_PATH, vocab_path=VOCAB_PATH):
         super().__init__(encoder_path=encoder_path, vocab_path=vocab_path)
