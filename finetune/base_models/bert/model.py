@@ -154,11 +154,15 @@ class RoBERTa(SourceModel):
         },
         {
             "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "roberta_vocab.bpe"),
-            "url": urljoin(GPT2_BASE_URL, "roberta_vocab.bpe"),
+            "url": urljoin(ROBERTA_BASE_URL, "roberta_vocab.bpe"),
         },
         {
             "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "roberta_encoder.json"),
-            "url": urljoin(GPT2_BASE_URL, "roberta_encoder.json"),
+            "url": urljoin(ROBERTA_BASE_URL, "roberta_encoder.json"),
+        },
+        {
+            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "roberta_dict.txt"),
+            "url": urljoin(ROBERTA_BASE_URL, "roberta_dict.txt"),
         },
     ]
 
@@ -204,11 +208,15 @@ class RoBERTaLarge(RoBERTa):
         },
         {
             "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "roberta_vocab.bpe"),
-            "url": urljoin(GPT2_BASE_URL, "roberta_vocab.bpe"),
+            "url": urljoin(ROBERTA_BASE_URL, "roberta_vocab.bpe"),
         },
         {
             "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "roberta_encoder.json"),
-            "url": urljoin(GPT2_BASE_URL, "roberta_encoder.json"),
+            "url": urljoin(ROBERTA_BASE_URL, "roberta_encoder.json"),
+        },
+        {
+            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "roberta_dict.txt"),
+            "url": urljoin(ROBERTA_BASE_URL, "roberta_dict.txt"),
         },
     ]
 
