@@ -69,12 +69,15 @@ class TestAuxiliary(unittest.TestCase):
 
     @classmethod
     def setUpClass(self):
-        self.trainX = ['i like apples'] * 2
-        self.trainY = ['A', 'B']
+        self.trainX = ['i like apples'] * 3
+        self.trainY = ['A', 'B', 'C']
         # labels could only be inferred given context
         self.trainY_seq = [
             [
                 {'start': 0, 'end': 1, 'label': 'IMPORTANT', 'text': 'i'},
+            ],
+            [
+                {'start': 2, 'end': 6, 'label': 'IMPORTANT', 'text': 'like'},
             ],
             [
                 {'start': 7, 'end': 13, 'label': 'IMPORTANT', 'text': 'apples'},
@@ -84,6 +87,11 @@ class TestAuxiliary(unittest.TestCase):
             [
                 {'token': 'i', 'start': 0, 'end': 1, 'bold': True},
                 {'token': 'like', 'start': 2, 'end': 6, 'bold': False},
+                {'token': 'apples', 'start': 7, 'end': 13, 'bold': False},
+            ],
+            [
+                {'token': 'i', 'start': 0, 'end': 1, 'bold': False},
+                {'token': 'like', 'start': 2, 'end': 6, 'bold': True},
                 {'token': 'apples', 'start': 7, 'end': 13, 'bold': False},
             ],
             [
@@ -107,15 +115,16 @@ class TestAuxiliary(unittest.TestCase):
 
     def default_config(self, **kwargs):
         defaults = {
-            'lr': 1e-4,
-            "batch_size": 2,
+            "lr": 1e-4,
+            "n_context_embed": 768,
+            "batch_size": 3,
             "max_length": 32,
             "n_epochs": 1,  # we mostly are making sure nothing errors out
             "base_model": self.base_model,
             "val_size": 0,
             "use_auxiliary_info": True,
             "context_dim": 1,
-            "default_context": {'bold': False, 'unrelated': True}
+            "default_context": {'bold': False}
         }
         defaults.update(kwargs)
         return dict(get_config(**defaults))
@@ -248,7 +257,8 @@ class TestAuxiliary(unittest.TestCase):
         new_predictions = model.predict(self.trainX, context=self.train_context)
         for i, prediction in enumerate(predictions):
             self.assertEqual(prediction, new_predictions[i])
-    
+
+
 class TestAuxiliaryBert(TestAuxiliary):
     base_model = BERTModelCased
 
