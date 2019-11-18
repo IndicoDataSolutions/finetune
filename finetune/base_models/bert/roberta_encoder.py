@@ -44,6 +44,11 @@ class RoBERTaEncoder(GPT2Encoder):
                 )  # add 4 for the special tokens at beginning
                 index += 1
 
+
+    def _convert_to_embed_idx(self, idx):
+        return self.freqs[str(idx)]
+    
+
     def _lazy_init(self, errors="replace"):
         if self.initialized:
             return
@@ -158,7 +163,8 @@ class RoBERTaEncoder(GPT2Encoder):
 
             batch_tokens.append(subtokens)
             for k in range(len(subtoken_idxs)):
-                subtoken_idxs[k] = self.freqs[str(subtoken_idxs[k])]
+                subtoken_idxs[k] = self._convert_to_embed_idx(subtoken_idxs[k])
+
             batch_token_idxs.append(subtoken_idxs)
             batch_char_ends.append(char_ends)
             batch_char_starts.append(char_starts)
@@ -183,6 +189,9 @@ class RoBERTaEncoderV2(RoBERTaEncoder):
     """
     offset = 4
     dict_path = os.path.join(FINETUNE_FOLDER, "model", "bert", "roberta_dict.txt")
+
+    def _convert_to_embed_idx(self, idx):
+        return idx
 
     def __init__(self, encoder_path=ENCODER_PATH, vocab_path=VOCAB_PATH):
         super().__init__(encoder_path=encoder_path, vocab_path=vocab_path)
