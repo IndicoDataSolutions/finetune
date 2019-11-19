@@ -11,6 +11,7 @@ from finetune.base_models.gpt2 import encoder as gpt2_encoder
 
 
 FINETUNE_FOLDER = os.path.dirname(finetune.__file__)
+DICT_PATH = os.path.join(FINETUNE_FOLDER, "model", "bert", "dict.txt")
 ENCODER_PATH = os.path.join(FINETUNE_FOLDER, "model", "bert", "roberta_encoder.json")
 VOCAB_PATH = os.path.join(FINETUNE_FOLDER, "model", "bert", "roberta_vocab.bpe")
 
@@ -21,13 +22,12 @@ class RoBERTaEncoder(GPT2Encoder):
     required for finetune. Particularly with respect to formatting with multiple inputs.
     """
     offset = 4
-    dict_path = os.path.join(FINETUNE_FOLDER, "model", "bert", "dict.txt")
 
     def __init__(self, encoder_path=gpt2_encoder.ENCODER_PATH, vocab_path=gpt2_encoder.VOCAB_PATH):
         BaseEncoder.__init__(self, encoder_path=encoder_path, vocab_path=vocab_path)
         self.freqs = {}
         index = 0
-        with open(self.dict_path, "r", encoding="utf-8") as freq_dict:
+        with open(DICT_PATH, "r", encoding="utf-8") as freq_dict:
             lines = freq_dict.readlines()
             for line in lines:
                 idx = line.rfind(" ")
@@ -188,7 +188,6 @@ class RoBERTaEncoderV2(RoBERTaEncoder):
     Now with support for MLM objective
     """
     offset = 4
-    dict_path = os.path.join(FINETUNE_FOLDER, "model", "bert", "roberta_dict.txt")
 
     def _convert_to_embed_idx(self, idx):
         return idx
