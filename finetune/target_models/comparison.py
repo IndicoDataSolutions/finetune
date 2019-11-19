@@ -112,7 +112,6 @@ class Comparison(Classifier):
         **kwargs
     ):
         featurizer_state = featurizer_state.copy()
-        print('features before ', featurizer_state['features'])
         featurizer_state["sequence_features"] = tf.abs(
             tf.reduce_sum(featurizer_state["sequence_features"], 1)
         )
