@@ -127,6 +127,11 @@ class TestAuxiliary(unittest.TestCase):
             ],
             [
                 {'token': 'i', 'start': 0, 'end': 1,  'bold': False, 'italic': False},
+                {'token': 'like', 'start': 2, 'end': 6,  'bold': True, 'italic': False},
+                {'token': 'apples', 'start': 7, 'end': 13,  'bold': False, 'italic': False},
+            ],
+            [
+                {'token': 'i', 'start': 0, 'end': 1,  'bold': False, 'italic': False},
                 {'token': 'like', 'start': 2, 'end': 6,  'bold': False, 'italic': False},
                 {'token': 'apples', 'start': 7, 'end': 13,  'bold': True, 'italic': False},
             ]
@@ -146,7 +151,7 @@ class TestAuxiliary(unittest.TestCase):
 
     def default_config(self, **kwargs):
         defaults = {
-            "lr": 1e-4,
+            "lr": 1e-3,
             "n_context_embed": 768,
             "batch_size": 3,
             "max_length": 32,
@@ -179,12 +184,17 @@ class TestAuxiliary(unittest.TestCase):
         Ensure model training does not error out
         Ensure model returns predictions
         """
-        trainX = ['i like\n apples'] * 2
+        trainX = ['i like\n apples'] * 3
         train_context = [
             [
                 {'token': 'i', 'start': 0, 'end': 1, 'bold': True, 'italic': True},
                 {'token': 'like', 'start': 2, 'end': 6, 'bold': False, 'italic': True},
                 {'token': 'apples', 'start': 9, 'end': 15, 'bold': False, 'italic': True},
+            ],
+            [
+                {'token': 'i', 'start': 0, 'end': 1,  'bold': False, 'italic': True},
+                {'token': 'like', 'start': 2, 'end': 6,  'bold': True, 'italic': True},
+                {'token': 'apples', 'start': 9, 'end': 15,  'bold': False, 'italic': True},
             ],
             [
                 {'token': 'i', 'start': 0, 'end': 1,  'bold': False, 'italic': True},
