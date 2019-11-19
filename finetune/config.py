@@ -349,7 +349,7 @@ def get_default_config():
         scale_loss=False,
         oscar_use_timing=True,
         oscar_feat_mode="final_state",
-        oscar_use_fused_kernel=True,
+        oscar_use_fused_kernel=False,
 
         # Location of model weights
         base_model=GPTModel,
