@@ -6,7 +6,7 @@ from tensorflow.data import Dataset
 
 from finetune.encoding.input_encoder import EncodedOutput
 from finetune.model import PredictMode
-from finetune.base_models import GPT, GPT2, BERT
+from finetune.base_models import GPT, GPT2, BERT, RoBERTa
 from finetune import Classifier, MultiFieldClassifier
 
 DIRECTORY = os.path.abspath(os.path.dirname(__file__))
@@ -79,4 +79,15 @@ class TestActivationParity(unittest.TestCase):
             atol=1e-1
         )
 
-    
+    def test_roberta_featurize(self):
+        model = Classifier(base_model=RoBERTa)
+        np.testing.assert_allclose(
+            model.featurize_sequence(self.TEST_DATA)[:,:6,:], 
+            np.load(
+                os.path.join(
+                    DIRECTORY, 
+                    'data/test-roberta-activations.npy'
+                )
+            ),
+            atol=1e-1
+        )
