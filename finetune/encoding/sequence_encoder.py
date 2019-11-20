@@ -122,8 +122,8 @@ def finetune_to_indico_sequence(
 
                 if raw_annotation_start == -1:
                     warnings.warn(
-                        "Failed to find predicted sequence: {} in text: {}.".format(
-                            sub_str, raw_text
+                        "Failed to find predicted sequence: {} in text".format(
+                            sub_str
                         )
                     )
                     continue
