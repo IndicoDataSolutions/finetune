@@ -1,8 +1,11 @@
 import tensorflow as tf
+
+from indico_tf_ops import recursive_agg, dynamic_convolution
+
 from finetune.base_models.gpt.featurizer import dropout, embed, split_heads, merge_heads
 from finetune.util.shapes import shape_list, lengths_from_eos_idx
-from finetune.base_models.oscar.ra import recursive_agg, recursive_agg_tf
-from finetune.base_models.oscar.dynamic_conv import dynamic_conv
+#from finetune.base_models.oscar.ra import recursive_agg, recursive_agg_tf
+#from finetune.base_models.oscar.dynamic_conv import dynamic_conv
 from finetune.optimizers.recompute_grads import recompute_grad
 
 import functools
@@ -56,10 +59,7 @@ def batch_to_time(value, dilation):
 def cascaded_pool(value, kernel_size, dim=1, pool_len=None, use_fused_kernel=True, blowout_mul=2):
     shape = shape_list(value)
     full_pool_len = pool_len or shape[dim]
-    if use_fused_kernel:
-        ra = recursive_agg
-    else:
-        ra = recursive_agg_tf
+    ra = recursive_agg
 
     #value_semiflat = tf.reshape(value, [shape[0], shape[1] * blowout_mul, shape[2] // blowout_mul])
     #value_blown_up = tf.reshape(
@@ -179,7 +179,7 @@ def block(X, block_name, use_fp16, pool_idx=None, encoder_state=None, train=Fals
         ra = cumulative_state_net(
             h0, "cumulative_state_net", use_fp16, pdrop, train, nominal_pool_length=nominal_pool_length, use_fused_kernel=use_fused_kernel
         )
-        dc = dynamic_conv(h0, ra, n_heads=16, kernel_size=32)
+        dc = dynamic_convolution(h0, ra, n_heads=16, kernel_size=32)
         h1 = normal_1d_conv_block(dc, 1, "h1", use_fp16, output_dim=hidden * 4)
         h1_relu =  tf.nn.relu(h1)
         h2 = normal_1d_conv_block(h1_relu, 1, "h2", use_fp16, output_dim=hidden)
