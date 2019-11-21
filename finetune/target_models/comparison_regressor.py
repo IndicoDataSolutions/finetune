@@ -15,11 +15,11 @@ class ComparisonRegressionPipeline(ComparisonPipeline):
     def feed_shape_type_def(self):
         TS = tf.TensorShape
         types = {"tokens": tf.int32, "mask": tf.int32}
-        shapes = {"tokens": TS([2, self.config.max_length, 2]), "mask": TS([2, self.config.max_length])}
+        shapes = {"tokens": TS([2, None, 2]), "mask": TS([2, None])}
         if self.config.use_auxiliary_info:
             TS = tf.TensorShape
             types["context"] = tf.float32
-            shapes["context"] = TS([2, self.config.max_length, self.config.context_dim])
+            shapes["context"] = TS([2, None, self.config.context_dim])
         return (
             (types, tf.float32,),
             (shapes, TS([self.target_dim]),),

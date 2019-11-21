@@ -46,7 +46,7 @@ class BasePipeline(metaclass=ABCMeta):
         if self.config.use_auxiliary_info:
             TS = tf.TensorShape
             types["context"] = tf.float32
-            shapes["context"] = TS([self.config.max_length, self.config.context_dim])
+            shapes["context"] = TS([None, self.config.context_dim])
         return types, shapes
 
 
@@ -54,8 +54,8 @@ class BasePipeline(metaclass=ABCMeta):
         TS = tf.TensorShape
         types = {"tokens": tf.int32, "mask": tf.float32}
         shapes = {
-            "tokens": TS([self.config.max_length, 2]),
-            "mask": TS([self.config.max_length]),
+            "tokens": TS([None, 2]),
+            "mask": TS([None]),
         }
         types, shapes = self._add_context_info_if_present(types, shapes)
         return (
@@ -71,34 +71,33 @@ class BasePipeline(metaclass=ABCMeta):
             1: positional embedding
         """
         seq_length = len(encoded_output.token_ids)
-        x = np.zeros((self.config.max_length, 2), dtype=np.int32)
+        x = np.zeros((seq_length, 2), dtype=np.int32)
         if self.config.base_model.__name__ == "RoBERTa":
             x += 1
-        mask = np.zeros((self.config.max_length), dtype=np.float32)
+        mask = np.zeros((seq_length), dtype=np.float32)
 
         if encoded_output.labels is not None:
-            labels_arr = np.empty((self.config.max_length), dtype="object")
+            labels_arr = np.empty((seq_length), dtype="object")
             labels_arr.fill((pad_token or self.config.pad_token))
         else:
             labels_arr = None
 
         # BPE embedding
-        x[:seq_length, 0] = encoded_output.token_ids
+        x[:, 0] = encoded_output.token_ids
         # masking: value of 1 means "consider this in cross-entropy LM loss"
-        mask[1:seq_length] = 1
+        mask[1:] = 1
         if encoded_output.labels:
             labels_arr[:seq_length] = encoded_output.labels
 
         # positional_embeddings
         x[:, 1] = np.arange(
             self.text_encoder.vocab_size,
-            self.text_encoder.vocab_size + self.config.max_length,
+            self.text_encoder.vocab_size + seq_length
         )
 
         # roberta uses different positional embedding structure
         if self.config.base_model.__name__ == "RoBERTa":
-            mask = np.zeros((self.config.max_length), dtype=np.float32)
-            mask[0:seq_length] = 1
+            mask = np.ones((seq_length), dtype=np.float32)
             positions = np.cumsum(mask, dtype=np.int32)
             positions += 1  # add padding idx because RoBERTa's pos embeds depend on it
             positions += (
@@ -392,15 +391,17 @@ class BasePipeline(metaclass=ABCMeta):
             with tf.Graph().as_default():
                 train_dataset_unbatched()
 
+        _, shapes = self.feed_shape_type_def()
+
         val_dataset = (
             lambda: val_dataset_unbatched()
-            .batch(batch_size, drop_remainder=False)
+            .padded_batch(batch_size, padded_shapes=shapes, drop_remainder=False)
             .cache()
             .prefetch(prefetch_buffer)
         )
         train_dataset = (
             lambda: train_dataset_unbatched()
-            .batch(batch_size, drop_remainder=False)
+            .padded_batch(batch_size, padded_shapes=shapes, drop_remainder=False)
             .repeat(self.config.n_epochs)
             .prefetch(prefetch_buffer)
         )
@@ -414,7 +415,8 @@ class BasePipeline(metaclass=ABCMeta):
 
     def get_predict_input_fn(self, Xs, batch_size=None, context=None):
         batch_size = batch_size or self.config.predict_batch_size
-        tf_dataset = lambda: self._dataset_without_targets(Xs, train=None, context=context).batch(batch_size)
+        _, shapes = self.feed_shape_type_def()
+        tf_dataset = lambda: self._dataset_without_targets(Xs, train=None, context=context).padded_batch(batch_size, padded_shapes=shapes[0], drop_remainder=False)
         return tf_dataset
 
     @property
