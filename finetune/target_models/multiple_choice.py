@@ -10,6 +10,15 @@ from finetune.nn.target_blocks import multi_choice_question
 from finetune.util import list_transpose
 from finetune.encoding.input_encoder import tokenize_context
 
+def padded_stack(arrays):
+    lens = [arr.shape[0] for arr in arrays]
+    other_padding = [(0, 0) for _ in arrays[0].shape[1:]]
+    max_len = max(lens)
+    padded = [np.pad(a, ((0, max_len - l), *other_padding), "constant") for a, l in zip(arrays, lens)]
+    print([p.shape for p in arrays])
+    print([p.shape for p in padded])
+    return np.stack(padded, 0)
+
 
 class MultipleChoicePipeline(BasePipeline):
     def __init__(self, *args, **kwargs):
@@ -31,9 +40,10 @@ class MultipleChoicePipeline(BasePipeline):
             arrays.append(next(super()._text_to_ids(pair, Y=Y)))
 
         kwargs = arrays[0]._asdict()
+        max_len = max([len(arr.token_ids) for arr in arrays])
         kwargs["tokens"] = [arr.tokens for arr in arrays]
-        kwargs["token_ids"] = np.stack([arr.token_ids for arr in arrays], 0)
-        kwargs["mask"] = np.stack([arr.mask for arr in arrays], 0)
+        kwargs["token_ids"] = padded_stack([arr.token_ids for arr in arrays])
+        kwargs["mask"] = padded_stack([arr.mask for arr in arrays])
         yield ArrayEncodedOutput(**kwargs)
 
     def text_to_tokens_mask(self, pair, Y=None, context=None):
@@ -68,13 +78,13 @@ class MultipleChoicePipeline(BasePipeline):
         TS = tf.TensorShape
         types = {"tokens": tf.int32, "mask": tf.float32}
         shapes = {
-            "tokens": TS([self.target_dim, self.config.max_length, 2]),
-            "mask": TS([self.target_dim, self.config.max_length]),
+            "tokens": TS([self.target_dim, None, 2]),
+            "mask": TS([self.target_dim, None]),
         }
         if self.config.use_auxiliary_info:
             TS = tf.TensorShape
             types["context"] = tf.float32
-            shapes["context"] = TS([self.target_dim, self.config.max_length, self.config.context_dim])
+            shapes["context"] = TS([self.target_dim, None, self.config.context_dim])
         return (
             (types, tf.float32,),
             (shapes, TS([]),),

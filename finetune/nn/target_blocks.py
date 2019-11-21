@@ -383,9 +383,9 @@ def sequence_labeler(
         "predict_params": A dictionary of params to be fed to the viterbi decode function.
     """
     with tf.variable_scope("sequence-labeler", reuse=reuse):
-        # TODO: This is a patch because crf doesn't like not knowing the sequence dimension
-        # and OSCAR doesn't provide one.
-        hidden.set_shape([None, config.max_length, None])
+#        # TODO: This is a patch because crf doesn't like not knowing the sequence dimension
+#        # and OSCAR doesn't provide one.
+#        hidden.set_shape([None, config.max_length, None])
 
         if targets is not None:
             targets = tf.cast(targets, dtype=tf.int32)
@@ -426,7 +426,7 @@ def sequence_labeler(
 
         log_likelihood = 0.0
 
-        default_lengths = kwargs.get("max_length") * tf.ones(
+        default_lengths = tf.shape(hidden)[1] * tf.ones(
             tf.shape(hidden)[0], dtype=tf.int32
         )
         if lengths is None:

@@ -71,14 +71,14 @@ class SequencePipeline(BasePipeline):
         TS = tf.TensorShape
         types = {"tokens": tf.int32, "mask": tf.float32}
         shapes = {
-            "tokens": TS([self.config.max_length, 2]),
-            "mask": TS([self.config.max_length]),
+            "tokens": TS([None, 2]),
+            "mask": TS([None]),
         }
         types, shapes = self._add_context_info_if_present(types, shapes)
         target_shape = (
-            [self.config.max_length, self.label_encoder.target_dim]
+            [None, self.label_encoder.target_dim]
             if self.multi_label
-            else [self.config.max_length]
+            else [None]
         )
         return (
             (types, tf.float32,),
@@ -325,6 +325,7 @@ class SequenceLabeler(BaseModel):
     def _target_model(
         self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
     ):
+        featurizer_state["sequence_features"] = tf.Print(featurizer_state["sequence_features"], [tf.shape(featurizer_state["sequence_features"])])
         self._add_context_embed(featurizer_state)
         return sequence_labeler(
             hidden=featurizer_state["sequence_features"],
