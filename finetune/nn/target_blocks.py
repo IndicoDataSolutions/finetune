@@ -112,18 +112,19 @@ def language_model(*, X, M, embed_weights, hidden, config, reuse=None, train=Fal
 
     with tf.variable_scope('model/language-model', reuse=reuse):
         # language model ignores last hidden state because we don't have a target
-        sliced_hidden = hidden[:, :-1]
-        lm_h = tf.reshape(sliced_hidden, [-1, config.n_embed])  # [batch, seq_len, embed] --> [batch * seq_len, embed]
+        lm_h = tf.reshape(hidden, [-1, config.n_embed])  # [batch, seq_len, embed] --> [batch * seq_len, embed]
         lm_logits = tf.matmul(lm_h, embed_weights, transpose_b=True)  # tied weights
         lm_logits = tf.cast(lm_logits, tf.float32)
+        hidden_shape = tf.shape(hidden)
+        logits = tf.reshape(lm_logits, shape=tf.concat([hidden_shape[:-1], [vocab_size]], axis=0))
+        lm_logits_offset = tf.reshape(logits[:, :-1], [-1, vocab_size])
+        
         lm_losses = tf.losses.sparse_softmax_cross_entropy(
-            logits=lm_logits,
+            logits=lm_logits_offset,
             labels=tf.reshape(X[:, 1:, 0], [-1]),
             weights=tf.reshape(M[:, 1:], [-1])
         )
 
-        sliced_hidden_shape = tf.shape(sliced_hidden)
-        logits = tf.reshape(lm_logits, shape=tf.concat([sliced_hidden_shape[:-1], [vocab_size]], axis=0))
         perplexity = tf.reduce_sum(tf.exp(lm_losses) * M[:, 1:], 1) / tf.reduce_sum(M[:, 1:], 1)
 
         return {

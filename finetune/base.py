@@ -612,7 +612,7 @@ class BaseModel(object, metaclass=ABCMeta):
             ):
                 arr_encoded = self.input_pipeline._array_format(encoded)
                 class_idx = next(predict)[PredictMode.GENERATE_TEXT]
-                encoded.token_ids.append(class_idx[i])
+                encoded.token_ids.append(class_idx[-1])
                 if encoded.token_ids[-1] == EOS:
                     break
             dataset_encoded.finished = True
