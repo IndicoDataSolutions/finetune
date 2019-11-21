@@ -65,13 +65,13 @@ class ComparisonPipeline(ClassificationPipeline):
         TS = tf.TensorShape
         types = {"tokens": tf.int32, "mask": tf.float32}
         shapes = {
-            "tokens": TS([2, self.config.max_length, 2]),
-            "mask": TS([None, self.config.max_length]),
+            "tokens": TS([2, None, 2]),
+            "mask": TS([None, None]),
         }
         if self.config.use_auxiliary_info:
             TS = tf.TensorShape
             types["context"] = tf.float32
-            shapes["context"] = TS([2, self.config.max_length, self.config.context_dim])
+            shapes["context"] = TS([2, None, self.config.context_dim])
         return (
             (types, tf.float32,),
             (shapes, TS([self.target_dim]),),
