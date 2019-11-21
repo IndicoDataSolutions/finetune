@@ -245,6 +245,7 @@ def gpt_featurizer(
     """
     initial_shape = tf.shape(X)
     X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-2:]), 0))
+    sequence_length = tf.shape(X)[1]
 
     with tf.variable_scope("model/featurizer", reuse=reuse):
         embed_weights = tf.get_variable(
@@ -257,13 +258,13 @@ def gpt_featurizer(
         else:
             embed_weights = tf.stop_gradient(embed_weights)
 
-        X = tf.reshape(X, [-1, config.max_length, 2])
+#        X = tf.reshape(X, [-1, config.max_length, 2])
 
         clf_token = encoder.end_token
         pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
 
         if explain:
-            X = add_explain_tokens(X, config.max_length, pool_idx)
+            X = add_explain_tokens(X, sequence_length, pool_idx)
 
         h = embed(X, embed_weights)
         for layer in range(config.n_layer):
@@ -316,7 +317,7 @@ def gpt_featurizer(
         clf_h = tf.reshape(h_out, [-1, config.n_embed])  # [batch * seq_len, embed]
         clf_h = tf.gather(
             clf_h,
-            tf.range(shape_list(X)[0], dtype=tf.int32) * config.max_length + pool_idx,
+            tf.range(shape_list(X)[0], dtype=tf.int32) * sequence_length + pool_idx,
         )
         clf_h = tf.reshape(
             clf_h, shape=tf.concat((initial_shape[:-2], [config.n_embed]), 0)
@@ -325,7 +326,7 @@ def gpt_featurizer(
             h, shape=tf.concat((initial_shape[:-1], [config.n_embed]), 0)
         )
 
-        lengths = lengths_from_eos_idx(eos_idx=pool_idx, max_length=shape_list(X)[0])
+        lengths = lengths_from_eos_idx(eos_idx=pool_idx, max_length=sequence_length)
 
         out = {
             "embed_weights": embed_weights,
