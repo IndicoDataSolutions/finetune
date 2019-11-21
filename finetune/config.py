@@ -321,7 +321,7 @@ def get_default_config():
         max_masked_tokens=128,
 
         # Sequence Labeling
-        seq_num_heads=16,
+        # seq_num_heads=16,
         pad_token="<PAD>",
         pad_idx=None,
         subtoken_predictions=False,
@@ -382,7 +382,7 @@ def get_default_config():
         # Auxiliary Information
         use_auxiliary_info=False,
         n_context_embed=32,
-        context_embed_stddev=0.5,
+        context_embed_stddev=1.0,
         default_context=None,
         context_dim=None,  # number of context dimensions to be inserted
 
