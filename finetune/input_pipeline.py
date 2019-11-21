@@ -391,6 +391,8 @@ class BasePipeline(metaclass=ABCMeta):
             train_dataset_unbatched()
 
         _, shapes = self.feed_shape_type_def()
+        if Y is None:
+            shapes = shapes[0]
 
         val_dataset = (
             lambda: val_dataset_unbatched()
