@@ -62,7 +62,8 @@ def attn_weights(q, k, v, scale=False, mask=True, explain=False, lengths=None):
         w = mask_pad(w, lengths=lengths)
 
     w = tf.nn.softmax(w)
-    return w
+    with tf.control_dependencies([tf.print(w, 'attn output')]):
+        return w
 
 
 def split_states(x, n):

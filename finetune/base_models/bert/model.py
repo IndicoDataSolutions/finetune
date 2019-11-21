@@ -140,7 +140,7 @@ class BERTModelMultilingualCased(_BaseBert):
         "lm_type": "mlm",
         "n_embed": 768,
         "n_epochs": 8,
-        "n_heads": 12,
+        "n_heads": 16,
         "n_layer": 12,
         "act_fn": "gelu",
         "lr_warmup": 0.1,
