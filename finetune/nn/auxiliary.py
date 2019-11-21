@@ -18,4 +18,27 @@ def embed_context(context, featurizer_state, config, train):
         )
         c_embed = tf.add(tf.tensordot(context, context_weight, axes=[[-1], [0]]), context_bias)
     featurizer_state['context'] = c_embed
-    return featurizer_state
+
+
+def positional_embed_context(context, featurizer_state, config, train):
+    with tf.variable_scope('positional_embed'):
+        
+def pairwise_embed_context(context, featurizer_state, config, train):
+    with tf.variable_scope("context_attn_embedding"):
+        context_dim = shape_list(context)[-1]
+        diff = tf.expand_dims(context, 1) - tf.expand_dims(context, 2)
+        g = tf.get_variable(
+            name='g',
+            shape=[1, config.n_heads, 1, 1, context_dim],
+            initializer=tf.random_normal_initializer(mean=1.0, stddev=config.context_embed_stddev)
+        )
+        b = tf.get_variable(
+            name='b',
+            shape=[1, config.n_heads, 1, 1, context_dim],
+            initializer=tf.zeros_initializer()
+        )
+        proximity = tf.nn.sigmoid(-diff)
+        proximity = tf.expand_dims(proximity, axis=1)
+        offset = proximity * g + b
+        total_offset = tf.reduce_sum(offset, axis=-1, keep_dims=False) 
+    featurizer_state['context'] = total_offset

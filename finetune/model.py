@@ -16,7 +16,7 @@ from finetune.util.imbalance import class_weight_tensor
 from finetune.errors import FinetuneError
 from finetune.base_models import GPTModel, GPTModelSmall
 from finetune.optimizers.adafactor import AdafactorWOptimizer, AdafactorOptimizer
-from finetune.nn.auxiliary import embed_context
+from finetune.nn.auxiliary import embed_context, pairwise_embed_context
 
 LOGGER = logging.getLogger("finetune")
 
@@ -146,7 +146,8 @@ def get_model_fn(
                 explain=build_explain,
             )
             if context is not None:
-                featurizer_state = embed_context(context, featurizer_state, params, train)
+                pairwise_embed_context(context, featurizer_state, params, train)
+            
             predictions = {
                 PredictMode.FEATURIZE: featurizer_state["features"], 
                 PredictMode.SEQUENCE: featurizer_state["sequence_features"]

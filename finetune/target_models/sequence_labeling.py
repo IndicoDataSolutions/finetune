@@ -336,6 +336,7 @@ class SequenceLabeler(BaseModel):
             multilabel=config.multi_label_sequences,
             reuse=reuse,
             lengths=featurizer_state["lengths"],
+            context=featurizer_state.get('context', None),
             **kwargs
         )
 

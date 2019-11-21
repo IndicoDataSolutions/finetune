@@ -155,7 +155,7 @@ class BasePipeline(metaclass=ABCMeta):
             if not callable(Xs) and not callable(Y) and not callable(context):
                 dataset = lambda: zip(Xs, Y, context)
             elif callable(Xs) and callable(Y) and callable(context):
-                dataset = lambda: zip(Xs(), Y(), context)
+                dataset = lambda: zip(Xs(), Y(), context())
             else:
                 raise ValueError( "Either none or all of Xs and Y and context should be callable, not a mixture")
 

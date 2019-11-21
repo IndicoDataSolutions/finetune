@@ -2,6 +2,7 @@ import warnings
 import copy
 from collections import defaultdict
 
+import ipdb
 import numpy as np
 
 from finetune.util.logging import truncate_text
@@ -352,7 +353,6 @@ def indico_to_finetune_sequence(
                 label.get("text") is not None
                 and label["text"] != text[label["start"] : label["end"]]
             ):
-
                 raise ValueError(
                     "Annotation text does not match text specified by `start` and `end` indexes. "
                     "Text provided: `{}`.  Text extracted: `{}`.".format(

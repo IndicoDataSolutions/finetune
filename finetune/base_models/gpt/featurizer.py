@@ -62,7 +62,8 @@ def attn_weights(q, k, v, scale=False, mask=True, explain=False, lengths=None):
         w = mask_pad(w, lengths=lengths)
 
     w = tf.nn.softmax(w)
-    return w
+    with tf.control_dependencies([tf.print(w, 'attn output')]):
+        return w
 
 
 def split_states(x, n):
@@ -133,13 +134,22 @@ def attn(
     scale=False,
     mask=True,
     explain=False,
+<<<<<<< HEAD
     lengths=None,
+=======
+    context=None
+>>>>>>> de455c3... CONTEXT attn
 ):
     assert n_state % n_head == 0
     with tf.variable_scope(scope):
         q, k, v = multihead_qkv(x, n_state, n_head, train, explain)
 
+<<<<<<< HEAD
         w = attn_weights(q, k, v, scale=scale, mask=mask, explain=explain, lengths=lengths)
+=======
+        w = attn_weights(q, k, v, scale=scale, mask=mask, explain=explain, context=context)
+
+>>>>>>> de455c3... CONTEXT attn
         w = dropout(w, attn_pdrop, train)
 
         a = tf.matmul(w, v)
