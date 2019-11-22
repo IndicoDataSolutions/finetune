@@ -62,8 +62,7 @@ def attn_weights(q, k, v, scale=False, mask=True, explain=False, lengths=None):
         w = mask_pad(w, lengths=lengths)
 
     w = tf.nn.softmax(w)
-    with tf.control_dependencies([tf.print(w, 'attn output')]):
-        return w
+    return w
 
 
 def split_states(x, n):
@@ -143,6 +142,7 @@ def attn(
         w = dropout(w, attn_pdrop, train)
         a = tf.matmul(w, v)
         a = merge_heads(a)
+        a.set_shape([None, None, n_state])
         a = conv1d(a, "c_proj", n_state, 1, train=train)
         a = dropout(a, resid_pdrop, train)
         return a
