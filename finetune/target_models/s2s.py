@@ -27,10 +27,10 @@ class S2SPipeline(BasePipeline):
             ),
             (
                 {
-                    "tokens": TS([self.config.max_length, 2]),
-                    "mask": TS([self.config.max_length])
+                    "tokens": TS([None, 2]),
+                    "mask": TS([None])
                 },
-                TS([self.config.max_length, 2])
+                TS([None, 2])
             )
         )
 
