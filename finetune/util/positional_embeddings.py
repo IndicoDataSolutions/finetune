@@ -1,5 +1,10 @@
+import math
+
 import numpy as np
 from scipy import interpolate
+import tensorflow as tf
+
+from finetune.util.shapes import shape_list
 
 
 def interpolate_pos_embed(positional_embed, new_len):
@@ -50,3 +55,35 @@ def embedding_preprocessor(input_pipeline, config):
         return value
 
     return process_embeddings
+
+
+def add_timing_signal_from_position(x, position, timescales):
+    """
+    Args:
+      x: a Tensor with shape [batch, len, channels]
+      position: [batch, len, nd]
+      min_timescale: a float
+      max_timescale: a float
+    Returns:
+      a Tensor the same shape as x.
+    """
+    channels = shape_list(x)[2]
+    num_dims = shape_list(position)[2]
+
+    num_timescales = channels // (num_dims * 2)
+    
+    for dim, timescale in zip(range(num_dims), timescales):
+        min_timescale, max_timescale = timescale
+        log_timescale_increment = (
+            math.log(float(max_timescale) / float(min_timescale)) / (tf.to_float(num_timescales) - 1)
+        )
+        inv_timescales = min_timescale * tf.exp(tf.to_float(tf.range(num_timescales)) * -log_timescale_increment)
+        position_x = tf.expand_dims(tf.to_float(position[:, :, dim]), 2)  # batch, len, 1 # where 1 will be the chanels dim
+        scaled_time = position_x * tf.expand_dims(tf.expand_dims(inv_timescales, 0), 0)  # batch , len, num_timescales
+        signal = tf.concat([tf.sin(scaled_time), tf.cos(scaled_time)], axis=2)  # batch channels//num_dims
+        prepad = dim * 2 * num_timescales
+        postpad = channels - (dim + 1) * 2 * num_timescales
+        signal = tf.pad(signal, [[0, 0], [0, 0], [prepad, postpad]])
+        x = x + signal
+    return x
+
