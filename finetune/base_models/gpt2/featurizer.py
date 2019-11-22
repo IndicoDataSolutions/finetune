@@ -178,7 +178,7 @@ def gpt2_featurizer(
         else:
             embed_weights = tf.stop_gradient(embed_weights)
 
-        X = tf.reshape(X, [-1, config.max_length, 2])
+#        X = tf.reshape(X, [-1, config.max_length, 2])
         h = embed(X, embed_weights)
 
         # Transformer
