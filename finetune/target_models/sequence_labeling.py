@@ -325,7 +325,6 @@ class SequenceLabeler(BaseModel):
     def _target_model(
         self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
     ):
-        featurizer_state["sequence_features"] = tf.Print(featurizer_state["sequence_features"], [tf.shape(featurizer_state["sequence_features"])])
         self._add_context_embed(featurizer_state)
         return sequence_labeler(
             hidden=featurizer_state["sequence_features"],
