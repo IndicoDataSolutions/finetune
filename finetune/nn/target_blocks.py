@@ -528,6 +528,7 @@ def association(
                 train=train,
                 scale=False,
                 mask=False,
+                lengths=lengths,
             )
             n = norm(attn_fn(hidden) + hidden, "seq_label_residual")
             flat_logits = tf.layers.dense(n, n_targets)
