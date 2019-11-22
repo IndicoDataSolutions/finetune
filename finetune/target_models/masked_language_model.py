@@ -27,8 +27,8 @@ class MaskedLanguageModelPipeline(BasePipeline):
             ),
             (
                 {
-                    "tokens": TS([self.config.max_length, 2]),
-                    "mask": TS([self.config.max_length]),
+                    "tokens": TS([None, 2]),
+                    "mask": TS([None]),
                     "mlm_weights": TS([self.config.max_masked_tokens * self.config.batch_size]),
                     "mlm_ids": TS([self.config.max_masked_tokens * self.config.batch_size]),
                     "mlm_positions": TS([self.config.max_masked_tokens * self.config.batch_size]),
@@ -63,9 +63,9 @@ class MaskedLanguageModelPipeline(BasePipeline):
             mlm_ids = out.token_ids[:, 0][mlm_mask]
             expected_length = self.config.max_masked_tokens * self.config.batch_size
             pad_size = expected_length - len(mlm_ids)
-            mlm_weights = np.pad(np.ones_like(mlm_ids), [(0, pad_size)], constant_values=0.)
-            mlm_ids = np.pad(mlm_ids, [(0, pad_size)], constant_values=0)
-            mlm_positions = np.pad(np.where(mlm_mask)[0], [(0, pad_size)], constant_values=0)
+            mlm_weights = np.pad(np.ones_like(mlm_ids), [(0, pad_size)], constant_values=0., mode="constant")
+            mlm_ids = np.pad(mlm_ids, [(0, pad_size)], constant_values=0, mode="constant")
+            mlm_positions = np.pad(np.where(mlm_mask)[0], [(0, pad_size)], constant_values=0, mode="constant")
 
 
             out.token_ids[:, 0][mlm_mask & (mask_type == 'mask')] = self.text_encoder.mask_token
