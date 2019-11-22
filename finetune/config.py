@@ -235,6 +235,9 @@ def get_default_config():
 
     :return: Config object.
     """
+    # lazy import to avoid circular dependency
+    from finetune import VERSION
+    
     settings = Settings(
         # General Settings
         low_memory_mode=False,
@@ -380,7 +383,10 @@ def get_default_config():
         n_context_embed=32,
         context_embed_stddev=0.5,
         default_context=None,
-        context_dim=None  # number of context dimensions to be inserted
+        context_dim=None,  # number of context dimensions to be inserted
+
+        # Serialize finetune version with model
+        version=VERSION,
     )
     return settings
 

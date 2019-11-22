@@ -17,6 +17,15 @@ def mask_attn_weights(w):
     return w
 
 
+def mask_pad(w, lengths):
+    batch = shape_list(lengths)[0]
+    maxlen = tf.maximum(lengths)
+    seq_mask = tf.reshape(tf.sequence_mask(lengths, maxlen=maxlen), [batch, 1, 1, maxlen])
+    b = tf.cast(seq_mask, tf.float32)
+    w = w * b + -1e9 * (1 - b)
+    return w
+
+
 def explain_mask_attn_weights(w):
     # w is [batch, heads, n, n]
     # lengths is [batch]
@@ -36,7 +45,7 @@ def explain_mask_attn_weights(w):
     return w
 
 
-def attn_weights(q, k, v, scale=False, mask=True, explain=False):
+def attn_weights(q, k, v, scale=False, mask=True, explain=False, lengths=None):
     w = tf.matmul(q, k)
 
     if scale:
@@ -48,6 +57,10 @@ def attn_weights(q, k, v, scale=False, mask=True, explain=False):
             w = explain_mask_attn_weights(w)
         else:
             w = mask_attn_weights(w)
+    elif lengths is not None:
+        # at least mask pad tokens
+        w = mask_pad(w, lengths=lengths)
+
     w = tf.nn.softmax(w)
     return w
 
@@ -120,12 +133,13 @@ def attn(
     scale=False,
     mask=True,
     explain=False,
+    lengths=None,
 ):
     assert n_state % n_head == 0
     with tf.variable_scope(scope):
         q, k, v = multihead_qkv(x, n_state, n_head, train, explain)
 
-        w = attn_weights(q, k, v, scale=scale, mask=mask, explain=explain)
+        w = attn_weights(q, k, v, scale=scale, mask=mask, explain=explain, lengths=lengths)
         w = dropout(w, attn_pdrop, train)
 
         a = tf.matmul(w, v)
