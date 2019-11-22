@@ -145,10 +145,15 @@ class BaseModel(object, metaclass=ABCMeta):
     def _add_context_embed(self, featurizer_state):
         if "context" in featurizer_state:
             context_embed = featurizer_state["context"]
+            seq_mask = tf.sequence_mask(featurizer_state['lengths'])
             for key in ['features', 'explain_out']:
                 if key in featurizer_state:
+                    binary_mask = tf.constant(1.) - tf.cast(seq_mask, tf.float32)
+                    context_embed = context_embed * tf.expand_dims(binary_mask, -1)
+                    sum_context = tf.reduce_mean(context_embed, 1)
+                    mean_context = sum_context / tf.reduce_mean(binary_mask)
                     featurizer_state[key] = tf.concat(
-                        (featurizer_state[key], tf.reduce_mean(context_embed, 1)), -1
+                        (featurizer_state[key], mean_context), -1
                     )
 
             featurizer_state['sequence_features'] = tf.concat(

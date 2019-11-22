@@ -19,7 +19,7 @@ def mask_attn_weights(w):
 
 def mask_pad(w, lengths):
     batch = shape_list(lengths)[0]
-    maxlen = tf.maximum(lengths)
+    maxlen = tf.cast(tf.reduce_max(lengths), tf.int32)
     seq_mask = tf.reshape(tf.sequence_mask(lengths, maxlen=maxlen), [batch, 1, 1, maxlen])
     b = tf.cast(seq_mask, tf.float32)
     w = w * b + -1e9 * (1 - b)
@@ -62,8 +62,7 @@ def attn_weights(q, k, v, scale=False, mask=True, explain=False, lengths=None):
         w = mask_pad(w, lengths=lengths)
 
     w = tf.nn.softmax(w)
-    with tf.control_dependencies([tf.print(w, 'attn output')]):
-        return w
+    return w
 
 
 def split_states(x, n):
@@ -139,9 +138,11 @@ def attn(
     assert n_state % n_head == 0
     with tf.variable_scope(scope):
         q, k, v = multihead_qkv(x, n_state, n_head, train, explain)
-
         w = attn_weights(q, k, v, scale=scale, mask=mask, explain=explain, lengths=lengths)
+        w = dropout(w, attn_pdrop, train)
+        a = tf.matmul(w, v)
         a = merge_heads(a)
+        a.set_shape([None, None, n_state])
         a = conv1d(a, "c_proj", n_state, 1, train=train)
         a = dropout(a, resid_pdrop, train)
         return a
