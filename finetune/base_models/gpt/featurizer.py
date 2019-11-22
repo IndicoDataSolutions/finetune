@@ -134,26 +134,13 @@ def attn(
     scale=False,
     mask=True,
     explain=False,
-<<<<<<< HEAD
     lengths=None,
-=======
-    context=None
->>>>>>> de455c3... CONTEXT attn
 ):
     assert n_state % n_head == 0
     with tf.variable_scope(scope):
         q, k, v = multihead_qkv(x, n_state, n_head, train, explain)
 
-<<<<<<< HEAD
         w = attn_weights(q, k, v, scale=scale, mask=mask, explain=explain, lengths=lengths)
-=======
-        w = attn_weights(q, k, v, scale=scale, mask=mask, explain=explain, context=context)
-
->>>>>>> de455c3... CONTEXT attn
-        w = dropout(w, attn_pdrop, train)
-
-        a = tf.matmul(w, v)
-
         a = merge_heads(a)
         a = conv1d(a, "c_proj", n_state, 1, train=train)
         a = dropout(a, resid_pdrop, train)

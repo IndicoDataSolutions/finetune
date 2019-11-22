@@ -253,6 +253,7 @@ def tokenize_context(context, encoded_output, config):
         # Note: this assumes that the tokenization will never lump multiple tokens into one
         # (this would not be the case if multiple context spans make up the same token)
         if char_loc == -1:
+            # print("Token {} assigned default".format(token))
             tokenized_context.append(default_context)
         elif token in ['\n</w>', 'Ċ', 'Ġ']:
             tokenized_context.append(context_by_char_loc[current_char_loc][1])
