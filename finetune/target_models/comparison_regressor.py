@@ -6,6 +6,8 @@ from finetune.encoding.input_encoder import ArrayEncodedOutput
 from finetune.target_models.comparison import ComparisonPipeline
 from finetune.nn.target_blocks import regressor
 from finetune.base import BaseModel
+from finetune.nn.auxiliary import add_context_embed
+
 
 class ComparisonRegressionPipeline(ComparisonPipeline):
 
@@ -40,7 +42,7 @@ class ComparisonRegressor(BaseModel):
 
     
     def _pre_target_model_hook(self, featurizer_state):
-        super()._add_context_embed(featurizer_state)
+        add_context_embed(featurizer_state)
         featurizer_state["sequence_features"] = tf.abs(tf.reduce_sum(featurizer_state["sequence_features"], 1))
         featurizer_state["features"] = tf.abs(tf.reduce_sum(featurizer_state["features"], 1))
 
