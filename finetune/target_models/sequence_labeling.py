@@ -325,7 +325,6 @@ class SequenceLabeler(BaseModel):
     def _target_model(
         self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
     ):
-        self._add_context_embed(featurizer_state)
         return sequence_labeler(
             hidden=featurizer_state["sequence_features"],
             targets=targets,

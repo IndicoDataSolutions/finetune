@@ -151,14 +151,16 @@ class MultipleChoice(BaseModel):
         self.input_pipeline.target_dim_ = len(answers[0])
         return super().finetune(list(zip(questions, answers)), Y=labels, context=context)
 
-    def _target_model(
-        self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
-    ):
+    def _pre_target_model_hook(self, featurizer_state):
         if "context" in featurizer_state:
             context_embed = featurizer_state["context"]
             featurizer_state['features'] = tf.concat(
                 (featurizer_state['features'], tf.reduce_mean(context_embed, 2)), -1
             )
+
+    def _target_model(
+        self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
+    ):
         return multi_choice_question(
             hidden=featurizer_state["features"],
             targets=targets,
