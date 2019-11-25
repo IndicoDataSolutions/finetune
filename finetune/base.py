@@ -34,6 +34,7 @@ from finetune.util.download import download_data_if_required
 from finetune.util.positional_embeddings import embedding_preprocessor
 from finetune.util.shapes import shape_list
 from finetune.base_models import GPTModel, GPTModelSmall
+from finetune.nn.auxiliary import add_context_embed
 
 from finetune.util.in_memory_finetune import make_in_memory_finetune_hooks
 
@@ -143,44 +144,7 @@ class BaseModel(object, metaclass=ABCMeta):
         raise NotImplementedError
 
     def _pre_target_model_hook(self, featurizer_state):
-        self._add_context_embed(featurizer_state)
-
-    def _add_context_embed(self, featurizer_state):
-        if "context" in featurizer_state:
-            context_embed = featurizer_state["context"]
-
-            shape = shape_list(context_embed)
-            if len(shape) == 4:
-                # comparison / multiple choice / multifield
-                flat_embed = tf.reshape(
-                    context_embed, 
-                    [shape[0] * shape[1], shape[2], shape[3]],
-                )
-            else:
-                flat_embed = context_embed
-
-            seq_mask = tf.sequence_mask(featurizer_state['lengths'])
-            for key in ['features', 'explain_out']:
-                if key in featurizer_state:
-                    float_mask = tf.cast(seq_mask, tf.float32)
-                    binary_mask = tf.constant(1.) - float_mask
-                    flat_embed = flat_embed * tf.expand_dims(binary_mask, -1)
-                    sum_context = tf.reduce_mean(flat_embed, 1)
-                    mean_context = sum_context / tf.reduce_mean(float_mask)
-
-                    if len(shape) == 4:
-                        mean_context = tf.reshape(
-                            mean_context, 
-                            [shape[0], shape[1], shape[3]]
-                        )
-        
-                    featurizer_state[key] = tf.concat(
-                        (featurizer_state[key], mean_context), -1
-                    )
-
-            featurizer_state['sequence_features'] = tf.concat(
-                (featurizer_state['sequence_features'], context_embed), -1
-            )
+        add_context_embed(featurizer_state)
 
     def _n_steps(self, n_examples, batch_size, n_gpus):
         steps = int(math.ceil(n_examples / (batch_size * n_gpus)))
