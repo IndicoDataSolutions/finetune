@@ -34,6 +34,7 @@ from finetune.util.positional_embeddings import embedding_preprocessor
 from finetune.util.shapes import shape_list
 from finetune.util.timing import ProgressBar
 from finetune.base_models import GPTModel, GPTModelSmall
+from finetune.nn.auxiliary import add_context_embed
 
 from finetune.util.in_memory_finetune import make_in_memory_finetune_hooks
 from finetune.base_models import GPTModel, GPTModelSmall
