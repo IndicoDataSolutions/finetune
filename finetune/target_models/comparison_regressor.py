@@ -38,13 +38,13 @@ class ComparisonRegressor(BaseModel):
     def _get_input_pipeline(self):
         return ComparisonRegressionPipeline(self.config)
 
-    def _target_model(self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
+    
+    def _pre_target_model_hook(self, featurizer_state):
+        super()._add_context_embed(featurizer_state)
         featurizer_state["sequence_features"] = tf.abs(tf.reduce_sum(featurizer_state["sequence_features"], 1))
         featurizer_state["features"] = tf.abs(tf.reduce_sum(featurizer_state["features"], 1))
-        self._add_context_embed(featurizer_state)
-        if 'context' in featurizer_state:
-            featurizer_state["context"] = tf.abs(tf.reduce_sum(featurizer_state["context"], 1))
-        
+
+    def _target_model(self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
         return regressor(
             hidden=featurizer_state['features'],
             targets=targets, 

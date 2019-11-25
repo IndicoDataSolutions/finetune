@@ -98,6 +98,15 @@ class Comparison(Classifier):
     def _get_input_pipeline(self):
         return ComparisonPipeline(self.config)
 
+    def _pre_target_model_hook(self, featurizer_state):
+        super()._add_context_embed(featurizer_state)
+        featurizer_state["sequence_features"] = tf.abs(
+            tf.reduce_sum(featurizer_state["sequence_features"], 1)
+        )
+        featurizer_state["features"] = tf.abs(
+            tf.reduce_sum(featurizer_state["features"], 1)
+        )
+
     def _target_model(
         self,
         *,
@@ -109,19 +118,6 @@ class Comparison(Classifier):
         reuse=None,
         **kwargs
     ):
-        featurizer_state = featurizer_state.copy()
-        print('features before ', featurizer_state['features'])
-        featurizer_state["sequence_features"] = tf.abs(
-            tf.reduce_sum(featurizer_state["sequence_features"], 1)
-        )
-        featurizer_state["features"] = tf.abs(
-            tf.reduce_sum(featurizer_state["features"], 1)
-        )
-        # to go from [batch, 2, max_length, n_context_embed] -> [batch, max_length, n_context_embed]
-        if 'context' in featurizer_state:
-            featurizer_state["context"] = tf.abs(
-                tf.reduce_sum(featurizer_state["context"], 1)
-            )
         return super(Comparison, self)._target_model(
             config=config,
             featurizer_state=featurizer_state,

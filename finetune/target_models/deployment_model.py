@@ -240,6 +240,7 @@ class DeploymentModel(BaseModel):
 
         fn = get_separate_model_fns(
             target_model_fn=self._target_model if portion == "target" else None,
+            pre_target_model_hook=self._pre_target_model_hook,
             predict_op=self._predict_op,
             predict_proba_op=self._predict_proba_op,
             build_target_model=self.input_pipeline.target_dim is not None,
