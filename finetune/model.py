@@ -88,6 +88,7 @@ def masked_language_model_op(X, M, mlm_weights, mlm_ids, mlm_positions, params, 
 
 def get_model_fn(
     target_model_fn,
+    pre_target_model_hook,
     predict_op,
     predict_proba_op,
     build_target_model,
@@ -107,6 +108,7 @@ def get_model_fn(
                 label_encoder=label_encoder,
             )
         with tf.variable_scope("model/target"):
+            pre_target_model_hook(featurizer_state)
             target_model_state = target_model_fn(
                 config=params,
                 featurizer_state=featurizer_state,
@@ -348,6 +350,7 @@ def get_model_fn(
 
 def get_separate_model_fns(
     target_model_fn,
+    pre_target_model_hook,
     predict_op,
     predict_proba_op,
     build_target_model,
@@ -395,6 +398,7 @@ def get_separate_model_fns(
             predictions[PredictMode.ATTENTION] = featurizer_state["attention_weights"]
 
         with tf.variable_scope("model/target"):
+            pre_target_model_hook(featurizer_state)
             target_model_state = target_model_fn(
                 config=params,
                 featurizer_state=featurizer_state,
