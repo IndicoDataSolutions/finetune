@@ -280,6 +280,7 @@ def get_model_fn(
                     epsilon=params.epsilon,
                     weight_decay=params.l2_reg * lr,
                 )
+                opt.target_model_lr_mult = params.target_model_lr_mult
                 decay_var_list = [
                     v
                     for v in tf.global_variables()
