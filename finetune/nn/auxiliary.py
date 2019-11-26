@@ -62,8 +62,8 @@ def add_context_embed(featurizer_state):
                 float_mask = tf.cast(seq_mask, tf.float32)
                 binary_mask = tf.constant(1.) - float_mask
                 flat_embed = flat_embed * tf.expand_dims(binary_mask, -1)
-                sum_context = tf.reduce_mean(flat_embed, 1)
-                mean_context = sum_context / tf.reduce_mean(float_mask)
+                sum_context = tf.reduce_sum(flat_embed, 1)
+                mean_context = sum_context / tf.reduce_sum(float_mask)
 
                 if len(shape) == 4:
                     mean_context = tf.reshape(
