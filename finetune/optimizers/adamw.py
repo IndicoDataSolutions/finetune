@@ -14,7 +14,7 @@ class AdamWOptimizer(AdamWOptimizerBroken):
     def apply_gradients(self, grads_and_vars, global_step=None, name=None, decay_var_list=None):
         new_grads_and_vars = [None] * len(grads_and_vars)
         for i, pair in enumerate(grads_and_vars):
-            if 'model/target' in pair[1].name:
+            if 'model/target' in pair[1].name and pair[0] is not None:
                 new_grads_and_vars[i] = (pair[0] * self.target_model_lr_mult, pair[1])
             else:
                 new_grads_and_vars[i] = (pair[0], pair[1])
