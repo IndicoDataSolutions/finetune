@@ -29,7 +29,6 @@ def tsa_loss(n_targets, config, clf_losses, clf_logits, targets):
         tsa_threshold = get_tsa_threshold(
             config.tsa_schedule, global_step, total_num_steps, start, 1
         )
-
         clf_logits = tf.nn.log_softmax(clf_logits)
         multiplied = targets * tf.exp(clf_logits)
         correct_label_probs = tf.reduce_sum(multiplied, axis=1)

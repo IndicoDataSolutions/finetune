@@ -295,6 +295,7 @@ def get_default_config():
         lr_schedule="warmup_linear",
         lr=GridSearchable(6.25e-5, [6.25e-4, 6.25e-5, 6.25e-6]),
         lr_warmup=0.002,
+        target_model_lr_mult=2., # different learning ra
         max_grad_norm=1.0,
         accum_steps=1,
 
