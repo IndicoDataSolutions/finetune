@@ -356,6 +356,14 @@ def class_reweighting(class_weights):
     return custom_grad
 
 
+def simple_attn(hidden, config):
+    context_embed = hidden[:, :, -config.n_context_embed:]
+    text_embed = hidden[:, :, :config.n_embed]
+    w = tf.nn.softmax(tf.losses.cosine_distance(context_embed, context_embed, axis=2))
+    w = tf.Print(w, [w.shape])  # [batch, seq_len]
+    return tf.einsum('ab, abc -> abc', w, text_embed)
+
+
 def sequence_labeler(
     hidden,
     targets,
@@ -406,19 +414,20 @@ def sequence_labeler(
             # if config.base_model.is_bidirectional:
             #     n = hidden
             # else:
-            attn_fn = functools.partial(
-                attn,
-                scope="seq_label_attn",
-                n_state=nx,
-                n_head=config.n_heads,
-                resid_pdrop=config.resid_p_drop,
-                attn_pdrop=config.attn_p_drop,
-                train=train,
-                scale=False,
-                mask=False,
-                lengths=lengths
-            )
-            n = norm(attn_fn(hidden) + hidden, "seq_label_residual")
+            # attn_fn = functools.partial(
+            #     attn,
+            #     scope="seq_label_attn",
+            #     n_state=nx,
+            #     n_head=config.n_heads,
+            #     resid_pdrop=config.resid_p_drop,
+            #     attn_pdrop=config.attn_p_drop,
+            #     train=train,
+            #     scale=False,
+            #     mask=False,
+            #     lengths=lengths
+            # )
+            # n = norm(attn_fn(hidden) + hidden, "seq_label_residual")
+            n = simple_attn(hidden, config)
             
             flat_logits = tf.layers.dense(n, n_targets)
             logits = tf.reshape(
