@@ -359,9 +359,14 @@ def class_reweighting(class_weights):
 def simple_attn(hidden, config):
     context_embed = hidden[:, :, -config.n_context_embed:]
     text_embed = hidden[:, :, :config.n_embed]
-    w = tf.nn.softmax(tf.losses.cosine_distance(context_embed, context_embed, axis=2))
-    w = tf.Print(w, [w.shape])  # [batch, seq_len]
-    return tf.einsum('ab, abc -> abc', w, text_embed)
+    # reweight each frequency by a scalar
+    scale = tf.get_variable("scale", [config.n_context_embed], initializer=tf.constant_initializer(1))
+    # scale = tf.Print(scale, [scale])
+    context_embed = scale * context_embed
+    w = tf.nn.softmax(tf.matmul(context_embed, tf.transpose(context_embed, [0, 2, 1])))
+    # w = tf.Print(w, [w])  # [batch, seq_len, seq_len]
+    # return tf.einsum('ab, abc -> abc', w, text_embed)
+    return tf.matmul(w, text_embed)
 
 
 def sequence_labeler(
