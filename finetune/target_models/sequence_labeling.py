@@ -337,6 +337,7 @@ class SequenceLabeler(BaseModel):
             reuse=reuse,
             lengths=featurizer_state["lengths"],
             context=featurizer_state.get('context', None),
+            featurizer_state=featurizer_state,
             **kwargs
         )
 
