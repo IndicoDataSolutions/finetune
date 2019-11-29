@@ -361,8 +361,12 @@ def simple_attn(hidden, config, lengths):
     scale = tf.get_variable("scale", [config.n_context_embed], initializer=tf.constant_initializer(1))
     context_embed = scale * context_embed
     w = tf.matmul(context_embed, tf.transpose(context_embed, [0, 2, 1]))
-    w = tf.nn.softmax(w)  # [batch, seq_len, seq_len]
-    # w = tf.nn.softmax(mask_pad_single_head(w, lengths))  # [batch, seq_len, seq_len]
+    temp = tf.get_variable("temp", [1], initializer=tf.constant_initializer(10))
+    # tf.summary.scalar('temp', temp)
+    # tf.summary.histogram('scale', scale)
+    w = temp * w
+    w = mask_pad_single_head(w, lengths)  # [batch, seq_len, seq_len]
+    # w = tf.nn.softmax(w)  # [batch, seq_len, seq_len]
     return w
 
 
