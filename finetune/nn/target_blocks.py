@@ -2,7 +2,7 @@ import functools
 import tensorflow as tf
 from tensorflow.contrib.crf import crf_log_likelihood
 
-from finetune.base_models.gpt.featurizer import attn, dropout, norm, mask_pad
+from finetune.base_models.gpt.featurizer import attn, dropout, norm
 from finetune.util.shapes import shape_list, merge_leading_dims
 from finetune.optimizers.recompute_grads import recompute_grad
 from finetune.optimizers.tsa_schedules import get_tsa_threshold, tsa_loss
@@ -346,13 +346,23 @@ def class_reweighting(class_weights):
     return custom_grad
 
 
+def mask_pad_single_head(w, lengths):
+    batch = shape_list(lengths)[0]
+    maxlen = tf.cast(tf.reduce_max(lengths), tf.int32)
+    seq_mask = tf.reshape(tf.sequence_mask(lengths, maxlen=maxlen), [batch, 1, maxlen])
+    b = tf.cast(seq_mask, tf.float32)
+    w = w * b + -1e9 * (1 - b)
+    return w
+
+
 def simple_attn(hidden, config, lengths):
     context_embed = hidden[:, :, -config.n_context_embed:]
     # reweight each frequency by a scalar
     scale = tf.get_variable("scale", [config.n_context_embed], initializer=tf.constant_initializer(1))
     context_embed = scale * context_embed
     w = tf.matmul(context_embed, tf.transpose(context_embed, [0, 2, 1]))
-    w = tf.nn.softmax(mask_pad(w, lengths))  # [batch, seq_len, seq_len]
+    w = tf.nn.softmax(w)  # [batch, seq_len, seq_len]
+    # w = tf.nn.softmax(mask_pad_single_head(w, lengths))  # [batch, seq_len, seq_len]
     return w
 
 
@@ -425,7 +435,6 @@ def sequence_labeler(
             # )
             # n = norm(attn_fn(hidden) + hidden, "seq_label_residual")
             w = simple_attn(hidden, config, lengths)
-            w = tf.Print(w, [tf.shape(w)], summarize=10)
             featurizer_state['context_attention_weights'] = w
             text_embed = hidden[:, :, :config.n_embed]
             n = tf.matmul(w, text_embed)
