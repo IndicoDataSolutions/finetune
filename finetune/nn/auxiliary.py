@@ -37,4 +37,5 @@ def embed_position(context, featurizer_state, config, train):
                 ]
             ]
         )
+        # pos_embed = tf.Print(pos_embed, [pos_embed], summarize=1000)
         featurizer_state['context'] = pos_embed
