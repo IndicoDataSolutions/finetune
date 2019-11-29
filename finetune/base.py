@@ -148,7 +148,7 @@ class BaseModel(object, metaclass=ABCMeta):
             seq_mask = tf.sequence_mask(featurizer_state['lengths'])
             for key in ['features', 'explain_out']:
                 if key in featurizer_state:
-                    binary_mask = tf.constant(1.) - tf.cast(seq_mask, tf.float32)
+                    binary_mask = tf.cast(seq_mask, tf.float32)
                     context_embed = context_embed * tf.expand_dims(binary_mask, -1)
                     sum_context = tf.reduce_mean(context_embed, 1)
                     mean_context = sum_context / tf.reduce_mean(binary_mask)
@@ -529,6 +529,12 @@ class BaseModel(object, metaclass=ABCMeta):
         raise NotImplementedError(
             "'attention_weights' only supported for GPTModel and GPTModelSmall base models."
         )
+    
+    def context_attention_weights(self, Xs, context=None):
+        if not context:
+            raise ValueError('Need to pass in context.')
+        raw_preds = self._inference(Xs, context=context, predict_keys=[PredictMode.CONTEXT_ATTENTION])
+        return raw_preds
 
     def _featurize(self, Xs):
         raw_preds = self._inference(Xs, predict_keys=[PredictMode.FEATURIZE])
