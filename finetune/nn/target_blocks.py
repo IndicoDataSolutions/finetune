@@ -355,7 +355,6 @@ def simple_attn(hidden, config):
     context_embed = scale * context_embed
     w = tf.nn.softmax(tf.matmul(context_embed, tf.transpose(context_embed, [0, 2, 1])))
     # w = tf.Print(w, [w])  # [batch, seq_len, seq_len]
-    # return tf.einsum('ab, abc -> abc', w, text_embed)
     return tf.matmul(w, text_embed)
 
 
