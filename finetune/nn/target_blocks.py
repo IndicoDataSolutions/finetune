@@ -2,7 +2,7 @@ import functools
 import tensorflow as tf
 from tensorflow.contrib.crf import crf_log_likelihood
 
-from finetune.base_models.gpt.featurizer import attn, dropout, norm
+from finetune.base_models.gpt.featurizer import attn, dropout, norm, mask_pad
 from finetune.util.shapes import shape_list, merge_leading_dims
 from finetune.optimizers.recompute_grads import recompute_grad
 from finetune.errors import FinetuneError
@@ -356,16 +356,14 @@ def class_reweighting(class_weights):
     return custom_grad
 
 
-def simple_attn(hidden, config):
+def simple_attn(hidden, config, lengths):
     context_embed = hidden[:, :, -config.n_context_embed:]
-    text_embed = hidden[:, :, :config.n_embed]
     # reweight each frequency by a scalar
     scale = tf.get_variable("scale", [config.n_context_embed], initializer=tf.constant_initializer(1))
-    # scale = tf.Print(scale, [scale])
     context_embed = scale * context_embed
-    w = tf.nn.softmax(tf.matmul(context_embed, tf.transpose(context_embed, [0, 2, 1])))
-    # w = tf.Print(w, [w])  # [batch, seq_len, seq_len]
-    return tf.matmul(w, text_embed)
+    w = tf.matmul(context_embed, tf.transpose(context_embed, [0, 2, 1]))
+    w = tf.nn.softmax(mask_pad(w, lengths))  # [batch, seq_len, seq_len]
+    return w
 
 
 def sequence_labeler(
@@ -379,6 +377,7 @@ def sequence_labeler(
     reuse=None,
     lengths=None,
     use_crf=True,
+    featurizer_state=None,
     **kwargs
 ):
     """
@@ -431,8 +430,11 @@ def sequence_labeler(
             #     lengths=lengths
             # )
             # n = norm(attn_fn(hidden) + hidden, "seq_label_residual")
-            n = simple_attn(hidden, config)
-            
+            w = simple_attn(hidden, config, lengths)
+            w = tf.Print(w, [tf.shape(w)], summarize=10)
+            featurizer_state['context_attention_weights'] = w
+            text_embed = hidden[:, :, :config.n_embed]
+            n = tf.matmul(w, text_embed)
             flat_logits = tf.layers.dense(n, n_targets)
             logits = tf.reshape(
                 flat_logits, tf.concat([tf.shape(hidden)[:2], [n_targets]], 0)

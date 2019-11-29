@@ -34,6 +34,7 @@ class PredictMode:
     GENERATE_TEXT = "GEN_TEXT"
     LM_PERPLEXITY = "PERPLEXITY"
     ATTENTION = "ATTENTION"
+    CONTEXT_ATTENTION = "CONTEXT_ATTENTION"
     SEQUENCE = "SEQUENCE"
     SEQUENCE_PROBAS = "SEQUENCE_PROBA"
     ASSOCIATION = "ASSOCIATION"
@@ -197,6 +198,9 @@ def get_model_fn(
                         predictions[PredictMode.EXPLAIN] = target_model_state[
                             "explanation"
                         ]
+                    predictions[PredictMode.CONTEXT_ATTENTION] = featurizer_state[
+                        "context_attention_weights"
+                    ]
 
             if lm_type is not None:
                 if lm_type.lower() == 'lm':

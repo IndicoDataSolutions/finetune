@@ -306,6 +306,7 @@ class SequenceLabeler(BaseModel):
             reuse=reuse,
             lengths=featurizer_state["lengths"],
             use_crf=self.config.crf_sequence_labeling,
+            featurizer_state=featurizer_state,
             **kwargs
         )
 
