@@ -134,11 +134,14 @@ def attn(
     mask=True,
     explain=False,
     lengths=None,
+    featurizer_state=None
 ):
     assert n_state % n_head == 0
     with tf.variable_scope(scope):
         q, k, v = multihead_qkv(x, n_state, n_head, train, explain)
         w = attn_weights(q, k, v, scale=scale, mask=mask, explain=explain, lengths=lengths)
+        if featurizer_state:
+            featurizer_state['context_attention_weights'] = w
         w = dropout(w, attn_pdrop, train)
         a = tf.matmul(w, v)
         a = merge_heads(a)
