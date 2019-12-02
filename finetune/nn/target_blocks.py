@@ -431,23 +431,21 @@ def sequence_labeler(
             # if config.base_model.is_bidirectional:
             #     n = hidden
             # else:
-            # attn_fn = functools.partial(
-            #     attn,
-            #     scope="seq_label_attn",
-            #     n_state=nx,
-            #     n_head=config.n_heads,
-            #     resid_pdrop=config.resid_p_drop,
-            #     attn_pdrop=config.attn_p_drop,
-            #     train=train,
-            #     scale=False,
-            #     mask=False,
-            #     lengths=lengths
-            # )
-            # n = norm(attn_fn(hidden) + hidden, "seq_label_residual")
-            w = simple_attn(hidden, config, lengths)
-            featurizer_state['context_attention_weights'] = w
-            text_embed = hidden[:, :, :config.n_embed]
-            n = tf.matmul(w, text_embed)
+            attn_fn = functools.partial(
+                attn,
+                scope="seq_label_attn",
+                n_state=nx,
+                n_head=config.n_heads,
+                resid_pdrop=config.resid_p_drop,
+                attn_pdrop=config.attn_p_drop,
+                train=train,
+                scale=False,
+                mask=False,
+                lengths=lengths,
+                featurizer_state=featurizer_state
+            )
+            n = norm(attn_fn(hidden) + hidden, "seq_label_residual")
+
             flat_logits = tf.layers.dense(n, n_targets)
             logits = tf.reshape(
                 flat_logits, tf.concat([tf.shape(hidden)[:2], [n_targets]], 0)
