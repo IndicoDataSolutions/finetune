@@ -2,7 +2,7 @@ import functools
 import tensorflow as tf
 from tensorflow.contrib.crf import crf_log_likelihood
 
-from finetune.base_models.gpt.featurizer import attn, dropout, norm
+from finetune.base_models.gpt.featurizer import attn, dropout, norm, conv1d
 from finetune.util.shapes import shape_list, merge_leading_dims
 from finetune.optimizers.recompute_grads import recompute_grad
 from finetune.optimizers.tsa_schedules import get_tsa_threshold, tsa_loss
@@ -378,7 +378,9 @@ def simple_attn(hidden, config, lengths):
     # reweight each frequency by a scalar
     scale = tf.get_variable("scale", [config.n_context_embed], initializer=tf.constant_initializer(1))
     context_embed = scale * context_embed
-    w = tf.matmul(context_embed, tf.transpose(context_embed, [0, 2, 1]))
+    query = conv1d(context_embed, "attn_proj", config.n_context_embed, 1)
+    key = tf.transpose(context_embed, [0, 2, 1])
+    w = tf.matmul(query, key)
     temp = tf.get_variable("temp", [1], initializer=tf.constant_initializer(1))
     # tf.summary.scalar('temp', temp)
     # tf.summary.histogram('scale', scale)
@@ -439,21 +441,26 @@ def sequence_labeler(
             # if config.base_model.is_bidirectional:
             #     n = hidden
             # else:
-            attn_fn = functools.partial(
-                attn,
-                scope="seq_label_attn",
-                n_state=nx,
-                n_head=config.n_heads,
-                resid_pdrop=config.resid_p_drop,
-                attn_pdrop=config.attn_p_drop,
-                train=train,
-                scale=False,
-                mask=False,
-                lengths=lengths,
-                featurizer_state=featurizer_state
-            )
-            n = norm(attn_fn(hidden) + hidden, "seq_label_residual")
 
+            # attn_fn = functools.partial(
+            #     attn,
+            #     scope="seq_label_attn",
+            #     n_state=nx,
+            #     n_head=config.n_heads,
+            #     resid_pdrop=config.resid_p_drop,
+            #     attn_pdrop=config.attn_p_drop,
+            #     train=train,
+            #     scale=False,
+            #     mask=False,
+            #     lengths=lengths,
+            #     featurizer_state=featurizer_state
+            # )
+            # n = norm(attn_fn(hidden) + hidden, "seq_label_residual")
+
+            w = simple_attn(hidden, config, lengths)
+            featurizer_state['context_attention_weights'] = w
+            text_embed = hidden[:, :, :config.n_embed]
+            n = tf.matmul(w, text_embed)
             flat_logits = tf.layers.dense(n, n_targets)
             logits = tf.reshape(
                 flat_logits, tf.concat([tf.shape(hidden)[:2], [n_targets]], 0)
