@@ -31,6 +31,7 @@ BASE_OSCAR_SETTINGS = {
     "embed_p_drop": 0.01,
     "lr_schedule": "warmup_linear",
     "lm_loss_coef": 0.5,
+    "xla": True,
 }
 
 
@@ -48,6 +49,7 @@ class GPCModelFP16(SourceModel):
     featurizer = featurizer
     settings = {
         **GPCModel.settings,
+        "base_model_path": os.path.join("oscar", "oscar23.jl"),
         "use_fp16": True,
         "low_memory_mode": True,
         "scale_loss": True,
@@ -60,8 +62,8 @@ class GPCModelFP16Pretrain(SourceModel):
     encoder = GPCEncoder
     featurizer = featurizer
     settings = {
-        **GPCModelFP16.settings,
-        "base_model_path": os.path.join("oscar", "fresh_start.jl"),
+        **BASE_OSCAR_SETTINGS,
+        "base_model_path": "fresh_start.jl",
         "optimizer": "Adafactor",
         "cache_weights_to_file": True,
         "lr": 1e-4,
@@ -71,5 +73,7 @@ class GPCModelFP16Pretrain(SourceModel):
         "val_size": 2000,
         "lr_schedule": "exp_decay_oscar",
         "n_epochs": 4,
+        "use_fp16": True,
+        "scale_loss": True
     }
     required_files = REQUIRED_FILES
