@@ -77,7 +77,7 @@ def add_timing_signal_from_position(x, position, timescales):
         log_timescale_increment = (
             math.log(float(max_timescale) / float(min_timescale)) / (tf.to_float(num_timescales) - 1)
         )
-        inv_timescales = min_timescale * tf.exp(tf.to_float(tf.range(num_timescales)) * -log_timescale_increment)
+        inv_timescales = min_timescale * tf.exp(tf.to_float(tf.range(num_timescales)) * log_timescale_increment)
         position_x = tf.expand_dims(tf.to_float(position[:, :, dim]), 2)  # batch, len, 1 # where 1 will be the chanels dim
         scaled_time = position_x * tf.expand_dims(tf.expand_dims(inv_timescales, 0), 0)  # batch , len, num_timescales
         signal = tf.concat([tf.sin(scaled_time), tf.cos(scaled_time)], axis=2)  # batch channels//num_dims
