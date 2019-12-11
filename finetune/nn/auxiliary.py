@@ -32,10 +32,9 @@ def embed_position(context, featurizer_state, config, train):
             context,
             timescales=[
                 [
-                    math.pi / 2,
-                    25 * math.pi
+                    math.pi / 4,
+                    50 * math.pi
                 ]
             ]
         )
-        # pos_embed = tf.Print(pos_embed, [pos_embed], summarize=1000)
         featurizer_state['context'] = pos_embed
