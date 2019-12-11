@@ -30,6 +30,7 @@ ArrayEncodedOutput = namedtuple(
         "token_ends",  # list of list of char_locs (int) passed through from `EncoderOutput`
         "token_starts",
         "mask",  # int array shape (batch, seq_length)
+        "char_pos_abs"
     ],
 )
 ArrayEncodedOutput.__new__.__defaults__ = (None,) * len(ArrayEncodedOutput._fields)
@@ -226,6 +227,7 @@ def tokenize_context(context, encoded_output, config):
                     raise ValueError("Context cannot be fully matched as it appears to not cover the end of the sequence")
 
             tokenized_context.append(context_by_char_loc[current_char_loc][1])
+
     assert len(tokenized_context) == len(encoded_output.char_locs)
     # padded value doesn't matter since it will be masked out
     expanded_context = np.pad(tokenized_context, ((0, seq_len - len(tokenized_context)), (0, 0)), 'constant')
