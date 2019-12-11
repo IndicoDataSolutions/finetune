@@ -80,7 +80,6 @@ class SequencePipeline(BasePipeline):
             (shapes, TS(target_shape),),
         )
 
-
     def _target_encoder(self):
         if self.multi_label:
             return SequenceMultiLabelingEncoder(pad_token=self.config.pad_token)
@@ -319,6 +318,7 @@ class SequenceLabeler(BaseModel):
             lengths=featurizer_state["lengths"],
             use_crf=self.config.crf_sequence_labeling,
             featurizer_state=featurizer_state,
+            use_crf=self.config.crf_sequence_labeling,
             **kwargs
         )
 

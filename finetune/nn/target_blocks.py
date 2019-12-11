@@ -408,6 +408,7 @@ def sequence_labeler(
     lengths=None,
     use_crf=True,
     featurizer_state=None,
+    use_crf=True,
     **kwargs
 ):
     """
