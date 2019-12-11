@@ -365,9 +365,8 @@ def simple_attn(hidden, config, lengths):
     key = tf.expand_dims(context_embed, 2)
     dist = tf.reduce_sum(query * key, 3)
 #    key = tf.transpose(context_embed, [0, 2, 1])
-    dist = tf.Print(dist, [dist], summarize=10000)
-    w = tf.cast(dist < 0.01, dtype=tf.float32)
-    
+    w = tf.cast(dist > 10, dtype=tf.float32)
+
 
 #    temp = tf.get_variable("temp", [1], initializer=tf.constant_initializer(1))
     # tf.summary.scalar('temp', temp)
@@ -510,7 +509,7 @@ def sequence_labeler(
                                 logits_i,
                                 weights=tf.sequence_mask(
                                     lengths, maxlen=tf.shape(targets_individual[i])[1], dtype=tf.float32
-                                ) / tf.cast(lengths, tf.float32)
+                                ) / tf.expand_dims(tf.cast(lengths, tf.float32), -1)
                             )
                 logits = tf.stack(logits, axis=-1)
             else:
@@ -537,7 +536,7 @@ def sequence_labeler(
                             logits,
                             weights=tf.sequence_mask(
                                 lengths, maxlen=tf.shape(targets)[1], dtype=tf.float32
-                            ) / tf.cast(lengths, tf.float32)
+                            ) / tf.cast(tf.expand_dims(lengths, -1), tf.float32)
                         )
 
         return {

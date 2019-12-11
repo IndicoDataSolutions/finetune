@@ -20,6 +20,7 @@ EncodedOutput = namedtuple(
         "labels",  # list of list of labels
         "char_locs",  # list of list of character locations (ints)
         "char_starts",  # list of list of character starts (locs are character ends) (ints)
+        "char_pos_abs",  # absolute char ends relative to input sequence.
     ],
 )
 EncodedOutput.__new__.__defaults__ = (None,) * len(EncodedOutput._fields)
@@ -32,6 +33,7 @@ ArrayEncodedOutput = namedtuple(
         "char_locs",  # list of list of char_locs (int) passed through from `EncoderOutput`
         "char_starts",  # list of list of char_starts (int) passed through from `EncoderOutput`
         "mask",  # int array shape (batch, seq_length)
+        "char_pos_abs"
     ],
 )
 ArrayEncodedOutput.__new__.__defaults__ = (None,) * len(ArrayEncodedOutput._fields)
@@ -174,6 +176,7 @@ class BaseEncoder(object):
         tokens = []
         positions = []
         labels = []
+        abs_positions = []
 
         # for each field in that example
         for field in Xs:
@@ -194,12 +197,22 @@ class BaseEncoder(object):
                         max_length - 2
                     )
                 )
+            cumulative_positions = encoded.char_locs[0]
+            for p in encoded.char_locs[1:]:
+                cumulative_positions.extend([i + cumulative_positions[-1] for i in p])
+
+
+            abs_positions.append(cumulative_positions)
 
         # merge fields + truncate if necessary
         token_ids = self._cut_and_concat(encoded=token_ids, max_length=max_length)
         tokens = self._cut_and_concat(encoded=tokens, max_length=max_length)
         locations = self._cut_and_concat(
             encoded=positions, max_length=max_length, special_tokens=-1
+        )
+        cumulative_positions = self._cut_and_concat(
+            encoded=abs_positions,
+            max_length=max_length, special_tokens=-1
         )
 
         # needed to match up context with chunks if chunk_long_sequences=True
@@ -217,6 +230,7 @@ class BaseEncoder(object):
             labels=labels,
             char_starts=starts,
             char_locs=locations,
+            char_pos_abs=cumulative_positions
         )
 
     def __setstate__(self, state):
@@ -249,7 +263,7 @@ def tokenize_context(context, encoded_output, config):
     default_context = [config.default_context[k] for k in context_keys]
     current_char_loc = 0
     tokenized_context = []
-    for token, char_loc in zip(encoded_output.tokens, encoded_output.char_locs):
+    for token, char_loc in zip(encoded_output.tokens, encoded_output.char_pos_abs):
         # Note: this assumes that the tokenization will never lump multiple tokens into one
         # (this would not be the case if multiple context spans make up the same token)
         if char_loc == -1:
@@ -261,6 +275,7 @@ def tokenize_context(context, encoded_output, config):
             if char_loc > context_by_char_loc[current_char_loc][0]:
                 current_char_loc += 1
             tokenized_context.append(context_by_char_loc[current_char_loc][1])
+
     assert len(tokenized_context) == len(encoded_output.char_locs)
     # padded value doesn't matter since it will be masked out
     expanded_context = np.pad(tokenized_context, ((0, seq_len - len(tokenized_context)), (0, 0)), 'constant')
