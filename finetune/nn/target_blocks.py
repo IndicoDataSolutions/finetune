@@ -368,17 +368,23 @@ def mask_pad_single_head(w, lengths):
 def simple_attn(hidden, config, lengths):
     context_embed = hidden[:, :, -config.n_context_embed:]
     # reweight each frequency by a scalar
-    scale = tf.get_variable("scale", [config.n_context_embed], initializer=tf.constant_initializer(1))
-    context_embed = scale * context_embed
-    query = conv1d(context_embed, "attn_proj", config.n_context_embed, 1)
-    key = tf.transpose(context_embed, [0, 2, 1])
-    w = tf.matmul(query, key)
-    temp = tf.get_variable("temp", [1], initializer=tf.constant_initializer(1))
+    #scale = tf.get_variable("scale", [config.n_context_embed], initializer=tf.constant_initializer(1))
+    #context_embed = scale * context_embed
+    #query = conv1d(context_embed, "attn_proj", config.n_context_embed, 1)
+    query = tf.expand_dims(context_embed, 1)
+    key = tf.expand_dims(context_embed, 2)
+    dist = tf.reduce_sum(query * key, 3)
+#    key = tf.transpose(context_embed, [0, 2, 1])
+    dist = tf.Print(dist, [dist], summarize=10000)
+    w = tf.cast(dist < 0.01, dtype=tf.float32)
+    
+
+#    temp = tf.get_variable("temp", [1], initializer=tf.constant_initializer(1))
     # tf.summary.scalar('temp', temp)
     # tf.summary.histogram('scale', scale)
-    w = temp * w
-    w = mask_pad_single_head(w, lengths)  # [batch, seq_len, seq_len]
-    w = tf.nn.softmax(w)  # [batch, seq_len, seq_len]
+#    w = temp * w
+#    w = mask_pad_single_head(w, lengths)  # [batch, seq_len, seq_len]
+#    w = tf.nn.softmax(w)  # [batch, seq_len, seq_len]
     return w
 
 
