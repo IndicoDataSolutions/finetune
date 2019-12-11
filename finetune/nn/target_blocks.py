@@ -390,6 +390,7 @@ def sequence_labeler(
     lengths=None,
     context=None,
     featurizer_state=None,
+    use_crf=True,
     **kwargs
 ):
     """
@@ -418,9 +419,6 @@ def sequence_labeler(
         "predict_params": A dictionary of params to be fed to the viterbi decode function.
     """
     with tf.variable_scope("sequence-labeler", reuse=reuse):
-#        # TODO: This is a patch because crf doesn't like not knowing the sequence dimension
-#        # and OSCAR doesn't provide one.
-#        hidden.set_shape([None, config.max_length, None])
 
         if targets is not None:
             targets = tf.cast(targets, dtype=tf.int32)
@@ -466,7 +464,7 @@ def sequence_labeler(
                 )
             logits = seq_lab_internal(hidden)
 
-        log_likelihood = 0.0
+        loss = 0.0
 
         default_lengths = tf.shape(hidden)[1] * tf.ones(
             tf.shape(hidden)[0], dtype=tf.int32
@@ -499,13 +497,21 @@ def sequence_labeler(
                             logits_i = class_reweighting(class_weight)(logits[-1])
                         else:
                             logits_i = logits[i]
-                            
-                        log_likelihood += crf_log_likelihood(
-                            logits_i,
-                            targets_individual[i],
-                            lengths,
-                            transition_params=transition_params[-1],
-                        )[0]
+                        if use_crf:
+                            loss -= crf_log_likelihood(
+                                logits_i,
+                                targets_individual[i],
+                                lengths,
+                                transition_params=transition_params[-1],
+                            )[0]
+                        else:
+                            loss += tf.compat.v1.losses.sparse_softmax_cross_entropy(
+                                targets_individual[i],
+                                logits_i,
+                                weights=tf.sequence_mask(
+                                    lengths, maxlen=tf.shape(targets_individual[i])[1], dtype=tf.float32
+                                ) / tf.cast(lengths, tf.float32)
+                            )
                 logits = tf.stack(logits, axis=-1)
             else:
                 if class_weights is not None and train:
@@ -520,13 +526,23 @@ def sequence_labeler(
                     "Transition_matrix", shape=[n_targets, n_targets]
                 )
                 if targets is not None:
-                    log_likelihood, _ = crf_log_likelihood(
-                        logits, targets, lengths, transition_params=transition_params
-                    )
+                    if use_crf:
+                        log_likelihood, _ = crf_log_likelihood(
+                            logits, targets, lengths, transition_params=transition_params
+                        )
+                        loss = -log_likelihood
+                    else:
+                        loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(
+                            targets,
+                            logits,
+                            weights=tf.sequence_mask(
+                                lengths, maxlen=tf.shape(targets)[1], dtype=tf.float32
+                            ) / tf.cast(lengths, tf.float32)
+                        )
 
         return {
             "logits": logits,
-            "losses": -log_likelihood,
+            "losses": loss,
             "predict_params": {"transition_matrix": transition_params, "sequence_length": lengths},
         }
 

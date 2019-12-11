@@ -85,7 +85,6 @@ class SequencePipeline(BasePipeline):
             (shapes, TS(target_shape),),
         )
 
-
     def _target_encoder(self):
         if self.multi_label:
             return SequenceMultiLabelingEncoder()
@@ -337,6 +336,7 @@ class SequenceLabeler(BaseModel):
             lengths=featurizer_state["lengths"],
             context=featurizer_state.get('context', None),
             featurizer_state=featurizer_state,
+            use_crf=self.config.crf_sequence_labeling,
             **kwargs
         )
 
@@ -348,13 +348,17 @@ class SequenceLabeler(BaseModel):
             label_idxs = []
             label_probas = []
             for logits_i, trans_mat_i in zip(logits, trans_mats):
-                idx, prob = sequence_decode(logits_i, trans_mat_i, sequence_length, use_gpu_op=True)
+                idx, prob = sequence_decode(
+                    logits_i, trans_mat_i, sequence_length, use_gpu_op=True, use_crf=self.config.crf_sequence_labeling
+                )
                 label_idxs.append(idx)
                 label_probas.append(prob[:, :, 1:])
             label_idxs = tf.stack(label_idxs, axis=-1)
             label_probas = tf.stack(label_probas, axis=-1)
         else:
-            label_idxs, label_probas = sequence_decode(logits, trans_mats, sequence_length, use_gpu_op=False)
+            label_idxs, label_probas = sequence_decode(
+                logits, trans_mats, sequence_length, use_gpu_op=False, use_crf=self.config.crf_sequence_labeling
+            )
         return label_idxs, label_probas
 
     def _predict_proba_op(self, logits, **kwargs):
