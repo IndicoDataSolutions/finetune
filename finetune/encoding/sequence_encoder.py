@@ -180,6 +180,10 @@ def finetune_to_indico_sequence(
                     annotation_ranges.add(annotation_tuple)
                     doc_annotations.append(annotation)
 
+            # move raw_annotation_start forward so we don't revisit earlier parts of the text
+            raw_annotation_start = raw_annotation_end
+
+
         if associations:
             associations_seq = assign_associations(
                 associations[doc_idx], none_value, subtoken_to_label_idx

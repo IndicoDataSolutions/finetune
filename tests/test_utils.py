@@ -276,6 +276,21 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
         weights = compute_class_weights('log', class_counts=class_counts)
         self.assertEqual(weights[1], 1.0)
 
+    def test_duplicates(self):
+        # Newline complications
+        finetunex = [["Revenue Cost 95", " 95"]]
+        finetuney = [[("<PAD>",), ("1",)]]
+        expectedx = ["Revenue Cost 95 95"]
+        expectedy = [
+            [
+                {'start': 16, 'end': 18, 'label': "1", 'text': "95"},
+            ]
+        ]
+        indicox_pred, indicoy_pred = finetune_to_indico_sequence(expectedx, finetunex, finetuney, none_value="<PAD>", subtoken_predictions=False)
+        print(indicox_pred)
+        print(indicoy_pred)
+        self.assertEqual(indicox_pred, expectedx)
+        self.assertEqual(indicoy_pred, expectedy)
 
 class TestGradientAccumulation(unittest.TestCase):
 
