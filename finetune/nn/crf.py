@@ -37,8 +37,11 @@ def viterbi_decode(score, transition_params):
     return viterbi, np_softmax(trellis, axis=-1)
 
 
-def sequence_decode(logits, transition_matrix, sequence_length, use_gpu_op):
+def sequence_decode(logits, transition_matrix, sequence_length, use_gpu_op, use_crf):
     """ A simple py_func wrapper around the Viterbi decode allowing it to be included in the tensorflow graph. """
+    if not use_crf:
+        return tf.argmax(logits, -1), tf.nn.softmax(logits, -1)
+
     if use_gpu_op:
         tags, _ = tf.contrib.crf.crf_decode(
             logits,

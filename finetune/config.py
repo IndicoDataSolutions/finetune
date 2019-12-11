@@ -329,7 +329,8 @@ def get_default_config():
         multi_label_threshold=0.5,
         chunk_long_sequences=True,
         add_eos_bos_to_chunk=True,
-        filter_empty_examples=False, 
+        filter_empty_examples=False,
+        crf_sequence_labeling=True,
 
         # Regression Params
         regression_loss="L2",
