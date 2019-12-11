@@ -78,7 +78,7 @@ if __name__ == "__main__":
         test_size=0.7,
         random_state=42
     )
-    model = SequenceLabeler(base_model=RoBERTa, batch_size=1, val_size=0., max_length=16, chunk_long_sequences=True, subtoken_predictions=True)
+    model = SequenceLabeler(base_model=RoBERTa, batch_size=1,n_epochs=3, val_size=0.0, max_length=16, chunk_long_sequences=True, subtoken_predictions=True, crf_sequence_labeling=True)
     model.fit(trainX, trainY)
     predictions = model.predict(testX)
     print(predictions)
