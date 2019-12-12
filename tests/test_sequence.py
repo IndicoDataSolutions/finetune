@@ -278,3 +278,17 @@ class TestSequenceLabeler(unittest.TestCase):
         self.model.save(self.save_file)
         model = SequenceLabeler.load(self.save_file)
         model.predict(test_texts)
+
+
+class TestSequenceLabelerNoCRF(TestSequenceLabeler):
+    def default_config(self, **kwargs):
+        d = dict(
+            batch_size=2,
+            max_length=256,
+            lm_loss_coef=0.0,
+            val_size=0,
+            interpolate_pos_embed=False,
+            crf_sequence_labeling=False,
+        )
+        d.update(**kwargs)
+        return d
