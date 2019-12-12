@@ -464,12 +464,13 @@ def sequence_labeler(
                                 transition_params=transition_params[-1],
                             )[0]
                         else:
+                            weights = tf.sequence_mask(
+                                lengths, maxlen=tf.shape(targets_individual[i])[1], dtype=tf.float32
+                            ) / tf.expand_dims(tf.cast(lengths, tf.float32), -1)
                             loss += tf.compat.v1.losses.sparse_softmax_cross_entropy(
                                 targets_individual[i],
                                 logits_i,
-                                weights=tf.sequence_mask(
-                                    lengths, maxlen=tf.shape(targets_individual[i])[1], dtype=tf.float32
-                                ) / tf.cast(lengths, tf.float32)
+                                weights=weights
                             )
                 logits = tf.stack(logits, axis=-1)
             else:
@@ -491,12 +492,13 @@ def sequence_labeler(
                         )
                         loss = -log_likelihood
                     else:
+                        weights = tf.sequence_mask(
+                            lengths, maxlen=tf.shape(targets)[1], dtype=tf.float32
+                        ) / tf.expand_dims(tf.cast(lengths, tf.float32), -1)
                         loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(
                             targets,
                             logits,
-                            weights=tf.sequence_mask(
-                                lengths, maxlen=tf.shape(targets)[1], dtype=tf.float32
-                            ) / tf.cast(lengths, tf.float32)
+                            weights=weights
                         )
 
         return {
