@@ -109,77 +109,77 @@ def finetune_to_indico_sequence(
             else:
                 label_list = raw_label
 
-            for label_idx, label in enumerate(label_list or [None]):
-                stripped_text = sub_str.strip()
+            stripped_text = sub_str.strip()
 
-                if subtoken_predictions:
-                    raw_annotation_start = raw_text.find(sub_str, raw_annotation_start)
-                    raw_annotation_end = raw_annotation_start + len(sub_str)
-                else:
-                    raw_annotation_start = raw_text.find(
-                        stripped_text, raw_annotation_start
-                    )
-                    raw_annotation_end = raw_annotation_start + len(stripped_text)
+            if subtoken_predictions:
+                raw_annotation_start = raw_text.find(sub_str, raw_annotation_start)
+                raw_annotation_end = raw_annotation_start + len(sub_str)
+            else:
+                raw_annotation_start = raw_text.find(
+                    stripped_text, raw_annotation_start
+                )
+                raw_annotation_end = raw_annotation_start + len(stripped_text)
 
-                if raw_annotation_start == -1:
-                    warnings.warn(
-                        "Failed to find predicted sequence: {} in text".format(
-                            sub_str
-                        )
+            if raw_annotation_start == -1:
+                warnings.warn(
+                    "Failed to find predicted sequence: {} in text".format(
+                        sub_str
                     )
+                )
+                continue
+
+            for label_idx, label in enumerate(label_list):
+                extended_existing_label = False
+                for item in doc_annotations:
+                    # handle case where we extend existing annotation
+                    if (
+                        # same label
+                        item["label"] == label
+                        # and only separated by whitespace
+                        and item["end"] <= raw_annotation_end
+                        and not raw_text[item["end"] : raw_annotation_start].strip()
+                    ):
+                        item["end"] = raw_annotation_end
+                        item["text"] = raw_text[item["start"] : raw_annotation_end]
+                        if "confidence" in item and confidences is not None:
+                            item["confidence"].append(confidences)
+                        extended_existing_label = True
+                        break
+
+                if extended_existing_label or label == none_value:
                     continue
-                if label is not None:
-                    extended_existing_label = False
-                    for item in doc_annotations:
-                        # handle case where we extend existing annotation
-                        if (
-                            # same label
-                            item["label"] == label
-                            # and only separated by whitespace
-                            and item["end"] <= raw_annotation_end
-                            and not raw_text[item["end"] : raw_annotation_start].strip()
-                        ):
-                            item["end"] = raw_annotation_end
-                            item["text"] = raw_text[item["start"] : raw_annotation_end]
-                            if "confidence" in item and confidences is not None:
-                                item["confidence"].append(confidences)
-                            extended_existing_label = True
-                            break
 
-                    if extended_existing_label or label == none_value:
-                        continue
+                annotation_start, annotation_end = (
+                    int(raw_annotation_start),
+                    int(raw_annotation_end),
+                )
 
-                    annotation_start, annotation_end = (
-                        int(raw_annotation_start),
-                        int(raw_annotation_end),
+                annotation = {
+                    "start": int(annotation_start),
+                    "end": int(annotation_end),
+                    "label": label,
+                    "text": raw_text[annotation_start:annotation_end],
+                }
+
+                # if we don't want to allow subtoken predictions, adjust start and end to match
+                # the start and ends of the nearest full tokens
+                if not subtoken_predictions:
+                    round_to_nearest_start_and_end(
+                        annotation, spacy_token_starts, spacy_token_ends, raw_text
                     )
 
-                    annotation = {
-                        "start": int(annotation_start),
-                        "end": int(annotation_end),
-                        "label": label,
-                        "text": raw_text[annotation_start:annotation_end],
-                    }
+                if confidences is not None:
+                    annotation["confidence"] = [confidences]
 
-                    # if we don't want to allow subtoken predictions, adjust start and end to match
-                    # the start and ends of the nearest full tokens
-                    if not subtoken_predictions:
-                        round_to_nearest_start_and_end(
-                            annotation, spacy_token_starts, spacy_token_ends, raw_text
-                        )
+                if annotation["start"] >= annotation["end"]:
+                    continue
 
-                    if confidences is not None:
-                        annotation["confidence"] = [confidences]
-
-                    if annotation["start"] >= annotation["end"]:
-                        continue
-
-                    # prevent duplicate annotation edge case
-                    annotation_tuple = (annotation["start"], annotation["end"], label)
-                    if annotation_tuple not in annotation_ranges:
-                        annotation_ranges.add(annotation_tuple)
-                        doc_annotations.append(annotation)
-                raw_annotation_start = raw_annotation_end
+                # prevent duplicate annotation edge case
+                annotation_tuple = (annotation["start"], annotation["end"], label)
+                if annotation_tuple not in annotation_ranges:
+                    annotation_ranges.add(annotation_tuple)
+                    doc_annotations.append(annotation)
+            raw_annotation_start = raw_annotation_end
 
         if associations:
             associations_seq = assign_associations(
