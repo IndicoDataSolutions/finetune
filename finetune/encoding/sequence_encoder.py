@@ -99,6 +99,7 @@ def finetune_to_indico_sequence(
         doc_annotations = []
         annotation_ranges = set()
         raw_annotation_start = 0
+        raw_annotation_end = 0
         subtoken_to_label_idx = []
         for i, (sub_str, raw_label, confidences) in enumerate(
             zip(doc_seq, label_seq, prob_seq or [None] * len(doc_seq))
