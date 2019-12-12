@@ -254,8 +254,6 @@ def get_relevant_context_for_chunk(context, encoded_output):
 def tokenize_context(context, encoded_output, config):
     """ Tokenize the context corresponding to a single sequence of text """
     # in the edge case where the chunk is just a single end token, we don't need to alter our context chunk
-    print(encoded_output.char_pos_abs)
-    print(encoded_output.tokens)
     if len(encoded_output.char_locs) > 1:
         context = get_relevant_context_for_chunk(context, encoded_output)
     seq_len = len(encoded_output.token_ids)
