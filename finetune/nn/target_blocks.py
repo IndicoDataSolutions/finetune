@@ -366,7 +366,7 @@ def simple_attn(hidden, config, lengths):
     key = context_embed
     key = tf.transpose(key, [0, 2, 1])
     w = tf.matmul(query, key)
-    temp = tf.get_variable("temp", [1], initializer=tf.constant_initializer(1))
+    temp = tf.get_variable("temp", [1], initializer=tf.constant_initializer(1 / config.n_context_embed))
     # tf.summary.scalar('temp', temp)
     # tf.summary.histogram('scale', scale)
     w = temp * w
