@@ -382,9 +382,6 @@ def simple_attn(hidden, config, lengths):
     query = tf.expand_dims(context_embed, 1)
     key = tf.expand_dims(context_embed, 2)
     w = tf.reduce_sum(query * key, 3)
-#    key = tf.transpose(context_embed, [0, 2, 1])
-#    w = tf.cast(dist > 10, dtype=tf.float32)
-
 #    temp = tf.get_variable("temp", [1], initializer=tf.constant_initializer(1))
     # tf.summary.scalar('temp', temp)
     # tf.summary.histogram('scale', scale)
