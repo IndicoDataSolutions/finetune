@@ -371,8 +371,8 @@ def simple_attn(hidden, config, lengths):
     # tf.summary.scalar('temp', temp)
     # tf.summary.histogram('scale', scale)
 #    w = temp * w
-#    w = mask_pad_single_head(w, lengths)  # [batch, seq_len, seq_len]
-#    w = tf.nn.softmax(w)  # [batch, seq_len, seq_len]
+    w = mask_pad_single_head(w, lengths)  # [batch, seq_len, seq_len]
+    w = tf.nn.softmax(w)  # [batch, seq_len, seq_len]
     return w
 
 
