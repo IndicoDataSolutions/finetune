@@ -198,9 +198,10 @@ def get_model_fn(
                         predictions[PredictMode.EXPLAIN] = target_model_state[
                             "explanation"
                         ]
-                    predictions[PredictMode.CONTEXT_ATTENTION] = featurizer_state[
-                        "context_attention_weights"
-                    ]
+                    if "context_attention_weights" in featurizer_state:
+                        predictions[PredictMode.CONTEXT_ATTENTION] = featurizer_state[
+                            "context_attention_weights"
+                        ]
 
             if lm_type is not None:
                 if lm_type.lower() == 'lm':
