@@ -354,20 +354,28 @@ def mask_pad_single_head(w, lengths):
     w = w * b + -1e9 * (1 - b)
     return w
 
+class ConvIdentityInit(tf.initializers.identity):
+    def __call__(self, shape, dtype=None, partition_info=None):
+        full_shape = shape if partition_info is None else partition_info.full_shape
+        if dtype is None:
+            dtype = self.dtype
+        if isinstance(full_shape, tf.TensorShape):
+            full_shape = full_shape.as_list()
+        initializer = tf.eye(*full_shape[-2:], batch_shape=full_shape[:-2], dtype=dtype)
+        if partition_info is not None:
+            initializer = tf.slice(initializer, partition_info.var_offset, shape)
+        return self.gain * initializer
 
-def simple_attn(hidden, config, lengths):
-    context_embed = hidden[:, :, -config.n_context_embed:]
-    # reweight each frequency by a scalar
-    #scale = tf.get_variable("scale", [config.n_context_embed], initializer=tf.constant_initializer(1))
-    #context_embed = scale * context_embed
-    #query = conv1d(context_embed, "attn_proj", config.n_context_embed, 1)
-    query = tf.expand_dims(context_embed, 1)
-    key = tf.expand_dims(context_embed, 2)
+def simple_attn(hidden, config, lengths, textual_context=10):
+    total_context =  config.n_context_embed + textual_context
+    context_embed = hidden[:, :, -total_context:]
+    
+    query = conv1d(context_embed, "q_proj", total_context, 1, w_init=ConvIdentityInit())
+    query = tf.expand_dims(query, 1)
+
+    key = conv1d(context_embed, "k_proj", total_context, 1, w_init=ConvIdentityInit())
+    key = tf.expand_dims(key, 2)
     w = tf.reduce_sum(query * key, 3)
-#    temp = tf.get_variable("temp", [1], initializer=tf.constant_initializer(1))
-    # tf.summary.scalar('temp', temp)
-    # tf.summary.histogram('scale', scale)
-#    w = temp * w
     w = mask_pad_single_head(w, lengths)  # [batch, seq_len, seq_len]
     w = tf.nn.softmax(w)  # [batch, seq_len, seq_len]
     return w

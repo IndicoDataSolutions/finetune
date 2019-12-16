@@ -2,7 +2,6 @@ import warnings
 import copy
 from collections import defaultdict
 
-import ipdb
 import numpy as np
 
 from finetune.util.logging import truncate_text
