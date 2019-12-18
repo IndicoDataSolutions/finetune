@@ -30,10 +30,10 @@ def embed_position(context, featurizer_state, config, train):
         pos_embed = add_timing_signal_from_position(
             x,
             context,
-            timescales=[
+            timescales = [
                 [
-                    math.pi / 2,
-                    25 * math.pi
+                    (math.pi / 2) * (1/2500),
+                    (25 * math.pi) * (1/2500)
                 ]
             ]
         )
