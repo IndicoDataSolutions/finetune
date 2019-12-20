@@ -376,14 +376,14 @@ class ConvIdentityInit(tf.initializers.identity):
             initializer = tf.slice(initializer, partition_info.var_offset, shape)
         return self.gain * initializer
 
-def simple_attn(hidden, config, lengths, textual_context=10):
+def simple_attn(hidden, config, lengths, textual_context=10, suffix=''):
     total_context =  config.n_context_embed + textual_context
     context_embed = hidden[:, :, -total_context:]
     
-    query = conv1d(context_embed, "q_proj", total_context, 1, w_init=ConvIdentityInit())
+    query = conv1d(context_embed, "q_proj{}".format(suffix), total_context, 1, w_init=ConvIdentityInit())
     query = tf.expand_dims(query, 1)
 
-    key = conv1d(context_embed, "k_proj", total_context, 1, w_init=ConvIdentityInit())
+    key = conv1d(context_embed, "k_proj{}".format(suffix), total_context, 1, w_init=ConvIdentityInit())
     key = tf.expand_dims(key, 2)
     w = tf.reduce_sum(query * key, 3)
     w = mask_pad_single_head(w, lengths)  # [batch, seq_len, seq_len]
@@ -460,10 +460,15 @@ def sequence_labeler(
             # n = norm(attn_fn(hidden) + hidden, "seq_label_residual")
 
             w = simple_attn(hidden, config, lengths)
-            featurizer_state['context_attention_weights'] = w
+            # featurizer_state['context_attention_weights'] = w
             text_embed = hidden[:, :, :config.n_embed]
             n = tf.matmul(w, text_embed)
             flat_logits = tf.layers.dense(n, n_targets)
+            w2 = simple_attn(hidden, config, lengths, suffix='2')
+            featurizer_state['context_attention_weights'] = tf.concat([tf.expand_dims(w, 0), tf.expand_dims(w2, 0)], 0)
+            n2 = tf.matmul(w, flat_logits)
+            flat_logits = tf.layers.dense(n2, n_targets)
+
             logits = tf.reshape(
                 flat_logits, tf.concat([tf.shape(hidden)[:2], [n_targets]], 0)
             )
