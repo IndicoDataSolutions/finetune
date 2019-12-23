@@ -467,15 +467,18 @@ def sequence_labeler(
             # )
             # n = norm(attn_fn(hidden) + hidden, "seq_label_residual")
 
-            w = simple_attn(hidden, config, lengths)
-            # featurizer_state['context_attention_weights'] = w
+            context_embed = hidden[:, :, -config.n_context_embed:]
+            w0 = simple_attn(context_embed, config, lengths, textual_context=0, suffix='0')
+            hidden1 = tf.matmul(w0, context_embed)
+
+            # use new aggregated positional features
+            hidden_final = tf.concat([hidden[:, :, :-config.n_context_embed], hidden1], 2)
+            w = simple_attn(hidden_final, config, lengths)
+            featurizer_state['context_attention_weights'] = tf.concat(
+                [tf.expand_dims(w0, 0), tf.expand_dims(w, 0)], 0)
             text_embed = hidden[:, :, :config.n_embed]
             n = tf.matmul(w, text_embed)
             flat_logits = tf.layers.dense(n, n_targets)
-            w2 = simple_attn(hidden, config, lengths, suffix='2')
-            featurizer_state['context_attention_weights'] = tf.concat([tf.expand_dims(w, 0), tf.expand_dims(w2, 0)], 0)
-            n2 = tf.matmul(w, flat_logits)
-            flat_logits = tf.layers.dense(n2, n_targets)
 
             logits = tf.reshape(
                 flat_logits, tf.concat([tf.shape(hidden)[:2], [n_targets]], 0)
