@@ -24,9 +24,7 @@ def perceptron(x, ny, config, w_init=None, b_init=None):
     b_init = b_init or tf.constant_initializer(0)
 
     with tf.variable_scope('perceptron'):
-        nx = config.n_embed
-        if config.use_auxiliary_info:
-            nx += config.n_context_embed
+        nx = shape_list(x)[-1]
         w = tf.get_variable("w", [nx, ny], initializer=w_init)
         b = tf.get_variable("b", [ny], initializer=b_init)
         return tf.matmul(x, w) + b
@@ -367,7 +365,7 @@ class ConvIdentityInit(tf.initializers.identity):
         return self.gain * initializer
 
 def simple_attn(hidden, config, lengths, textual_context=10, suffix=''):
-    total_context =  config.n_context_embed + textual_context
+    total_context =  config.n_context_embed_per_channel * config.context_dim + textual_context
     context_embed = hidden[:, :, -total_context:]
     
     query = conv1d(context_embed, "q_proj{}".format(suffix), total_context, 1, w_init=ConvIdentityInit())
@@ -426,10 +424,7 @@ def sequence_labeler(
         if targets is not None:
             targets = tf.cast(targets, dtype=tf.int32)
 
-        nx = config.n_embed
-        if config.use_auxiliary_info:
-            nx += config.n_context_embed
-
+        nx = shape_list(hidden)[-1]
         def seq_lab_internal(hidden):
             # if config.base_model.is_bidirectional:
             #     n = hidden
@@ -449,13 +444,13 @@ def sequence_labeler(
             #     featurizer_state=featurizer_state
             # )
             # n = norm(attn_fn(hidden) + hidden, "seq_label_residual")
-
-            context_embed = hidden[:, :, -config.n_context_embed:]
+            n_context_embed = config.n_context_embed_per_channel * config.context_dim
+            context_embed = hidden[:, :, -n_context_embed:]
             w0 = simple_attn(context_embed, config, lengths, textual_context=0, suffix='0')
             hidden1 = tf.matmul(w0, context_embed)
 
             # use new aggregated positional features
-            hidden_final = tf.concat([hidden[:, :, :-config.n_context_embed], hidden1], 2)
+            hidden_final = tf.concat([hidden[:, :, :-n_context_embed], hidden1], 2)
             w = simple_attn(hidden_final, config, lengths, textual_context=config.textual_context)
             featurizer_state['context_attention_weights'] = tf.concat(
                 [tf.expand_dims(w0, 0), tf.expand_dims(w, 0)], 0)
