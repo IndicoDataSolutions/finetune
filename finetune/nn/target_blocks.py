@@ -470,8 +470,7 @@ def sequence_labeler(
             # use new aggregated positional features
             hidden_final = tf.concat([hidden[:, :, :-n_context_embed], hidden1], 2)
             w = simple_attn(hidden_final, config, lengths, textual_context=config.textual_context)
-            featurizer_state['context_attention_weights'] = tf.concat(
-                [tf.expand_dims(w0, 0), tf.expand_dims(w, 0)], 0)
+            featurizer_state['context_attention_weights'] = tf.stack((w0, w), 3)
             text_embed = hidden[:, :, :config.n_embed]
             n = tf.matmul(w, text_embed)
             flat_logits = tf.layers.dense(n, n_targets)
