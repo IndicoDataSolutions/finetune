@@ -26,7 +26,8 @@ def embed_position(context, featurizer_state, config, train):
     with tf.variable_scope("context_embedding"):
         context_dim = shape_list(context)[-1]
         batch, seq, _ = shape_list(featurizer_state['sequence_features'])
-        x = tf.zeros(shape=(batch, seq, config.n_context_embed))
+        context_channels = config.n_context_embed_per_channel * context_dim)
+        x = tf.zeros(shape=(batch, seq, context_channels))
         pos_embed = add_timing_signal_from_position(
             x,
             context,
@@ -36,7 +37,7 @@ def embed_position(context, featurizer_state, config, train):
                     (25 * math.pi) * (1/2500)
                 ]
             ] * context_dim
-        ) / (float(config.n_context_embed) / config.context_embed_scale)
+        ) / (float(context_channels) / config.context_embed_scale)
         featurizer_state['context'] = pos_embed
     return featurizer_state
 
