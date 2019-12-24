@@ -364,7 +364,7 @@ def get_default_config():
 
         # Auxiliary Information
         use_auxiliary_info=False,
-        n_context_embed_per_channel=32,
+        n_context_embed_per_channel=64,
         context_embed_scale=32,
         textual_context=10,
         context_embed_stddev=1.0,
