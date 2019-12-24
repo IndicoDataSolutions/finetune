@@ -52,6 +52,8 @@ def round_to_nearest_start_and_end(label, token_starts, token_ends, text):
     label["start"] = token_starts[np.argmin(start_distances)]
     label["end"] = token_ends[np.argmin(end_distances)]
     label["text"] = text[label["start"] : label["end"]]
+    if label["start"] > label["end"]:
+        raise FinetuneError("Cannot find appropriate nearest token. Check your labels.")
 
 
 def finetune_to_indico_sequence(
