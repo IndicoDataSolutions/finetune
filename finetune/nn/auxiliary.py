@@ -36,8 +36,7 @@ def embed_position(context, featurizer_state, config, train):
                     (25 * math.pi) * (1/2500)
                 ]
             ] * context_dim
-        )
-        # pos_embed = tf.Print(pos_embed, [pos_embed], summarize=1000)
+        ) / (float(config.n_context_embed) / config.context_embed_scale)
         featurizer_state['context'] = pos_embed
     return featurizer_state
 
