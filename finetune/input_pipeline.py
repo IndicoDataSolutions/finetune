@@ -487,6 +487,8 @@ class BasePipeline(metaclass=ABCMeta):
                                 fv = fv + [end_token]
                         d[field] = fv
                 yield self._array_format(EncodedOutput(**d), pad_token=pad_token)
+                if length < self.config.max_length:
+                    break
         else:
             encoder_out = self.text_encoder.encode_multi_input(
                 Xs,
