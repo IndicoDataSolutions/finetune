@@ -98,13 +98,14 @@ def cumulative_state_net(X, name, use_fp16, pdrop, train, pool_kernel_size=2, no
     pool_kernel_size = pool_kernel_size or conv_kernel
 
     nx = shape_list(X)[-1]
-    with tf.variable_scope(name):
-        output = tf.nn.relu(normal_1d_conv_block(X, conv_kernel, "1-" + str(conv_kernel), use_fp16, output_dim=nx))
+#    with tf.variable_scope(name):
+#        output = tf.nn.relu(normal_1d_conv_block(X, conv_kernel, "1-" + str(conv_kernel), use_fp16, output_dim=nx))
 
-    output = dropout(output, pdrop, train)
+    output = dropout(X, pdrop, train)
     aggregated = cascaded_pool(output, kernel_size=pool_kernel_size, pool_len=nominal_pool_length, use_fused_kernel=use_fused_kernel)
+    return aggregated
 
-    return normal_1d_conv_block(aggregated, 1, "output_reproject", use_fp16, output_dim=nx)
+#    return normal_1d_conv_block(aggregated, 1, "output_reproject", use_fp16, output_dim=nx)
 
 
 def normal_1d_conv_block(X, kernel_width, layer_name, use_fp16, dilation=1, output_dim=None, causal=True):
@@ -171,9 +172,9 @@ def block(X, block_name, use_fp16, pool_idx=None, encoder_state=None, train=Fals
         hidden = shape_list(X)[-1]
         h0 = normal_1d_conv_block(X, 1, "h0", use_fp16)
         ra = cumulative_state_net(
-            h0, "cumulative_state_net", use_fp16, pdrop, train, nominal_pool_length=nominal_pool_length, use_fused_kernel=use_fused_kernel
+            X, "cumulative_state_net", use_fp16, pdrop, train, nominal_pool_length=nominal_pool_length, use_fused_kernel=use_fused_kernel
         )
-        dc = dynamic_convolution(h0, ra, n_heads=16, kernel_size=15)
+        dc = dynamic_convolution(tf.nn.relu(h0), ra, n_heads=16, kernel_size=15)
         h1 = normal_1d_conv_block(dc, 1, "h1", use_fp16, output_dim=hidden * 2)
         h1_relu =  tf.nn.relu(h1)
         h2 = normal_1d_conv_block(h1_relu, 1, "h2", use_fp16, output_dim=hidden)

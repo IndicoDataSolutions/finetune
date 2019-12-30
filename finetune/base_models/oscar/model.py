@@ -64,7 +64,7 @@ class GPCModelFP16Pretrain(SourceModel):
     settings = {
         **BASE_OSCAR_SETTINGS,
         "base_model_path": "fresh_start.jl",
-        "optimizer": "Adafactor",
+        "optimizer": "AdafactorW",
         "cache_weights_to_file": True,
         "lr": 1e-4,
         "batch_size": 60,
