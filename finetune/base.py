@@ -13,6 +13,7 @@ import sys
 from contextlib import contextmanager
 import pathlib
 import logging
+from functools import partial
 
 import tqdm
 import numpy as np
@@ -517,11 +518,16 @@ class BaseModel(object, metaclass=ABCMeta):
             "'attention_weights' only supported for GPTModel and GPTModelSmall base models."
         )
     
-    def context_attention_weights(self, Xs, context=None):
+    def context_attention_weights(self, Xs, context=None, per_token_viz=False):
         if not context:
             raise ValueError('Need to pass in context.')
         raw_preds = self._inference(Xs, context=context, predict_keys=[PredictMode.CONTEXT_ATTENTION])
-        return raw_preds
+        if per_token_viz:
+            Xs = self.input_pipeline._format_for_inference(Xs)
+            text_to_ids = partial(self.input_pipeline._text_to_ids, pad_token=self.config.pad_token)
+            encoded_output = map(text_to_ids, Xs)
+            return raw_preds, encoded_output
+        return raw_preds, None
 
     def _featurize(self, Xs):
         raw_preds = self._inference(Xs, predict_keys=[PredictMode.FEATURIZE])
