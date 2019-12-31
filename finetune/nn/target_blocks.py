@@ -71,7 +71,7 @@ def masked_language_model(*, X, M, mlm_weights, mlm_positions, mlm_ids, embed_we
         )
         logits = tf.matmul(normed_proj, embed_weights, transpose_b=True)
         logits = tf.nn.bias_add(logits, output_bias)
-        
+
         mlm_ids = tf.reshape(mlm_ids, [-1])
         mlm_weights = tf.reshape(mlm_weights, [-1])
 
@@ -118,7 +118,7 @@ def language_model(*, X, M, embed_weights, hidden, config, reuse=None, train=Fal
         hidden_shape = tf.shape(hidden)
         logits = tf.reshape(lm_logits, shape=tf.concat([hidden_shape[:-1], [vocab_size]], axis=0))
         lm_logits_offset = tf.reshape(logits[:, :-1], [-1, vocab_size])
-        
+
         lm_losses = tf.losses.sparse_softmax_cross_entropy(
             logits=lm_logits_offset,
             labels=tf.reshape(X[:, 1:, 0], [-1]),
@@ -152,7 +152,7 @@ def _apply_multilabel_class_weight(losses, targets, class_weights=None):
         # loss multiplier applied based on true class
         weights = (
             # contribution of positive class
-            class_weights * tf.to_float(targets) + 
+            class_weights * tf.to_float(targets) +
             # contribution of negative class
             tf.ones_like(class_weights) * (1 - tf.to_float(targets))
         )
@@ -203,12 +203,12 @@ def classifier(hidden, targets, n_targets, config, train=False, reuse=None, **kw
 
 
 def multi_choice_question(
-    hidden, 
-    targets, 
-    n_targets, 
-    config, 
-    train=False, 
-    reuse=None, 
+    hidden,
+    targets,
+    n_targets,
+    config,
+    train=False,
+    reuse=None,
     **kwargs
 ):
     with tf.variable_scope("model", reuse=reuse):
@@ -427,7 +427,7 @@ def sequence_labeler(
                     mask=False,
                 )
                 n = norm(attn_fn(hidden) + hidden, "seq_label_residual")
-            
+
             flat_logits = tf.layers.dense(n, n_targets)
             logits = tf.reshape(
                 flat_logits, tf.concat([tf.shape(hidden)[:2], [n_targets]], 0)
@@ -448,9 +448,9 @@ def sequence_labeler(
         )
         if lengths is None:
             lengths = default_lengths
-            
+
         class_weights = kwargs.get("class_weights")
-        
+
         with tf.device("CPU:0" if train else logits.device):
             if multilabel:
                 transition_params = []
@@ -499,7 +499,7 @@ def sequence_labeler(
                         one_hot_class_weights, axis=-1, keep_dims=True
                     )
                     logits = class_reweighting(per_token_weights)(logits)
-                                                                                                          
+
                 transition_params = tf.get_variable(
                     "Transition_matrix", shape=[n_targets, n_targets]
                 )
