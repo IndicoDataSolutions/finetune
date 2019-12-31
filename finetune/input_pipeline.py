@@ -150,12 +150,20 @@ class BasePipeline(metaclass=ABCMeta):
         target_arrs = np.asarray([target_arr for doc, target_arr in encoded_dataset])
         targets = []
         for target in self.label_encoder.inverse_transform(target_arrs):
+<<<<<<< HEAD
             if isinstance(target, Iterable):
                 # Iterable
                 targets.extend(target)
             else:
                 targets.append(target)
 
+=======
+            if isinstance(target, str):
+                targets.append(target)
+            else:
+                # Iterable
+                targets.extend(target)
+>>>>>>> ADD: proper multi-label class weights
         return Counter(targets)
 
     def _compute_class_weights(self, class_weights, class_counts):
