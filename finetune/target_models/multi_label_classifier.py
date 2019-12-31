@@ -4,11 +4,20 @@ import numpy as np
 from finetune.base import BaseModel
 from finetune.encoding.target_encoders import MultilabelClassificationEncoder
 from finetune.nn.target_blocks import multi_classifier
-
+from finetune.util.imbalance import compute_class_weights
 from finetune.input_pipeline import BasePipeline
 
 
 class MultilabelClassificationPipeline(BasePipeline):
+    def _compute_class_weights(self, class_weights, class_counts):
+        class_weights = compute_class_weights(
+            class_weights=class_weights,
+            class_counts=class_counts,
+            n_total=self.config.dataset_size,
+            multilabel=True
+        )
+        return class_weights
+
     def _target_encoder(self):
         return MultilabelClassificationEncoder()
 

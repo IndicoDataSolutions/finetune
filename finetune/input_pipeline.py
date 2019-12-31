@@ -147,7 +147,17 @@ class BasePipeline(metaclass=ABCMeta):
 
     def _compute_class_counts(self, encoded_dataset):
         target_arrs = np.asarray([target_arr for doc, target_arr in encoded_dataset])
-        return Counter(self.label_encoder.inverse_transform(target_arrs))
+        targets = []
+        for target in self.label_encoder.inverse_transform(target_arrs):
+            if isinstance(target, str):
+                targets.append(target)
+            else:
+                # Iterable
+                targets.extend(target)
+        return Counter(targets)
+
+    def _compute_class_weights(self, class_weights, class_counts):
+        return compute_class_weights(class_weights=class_weights, class_counts=class_counts)
 
     def _dataset_with_targets(self, Xs, Y, train, context=None):
         if context is not None:
@@ -177,8 +187,9 @@ class BasePipeline(metaclass=ABCMeta):
             class_counts = self._compute_class_counts(dataset_encoded_list)
             self.config.dataset_size = len(dataset_encoded_list)
             if self.config.class_weights is not None:
-                self.config.class_weights = compute_class_weights(
-                    class_weights=self.config.class_weights, class_counts=class_counts
+                self.config.class_weights = self._compute_class_weights(
+                    class_weights=self.config.class_weights, 
+                    class_counts=class_counts
                 )
         shape_def = self.feed_shape_type_def()
         return Dataset.from_generator(
