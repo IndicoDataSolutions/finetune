@@ -257,6 +257,27 @@ class TestSequenceLabeler(unittest.TestCase):
         self.assertEqual(len(predictions[0]), 20)
         self.assertTrue(any(pred["text"].strip() == "dog" for pred in predictions[0]))
 
+    def test_use_last_chunk(self):
+        test_sequence = ["I am a dog. A dog that's incredibly bright. I can talk, read, and write! " * 10]
+        path = os.path.join(os.path.dirname(__file__), "data", "testdata.json")
+
+        # test ValueError raised when raw text is passed along with character idxs and doesn't match                                                   
+        self.model.config.chunk_long_sequences = True
+        self.model.config.max_length = 20
+        self.model.config.use_end_chunk = True
+        with self.assertRaises(ValueError):
+            self.model.fit(["Text about a dog."], [[{"start": 0, "end": 5, "text": "cat", "label": "dog"}]])
+
+        with open(path, "rt") as fp:
+            text, labels = json.load(fp)
+
+        self.model.finetune(text * 10, labels * 10)
+
+        predictions = self.model.predict(test_sequence)
+        self.assertEqual(len(predictions[0]), 20)
+        self.assertTrue(any(pred["text"].strip() == "dog" for pred in predictions[0]))
+
+
     def test_fit_predict_multi_model(self):
         """
         Ensure model training does not error out

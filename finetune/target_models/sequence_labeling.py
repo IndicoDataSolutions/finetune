@@ -191,6 +191,7 @@ class SequenceLabeler(BaseModel):
         chunk_size = self.config.max_length - 2
         step_size = chunk_size // 3
         doc_idx = -1
+        use_end_chunk = self.config.use_end_chunk
         for token_start_idx, token_end_idx, start_of_doc, end_of_doc, label_seq, proba_seq in self.process_long_sequence(X, context=context, **kwargs):
             start, end = 0, None
             if start_of_doc:
@@ -202,15 +203,19 @@ class SequenceLabeler(BaseModel):
                 doc_starts = []
 
                 doc_idx += 1
-                if not end_of_doc:
+                start_of_token = 0
+                if not end_of_doc and not use_end_chunk:
                     end = step_size * 2
             else:
-                if end_of_doc:
-                    # predict on the rest of sequence
-                    start = step_size
+                if use_end_chunk:
+                    start = step_size * 2
                 else:
-                    # predict only on middle third
-                    start, end = step_size, step_size * 2
+                    if end_of_doc:
+                        # predict on the rest of sequence
+                        start = step_size
+                    else:
+                        # predict only on middle third
+                        start, end = step_size, step_size * 2
 
             label_seq = label_seq[start:end]
             end_of_token_seq = token_end_idx[start:end]
