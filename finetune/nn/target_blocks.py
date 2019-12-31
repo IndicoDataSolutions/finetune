@@ -244,8 +244,9 @@ def multi_classifier(
             clf_losses = tf.nn.sigmoid_cross_entropy_with_logits(
                 logits=clf_logits, labels=tf.stop_gradient(targets)
             )
+            per_example_losses = tf.reduce_sum(clf_losses, axis=-1)
             clf_losses = _apply_class_weight(
-                clf_losses, targets, kwargs.get("class_weights")
+                per_example_losses, targets, kwargs.get("class_weights")
             )
         return {"logits": clf_logits, "losses": clf_losses}
 
