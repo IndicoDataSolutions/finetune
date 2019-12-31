@@ -117,6 +117,7 @@ class Settings(dict):
     :param weight_stddev: Standard deviation of initial weights.  Defaults to `0.02`.
     :param chunk_long_sequences: When True, use a sliding window approach to predict on
         examples that are longer than max length.  The progress bar will display the number of chunks processed rather than the number of examples. Defaults to `True`.  
+    :param use_end_chunk: When chunk_long_sequences is True for SequenceLabeler, the default is to use the predictions from the middle third of each chunk, this parameter uses the final third to maximise preceding context.
     :param low_memory_mode: When True, only store partial gradients on forward pass
         and recompute remaining gradients incrementally in order to save memory.  Defaults to `False`.
     :param interpolate_pos_embed: Interpolate positional embeddings when `max_length` differs from it's original value of
