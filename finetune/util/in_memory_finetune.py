@@ -10,7 +10,7 @@ import numpy as np
 
 class InMemoryFinetune(tf.train.SessionRunHook):
 
-    def __init__(self, config_to_eval, model, eval_dir, X, Y, X_test, Y_test, name=None, every_n_iter=100):
+    def __init__(self, config_to_eval, model, eval_dir, X, Y, X_test, Y_test, name=None, every_n_iter=100, context=None, context_test=None):
         if every_n_iter is None or every_n_iter <= 0:
             raise ValueError('invalid every_n_iter=%s.' % every_n_iter)
 
@@ -23,6 +23,8 @@ class InMemoryFinetune(tf.train.SessionRunHook):
         self.train_data = (X, Y)
         self.test_data = (X_test, Y_test)
         self._iter_count = 0
+        self.train_context = context
+        self.test_context = context
 
     def begin(self):
         self._timer.reset()
@@ -35,8 +37,10 @@ class InMemoryFinetune(tf.train.SessionRunHook):
     def _evaluate(self, session):
         try:
             with tf.Graph().as_default():
-                from finetune import Classifier
-                model = Classifier(**self._config_to_finetune)
+                # from finetune import Classifier
+                # model = Classifier(**self._config_to_finetune)
+                from finetune import SequenceLabeler
+                model = SequenceLabeler(**self._config_to_finetune)
 
                 if self._current_finetune.saver.variables:
                     model.saver.variables = {
@@ -48,10 +52,10 @@ class InMemoryFinetune(tf.train.SessionRunHook):
                     k: v for k, v in self._current_finetune.saver.fallback.items() if "global_step" not in k
                 }
                 train_x, train_y = self.train_data
-                model.fit(train_x, train_y)
+                model.fit(train_x, train_y, context=self.train_context)
                 test_x, test_y = self.test_data
-                test_accuracy = np.mean(model.predict(test_x) == test_y)
-                train_accuracy = np.mean(model.predict(train_x) == train_y)
+                test_accuracy = np.mean(model.predict(test_x, context=self.test_context) == test_y)
+                train_accuracy = np.mean(model.predict(train_x, context=self.train_context) == train_y)
         except IOError as e:
             traceback.print_exc(file=sys.stdout)
             test_accuracy = -1.0
