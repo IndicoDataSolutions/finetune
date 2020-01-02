@@ -152,15 +152,9 @@ def _apply_multilabel_class_weight(losses, targets, class_weights=None):
         # loss multiplier applied based on true class
         weights = (
             # contribution of positive class
-<<<<<<< HEAD
             class_weights * tf.to_float(targets) +
             # contribution of negative class
             tf.ones_like(class_weights) * (1 - tf.to_float(targets))
-=======
-            tf.reduce_sum(class_weights * tf.to_float(targets), axis=1) + 
-            # contribution of negative class
-            tf.reduce_sum(tf.ones_like(class_weights) * (1 - tf.to_float(targets)), axis=1)
->>>>>>> FIX: handle negative class in multilabel
         )
         weights *= tf.to_float(tf.reduce_prod(tf.shape(weights))) / tf.reduce_sum(
             weights
@@ -268,14 +262,8 @@ def multi_classifier(
             clf_losses = tf.nn.sigmoid_cross_entropy_with_logits(
                 logits=clf_logits, labels=tf.stop_gradient(targets)
             )
-<<<<<<< HEAD
             clf_losses = _apply_multilabel_class_weight(
                 clf_losses, targets, kwargs.get("class_weights")
-=======
-            per_example_losses = tf.reduce_sum(clf_losses, axis=-1)
-            clf_losses = _apply_multilabel_class_weight(
-                per_example_losses, targets, kwargs.get("class_weights")
->>>>>>> FIX: handle negative class in multilabel
             )
         return {"logits": clf_logits, "losses": clf_losses}
 
