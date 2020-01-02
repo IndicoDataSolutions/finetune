@@ -440,7 +440,7 @@ class BasePipeline(metaclass=ABCMeta):
         Encode_multi_input expect the following format:
             List (batch) of list (docs) of list (subseqs) of text
 
-ben/fix_chunk_long_sequences        This method is responsible for standardizing inputs to the above format
+        This method is responsible for standardizing inputs to the above format
         """
         return [[X]]
 
