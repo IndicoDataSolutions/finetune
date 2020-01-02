@@ -204,18 +204,10 @@ class SequenceLabeler(BaseModel):
 
                 doc_idx += 1
                 start_of_token = 0
-                if not end_of_doc and not use_end_chunk:
-                    end = step_size * 2
-            else:
-                if use_end_chunk:
-                    start = step_size * 2
-                else:
-                    if end_of_doc:
-                        # predict on the rest of sequence
-                        start = step_size
-                    else:
-                        # predict only on middle third
-                        start, end = step_size, step_size * 2
+                start = 0
+                
+            if end_of_doc:
+                end = None
 
             label_seq = label_seq[start:end]
             end_of_token_seq = token_end_idx[start:end]
