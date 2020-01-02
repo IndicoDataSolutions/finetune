@@ -7,6 +7,7 @@ from finetune.base import PredictMode, BaseModel
 from finetune.base_models import RoBERTa, BERT
 from finetune.input_pipeline import BasePipeline
 from finetune.nn.target_blocks import masked_language_model
+from finetune.encoding.input_encoder import tokenize_context
 
 
 class MaskedLanguageModelPipeline(BasePipeline):
@@ -36,7 +37,7 @@ class MaskedLanguageModelPipeline(BasePipeline):
             ),
         )
 
-    def text_to_tokens_mask(self, X, Y=None):
+    def text_to_tokens_mask(self, X, Y=None, context=None):
         out_gen = self._text_to_ids(X, pad_token=self.config.pad_token)
        
         for out in out_gen:
@@ -78,6 +79,9 @@ class MaskedLanguageModelPipeline(BasePipeline):
                 "mlm_ids": mlm_ids,
                 "mlm_positions": mlm_positions
             }
+            if context:
+                tokenized_context = tokenize_context(context, out, self.config)
+                feats['context'] = tokenized_context
             yield feats
 
 
