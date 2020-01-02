@@ -147,6 +147,11 @@ def get_model_fn(
                 train=train,
                 explain=build_explain,
             )
+            is_end = tf.math.reduce_any(tf.equal(X[:, :, 0], encoder.end_token), 1)
+            is_start = tf.math.reduce_any(tf.equal(X[:, :, 0], encoder.start_token), 1)
+            featurizer_state["is_end"] = is_end
+            featurizer_state["is_start"] = is_start
+            
             if context is not None:
                 featurizer_state = embed_context(context, featurizer_state, params, train)
             predictions = {
@@ -372,11 +377,15 @@ def get_separate_model_fns(
             config=params,
             train=False,
         )
+        is_end = tf.math.reduce_any(tf.equal(X[:, :, 0], encoder.end_token), 1)
+        is_start = tf.math.reduce_any(tf.equal(X[:, :, 0], encoder.start_token), 1)
         predictions = {
             "features": featurizer_state["features"],
             "sequence_features": featurizer_state["sequence_features"],
             "eos_idx": featurizer_state["eos_idx"],
             "lengths": featurizer_state["lengths"],
+            "is_end": is_end,
+            "is_start": is_start,
         }
 
         if params.base_model in [GPTModel, GPTModelSmall] and build_attn:

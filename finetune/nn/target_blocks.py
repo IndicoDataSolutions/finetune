@@ -345,6 +345,28 @@ def class_reweighting(class_weights):
 
     return custom_grad
 
+def chunk_mask(logits, is_start, is_end, use_end_chunk, max_length):
+    is_start = tf.cast(is_start, tf.int32)
+    is_end = tf.cast(is_end, tf.int32)
+    
+    step_size = max_length // 3
+    if use_end_chunk:
+        def_start = step_size * 2
+        def_end = max_length
+    else:
+        def_start = step_size
+        def_end = step_size * 2
+
+    start = (1 - is_start) * def_start # 0 if is_start else def_start
+    end = is_end * max_length + (1 - is_end) * def_end # max_length if is_end else def_end
+
+    logit_len = tf.shape(logits)[1]
+    mask = (1 - tf.sequence_mask(end, maxlen=logit_len, dtype=tf.float32)) + tf.sequence_mask(start, maxlen=logit_len, dtype=tf.float32) # 1s where we want to mask
+    mask = tf.expand_dims(mask, 2)
+    return tf.stop_gradients(mask * logits) + (1 - mask) * logits
+
+    
+    
 
 def sequence_labeler(
     hidden,
@@ -357,6 +379,8 @@ def sequence_labeler(
     reuse=None,
     lengths=None,
     use_crf=True,
+    is_start=True,
+    is_end=True, 
     **kwargs
 ):
     """
@@ -384,6 +408,7 @@ def sequence_labeler(
         "losses": The negative log likelihood for the sequence targets.
         "predict_params": A dictionary of params to be fed to the viterbi decode function.
     """
+    
     with tf.variable_scope("sequence-labeler", reuse=reuse):
 
         if targets is not None:
@@ -414,6 +439,7 @@ def sequence_labeler(
             logits = tf.reshape(
                 flat_logits, tf.concat([tf.shape(hidden)[:2], [n_targets]], 0)
             )
+            logits = chunk_mask(logits, is_start, is_end, config.use_end_chunk, config.max_length)
             return logits
 
         with tf.variable_scope("seq_lab_attn"):
