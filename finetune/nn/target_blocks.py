@@ -137,7 +137,25 @@ def language_model(*, X, M, embed_weights, hidden, config, reuse=None, train=Fal
 def _apply_class_weight(losses, targets, class_weights=None):
     if class_weights is not None:
         # loss multiplier applied based on true class
-        weights = tf.reduce_sum(class_weights * tf.to_float(targets), axis=1)
+        weights = (
+            tf.reduce_sum(class_weights * tf.to_float(targets), axis=1)
+        )
+        weights *= tf.to_float(tf.reduce_prod(tf.shape(weights))) / tf.reduce_sum(
+            weights
+        )
+        losses *= tf.expand_dims(weights, 1)
+    return losses
+
+
+def _apply_multilabel_class_weight(losses, targets, class_weights=None):
+    if class_weights is not None:
+        # loss multiplier applied based on true class
+        weights = (
+            # contribution of positive class
+            tf.reduce_sum(class_weights * tf.to_float(targets), axis=1) + 
+            # contribution of negative class
+            tf.reduce_sum(tf.ones_like(class_weights) * (1 - tf.to_float(targets)), axis=1)
+        )
         weights *= tf.to_float(tf.reduce_prod(tf.shape(weights))) / tf.reduce_sum(
             weights
         )
@@ -245,7 +263,7 @@ def multi_classifier(
                 logits=clf_logits, labels=tf.stop_gradient(targets)
             )
             per_example_losses = tf.reduce_sum(clf_losses, axis=-1)
-            clf_losses = _apply_class_weight(
+            clf_losses = _apply_multilabel_class_weight(
                 per_example_losses, targets, kwargs.get("class_weights")
             )
         return {"logits": clf_logits, "losses": clf_losses}
