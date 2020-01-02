@@ -2,7 +2,6 @@ import os
 import urllib
 import urllib.request
 from pathlib import Path
-import tqdl
 
 import finetune
 
@@ -20,4 +19,6 @@ def download_data_if_required(base_model):
         if not path.exists():
             path.parent.mkdir(parents=True, exist_ok=True)
             print("Downloading: {}".format(path.name))
-            tqdl.download(file_obj['url'], path)
+            data = urllib.request.urlopen(file_obj['url']).read()
+            with path.open('wb') as f:
+                f.write(data)
