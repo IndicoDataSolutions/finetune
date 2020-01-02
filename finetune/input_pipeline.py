@@ -440,7 +440,7 @@ class BasePipeline(metaclass=ABCMeta):
         Encode_multi_input expect the following format:
             List (batch) of list (docs) of list (subseqs) of text
 
-        This method is responsible for standardizing inputs to the above format
+ben/fix_chunk_long_sequences        This method is responsible for standardizing inputs to the above format
         """
         return [[X]]
 
@@ -487,7 +487,7 @@ class BasePipeline(metaclass=ABCMeta):
                                 fv = fv + [end_token]
                         d[field] = fv
                 yield self._array_format(EncodedOutput(**d), pad_token=pad_token)
-                if length < self.config.max_length:
+                if end > length:
                     break
         else:
             encoder_out = self.text_encoder.encode_multi_input(
