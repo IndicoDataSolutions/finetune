@@ -48,7 +48,7 @@ from finetune.base_models.gpt2.model import GPT2Model, GPT2Model345, GPT2Model76
 from finetune.base_models.textcnn.model import TextCNNModel
 from finetune.base_models.bert.model import BERTModelCased, BERTModelLargeCased, RoBERTa, RoBERTaLarge, DistilBERT, DistilRoBERTa
 from finetune.base_models.tcn.model import TCNModel
-from finetune.base_models.bert.model import BERTModelCased, BERTModelLargeCased, RoBERTa, RoBERTaLarge
+from finetune.base_models.bert.model import BERTModelCased, BERTModelLargeCased, RoBERTa, RoBERTaLarge, RoBERTaPos
 from finetune.base_models.oscar.model import GPCModel
 
 # Aliases
@@ -61,6 +61,7 @@ TextCNN = TextCNNModel
 BERT = BERTModelCased
 BERTLarge = BERTModelLargeCased
 ROBERTA = RoBERTa
+ROBERTAPos = RoBERTaPos
 ROBERTALarge = RoBERTaLarge
 DistilROBERTA = DistilRoBERTa
 TCN = TCNModel
