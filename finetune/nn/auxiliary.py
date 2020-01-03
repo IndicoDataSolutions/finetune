@@ -4,6 +4,8 @@ import tensorflow as tf
 from finetune.nn.nn_utils import dropout, norm
 from finetune.util.shapes import shape_list
 from finetune.util.positional_embeddings import add_timing_signal_from_position
+from finetune.base_models.gpt.featurizer import conv1d
+
 
 def embed_context(context, featurizer_state, config, train):
     with tf.variable_scope("context_embedding"):
@@ -78,3 +80,5 @@ def add_context_embed(featurizer_state):
         featurizer_state['sequence_features'] = tf.concat(
             (featurizer_state['sequence_features'], context_embed), -1
         )
+
+
