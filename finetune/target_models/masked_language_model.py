@@ -16,23 +16,22 @@ class MaskedLanguageModelPipeline(BasePipeline):
         pass
 
     def feed_shape_type_def(self):
+        types = {
+                "tokens": tf.int32,
+                "mlm_weights": tf.float32,
+                "mlm_ids": tf.int32,
+                "mlm_positions": tf.int32
+            }
+        shapes = {
+                "tokens": TS([None]),
+                "mlm_weights": TS([self.config.max_masked_tokens * self.config.batch_size]),
+                "mlm_ids": TS([self.config.max_masked_tokens * self.config.batch_size]),
+                "mlm_positions": TS([self.config.max_masked_tokens * self.config.batch_size]),
+            }
+        types, shapes = self._add_context_info_if_present(types, shapes)
         return (
-            (
-                {
-                    "tokens": tf.int32,
-                    "mlm_weights": tf.float32,
-                    "mlm_ids": tf.int32,
-                    "mlm_positions": tf.int32
-                },
-            ),
-            (
-                {
-                    "tokens": TS([None]),
-                    "mlm_weights": TS([None]),
-                    "mlm_ids": TS([None]),
-                    "mlm_positions": TS([None]),
-                },
-            ),
+            (types,),
+            (shapes,),
         )
 
     def text_to_tokens_mask(self, X, Y=None, context=None):
