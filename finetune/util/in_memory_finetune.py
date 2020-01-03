@@ -24,7 +24,7 @@ class InMemoryFinetune(tf.train.SessionRunHook):
         self.test_data = (X_test, Y_test)
         self._iter_count = 0
         self.train_context = context
-        self.test_context = context
+        self.test_context = context_test
 
     def begin(self):
         self._timer.reset()
@@ -92,8 +92,10 @@ def make_in_memory_finetune_hooks(model, estimator):
             eval_dir=estimator.eval_dir(),
             X=f["X"],
             Y=f["Y"],
+            context=f['context'],
             X_test=f["X_test"],
             Y_test=f["Y_test"],
+            context_test=f['context_test'],
             name=f["name"],
             every_n_iter=f["every_n_iter"]
         ))
