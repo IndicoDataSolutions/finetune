@@ -3,6 +3,7 @@ from abc import ABCMeta, abstractmethod
 
 class SourceModel(metaclass=ABCMeta):
     is_bidirectional = True
+    positional_info = False
 
     @property
     @abstractmethod
