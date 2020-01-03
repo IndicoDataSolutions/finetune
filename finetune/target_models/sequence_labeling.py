@@ -193,7 +193,13 @@ class SequenceLabeler(BaseModel):
         doc_idx = -1
         use_end_chunk = self.config.use_end_chunk
         for token_start_idx, token_end_idx, start_of_doc, end_of_doc, label_seq, proba_seq in self.process_long_sequence(X, context=context, **kwargs):
-            start, end = 0, None
+            if use_end_chunk:
+                start = step_size * 2
+                end = None
+            else:
+                start = step_size
+                end = step_size * 2
+                
             if start_of_doc:
                 # if this is the first chunk in a document, start accumulating from scratch
                 doc_subseqs = []
