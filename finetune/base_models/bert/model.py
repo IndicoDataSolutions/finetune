@@ -177,12 +177,17 @@ class RoBERTaPos(RoBERTa):
     # TODO: ideally we would pull out the positional logic so that
     # it can be easily incorporated throughout all the SourceModels
     featurizer = bert_featurizer_with_pos
+
     @classmethod
     def get_encoder(cls, config=None, **kwargs):
         if config is not None and not config.base_model_path.endswith('-v2'):
             return cls.encoder(**kwargs)
         else:
             return RoBERTaEncoder(**kwargs)
+
+    @classmethod
+    def get_featurizer(cls, X, context, encoder, config, train=False, reuse=None, **kwargs):
+        return cls.featurizer(X, context, encoder, config, train=train, reuse=reuse, **kwargs)
 
 class RoBERTaLarge(RoBERTa):
     is_bidirectional = True
