@@ -386,6 +386,10 @@ def get_default_config():
         default_context=None,
         context_dim=None,  # number of context dimensions to be inserted
 
+        # Focal Loss
+        focal_loss=False,
+        focal_loss_gamma=2.0,
+
         # Serialize finetune version with model
         version=VERSION,
     )

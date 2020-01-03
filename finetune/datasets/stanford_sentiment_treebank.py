@@ -51,7 +51,8 @@ if __name__ == "__main__":
         batch_size=2,
         lr_warmup=0.1,
         max_length=64,
-        base_model=GPTModel
+        base_model=GPTModel,
+#        focal_loss=True
     )
     trainX, testX, trainY, testY = train_test_split(dataset.Text.values, dataset.Target.values, test_size=0.3, random_state=42)
     model.fit(trainX, trainY)

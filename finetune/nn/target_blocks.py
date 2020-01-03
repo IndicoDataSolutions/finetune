@@ -170,6 +170,8 @@ def classifier(hidden, targets, n_targets, config, train=False, reuse=None, **kw
             clf_losses = tf.nn.softmax_cross_entropy_with_logits_v2(
                 logits=clf_logits, labels=tf.stop_gradient(targets)
             )
+            if config.focal_loss:
+                clf_losses *= (1 - tf.reduce_sum(tf.nn.softmax(clf_logits) * targets, -1)) ** config.focal_loss_gamma
 
             clf_losses = _apply_class_weight(
                 clf_losses, targets, kwargs.get("class_weights")
