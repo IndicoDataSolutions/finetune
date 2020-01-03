@@ -334,7 +334,7 @@ def gpt_featurizer(
             clf_h, shape=tf.concat((initial_shape[:-2], [config.n_embed]), 0)
         )
         seq_feats = tf.reshape(
-            h, shape=tf.concat((initial_shape[:-1], [config.n_embed]), 0)
+            h_out, shape=tf.concat((initial_shape[:-1], [config.n_embed]), 0)
         )
 
         lengths = lengths_from_eos_idx(eos_idx=pool_idx, max_length=sequence_length)
