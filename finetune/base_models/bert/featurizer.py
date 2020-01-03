@@ -134,13 +134,12 @@ def bert_featurizer_with_pos(
 ):
     featurizer_state = bert_featurizer(X, encoder, config, train=train, reuse=reuse, **kwargs)
     with tf.variable_scope("model/featurizer"):
-        if context:
-            embed_position(context, featurizer_state, config, train)
-            add_context_embed(featurizer_state)
-            hidden = featurizer_state['sequence_features']
-            w0, w = smooth_pos_attn(hidden, config, featurizer_state['lengths'])
-            text_embed = hidden[:, :, :config.n_embed]
-            seq_feats = tf.matmul(w, text_embed)
-            featurizer_state['sequence_features'] = seq_feats
+        embed_position(context, featurizer_state, config, train)
+        add_context_embed(featurizer_state)
+        hidden = featurizer_state['sequence_features']
+        w0, w = smooth_pos_attn(hidden, config, featurizer_state['lengths'])
+        text_embed = hidden[:, :, :config.n_embed]
+        seq_feats = tf.matmul(w, text_embed)
+        featurizer_state['sequence_features'] = seq_feats
     return featurizer_state
 
