@@ -142,7 +142,7 @@ def get_model_fn(
             if params.base_model.positional_info:
                 featurizer_state = params.base_model.get_featurizer(
                     X,
-                    context,
+                    context=context,
                     encoder=encoder,
                     config=params,
                     train=train,
