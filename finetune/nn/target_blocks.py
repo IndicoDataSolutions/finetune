@@ -379,6 +379,18 @@ def simple_attn(hidden, config, lengths, textual_context=10, suffix=''):
     return w
 
 
+def smooth_pos_attn(hidden, config, lengths):
+    n_context_embed = config.n_context_embed_per_channel * config.context_dim
+    context_embed = hidden[:, :, -n_context_embed:]
+    w0 = simple_attn(context_embed, config, lengths, textual_context=0, suffix='0')
+    hidden1 = tf.matmul(w0, context_embed)
+
+    # use new aggregated positional features
+    hidden_final = tf.concat([hidden[:, :, :-n_context_embed], hidden1], 2)
+    w = simple_attn(hidden_final, config, lengths, textual_context=config.textual_context)
+    return w0, w
+
+
 def sequence_labeler(
     hidden,
     targets,
@@ -444,14 +456,7 @@ def sequence_labeler(
             #     featurizer_state=featurizer_state
             # )
             # n = norm(attn_fn(hidden) + hidden, "seq_label_residual")
-            n_context_embed = config.n_context_embed_per_channel * config.context_dim
-            context_embed = hidden[:, :, -n_context_embed:]
-            w0 = simple_attn(context_embed, config, lengths, textual_context=0, suffix='0')
-            hidden1 = tf.matmul(w0, context_embed)
-
-            # use new aggregated positional features
-            hidden_final = tf.concat([hidden[:, :, :-n_context_embed], hidden1], 2)
-            w = simple_attn(hidden_final, config, lengths, textual_context=config.textual_context)
+            w0, w = smooth_pos_attn(hidden, config, lengths)
             featurizer_state['context_attention_weights'] = tf.stack((w0, w), 3)
             text_embed = hidden[:, :, :config.n_embed]
             n = tf.matmul(w, text_embed)

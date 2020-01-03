@@ -141,16 +141,26 @@ def get_model_fn(
 
         with tf.variable_scope(tf.get_variable_scope()):
             train_loss = 0.0
-            featurizer_state = params.base_model.get_featurizer(
-                X,
-                encoder=encoder,
-                config=params,
-                train=train,
-                explain=build_explain,
-            )
-            if context is not None:
-                print("Embedding position")
-                embed_position(context, featurizer_state, params, train)
+            if params.base_model.positional_info:
+                featurizer_state = params.base_model.get_featurizer(
+                    X,
+                    context,
+                    encoder=encoder,
+                    config=params,
+                    train=train,
+                    explain=build_explain,
+                )
+            else:
+                featurizer_state = params.base_model.get_featurizer(
+                    X,
+                    encoder=encoder,
+                    config=params,
+                    train=train,
+                    explain=build_explain,
+                )
+                if context is not None:
+                    print("Embedding position")
+                    embed_position(context, featurizer_state, params, train)
             
             predictions = {
                 PredictMode.FEATURIZE: featurizer_state["features"], 
