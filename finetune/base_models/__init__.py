@@ -11,6 +11,7 @@ COMMON_SETTINGS = {
 
 class SourceModel(metaclass=ABCMeta):
     is_bidirectional = True
+    positional_info = False
 
     @classmethod
     def get_optimal_params(cls, config):

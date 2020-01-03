@@ -10,7 +10,8 @@ from finetune.base_models.bert.encoder import (
 )
 
 from finetune.base_models.bert.roberta_encoder import RoBERTaEncoder, RoBERTaEncoderV2
-from finetune.base_models.bert.featurizer import bert_featurizer
+from finetune.base_models.bert.featurizer import bert_featurizer, bert_featurizer_with_pos
+from finetune.base_models.gpt2 import encoder as gpt2_encoder
 from finetune.util.download import BERT_BASE_URL, GPT2_BASE_URL, ROBERTA_BASE_URL, FINETUNE_BASE_FOLDER
 
 
@@ -206,6 +207,18 @@ class RoBERTa(_BaseBert):
         else:
             return RoBERTaEncoder(**kwargs)
 
+
+class RoBERTaPos(RoBERTa):
+    positional_info = True
+    # TODO: ideally we would pull out the positional logic so that
+    # it can be easily incorporated throughout all the SourceModels
+    featurizer = bert_featurizer_with_pos
+    @classmethod
+    def get_encoder(cls, config=None, **kwargs):
+        if config is not None and not config.base_model_path.endswith('-v2'):
+            return cls.encoder(**kwargs)
+        else:
+            return RoBERTaEncoder(**kwargs)
 
 class RoBERTaLarge(RoBERTa):
     encoder = RoBERTaEncoderV2

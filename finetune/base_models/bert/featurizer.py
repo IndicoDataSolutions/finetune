@@ -4,6 +4,8 @@ import tensorflow as tf
 from finetune.util.shapes import lengths_from_eos_idx
 from finetune.base_models.bert.roberta_encoder import RoBERTaEncoder
 from finetune.base_models.bert.modeling import BertConfig, BertModel
+from finetune.nn.target_blocks import smooth_pos_attn
+from finetune.nn.auxiliary import add_context_embed, embed_position
 
 
 def bert_featurizer(
@@ -118,3 +120,25 @@ def bert_featurizer(
             output_state = {k: tf.stop_gradient(v) for k, v in output_state.items()}
 
         return output_state
+
+def bert_featurizer_with_pos(
+    X,
+    context,
+    encoder,
+    config,
+    train=False,
+    reuse=None,
+    **kwargs
+):
+    featurizer_state = bert_featurizer(X, encoder, config, train=train, reuse=reuse, **kwargs)
+    with tf.variable_scope("model/featurizer"):
+        if context:
+            embed_position(context, featurizer_state, config, train)
+            add_context_embed(featurizer_state)
+            hidden = featurizer_state['sequence_features']
+            w0, w = smooth_pos_attn(hidden, config, featurizer_state['lengths'])
+            text_embed = hidden[:, :, :config.n_embed]
+            seq_feats = tf.matmul(w, text_embed)
+            featurizer_state['sequence_features'] = seq_feats
+    return featurizer_state
+
