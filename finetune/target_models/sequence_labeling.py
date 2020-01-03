@@ -212,7 +212,7 @@ class SequenceLabeler(BaseModel):
         for position_seq, start_of_doc, end_of_doc, label_seq, proba_seq in self.process_long_sequence(X, context=context):
             if use_end_chunk:
                 start = step_size * 2
-                end = max_length
+                end = None
             else:
                 start = step_size
                 end = step_size * 2
