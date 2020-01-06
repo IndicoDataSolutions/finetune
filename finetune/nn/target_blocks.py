@@ -145,6 +145,34 @@ def _apply_class_weight(losses, targets, class_weights=None):
     return losses
 
 
+def _class_balance_softmax_weight(losses, targets, beta, class_counts=None):
+    if class_counts is not None:
+        weights = (1. - beta) / (1. - tf.pow(tf.ones_like(class_counts) * beta, class_counts))
+        per_example_weights = tf.reduce_sum(weights * tf.to_float(targets), axis=1)
+        norm_ratio = tf.to_float(tf.shape(class_counts)[-1]) / tf.reduce_sum(weights, axis=-1)
+        per_example_weights *= norm_ratio
+        losses *= per_example_weights
+    return losses
+
+
+def _class_balance_sigmoid_weight(losses, beta, class_counts=None):
+    if class_counts is not None:
+        pre_norm_weights = (1. - beta) / (1. - tf.pow(tf.ones_like(class_counts) * beta, class_counts))
+        norm_ratio = tf.to_float(tf.shape(class_counts)[-1]) / tf.reduce_sum(pre_norm_weights, axis=-1)
+        post_norm_weights = pre_norm_weights * norm_ratio
+        with tf.control_dependencies([
+            # tf.print("class_counts", class_counts, summarize=-1),
+            # tf.print("pre_norm_weights", pre_norm_weights, summarize=-1),
+            # tf.print("norm", norm_ratio, summarize=-1),
+            # tf.print("post_norm_weights", post_norm_weights, summarize=-1),
+            # tf.print("losses", losses, summarize=-1),
+            # tf.print("sum post norm weights", tf.reduce_sum(post_norm_weights))
+        ]):
+            losses *= post_norm_weights
+    return losses
+
+
+
 def classifier(hidden, targets, n_targets, config, train=False, reuse=None, **kwargs):
     """
     A simple linear classifier.
@@ -237,16 +265,19 @@ def multi_classifier(
     """
     with tf.variable_scope("model", reuse=reuse):
         hidden = dropout(hidden, config.clf_p_drop, train)
-        clf_logits = perceptron(hidden, n_targets, config)
+        b_init = tf.constant_initializer(value=1./n_targets)
+        clf_logits = perceptron(hidden, n_targets, config, b_init=b_init)
         if targets is None:
             clf_losses = None
         else:
             clf_losses = tf.nn.sigmoid_cross_entropy_with_logits(
                 logits=clf_logits, labels=tf.stop_gradient(targets)
             )
-            clf_losses = _apply_class_weight(
-                clf_losses, targets, kwargs.get("class_weights")
-            )
+            class_counts = kwargs.get('class_counts')
+            if class_counts is not None:
+                clf_losses = _class_balance_sigmoid_weight(
+                    clf_losses, config.class_balance_beta, kwargs.get('class_counts') 
+                )
         return {"logits": clf_logits, "losses": clf_losses}
 
 

@@ -290,6 +290,7 @@ def get_default_config():
         train_embeddings=True,
 
         # Class Imbalance
+        class_counts=None,
         class_weights=None,
         oversample=False,
         params_device="cpu",
@@ -306,6 +307,7 @@ def get_default_config():
         prefit_init=False,
         accum_steps=1,
         tsa_schedule=None,
+        class_balance_beta=0.99,
 
         # MTL
         tasks=None,

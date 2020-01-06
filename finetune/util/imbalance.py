@@ -52,3 +52,15 @@ def class_weight_tensor(class_weights, target_dim, label_encoder):
 
     class_weight_tensor = tf.convert_to_tensor(class_weight_arr)
     return class_weight_tensor
+
+
+def class_count_tensor(class_counts, target_dim, label_encoder):
+    """
+    Convert from dictionary of class counts to tf tensor
+    """
+    class_count_arr = np.ones(target_dim, dtype=np.float32)
+    for i, cls in enumerate(label_encoder.target_labels):
+        class_count_arr[i] = class_counts.get(cls, 1.0)
+    
+    class_count_tensor = tf.convert_to_tensor(class_count_arr)
+    return class_count_tensor

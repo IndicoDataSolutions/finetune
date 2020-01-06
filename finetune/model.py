@@ -12,7 +12,7 @@ from finetune.optimizers.gradient_accumulation import get_grad_accumulation_opti
 from finetune.optimizers.learning_rate_schedules import schedules
 from finetune.optimizers.adamax import AdamaxWOptimizer
 from finetune.optimizers.adamw import AdamWOptimizer
-from finetune.util.imbalance import class_weight_tensor
+from finetune.util.imbalance import class_weight_tensor, class_count_tensor
 from finetune.errors import FinetuneError
 from finetune.base_models import GPTModel, GPTModelSmall
 from finetune.optimizers.adafactor import AdafactorWOptimizer, AdafactorOptimizer
@@ -101,11 +101,18 @@ def get_model_fn(
 ):
     def target_model_op(featurizer_state, Y, params, mode, **kwargs):
         weighted_tensor = None
+        count_tensor = None
         if params.class_weights is not None:
             weighted_tensor = class_weight_tensor(
                 class_weights=params.class_weights,
                 target_dim=target_dim,
                 label_encoder=label_encoder,
+            )
+        if params.class_counts is not None:
+            count_tensor = class_count_tensor(
+                class_counts=params.class_counts,
+                target_dim=target_dim, 
+                label_encoder=label_encoder
             )
         with tf.variable_scope("model/target"):
             pre_target_model_hook(featurizer_state)
@@ -117,6 +124,7 @@ def get_model_fn(
                 train=(mode == tf.estimator.ModeKeys.TRAIN),
                 max_length=params.max_length,
                 class_weights=weighted_tensor,
+                class_counts=count_tensor,
                 label_encoder=label_encoder,
                 **kwargs
             )
