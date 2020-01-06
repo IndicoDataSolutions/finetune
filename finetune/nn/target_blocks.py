@@ -148,10 +148,18 @@ def _apply_class_weight(losses, targets, class_weights=None):
 def _class_balance_softmax_weight(losses, targets, beta, class_counts=None):
     if class_counts is not None:
         weights = (1. - beta) / (1. - tf.pow(tf.ones_like(class_counts) * beta, class_counts))
-        per_example_weights = tf.reduce_sum(weights * tf.to_float(targets), axis=1)
+        pre_norm_weights = tf.reduce_sum(weights * tf.to_float(targets), axis=1)
         norm_ratio = tf.to_float(tf.shape(class_counts)[-1]) / tf.reduce_sum(weights, axis=-1)
-        per_example_weights *= norm_ratio
-        losses *= per_example_weights
+        post_norm_weights = pre_norm_weights * norm_ratio
+        with tf.control_dependencies([
+            tf.print("class_counts", class_counts, summarize=-1),
+            tf.print("per_example_weights", pre_norm_weights, summarize=-1),
+            tf.print("norm", norm_ratio, summarize=-1),
+            tf.print("post_norm_weights", post_norm_weights, summarize=-1),
+            tf.print("losses", losses, summarize=-1),
+            tf.print("sum post norm weights", tf.reduce_sum(post_norm_weights))
+        ]):
+            losses *= post_norm_weights
     return losses
 
 
@@ -199,8 +207,8 @@ def classifier(hidden, targets, n_targets, config, train=False, reuse=None, **kw
                 logits=clf_logits, labels=tf.stop_gradient(targets)
             )
 
-            clf_losses = _apply_class_weight(
-                clf_losses, targets, kwargs.get("class_weights")
+            clf_losses = _class_balance_softmax_weight(
+                clf_losses, targets, config.class_balance_beta, kwargs.get("class_counts")
             )
 
             # From Unsupervised Data Augmentation for Consistency Training, Xie et al. 2019
