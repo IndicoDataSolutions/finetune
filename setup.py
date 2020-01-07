@@ -7,20 +7,20 @@ from setuptools import setup, find_packages
 
 
 REQUIREMENTS = [
-    "pandas==0.25.2",
-    "tqdm==4.36.1",
+    "pandas>=0.23.1",
+    "tqdm>=4.0.0",
     "numpy>=1.13.0",
-    "scipy==1.3.1",
-    "scikit-learn>=0.18.0",
+    "scipy>=1.1.0",
+    "scikit-learn>=0.21,<=0.22",
     "ftfy>=4.4.0",
-    "spacy==2.2.0",
+    "spacy>=2.0.0",
     "h5py>=2.8.0",
     "joblib>=0.12.0",
     "bs4>=0.0.1",
     "imblearn>=0.0",
     "imbalanced-learn==0.5.0",
     "nltk>=3.2.4",
-    "regex==2019.8.20",
+    "regex>=2019.03.12",
     "lxml>=4.3.3"
 ]
 
