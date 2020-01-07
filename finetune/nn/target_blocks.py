@@ -476,9 +476,10 @@ def sequence_labeler(
                 featurizer_state['context_attention_weights'] = tf.stack((w0, w), 3)
                 text_embed = hidden[:, :, :config.n_embed]
                 n = tf.matmul(w, text_embed)
-    
-            flat_logits = tf.layers.dense(n, n_targets)
+            else:
+                n = hidden
 
+            flat_logits = tf.layers.dense(n, n_targets)
             logits = tf.reshape(
                 flat_logits, tf.concat([tf.shape(hidden)[:2], [n_targets]], 0)
             )
