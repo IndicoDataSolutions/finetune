@@ -5,7 +5,7 @@ import numpy as np
 import tensorflow as tf
 
 
-from finetune.nn.target_blocks import language_model, masked_language_model
+from finetune.nn.target_blocks import language_model, masked_language_model, smooth_pos_attn
 from finetune.util.text_generation import sample_with_temperature
 from finetune.optimizers.zero_grad import dont_optimize_zeros
 from finetune.optimizers.gradient_accumulation import get_grad_accumulation_optimizer
@@ -16,7 +16,7 @@ from finetune.util.imbalance import class_weight_tensor
 from finetune.errors import FinetuneError
 from finetune.base_models import GPTModel, GPTModelSmall
 from finetune.optimizers.adafactor import AdafactorWOptimizer, AdafactorOptimizer
-from finetune.nn.auxiliary import embed_context, embed_position
+from finetune.nn.auxiliary import embed_context, embed_position, add_context_embed
 
 LOGGER = logging.getLogger("finetune")
 
@@ -141,27 +141,25 @@ def get_model_fn(
 
         with tf.variable_scope(tf.get_variable_scope()):
             train_loss = 0.0
-            if params.base_model.positional_info:
-                featurizer_state = params.base_model.get_featurizer(
-                    X,
-                    context=context,
-                    encoder=encoder,
-                    config=params,
-                    train=train,
-                    explain=build_explain,
-                )
-            else:
-                featurizer_state = params.base_model.get_featurizer(
-                    X,
-                    encoder=encoder,
-                    config=params,
-                    train=train,
-                    explain=build_explain,
-                )
-                if context is not None:
-                    print("Embedding position")
-                    embed_position(context, featurizer_state, params, train)
-            
+            featurizer_state = params.base_model.get_featurizer(
+                X,
+                encoder=encoder,
+                config=params,
+                train=train,
+                explain=build_explain,
+            )
+            if context is not None:
+                embed_position(context, featurizer_state, params, train)
+                if params.context_in_base_model:
+                    with tf.variable_scope("model/featurizer"):
+                        # TODO: must also update features for classification and explanation
+                        add_context_embed(featurizer_state)
+                        hidden = featurizer_state['sequence_features']
+                        w0, w = smooth_pos_attn(hidden, params, featurizer_state['lengths'])
+                        text_embed = hidden[:, :, :params.n_embed]
+                        seq_feats = tf.matmul(w, text_embed)
+                        featurizer_state['sequence_features'] = seq_feats
+
             predictions = {
                 PredictMode.FEATURIZE: featurizer_state["features"], 
                 PredictMode.SEQUENCE: featurizer_state["sequence_features"]

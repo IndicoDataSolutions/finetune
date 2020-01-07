@@ -39,6 +39,7 @@ class InMemoryFinetune(tf.train.SessionRunHook):
             with tf.Graph().as_default():
                 # from finetune import Classifier
                 # model = Classifier(**self._config_to_finetune)
+                # TODO: support both Classifier and SequenceLabeler
                 from finetune import SequenceLabeler
                 model = SequenceLabeler(**self._config_to_finetune)
 
