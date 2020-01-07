@@ -456,12 +456,15 @@ def sequence_labeler(
             #     featurizer_state=featurizer_state
             # )
             # n = norm(attn_fn(hidden) + hidden, "seq_label_residual")
-            w0, w = smooth_pos_attn(hidden, config, lengths)
-            featurizer_state['context_attention_weights'] = tf.stack((w0, w), 3)
-            text_embed = hidden[:, :, :config.n_embed]
-            n = tf.matmul(w, text_embed)
-            flat_logits = tf.layers.dense(n, n_targets)
+            if not config.context_in_base_model:
+                w0, w = smooth_pos_attn(hidden, config, lengths)
+                featurizer_state['context_attention_weights'] = tf.stack((w0, w), 3)
+                text_embed = hidden[:, :, :config.n_embed]
+                n = tf.matmul(w, text_embed)
+            else:
+                n = hidden
 
+            flat_logits = tf.layers.dense(n, n_targets)
             logits = tf.reshape(
                 flat_logits, tf.concat([tf.shape(hidden)[:2], [n_targets]], 0)
             )
