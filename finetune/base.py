@@ -326,7 +326,7 @@ class BaseModel(object, metaclass=ABCMeta):
             tf_random_seed=self.config.seed,
             save_summary_steps=self.config.val_interval,
             save_checkpoints_secs=None,
-            save_checkpoints_steps=10,
+            save_checkpoints_steps=None,
             # disable auto summaries
             session_config=conf,
             log_step_count_steps=100,
