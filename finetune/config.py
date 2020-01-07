@@ -388,7 +388,7 @@ def get_default_config():
         context_embed_stddev=1.0,
         default_context=None,
         context_dim=None,  # number of context dimensions to be inserted
-        context_in_base_model=False
+        context_in_base_model=False,
 
         # Serialize finetune version with model
         version=VERSION,
