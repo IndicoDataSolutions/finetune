@@ -3,6 +3,7 @@ import logging
 import sys
 import math
 import os
+from collections.abc import Iterable
 from collections import Counter
 
 from abc import ABCMeta, abstractmethod
@@ -149,11 +150,12 @@ class BasePipeline(metaclass=ABCMeta):
         target_arrs = np.asarray([target_arr for doc, target_arr in encoded_dataset])
         targets = []
         for target in self.label_encoder.inverse_transform(target_arrs):
-            if isinstance(target, str):
-                targets.append(target)
-            else:
+            if isinstance(target, Iterable):
                 # Iterable
                 targets.extend(target)
+            else:
+                targets.append(target)
+
         return Counter(targets)
 
     def _compute_class_weights(self, class_weights, class_counts):
@@ -184,9 +186,9 @@ class BasePipeline(metaclass=ABCMeta):
 
         if not callable(Y) and train:
             dataset_encoded_list = list(dataset_encoded())
-            class_counts = self._compute_class_counts(dataset_encoded_list)
             self.config.dataset_size = len(dataset_encoded_list)
             if self.config.class_weights is not None:
+                class_counts = self._compute_class_counts(dataset_encoded_list)
                 self.config.class_weights = self._compute_class_weights(
                     class_weights=self.config.class_weights, 
                     class_counts=class_counts
