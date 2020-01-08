@@ -160,12 +160,13 @@ class BasePipeline(metaclass=ABCMeta):
                 targets.append(target)
 
 =======
-            if isinstance(target, str):
-                targets.append(target)
-            else:
+            if isinstance(target, Iterable):
                 # Iterable
                 targets.extend(target)
->>>>>>> ADD: proper multi-label class weights
+            else:
+                targets.append(target)
+
+>>>>>>> FIX: don't compute class_counts when there aren't classes to be counted
         return Counter(targets)
 
     def _compute_class_weights(self, class_weights, class_counts):
