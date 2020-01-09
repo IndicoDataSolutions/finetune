@@ -147,7 +147,6 @@ class BasePipeline(metaclass=ABCMeta):
             self.target_dim = target_dim
 
     def _compute_class_counts(self, encoded_dataset):
-        import pdb; pdb.set_trace()
         target_arrs = np.asarray([target_arr for doc, target_arr in encoded_dataset])
         targets = []
         for target in self.label_encoder.inverse_transform(target_arrs):
