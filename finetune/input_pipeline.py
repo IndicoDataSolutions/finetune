@@ -137,7 +137,7 @@ class BasePipeline(metaclass=ABCMeta):
                 else:
                     Y_fit = list(itertools.islice(Y(), 10000))
                     self.label_encoder.fit(Y_fit)
-                    
+
             self.config.pad_idx = self.pad_idx
 
             target_dim = self.label_encoder.target_dim
@@ -147,6 +147,7 @@ class BasePipeline(metaclass=ABCMeta):
             self.target_dim = target_dim
 
     def _compute_class_counts(self, encoded_dataset):
+        import pdb; pdb.set_trace()
         target_arrs = np.asarray([target_arr for doc, target_arr in encoded_dataset])
         targets = []
         for target in self.label_encoder.inverse_transform(target_arrs):
@@ -190,7 +191,7 @@ class BasePipeline(metaclass=ABCMeta):
             if self.config.class_weights is not None:
                 class_counts = self._compute_class_counts(dataset_encoded_list)
                 self.config.class_weights = self._compute_class_weights(
-                    class_weights=self.config.class_weights, 
+                    class_weights=self.config.class_weights,
                     class_counts=class_counts
                 )
         shape_def = self.feed_shape_type_def()
@@ -466,9 +467,9 @@ class BasePipeline(metaclass=ABCMeta):
             # can only chunk single sequence inputs
 
             chunk_size = self.config.max_length - 2
-                
+
             step_size = chunk_size // 3
-            
+
             encoded = self.text_encoder.encode_multi_input(
                 Xs,
                 Y=Y,
@@ -483,7 +484,7 @@ class BasePipeline(metaclass=ABCMeta):
                 field_value = getattr(encoded, field)
                 if field_value is not None:
                     field_starts_and_ends[field] = (field_value[0], field_value[-1])
-                                
+
             for start in starts:
                 d = dict()
                 end = start + chunk_size
@@ -517,4 +518,3 @@ class BasePipeline(metaclass=ABCMeta):
                     d[field] = field_value
 
             yield self._array_format(EncodedOutput(**d), pad_token=(pad_token or self.config.pad_token))
-
