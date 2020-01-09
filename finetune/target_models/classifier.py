@@ -100,7 +100,10 @@ class Classifier(BaseModel):
             doc_probs.append(proba)
 
             if end_of_doc:
-                # last chunk in a document
+                # last chunk in a document\
+                # TODO: Make sure this works right for noisy labels
+                # Might just work if it's calling the generic one
+                # hot encoder
                 mean_pool = np.mean(doc_probs, axis=0)
                 pred = np.argmax(mean_pool)
                 one_hot = np.zeros_like(mean_pool)
