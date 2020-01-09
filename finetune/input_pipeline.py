@@ -186,18 +186,6 @@ class BasePipeline(metaclass=ABCMeta):
 
         if not callable(Y) and train:
             dataset_encoded_list = list(dataset_encoded())
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-            import pdb; pdb.set_trace()
-            class_counts = self._compute_class_counts(dataset_encoded_list)
->>>>>>> Made noise aware classifier, label encoder, pipeline. breaking pending merge
-=======
->>>>>>> empty commit/formatting
-=======
-            class_counts = self._compute_class_counts(dataset_encoded_list)
->>>>>>> removing merge junk
             self.config.dataset_size = len(dataset_encoded_list)
             if self.config.class_weights is not None:
                 class_counts = self._compute_class_counts(dataset_encoded_list)
