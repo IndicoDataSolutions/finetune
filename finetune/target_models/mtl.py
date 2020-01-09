@@ -1,5 +1,7 @@
 import logging
 
+import copy
+
 import tensorflow as tf
 from finetune.base import BaseModel
 from finetune.input_pipeline import BasePipeline
@@ -93,8 +95,10 @@ class MultiTaskPipeline(BasePipeline):
 
 
 def get_loss_logits_fn(task, featurizer_state, config, targets_i, train, reuse, task_id_i):
+    featurizer_state = copy.copy(featurizer_state)
     def loss_logits():
         with tf.variable_scope("target_model_{}".format(task)):
+            config.tasks[task]()._pre_target_model_hook(featurizer_state)
             target_model_out = config.tasks[task]()._target_model(
                 config=config,
                 featurizer_state=featurizer_state,
