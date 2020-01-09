@@ -57,7 +57,7 @@ class NoisyClassificationPipeline(BasePipeline):
         return NoisyLabelEncoder()
 
     def feed_shape_type_def(self):
-        return super(ClassificationPipeline, self).feed_shape_type_def()
+        return super(NoisyClassificationPipeline, self).feed_shape_type_def()
 
 class Classifier(BaseModel):
     """
