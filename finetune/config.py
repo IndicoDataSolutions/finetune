@@ -177,6 +177,8 @@ class Settings(dict):
     :param val_set: Where it is neccessary to use an explicit validation set, provide it here as a tuple (text, labels)
     :param per_process_gpu_memory_fraction: fraction of the overall amount of memory that each visible GPU should be allocated, defaults to `1.0`.
     :param adapter_size: width of adapter module from 'Parameter Efficient Transfer Learning' paper, if defined. defaults to 'None'.
+    :train_batch_hook: function to run after preprocessing every batch of data during training. Function will receive a dict of timing information, with keys including "estimated_total_seconds" and "estimated_remaining_seconds".
+    :predict_batch_hook: function to run after preprocessing every batch of data during prediction. Function will receive a dict of timing information, with keys including "estimated_total_seconds" and "estimated_remaining_seconds".
     """
 
     def get_grid_searchable(self):
@@ -388,6 +390,10 @@ def get_default_config():
 
         # Serialize finetune version with model
         version=VERSION,
+
+        # Training Update Hook
+        train_batch_hook=None,
+        predict_batch_hook=None,
     )
     return settings
 

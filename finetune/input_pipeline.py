@@ -20,6 +20,7 @@ import finetune
 from finetune.errors import FinetuneError
 from finetune.encoding.input_encoder import ArrayEncodedOutput, EncodedOutput, tokenize_context
 from finetune.util.imbalance import compute_class_weights
+from finetune.util.timing import ProgressBar
 
 LOGGER = logging.getLogger("finetune")
 
@@ -161,7 +162,7 @@ class BasePipeline(metaclass=ABCMeta):
     def _compute_class_weights(self, class_weights, class_counts):
         return compute_class_weights(class_weights=class_weights, class_counts=class_counts)
 
-    def _dataset_with_targets(self, Xs, Y, train, context=None):
+    def _dataset_with_targets(self, Xs, Y, train, context=None, update_hook=None):
         if context is not None:
             if not callable(Xs) and not callable(Y) and not callable(context):
                 dataset = lambda: zip(Xs, Y, context)
@@ -195,7 +196,7 @@ class BasePipeline(metaclass=ABCMeta):
                 )
         shape_def = self.feed_shape_type_def()
         return Dataset.from_generator(
-            lambda: self.wrap_tqdm(dataset_encoded(), train), *shape_def
+            lambda: self.wrap_tqdm(dataset_encoded(), train, update_hook=update_hook), *shape_def
         )
 
     def _dataset_without_targets(self, Xs, train, context=None):
@@ -206,15 +207,15 @@ class BasePipeline(metaclass=ABCMeta):
             else:
                 Xs_ = Xs
             Xs_gen = lambda: zip(Xs_, [None] * len(Xs_), context)
-            Xs_fn = lambda: self.wrap_tqdm(Xs_gen(), train)
+            Xs_fn = lambda: self.wrap_tqdm(Xs_gen(), train, update_hook=update_hook)
             dataset_encoded = lambda: itertools.chain.from_iterable(
                 map(lambda xyc: self.text_to_tokens_mask(*xyc), Xs_fn())
             )
         else:
             if not callable(Xs):
-                Xs_fn = lambda: self.wrap_tqdm(Xs, train)
+                Xs_fn = lambda: self.wrap_tqdm(Xs, train, update_hook=update_hook)
             else:
-                Xs_fn = lambda: self.wrap_tqdm(Xs(), train)
+                Xs_fn = lambda: self.wrap_tqdm(Xs(), train, update_hook=update_hook)
             dataset_encoded = lambda: itertools.chain.from_iterable(
                 map(self.text_to_tokens_mask, Xs_fn())
             )
@@ -266,17 +267,14 @@ class BasePipeline(metaclass=ABCMeta):
     def resampling(self, Xs, Y, context=None):
         return Xs, Y, context
 
-    def _make_dataset(self, Xs, Y, train=False, context=None):
+    def _make_dataset(self, Xs, Y, train=False, context=None, update_hook=None):
         if Y is not None:
-            dataset = lambda: self._dataset_with_targets(Xs, Y, train=train, context=context)
+            dataset = lambda: self._dataset_with_targets(Xs, Y, train=train, context=context, update_hook=update_hook)
         else:
-            dataset = lambda: self._dataset_without_targets(Xs, train=train, context=context)
+            dataset = lambda: self._dataset_without_targets(Xs, train=train, context=context, update_hook=update_hook)
         return dataset
 
-    def wrap_tqdm(self, gen, train):
-        if self.config.debugging_logs:
-            return gen
-
+    def wrap_tqdm(self, gen, train, update_hook=None):
         if train is None:
             return gen
 
@@ -304,12 +302,14 @@ class BasePipeline(metaclass=ABCMeta):
             for _, i in zip(range(self._skip_tqdm), it):
                 yield i
 
-            for i in tqdm.tqdm(
+            for i in ProgressBar(
                 it,
                 desc=desc,
                 total=total,
                 miniters=1,
                 leave=current_epoch == self.config.n_epochs and train,
+                update_hook=update_hook,
+                silent=self.config.debugging_logs
             ):
                 yield i
 
@@ -318,7 +318,7 @@ class BasePipeline(metaclass=ABCMeta):
 
         return internal_gen()
 
-    def get_train_input_fns(self, Xs, Y=None, batch_size=None, val_size=None, context=None):
+    def get_train_input_fns(self, Xs, Y=None, batch_size=None, val_size=None, context=None, update_hook=None):
         self.epoch = 1
         batch_size = batch_size or self.config.batch_size
 
@@ -351,7 +351,7 @@ class BasePipeline(metaclass=ABCMeta):
 
         if callable(Xs) or Y is None:
             self._skip_tqdm = val_size
-            dataset = self._make_dataset(Xs, Y, train=True, context=context)
+            dataset = self._make_dataset(Xs, Y, train=True, context=context, update_hook=update_hook)
             val_dataset_unbatched = (
                 lambda: dataset()
                 .shuffle(
@@ -384,7 +384,7 @@ class BasePipeline(metaclass=ABCMeta):
                 Xs_tr, Y_tr, c_tr = self.resampling(Xs_tr, Y_tr, c_tr)
                 self.config.dataset_size = len(Xs_tr)
                 val_dataset_unbatched = self._make_dataset(Xs_va, Y_va, train=False, context=c_va)
-                train_dataset_unbatched = self._make_dataset(Xs_tr, Y_tr, train=True, context=c_tr)
+                train_dataset_unbatched = self._make_dataset(Xs_tr, Y_tr, train=True, context=c_tr, update_hook=update_hook)
             else:
                 to_shuffle = (Xs, Y)
 
@@ -397,7 +397,7 @@ class BasePipeline(metaclass=ABCMeta):
                 Xs_tr, Y_tr, _ = self.resampling(Xs_tr, Y_tr)
                 self.config.dataset_size = len(Xs_tr)
                 val_dataset_unbatched = self._make_dataset(Xs_va, Y_va, train=False)
-                train_dataset_unbatched = self._make_dataset(Xs_tr, Y_tr, train=True)
+                train_dataset_unbatched = self._make_dataset(Xs_tr, Y_tr, train=True, update_hook=update_hook)
 
         if self.config.chunk_long_sequences or self.config.class_weights:
             # Certain settings require that the entire dataset be encoded before compiling the graph
