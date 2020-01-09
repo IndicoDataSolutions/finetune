@@ -191,6 +191,7 @@ class BasePipeline(metaclass=ABCMeta):
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
             import pdb; pdb.set_trace()
             class_counts = self._compute_class_counts(dataset_encoded_list)
@@ -200,6 +201,8 @@ class BasePipeline(metaclass=ABCMeta):
 =======
             class_counts = self._compute_class_counts(dataset_encoded_list)
 >>>>>>> removing merge junk
+=======
+>>>>>>> fixing git mistake
             self.config.dataset_size = len(dataset_encoded_list)
             if self.config.class_weights is not None:
                 class_counts = self._compute_class_counts(dataset_encoded_list)
