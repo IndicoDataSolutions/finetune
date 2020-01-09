@@ -244,6 +244,9 @@ class MultiTask(BaseModel):
             )
         return super().finetune(X, Y=Y, batch_size=batch_size, context=context)
 
+    def _pre_target_model_hook(self, featurizer_state):
+        pass
+
     def _target_model(
         self,
         *,
