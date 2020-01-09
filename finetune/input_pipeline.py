@@ -151,21 +151,12 @@ class BasePipeline(metaclass=ABCMeta):
         target_arrs = np.asarray([target_arr for doc, target_arr in encoded_dataset])
         targets = []
         for target in self.label_encoder.inverse_transform(target_arrs):
-<<<<<<< HEAD
             if isinstance(target, Iterable):
                 # Iterable
                 targets.extend(target)
             else:
                 targets.append(target)
 
-=======
-            if isinstance(target, Iterable):
-                # Iterable
-                targets.extend(target)
-            else:
-                targets.append(target)
-
->>>>>>> FIX: don't compute class_counts when there aren't classes to be counted
         return Counter(targets)
 
     def _compute_class_weights(self, class_weights, class_counts):
@@ -198,12 +189,16 @@ class BasePipeline(metaclass=ABCMeta):
             dataset_encoded_list = list(dataset_encoded())
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
             import pdb; pdb.set_trace()
             class_counts = self._compute_class_counts(dataset_encoded_list)
 >>>>>>> Made noise aware classifier, label encoder, pipeline. breaking pending merge
 =======
 >>>>>>> empty commit/formatting
+=======
+            class_counts = self._compute_class_counts(dataset_encoded_list)
+>>>>>>> removing merge junk
             self.config.dataset_size = len(dataset_encoded_list)
             if self.config.class_weights is not None:
                 class_counts = self._compute_class_counts(dataset_encoded_list)
