@@ -29,7 +29,8 @@ def bert_featurizer(
     """
 
     is_roberta = issubclass(config.base_model.encoder, RoBERTaEncoder)
-    is_roberta_v1 = is_roberta and not config.base_model_path.endswith("roberta-model-sm-v2.jl")
+    model_filename = config.base_model_path.rpartition('/')[-1]
+    is_roberta_v1 = is_roberta and model_filename in ("roberta-model-sm.jl", "roberta-model-lg.jl")
 
     bert_config = BertConfig(
         vocab_size=encoder.vocab_size,
