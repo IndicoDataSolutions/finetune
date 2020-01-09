@@ -1,5 +1,6 @@
 from abc import ABCMeta
 
+import pandas as pd
 import numpy as np
 from sklearn.preprocessing import LabelEncoder, MultiLabelBinarizer, OrdinalEncoder
 
@@ -77,6 +78,28 @@ class OneHotLabelEncoder(LabelEncoder, BaseEncoder):
                     break
         return ys
 
+class NoisyLabelEncoder(LabelEncoder, BaseEncoder):
+
+    # Overriding the fit method...
+    # Fit method may not be necessary at all if pandas is
+    # consistent about how it chooses columns
+    # TODO: Check
+    def fit(self, y):
+        self.classes_ = list(pd.DataFrame(y[:1]).columns)
+        return self
+
+    def transform(self, y):
+        return pd.DataFrame(y, columns=self.classes_, dtype=np.float).values
+
+    #TODO: Make output dataframe consistent with self.target_labels
+    # and self.classes_
+    def fit_transform(self, labels):
+        fit(labels)
+        return transform(labels)
+
+    def inverse_transform(self, probabilities):
+        dataframe = pd.DataFrame(probabilities, columns=self.classes_)
+        return list(dataframe.T.to_dict().values())
 
 class Seq2SeqLabelEncoder(BaseEncoder):
     def __init__(self, encoder, max_len, *args, **kwargs):
@@ -86,7 +109,7 @@ class Seq2SeqLabelEncoder(BaseEncoder):
 
     def fit(self, y):
         return
-    
+
     @property
     def target_dim(self):
         return self.encoder.vocab_size
@@ -100,7 +123,7 @@ class Seq2SeqLabelEncoder(BaseEncoder):
             out = self.encoder.encode_multi_input([[y_i]], max_length=self.max_len).token_ids
             seq_length = len(out)
             x = np.zeros((self.max_len, 2), dtype=np.int32)
-        
+
             x[:seq_length, 0] = out
             x[:, 1] = np.arange(self.encoder.vocab_size, self.encoder.vocab_size + self.max_len)
             output.append(x)
