@@ -164,7 +164,9 @@ class RoBERTa(SourceModel):
 
     @classmethod
     def get_encoder(cls, config=None, **kwargs):
-        if config is not None and not config.base_model_path.endswith('-v2'):
+        roberta_filename = config.base_model_path.rpartition('/')[-1]
+        missing_mask_token = roberta_filename in ('roberta-model-sm.jl', 'roberta-model-lg.jl')
+        if config is not None and not missing_mask_token:
             return cls.encoder(**kwargs)
         else:
             return RoBERTaEncoder(**kwargs)
