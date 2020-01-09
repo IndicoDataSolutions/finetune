@@ -14,6 +14,7 @@ from contextlib import contextmanager
 import pathlib
 import logging
 
+import ipdb
 import tqdm
 import numpy as np
 import tensorflow as tf
@@ -29,14 +30,13 @@ from finetune.config import get_config, all_gpus, assert_valid_config, get_defau
 from finetune.saver import Saver, InitializeHook
 from finetune.errors import FinetuneError
 from finetune.model import get_model_fn, PredictMode
-
 from finetune.util.download import download_data_if_required
 from finetune.util.positional_embeddings import embedding_preprocessor
 from finetune.util.shapes import shape_list
+from finetune.util.timing import ProgressBar
+from finetune.util.in_memory_finetune import make_in_memory_finetune_hooks
 from finetune.base_models import GPTModel, GPTModelSmall
 from finetune.nn.auxiliary import add_context_embed
-
-from finetune.util.in_memory_finetune import make_in_memory_finetune_hooks
 
 LOGGER = logging.getLogger("finetune")
 
@@ -97,6 +97,9 @@ class BaseModel(object, metaclass=ABCMeta):
         self._cached_predict = False
         self._closed = False
         self._to_pull = 0
+        
+        # state for progress bar + time estimation
+        self.progress_bar = None
 
         try:
             self.estimator_dir = os.path.abspath(
@@ -164,7 +167,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         batch_size = batch_size or self.config.batch_size
         val_input_fn, train_input_fn, val_size, val_interval = self.input_pipeline.get_train_input_fns(
-            Xs, Y, batch_size=batch_size, context=context
+            Xs, Y, batch_size=batch_size, context=context, update_hook=self.config.train_batch_hook
         )
 
         if self.config.keep_best_model:
@@ -211,6 +214,7 @@ class BaseModel(object, metaclass=ABCMeta):
                         )
                     )
             early_stopping_interval = sys.maxsize  # turn off early stopping for mtl.
+
         elif val_size > 0:
             # Validation with all other tasks.
             train_hooks.append(
@@ -434,7 +438,8 @@ class BaseModel(object, metaclass=ABCMeta):
         self._clear_prediction_queue()
 
         predictions = [None] * n
-        for i in tqdm.tqdm(range(n), total=n, desc="Inference"):
+        
+        for i in ProgressBar(range(n), total=n, desc="Inference", update_hook=self.predict_batch_hook):
             y = next(self._predictions)
             try:
                 y = y[predict_keys[0]] if len(predict_keys) == 1 else y
@@ -460,12 +465,14 @@ class BaseModel(object, metaclass=ABCMeta):
             )
             length = len(Xs) if not callable(Xs) else None
 
-            predictions = tqdm.tqdm(
-                estimator.predict(
-                    input_fn=input_fn, predict_keys=predict_keys, hooks=hooks
-                ),
-                total=n_examples or length,
-                desc="Inference",
+            prediction_iterator = estimator.predict(
+                input_fn=input_fn, predict_keys=predict_keys, hooks=hooks
+            )
+            predictions = ProgressBar(
+                prediction_iterator, 
+                total=n_examples or length, 
+                desc="Inference", 
+                update_hook=self.predict_batch_hook
             )
             try:
                 return [
