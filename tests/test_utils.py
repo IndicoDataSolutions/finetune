@@ -214,7 +214,7 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
         self.assertCountEqual(finetuney[0][1], finetuney_pred[0][1])
         self.assertCountEqual(finetuney[0][2], finetuney_pred[0][2])
 
-    def test_robert_failure(self):
+    def test_roberta_failure(self):
         text = [
             'Margin Cost\n1357711\n593 2501\n1350\n700860\n65053899 06\n46032479 8308\n6452785 '
             '50\n3353\n12546915 246\n094 10828664\n7 8058\n53696576 25\n7654 260919\n646256 '
