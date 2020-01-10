@@ -5,7 +5,6 @@ from finetune.util.shapes import lengths_from_eos_idx
 from finetune.base_models.bert.roberta_encoder import RoBERTaEncoder
 from finetune.base_models.bert.modeling import BertConfig, BertModel
 from finetune.nn.target_blocks import smooth_pos_attn
-from finetune.nn.auxiliary import add_context_embed, embed_position
 
 
 def bert_featurizer(

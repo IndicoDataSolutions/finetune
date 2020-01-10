@@ -47,10 +47,7 @@ def gather_indexes(sequence_tensor, positions):
 
 
 def masked_language_model(*, X, M, mlm_weights, mlm_positions, mlm_ids, embed_weights, hidden, config, reuse=None, train=False):
-    X = merge_leading_dims(X, 3)
-    M = merge_leading_dims(M, 2)
     hidden = merge_leading_dims(hidden, 3)
-    batch, seq, _ = shape_list(X)
     with tf.variable_scope('model/masked-language-model'):
         gathered_hidden = gather_indexes(hidden, mlm_positions)
         final_proj = tf.layers.dense(

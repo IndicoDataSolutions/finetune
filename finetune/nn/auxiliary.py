@@ -24,7 +24,7 @@ def embed_context(context, featurizer_state, config, train):
     featurizer_state['context'] = c_embed
 
 
-def embed_position(context, featurizer_state, config, train):
+def embed_position(context, config):
     with tf.variable_scope("context_embedding"):
         context_dim = shape_list(context)[-1]
         batch, seq, _ = shape_list(featurizer_state['sequence_features'])
@@ -40,8 +40,7 @@ def embed_position(context, featurizer_state, config, train):
                 ]
             ] * context_dim
         ) / (float(context_channels) / config.context_embed_scale)
-        featurizer_state['context'] = pos_embed
-    return featurizer_state
+    return pos_embed
 
 
 def add_context_embed(featurizer_state):
