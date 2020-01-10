@@ -57,7 +57,7 @@ class ComparisonRegressor(BaseModel):
             **kwargs
         )
 
-    def predict(self, pairs, context=None):
+    def predict(self, pairs, context=None, **kwargs):
         """
         Produces a floating point prediction determined by the fine-tuned model.
 
@@ -65,7 +65,7 @@ class ComparisonRegressor(BaseModel):
         :param pairs: Array of text, shape [batch, 2]
         :returns: list of floats, shape [batch]
         """
-        return super().predict(pairs, context=context)
+        return super().predict(pairs, context=context, **kwargs)
 
     def predict_proba(self, pairs, context=None):
         """
@@ -73,24 +73,24 @@ class ComparisonRegressor(BaseModel):
         """
         raise AttributeError("`ComparisonRegressor` model does not support `predict_proba`.")
 
-    def featurize(self, pairs):
+    def featurize(self, pairs, **kwargs):
         """
         Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
 
         :param pairs: Array of text, shape [batch, 2]
         :returns: np.array of features of shape (n_examples, embedding_size).
         """
-        return self._featurize(pairs)
+        return self._featurize(pairs, **kwargs)
     
     
-    def finetune(self, pairs, Y=None, batch_size=None, context=None):
+    def finetune(self, pairs, Y=None, batch_size=None, context=None, **kwargs):
         """
         :param pairs: Array of text, shape [batch_size, 2]
         :param Y: floating point targets
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
         """
-        return super().finetune(pairs, Y=Y, batch_size=batch_size, context=context)
+        return super().finetune(pairs, Y=Y, batch_size=batch_size, context=context, **kwargs)
     
     def _predict_op(self, logits, **kwargs):
         return logits

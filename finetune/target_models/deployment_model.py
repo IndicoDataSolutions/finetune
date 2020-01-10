@@ -1,5 +1,4 @@
 import numpy as np
-import tqdm
 import math
 import itertools
 import logging
@@ -19,6 +18,7 @@ from finetune.base_models.gpt2.featurizer import gpt2_featurizer
 from finetune.model import get_separate_model_fns, PredictMode
 from finetune.errors import FinetuneError
 from finetune.input_pipeline import BasePipeline
+from finetune.util.timing import ProgressBar
 
 LOGGER = logging.getLogger("finetune")
 PredictHook = namedtuple("InitializeHook", "feat_hook target_hook")
@@ -270,14 +270,14 @@ class DeploymentModel(BaseModel):
             self.input_pipeline = DeploymentPipeline(self.config)
         return self.input_pipeline
 
-    def featurize(self, X):
+    def featurize(self, X, **kwargs):
         """
         Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
 
         :param X: list or array of text to embed.
         :returns: np.array of features of shape (n_examples, embedding_size).
         """
-        features = self.predict(X, exclude_targets=True)
+        features = self.predict(X, exclude_targets=True, **kwargs)
         return features["features"]
 
     def _get_input_fn(self, gen, context=None):
@@ -289,7 +289,8 @@ class DeploymentModel(BaseModel):
         predict_keys=[PredictMode.NORMAL],
         exclude_target=False,
         n_examples=None,
-        context=None
+        context=None,
+        update_hook=None
     ):
         Xs = self.input_pipeline._format_for_inference(Xs)
         self._data = Xs
@@ -313,7 +314,7 @@ class DeploymentModel(BaseModel):
 
         num_batches = math.ceil(n / self.config.predict_batch_size)
         features = [None] * n
-        for i in tqdm.tqdm(range(num_batches), total=num_batches, desc="Featurization by Batch"):
+        for i in ProgressBar(range(num_batches), total=num_batches, desc="Featurization by Batch", update_hook=update_hook):
             y = next(self._predictions)
             for j in range(
                 self.config.predict_batch_size
@@ -341,7 +342,7 @@ class DeploymentModel(BaseModel):
 
         predictions = [None] * n
 
-        for i in tqdm.tqdm(range(n), total=n, desc="Target Model"):
+        for i in ProgressBar(range(n), total=n, desc="Target Model", update_hook=update_hook):
             y = next(preds)
             try:
                 y = y[predict_keys[0]] if len(predict_keys) == 1 else y
@@ -354,7 +355,7 @@ class DeploymentModel(BaseModel):
         self._clear_prediction_queue()
         return predictions
 
-    def predict(self, X, exclude_target=False, context=None):
+    def predict(self, X, exclude_target=False, context=None, **kwargs):
         """
         Performs inference using the weights and targets from the model in filepath used for load_custom_model. 
 
@@ -364,21 +365,21 @@ class DeploymentModel(BaseModel):
         if self.task == TaskMode.SEQUENCE_LABELING and not exclude_target:
             return SequenceLabeler.predict(self, X, context=context)
         else:
-            raw_preds = self._inference(X, exclude_target=exclude_target)
+            raw_preds = self._inference(X, exclude_target=exclude_target, **kwargs)
             if exclude_target:
                 return raw_preds
             return self.input_pipeline.label_encoder.inverse_transform(
                 np.asarray(raw_preds)
             )
 
-    def predict_proba(self, X, context=None):
+    def predict_proba(self, X, context=None, **kwargs):
         """
         Produces a probability distribution over classes for each example in X.
 
         :param X: list or array of text to embed.
         :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
         """
-        return super().predict_proba(X, context=context)
+        return super().predict_proba(X, context=context, **kwargs)
 
     def finetune(self, X, Y=None, batch_size=None, context=None):
         raise NotImplementedError

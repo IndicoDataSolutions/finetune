@@ -181,7 +181,7 @@ class SequenceLabeler(BaseModel):
         self.multi_label = self.config.multi_label_sequences
         return super()._initialize()
 
-    def finetune(self, Xs, Y=None, batch_size=None, context=None):
+    def finetune(self, Xs, Y=None, batch_size=None, context=None, **kwargs):
         Xs, Y_new, _, _, _ = indico_to_finetune_sequence(
             Xs,
             encoder=self.input_pipeline.text_encoder,
@@ -191,9 +191,9 @@ class SequenceLabeler(BaseModel):
         )
 
         Y = Y_new if Y is not None else None
-        return super().finetune(Xs, Y=Y, batch_size=batch_size, context=context)
+        return super().finetune(Xs, Y=Y, batch_size=batch_size, context=context, **kwargs)
 
-    def predict(self, X, per_token=False, context=None):
+    def predict(self, X, per_token=False, context=None, **kwargs):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
@@ -208,7 +208,7 @@ class SequenceLabeler(BaseModel):
         chunk_size = self.config.max_length - 2
         step_size = chunk_size // 3
         doc_idx = -1
-        for position_seq, start_of_doc, end_of_doc, label_seq, proba_seq in self.process_long_sequence(X, context=context):
+        for position_seq, start_of_doc, end_of_doc, label_seq, proba_seq in self.process_long_sequence(X, context=context, **kwargs):
             start, end = 0, None
             if start_of_doc:
                 # if this is the first chunk in a document, start accumulating from scratch
@@ -303,23 +303,23 @@ class SequenceLabeler(BaseModel):
         else:
             return doc_annotations
 
-    def featurize(self, X):
+    def featurize(self, X, **kwargs):
         """
         Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
 
         :param Xs: An iterable of lists or array of text, shape [batch, n_inputs, tokens]
         :returns: np.array of features of shape (n_examples, embedding_size).
         """
-        return self._featurize(X)
+        return self._featurize(X, **kwargs)
 
-    def predict_proba(self, X, context=None):
+    def predict_proba(self, X, context=None, **kwargs):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
         :param X: A list / array of text, shape [batch]
         :returns: list of class labels.
         """
-        return self.predict(X, context=context)
+        return self.predict(X, context=context, **kwargs)
 
     def _target_model(
         self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
