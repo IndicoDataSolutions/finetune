@@ -465,8 +465,4 @@ def indico_to_finetune_sequence(
         all_idxs.append(doc_current_label_idx)
 
     lens = [len(x) for x in all_subseqs[0]]
-    print(all_subseqs[0])
-    print(repr(texts[0]))
-    
-    print(lens, sum(lens))
     return all_subseqs, all_labels, all_association_type, all_association_idx, all_idxs

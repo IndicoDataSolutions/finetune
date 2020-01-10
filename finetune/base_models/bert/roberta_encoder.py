@@ -111,7 +111,6 @@ class RoBERTaEncoder(GPT2Encoder):
         skipped = 0
 
         for i, text in enumerate(texts):
-            print(text)
             if labels is not None:
                 label = labels[i]
 
@@ -157,8 +156,9 @@ class RoBERTaEncoder(GPT2Encoder):
                     token_char_ends = (
                         np.cumsum([len(tok) for tok in bpe_toks]) + token_start
                     )
+                token_char_starts = [token_start] + [e for e in token_char_ends[1:]]
 
-                token_start += len(token.strip())
+                token_start = token_char_ends[-1]#len(token.strip())
                 char_ends.extend(token_char_ends)
                 char_starts.extend(token_char_starts)
 
@@ -170,9 +170,6 @@ class RoBERTaEncoder(GPT2Encoder):
             batch_char_ends.append(char_ends)
             batch_char_starts.append(char_starts)
 
-            for tok, st, ed in zip(subtokens, char_starts, char_ends):
-                print("#{}#".format(tok), "#{}#".format(text[st:ed]))
-            
             if labels is not None:
                 batch_label_idxs.append([label] * len(subtoken_idxs))
 
