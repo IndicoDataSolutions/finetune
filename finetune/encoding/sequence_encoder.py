@@ -47,10 +47,13 @@ def _merge_confidences(annotation):
 def round_to_nearest_start_and_end(label, token_starts, token_ends, text):
     # Update label start / end / text to align with nearest token start_token and end
     # Applies in-place modification to `label` obj.
-    start_distances = np.abs(np.asarray(token_starts) - label["start"])
     end_distances = np.abs(np.asarray(token_ends) - label["end"])
-    label["start"] = token_starts[np.argmin(start_distances)]
     label["end"] = token_ends[np.argmin(end_distances)]
+
+    token_starts = [s for s in token_starts if s < label["end"]]  # label cannot end before it starts
+    start_distances = np.abs(np.asarray(token_starts) - label["start"])
+    label["start"] = token_starts[np.argmin(start_distances)]
+
     label["text"] = text[label["start"] : label["end"]]
 
 
