@@ -152,21 +152,9 @@ def _apply_multilabel_class_weight(losses, targets, class_weights=None):
         # loss multiplier applied based on true class
         weights = (
             # contribution of positive class
-<<<<<<< HEAD
-<<<<<<< HEAD
             class_weights * tf.to_float(targets) +
             # contribution of negative class
             tf.ones_like(class_weights) * (1 - tf.to_float(targets))
-=======
-            tf.reduce_sum(class_weights * tf.to_float(targets), axis=1) +
-            # contribution of negative class
-            tf.reduce_sum(tf.ones_like(class_weights) * (1 - tf.to_float(targets)), axis=1)
->>>>>>> FIX: handle negative class in multilabel
-=======
-            class_weights * tf.to_float(targets) + 
-            # contribution of negative class
-            tf.ones_like(class_weights) * (1 - tf.to_float(targets))
->>>>>>> target reweighting instead of example reweighting
         )
         weights *= tf.to_float(tf.reduce_prod(tf.shape(weights))) / tf.reduce_sum(
             weights
