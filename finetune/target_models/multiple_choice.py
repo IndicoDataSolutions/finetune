@@ -109,7 +109,7 @@ class MultipleChoice(BaseModel):
     def _get_input_pipeline(self):
         return MultipleChoicePipeline(self.config)
 
-    def finetune(self, questions, answers, correct_answer, fit_lm_only=False, context=None):
+    def finetune(self, questions, answers, correct_answer, fit_lm_only=False, context=None, **kwargs):
         """
         :param questions: List or array of text, shape [batch]
         :param answers: List or array of text, shape [batch, n_answers], must contain the correct answer for each entry.
@@ -148,7 +148,7 @@ class MultipleChoice(BaseModel):
 
         labels = None if fit_lm_only else answer_idx
         self.input_pipeline.target_dim_ = len(answers[0])
-        return super().finetune(list(zip(questions, answers)), Y=labels, context=context)
+        return super().finetune(list(zip(questions, answers)), Y=labels, context=context, **kwargs)
 
     def _pre_target_model_hook(self, featurizer_state):
         if "context" in featurizer_state:
@@ -176,7 +176,7 @@ class MultipleChoice(BaseModel):
     def _predict_proba_op(self, logits, **kwargs):
         return tf.nn.softmax(logits, -1)
 
-    def predict(self, questions, answers, context=None):
+    def predict(self, questions, answers, context=None, **kwargs):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
@@ -185,10 +185,10 @@ class MultipleChoice(BaseModel):
         :param answers: List or array of text, shape [batch, n_answers]
         :returns: list of class labels.
         """
-        raw_ids = BaseModel.predict(self, list(zip(questions, answers)), context=context)
+        raw_ids = BaseModel.predict(self, list(zip(questions, answers)), context=context, **kwargs)
         return [ans[i] for ans, i in zip(answers, raw_ids)]
 
-    def predict_proba(self, questions, answers, context=None):
+    def predict_proba(self, questions, answers, context=None, **kwargs):
         """
         Produces a probability distribution over classes for each example in X.
 
@@ -198,14 +198,14 @@ class MultipleChoice(BaseModel):
         :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
         """
         answers = list_transpose(answers)
-        raw_probas = self._predict_proba(zip(questions, answers), context=context)
+        raw_probas = self._predict_proba(zip(questions, answers), context=context, **kwargs)
 
         formatted_predictions = []
         for probas, *answers_per_sample in zip(raw_probas, *answers):
             formatted_predictions.append(dict(zip(answers_per_sample, probas)))
         return formatted_predictions
 
-    def featurize(self, questions, answers):
+    def featurize(self, questions, answers, **kwargs):
         """
         Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
 
@@ -213,4 +213,4 @@ class MultipleChoice(BaseModel):
         :param answers: List or array of text, shape [n_answers, batch]
         :returns: np.array of features of shape (n_examples, embedding_size).
         """
-        return BaseModel.featurize(self, zip(questions, answers))
+        return BaseModel.featurize(self, zip(questions, answers), **kwargs)

@@ -44,16 +44,16 @@ class MultiLabelClassifier(BaseModel):
             return self.config.multi_label_threshold
         return threshold
 
-    def featurize(self, X):
+    def featurize(self, X, **kwargs):
         """
         Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
 
         :param X: list or array of text to embed.
         :returns: np.array of features of shape (n_examples, embedding_size).
         """
-        return super().featurize(X)
+        return super().featurize(X, **kwargs)
 
-    def predict(self, X, threshold=None, context=None):
+    def predict(self, X, threshold=None, context=None, **kwargs):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
@@ -62,7 +62,7 @@ class MultiLabelClassifier(BaseModel):
         """
         threshold = self._get_threshold(threshold)
         all_labels = []
-        for _, start_of_doc, end_of_doc, _, proba in self.process_long_sequence(X, context=context):
+        for _, start_of_doc, end_of_doc, _, proba in self.process_long_sequence(X, context=context, **kwargs):
             if start_of_doc:
                 # if this is the first chunk in a document, start accumulating from scratch
                 doc_probs = []
@@ -76,23 +76,23 @@ class MultiLabelClassifier(BaseModel):
                 all_labels.append(list(label))
         return all_labels
 
-    def predict_proba(self, X, context=None):
+    def predict_proba(self, X, context=None, **kwargs):
         """
         Produces a probability distribution over classes for each example in X.
 
         :param X: list or array of text to embed.
         :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
         """
-        return super().predict_proba(X, context=context)
+        return super().predict_proba(X, context=context, **kwargs)
 
-    def finetune(self, X, Y=None, batch_size=None, context=None):
+    def finetune(self, X, Y=None, batch_size=None, context=None, **kwargs):
         """
         :param X: list or array of text.
         :param Y: A list of lists containing labels for the corresponding X
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
         """
-        return super().finetune(X, Y=Y, batch_size=batch_size, context=context)
+        return super().finetune(X, Y=Y, batch_size=batch_size, context=context, **kwargs)
 
     def _target_model(self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
         return multi_classifier(

@@ -129,7 +129,7 @@ class Comparison(Classifier):
             **kwargs
         )
 
-    def predict(self, pairs, context=None):
+    def predict(self, pairs, context=None, **kwargs):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
@@ -137,9 +137,9 @@ class Comparison(Classifier):
         :param pairs: Array of text, shape [batch, 2]
         :returns: list of class labels.
         """
-        return BaseModel.predict(self, pairs, context=context)
+        return BaseModel.predict(self, pairs, context=context, **kwargs)
 
-    def predict_proba(self, pairs, context=None):
+    def predict_proba(self, pairs, context=None, **kwargs):
         """
         Produces a probability distribution over classes for each example in X.
 
@@ -147,7 +147,7 @@ class Comparison(Classifier):
         :param pairs: Array of text, shape [batch, 2]
         :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
         """
-        return BaseModel.predict_proba(self, pairs, context=context)
+        return BaseModel.predict_proba(self, pairs, context=context, **kwargs)
 
     def featurize(self, pairs):
         """
