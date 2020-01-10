@@ -156,7 +156,7 @@ class RoBERTaEncoder(GPT2Encoder):
                     )
                 token_char_starts = [token_start] + [e for e in token_char_ends[1:]]
 
-                token_start = token_char_ends[-1]#len(token.strip())
+                token_start = token_char_ends[-1]
                 char_ends.extend(token_char_ends)
                 char_starts.extend(token_char_starts)
 
