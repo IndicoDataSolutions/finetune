@@ -452,7 +452,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         if self._cached_predict:
             return self._cached_inference(
-                Xs=Xs, predict_keys=predict_keys, n_examples=n_examples, udpate_hook=update_hook
+                Xs=Xs, predict_keys=predict_keys, n_examples=n_examples, update_hook=update_hook
             )
         else:
             input_fn = self.input_pipeline.get_predict_input_fn(Xs, context=context)

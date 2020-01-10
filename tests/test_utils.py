@@ -12,6 +12,7 @@ import finetune
 from finetune.encoding.sequence_encoder import indico_to_finetune_sequence, finetune_to_indico_sequence
 from finetune.optimizers.gradient_accumulation import get_grad_accumulation_optimizer
 from finetune.util.imbalance import compute_class_weights
+from finetune.util.timing import ProgressBar
 from finetune.errors import FinetuneError
 from finetune import Classifier, SequenceLabeler
 from finetune.base_models import GPT, GPT2, BERT
@@ -333,6 +334,18 @@ class TestGradientAccumulation(unittest.TestCase):
             self.assertEqual(val_before - (grad_before + grad_after1) * lr, val_after2)  # check 2 steps of update have been made.
             self.assertEqual(val_before, val_after1)  # first step should not actually do anything
 
+
+class TestProgressBar(unittest.TestCase):
+
+    def test_progress_bar(self):
+        state = {'hook_run': False}
+    
+        def update_state(timing_dict):
+            nonlocal state
+            state['hook_run'] = True
+
+        pbar = ProgressBar(range(1000), update_hook=update_state)
+        assert state['hook_run']
 
 if __name__ == '__main__':
     unittest.main()
