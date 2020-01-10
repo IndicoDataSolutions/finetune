@@ -1,3 +1,4 @@
+from warnings import warn
 import itertools
 import copy
 import tensorflow as tf
@@ -40,6 +41,7 @@ class NoisyClassificationPipeline(BasePipeline):
     def resampling(self, Xs, Y, context=None):
         if context is not None:
             if self.config.oversample:
+                warn("Noisy classifier does not support oversampling by class.")
                 idxs, Ys, contexts = shuffle(
                     *RandomOverSampler().fit_sample([[i] for i in range(len(Xs))], Y, context)
                 )
@@ -221,171 +223,14 @@ class Classifier(BaseModel):
     def _predict_proba_op(self, logits, **kwargs):
         return tf.nn.softmax(logits, -1)
 
-class NoisyClassifier(BaseModel):
+class NoisyClassifier(Classifier, BaseModel):
     """
-    Classifies a single document into 1 of N categories.
+    Classifies a single document into 1 of N categories, taking a probability
+    distribution over the labels as input (a dictionary with float values).
 
     :param config: A :py:class:`finetune.config.Settings` object or None (for default config).
     :param \**kwargs: key-value pairs of config items to override.
     """
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
     def _get_input_pipeline(self):
         return NoisyClassificationPipeline(self.config)
-
-    def featurize(self, X):
-        """
-        Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
-
-        :param X: list or array of text to embed.
-        :returns: np.array of features of shape (n_examples, embedding_size).
-        """
-        return super().featurize(X)
-
-    def predict(self, X, probas=False, context=None):
-        """
-        Produces a list of most likely class labels as determined by the fine-tuned model.
-
-        :param X: list or array of text to embed.
-        :returns: list of class labels.
-
-
-        Chunk idx for prediction.  Dividers at `step_size` increments.
-        [  1  |  1  |  2  |  3  |  3  ]
-        """
-        all_labels = []
-        all_probs = []
-        doc_probs = []
-        for _, start_of_doc, end_of_doc, _, proba in self.process_long_sequence(X, context=context):
-            start, end = 0, None
-            doc_probs.append(proba)
-
-            if end_of_doc:
-                # last chunk in a document\
-                # TODO: Make sure this works right for noisy labels
-                # Might just work if it's calling the generic one
-                # hot encoder
-                mean_pool = np.mean(doc_probs, axis=0)
-                pred = np.argmax(mean_pool)
-                one_hot = np.zeros_like(mean_pool)
-                one_hot[pred] = 1
-                label = self.input_pipeline.label_encoder.inverse_transform([one_hot])
-                label = np.squeeze(label).tolist()
-                all_labels.append(label)
-                all_probs.append(mean_pool)
-                doc_probs = []
-
-        if probas:
-            return all_probs
-        else:
-            print(all_labels)
-            print(X)
-            assert len(all_labels) == len(X)
-            return np.asarray(all_labels)
-
-    def predict_proba(self, X, context=None):
-        """
-        Produces a probability distribution over classes for each example in X.
-
-        :param X: list or array of text to embed.
-        :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
-        """
-        # this is simply a vector of probabilities, not a dict from classes to class probs
-        raw_probas = self.predict(X, probas=True, context=context)
-        classes = self.input_pipeline.label_encoder.classes_
-        formatted_predictions = []
-        for probas in raw_probas:
-            formatted_predictions.append(dict(zip(classes, probas)))
-        return formatted_predictions
-
-    def finetune(self, X, Y=None, batch_size=None, context=None):
-        """
-        :param X: list or array of text.
-        :param Y: integer or string-valued class labels.
-        :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
-                           corresponds to the number of training examples provided to each GPU.
-        """
-        return super().finetune(X, Y=Y, batch_size=batch_size, context=context)
-
-    @classmethod
-    def get_eval_fn(cls):
-        return lambda labels, targets: np.mean(
-            np.asarray(labels) == np.asarray(targets)
-        )
-
-    def _target_model(
-        self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
-    ):
-        if "explain_out" in featurizer_state:
-            shape = tf.shape(featurizer_state["explain_out"])  # batch, seq, hidden
-            flat_explain = tf.reshape(
-                featurizer_state["explain_out"], [shape[0] * shape[1], shape[2]]
-            )
-            hidden = tf.concat((featurizer_state["features"], flat_explain), 0)
-        else:
-            hidden = featurizer_state["features"]
-
-        clf_out = classifier(
-            hidden=hidden,
-            targets=targets,
-            n_targets=n_outputs,
-            config=config,
-            train=train,
-            reuse=reuse,
-            **kwargs
-        )
-        if "explain_out" in featurizer_state:
-            logits = clf_out["logits"]
-            clf_out["logits"] = logits[: shape[0]]
-            clf_out["explanation"] = tf.nn.softmax(
-                tf.reshape(
-                    logits[shape[0] :],
-                    tf.concat((shape[:2], [tf.shape(logits)[-1]]), 0),
-                ),
-                -1,
-            )
-        return clf_out
-
-    def explain(self, Xs):
-        explanation = self._inference(
-            Xs, predict_keys=[PredictMode.EXPLAIN, PredictMode.NORMAL]
-        )
-        classes = self.input_pipeline.label_encoder.target_labels
-        out = []
-        bases = []
-        preds = []
-        for values in explanation:
-            explain_sample = values[PredictMode.EXPLAIN]
-            preds.append(values[PredictMode.NORMAL])
-            out.append(explain_sample[1:])
-            bases.append(explain_sample[0])
-        processed = finetune_to_indico_explain(
-            Xs, out, self.input_pipeline.text_encoder, attention=False
-        )
-
-        for base, sample, cls in zip(bases, processed, preds):
-            weights = sample["explanation"]
-            weights = np.array([base] + weights[:-1]) - weights
-            n_classes = weights.shape[-1]
-            norm = (
-                np.max([np.abs(np.max(weights, 0)), abs(np.min(weights, 0))], 0)
-                * n_classes
-            )
-            explanation = weights / norm + 1 / n_classes
-
-            sample["explanation"] = {
-                c: explanation[:, i] for i, c in enumerate(classes)
-            }
-            sample["prediction"] = self.input_pipeline.label_encoder.inverse_transform(
-                [cls]
-            )[0]
-
-        return processed
-
-    def _predict_op(self, logits, **kwargs):
-        return tf.contrib.seq2seq.hardmax(logits)
-
-    def _predict_proba_op(self, logits, **kwargs):
-        return tf.nn.softmax(logits, -1)
