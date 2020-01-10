@@ -57,42 +57,42 @@ class S2S(BaseModel):
         pipeline = S2SPipeline(self.config)
         return pipeline
 
-    def featurize(self, X):
+    def featurize(self, X, **kwargs):
         """
         Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
 
         :param X: list or array of text to embed.
         :returns: np.array of features of shape (n_examples, embedding_size).
         """
-        return super().featurize(X)
+        return super().featurize(X, **kwargs)
 
 
-    def predict(self, X):
+    def predict(self, X, **kwargs):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
         :param X: list or array of text to embed.
         :returns: list of class labels.
         """
-        return super().predict(X)
+        return super().predict(X, **kwargs)
 
-    def predict_proba(self, X):
+    def predict_proba(self, X, **kwargs):
         """
         Produces a probability distribution over classes for each example in X.
 
         :param X: list or array of text to embed.
         :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
         """
-        return super().predict_proba(X)
+        return super().predict_proba(X, **kwargs)
 
-    def finetune(self, X, Y=None, batch_size=None):
+    def finetune(self, X, Y=None, batch_size=None, **kwargs):
         """
         :param X: list or array of text.
         :param Y: integer or string-valued class labels.
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
         """
-        return super().finetune(X, Y=Y, batch_size=batch_size)
+        return super().finetune(X, Y=Y, batch_size=batch_size, **kwargs)
 
     @staticmethod
     def _target_model(config, featurizer_state, targets, n_outputs, train=False, reuse=None, label_encoder=None, **kwargs):

@@ -144,7 +144,7 @@ class MultiTask(BaseModel):
         """
         raise FinetuneError("cached_predict is not supported yet for MTL")
 
-    def featurize(self, X):
+    def featurize(self, X, **kwargs):
         """                                                                                                                                                                        
         Runs featurization on the trained model for any of the tasks the model was trained for. Input and output formats  
         are the same as for each of the individial tasks.
@@ -164,10 +164,10 @@ class MultiTask(BaseModel):
                 k.replace("/target_model_{}".format(name), ""): v
                 for k, v in self.saver.variables.items()
             }
-            features[name] = pred_model.featurize(X[name])
+            features[name] = pred_model.featurize(X[name], **kwargs)
         return features
 
-    def predict(self, X, context=None):
+    def predict(self, X, context=None, **kwargs):
         """
         Runs inference on the trained model for any of the tasks the model was trained for. Input and output formats
         are the same as for each of the individial tasks.
@@ -188,10 +188,10 @@ class MultiTask(BaseModel):
                 k.replace("/target_model_{}".format(name), ""): v
                 for k, v in self.saver.variables.items()
             }
-            predictions[name] = pred_model.predict(X[name], context=context)
+            predictions[name] = pred_model.predict(X[name], context=context, **kwargs)
         return predictions
 
-    def predict_proba(self, X, context=None):
+    def predict_proba(self, X, context=None, **kwargs):
         """
         Runs probability inference on the trained model for any of the tasks the model was trained for. Falls back
         to normal predict when probabilities are not available for a task, eg Regression.
@@ -214,7 +214,7 @@ class MultiTask(BaseModel):
                 for k, v in self.saver.variables.items()
             }
             try:
-                predictions[name] = pred_model.predict_proba(X[name], context=context)
+                predictions[name] = pred_model.predict_proba(X[name], context=context, **kwargs)
             except FinetuneError as e:
                 LOGGER.warning(
                     (
@@ -225,7 +225,7 @@ class MultiTask(BaseModel):
                 predictions[name] = pred_model.predict(X[name], context=context)
         return predictions
 
-    def finetune(self, X, Y=None, batch_size=None, context=None):
+    def finetune(self, X, Y=None, batch_size=None, context=None, **kwargs):
         """
 
         :param X: A dictionary mapping from task name to inputs in the same format required for each of the models.
@@ -242,7 +242,7 @@ class MultiTask(BaseModel):
             X[t], Y[t], *_ = indico_to_finetune_sequence(
                 X[t], labels=Y[t], multi_label=False, none_value="<PAD>"
             )
-        return super().finetune(X, Y=Y, batch_size=batch_size, context=context)
+        return super().finetune(X, Y=Y, batch_size=batch_size, context=context, **kwargs)
 
     def _pre_target_model_hook(self, featurizer_state):
         pass

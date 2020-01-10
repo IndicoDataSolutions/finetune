@@ -149,7 +149,7 @@ class BaseModel(object, metaclass=ABCMeta):
         steps = int(math.ceil(n_examples / (batch_size * n_gpus)))
         return steps
 
-    def finetune(self, Xs, Y=None, batch_size=None, context=None):
+    def finetune(self, Xs, Y=None, batch_size=None, context=None, update_hook=None):
         if (
             not callable(Xs)
             and Y is not None
@@ -163,7 +163,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         batch_size = batch_size or self.config.batch_size
         val_input_fn, train_input_fn, val_size, val_interval = self.input_pipeline.get_train_input_fns(
-            Xs, Y, batch_size=batch_size, context=context, update_hook=self.config.train_batch_hook
+            Xs, Y, batch_size=batch_size, context=context, update_hook=update_hook
         )
 
         if self.config.keep_best_model:
@@ -417,7 +417,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self._cached_predict = False
         self.close()
 
-    def _cached_inference(self, Xs, predict_keys=None, n_examples=None):
+    def _cached_inference(self, Xs, predict_keys=None, n_examples=None, update_hook=None):
         """
         Ensure graph is not rebuilt on subsequent calls to .predict()
         """
@@ -435,7 +435,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         predictions = [None] * n
         
-        for i in ProgressBar(range(n), total=n, desc="Inference", update_hook=self.predict_batch_hook):
+        for i in ProgressBar(range(n), total=n, desc="Inference", update_hook=update_hook):
             y = next(self._predictions)
             try:
                 y = y[predict_keys[0]] if len(predict_keys) == 1 else y
@@ -447,12 +447,12 @@ class BaseModel(object, metaclass=ABCMeta):
 
         return predictions
 
-    def _inference(self, Xs, predict_keys=None, n_examples=None, context=None):
+    def _inference(self, Xs, predict_keys=None, n_examples=None, context=None, update_hook=None):
         Xs = self.input_pipeline._format_for_inference(Xs)
 
         if self._cached_predict:
             return self._cached_inference(
-                Xs=Xs, predict_keys=predict_keys, n_examples=n_examples
+                Xs=Xs, predict_keys=predict_keys, n_examples=n_examples, udpate_hook=update_hook
             )
         else:
             input_fn = self.input_pipeline.get_predict_input_fn(Xs, context=context)
@@ -468,7 +468,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 prediction_iterator, 
                 total=n_examples or length, 
                 desc="Inference", 
-                update_hook=self.predict_batch_hook
+                update_hook=update_hook
             )
             try:
                 return [
@@ -484,20 +484,20 @@ class BaseModel(object, metaclass=ABCMeta):
         """ An alias for finetune. """
         return self.finetune(*args, **kwargs)
 
-    def _predict(self, Xs, context=None):
-        raw_preds = self._inference(Xs, predict_keys=[PredictMode.NORMAL], context=context)
+    def _predict(self, Xs, context=None, **kwargs):
+        raw_preds = self._inference(Xs, predict_keys=[PredictMode.NORMAL], context=context, **kwargs)
         return self.input_pipeline.label_encoder.inverse_transform(
             np.asarray(raw_preds)
         )
 
-    def predict(self, Xs, context=None):
-        return self._predict(Xs, context=context)
+    def predict(self, Xs, context=None, **kwargs):
+        return self._predict(Xs, context=context, **kwargs)
 
-    def _predict_proba(self, Xs, context=None):
+    def _predict_proba(self, Xs, context=None, **kwargs):
         """
         Produce raw numeric outputs for proba predictions
         """
-        raw_preds = self._inference(Xs, predict_keys=[PredictMode.PROBAS], context=context)
+        raw_preds = self._inference(Xs, predict_keys=[PredictMode.PROBAS], context=context, **kwargs)
         return raw_preds
 
     def predict_proba(self, *args, **kwargs):
@@ -520,12 +520,12 @@ class BaseModel(object, metaclass=ABCMeta):
             "'attention_weights' only supported for GPTModel and GPTModelSmall base models."
         )
 
-    def _featurize(self, Xs):
-        raw_preds = self._inference(Xs, predict_keys=[PredictMode.FEATURIZE])
+    def _featurize(self, Xs, **kwargs):
+        raw_preds = self._inference(Xs, predict_keys=[PredictMode.FEATURIZE], **kwargs)
         return np.asarray(raw_preds)
 
-    def _featurize_sequence(self, Xs):
-        raw_preds = self._inference(Xs, predict_keys=[PredictMode.SEQUENCE])
+    def _featurize_sequence(self, Xs, **kwargs):
+        raw_preds = self._inference(Xs, predict_keys=[PredictMode.SEQUENCE], **kwargs)
         return np.asarray(raw_preds)
 
     def featurize(self, *args, **kwargs):
@@ -826,7 +826,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         return max(aggregated_results, key=lambda x: x[1])[0]
 
-    def process_long_sequence(self, X, context=None):
+    def process_long_sequence(self, X, context=None, **kwargs):
         arr_encoded = [
             self.input_pipeline._text_to_ids(x) for x in self.input_pipeline._format_for_inference(X)
         ]
@@ -839,7 +839,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 sequence_id.append(i)
 
         labels, batch_probas = [], []
-        for pred in self._inference(X, predict_keys=[PredictMode.PROBAS, PredictMode.NORMAL], n_examples=len(flat_array_encoded), context=context):
+        for pred in self._inference(X, predict_keys=[PredictMode.PROBAS, PredictMode.NORMAL], n_examples=len(flat_array_encoded), context=context, **kwargs):
             normal_pred = pred[PredictMode.NORMAL]
             if not hasattr(self, 'multi_label'):
                 normal_pred = np.expand_dims(normal_pred, 0)
