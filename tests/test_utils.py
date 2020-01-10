@@ -17,6 +17,8 @@ from finetune import Classifier, SequenceLabeler
 from finetune.base_models import GPT, GPT2, BERT
 from finetune.base_models.gpt.encoder import GPTEncoder
 from finetune.base_models.gpt2.encoder import GPT2Encoder
+from finetune.base_models.bert.roberta_encoder import RoBERTaEncoderV2
+
 
 
 class TestFinetuneIndicoConverters(unittest.TestCase):
@@ -137,7 +139,6 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
         encoder = GPT2Encoder()
         indicox_pred, indicoy_pred = finetune_to_indico_sequence(raw, finetunex, finetuney, none_value="<PAD>",
                                                                  subtoken_predictions=False)
-
         indicoy = [
             [
                 {'start': 0, 'end': 13, 'label': '1', 'text': 'Indico Is the'},
@@ -212,6 +213,37 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
         self.assertCountEqual(finetuney[0][0], finetuney_pred[0][0])
         self.assertCountEqual(finetuney[0][1], finetuney_pred[0][1])
         self.assertCountEqual(finetuney[0][2], finetuney_pred[0][2])
+
+    def test_robert_failure(self):
+        text = [
+            'Margin Cost\n1357711\n593 2501\n1350\n700860\n65053899 06\n46032479 8308\n6452785 '
+            '50\n3353\n12546915 246\n094 10828664\n7 8058\n53696576 25\n7654 260919\n646256 '
+            '75300\n4\n091577 8177070\n012197121 38\n30414787 93\n6024915 600028\n8 2'
+        ]
+        label = [
+            [
+                {'text': '600028', 'label': '0000ff', 'start': 203, 'end': 209},
+                {'text': '8', 'label': '0000ff', 'start': 210, 'end': 211},
+                {'text': '2', 'label': '0000ff', 'start': 212, 'end': 213}
+            ]
+        ]
+        finetunex_pred, finetuney_pred, *_ = indico_to_finetune_sequence(
+            text, label, encoder=RoBERTaEncoderV2(), none_value="<PAD>"
+        )
+        target_x = [
+            [
+                'Margin Cost\n1357711\n593 2501\n1350\n700860\n65053899 06\n46032479 8308\n6452785'
+                    ' 50\n3353\n12546915 246\n094 10828664\n7 8058\n53696576 25\n7654 260919\n646256 '
+                    '75300\n4\n091577 8177070\n012197121 38\n30414787 93\n6024915',
+                ' 600028',
+                '\n',
+                '8',
+                ' 2'
+            ]
+        ]
+        target_y = [[('<PAD>',), ('0000ff',), ('<PAD>',), ('0000ff',), ('0000ff',)]]
+        self.assertEqual(finetunex_pred, target_x)
+        self.assertEqual(finetuney_pred, target_y)
 
     def test_overlapping_labels_with_single_label(self):
         text = ["Indico Rules"]
