@@ -199,7 +199,7 @@ class BasePipeline(metaclass=ABCMeta):
             lambda: self.wrap_tqdm(dataset_encoded(), train, update_hook=update_hook), *shape_def
         )
 
-    def _dataset_without_targets(self, Xs, train, context=None):
+    def _dataset_without_targets(self, Xs, train, context=None, update_hook=None):
         if context is not None:
             # we assume that X must have known length if we also provide context so this is safe
             if callable(Xs):

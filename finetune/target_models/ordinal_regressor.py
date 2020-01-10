@@ -37,16 +37,16 @@ class OrdinalRegressor(BaseModel):
     def _get_input_pipeline(self):
         return OrdinalRegressionPipeline(self.config)
 
-    def featurize(self, X):
+    def featurize(self, X, **kwargs):
         """
         Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
 
         :param X: list or array of text to embed.
         :returns: np.array of features of shape (n_examples, embedding_size).
         """
-        return self._featurize(X)
+        return self._featurize(X, **kwargs)
 
-    def predict(self, X, context=None):
+    def predict(self, X, context=None, **kwargs):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
@@ -54,7 +54,7 @@ class OrdinalRegressor(BaseModel):
         :returns: list of class labels.
         """
         all_labels = []
-        for _, start_of_doc, end_of_doc, label, _ in self.process_long_sequence(X, context=context):
+        for _, start_of_doc, end_of_doc, label, _ in self.process_long_sequence(X, context=context, **kwargs):
             if start_of_doc:
                 # if this is the first chunk in a document, start accumulating from scratch
                 doc_labels = []
@@ -70,7 +70,7 @@ class OrdinalRegressor(BaseModel):
                 all_labels.append(label.tolist())
         return all_labels
 
-    def predict_proba(self, X, context=None):
+    def predict_proba(self, X, context=None, **kwargs):
         """
         Produces a probability distribution over classes for each example in X.
 
@@ -79,7 +79,7 @@ class OrdinalRegressor(BaseModel):
         """
         raise AttributeError("`Regressor` model does not support `predict_proba`.")
 
-    def finetune(self, X, Y=None, batch_size=None, context=None):
+    def finetune(self, X, Y=None, batch_size=None, context=None, **kwargs):
         """
         :param X: list or array of text.
         :param Y: floating point targets
@@ -120,7 +120,7 @@ class ComparisonOrdinalRegressor(OrdinalRegressor):
     """
     defaults = {"chunk_long_sequences": False}
 
-    def predict(self, pairs):
+    def predict(self, pairs, **kwargs):
         """
         Produces a floating point prediction determined by the fine-tuned model.
 
@@ -128,7 +128,7 @@ class ComparisonOrdinalRegressor(OrdinalRegressor):
         :param pairs: Array of text, shape [batch, 2]
         :returns: list of floats, shape [batch]
         """
-        return list(Comparison.predict(self, pairs))
+        return list(Comparison.predict(self, pairs, **kwargs))
 
 
     def _get_input_pipeline(self):
