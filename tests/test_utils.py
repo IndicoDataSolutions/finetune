@@ -15,7 +15,7 @@ from finetune.util.imbalance import compute_class_weights
 from finetune.util.timing import ProgressBar
 from finetune.errors import FinetuneError
 from finetune import Classifier, SequenceLabeler
-from finetune.base_models import GPT, GPT2, BERT
+from finetune.base_models import GPT, GPT2, BERT, RoBERTa
 from finetune.base_models.gpt.encoder import GPTEncoder
 from finetune.base_models.gpt2.encoder import GPT2Encoder
 from finetune.base_models.bert.roberta_encoder import RoBERTaEncoderV2
@@ -23,7 +23,7 @@ from finetune.base_models.bert.roberta_encoder import RoBERTaEncoderV2
 
 
 class TestFinetuneIndicoConverters(unittest.TestCase):
-
+    
     def test_invalid_keyword(self):
         with self.assertRaises(FinetuneError):
             model = Classifier(tensorboard='./testing') # should be tensorboard_folder
@@ -44,7 +44,7 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
             Y.append(labels)
 
         for multilabel_setting in [True, False]:
-            for base_model in [GPT, GPT2, BERT]:
+            for base_model in [GPT, GPT2, BERT, RoBERTa]:
                 model = SequenceLabeler(chunk_long_sequences=True, base_model=base_model, multi_label_sequences=multilabel_setting)
                 train_encoded = [x for x in model.input_pipeline._text_to_ids(X, Y=Y, pad_token=model.config.pad_token)]
                 test_encoded = [x for x in model.input_pipeline._text_to_ids(X)]
@@ -98,124 +98,16 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
         indicox_pred, indicoy_pred = finetune_to_indico_sequence(expectedx, finetunex, finetuney, none_value="<PAD>", subtoken_predictions=False)
         self.assertEqual(indicox_pred, expectedx)
         self.assertEqual(indicoy_pred, expectedy)
-        
 
-    def test_overlapping(self):
-        raw = ["Indico Is the best hey"]
-        finetunex = [
-            ["Indico ", "Is the", " best", " hey"]
-        ]
-        finetuney = [
-            [("1",), ("1", "2"), ("2",), ("<PAD>",)]
-        ]
-        encoder = GPTEncoder()
-        indicox_pred, indicoy_pred = finetune_to_indico_sequence(raw, finetunex, finetuney, none_value="<PAD>",
-                                                                 subtoken_predictions=True)
+    def test_compute_class_weights(self):
+        # regression test for issue #181                                                                                                              
+        np.random.seed(0)
+        y = np.random.choice(a=[0, 1, 2], size=1000, p=[0.3, 0.6, 0.1])
+        class_counts = Counter(y)
+        weights = compute_class_weights('log', class_counts=class_counts)
+        self.assertEqual(weights[1], 1.0)
 
-        indicoy = [
-            [
-                {'start': 0, 'end': 13, 'label': '1', 'text': 'Indico Is the'},
-                {'start': 7, 'end': 18, 'label': '2', 'text': 'Is the best'},
-            ]
-        ]
-        self.assertEqual(indicoy, indicoy_pred)
-        self.assertEqual(raw, indicox_pred)
-
-        finetunex_pred, finetuney_pred, *_ = indico_to_finetune_sequence(
-            raw, indicoy, encoder=encoder, none_value="<PAD>"
-        )
-        self.assertEqual(finetunex_pred, finetunex)
-        self.assertCountEqual(finetuney[0][0], finetuney_pred[0][0])
-        self.assertCountEqual(finetuney[0][1], finetuney_pred[0][1])
-        self.assertCountEqual(finetuney[0][2], finetuney_pred[0][2])
-
-    def test_overlapping_gpt2(self):
-        raw = ["Indico Is the best hey"]
-        finetunex = [
-            ["Indico", " Is the", " best", " hey"]
-        ]
-        finetuney = [
-            [("1",), ("1", "2"), ("2", ), ("<PAD>")]
-        ]
-        encoder = GPT2Encoder()
-        indicox_pred, indicoy_pred = finetune_to_indico_sequence(raw, finetunex, finetuney, none_value="<PAD>",
-                                                                 subtoken_predictions=False)
-        indicoy = [
-            [
-                {'start': 0, 'end': 13, 'label': '1', 'text': 'Indico Is the'},
-                {'start': 7, 'end': 18, 'label': '2', 'text': 'Is the best'},
-            ]
-        ]
-        self.assertEqual(indicoy, indicoy_pred)
-        self.assertEqual(raw, indicox_pred)
-
-        finetunex_pred, finetuney_pred, *_ = indico_to_finetune_sequence(
-            raw, indicoy, encoder=encoder, none_value="<PAD>"
-        )
-        self.assertEqual(finetunex_pred, finetunex)
-        self.assertCountEqual(finetuney[0][0], finetuney_pred[0][0])
-        self.assertCountEqual(finetuney[0][1], finetuney_pred[0][1])
-        self.assertCountEqual(finetuney[0][2], finetuney_pred[0][2])
-
-    def test_overlapping_gpt2_subtokens(self):
-        raw = ["Indico Is the best hey"]
-        finetunex = [
-            ["Indico", " Is the", " best", " hey"]
-        ]
-        finetuney = [
-            [("1",), ("1", "2"), ("2", ), ("<PAD>")]
-        ]
-        encoder = GPT2Encoder()
-        indicox_pred, indicoy_pred = finetune_to_indico_sequence(raw, finetunex, finetuney, none_value="<PAD>",
-                                                                 subtoken_predictions=True)
-
-        indicoy = [
-            [
-                {'start': 0, 'end': 13, 'label': '1', 'text': 'Indico Is the'},
-                {'start': 6, 'end': 18, 'label': '2', 'text': ' Is the best'},
-            ]
-        ]
-        self.assertEqual(indicoy, indicoy_pred)
-        self.assertEqual(raw, indicox_pred)
-
-        finetunex_pred, finetuney_pred, *_ = indico_to_finetune_sequence(
-            raw, indicoy, encoder=encoder, none_value="<PAD>"
-        )
-        self.assertEqual(finetunex_pred, finetunex)
-        self.assertCountEqual(finetuney[0][0], finetuney_pred[0][0])
-        self.assertCountEqual(finetuney[0][1], finetuney_pred[0][1])
-        self.assertCountEqual(finetuney[0][2], finetuney_pred[0][2])
-
-    def test_nested_labels(self):
-        raw = ["Indico Is the best"]
-        finetunex = [
-            ["Indico ", "Is the", " best"]
-        ]
-        finetuney = [
-            [("1", ), ("1", "2", "3"), ("1", )]
-        ]
-        encoder = GPTEncoder()
-        indicox_pred, indicoy_pred = finetune_to_indico_sequence(raw, finetunex, finetuney, none_value="<PAD>")
-
-        indicoy = [
-            [
-                {'start': 0, 'end': 18, 'label': '1', 'text': 'Indico Is the best'},
-                {'start': 7, 'end': 13, 'label': '2', 'text': 'Is the'},
-                {'start': 7, 'end': 13, 'label': '3', 'text': 'Is the'}
-            ]
-        ]
-        self.assertEqual(indicoy, indicoy_pred)
-        self.assertEqual(raw, indicox_pred)
-
-        finetunex_pred, finetuney_pred, *_ = indico_to_finetune_sequence(
-            raw, indicoy, encoder=encoder, none_value="<PAD>"
-        )
-        self.assertEqual(finetunex_pred, finetunex)
-        self.assertCountEqual(finetuney[0][0], finetuney_pred[0][0])
-        self.assertCountEqual(finetuney[0][1], finetuney_pred[0][1])
-        self.assertCountEqual(finetuney[0][2], finetuney_pred[0][2])
-
-    def test_roberta_failure(self):
+    def test_robert_failure(self):
         text = [
             'Margin Cost\n1357711\n593 2501\n1350\n700860\n65053899 06\n46032479 8308\n6452785 '
             '50\n3353\n12546915 246\n094 10828664\n7 8058\n53696576 25\n7654 260919\n646256 '
@@ -246,6 +138,131 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
         self.assertEqual(finetunex_pred, target_x)
         self.assertEqual(finetuney_pred, target_y)
 
+
+        
+class TestConverterGPT(unittest.TestCase):
+    encoder = GPTEncoder()
+    
+    def test_overlapping(self):
+        raw = ["Indico Is the best hey"]
+        finetunex = [
+            ["Indico ", "Is the", " best", " hey"]
+        ]
+        finetuney = [
+            [("1",), ("1", "2"), ("2",), ("<PAD>",)]
+        ]
+
+        indicox_pred, indicoy_pred = finetune_to_indico_sequence(raw, finetunex, finetuney, none_value="<PAD>",
+                                                                 subtoken_predictions=True)
+
+        indicoy = [
+            [
+                {'start': 0, 'end': 13, 'label': '1', 'text': 'Indico Is the'},
+                {'start': 7, 'end': 18, 'label': '2', 'text': ' Is the best'},
+            ]
+        ]
+        self.assertEqual(indicoy, indicoy_pred)
+        self.assertEqual(raw, indicox_pred)
+
+        finetunex_pred, finetuney_pred, *_ = indico_to_finetune_sequence(
+            raw, indicoy, encoder=self.encoder, none_value="<PAD>"
+        )
+        self.assertEqual(finetunex_pred, finetunex)
+        self.assertCountEqual(finetuney[0][0], finetuney_pred[0][0])
+        self.assertCountEqual(finetuney[0][1], finetuney_pred[0][1])
+        self.assertCountEqual(finetuney[0][2], finetuney_pred[0][2])
+
+        
+    def test_overlapping_subtokens(self):
+        raw = ["Indico Is the best hey"]
+        finetunex = [
+            ["Indico", " Is the", " best", " hey"]
+        ]
+        finetuney = [
+            [("1",), ("1", "2"), ("2", ), ("<PAD>")]
+        ]
+        indicox_pred, indicoy_pred = finetune_to_indico_sequence(raw, finetunex, finetuney, none_value="<PAD>",
+                                                                 subtoken_predictions=True)
+
+        indicoy = [
+            [
+                {'start': 0, 'end': 13, 'label': '1', 'text': 'Indico Is the'},
+                {'start': 6, 'end': 18, 'label': '2', 'text': 'Is the best'},
+            ]
+        ]
+        self.assertEqual(indicoy, indicoy_pred)
+        self.assertEqual(raw, indicox_pred)
+
+        finetunex_pred, finetuney_pred, *_ = indico_to_finetune_sequence(
+            raw, indicoy, encoder=self.encoder, none_value="<PAD>"
+        )
+        self.assertEqual(finetunex_pred, finetunex)
+        self.assertCountEqual(finetuney[0][0], finetuney_pred[0][0])
+        self.assertCountEqual(finetuney[0][1], finetuney_pred[0][1])
+        self.assertCountEqual(finetuney[0][2], finetuney_pred[0][2])
+
+    def test_nested_labels(self):
+        raw = ["Indico Is the best"]
+        finetunex = [
+            ["Indico ", "Is the", " best"]
+        ]
+        finetuney = [
+            [("1", ), ("1", "2", "3"), ("1", )]
+        ]
+        indicox_pred, indicoy_pred = finetune_to_indico_sequence(raw, finetunex, finetuney, none_value="<PAD>")
+
+        indicoy = [
+            [
+                {'start': 0, 'end': 18, 'label': '1', 'text': 'Indico Is the best'},
+                {'start': 7, 'end': 13, 'label': '2', 'text': 'Is the'},
+                {'start': 7, 'end': 13, 'label': '3', 'text': 'Is the'}
+            ]
+        ]
+        self.assertEqual(indicoy, indicoy_pred)
+        self.assertEqual(raw, indicox_pred)
+
+        finetunex_pred, finetuney_pred, *_ = indico_to_finetune_sequence(
+            raw, indicoy, encoder=self.encoder, none_value="<PAD>"
+        )
+        self.assertEqual(finetunex_pred, finetunex)
+        self.assertCountEqual(finetuney[0][0], finetuney_pred[0][0])
+        self.assertCountEqual(finetuney[0][1], finetuney_pred[0][1])
+        self.assertCountEqual(finetuney[0][2], finetuney_pred[0][2])
+
+<<<<<<< HEAD
+    def test_roberta_failure(self):
+        text = [
+            'Margin Cost\n1357711\n593 2501\n1350\n700860\n65053899 06\n46032479 8308\n6452785 '
+            '50\n3353\n12546915 246\n094 10828664\n7 8058\n53696576 25\n7654 260919\n646256 '
+            '75300\n4\n091577 8177070\n012197121 38\n30414787 93\n6024915 600028\n8 2'
+        ]
+        label = [
+            [
+                {'text': '600028', 'label': '0000ff', 'start': 203, 'end': 209},
+                {'text': '8', 'label': '0000ff', 'start': 210, 'end': 211},
+                {'text': '2', 'label': '0000ff', 'start': 212, 'end': 213}
+            ]
+        ]
+        finetunex_pred, finetuney_pred, *_ = indico_to_finetune_sequence(
+            text, label, encoder=RoBERTaEncoderV2(), none_value="<PAD>"
+        )
+        target_x = [
+            [
+                'Margin Cost\n1357711\n593 2501\n1350\n700860\n65053899 06\n46032479 8308\n6452785'
+                    ' 50\n3353\n12546915 246\n094 10828664\n7 8058\n53696576 25\n7654 260919\n646256 '
+                    '75300\n4\n091577 8177070\n012197121 38\n30414787 93\n6024915',
+                ' 600028',
+                '\n',
+                '8',
+                ' 2'
+            ]
+        ]
+        target_y = [[('<PAD>',), ('0000ff',), ('<PAD>',), ('0000ff',), ('0000ff',)]]
+        self.assertEqual(finetunex_pred, target_x)
+        self.assertEqual(finetuney_pred, target_y)
+=======
+>>>>>>> b3750b1... ADD: tests for other encoders
+
     def test_overlapping_labels_with_single_label(self):
         text = ["Indico Rules"]
         finetunex = [
@@ -262,7 +279,7 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
         ]
 
         finetunex_pred, finetuney_pred, *_ = indico_to_finetune_sequence(
-            text, indicoy, encoder=GPTEncoder(), none_value="<PAD>", multi_label=False
+            text, indicoy, encoder=self.encoder, none_value="<PAD>", multi_label=False
         )
         self.assertEqual(finetunex_pred, finetunex)
         self.assertCountEqual(finetuney[0][0], finetuney_pred[0][0])
@@ -277,7 +294,6 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
         finetuney = [
             [("<PAD>", ), ("1", "2", "3"), ("1", "3")]
         ]
-        encoder = GPTEncoder()
         indicox_pred, indicoy_pred = finetune_to_indico_sequence(raw, finetunex, finetuney, none_value="<PAD>")
         indicoy_pred = [sorted(seq, key=lambda x: x['label']) for seq in indicoy_pred]
         indicoy = [
@@ -294,21 +310,15 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
         self.assertEqual(raw, indicox_pred)
 
         finetunex_pred, finetuney_pred, *_ = indico_to_finetune_sequence(
-            raw, indicoy, encoder=encoder, none_value="<PAD>"
+            raw, indicoy, encoder=self.encoder, none_value="<PAD>"
         )
         self.assertEqual(finetunex_pred, finetunex)
         self.assertCountEqual(finetuney[0][0], finetuney_pred[0][0])
         self.assertCountEqual(finetuney[0][1], finetuney_pred[0][1])
         self.assertCountEqual(finetuney[0][2], finetuney_pred[0][2])
 
-    def test_compute_class_weights(self):
-        # regression test for issue #181
-        np.random.seed(0)
-        y = np.random.choice(a=[0, 1, 2], size=1000, p=[0.3, 0.6, 0.1])
-        class_counts = Counter(y)
-        weights = compute_class_weights('log', class_counts=class_counts)
-        self.assertEqual(weights[1], 1.0)
-
+class TestConverterRoberta(TestConverterGPT):
+    encoder = RoBERTaEncoderV2()
 
 class TestGradientAccumulation(unittest.TestCase):
 
