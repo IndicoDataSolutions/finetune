@@ -37,29 +37,15 @@ class ClassificationPipeline(BasePipeline):
     def feed_shape_type_def(self):
         return super(ClassificationPipeline, self).feed_shape_type_def()
 
+
 class NoisyClassificationPipeline(BasePipeline):
-    def resampling(self, Xs, Y, context=None):
-        if context is not None:
-            if self.config.oversample:
-                warn("Noisy classifier does not support oversampling by class.")
-                idxs, Ys, contexts = shuffle(
-                    *RandomOverSampler().fit_sample([[i] for i in range(len(Xs))], Y, context)
-                )
-                return [Xs[i[0]] for i in idxs], Ys, contexts
-            return Xs, Y, context
-        else:
-            if self.config.oversample:
-                idxs, Ys = shuffle(
-                    *RandomOverSampler().fit_sample([[i] for i in range(len(Xs))], Y)
-                )
-                return [Xs[i[0]] for i in idxs], Ys, None
-            return Xs, Y, None
 
     def _target_encoder(self):
         return NoisyLabelEncoder()
 
     def feed_shape_type_def(self):
         return super(NoisyClassificationPipeline, self).feed_shape_type_def()
+
 
 class Classifier(BaseModel):
     """
