@@ -98,9 +98,6 @@ class BaseModel(object, metaclass=ABCMeta):
         self._closed = False
         self._to_pull = 0
         
-        # state for progress bar + time estimation
-        self.progress_bar = None
-
         try:
             self.estimator_dir = os.path.abspath(
                 os.path.join(self.config.tensorboard_folder, str(int(time.time())))
