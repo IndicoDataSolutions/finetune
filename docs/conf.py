@@ -28,10 +28,10 @@ copyright = '2019, Madison May, Ben Townsend, Lily Zhang, Matthew Bayer'
 author = 'Madison May, Ben Townsend, Lily Zhang, Matthew Bayer'
 
 # The short X.Y version
-version, __version__ = ('0.8.5',) * 2
+version, __version__ = ('0.8.6',) * 2
 
 # The full version, including alpha/beta/rc tags
-release = '0.8.5'
+release = '0.8.6'
 
 # -- General configuration ---------------------------------------------------
 

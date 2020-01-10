@@ -52,7 +52,7 @@ class MultiTaskPipeline(BasePipeline):
         return self.dataset_size_
 
     def get_train_input_fns(
-        self, Xs, Y=None, batch_size=None, val_size=None, context=None
+        self, Xs, Y=None, batch_size=None, val_size=None, context=None, update_hook=None
     ):
         val_funcs = {}
         val_sizes = {}
@@ -64,7 +64,7 @@ class MultiTaskPipeline(BasePipeline):
         for task_name in self.config.tasks:
             input_pipelines[task_name] = self.config.tasks[task_name]._get_input_pipeline(self)
             task_tuple = input_pipelines[task_name].get_train_input_fns(
-                Xs[task_name], Y[task_name], batch_size=batch_size, val_size=val_size, context=context
+                Xs[task_name], Y[task_name], batch_size=batch_size, val_size=val_size, context=context, update_hook=None
             )
             self.dataset_size_ += self.config.dataset_size
             frequencies.append(self.config.dataset_size)
