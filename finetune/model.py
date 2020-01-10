@@ -139,24 +139,40 @@ def get_model_fn(
 
         with tf.variable_scope(tf.get_variable_scope()):
             train_loss = 0.0
-            featurizer_state = params.base_model.get_featurizer(
-                X,
-                encoder=encoder,
-                config=params,
-                train=train,
-                explain=build_explain,
-            )
+            if params.context_in_base_model:
+                if params.base_model.is_bidirectional:
+                    pos_embed = embed_position(context, params)
+                    featurizer_state = params.base_model.get_featurizer(
+                        X,
+                        encoder=encoder,
+                        config=params,
+                        train=train,
+                        explain=build_explain,
+                        context=pos_embed
+                    )
+                else:
+                    raise NotImplementedError('context_in_base_model not implemented for non-bidirectional models.')
+            else:
+                featurizer_state = params.base_model.get_featurizer(
+                    X,
+                    encoder=encoder,
+                    config=params,
+                    train=train,
+                    explain=build_explain,
+                )
             if context is not None:
-                embed_position(context, featurizer_state, params, train)
-                if params.context_in_base_model:
-                    with tf.variable_scope("model/featurizer"):
-                        # TODO: must also update features for classification and explanation
-                        add_context_embed(featurizer_state)
-                        hidden = featurizer_state['sequence_features']
-                        w0, w = smooth_pos_attn(hidden, params, featurizer_state['lengths'])
-                        text_embed = hidden[:, :, :params.n_embed]
-                        seq_feats = tf.matmul(w, text_embed)
-                        featurizer_state['sequence_features'] = seq_feats
+                pos_embed = embed_position(context, params)
+                featurizer_state['context'] = pos_embed
+                # base model gets same additional blocks as target model
+                # if params.context_in_base_model:
+                #     with tf.variable_scope("model/featurizer"):
+                #         # TODO: must also update features for classification and explanation
+                #         add_context_embed(featurizer_state)
+                #         hidden = featurizer_state['sequence_features']
+                #         w0, w = smooth_pos_attn(hidden, params, featurizer_state['lengths'])
+                #         text_embed = hidden[:, :, :params.n_embed]
+                #         seq_feats = tf.matmul(w, text_embed)
+                #         featurizer_state['sequence_features'] = seq_feats
 
             predictions = {
                 PredictMode.FEATURIZE: featurizer_state["features"], 
