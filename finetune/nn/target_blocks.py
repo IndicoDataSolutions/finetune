@@ -172,7 +172,8 @@ def classifier(hidden, targets, n_targets, config, train=False, reuse=None, **kw
             )
             if config.focal_loss:
                 clf_losses *= (1 - tf.reduce_sum(tf.nn.softmax(clf_logits) * targets, -1)) ** config.focal_loss_gamma
-
+            if config.daniel_loss:
+                clf_losses += tf.reduce_sum(tf.nn.softmax(clf_logits) * targets, -1) - 1
             clf_losses = _apply_class_weight(
                 clf_losses, targets, kwargs.get("class_weights")
             )

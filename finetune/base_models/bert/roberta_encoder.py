@@ -145,17 +145,17 @@ class RoBERTaEncoder(GPT2Encoder):
                     [self.encoder.get(t, self.UNK_IDX) for t in bpe_toks]
                 )
 
-                token_char_starts = [token_start] * len(bpe_toks)
-
                 if np.sum([len(tok) for tok in bpe_toks]) > len(token):
                     token_char_ends = (
                         np.asarray([len(token.strip()) for tok in bpe_toks])
                         + token_start
                     )
+                    
                 else:
                     token_char_ends = (
                         np.cumsum([len(tok) for tok in bpe_toks]) + token_start
                     )
+                token_char_starts = [token_start] + [c for c in token_char_ends[1:]]
 
                 token_start += len(token.strip())
                 char_ends.extend(token_char_ends)

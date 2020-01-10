@@ -388,6 +388,7 @@ def get_default_config():
 
         # Focal Loss
         focal_loss=False,
+        daniel_loss=False,
         focal_loss_gamma=2.0,
 
         # Serialize finetune version with model
