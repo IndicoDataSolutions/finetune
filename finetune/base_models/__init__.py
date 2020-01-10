@@ -25,8 +25,8 @@ class SourceModel(metaclass=ABCMeta):
         return cls.encoder(**kwargs)
 
     @classmethod
-    def get_featurizer(cls, X, encoder, config, train=False, reuse=None, **kwargs):
-        return cls.featurizer(X, encoder, config, train=train, reuse=reuse, **kwargs)
+    def get_featurizer(cls, X, encoder, config, train=False, reuse=None, context=None, **kwargs):
+        return cls.featurizer(X, encoder, config, train=train, reuse=reuse, context=context, **kwargs)
 
 
 from finetune.base_models.gpt.model import GPTModel, GPTModelSmall
