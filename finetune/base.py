@@ -14,7 +14,6 @@ from contextlib import contextmanager
 import pathlib
 import logging
 
-import ipdb
 import tqdm
 import numpy as np
 import tensorflow as tf
