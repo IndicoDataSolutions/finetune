@@ -111,6 +111,7 @@ class RoBERTaEncoder(GPT2Encoder):
         skipped = 0
 
         for i, text in enumerate(texts):
+            print(text)
             if labels is not None:
                 label = labels[i]
 
@@ -168,6 +169,10 @@ class RoBERTaEncoder(GPT2Encoder):
             batch_token_idxs.append(subtoken_idxs)
             batch_char_ends.append(char_ends)
             batch_char_starts.append(char_starts)
+
+            for tok, st, ed in zip(subtokens, char_starts, char_ends):
+                print("#{}#".format(tok), "#{}#".format(text[st:ed]))
+            
             if labels is not None:
                 batch_label_idxs.append([label] * len(subtoken_idxs))
 

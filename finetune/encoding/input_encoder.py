@@ -264,6 +264,7 @@ def tokenize_context(context, encoded_output, config):
     current_char_loc = 0
     tokenized_context = []
     for token, char_loc in zip(encoded_output.tokens, encoded_output.char_pos_abs):
+        print(token, char_loc)
         # Note: this assumes that the tokenization will never lump multiple tokens into one
         # (this would not be the case if multiple context spans make up the same token)
         if char_loc == -1:
@@ -273,7 +274,13 @@ def tokenize_context(context, encoded_output, config):
             tokenized_context.append(context_by_char_loc[current_char_loc][1])
         else:
             if char_loc > context_by_char_loc[current_char_loc][0]:
-                current_char_loc += 1
+                if current_char_loc + 1 >= len(context_by_char_loc):
+                    print("this is a really big problem if it happens commonly")
+                    print(context)
+                    raise Exception
+                else:
+                    current_char_loc += 1
+
             tokenized_context.append(context_by_char_loc[current_char_loc][1])
 
     assert len(tokenized_context) == len(encoded_output.char_locs)

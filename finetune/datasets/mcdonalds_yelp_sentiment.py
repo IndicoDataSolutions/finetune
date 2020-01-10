@@ -1,12 +1,13 @@
 import os
 import logging
 from pathlib import Path
-
+from sklearn.metrics import roc_auc_score
 import numpy as np
 
 from sklearn.model_selection import train_test_split
 
 from finetune import MultiLabelClassifier
+from finetune.base_models import RoBERTa
 from finetune.datasets import Dataset, generic_download
 
 logging.basicConfig(level=logging.DEBUG)
@@ -51,12 +52,17 @@ class MCDonaldsSentiment(Dataset):
 if __name__ == "__main__":
     # Train and evaluate on SST
     dataset = MCDonaldsSentiment().dataframe
-    model = MultiLabelClassifier(n_epochs=2)
-    trainX, testX, trainY, testY = train_test_split(dataset.Text, dataset.Target, test_size=0.3, random_state=42)
-    model.fit(trainX, trainY)
-    for threshold in np.linspace(0, 1, 5):
-        print("Threshold = {}".format(threshold))
-        print(classification_report(
-            model.input_pipeline.label_encoder.transform(testY),
-            model.input_pipeline.label_encoder.transform(model.predict(testX, threshold=threshold))
-        ))
+
+    for beta in [0.0, 0.5, 0.9, 0.99, 0.999, 0.9999]:
+        model = MultiLabelClassifier(base_model=RoBERTa, chunk_long_sequences=False, class_balance_beta=beta)
+        trainX, testX, trainY, testY = train_test_split(dataset.Text.values, [eval(s) for s in dataset.Target.values], test_size=0.3, random_state=42)
+        model.fit(trainX, trainY)
+        probas = model.predict_proba(testX)
+        probas_array = [[p[c] for c in model.input_pipeline.label_encoder.classes_] for p in probas]
+        print(beta, roc_auc_score(model.input_pipeline.label_encoder.transform(testY), probas_array))
+#    for threshold in np.linspace(0, 1, 5):
+#        print("Threshold = {}".format(threshold))
+#        print(classification_report(
+#            model.input_pipeline.label_encoder.transform(testY),
+#            model.input_pipeline.label_encoder.transform(model.predict(testX, threshold=threshold))
+#        ))
