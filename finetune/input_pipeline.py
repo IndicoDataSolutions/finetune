@@ -65,7 +65,7 @@ class BasePipeline(metaclass=ABCMeta):
             (shapes, TS([self.target_dim]),),
         )
 
-    def _array_format(self, encoded_output, pad_token=None):
+    def _array_format(self, encoded_output, pad_token=None, start=None, end=None):
         """
         Returns numpy array of token idxs and corresponding mask
         Returned `x` array contains two channels:
@@ -112,7 +112,10 @@ class BasePipeline(metaclass=ABCMeta):
             tokens=encoded_output.tokens,
             labels=labels_arr,
             char_locs=encoded_output.char_locs,
+            char_starts=encoded_output.char_starts,
             mask=mask,
+            start=start,
+            end=end,
         )
         return output
 
@@ -499,7 +502,7 @@ class BasePipeline(metaclass=ABCMeta):
                             if fv[-1] != end_token:
                                 fv = fv + [end_token]
                         d[field] = fv
-                yield self._array_format(EncodedOutput(**d), pad_token=pad_token)
+                yield self._array_format(EncodedOutput(**d), pad_token=pad_token, start=start, end=end)
                 if end > length:
                     break
         else:
