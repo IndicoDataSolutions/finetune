@@ -194,25 +194,23 @@ class SequenceLabelingEncoder(BaseEncoder):
         self.lookup = {c: i for i, c in enumerate(self.classes_)}
 
     def pre_process_label(self, out, labels):
-        if out.start is not None:
-            labels = [
-                {
-                    "start": lab["start"] - out.start,
-                    "end": lab["end"] - out.start,
-                    "text": lab["text"],
-                    "label": lab["label"]
-                } for lab in labels
-            ]
         # TODO employ more complex strategies
         pad_idx = self.lookup[self.pad_token]
         return labels, pad_idx
 
+    @staticmethod
+    def overlaps(label, tok_start, tok_end):
+        return (
+            label["start"] < tok_end <= label["end"] or
+            tok_start < label["end"] <= tok_end
+        )
+
     def transform(self, out, labels):
         labels, pad_idx = self.pre_process_label(out, labels)
         labels_out = [pad_idx for _ in out.tokens]
-        for i, (start, end) in enumerate(zip(out.char_starts, out.char_locs)):
-            for label in labels:
-                if label["start"] <= start < label["end"] or label["start"] < end <= label["end"]:
+        for label in labels:
+            for i, (start, end) in enumerate(zip(out.token_starts, out.token_ends)):
+                if self.overlaps(label, start, end):
                     if labels_out[i] != pad_idx:
                         LOGGER.warning("Overlapping labels were found, consider multilabel_sequence=True")
                     if label["label"] not in self.lookup:

@@ -1,12 +1,8 @@
 import warnings
-import copy
-from collections import defaultdict
 
 import numpy as np
 
-from finetune.util.logging import truncate_text
 from finetune.encoding.input_encoder import NLP
-from finetune.errors import FinetuneError
 
 
 def assign_associations(associations, none_value, idx_lookup):

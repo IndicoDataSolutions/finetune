@@ -48,6 +48,7 @@ class GPT2Encoder(BaseEncoder):
     """
 
     UNK_IDX = 0
+    offset = 0
 
     def __init__(self, encoder_path=ENCODER_PATH, vocab_path=VOCAB_PATH):
         super().__init__(encoder_path=encoder_path, vocab_path=vocab_path)
@@ -60,6 +61,9 @@ class GPT2Encoder(BaseEncoder):
         with open(self.encoder_path, "r") as f:
             self.encoder = json.load(f)
 
+        if self.offset != 0:
+            self.encoder.update((token, idx + self.offset) for token, idx in self.encoder.items())
+
         # Load BPE
         with open(self.vocab_path, "r", encoding="utf-8") as f:
             bpe_data = f.read()
@@ -68,17 +72,12 @@ class GPT2Encoder(BaseEncoder):
         ]
         self.bpe_ranks = dict(zip(bpe_merges, range(len(bpe_merges))))
 
-        self.special_tokens = ["_delimiter_", "_classify_"]
-        for token in self.special_tokens:
-            self.encoder[token] = len(self.encoder)
+        self._add_extra_toks()
 
         self.decoder = {v: k for k, v in self.encoder.items()}
         self.errors = errors
         self.byte_encoder = bytes_to_unicode()
         self.byte_decoder = {v: k for k, v in self.byte_encoder.items()}
-        self.start_token = self.encoder["<|endoftext|>"]
-        self.delimiter_token = self.encoder["_delimiter_"]
-        self.end_token = self.encoder["_classify_"]
         self.cache = {}
 
         # Should haved added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
@@ -86,6 +85,14 @@ class GPT2Encoder(BaseEncoder):
             r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
         )
         self.initialized = True
+
+    def _add_extra_toks(self):
+        self.special_tokens = ["_delimiter_", "_classify_"]
+        for token in self.special_tokens:
+            self.encoder[token] = len(self.encoder)
+        self.start_token = self.encoder["<|endoftext|>"]
+        self.delimiter_token = self.encoder["_delimiter_"]
+        self.end_token = self.encoder["_classify_"]
 
     def bpe(self, token):
         if token in self.cache:
@@ -128,25 +135,23 @@ class GPT2Encoder(BaseEncoder):
         self.cache[token] = word
         return word
 
-    def _encode(self, texts, labels=None):
+    def _convert_to_embed_idx(self, idx):
+        return idx
+
+    def _encode(self, texts):
         """
         Convert a sample of raw text to a list of byte-pair encoded token indices.
         """
         self._lazy_init()
         batch_tokens = []
         batch_token_idxs = []
-        batch_label_idxs = []
         batch_char_ends = []
         # to account for the fact that some BPEs have different lengths than their original tokens
         # (e.g. special characters such as bullets)
         batch_char_starts = []
-        label = None
 
         skipped = 0
         for i, text in enumerate(texts):  # text = one label span
-            if labels is not None:
-                label = labels[i]
-
             subtokens = []
             subtoken_idxs = []
             char_ends = []
@@ -193,18 +198,19 @@ class GPT2Encoder(BaseEncoder):
                 char_starts.extend(token_char_starts)
 
             batch_tokens.append(subtokens)
+
+            for k in range(len(subtoken_idxs)):
+                subtoken_idxs[k] = self._convert_to_embed_idx(subtoken_idxs[k])
+
             batch_token_idxs.append(subtoken_idxs)
             batch_char_ends.append(char_ends)
             batch_char_starts.append(char_starts)
-            if labels is not None:
-                batch_label_idxs.append([label] * len(subtoken_idxs))
 
         return EncodedOutput(
             token_ids=batch_token_idxs,
             tokens=batch_tokens,
-            labels=batch_label_idxs,
-            char_locs=batch_char_ends,
-            char_starts=batch_char_starts,
+            token_ends=batch_char_ends,
+            token_starts=batch_char_starts,
         )
 
     def decode(self, token_ids):

@@ -120,7 +120,7 @@ class GPTEncoder(BaseEncoder):
         self.cache[token] = word
         return word
 
-    def _encode(self, texts, labels=None):
+    def _encode(self, texts):
         """
         Convert a batch of raw text to a batch of byte-pair encoded token indices.
         """
@@ -128,16 +128,13 @@ class GPTEncoder(BaseEncoder):
         self._lazy_init()
         batch_tokens = []
         batch_token_idxs = []
-        batch_label_idxs = []
-        batch_char_ends = (
-            []
-        )  # to account for the fact that some BPEs have different lengths than their original tokens (e.g. special characters such as bullets)
+        batch_char_ends = []
+        # to account for the fact that some BPEs have different lengths than their original tokens
+        # (e.g. special characters such as bullets)
+
         batch_char_starts = []
-        label = None
         skipped = 0
         for i, text in enumerate(texts):
-            if labels is not None:
-                label = labels[i]
 
             raw_text = text.lower()
             
@@ -197,15 +194,12 @@ class GPTEncoder(BaseEncoder):
             batch_token_idxs.append(subtoken_idxs)
             batch_char_ends.append(char_ends)
             batch_char_starts.append(char_starts)
-            if labels is not None:
-                batch_label_idxs.append([label] * len(subtoken_idxs))
 
         return EncodedOutput(
             token_ids=batch_token_idxs,
             tokens=batch_tokens,
-            labels=batch_label_idxs,
-            char_locs=batch_char_ends,
-            char_starts=batch_char_starts,
+            token_ends=batch_char_ends,
+            token_starts=batch_char_starts,
         )
 
     def decode(self, ids):
