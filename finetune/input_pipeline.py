@@ -496,7 +496,6 @@ class BasePipeline(metaclass=ABCMeta):
             encoder_out = self.text_encoder.encode_multi_input(
                 Xs,
                 max_length=self.config.max_length,
-                pad_token=(pad_token or self.config.pad_token),
             )
 
             d = dict()

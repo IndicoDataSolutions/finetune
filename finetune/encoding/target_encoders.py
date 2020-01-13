@@ -80,6 +80,7 @@ class OneHotLabelEncoder(LabelEncoder, BaseEncoder):
                     break
         return ys
 
+
 class NoisyLabelEncoder(LabelEncoder, BaseEncoder):
 
     # Overriding the fit method...
@@ -96,12 +97,13 @@ class NoisyLabelEncoder(LabelEncoder, BaseEncoder):
     #TODO: Make output dataframe consistent with self.target_labels
     # and self.classes_
     def fit_transform(self, labels):
-        fit(labels)
-        return transform(labels)
+        self.fit(labels)
+        return self.transform(labels)
 
     def inverse_transform(self, probabilities):
         dataframe = pd.DataFrame(probabilities, columns=self.classes_)
         return list(dataframe.T.to_dict().values())
+
 
 class Seq2SeqLabelEncoder(BaseEncoder):
     def __init__(self, encoder, max_len, *args, **kwargs):
@@ -188,6 +190,7 @@ class SequenceLabelingEncoder(BaseEncoder):
     def __init__(self, pad_token="<PAD>"):
         self.classes_ = None
         self.pad_token = pad_token
+        self.lookup = None
 
     def fit(self, labels):
         self.classes_ = list(set(lab["label"] for lab in labels) | {self.pad_token})
@@ -199,18 +202,32 @@ class SequenceLabelingEncoder(BaseEncoder):
         return labels, pad_idx
 
     @staticmethod
-    def overlaps(label, tok_start, tok_end):
-        return (
+    def overlaps(label, tok_start, tok_end, tok_text):
+        does_overlap = (
             label["start"] < tok_end <= label["end"] or
             tok_start < label["end"] <= tok_end
         )
+        if not does_overlap:
+            return False, False
+
+        start = max(tok_start, label["start"])
+        end = min(tok_end, label["end"])
+        sub_text = label["text"][start - label["start"]: end - label["end"]]
+        print(sub_text)
+        print(tok_text)
+        strings_agree = sub_text.lower() in tok_text.lower()
+        return does_overlap, strings_agree
 
     def transform(self, out, labels):
         labels, pad_idx = self.pre_process_label(out, labels)
         labels_out = [pad_idx for _ in out.tokens]
         for label in labels:
-            for i, (start, end) in enumerate(zip(out.token_starts, out.token_ends)):
-                if self.overlaps(label, start, end):
+            for i, (start, end, text) in enumerate(zip(out.token_starts, out.token_ends, out.tokens)):
+                overlap, agree = self.overlaps(label, start, end, text)
+                if overlap:
+                    if not agree:
+                        raise ValueError("Tokens and labels do not align")
+
                     if labels_out[i] != pad_idx:
                         LOGGER.warning("Overlapping labels were found, consider multilabel_sequence=True")
                     if label["label"] not in self.lookup:
