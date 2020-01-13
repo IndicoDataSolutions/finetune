@@ -17,6 +17,7 @@ from finetune.errors import FinetuneError
 from finetune.base_models import GPTModel, GPTModelSmall
 from finetune.optimizers.adafactor import AdafactorWOptimizer, AdafactorOptimizer
 from finetune.nn.auxiliary import embed_context, embed_position, add_context_embed
+from finetune.util.shapes import shape_list
 
 LOGGER = logging.getLogger("finetune")
 
@@ -143,7 +144,8 @@ def get_model_fn(
             train_loss = 0.0
             if params.context_in_base_model:
                 if params.base_model.is_bidirectional:
-                    pos_embed = embed_position(context, params)
+                    batch, seq, _ = shape_list(X)
+                    pos_embed = embed_position(context, params, batch, seq)
                     featurizer_state = params.base_model.get_featurizer(
                         X,
                         encoder=encoder,
@@ -163,7 +165,8 @@ def get_model_fn(
                     explain=build_explain,
                 )
             if context is not None and not params.context_in_base_model:
-                pos_embed = embed_position(context, params)
+                batch, seq, _ = shape_list(featurizer_state['sequence_features'])
+                pos_embed = embed_position(context, params, batch, seq)
                 featurizer_state['context'] = pos_embed
                 # base model gets same additional blocks as target model
                 # if params.context_in_base_model:
