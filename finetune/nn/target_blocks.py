@@ -453,7 +453,7 @@ def sequence_labeler(
             #     featurizer_state=featurizer_state
             # )
             # n = norm(attn_fn(hidden) + hidden, "seq_label_residual")
-            if not config.context_in_base_model:
+            if not config.context_in_base_model and 'context' in featurizer_state:
                 w0, w = smooth_pos_attn(hidden, config, lengths)
                 featurizer_state['context_attention_weights'] = tf.stack((w0, w), 3)
                 text_embed = hidden[:, :, :config.n_embed]
