@@ -13,6 +13,7 @@ FINETUNE_FOLDER = os.path.dirname(finetune.__file__)
 ENCODER_PATH = os.path.join(FINETUNE_FOLDER, "model", "gpt2", "encoder.json")
 VOCAB_PATH = os.path.join(FINETUNE_FOLDER, "model", "gpt2", "vocab.bpe")
 
+GPT2_WHITESPACE_INDICATORS = {"Ġ", "Ċ"}
 
 @lru_cache()
 def bytes_to_unicode():
@@ -170,7 +171,8 @@ class GPT2Encoder(BaseEncoder):
                 bpe_toks = self.bpe(encoded_token).split(" ")
                 try:
                     if token.strip():
-                        token_start = text.index(token, token_start)
+                        print(token.strip())
+                        token_start = text.index(token.strip(), token_start)
                 except ValueError:
                     # text_standardization oddity
                     traceback.print_exc()
@@ -180,19 +182,16 @@ class GPT2Encoder(BaseEncoder):
                 subtoken_idxs.extend(
                     [self.encoder.get(t, self.UNK_IDX) for t in bpe_toks]
                 )
+                print(bpe_toks)
+                lens = []
+                for tok in bpe_toks:
+                    for t in GPT2_WHITESPACE_INDICATORS:
+                        tok = tok.replace(t, "")
+                    lens.append(len(tok.strip()))
+                print(lens)
+                token_char_ends = np.cumsum(lens) + token_start
 
-                token_char_starts = [token_start] * len(bpe_toks)
-
-                if np.sum([len(tok) for tok in bpe_toks]) > len(token):
-                    token_char_ends = (
-                        np.asarray([len(token.strip()) for tok in bpe_toks])
-                        + token_start
-                    )
-                else:
-                    token_char_ends = (
-                        np.cumsum([len(tok) for tok in bpe_toks]) + token_start
-                    )
-
+                token_char_starts = [token_start] + token_char_ends[1:].tolist()
                 token_start += len(token.strip())
                 char_ends.extend(token_char_ends)
                 char_starts.extend(token_char_starts)

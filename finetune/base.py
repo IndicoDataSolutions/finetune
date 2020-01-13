@@ -850,13 +850,14 @@ class BaseModel(object, metaclass=ABCMeta):
             batch_probas = [None]*len(labels)
 
         for chunk_idx, (label_seq, proba_seq) in enumerate(zip(labels, batch_probas)):
-            position_seq = flat_array_encoded[chunk_idx].token_ends
+            token_end_idx = flat_array_encoded[chunk_idx].token_ends
+            token_start_idx = flat_array_encoded[chunk_idx].token_starts
             start_of_doc = chunk_idx == 0 or sequence_id[chunk_idx - 1] != sequence_id[chunk_idx]
             end_of_doc = (
                 chunk_idx + 1 == len(flat_array_encoded) or
                 sequence_id[chunk_idx] != sequence_id[chunk_idx + 1]
             )
-            yield position_seq, start_of_doc, end_of_doc, label_seq, proba_seq
+            yield token_start_idx, token_end_idx, start_of_doc, end_of_doc, label_seq, proba_seq
 
     def __del__(self):
         if hasattr(self, "_tmp_dir") and self._tmp_dir is not None:
