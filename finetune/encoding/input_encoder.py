@@ -30,7 +30,10 @@ ArrayEncodedOutput = namedtuple(
         "tokens",  # list of list of subtokens (str) passed through from `EncoderOutput`
         "labels",  # object array shape (batch, seq_length)
         "char_locs",  # list of list of char_locs (int) passed through from `EncoderOutput`
+        "char_starts",
         "mask",  # int array shape (batch, seq_length)
+        "start",
+        "end",
     ],
 )
 ArrayEncodedOutput.__new__.__defaults__ = (None,) * len(ArrayEncodedOutput._fields)
@@ -174,6 +177,7 @@ class BaseEncoder(object):
         tokens = []
         positions = []
         labels = []
+        char_starts = []
 
         # for each field in that example
         for field in Xs:
@@ -186,6 +190,7 @@ class BaseEncoder(object):
             token_ids.append(_flatten(encoded.token_ids))
             tokens.append(_flatten(encoded.tokens))
             positions.append(_flatten(encoded.char_locs))
+            char_starts.append(_flatten(encoded.char_starts))
             labels.append(_flatten(encoded.labels))
             if len(tokens[-1]) > (max_length - 2):
                 warnings.warn(
@@ -201,6 +206,7 @@ class BaseEncoder(object):
         locations = self._cut_and_concat(
             encoded=positions, max_length=max_length, special_tokens=-1
         )
+        char_starts = self._cut_and_concat(encoded=char_starts, max_length=max_length, special_tokens=-1)
 
         if Y is None:
             labels = None
@@ -214,6 +220,7 @@ class BaseEncoder(object):
             tokens=tokens,
             labels=labels,
             char_locs=locations,
+            char_starts=char_starts,
         )
 
     def __setstate__(self, state):

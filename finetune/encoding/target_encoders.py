@@ -1,9 +1,11 @@
 from abc import ABCMeta
+import logging
 
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import LabelEncoder, MultiLabelBinarizer, OrdinalEncoder
 
+LOGGER = logging.getLogger("finetune")
 
 class BaseEncoder(metaclass=ABCMeta):
     @property
@@ -181,12 +183,71 @@ class OrdinalRegressionEncoder(OrdinalEncoder, BaseEncoder):
         raise ValueError
 
 
-class SequenceLabelingEncoder(LabelEncoder, BaseEncoder):
-    pass
+class SequenceLabelingEncoder(BaseEncoder):
+
+    def __init__(self, pad_token="<PAD>"):
+        self.classes_ = None
+        self.pad_token = pad_token
+
+    def fit(self, labels):
+        self.classes_ = list(set(lab["label"] for lab in labels) | {self.pad_token})
+        self.lookup = {c: i for i, c in enumerate(self.classes_)}
+
+    def pre_process_label(self, out, labels):
+        if out.start is not None:
+            labels = [
+                {
+                    "start": lab["start"] - out.start,
+                    "end": lab["end"] - out.start,
+                    "text": lab["text"],
+                    "label": lab["label"]
+                } for lab in labels
+            ]
+        # TODO employ more complex strategies
+        pad_idx = self.lookup[self.pad_token]
+        return labels, pad_idx
+
+    def transform(self, out, labels):
+        labels, pad_idx = self.pre_process_label(out, labels)
+        labels_out = [pad_idx for _ in out.tokens]
+        for i, (start, end) in enumerate(zip(out.char_starts, out.char_locs)):
+            for label in labels:
+                if label["start"] <= start < label["end"] or label["start"] < end <= label["end"]:
+                    if labels_out[i] != pad_idx:
+                        LOGGER.warning("Overlapping labels were found, consider multilabel_sequence=True")
+                    if label["label"] not in self.lookup:
+                        LOGGER.warning(
+                            "Attempting to encode unknown labels, ignoring for now but this will likely not "
+                            "result in desirable behaviour"
+                        )
+                    else:
+                        labels_out[i] = self.lookup[label["label"]]
+        return labels_out
+
+    def inverse_transform(self, y):
+        # TODO: update when finetune_to_indico is removed
+        return [self.classes_[l] for l in y]
 
 
-class SequenceMultiLabelingEncoder(MultiLabelBinarizer, BaseEncoder):
-    pass
+class SequenceMultiLabelingEncoder(SequenceLabelingEncoder):
+    def transform(self, out, labels):
+        labels, pad_idx = self.pre_process_label(out, labels)
+        labels_out = [[0 for _ in self.classes_] for _ in out.tokens]
+        for i, (start, end) in enumerate(zip(out.char_starts, out.char_locs)):
+            for label in labels:
+                if label["start"] <= start < label["end"] or label["start"] < end <= label["end"]:
+                    if label["label"] not in self.lookup:
+                        LOGGER.warning(
+                            "Attempting to encode unknown labels, ignoring for now but this will likely not "
+                            "result in desirable behaviour"
+                        )
+                    else:
+                        labels_out[i][self.lookup[label["label"]]] = 1
+        return labels_out
+
+    def inverse_transform(self, y):
+        # TODO: update when finetune_to_indico is removed
+        return [tuple(c for c, l_i in zip(self.classes_, l) if l_i) for l in y]
 
 
 class MultilabelClassificationEncoder(MultiLabelBinarizer, BaseEncoder):

@@ -13,7 +13,6 @@ from finetune.encoding.target_encoders import (
 from finetune.nn.target_blocks import sequence_labeler
 from finetune.nn.crf import sequence_decode
 from finetune.encoding.sequence_encoder import (
-    indico_to_finetune_sequence,
     finetune_to_indico_sequence,
 )
 from finetune.encoding.input_encoder import NLP
@@ -34,8 +33,7 @@ class SequencePipeline(BasePipeline):
         pad_token = (
             [self.config.pad_token] if self.multi_label else self.config.pad_token
         )
-
-        out_gen = self._text_to_ids(X, Y=Y, pad_token=pad_token)
+        out_gen = self._text_to_ids(X, pad_token=pad_token)
         for out in out_gen:
             feats = {"tokens": out.token_ids, "mask": out.mask}
             if context is not None:
@@ -44,10 +42,11 @@ class SequencePipeline(BasePipeline):
             if Y is None:
                 yield feats
             if Y is not None:
+                filtered_labels = [lab for lab in Y if lab["end"] > out.start and lab["start"] < out.end]
                 if self.config.filter_empty_examples:
-                    if all(label == pad_token for label in out.labels):
+                    if len(filtered_labels) == 0:
                         continue
-                yield feats, self.label_encoder.transform(out.labels)
+                yield feats, self.label_encoder.transform(out, filtered_labels)
 
     def _compute_class_counts(self, encoded_dataset):
         counter = Counter()
@@ -60,12 +59,6 @@ class SequencePipeline(BasePipeline):
             else:
                 counter.update(decoded_targets)
         return counter
-
-    def _format_for_encoding(self, X):
-        return [X]
-
-    def _format_for_inference(self, X):
-        return [[x] for x in X]
 
     def feed_shape_type_def(self):
         TS = tf.TensorShape
@@ -181,18 +174,6 @@ class SequenceLabeler(BaseModel):
         self.multi_label = self.config.multi_label_sequences
         return super()._initialize()
 
-    def finetune(self, Xs, Y=None, batch_size=None, context=None, **kwargs):
-        Xs, Y_new, _, _, _ = indico_to_finetune_sequence(
-            Xs,
-            encoder=self.input_pipeline.text_encoder,
-            labels=Y,
-            multi_label=self.multi_label,
-            none_value=self.config.pad_token,
-        )
-
-        Y = Y_new if Y is not None else None
-        return super().finetune(Xs, Y=Y, batch_size=batch_size, context=context, **kwargs)
-
     def predict(self, X, per_token=False, context=None, **kwargs):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
@@ -250,7 +231,7 @@ class SequenceLabeler(BaseModel):
                     doc_starts.append(start_of_token)
                 else:
                     # continue appending to current subsequence
-                    doc_subseqs[-1] = X[doc_idx][doc_starts[-1] : position]
+                    doc_subseqs[-1] = X[doc_idx][doc_starts[-1]: position]
                     doc_probs[-1].append(proba)
                 start_of_token = position
 

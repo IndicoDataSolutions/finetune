@@ -7,9 +7,6 @@ from finetune.base import BaseModel
 from finetune.input_pipeline import BasePipeline
 from finetune.errors import FinetuneError
 
-from finetune.target_models.sequence_labeling import SequenceLabeler
-from finetune.encoding.sequence_encoder import indico_to_finetune_sequence
-
 LOGGER = logging.getLogger("finetune")
 
 
@@ -234,14 +231,6 @@ class MultiTask(BaseModel):
                            corresponds to the number of training examples provided to each GPU.
         :return:
         """
-        for t in [
-            task_name
-            for task_name, t in self.config.tasks.items()
-            if t == SequenceLabeler
-        ]:
-            X[t], Y[t], *_ = indico_to_finetune_sequence(
-                X[t], labels=Y[t], multi_label=False, none_value="<PAD>"
-            )
         return super().finetune(X, Y=Y, batch_size=batch_size, context=context, **kwargs)
 
     def _pre_target_model_hook(self, featurizer_state):
