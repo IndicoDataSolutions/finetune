@@ -135,10 +135,10 @@ def finetune_to_indico_sequence(
                         item["label"] == label
                         # and only separated by whitespace
                         and item["end"] <= raw_annotation_end
-                        and not raw_text[item["end"] : raw_annotation_start].strip()
+                        and not raw_text[item["end"]: raw_annotation_start].strip()
                     ):
                         item["end"] = raw_annotation_end
-                        item["text"] = raw_text[item["start"] : raw_annotation_end]
+                        item["text"] = raw_text[item["start"]: raw_annotation_end]
                         if "confidence" in item and confidences is not None:
                             item["confidence"].append(confidences)
                         extended_existing_label = True

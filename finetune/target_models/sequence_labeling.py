@@ -189,7 +189,7 @@ class SequenceLabeler(BaseModel):
         chunk_size = self.config.max_length - 2
         step_size = chunk_size // 3
         doc_idx = -1
-        for position_seq, start_of_doc, end_of_doc, label_seq, proba_seq in self.process_long_sequence(X, context=context, **kwargs):
+        for token_start_idx, token_end_idx, start_of_doc, end_of_doc, label_seq, proba_seq in self.process_long_sequence(X, context=context, **kwargs):
             start, end = 0, None
             if start_of_doc:
                 # if this is the first chunk in a document, start accumulating from scratch
@@ -200,7 +200,6 @@ class SequenceLabeler(BaseModel):
                 doc_starts = []
 
                 doc_idx += 1
-                start_of_token = 0
                 if not end_of_doc:
                     end = step_size * 2
             else:
@@ -212,28 +211,28 @@ class SequenceLabeler(BaseModel):
                     start, end = step_size, step_size * 2
 
             label_seq = label_seq[start:end]
-            position_seq = position_seq[start:end]
+            end_of_token_seq = token_end_idx[start:end]
+            start_of_token_seq = token_start_idx[start:end]
             proba_seq = proba_seq[start:end]
 
-            for label, position, proba in zip(label_seq, position_seq, proba_seq):
-                if position == -1:
+            for label, start_idx, end_idx, proba in zip(label_seq, start_of_token_seq, end_of_token_seq, proba_seq):
+                if end == -1:
                     # indicates padding / special tokens
                     continue
 
-                # if there are no current subsequence
+                # if there are no current subsequences
                 # or the current subsequence has the wrong label
                 if not doc_subseqs or label != doc_labels[-1] or per_token:
                     # start new subsequence
-                    doc_subseqs.append(X[doc_idx][start_of_token:position])
+                    doc_subseqs.append(X[doc_idx][start_idx: end_idx])
                     doc_labels.append(label)
                     doc_probs.append([proba])
-                    doc_positions.append((start_of_token, position))
-                    doc_starts.append(start_of_token)
+                    doc_positions.append((start_idx, end_idx))
+                    doc_starts.append(start_idx)
                 else:
                     # continue appending to current subsequence
-                    doc_subseqs[-1] = X[doc_idx][doc_starts[-1]: position]
+                    doc_subseqs[-1] = X[doc_idx][doc_starts[-1]: end_idx]
                     doc_probs[-1].append(proba)
-                start_of_token = position
 
             if end_of_doc:
                 # last chunk in a document

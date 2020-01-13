@@ -6,7 +6,6 @@ import functools
 from collections import namedtuple, Counter
 
 import spacy
-import tensorflow as tf
 import numpy as np
 
 

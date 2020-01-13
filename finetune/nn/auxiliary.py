@@ -1,5 +1,4 @@
 import tensorflow as tf	
-from finetune.nn.nn_utils import dropout, norm
 from finetune.util.shapes import shape_list
 
 
