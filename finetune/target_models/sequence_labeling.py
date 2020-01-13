@@ -30,9 +30,7 @@ class SequencePipeline(BasePipeline):
         super()._post_data_initialization(Y_)
 
     def text_to_tokens_mask(self, X, Y=None, context=None):
-        pad_token = (
-            [self.config.pad_token] if self.multi_label else self.config.pad_token
-        )
+        pad_token = [self.config.pad_token] if self.multi_label else self.config.pad_token
         out_gen = self._text_to_ids(X, pad_token=pad_token)
         for out in out_gen:
             feats = {"tokens": out.token_ids, "mask": out.mask}
@@ -42,7 +40,9 @@ class SequencePipeline(BasePipeline):
             if Y is None:
                 yield feats
             if Y is not None:
-                filtered_labels = [lab for lab in Y if lab["end"] > out.start and lab["start"] < out.end]
+                filtered_labels = [
+                    lab for lab in Y if lab["end"] >= min(out.token_starts) and lab["start"] <= max(out.token_ends)
+                ]
                 if self.config.filter_empty_examples:
                     if len(filtered_labels) == 0:
                         continue

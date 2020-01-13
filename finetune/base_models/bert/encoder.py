@@ -48,23 +48,19 @@ class BERTEncoder(BaseEncoder):
     def _token_length(self, token):
         return len(token.strip().replace("##", ""))
 
-    def _encode(self, texts, labels=None):
+    def _encode(self, texts):
         """
         Convert a batch of raw text to a batch of byte-pair encoded token indices.
         """
         self._lazy_init()
         batch_tokens = []
         batch_token_idxs = []
-        batch_label_idxs = []
         batch_char_ends = []
         batch_char_starts = []
-        label = None
         offset = 0
 
         skipped = 0
         for i, text in enumerate(texts):
-            if labels is not None:
-                label = labels[i]
             char_ends = []
 
             subtokens, _, token_char_ends, starts = self.tokenizer.tokenize(text)
@@ -75,20 +71,18 @@ class BERTEncoder(BaseEncoder):
             i -= skipped
 
             char_ends.extend(token_char_ends)
+
             subtoken_idxs = self.tokenizer.convert_tokens_to_ids(subtokens)
             batch_tokens.append(subtokens)
             batch_token_idxs.append(subtoken_idxs)
             batch_char_ends.append(char_ends)
             batch_char_starts.append(starts)
-            if labels is not None:
-                batch_label_idxs.append([label] * len(subtokens))
 
         return EncodedOutput(
             token_ids=batch_token_idxs,
             tokens=batch_tokens,
-            labels=batch_label_idxs,
-            char_locs=batch_char_ends,
-            char_starts=batch_char_starts,
+            token_ends=batch_char_ends,
+            token_starts=batch_char_starts,
         )
 
     def decode(self, ids):

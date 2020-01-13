@@ -65,7 +65,7 @@ class BasePipeline(metaclass=ABCMeta):
             (shapes, TS([self.target_dim]),),
         )
 
-    def _array_format(self, encoded_output, pad_token=None, start=None, end=None):
+    def _array_format(self, encoded_output):
         """
         Returns numpy array of token idxs and corresponding mask
         Returned `x` array contains two channels:
@@ -78,18 +78,10 @@ class BasePipeline(metaclass=ABCMeta):
             x += 1
         mask = np.zeros((seq_length), dtype=np.float32)
 
-        if encoded_output.labels is not None:
-            labels_arr = np.empty((seq_length), dtype="object")
-            labels_arr.fill((pad_token or self.config.pad_token))
-        else:
-            labels_arr = None
-
         # BPE embedding
         x[:, 0] = encoded_output.token_ids
         # masking: value of 1 means "consider this in cross-entropy LM loss"
         mask[1:] = 1
-        if encoded_output.labels:
-            labels_arr[:seq_length] = encoded_output.labels
 
         # positional_embeddings
         x[:, 1] = np.arange(
@@ -110,12 +102,9 @@ class BasePipeline(metaclass=ABCMeta):
         output = ArrayEncodedOutput(
             token_ids=x,
             tokens=encoded_output.tokens,
-            labels=labels_arr,
-            char_locs=encoded_output.char_locs,
-            char_starts=encoded_output.char_starts,
-            mask=mask,
-            start=start,
-            end=end,
+            token_ends=encoded_output.token_ends,
+            token_starts=encoded_output.token_starts,
+            mask=mask
         )
         return output
 
@@ -458,12 +447,12 @@ class BasePipeline(metaclass=ABCMeta):
 
         This method is responsible for standardizing inputs to the above format
         """
-        return [[X]]
+        return [X]
 
     def _format_for_inference(self, X):
         return list(X)
 
-    def _text_to_ids(self, Xs, Y=None, pad_token=None):
+    def _text_to_ids(self, Xs, pad_token=None):
         Xs = self._format_for_encoding(Xs)
         if self.config.chunk_long_sequences and len(Xs) == 1:
             # can only chunk single sequence inputs
@@ -474,9 +463,7 @@ class BasePipeline(metaclass=ABCMeta):
 
             encoded = self.text_encoder.encode_multi_input(
                 Xs,
-                Y=Y,
                 max_length=sys.maxsize,
-                pad_token=(pad_token or self.config.pad_token),
             )
             length = len(encoded.token_ids)
             assert length == len(encoded.token_ids)
@@ -502,13 +489,12 @@ class BasePipeline(metaclass=ABCMeta):
                             if fv[-1] != end_token:
                                 fv = fv + [end_token]
                         d[field] = fv
-                yield self._array_format(EncodedOutput(**d), pad_token=pad_token, start=start, end=end)
+                yield self._array_format(EncodedOutput(**d))
                 if end > length:
                     break
         else:
             encoder_out = self.text_encoder.encode_multi_input(
                 Xs,
-                Y=Y,
                 max_length=self.config.max_length,
                 pad_token=(pad_token or self.config.pad_token),
             )
@@ -519,4 +505,4 @@ class BasePipeline(metaclass=ABCMeta):
                 if field_value is not None:
                     d[field] = field_value
 
-            yield self._array_format(EncodedOutput(**d), pad_token=(pad_token or self.config.pad_token))
+            yield self._array_format(EncodedOutput(**d))

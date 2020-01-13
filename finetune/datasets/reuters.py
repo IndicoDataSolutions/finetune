@@ -75,10 +75,10 @@ if __name__ == "__main__":
     trainX, testX, trainY, testY = train_test_split(
         dataset.texts.values,
         dataset.annotations.values,
-        test_size=0.7,
+        test_size=0.2,
         random_state=42
     )
-    model = SequenceLabeler(base_model=RoBERTa, batch_size=1,n_epochs=3, val_size=0.0, max_length=16, chunk_long_sequences=True, subtoken_predictions=True, crf_sequence_labeling=True)
+    model = SequenceLabeler(base_model=RoBERTa, batch_size=1, n_epochs=3, val_size=0.0, max_length=512, chunk_long_sequences=True, subtoken_predictions=False, crf_sequence_labeling=True, multi_label_sequences=False)
     model.fit(trainX, trainY)
     predictions = model.predict(testX)
     print(predictions)
