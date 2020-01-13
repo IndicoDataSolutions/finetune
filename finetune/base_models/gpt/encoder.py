@@ -155,8 +155,9 @@ class GPTEncoder(BaseEncoder):
                 bpe_toks = self.bpe(token.text).split(" ")
 
                 try:
-                    if token.text.strip():
-                        token_start = ftfy_text.index((token.text.strip()), token_start)
+                    stripped_text = token.text.strip()
+                    if stripped_text:
+                        token_start = ftfy_text.index(stripped_text, token_start)
                 except ValueError:
                     warnings.warn(
                         "Failed to find token `{}` in text.".format(token.text)
@@ -176,7 +177,7 @@ class GPTEncoder(BaseEncoder):
                     token
                 ):  # the BPEs comprising a token are longer than the token itself
                     token_char_ends = (
-                        np.asarray([len(token.text.strip()) for tok in bpe_toks])
+                        np.asarray([len(token.text.strip()) for _ in bpe_toks])
                         + token_start
                     )
                 else:

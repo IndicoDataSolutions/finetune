@@ -171,7 +171,6 @@ class GPT2Encoder(BaseEncoder):
                 bpe_toks = self.bpe(encoded_token).split(" ")
                 try:
                     if token.strip():
-                        print(token.strip())
                         token_start = text.index(token.strip(), token_start)
                 except ValueError:
                     # text_standardization oddity
@@ -182,13 +181,11 @@ class GPT2Encoder(BaseEncoder):
                 subtoken_idxs.extend(
                     [self.encoder.get(t, self.UNK_IDX) for t in bpe_toks]
                 )
-                print(bpe_toks)
                 lens = []
                 for tok in bpe_toks:
                     for t in GPT2_WHITESPACE_INDICATORS:
                         tok = tok.replace(t, "")
                     lens.append(len(tok.strip()))
-                print(lens)
                 token_char_ends = np.cumsum(lens) + token_start
 
                 token_char_starts = [token_start] + token_char_ends[1:].tolist()
