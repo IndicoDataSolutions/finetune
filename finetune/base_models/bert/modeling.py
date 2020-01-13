@@ -142,7 +142,8 @@ class BertModel(object):
             scope=None,
             use_pooler=True,
             roberta=False,
-            use_token_type=True
+            use_token_type=True,
+            context=None
     ):
         """Constructor for BertModel.
 
@@ -223,7 +224,8 @@ class BertModel(object):
                     initializer_range=config.initializer_range,
                     adapter_size=config.adapter_size,
                     do_return_all_layers=True,
-                    low_memory_mode=config.low_memory_mode and is_training
+                    low_memory_mode=config.low_memory_mode and is_training,
+                    context=context
                 )
                 self.sequence_output = self.all_encoder_layers[-1]
 
@@ -573,6 +575,7 @@ def attention_layer(
         batch_size=None,
         from_seq_length=None,
         to_seq_length=None,
+        context=None
 ):
     """Performs multi-headed attention from `from_tensor` to `to_tensor`.
 
@@ -781,7 +784,8 @@ def full_block(
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         initializer_range=0.02,
-        adapter_size=0):
+        adapter_size=0,
+        context=None):
     with tf.variable_scope("attention"):
         attention_heads = []
         with tf.variable_scope("self"):
@@ -796,7 +800,8 @@ def full_block(
                 do_return_2d_tensor=True,
                 batch_size=batch_size,
                 from_seq_length=seq_length,
-                to_seq_length=seq_length
+                to_seq_length=seq_length,
+                context=context
             )
             attention_heads.append(attention_head)
 
@@ -857,7 +862,8 @@ def transformer_model(input_tensor,
                       initializer_range=0.02,
                       do_return_all_layers=False,
                       adapter_size=0,
-                      low_memory_mode=False):
+                      low_memory_mode=False,
+                      context=None):
     """Multi-headed, multi-layer Transformer from "Attention is All You Need".
 
     This is almost an exact implementation of the original Transformer encoder.
@@ -937,7 +943,8 @@ def transformer_model(input_tensor,
                                          hidden_dropout_prob=hidden_dropout_prob,
                                          attention_probs_dropout_prob=attention_probs_dropout_prob,
                                          initializer_range=initializer_range,
-                                         adapter_size=adapter_size)
+                                         adapter_size=adapter_size,
+                                         context=context)
 
             if low_memory_mode:
                 block_fn = recompute_grad(block_fn, use_entire_scope=True)

@@ -162,7 +162,7 @@ def get_model_fn(
                     train=train,
                     explain=build_explain,
                 )
-            if context is not None:
+            if context is not None and not params.context_in_base_model:
                 pos_embed = embed_position(context, params)
                 featurizer_state['context'] = pos_embed
                 # base model gets same additional blocks as target model
