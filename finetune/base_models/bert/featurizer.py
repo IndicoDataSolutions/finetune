@@ -1,7 +1,7 @@
 import os
 
 import tensorflow as tf
-from finetune.util.shapes import lengths_from_eos_idx
+from finetune.util.shapes import lengths_from_eos_idx, merge_leading_dims
 from finetune.base_models.bert.roberta_encoder import RoBERTaEncoder
 from finetune.base_models.bert.modeling import BertConfig, BertModel
 from finetune.nn.target_blocks import smooth_pos_attn
@@ -111,15 +111,14 @@ def bert_featurizer(
             bert.get_sequence_output(),
             shape=tf.concat((initial_shape[:-1], [config.n_embed]), 0),
         )
-    with tf.variable_scope("contsdf", reuse=reuse):
-        if context is not None:
-            sequence_features = tf.concat(sequence_features, context, -1)
-            features = tf.concat(features, tf.reduce_mean(context, 1), -1)
+        with tf.variable_scope('context'):
+            if context is not None:
+                sequence_features = tf.concat((sequence_features, context), -1)
+                features = tf.concat((features, tf.reduce_mean(context, 1)), -1)
 
-            sequence_features = tf.layers.dense(utils.merge_leading_dims(sequence_features,2), config.n_embed)
-            sequence_features = tf.reshape(sequence_features, tf.concat((initial_shape[:-1], [config.n_embed]), 0))
-
-            features = tf.layers.dense(features, config.n_embed)
+                sequence_features = tf.keras.layers.Dense(config.n_embed)(merge_leading_dims(sequence_features,2))
+                sequence_features = tf.reshape(sequence_features, tf.concat((initial_shape[:-1], [config.n_embed]), 0))
+                features = tf.keras.layers.Dense(config.n_embed)(features)
 
         output_state = {
             "embed_weights": embed_weights,
