@@ -13,6 +13,7 @@ def bert_featurizer(
     config,
     train=False,
     reuse=None,
+    context=None,
     **kwargs
 ):
     """
@@ -95,7 +96,8 @@ def bert_featurizer(
             scope=None,
             use_pooler=config.bert_use_pooler,
             use_token_type=config.bert_use_type_embed,
-            roberta=is_roberta
+            roberta=is_roberta,
+            context=context
         )
 
         embed_weights = bert.get_embedding_table()
