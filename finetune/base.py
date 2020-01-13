@@ -523,12 +523,12 @@ class BaseModel(object, metaclass=ABCMeta):
         raw_preds = self._inference(Xs, context=context, predict_keys=[PredictMode.CONTEXT_ATTENTION])
         return raw_preds
 
-    def _featurize(self, Xs):
-        raw_preds = self._inference(Xs, predict_keys=[PredictMode.FEATURIZE])
+    def _featurize(self, Xs, context=None):
+        raw_preds = self._inference(Xs, context=context, predict_keys=[PredictMode.FEATURIZE])
         return np.asarray(raw_preds)
 
-    def _featurize_sequence(self, Xs):
-        raw_preds = self._inference(Xs, predict_keys=[PredictMode.SEQUENCE])
+    def _featurize_sequence(self, Xs, context=None):
+        raw_preds = self._inference(Xs, context=context, predict_keys=[PredictMode.SEQUENCE])
         return np.asarray(raw_preds)
 
     def featurize(self, *args, **kwargs):
