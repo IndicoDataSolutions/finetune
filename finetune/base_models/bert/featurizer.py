@@ -101,6 +101,7 @@ def bert_featurizer(
         )
 
         embed_weights = bert.get_embedding_table()
+
         features = tf.reshape(
             bert.get_pooled_output(),
             shape=tf.concat((initial_shape[:-1], [config.n_embed]), 0),
@@ -109,6 +110,15 @@ def bert_featurizer(
             bert.get_sequence_output(),
             shape=tf.concat((initial_shape, [config.n_embed]), 0),
         )
+    with tf.variable_scope("contsdf", reuse=reuse):
+        if context is not None:
+            sequence_features = tf.concat(sequence_features, context, -1)
+            features = tf.concat(features, tf.reduce_mean(context, 1), -1)
+
+            sequence_features = tf.layers.dense(utils.merge_leading_dims(sequence_features,2), config.n_embed)
+            sequence_features = tf.reshape(sequence_features, tf.concat((initial_shape[:-1], [config.n_embed]), 0))
+
+            features = tf.layers.dense(features, config.n_embed)
 
         output_state = {
             "embed_weights": embed_weights,
