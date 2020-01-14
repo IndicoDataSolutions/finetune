@@ -213,8 +213,6 @@ class SequenceLabelingEncoder(BaseEncoder):
         start = max(tok_start, label["start"])
         end = min(tok_end, label["end"])
         sub_text = label["text"][start - label["start"]: end - label["end"]]
-        print(sub_text)
-        print(tok_text)
         strings_agree = sub_text.lower() in tok_text.lower()
         return does_overlap, strings_agree
 
@@ -223,6 +221,8 @@ class SequenceLabelingEncoder(BaseEncoder):
         labels_out = [pad_idx for _ in out.tokens]
         for label in labels:
             for i, (start, end, text) in enumerate(zip(out.token_starts, out.token_ends, out.tokens)):
+                if end > label["end"]:
+                    break
                 overlap, agree = self.overlaps(label, start, end, text)
                 if overlap:
                     if not agree:
@@ -232,8 +232,8 @@ class SequenceLabelingEncoder(BaseEncoder):
                         LOGGER.warning("Overlapping labels were found, consider multilabel_sequence=True")
                     if label["label"] not in self.lookup:
                         LOGGER.warning(
-                            "Attempting to encode unknown labels, ignoring for now but this will likely not "
-                            "result in desirable behaviour"
+                            "Attempting to encode unknown labels : {}, ignoring for now but this will likely not "
+                            "result in desirable behaviour. Available labels are {}".format(label["label"], self.lookup.keys())
                         )
                     else:
                         labels_out[i] = self.lookup[label["label"]]
@@ -248,7 +248,7 @@ class SequenceMultiLabelingEncoder(SequenceLabelingEncoder):
     def transform(self, out, labels):
         labels, pad_idx = self.pre_process_label(out, labels)
         labels_out = [[0 for _ in self.classes_] for _ in out.tokens]
-        for i, (start, end) in enumerate(zip(out.char_starts, out.char_locs)):
+        for i, (start, end) in enumerate(zip(out.token_starts, out.token_ends)):
             for label in labels:
                 if label["start"] <= start < label["end"] or label["start"] < end <= label["end"]:
                     if label["label"] not in self.lookup:

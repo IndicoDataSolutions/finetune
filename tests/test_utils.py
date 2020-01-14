@@ -9,7 +9,7 @@ import tensorflow as tf
 import pandas as pd
 
 import finetune
-from finetune.encoding.sequence_encoder import indico_to_finetune_sequence, finetune_to_indico_sequence
+from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
 from finetune.optimizers.gradient_accumulation import get_grad_accumulation_optimizer
 from finetune.util.imbalance import compute_class_weights
 from finetune.util.timing import ProgressBar
@@ -20,7 +20,35 @@ from finetune.base_models.gpt.encoder import GPTEncoder
 from finetune.base_models.gpt2.encoder import GPT2Encoder
 from finetune.base_models.bert.roberta_encoder import RoBERTaEncoderV2
 
+class TestGPTEncoder(unittest.TestCase):
+    Encoder = GPTEncoder
 
+    def setUp(self):
+        self.encoder = self.Encoder()
+        self.text = """This is a basic test of tokenizers but with some fun things at the end. 
+            This'll "tejhirpwkjovf[-d" the encoder's abilities to deal with ½ a sentence of rubbish."""
+
+    def test_max_length(self):
+        encoded = self.encoder.encode_multi_input([self.text], max_length=20)
+        self.assertEqual(len(encoded.tokens), 20)
+
+    def test_empty_string(self):
+        # This test is important for cached predict.
+        encoded = self.encoder.encode_multi_input([""], max_length=20)
+        self.assertEqual(len(encoded.tokens), 2) # start and end tokens
+
+    def test_no_whitespace_in_idxs(self):
+        encoded = self.encoder.encode_multi_input([self.text], max_length=200)
+        for tok, start, end in zip(encoded.tokens, encoded.token_starts, encoded.token_ends):
+            print(tok)
+            sub_seq = self.text[start:end]
+            self.assertNotIn(" ", sub_seq)
+            self.assertNotIn("\n", sub_seq)
+        
+        
+
+    
+    
 
 class TestFinetuneIndicoConverters(unittest.TestCase):
 
@@ -103,7 +131,7 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
     def test_overlapping(self):
         raw = ["Indico Is the best hey"]
         finetunex = [
-            ["Indico ", "Is the", " best", " hey"]
+            ["Indico", "Is the", "best", "hey"]
         ]
         finetuney = [
             [("1",), ("1", "2"), ("2",), ("<PAD>",)]
@@ -120,14 +148,6 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
         ]
         self.assertEqual(indicoy, indicoy_pred)
         self.assertEqual(raw, indicox_pred)
-
-        finetunex_pred, finetuney_pred, *_ = indico_to_finetune_sequence(
-            raw, indicoy, encoder=encoder, none_value="<PAD>"
-        )
-        self.assertEqual(finetunex_pred, finetunex)
-        self.assertCountEqual(finetuney[0][0], finetuney_pred[0][0])
-        self.assertCountEqual(finetuney[0][1], finetuney_pred[0][1])
-        self.assertCountEqual(finetuney[0][2], finetuney_pred[0][2])
 
     def test_overlapping_gpt2(self):
         raw = ["Indico Is the best hey"]
@@ -148,14 +168,6 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
         ]
         self.assertEqual(indicoy, indicoy_pred)
         self.assertEqual(raw, indicox_pred)
-
-        finetunex_pred, finetuney_pred, *_ = indico_to_finetune_sequence(
-            raw, indicoy, encoder=encoder, none_value="<PAD>"
-        )
-        self.assertEqual(finetunex_pred, finetunex)
-        self.assertCountEqual(finetuney[0][0], finetuney_pred[0][0])
-        self.assertCountEqual(finetuney[0][1], finetuney_pred[0][1])
-        self.assertCountEqual(finetuney[0][2], finetuney_pred[0][2])
 
     def test_overlapping_gpt2_subtokens(self):
         raw = ["Indico Is the best hey"]
@@ -178,14 +190,6 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
         self.assertEqual(indicoy, indicoy_pred)
         self.assertEqual(raw, indicox_pred)
 
-        finetunex_pred, finetuney_pred, *_ = indico_to_finetune_sequence(
-            raw, indicoy, encoder=encoder, none_value="<PAD>"
-        )
-        self.assertEqual(finetunex_pred, finetunex)
-        self.assertCountEqual(finetuney[0][0], finetuney_pred[0][0])
-        self.assertCountEqual(finetuney[0][1], finetuney_pred[0][1])
-        self.assertCountEqual(finetuney[0][2], finetuney_pred[0][2])
-
     def test_nested_labels(self):
         raw = ["Indico Is the best"]
         finetunex = [
@@ -197,77 +201,6 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
         encoder = GPTEncoder()
         indicox_pred, indicoy_pred = finetune_to_indico_sequence(raw, finetunex, finetuney, none_value="<PAD>")
 
-        indicoy = [
-            [
-                {'start': 0, 'end': 18, 'label': '1', 'text': 'Indico Is the best'},
-                {'start': 7, 'end': 13, 'label': '2', 'text': 'Is the'},
-                {'start': 7, 'end': 13, 'label': '3', 'text': 'Is the'}
-            ]
-        ]
-        self.assertEqual(indicoy, indicoy_pred)
-        self.assertEqual(raw, indicox_pred)
-
-        finetunex_pred, finetuney_pred, *_ = indico_to_finetune_sequence(
-            raw, indicoy, encoder=encoder, none_value="<PAD>"
-        )
-        self.assertEqual(finetunex_pred, finetunex)
-        self.assertCountEqual(finetuney[0][0], finetuney_pred[0][0])
-        self.assertCountEqual(finetuney[0][1], finetuney_pred[0][1])
-        self.assertCountEqual(finetuney[0][2], finetuney_pred[0][2])
-
-    def test_roberta_failure(self):
-        text = [
-            'Margin Cost\n1357711\n593 2501\n1350\n700860\n65053899 06\n46032479 8308\n6452785 '
-            '50\n3353\n12546915 246\n094 10828664\n7 8058\n53696576 25\n7654 260919\n646256 '
-            '75300\n4\n091577 8177070\n012197121 38\n30414787 93\n6024915 600028\n8 2'
-        ]
-        label = [
-            [
-                {'text': '600028', 'label': '0000ff', 'start': 203, 'end': 209},
-                {'text': '8', 'label': '0000ff', 'start': 210, 'end': 211},
-                {'text': '2', 'label': '0000ff', 'start': 212, 'end': 213}
-            ]
-        ]
-        finetunex_pred, finetuney_pred, *_ = indico_to_finetune_sequence(
-            text, label, encoder=RoBERTaEncoderV2(), none_value="<PAD>"
-        )
-        target_x = [
-            [
-                'Margin Cost\n1357711\n593 2501\n1350\n700860\n65053899 06\n46032479 8308\n6452785'
-                    ' 50\n3353\n12546915 246\n094 10828664\n7 8058\n53696576 25\n7654 260919\n646256 '
-                    '75300\n4\n091577 8177070\n012197121 38\n30414787 93\n6024915',
-                ' 600028',
-                '\n',
-                '8',
-                ' 2'
-            ]
-        ]
-        target_y = [[('<PAD>',), ('0000ff',), ('<PAD>',), ('0000ff',), ('0000ff',)]]
-        self.assertEqual(finetunex_pred, target_x)
-        self.assertEqual(finetuney_pred, target_y)
-
-    def test_overlapping_labels_with_single_label(self):
-        text = ["Indico Rules"]
-        finetunex = [
-            ["Indic", "o", " Rules"]
-        ]
-        finetuney = [
-            ["1", "1", "2"]
-        ]
-        indicoy = [
-            [
-                {'start': 0, 'end': 6, 'label': '1', 'text': 'Indico'},
-                {'start': 5, 'end': 12, 'label': '2', 'text': 'o Rules'},
-            ]
-        ]
-
-        finetunex_pred, finetuney_pred, *_ = indico_to_finetune_sequence(
-            text, indicoy, encoder=GPTEncoder(), none_value="<PAD>", multi_label=False
-        )
-        self.assertEqual(finetunex_pred, finetunex)
-        self.assertCountEqual(finetuney[0][0], finetuney_pred[0][0])
-        self.assertCountEqual(finetuney[0][1], finetuney_pred[0][1])
-        self.assertCountEqual(finetuney[0][2], finetuney_pred[0][2])
 
     def test_three_overlapping_labels(self):
         raw = ["Indico Is the very best"]
@@ -292,14 +225,6 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
         ]
         self.assertEqual(indicoy, indicoy_pred)
         self.assertEqual(raw, indicox_pred)
-
-        finetunex_pred, finetuney_pred, *_ = indico_to_finetune_sequence(
-            raw, indicoy, encoder=encoder, none_value="<PAD>"
-        )
-        self.assertEqual(finetunex_pred, finetunex)
-        self.assertCountEqual(finetuney[0][0], finetuney_pred[0][0])
-        self.assertCountEqual(finetuney[0][1], finetuney_pred[0][1])
-        self.assertCountEqual(finetuney[0][2], finetuney_pred[0][2])
 
     def test_compute_class_weights(self):
         # regression test for issue #181

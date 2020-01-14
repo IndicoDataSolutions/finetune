@@ -127,7 +127,6 @@ class BaseEncoder(object):
         start = start or special_tokens or self.start_token
         delimiter = delimiter or special_tokens or self.delimiter_token
         clf_token = end or special_tokens or self.end_token
-
         num_samples = len(encoded)
         adjusted_max_length = max_length - num_samples - 1
         allocated_max_len = adjusted_max_length // num_samples
@@ -139,7 +138,7 @@ class BaseEncoder(object):
             cut_len = None
         else:
             warnings.warn(
-                "Document is longer than max length allowed, trimming document to {} tokens.".format(
+                "Document is longer than max length allowed, trimming document to {} tokens. Try chunk_long_sequences=True".format(
                     max_length
                 )
             )

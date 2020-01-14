@@ -8,12 +8,12 @@ from finetune.base import BaseModel
 
 class MultiFieldClassificationPipeline(ClassificationPipeline):
     def _format_for_encoding(self, X):
-        return [[field] for field in X]
+        return X
 
 
 class MultiFieldRegressionPipeline(RegressionPipeline):
     def _format_for_encoding(self, X):
-        return [[field] for field in X]
+        return X
 
 
 class MultiFieldClassifier(Classifier):
