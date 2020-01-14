@@ -211,22 +211,42 @@ class BertModel(object):
 
                 # Run the stacked transformer.
                 # `sequence_output` shape = [batch_size, seq_length, hidden_size].
-                self.all_encoder_layers = transformer_model(
-                    input_tensor=self.embedding_output,
-                    attention_mask=attention_mask,
-                    hidden_size=config.hidden_size,
-                    num_hidden_layers=config.num_hidden_layers,
-                    num_attention_heads=config.num_attention_heads,
-                    intermediate_size=config.intermediate_size,
-                    intermediate_act_fn=get_activation(config.hidden_act),
-                    hidden_dropout_prob=config.hidden_dropout_prob,
-                    attention_probs_dropout_prob=config.attention_probs_dropout_prob,
-                    initializer_range=config.initializer_range,
-                    adapter_size=config.adapter_size,
-                    do_return_all_layers=True,
-                    low_memory_mode=config.low_memory_mode and is_training,
-                    context=context
-                )
+                if context is not None:
+                    hidden_and_auxiliary_dim = config.hidden_size + config.n_context_embed_per_channel * config.context_dim
+                    self.all_encoder_layers = transformer_model(
+                        input_tensor=tf.concat((self.embedding_output, context), -1),
+                        attention_mask=attention_mask,
+                        hidden_size=hidden_and_auxiliary_dim,
+                        num_hidden_layers=config.num_hidden_layers,
+                        num_attention_heads=config.num_attention_heads,  # TODO
+                        intermediate_size=config.intermediate_size,
+                        intermediate_act_fn=get_activation(config.hidden_act),
+                        hidden_dropout_prob=config.hidden_dropout_prob,
+                        attention_probs_dropout_prob=config.attention_probs_dropout_prob,
+                        initializer_range=config.initializer_range,
+                        adapter_size=config.adapter_size,
+                        do_return_all_layers=True,
+                        low_memory_mode=config.low_memory_mode and is_training,
+                        auxiliary_init=True
+                    )
+
+                else:
+                    self.all_encoder_layers = transformer_model(
+                        input_tensor=self.embedding_output,
+                        attention_mask=attention_mask,
+                        hidden_size=config.hidden_size,
+                        num_hidden_layers=config.num_hidden_layers,
+                        num_attention_heads=config.num_attention_heads,
+                        intermediate_size=config.intermediate_size,
+                        intermediate_act_fn=get_activation(config.hidden_act),
+                        hidden_dropout_prob=config.hidden_dropout_prob,
+                        attention_probs_dropout_prob=config.attention_probs_dropout_prob,
+                        initializer_range=config.initializer_range,
+                        adapter_size=config.adapter_size,
+                        do_return_all_layers=True,
+                        low_memory_mode=config.low_memory_mode and is_training,
+                        auxiliary_init=False
+                    )
                 self.sequence_output = self.all_encoder_layers[-1]
 
                 # The "pooler" converts the encoded sequence tensor of shape
@@ -575,7 +595,7 @@ def attention_layer(
         batch_size=None,
         from_seq_length=None,
         to_seq_length=None,
-        context=None
+        auxiliary_init=False
 ):
     """Performs multi-headed attention from `from_tensor` to `to_tensor`.
 
@@ -785,7 +805,7 @@ def full_block(
         attention_probs_dropout_prob=0.1,
         initializer_range=0.02,
         adapter_size=0,
-        context=None):
+        auxiliary_init=False):
     with tf.variable_scope("attention"):
         attention_heads = []
         with tf.variable_scope("self"):
@@ -801,7 +821,7 @@ def full_block(
                 batch_size=batch_size,
                 from_seq_length=seq_length,
                 to_seq_length=seq_length,
-                context=context
+                auxiliary_init=auxiliary_init
             )
             attention_heads.append(attention_head)
 
@@ -863,7 +883,7 @@ def transformer_model(input_tensor,
                       do_return_all_layers=False,
                       adapter_size=0,
                       low_memory_mode=False,
-                      context=None):
+                      auxiliary_init=False):
     """Multi-headed, multi-layer Transformer from "Attention is All You Need".
 
     This is almost an exact implementation of the original Transformer encoder.
@@ -944,7 +964,7 @@ def transformer_model(input_tensor,
                                          attention_probs_dropout_prob=attention_probs_dropout_prob,
                                          initializer_range=initializer_range,
                                          adapter_size=adapter_size,
-                                         context=context)
+                                         auxiliary_init=auxiliary_init)
 
             if low_memory_mode:
                 block_fn = recompute_grad(block_fn, use_entire_scope=True)
