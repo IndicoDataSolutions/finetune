@@ -1,24 +1,51 @@
 import math
 
-import tensorflow as tf	
+import tensorflow as tf
 from finetune.nn.nn_utils import dropout, norm
 from finetune.util.shapes import shape_list
 from finetune.util.positional_embeddings import add_timing_signal_from_position
 from finetune.base_models.gpt.featurizer import conv1d
 
 
+def dense_with_custom_init(input_tensor,
+                           output_dim,
+                           activation,
+                           name,
+                           kernel_initializer,
+                           custom=False,
+                           pos_embed=None):
+
+    if custom:
+        original_weights = tf.get_variable(name+'/kernel:0',shape=(shape_list(input_tensor)[1], output_dim))
+        position_weights = tf.get_variable(name+"/pos_weights",
+                                           shape=(pos_embed, pos_embed))
+        original_weights = tf.pad(original_weights, tf.constant([[0,pos_embed]]))
+        position_weights = tf.pad(position_weights, tf.constant([[shape_list(original_weights),0]]))
+        full_weights = tf.concat((original_weights, position_weights), axis=1)
+
+        original_bias = tf.get_variable(name+'/bias:0')
+        position_bias = tf.get_variable(name+"/pos_bias", shape=(pos_embed+shape_list(original_weights)[0]))
+        full_bias = tf.concat((original_bias, position_bias))
+
+        return tf.matmul(input_tensor, full_weights) + full_bias
+
+    else:
+        return tf.layers.dense(input_tensor, output_dim, activation, name, kernel_initializer=kernel_initializer)
+
+
+
 def embed_context(context, featurizer_state, config, train):
     with tf.variable_scope("context_embedding"):
         context_dim = shape_list(context)[-1]
         context_weight = tf.get_variable(
-            name="ce",	
+            name="ce",
             shape=[context_dim, config.n_context_embed],
-            initializer=tf.random_normal_initializer(stddev=config.context_embed_stddev),	
+            initializer=tf.random_normal_initializer(stddev=config.context_embed_stddev),
         )
         context_bias = tf.get_variable(
-            name="ca",	
-            shape=[config.n_context_embed],	
-            initializer=tf.zeros_initializer(),	
+            name="ca",
+            shape=[config.n_context_embed],
+            initializer=tf.zeros_initializer(),
         )
         c_embed = tf.add(tf.tensordot(context, context_weight, axes=[[-1], [0]]), context_bias)
     featurizer_state['context'] = c_embed
@@ -48,9 +75,9 @@ def add_context_embed(featurizer_state):
 
         shape = shape_list(context_embed)
         if len(shape) == 4:
-            # comparison / multiple choice 
+            # comparison / multiple choice
             flat_embed = tf.reshape(
-                context_embed, 
+                context_embed,
                 [shape[0] * shape[1], shape[2], shape[3]],
             )
         else:
@@ -67,10 +94,10 @@ def add_context_embed(featurizer_state):
 
                 if len(shape) == 4:
                     mean_context = tf.reshape(
-                        mean_context, 
+                        mean_context,
                         [shape[0], shape[1], shape[3]]
                     )
-    
+
                 featurizer_state[key] = tf.concat(
                     (featurizer_state[key], mean_context), -1
                 )
@@ -78,5 +105,3 @@ def add_context_embed(featurizer_state):
         featurizer_state['sequence_features'] = tf.concat(
             (featurizer_state['sequence_features'], context_embed), -1
         )
-
-
