@@ -99,7 +99,7 @@ def bert_featurizer(
             use_pooler=config.bert_use_pooler,
             use_token_type=config.bert_use_type_embed,
             roberta=is_roberta,
-            context=context
+            context=context if not config.mlm_baseline else None
         )
 
         embed_weights = bert.get_embedding_table()
