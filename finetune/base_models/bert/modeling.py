@@ -21,6 +21,8 @@ import numpy as np
 import tensorflow as tf
 import functools
 
+from finetune.nn.auxiliary import dense_with_custom_init
+from finetune.base_models.gpt.featurizer import adapter
 from finetune.optimizers.recompute_grads import recompute_grad
 
 
@@ -41,6 +43,9 @@ class BertConfig(object):
             max_position_embeddings=512,
             type_vocab_size=16,
             initializer_range=0.02,
+            adapter_size=0,
+            context_dim=0,
+            n_context_embed_per_channel=0
     ):
         """Constructs BertConfig.
 
@@ -78,6 +83,8 @@ class BertConfig(object):
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.low_memory_mode = low_memory_mode
+        self.context_dim = context_dim
+        self.n_context_embed_per_channel = n_context_embed_per_channel
 
     @classmethod
     def from_dict(cls, json_object):
@@ -223,7 +230,8 @@ class BertModel(object):
                         initializer_range=config.initializer_range,
                         do_return_all_layers=True,
                         low_memory_mode=config.low_memory_mode and is_training,
-                        auxiliary_init=True
+                        auxiliary_init=True,
+                        config=config
                     )
 
                 else:
@@ -240,7 +248,8 @@ class BertModel(object):
                         initializer_range=config.initializer_range,
                         do_return_all_layers=True,
                         low_memory_mode=config.low_memory_mode and is_training,
-                        auxiliary_init=False
+                        auxiliary_init=False,
+                        config=config
                     )
                 self.sequence_output = self.all_encoder_layers[-1]
 
@@ -255,11 +264,13 @@ class BertModel(object):
 
                 first_token_tensor = tf.squeeze(self.sequence_output[:, 0:1, :], axis=1)
                 if use_pooler:
-                    self.pooled_output = tf.layers.dense(
+                    self.pooled_output = dense_with_custom_init(
                         first_token_tensor,
                         config.hidden_size,
                         activation=tf.tanh,
                         kernel_initializer=create_initializer(config.initializer_range),
+                        custom=True,
+                        pos_embed=config.n_context_embed_per_channel*config.context_dim
                     )
                 else:
                     self.pooled_output = first_token_tensor
@@ -590,7 +601,8 @@ def attention_layer(
         batch_size=None,
         from_seq_length=None,
         to_seq_length=None,
-        auxiliary_init=False
+        auxiliary_init=False,
+        config=None
 ):
     """Performs multi-headed attention from `from_tensor` to `to_tensor`.
 
@@ -690,30 +702,36 @@ def attention_layer(
     to_tensor_2d = reshape_to_matrix(to_tensor)
 
     # `query_layer` = [B*F, N*H]
-    query_layer = tf.layers.dense(
+    query_layer = dense_with_custom_init(
         from_tensor_2d,
         num_attention_heads * size_per_head,
         activation=query_act,
         name="query",
         kernel_initializer=create_initializer(initializer_range),
+        custom=True,
+        pos_embed=config.n_context_embed_per_channel*config.context_dim
     )
 
     # `key_layer` = [B*T, N*H]
-    key_layer = tf.layers.dense(
+    key_layer = dense_with_custom_init(
         to_tensor_2d,
         num_attention_heads * size_per_head,
         activation=key_act,
         name="key",
         kernel_initializer=create_initializer(initializer_range),
+        custom=True,
+        pos_embed=config.n_context_embed_per_channel*config.context_dim
     )
 
     # `value_layer` = [B*T, N*H]
-    value_layer = tf.layers.dense(
+    value_layer = dense_with_custom_init(
         to_tensor_2d,
         num_attention_heads * size_per_head,
         activation=value_act,
         name="value",
         kernel_initializer=create_initializer(initializer_range),
+        custom=True,
+        pos_embed=config.n_context_embed_per_channel*config.context_dim
     )
 
     # `query_layer` = [B, N, F, H]
@@ -777,9 +795,9 @@ def attention_layer(
             [batch_size * from_seq_length, num_attention_heads * size_per_head],
         )
     else:
-        # `context_layer` = [B, F, N*H]
         context_layer = tf.reshape(
             context_layer,
+            # `context_layer` = [B, F, N*H]
             [batch_size, from_seq_length, num_attention_heads * size_per_head],
         )
 
@@ -799,7 +817,9 @@ def full_block(
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         initializer_range=0.02,
-        auxiliary_init=False):
+        adapter_size=0,
+        auxiliary_init=False,
+        config=None):
     with tf.variable_scope("attention"):
         attention_heads = []
         with tf.variable_scope("self"):
@@ -815,7 +835,8 @@ def full_block(
                 batch_size=batch_size,
                 from_seq_length=seq_length,
                 to_seq_length=seq_length,
-                auxiliary_init=auxiliary_init
+                auxiliary_init=auxiliary_init,
+                config=config
             )
             attention_heads.append(attention_head)
 
@@ -829,27 +850,33 @@ def full_block(
         # Run a linear projection of `hidden_size` then add a residual
         # with `layer_input`.
         with tf.variable_scope("output"):
-            attention_output = tf.layers.dense(
+            attention_output = dense_with_custom_init(
                 attention_output,
                 hidden_size,
-                kernel_initializer=create_initializer(initializer_range))
+                kernel_initializer=create_initializer(initializer_range),
+                custom=True,
+                pos_embed=config.n_context_embed_per_channel*config.context_dim)
             attention_output = dropout(attention_output, hidden_dropout_prob)
             attention_output = layer_norm(attention_output + layer_input)
 
     # The activation is only applied to the "intermediate" hidden layer.
     with tf.variable_scope("intermediate"):
-        intermediate_output = tf.layers.dense(
+        intermediate_output = dense_with_custom_init(
             attention_output,
             intermediate_size,
             activation=intermediate_act_fn,
-            kernel_initializer=create_initializer(initializer_range))
+            kernel_initializer=create_initializer(initializer_range),
+            custom=True,
+            pos_embed=config.n_context_embed_per_channel*config.context_dim)
 
     # Down-project back to `hidden_size` then add the residual.
     with tf.variable_scope("output"):
-        layer_output = tf.layers.dense(
+        layer_output = dense_with_custom_init(
             intermediate_output,
             hidden_size,
-            kernel_initializer=create_initializer(initializer_range))
+            kernel_initializer=create_initializer(initializer_range),
+            custom=True,
+            pos_embed=config.n_context_embed_per_channel*config.context_dim)
         layer_output = dropout(layer_output, hidden_dropout_prob)
         layer_output = layer_norm(layer_output + attention_output)
         return layer_output
@@ -867,7 +894,8 @@ def transformer_model(input_tensor,
                       initializer_range=0.02,
                       do_return_all_layers=False,
                       low_memory_mode=False,
-                      auxiliary_init=False):
+                      auxiliary_init=False,
+                      config=None):
     """Multi-headed, multi-layer Transformer from "Attention is All You Need".
 
     This is almost an exact implementation of the original Transformer encoder.
@@ -947,7 +975,8 @@ def transformer_model(input_tensor,
                                          attention_probs_dropout_prob=attention_probs_dropout_prob,
                                          initializer_range=initializer_range,
                                          adapter_size=adapter_size,
-                                         auxiliary_init=auxiliary_init)
+                                         auxiliary_init=auxiliary_init,
+                                         config=config)
 
             if low_memory_mode:
                 block_fn = recompute_grad(block_fn, use_entire_scope=True)
