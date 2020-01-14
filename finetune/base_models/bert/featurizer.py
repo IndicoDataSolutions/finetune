@@ -112,7 +112,7 @@ def bert_featurizer(
             shape=tf.concat((initial_shape[:-1], [config.n_embed]), 0),
         )
         with tf.variable_scope('context'):
-            if context is not None:
+            if context is not None and config.mlm_baseline:
                 sequence_features = tf.concat((sequence_features, context), -1)
                 features = tf.concat((features, tf.reduce_mean(context, 1)), -1)
 
