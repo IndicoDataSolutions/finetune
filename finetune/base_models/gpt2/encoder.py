@@ -13,8 +13,6 @@ FINETUNE_FOLDER = os.path.dirname(finetune.__file__)
 ENCODER_PATH = os.path.join(FINETUNE_FOLDER, "model", "gpt2", "encoder.json")
 VOCAB_PATH = os.path.join(FINETUNE_FOLDER, "model", "gpt2", "vocab.bpe")
 
-GPT2_WHITESPACE_INDICATORS = {"Ġ", "Ċ"}
-
 @lru_cache()
 def bytes_to_unicode():
     """
@@ -139,6 +137,23 @@ class GPT2Encoder(BaseEncoder):
     def _convert_to_embed_idx(self, idx):
         return idx
 
+    def _decode_token(self, bpe_toks):
+        decoded_bpe_toks = []
+        for i, bpe in enumerate(bpe_toks):
+            temp_toks = bpe
+            st = None
+            offset = 1
+            while st is None:
+                try:
+                    st = bytes(self.byte_decoder[c] for c in temp_toks).decode("utf-8")
+                except UnicodeDecodeError:
+                    if len(bpe_toks[i + offset]) == 0:
+                        offset += 1
+                    temp_toks += bpe_toks[i + offset][0]
+                    bpe_toks[i + offset] = bpe_toks[i + offset][1:]
+            decoded_bpe_toks.append(st)
+        return decoded_bpe_toks
+
     def _encode(self, texts):
         """
         Convert a sample of raw text to a list of byte-pair encoded token indices.
@@ -164,6 +179,7 @@ class GPT2Encoder(BaseEncoder):
                     self.byte_encoder[b] for b in token.encode("utf-8")
                 )
                 bpe_toks = self.bpe(encoded_token).split(" ")
+                decoded_bpe_toks = self._decode_token(bpe_toks)
                 try:
                     if token.strip():
                         token_start = text.index(token.strip(), token_start)
@@ -172,17 +188,17 @@ class GPT2Encoder(BaseEncoder):
                     traceback.print_exc()
                     continue
 
-                subtokens.extend(bpe_toks)
+                subtokens.extend(decoded_bpe_toks)
                 subtoken_idxs.extend(
                     [self.encoder.get(t, self.UNK_IDX) for t in bpe_toks]
                 )
                 lens = [None for _ in bpe_toks]
-                for i, tok in enumerate(bpe_toks):
-                    for t in GPT2_WHITESPACE_INDICATORS:
-                        tok = tok.replace(t, "")
+                
+                for i, tok in enumerate(decoded_bpe_toks):
                     lens[i] = len(tok.strip())
+                    
                 token_char_ends = np.cumsum(lens) + token_start
-
+                
                 token_char_starts = [token_start] + token_char_ends[:-1].tolist()
                 token_start += len(token.strip())
                 char_ends.extend(token_char_ends)

@@ -138,11 +138,14 @@ def load_vocab(vocab_file):
     return vocab
 
 
-def convert_by_vocab(vocab, items):
+def convert_by_vocab(vocab, items, unk_token=None):
     """Converts a sequence of [tokens|ids] using the vocab."""
     output = []
     for item in items:
-        output.append(vocab[item])
+        if unk_token is not None:
+            output.append(vocab.get(item, vocab[unk_token]))
+        else:    
+            output.append(vocab[item])
     return output
 
 
@@ -190,10 +193,11 @@ class FullTokenizer(object):
 
         for token, token_idx in zip(*self.basic_tokenizer.tokenize(text)):
             subtokens = self.wordpiece_tokenizer.tokenize(token, token_idx)[0]
+            if subtokens == [self.wordpiece_tokenizer.unk_token]:
+                subtokens = [token] # this will be unked later but it keeps lengths intact
             split_tokens.extend(subtokens)
                 
             token_start = token_idx[0]
-
             subtoken_ends = (
                 np.cumsum([len(tok.replace("##", "")) for tok in subtokens]) + token_start
             )
@@ -204,7 +208,7 @@ class FullTokenizer(object):
         return split_tokens, token_starts, token_ends
 
     def convert_tokens_to_ids(self, tokens):
-        return convert_by_vocab(self.vocab, tokens)
+        return convert_by_vocab(self.vocab, tokens, unk_token=self.wordpiece_tokenizer.unk_token)
 
     def convert_ids_to_tokens(self, ids):
         return convert_by_vocab(self.inv_vocab, ids)

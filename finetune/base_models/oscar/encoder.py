@@ -9,6 +9,7 @@ import numpy as np
 import finetune
 from finetune.encoding.input_encoder import BaseEncoder, EncodedOutput, get_pairs
 import sentencepiece as spm
+import unicodedata
 
 FINETUNE_FOLDER = os.path.dirname(finetune.__file__)
 ENCODER_PATH = os.path.join(FINETUNE_FOLDER, 'model', 'oscar', 'encoder')
@@ -20,7 +21,7 @@ def train_tokenizer(filename, vocab_size=128000):
     spm.SentencePieceTrainer.train(
         (
             "--input={} --model_prefix={} --user_defined_symbols=<_start_>,<_delimiter_>,<_classify_> --unk_id=0 "
-            "--vocab_size={} --input_sentence_size=10000000 --shuffle_input_sentence=true"
+            "--vocab_size={} --input_sentence_size=10000000 --shuffle_input_sentence=true --normalization_rule_name=identity"
             " --max_sentence_length=10000000 --character_coverage=0.9999"
         ).format(filename, ENCODER_PATH, vocab_size))
 
@@ -45,6 +46,17 @@ class GPCEncoder(BaseEncoder):
 
         self.initialized = True
 
+    def nfck_norm_aligned(self, text):
+        chars = [unicodedata.normalize('NFKC', t) for t in text]
+        lookup = []
+        text_out = ""
+        for i, c in enumerate(text):
+            normed = unicodedata.normalize('NFKC', c)
+            lookup += [i for _ in normed]
+            text_out += normed
+            
+        return lookup, text_out
+            
     def _encode(self, texts, stochastic=False):
         """
         Convert a batch of raw text to a batch of byte-pair encoded token indices.
@@ -57,29 +69,38 @@ class GPCEncoder(BaseEncoder):
         batch_char_starts = []
 
         for i, text in enumerate(texts):
+            alignment, normed_text = self.nfck_norm_aligned(text)
             text = text.replace(WEIRD_SPM_CHAR, "_")
             subtokens = []
             subtoken_idxs = []
             tok_pos = []
             char_starts = []
             token_start = 0
+            token_end = 0
             if stochastic:
                 encoded = self.encoder.sample_encode_as_pieces(text, -1, 0.1)
             else:
                 encoded = self.encoder.encode_as_pieces(text)
 
             for j, token in enumerate(encoded):
-                subtokens.append(token)
                 subtoken_idxs.append(self.encoder.piece_to_id(token))
                 raw_text = token.replace(WEIRD_SPM_CHAR, "")
-                token_start_temp = text.find(raw_text, token_start)
+                
+                token_start_temp = normed_text.find(raw_text, token_end)
                 if token_start_temp == -1:
-                    LOGGER.warning("SentencePiece produced a token {} not found in the original string {}".format(raw_text, text))
+#                    LOGGER.warning("SentencePiece produced a token {} not found in the original string {}".format(raw_text, text))
+                    print(normed_text[token_end:])
+                    print(raw_text)
                 else:
                     token_start = token_start_temp
-                tok_pos.append(token_start + len(raw_text))
-                char_starts.append(token_start)
-                token_start += len(raw_text)
+                    token_end = token_start + len(raw_text)
+                    
+                real_end = alignment[token_end]
+                real_start = alignment[token_start]
+                subtokens.append(token)
+                
+                tok_pos.append(alignment[token_end])
+                char_starts.append(alignment[token_start])
 
             batch_tokens.append(subtokens)
             batch_token_idxs.append(subtoken_idxs)
