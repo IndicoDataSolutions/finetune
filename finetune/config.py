@@ -371,6 +371,7 @@ def get_default_config():
         default_context=None,
         context_dim=None,  # number of context dimensions to be inserted
         context_in_base_model=False,
+        mlm_baseline=False,  # single projection after last layer of base model
 
         # Serialize finetune version with model
         version=VERSION,
