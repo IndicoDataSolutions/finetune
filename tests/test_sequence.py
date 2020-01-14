@@ -218,13 +218,14 @@ class TestSequenceLabeler(unittest.TestCase):
         second_prediction_time = (second - first)
         self.assertLess(second_prediction_time, first_prediction_time / 2.)
 
+    def test_raises_when_text_doesnt_match(self):
+        with self.assertRaises(ValueError):
+            self.model.fit(["Text about a dog."], [[{"start": 0, "end": 5, "text": "cat", "label": "dog"}]])
+
+
     def test_reasonable_predictions(self):
         test_sequence = ["I am a dog. A dog that's incredibly bright. I can talk, read, and write!"]
         path = os.path.join(os.path.dirname(__file__), "data", "testdata.json")
-
-        # test ValueError raised when raw text is passed along with character idxs and doesn't match
-        with self.assertRaises(ValueError):
-            self.model.fit(["Text about a dog."], [[{"start": 0, "end": 5, "text": "cat", "label": "dog"}]])
 
         with open(path, "rt") as fp:
             text, labels = json.load(fp)
@@ -246,8 +247,6 @@ class TestSequenceLabeler(unittest.TestCase):
         # test ValueError raised when raw text is passed along with character idxs and doesn't match
         self.model.config.chunk_long_sequences = True
         self.model.config.max_length = 20
-        with self.assertRaises(ValueError):
-            self.model.fit(["Text about a dog."], [[{"start": 0, "end": 5, "text": "cat", "label": "dog"}]])
 
         with open(path, "rt") as fp:
             text, labels = json.load(fp)

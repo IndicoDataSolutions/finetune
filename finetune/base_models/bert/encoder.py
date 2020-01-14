@@ -57,26 +57,14 @@ class BERTEncoder(BaseEncoder):
         batch_token_idxs = []
         batch_char_ends = []
         batch_char_starts = []
-        offset = 0
-
-        skipped = 0
         for i, text in enumerate(texts):
-            char_ends = []
-
-            subtokens, _, token_char_ends, starts = self.tokenizer.tokenize(text)
-            if not subtokens:
-                offset += len(text)  # for spans that are just whitespace
-                skipped += 1
-                continue
-            i -= skipped
-
-            char_ends.extend(token_char_ends)
-
+            subtokens, token_starts, token_ends = self.tokenizer.tokenize(text)
             subtoken_idxs = self.tokenizer.convert_tokens_to_ids(subtokens)
+            
             batch_tokens.append(subtokens)
             batch_token_idxs.append(subtoken_idxs)
-            batch_char_ends.append(char_ends)
-            batch_char_starts.append(starts)
+            batch_char_ends.append(token_ends)
+            batch_char_starts.append(token_starts)
 
         return EncodedOutput(
             token_ids=batch_token_idxs,
@@ -115,7 +103,7 @@ class BERTEncoderMultuilingal(BERTEncoder):
 
 class DistilBERTEncoder(BERTEncoder):
     def __init__(
-        self, encoder_path=None, vocab_path=VOCAB_PATH_DISTILBERT, lower_case=False
+        self, encoder_path=None, vocab_path=VOCAB_PATH_DISTILBERT, lower_case=True
     ):
         super().__init__(
             encoder_path=encoder_path, vocab_path=vocab_path, lower_case=lower_case

@@ -133,7 +133,6 @@ class GPTEncoder(BaseEncoder):
         # (e.g. special characters such as bullets)
 
         batch_char_starts = []
-        skipped = 0
         for i, text in enumerate(texts):
 
             raw_text = text.lower()
@@ -141,10 +140,6 @@ class GPTEncoder(BaseEncoder):
             # Only fine to apply this fix because it preserves character locations
             ftfy_text = uncurl_quotes(raw_text)
             tokens = NLP(_text_standardize(text))
-            if not tokens:
-                skipped += 1
-                continue
-            i -= skipped
             subtokens = []
             subtoken_idxs = []
             char_starts = []
@@ -173,19 +168,7 @@ class GPTEncoder(BaseEncoder):
                     token.text.replace(" ", "")
                 )
 
-                if np.sum([len(tok.replace("</w>", "")) for tok in bpe_toks]) > len(
-                    token
-                ):  # the BPEs comprising a token are longer than the token itself
-                    token_char_ends = (
-                        np.asarray([len(token.text.strip()) for _ in bpe_toks])
-                        + token_start
-                    )
-                else:
-                    token_char_ends = (
-                        np.cumsum([len(tok.replace("</w>", "")) for tok in bpe_toks])
-                        + token_start
-                    )
-                
+                token_char_ends = np.cumsum([len(tok.strip().replace("</w>", "")) for tok in bpe_toks]) + token_start
                 token_char_starts = [token_start] + token_char_ends[:-1].tolist()
                 token_start += len(token.text.strip())
                 char_ends.extend(token_char_ends)

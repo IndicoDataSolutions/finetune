@@ -185,35 +185,23 @@ class FullTokenizer(object):
 
     def tokenize(self, text):
         split_tokens = []
-        split_idxs = []
-        original_tok_pos = []
-        char_starts = []
+        token_starts = []
+        token_ends = []
 
         for token, token_idx in zip(*self.basic_tokenizer.tokenize(text)):
-            subtokens = []
-            for sub_token, sub_token_idx in zip(
-                *self.wordpiece_tokenizer.tokenize(token, token_idx)
-            ):
-                split_tokens.append(sub_token)
-                split_idxs.append((sub_token_idx[0], sub_token_idx[-1] + 1))
-                subtokens.append(sub_token)
-
-            token_char_starts = [token_idx[0]] * len(subtokens)
+            subtokens = self.wordpiece_tokenizer.tokenize(token, token_idx)[0]
+            split_tokens.extend(subtokens)
+                
             token_start = token_idx[0]
 
-            if np.sum([len(tok) for tok in subtokens]) != len(token):
-                original_subtoken_positions = (
-                    np.asarray([len(token.strip()) for tok in subtokens]) + token_start
-                )
-            else:
-                original_subtoken_positions = (
-                    np.cumsum([len(tok) for tok in subtokens]) + token_start
-                )
+            subtoken_ends = (
+                np.cumsum([len(tok.replace("##", "")) for tok in subtokens]) + token_start
+            )
 
-            original_tok_pos.extend(original_subtoken_positions)
-            char_starts.extend(token_char_starts)
+            token_ends.extend(subtoken_ends)
+            token_starts.extend([token_start] + subtoken_ends[:-1].tolist())
 
-        return split_tokens, split_idxs, original_tok_pos, char_starts
+        return split_tokens, token_starts, token_ends
 
     def convert_tokens_to_ids(self, tokens):
         return convert_by_vocab(self.vocab, tokens)

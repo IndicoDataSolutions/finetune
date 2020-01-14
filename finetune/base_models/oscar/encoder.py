@@ -45,7 +45,7 @@ class GPCEncoder(BaseEncoder):
 
         self.initialized = True
 
-    def _encode(self, texts, labels=None, stochastic=False):
+    def _encode(self, texts, stochastic=False):
         """
         Convert a batch of raw text to a batch of byte-pair encoded token indices.
         """
@@ -53,16 +53,11 @@ class GPCEncoder(BaseEncoder):
 
         batch_tokens = []
         batch_token_idxs = []
-        batch_label_idxs = []
         batch_character_locs = []
         batch_char_starts = []
-        label = None
 
         for i, text in enumerate(texts):
             text = text.replace(WEIRD_SPM_CHAR, "_")
-            if labels is not None:
-                label = labels[i]
-
             subtokens = []
             subtoken_idxs = []
             tok_pos = []
@@ -90,15 +85,12 @@ class GPCEncoder(BaseEncoder):
             batch_token_idxs.append(subtoken_idxs)
             batch_character_locs.append(tok_pos)
             batch_char_starts.append(char_starts)
-            if labels is not None:
-                batch_label_idxs.append([label] * len(subtoken_idxs))
 
         return EncodedOutput(
             token_ids=batch_token_idxs,
             tokens=batch_tokens,
-            labels=batch_label_idxs,
-            char_locs=batch_character_locs,
-            char_starts=batch_char_starts,
+            token_ends=batch_character_locs,
+            token_starts=batch_char_starts,
         )
 
     def decode(self, token_ids):

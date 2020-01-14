@@ -11,9 +11,9 @@ from finetune.nn.auxiliary import add_context_embed
 
 class ComparisonPipeline(ClassificationPipeline):
     def _format_for_encoding(self, X):
-        return [X]
+        return X
 
-    def _text_to_ids(self, pair, Y=None, pad_token=None):
+    def _text_to_ids(self, pair, pad_token=None):
         """
         Format comparison examples as a list of IDs
 
@@ -22,9 +22,9 @@ class ComparisonPipeline(ClassificationPipeline):
         assert (
             self.config.chunk_long_sequences is False
         ), "Chunk Long Sequences is not compatible with comparison"
-        arr_forward = next(super()._text_to_ids(pair, Y=None))
+        arr_forward = next(super()._text_to_ids(pair))
         reversed_pair = pair[::-1]
-        arr_backward = next(super()._text_to_ids(reversed_pair, Y=None))
+        arr_backward = next(super()._text_to_ids(reversed_pair))
         kwargs = arr_forward._asdict()
         kwargs["tokens"] = [arr_forward.tokens, arr_backward.tokens]
         kwargs["token_ids"] = np.stack(

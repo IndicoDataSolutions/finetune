@@ -150,8 +150,7 @@ class GPT2Encoder(BaseEncoder):
         # to account for the fact that some BPEs have different lengths than their original tokens
         # (e.g. special characters such as bullets)
         batch_char_starts = []
-
-        skipped = 0
+        
         for i, text in enumerate(texts):  # text = one label span
             subtokens = []
             subtoken_idxs = []
@@ -160,10 +159,6 @@ class GPT2Encoder(BaseEncoder):
             token_start = 0
 
             tokens = re.findall(self.pat, text)
-            if not tokens:
-                skipped += 1
-                continue
-            i -= skipped
             for j, token in enumerate(tokens):
                 encoded_token = "".join(
                     self.byte_encoder[b] for b in token.encode("utf-8")
@@ -181,14 +176,14 @@ class GPT2Encoder(BaseEncoder):
                 subtoken_idxs.extend(
                     [self.encoder.get(t, self.UNK_IDX) for t in bpe_toks]
                 )
-                lens = []
-                for tok in bpe_toks:
+                lens = [None for _ in bpe_toks]
+                for i, tok in enumerate(bpe_toks):
                     for t in GPT2_WHITESPACE_INDICATORS:
                         tok = tok.replace(t, "")
-                    lens.append(len(tok.strip()))
+                    lens[i] = len(tok.strip())
                 token_char_ends = np.cumsum(lens) + token_start
 
-                token_char_starts = [token_start] + token_char_ends[1:].tolist()
+                token_char_starts = [token_start] + token_char_ends[:-1].tolist()
                 token_start += len(token.strip())
                 char_ends.extend(token_char_ends)
                 char_starts.extend(token_char_starts)

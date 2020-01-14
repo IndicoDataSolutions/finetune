@@ -51,6 +51,7 @@ class SequencePipeline(BasePipeline):
     def _compute_class_counts(self, encoded_dataset):
         counter = Counter()
         for doc, target_arr in encoded_dataset:
+            target_arr = np.asarray(target_arr)
             targets = target_arr[doc["mask"].astype(np.bool)]
             decoded_targets = self.label_encoder.inverse_transform(targets)
             if self.multi_label:
@@ -80,8 +81,8 @@ class SequencePipeline(BasePipeline):
 
     def _target_encoder(self):
         if self.multi_label:
-            return SequenceMultiLabelingEncoder()
-        return SequenceLabelingEncoder()
+            return SequenceMultiLabelingEncoder(pad_token=self.config.pad_token)
+        return SequenceLabelingEncoder(pad_token=self.config.pad_token)
 
 
 def _combine_and_format(subtokens, start, end, raw_text):
