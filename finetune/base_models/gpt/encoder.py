@@ -249,9 +249,8 @@ def finetune_to_indico_explain(raw_texts, attn_weights, encoder, attention=True)
 
     for doc_idx, (raw_text) in enumerate(raw_texts):
         tokens = encoded_docs.tokens[doc_idx]
-        token_ends = encoded_docs.char_locs[doc_idx]
-        token_lengths = [encoder._token_length(token) for token in tokens]
-        token_starts = [end - length for end, length in zip(token_ends, token_lengths)]
+        token_ends = encoded_docs.token_ends[doc_idx]
+        token_starts = encoded_docs.token_ends[doc_idx]
         if attention:
             # offset of one to take into account the start token
             clf_token_idx = len(tokens) + 1

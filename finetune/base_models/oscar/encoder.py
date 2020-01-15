@@ -54,7 +54,7 @@ class GPCEncoder(BaseEncoder):
             normed = unicodedata.normalize('NFKC', c)
             lookup += [i for _ in normed]
             text_out += normed
-            
+        lookup.append(len(text))
         return lookup, text_out
             
     def _encode(self, texts, stochastic=False):
@@ -88,19 +88,18 @@ class GPCEncoder(BaseEncoder):
                 
                 token_start_temp = normed_text.find(raw_text, token_end)
                 if token_start_temp == -1:
-#                    LOGGER.warning("SentencePiece produced a token {} not found in the original string {}".format(raw_text, text))
-                    print(normed_text[token_end:])
-                    print(raw_text)
+                    LOGGER.warning("SentencePiece produced a token {} not found in the original string {}".format(raw_text, text))
                 else:
                     token_start = token_start_temp
                     token_end = token_start + len(raw_text)
-                    
                 real_end = alignment[token_end]
                 real_start = alignment[token_start]
                 subtokens.append(token)
                 
                 tok_pos.append(alignment[token_end])
-                char_starts.append(alignment[token_start])
+                # start after the end of the last token.
+                # This causes chars that become multiple tokens to get reasonable char idxs
+                char_starts.append(max(alignment[token_start], tok_pos[-1]))
 
             batch_tokens.append(subtokens)
             batch_token_idxs.append(subtoken_idxs)

@@ -42,15 +42,16 @@ class ComparisonPipeline(ClassificationPipeline):
                 out_forward = ArrayEncodedOutput(
                     token_ids=out.token_ids[0],
                     tokens=out.token_ids[0],
-                    labels=None,
-                    char_locs=out.char_locs,
+                    token_ends=out.token_ends,
+                    token_starts=out.token_starts,
                     mask=out.mask[0],
                 )
                 out_backward = ArrayEncodedOutput(
                     token_ids=out.token_ids[1],
                     tokens=out.token_ids[1],
                     labels=None,
-                    char_locs=out.char_locs,
+                    token_ends=out.token_ends,
+                    token_starts=out.token_starts,
                     mask=out.mask[1],
                 )
                 tokenized_context_forward = tokenize_context(context[0], out_forward, self.config)
