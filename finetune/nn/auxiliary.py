@@ -15,14 +15,15 @@ def layer_norm_with_custom_init(input_tensor, begin_norm_axis=-1, begin_params_a
             name = ''
         #scale mean and standard deviation
         if begin_norm_axis == -1:
-            mean = tf.math.reduce_mean(input_tensor, axis=begin_norm_axis)
-            sd = tf.math.reduce_std(input_tensor, axis=begin_norm_axis)
-            mean = tf.Print(tf.shape(mean), [mean])
-            sd = tf.Print(tf.shape(sd), [sd])
-        else:
+            print(input_tensor)
             input_tensor_rank = len(shape_list(input_tensor))
-            mean = tf.math.reduce_mean(input_tensor, axis=range(begin_norm_axis, input_tensor_rank))
-            sd = tf.math.reduce_std(input_tensor, axis=range(begin_norm_axis, input_tensor_rank))
+            mean = tf.math.reduce_mean(input_tensor, axis=range(input_tensor_rank - 1))
+            sd = tf.math.reduce_std(input_tensor, axis=range(input_tensor_rank - 1))
+            print(mean)
+            print(sd)
+        else:
+            mean = tf.math.reduce_mean(input_tensor, axis=range(begin_norm_axis))
+            sd = tf.math.reduce_std(input_tensor, axis=range(begin_norm_axis))
         target_shape = shape_list(input_tensor)[1]
         if begin_params_axis == -1:
             weights = tf.get_variable(name+'gamma', shape=(target_shape - pos_embed))
@@ -33,8 +34,8 @@ def layer_norm_with_custom_init(input_tensor, begin_norm_axis=-1, begin_params_a
 
             full_weights = tf.concat((weights, pos_weights), axis=0)
             full_bias = tf.concat((bias, pos_bias), axis=0)
-            full_weights = tf.Print(tf.shape(full_weights), [full_weights])
-            full_bias = tf.Print(tf.shape(full_bias), [full_bias])
+            print(full_weights)
+            print(full_bias)
         else:
             raise NotImplementedError('Not implemented yet')
 
