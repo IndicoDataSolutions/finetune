@@ -5,27 +5,56 @@ from finetune.util.shapes import shape_list
 from finetune.util.positional_embeddings import add_timing_signal_from_position
 from finetune.base_models.gpt.featurizer import conv1d
 
+def layer_norm_with_custom_init(input_tensor, name="", custom=False, pos_embed=None):
+    """Run layer normalization on the last dimension of the tensor."""
+
+    if custom:
+        #scale mean and standard deviation
+        mean = tf.math.reduce_mean(input_tensor)
+        sd = tf.math.reduce_std(input_tensor)
+        target_shape = shape_list(input_tensor)[1]
+        weights = tf.get_variable(name+'gamma', shape=(target_shape - pos_embed))
+        bias = tf.get_variable(name+'beta', shape=(target_shape - pos_embed))
+
+        pos_weights = tf.get_variable(name+'pos_gamma', shape=(pos_embed))
+        pos_bias = tf.get_variable(name+'pos_beta', shape=(pos_embed))
+
+        full_weights = tf.concat((weights, pos_weights), axis=0)
+        full_bias = tf.concat((bias, pos_bias), axis=0)
+
+        return ((input_tensor-mean)/sd)*full_weights + full_bias
+    else:
+        return tf.contrib.layers.layer_norm(inputs=input_tensor, begin_norm_axis=-1, begin_params_axis=-1, scope=name)
 
 def dense_with_custom_init(input_tensor,
                            output_dim,
                            activation,
-                           name,
                            kernel_initializer,
+                           name="",
                            custom=False,
                            pos_embed=None):
 
     if custom:
-        original_weights = tf.get_variable(name+'/kernel:0',shape=(shape_list(input_tensor)[1], output_dim))
+        # Subtracting pos_embed. input_tensor already includes context, and we
+        # want separate weights for the words and the positional context
+        original_weights = tf.get_variable(name+'/kernel',shape=(shape_list(input_tensor)[1]-pos_embed, output_dim-pos_embed))
         position_weights = tf.get_variable(name+"/pos_weights",
                                            shape=(pos_embed, pos_embed))
-        original_weights = tf.pad(original_weights, tf.constant([[0,pos_embed]]))
-        position_weights = tf.pad(position_weights, tf.constant([[shape_list(original_weights),0]]))
+
+        original_weights = tf.pad(original_weights, tf.constant([[0,pos_embed], [0,0]]))
+        # Note: Need to keep the dimension of original_weights before we pad it. Below
+        # we use output_dim, put if we want to have a non-square matrix for original_weights
+        # we should saving the first dimension of original_weights
+        position_weights = tf.pad(position_weights, tf.constant([[shape_list(input_tensor)[1]-pos_embed,0], [0,0]]))
+        # This concat should blow up (or give the wrong dimensions)
         full_weights = tf.concat((original_weights, position_weights), axis=1)
 
-        original_bias = tf.get_variable(name+'/bias:0')
-        position_bias = tf.get_variable(name+"/pos_bias", shape=(pos_embed+shape_list(original_weights)[0]))
-        full_bias = tf.concat((original_bias, position_bias))
 
+        original_bias = tf.get_variable(name+'/bias', shape=(output_dim-pos_embed))
+        # Also using output_dim here in lieu of shape_list(original_weights)[0]
+        # If we did that, it would be pos_embed + pos_embed + output_dim
+        position_bias = tf.get_variable(name+"/pos_bias", shape=(pos_embed))
+        full_bias = tf.concat((original_bias, position_bias), axis=0)
         return tf.matmul(input_tensor, full_weights) + full_bias
 
     else:
