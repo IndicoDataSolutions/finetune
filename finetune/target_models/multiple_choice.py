@@ -28,7 +28,7 @@ class MultipleChoicePipeline(BasePipeline):
         super()._post_data_initialization(Y)
         self.target_dim = self.target_dim_
 
-    def _text_to_ids(self, Xs, Y=None, pad_token=None):
+    def _text_to_ids(self, Xs, pad_token=None):
         """
         Format multi question examples as a list of IDs
         """
@@ -37,7 +37,7 @@ class MultipleChoicePipeline(BasePipeline):
         pairs = [[q, answer_list[idx]] for idx in range(len(answer_list))]
         arrays = []
         for pair in pairs:
-            arrays.append(next(super()._text_to_ids(pair, Y=Y)))
+            arrays.append(next(super()._text_to_ids(pair)))
 
         kwargs = arrays[0]._asdict()
         max_len = max([len(arr.token_ids) for arr in arrays])
@@ -58,8 +58,8 @@ class MultipleChoicePipeline(BasePipeline):
                     out_instance = ArrayEncodedOutput(
                         token_ids=out.token_ids[answer_idx],
                         tokens=out.token_ids[answer_idx],
-                        labels=None,
-                        char_locs=out.char_locs,
+                        token_ends=out.token_ends,
+                        token_starts=out.token_starts,
                         mask=out.mask[answer_idx],
                     )
                     context_instance = context[0] + context[answer_idx + 1]
@@ -72,7 +72,7 @@ class MultipleChoicePipeline(BasePipeline):
 
 
     def _format_for_encoding(self, X):
-        return [[field] for field in X]
+        return X
 
     def feed_shape_type_def(self):
         TS = tf.TensorShape

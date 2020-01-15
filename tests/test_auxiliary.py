@@ -41,8 +41,8 @@ class TestAuxiliaryTokenization(unittest.TestCase):
                 [40480, 40487]
             ],
             tokens=[40478, 'everything</w>', "'s</w>", 'only</w>', '$</w>', '80</w>', 40480],
-            labels=[0] * 7,
-            char_locs=[-1, 10, 12, 17, 19, 21, -1],
+            token_ends=[-1, 10, 12, 17, 19, 21, -1],
+            token_starts=[-1, 0, 10, 13, 18, 19, -1],
             mask=[0, 1, 1, 1, 1, 1, 0],
         )
         context = [

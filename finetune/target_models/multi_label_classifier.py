@@ -62,7 +62,7 @@ class MultiLabelClassifier(BaseModel):
         """
         threshold = self._get_threshold(threshold)
         all_labels = []
-        for _, start_of_doc, end_of_doc, _, proba in self.process_long_sequence(X, context=context, **kwargs):
+        for _, _, start_of_doc, end_of_doc, _, proba in self.process_long_sequence(X, context=context, **kwargs):
             if start_of_doc:
                 # if this is the first chunk in a document, start accumulating from scratch
                 doc_probs = []

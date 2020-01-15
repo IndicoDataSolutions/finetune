@@ -8,6 +8,8 @@ import numpy as np
 import tensorflow as tf
 import pandas as pd
 
+import unicodedata
+
 import finetune
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
 from finetune.optimizers.gradient_accumulation import get_grad_accumulation_optimizer
@@ -62,6 +64,8 @@ Powerلُلُصّبُلُلصّبُررً ॣ ॣh ॣ ॣ冗
         self.assertEqual(len(encoded.tokens), 2) # start and end tokens
 
     def test_no_whitespace_in_idxs(self):
+        def make_comparible(text):
+            return unicodedata.normalize("NFKC", text.replace("\u200c", "")).lower()
         encoded = self.encoder.encode_multi_input([self.text], max_length=2000)
         print(encoded)
         for tok, start, end in zip(encoded.tokens, encoded.token_starts, encoded.token_ends):
@@ -71,7 +75,7 @@ Powerلُلُصّبُلُلصّبُررً ॣ ॣh ॣ ॣ冗
             sub_seq = self.text[start: end]
             self.assertEqual(sub_seq, sub_seq.strip()) # no leading or trailing whitespace
             self.assertNotIn("\n", sub_seq)
-            self.assertIn(sub_seq.lower(), tok.lower())
+            self.assertIn(make_comparible(sub_seq), make_comparible(tok))
 
 class TestGPT2Encoder(TestGPTEncoder):
     Encoder = GPT2Encoder
@@ -94,29 +98,6 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
         with self.assertRaises(FinetuneError):
             model = Classifier(tensorboard='./testing') # should be tensorboard_folder
     
-    def test_train_test_tokenization_consistency(self):
-        filepath = os.path.abspath(os.path.join(os.path.dirname(__file__), 'data', 'testdata.csv'))
-        df = pd.read_csv(filepath)
-        X = []
-        Y = []
-
-        for i, row in df.iterrows():
-            X.append(row["text"])
-            labels = json.loads(row["question_843"])
-            for label in labels:
-                label['start'] = label['startOffset']
-                label['end'] = label['endOffset']
-                label['text'] = row["text"][label['start']:label['end']]
-            Y.append(labels)
-
-        for multilabel_setting in [True, False]:
-            for base_model in [GPT, GPT2, BERT]:
-                model = SequenceLabeler(chunk_long_sequences=True, base_model=base_model, multi_label_sequences=multilabel_setting)
-                train_encoded = [x for x in model.input_pipeline._text_to_ids(X, Y=Y, pad_token=model.config.pad_token)]
-                test_encoded = [x for x in model.input_pipeline._text_to_ids(X)]
-                for chunk_id in range(len(train_encoded)):
-                    for train_token_ids, test_token_ids in zip(train_encoded[chunk_id].token_ids, test_encoded[chunk_id].token_ids):
-                        self.assertEqual(train_token_ids[0], test_token_ids[0])
 
     def test_whitespace_handling(self):
         # Newline complications
