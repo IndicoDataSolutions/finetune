@@ -45,7 +45,8 @@ class BertConfig(object):
             initializer_range=0.02,
             adapter_size=0,
             context_dim=0,
-            n_context_embed_per_channel=0
+            n_context_embed_per_channel=0,
+            use_auxiliary_info=False
     ):
         """Constructs BertConfig.
 
@@ -86,6 +87,7 @@ class BertConfig(object):
         self.low_memory_mode = low_memory_mode
         self.context_dim = context_dim
         self.n_context_embed_per_channel = n_context_embed_per_channel
+        self.use_auxiliary_info = use_auxiliary_info
 
     @classmethod
     def from_dict(cls, json_object):
@@ -272,7 +274,7 @@ class BertModel(object):
                         config.hidden_size,
                         activation=tf.tanh,
                         kernel_initializer=create_initializer(config.initializer_range),
-                        custom=True,
+                        custom=config.use_auxiliary_info,
                         pos_embed=config.n_context_embed_per_channel*config.context_dim
                     )
                 else:
@@ -379,16 +381,16 @@ def dropout(input_tensor, dropout_prob):
     return output
 
 
-def layer_norm_(input_tensor, name=None):
-    """Run layer normalization on the last dimension of the tensor."""
-    return tf.contrib.layers.layer_norm(
-        inputs=input_tensor, begin_norm_axis=-1, begin_params_axis=-1, scope=name
-    )
+# def layer_norm_(input_tensor, name=None):
+#     """Run layer normalization on the last dimension of the tensor."""
+#     return tf.contrib.layers.layer_norm(
+#         inputs=input_tensor, begin_norm_axis=-1, begin_params_axis=-1, scope=name
+#     )
 
-def layer_norm(input_tensor, name=None):
+def layer_norm(input_tensor, name=None, custom=False, pos_embed=None):
     """Run layer normalization on the last dimension of the tensor."""
     return layer_norm_with_custom_init(
-        inputs=input_tensor, begin_norm_axis=-1, begin_params_axis=-1, name=name
+        input_tensor, begin_norm_axis=-1, begin_params_axis=-1, name=name, custom=custom, pos_embed=pos_embed
     )
 
 def layer_norm_and_dropout(input_tensor, dropout_prob, name=None):
@@ -716,7 +718,7 @@ def attention_layer(
         activation=query_act,
         name="query",
         kernel_initializer=create_initializer(initializer_range),
-        custom=True,
+        custom=config.use_auxiliary_info,
         pos_embed=config.n_context_embed_per_channel*config.context_dim
     )
 
@@ -727,7 +729,7 @@ def attention_layer(
         activation=key_act,
         name="key",
         kernel_initializer=create_initializer(initializer_range),
-        custom=True,
+        custom=config.use_auxiliary_info,
         pos_embed=config.n_context_embed_per_channel*config.context_dim
     )
 
@@ -738,7 +740,7 @@ def attention_layer(
         activation=value_act,
         name="value",
         kernel_initializer=create_initializer(initializer_range),
-        custom=True,
+        custom=config.use_auxiliary_info,
         pos_embed=config.n_context_embed_per_channel*config.context_dim
     )
 
@@ -864,7 +866,7 @@ def full_block(
                 activation=None,
                 name="attention",
                 kernel_initializer=create_initializer(initializer_range),
-                custom=True,
+                custom=config.use_auxiliary_info,
                 pos_embed=config.n_context_embed_per_channel*config.context_dim)
             attention_output = dropout(attention_output, hidden_dropout_prob)
             # Insert an "adapter" layer from "Parameter Efficient Transfer Learning for NLP" paper
@@ -872,7 +874,8 @@ def full_block(
                 with tf.variable_scope("attention_adapter"):
                     attention_output = adapter(attention_output, adapter_size, hidden_size,
                                                hidden_dropout_prob != 0)  # dropout prob is set to 0 above if not training, so we can use it to infer the 'train' argument for adapters
-            attention_output = layer_norm(attention_output + layer_input)
+            attention_output = layer_norm(attention_output + layer_input, custom=config.use_auxiliary_info,
+                                          pos_embed=config.n_context_embed_per_channel*config.context_dim)
 
     # The activation is only applied to the "intermediate" hidden layer.
     with tf.variable_scope("intermediate"):
@@ -882,7 +885,7 @@ def full_block(
             activation=intermediate_act_fn,
             name="intermediate",
             kernel_initializer=create_initializer(initializer_range),
-            custom=True,
+            custom=config.use_auxiliary_info,
             pos_embed=config.n_context_embed_per_channel*config.context_dim)
 
     # Down-project back to `hidden_size` then add the residual.
@@ -893,14 +896,15 @@ def full_block(
             activation=None,
             name="compress_to_hidden",
             kernel_initializer=create_initializer(initializer_range),
-            custom=True,
+            custom=config.use_auxiliary_info,
             pos_embed=config.n_context_embed_per_channel*config.context_dim)
         layer_output = dropout(layer_output, hidden_dropout_prob)
         # Insert an "adapter" layer from "Parameter Efficient Transfer Learning for NLP" paper
         if adapter_size is not None:
             with tf.variable_scope("dense_adapter"):
                 layer_output = adapter(layer_output, adapter_size, hidden_size, hidden_dropout_prob != 0)
-        layer_output = layer_norm(layer_output + attention_output)
+        layer_output = layer_norm(layer_output + attention_output, custom=config.use_auxiliary_info,
+                                  pos_embed=config.n_context_embed_per_channel*config.context_dim)
         return layer_output
 
 
