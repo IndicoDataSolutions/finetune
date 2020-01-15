@@ -21,7 +21,7 @@ import numpy as np
 import tensorflow as tf
 import functools
 
-from finetune.nn.auxiliary import dense_with_custom_init
+from finetune.nn.auxiliary import dense_with_custom_init, layer_norm_with_custom_init
 from finetune.base_models.gpt.featurizer import adapter
 from finetune.optimizers.recompute_grads import recompute_grad
 
@@ -379,12 +379,17 @@ def dropout(input_tensor, dropout_prob):
     return output
 
 
-def layer_norm(input_tensor, name=None):
+def layer_norm_(input_tensor, name=None):
     """Run layer normalization on the last dimension of the tensor."""
     return tf.contrib.layers.layer_norm(
         inputs=input_tensor, begin_norm_axis=-1, begin_params_axis=-1, scope=name
     )
 
+def layer_norm(input_tensor, name=None):
+    """Run layer normalization on the last dimension of the tensor."""
+    return layer_norm_with_custom_init(
+        inputs=input_tensor, begin_norm_axis=-1, begin_params_axis=-1, name=name
+    )
 
 def layer_norm_and_dropout(input_tensor, dropout_prob, name=None):
     """Runs layer normalization followed by dropout."""
@@ -856,6 +861,8 @@ def full_block(
             attention_output = dense_with_custom_init(
                 attention_output,
                 hidden_size,
+                activation=None,
+                name="attention",
                 kernel_initializer=create_initializer(initializer_range),
                 custom=True,
                 pos_embed=config.n_context_embed_per_channel*config.context_dim)
@@ -873,6 +880,7 @@ def full_block(
             attention_output,
             intermediate_size,
             activation=intermediate_act_fn,
+            name="intermediate",
             kernel_initializer=create_initializer(initializer_range),
             custom=True,
             pos_embed=config.n_context_embed_per_channel*config.context_dim)
@@ -882,6 +890,8 @@ def full_block(
         layer_output = dense_with_custom_init(
             intermediate_output,
             hidden_size,
+            activation=None,
+            name="compress_to_hidden",
             kernel_initializer=create_initializer(initializer_range),
             custom=True,
             pos_embed=config.n_context_embed_per_channel*config.context_dim)
