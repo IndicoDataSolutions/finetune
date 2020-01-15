@@ -48,7 +48,8 @@ def bert_featurizer(
         adapter_size=config.adapter_size,
         low_memory_mode=config.low_memory_mode,
         context_dim = config.context_dim,
-        n_context_embed_per_channel = config.n_context_embed_per_channel
+        n_context_embed_per_channel = config.n_context_embed_per_channel,
+        use_auxiliary_info=config.use_auxiliary_info
     )
 
     initial_shape = tf.shape(X)
@@ -105,16 +106,23 @@ def bert_featurizer(
 
         embed_weights = bert.get_embedding_table()
 
+        if context is None or config.mlm_baseline:
+            n_embed = config.n_embed
+        else:
+            n_embed = config.n_embed + config.n_context_embed_per_channel * config.context_dim
+
         features = tf.reshape(
             bert.get_pooled_output(),
-            shape=tf.concat((initial_shape[:-2], [config.n_embed]), 0),
+            shape=tf.concat((initial_shape[:-2], [n_embed]), 0),
         )
         sequence_features = tf.reshape(
             bert.get_sequence_output(),
-            shape=tf.concat((initial_shape[:-1], [config.n_embed]), 0),
+            shape=tf.concat((initial_shape[:-1], [n_embed]), 0),
         )
-        with tf.variable_scope('context'):
-            if context is not None and config.mlm_baseline:
+
+        # baseline just projects back to config.n_embed
+        if context is not None and config.mlm_baseline:
+            with tf.variable_scope('context'):
                 sequence_features = tf.concat((sequence_features, context), -1)
                 features = tf.concat((features, tf.reduce_mean(context, 1)), -1)
 
