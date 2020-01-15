@@ -5,22 +5,37 @@ from finetune.util.shapes import shape_list
 from finetune.util.positional_embeddings import add_timing_signal_from_position
 from finetune.base_models.gpt.featurizer import conv1d
 
-def layer_norm_with_custom_init(input_tensor, name="", custom=False, pos_embed=None):
+def layer_norm_with_custom_init(input_tensor, begin_norm_axis=-1, begin_params_axis=-1,
+                                name=None, custom=False, pos_embed=None):
     """Run layer normalization on the last dimension of the tensor."""
 
     if custom:
+        if name is None:
+            name = ''
         #scale mean and standard deviation
-        mean = tf.math.reduce_mean(input_tensor)
-        sd = tf.math.reduce_std(input_tensor)
+        if begin_norm_axis == -1:
+            mean = tf.math.reduce_mean(input_tensor, axis=begin_norm_axis)
+            sd = tf.math.reduce_std(input_tensor, axis=begin_norm_axis)
+            mean = tf.Print(tf.shape(mean), [mean])
+            sd = tf.Print(tf.shape(sd), [sd])
+        else:
+            input_tensor_rank = len(shape_list(input_tensor))
+            mean = tf.math.reduce_mean(input_tensor, axis=range(begin_norm_axis, input_tensor_rank))
+            sd = tf.math.reduce_std(input_tensor, axis=range(begin_norm_axis, input_tensor_rank))
         target_shape = shape_list(input_tensor)[1]
-        weights = tf.get_variable(name+'gamma', shape=(target_shape - pos_embed))
-        bias = tf.get_variable(name+'beta', shape=(target_shape - pos_embed))
+        if begin_params_axis == -1:
+            weights = tf.get_variable(name+'gamma', shape=(target_shape - pos_embed))
+            bias = tf.get_variable(name+'beta', shape=(target_shape - pos_embed))
 
-        pos_weights = tf.get_variable(name+'pos_gamma', shape=(pos_embed))
-        pos_bias = tf.get_variable(name+'pos_beta', shape=(pos_embed))
+            pos_weights = tf.get_variable(name+'pos_gamma', shape=(pos_embed))
+            pos_bias = tf.get_variable(name+'pos_beta', shape=(pos_embed))
 
-        full_weights = tf.concat((weights, pos_weights), axis=0)
-        full_bias = tf.concat((bias, pos_bias), axis=0)
+            full_weights = tf.concat((weights, pos_weights), axis=0)
+            full_bias = tf.concat((bias, pos_bias), axis=0)
+            full_weights = tf.Print(tf.shape(full_weights), [full_weights])
+            full_bias = tf.Print(tf.shape(full_bias), [full_bias])
+        else:
+            raise NotImplementedError('Not implemented yet')
 
         return ((input_tensor-mean)/sd)*full_weights + full_bias
     else:
@@ -30,13 +45,15 @@ def dense_with_custom_init(input_tensor,
                            output_dim,
                            activation,
                            kernel_initializer,
-                           name="",
+                           name=None,
                            custom=False,
                            pos_embed=None):
 
     if custom:
         # Subtracting pos_embed. input_tensor already includes context, and we
         # want separate weights for the words and the positional context
+        if name is None:
+            name = ''
         original_weights = tf.get_variable(name+'/kernel',shape=(shape_list(input_tensor)[1]-pos_embed, output_dim-pos_embed))
         position_weights = tf.get_variable(name+"/pos_weights",
                                            shape=(pos_embed, pos_embed))
