@@ -33,6 +33,9 @@ def bert_featurizer(
     is_roberta = issubclass(config.base_model.encoder, RoBERTaEncoder)
     is_roberta_v1 = is_roberta and not config.base_model_path.endswith("roberta-model-sm-v2.jl")
 
+    print('config.use_auxiliary_info and not config.mlm_baseline', config.use_auxiliary_info and not config.mlm_baseline)
+    print('config.mlm_baseline', config.mlm_baseline)
+    print('config.use_auxiliary_info', config.use_auxiliary_info)
     bert_config = BertConfig(
         vocab_size=encoder.vocab_size,
         hidden_size=config.n_embed,

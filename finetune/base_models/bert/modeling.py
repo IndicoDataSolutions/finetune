@@ -173,6 +173,8 @@ class BertModel(object):
         if not is_training:
             config.hidden_dropout_prob = 0.0
             config.attention_probs_dropout_prob = 0.0
+        
+        print('***config.use_auxiliary_info:', config.use_auxiliary_info)
 
         input_shape = get_shape_list(input_ids, expected_rank=2)
         batch_size = input_shape[0]
@@ -218,7 +220,7 @@ class BertModel(object):
 
                 # Run the stacked transformer.
                 # `sequence_output` shape = [batch_size, seq_length, hidden_size].
-                if context is not None:
+                if context is not None and config.use_auxiliary_info:
                     hidden_and_auxiliary_dim = config.hidden_size + config.n_context_embed_per_channel * config.context_dim
                     self.all_encoder_layers = transformer_model(
                         input_tensor=tf.concat((self.embedding_output, context), -1),
@@ -894,7 +896,6 @@ def full_block(
             intermediate_output,
             hidden_size,
             activation=None,
-            name="compress_to_hidden",
             kernel_initializer=create_initializer(initializer_range),
             custom=config.use_auxiliary_info,
             pos_embed=config.n_context_embed_per_channel*config.context_dim)
