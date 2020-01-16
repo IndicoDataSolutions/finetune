@@ -5,6 +5,7 @@ from finetune.util.shapes import lengths_from_eos_idx, merge_leading_dims
 from finetune.base_models.bert.roberta_encoder import RoBERTaEncoder
 from finetune.base_models.bert.modeling import BertConfig, BertModel
 from finetune.nn.target_blocks import smooth_pos_attn
+from finetune.errors import FinetuneError
 
 
 def bert_featurizer(
@@ -33,14 +34,20 @@ def bert_featurizer(
     is_roberta = issubclass(config.base_model.encoder, RoBERTaEncoder)
     is_roberta_v1 = is_roberta and not config.base_model_path.endswith("roberta-model-sm-v2.jl")
 
-    print('config.use_auxiliary_info and not config.mlm_baseline', config.use_auxiliary_info and not config.mlm_baseline)
-    print('config.mlm_baseline', config.mlm_baseline)
-    print('config.use_auxiliary_info', config.use_auxiliary_info)
+    if config.use_auxiliary_info and not config.mlm_baseline:
+        dim_per_head = config.n_embed / config.n_heads
+        n_context_embed = config.n_context_embed_per_channel * config.context_dim
+        if n_context_embed % dim_per_head != 0:
+            raise FinetuneError('The extra dimensions of the auxiliary information should be a multiple of the dimensions per attention head')
+        n_pos_heads = int(n_context_embed / dim_per_head)
+        n_heads = config.n_heads + n_pos_heads
+    else:
+        n_heads = config.n_heads
     bert_config = BertConfig(
         vocab_size=encoder.vocab_size,
         hidden_size=config.n_embed,
         num_hidden_layers=config.n_layer,
-        num_attention_heads=config.n_heads,
+        num_attention_heads=n_heads,
         intermediate_size=config.bert_intermediate_size,
         hidden_act=config.act_fn,
         hidden_dropout_prob=config.resid_p_drop,
