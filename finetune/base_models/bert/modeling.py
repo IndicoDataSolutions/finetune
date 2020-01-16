@@ -712,6 +712,9 @@ def attention_layer(
     to_tensor_2d = reshape_to_matrix(to_tensor)
 
     # `query_layer` = [B*F, N*H]
+    print(config)
+    print(config.n_context_embed_per_channel)
+    print(config.context_dim)
     query_layer = dense_with_custom_init(
         from_tensor_2d,
         num_attention_heads * size_per_head,
@@ -863,6 +866,7 @@ def full_block(
             attention_output = dense_with_custom_init(
                 attention_output,
                 hidden_size,
+                name="dense",
                 activation=None,
                 kernel_initializer=create_initializer(initializer_range),
                 custom=config.use_auxiliary_info,
