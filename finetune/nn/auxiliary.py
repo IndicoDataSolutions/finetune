@@ -62,7 +62,11 @@ def dense_with_custom_init(input_tensor,
         # If we did that, it would be pos_embed + pos_embed + output_dim
         position_bias = tf.get_variable(name+"/pos_bias", shape=(pos_embed))
         full_bias = tf.concat((original_bias, position_bias), axis=0)
-        return tf.matmul(input_tensor, full_weights) + full_bias
+        z = tf.matmul(input_tensor, full_weights) + full_bias
+        if activation is not None:
+            return activation(z)
+        else:
+            return z
 
     else:
         print('**else branch')
