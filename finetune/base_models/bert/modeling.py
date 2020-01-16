@@ -172,8 +172,6 @@ class BertModel(object):
         if not is_training:
             config.hidden_dropout_prob = 0.0
             config.attention_probs_dropout_prob = 0.0
-        
-        print('***config.use_auxiliary_info:', config.use_auxiliary_info)
 
         input_shape = get_shape_list(input_ids, expected_rank=2)
         batch_size = input_shape[0]
