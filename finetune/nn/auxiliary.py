@@ -43,7 +43,7 @@ def dense_with_custom_init(input_tensor,
         # want separate weights for the words and the positional context
         if name is None:
             name = ''
-        original_weights = tf.get_variable(name+'/kernel',shape=(shape_list(input_tensor)[1]-pos_embed, output_dim-pos_embed))
+        original_weights = tf.get_variable(name+'dense/kernel',shape=(shape_list(input_tensor)[1]-pos_embed, output_dim-pos_embed))
         position_weights = tf.get_variable(name+"/pos_weights",
                                            shape=(pos_embed, pos_embed))
 
@@ -56,7 +56,7 @@ def dense_with_custom_init(input_tensor,
         full_weights = tf.concat((original_weights, position_weights), axis=1)
 
 
-        original_bias = tf.get_variable(name+'/bias', shape=(output_dim-pos_embed))
+        original_bias = tf.get_variable(name+'dense/bias', shape=(output_dim-pos_embed))
         # Also using output_dim here in lieu of shape_list(original_weights)[0]
         # If we did that, it would be pos_embed + pos_embed + output_dim
         position_bias = tf.get_variable(name+"/pos_bias", shape=(pos_embed))
