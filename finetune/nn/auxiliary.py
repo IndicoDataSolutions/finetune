@@ -17,8 +17,8 @@ def layer_norm_with_custom_init(input_tensor, begin_norm_axis=-1, begin_params_a
         if begin_norm_axis == -1:
             print(input_tensor)
             input_tensor_rank = len(shape_list(input_tensor))
-            mean = tf.math.reduce_mean(input_tensor, axis=range(input_tensor_rank - 1))
-            sd = tf.math.reduce_std(input_tensor, axis=range(input_tensor_rank - 1))
+            mean = tf.math.reduce_mean(input_tensor, axis=list(range(input_tensor_rank - 1)))
+            sd = tf.math.reduce_std(input_tensor, axis=list(range(input_tensor_rank - 1)))
             print(mean)
             print(sd)
         else:
