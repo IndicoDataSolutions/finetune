@@ -34,6 +34,9 @@ def bert_featurizer(
     model_filename = config.base_model_path.rpartition('/')[-1]
     is_roberta_v1 = is_roberta and model_filename in ("roberta-model-sm.jl", "roberta-model-lg.jl")
 
+    print('config.use_auxiliary_info and not config.mlm_baseline', config.use_auxiliary_info and not config.mlm_baseline)
+    print('config.mlm_baseline', config.mlm_baseline)
+    print('config.use_auxiliary_info', config.use_auxiliary_info)
     bert_config = BertConfig(
         vocab_size=encoder.vocab_size,
         hidden_size=config.n_embed,
