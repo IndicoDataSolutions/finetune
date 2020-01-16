@@ -857,6 +857,8 @@ def full_block(
             # them to the self-attention head before the projection.
             attention_output = tf.concat(attention_heads, axis=-1)
 
+
+        pos_embed = config.n_context_embed_per_channel*config.context_dim
         # Run a linear projection of `hidden_size` then add a residual
         # with `layer_input`.
         with tf.variable_scope("output"):
@@ -866,7 +868,7 @@ def full_block(
                 activation=None,
                 kernel_initializer=create_initializer(initializer_range),
                 custom=config.use_auxiliary_info,
-                pos_embed=config.n_context_embed_per_channel*config.context_dim)
+                pos_embed=pos_embed)
             attention_output = dropout(attention_output, hidden_dropout_prob)
             # Insert an "adapter" layer from "Parameter Efficient Transfer Learning for NLP" paper
             if adapter_size is not None:
@@ -874,17 +876,17 @@ def full_block(
                     attention_output = adapter(attention_output, adapter_size, hidden_size,
                                                hidden_dropout_prob != 0)  # dropout prob is set to 0 above if not training, so we can use it to infer the 'train' argument for adapters
             attention_output = layer_norm(attention_output + layer_input, custom=config.use_auxiliary_info,
-                                          pos_embed=config.n_context_embed_per_channel*config.context_dim)
+                                          pos_embed=pos_embed)
 
     # The activation is only applied to the "intermediate" hidden layer.
     with tf.variable_scope("intermediate"):
         intermediate_output = dense_with_custom_init(
             attention_output,
-            intermediate_size,
+            intermediate_size + pos_embed,
             activation=intermediate_act_fn,
             kernel_initializer=create_initializer(initializer_range),
             custom=config.use_auxiliary_info,
-            pos_embed=config.n_context_embed_per_channel*config.context_dim)
+            pos_embed=pos_embed)
 
     # Down-project back to `hidden_size` then add the residual.
     with tf.variable_scope("output"):
@@ -894,14 +896,14 @@ def full_block(
             activation=None,
             kernel_initializer=create_initializer(initializer_range),
             custom=config.use_auxiliary_info,
-            pos_embed=config.n_context_embed_per_channel*config.context_dim)
+            pos_embed=pos_embed)
         layer_output = dropout(layer_output, hidden_dropout_prob)
         # Insert an "adapter" layer from "Parameter Efficient Transfer Learning for NLP" paper
         if adapter_size is not None:
             with tf.variable_scope("dense_adapter"):
                 layer_output = adapter(layer_output, adapter_size, hidden_size, hidden_dropout_prob != 0)
         layer_output = layer_norm(layer_output + attention_output, custom=config.use_auxiliary_info,
-                                  pos_embed=config.n_context_embed_per_channel*config.context_dim)
+                                  pos_embed=pos_embed)
         return layer_output
 
 
