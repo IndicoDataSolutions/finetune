@@ -866,7 +866,6 @@ def full_block(
                 attention_output,
                 hidden_size,
                 activation=None,
-                name="attention",
                 kernel_initializer=create_initializer(initializer_range),
                 custom=config.use_auxiliary_info,
                 pos_embed=config.n_context_embed_per_channel*config.context_dim)
@@ -885,7 +884,6 @@ def full_block(
             attention_output,
             intermediate_size,
             activation=intermediate_act_fn,
-            name="intermediate",
             kernel_initializer=create_initializer(initializer_range),
             custom=config.use_auxiliary_info,
             pos_embed=config.n_context_embed_per_channel*config.context_dim)
