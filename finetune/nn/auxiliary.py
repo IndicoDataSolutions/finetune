@@ -11,35 +11,23 @@ def layer_norm_with_custom_init(input_tensor, begin_norm_axis=-1, begin_params_a
     """Run layer normalization on the last dimension of the tensor."""
 
     if custom:
-        if name is None:
-            name = ''
-        #scale mean and standard deviation
-        if begin_norm_axis == -1:
-            print(input_tensor)
-            input_tensor_rank = len(shape_list(input_tensor))
-            mean = tf.math.reduce_mean(input_tensor, axis=list(range(input_tensor_rank - 1)))
-            sd = tf.math.reduce_std(input_tensor, axis=list(range(input_tensor_rank - 1)))
-            print(mean)
-            print(sd)
-        else:
-            mean = tf.math.reduce_mean(input_tensor, axis=range(begin_norm_axis))
-            sd = tf.math.reduce_std(input_tensor, axis=range(begin_norm_axis))
-        target_shape = shape_list(input_tensor)[1]
-        if begin_params_axis == -1:
-            weights = tf.get_variable(name+'gamma', shape=(target_shape - pos_embed))
-            bias = tf.get_variable(name+'beta', shape=(target_shape - pos_embed))
+        bert_dimension = shape_list(input_tensor)[1] - pos_embed
 
-            pos_weights = tf.get_variable(name+'pos_gamma', shape=(pos_embed))
-            pos_bias = tf.get_variable(name+'pos_beta', shape=(pos_embed))
+        bert_tensor = input_tensor[:,:bert_dimension]
+        pos_tensor = input_tensor[:,bert_dimension:]
 
-            full_weights = tf.concat((weights, pos_weights), axis=0)
-            full_bias = tf.concat((bias, pos_bias), axis=0)
-            print(full_weights)
-            print(full_bias)
-        else:
-            raise NotImplementedError('Not implemented yet')
+        bert_layer_norm = tf.contrib.layers.layer_norm(inputs=bert_tensor,
+                                                       begin_norm_axis=begin_norm_axis,
+                                                       begin_params_axis=begin_params_axis,
+                                                       scope=name)
+        pos_layer_norm = tf.contrib.layers.layer_norm(inputs=pos_tensor,
+                                                      begin_norm_axis=begin_norm_axis,
+                                                      begin_params_axis=begin_params_axis,
+                                                      scope='pos_layer_norm')
 
-        return ((input_tensor-mean)/sd)*full_weights + full_bias
+        full_layer_norm = tf.concat([bert_layer_norm, pos_layer_norm], axis=1)
+
+        return full_layer_norm
     else:
         return tf.contrib.layers.layer_norm(inputs=input_tensor, begin_norm_axis=-1, begin_params_axis=-1, scope=name)
 
