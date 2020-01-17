@@ -460,7 +460,7 @@ class BaseModel(object, metaclass=ABCMeta):
         else:
             input_fn = self.input_pipeline.get_predict_input_fn(Xs, context=context)
             estimator, hooks = self.get_estimator(
-                build_explain=PredictMode.EXPLAIN in predict_keys
+                build_explain=PredictMode.EXPLAIN in predict_keys,
             )
             length = len(Xs) if not callable(Xs) else None
 
