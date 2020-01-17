@@ -80,8 +80,11 @@ def dense_with_custom_init(input_tensor,
             original_weights = tf.get_variable(name+'/kernel',shape=(shape_list(input_tensor)[1]-pos_embed, weight_output_dim))
             original_bias = tf.get_variable(name+'/bias', shape=(weight_output_dim))
         elif proj_type == 'downward_identity':
-            original_weights = tf.eye(shape_list(input_tensor)[1])
-            original_bias = tf.zeros((batch, output_dim))
+            input_dim = shape_list(input_tensor)[0]
+            # original_weights = tf.get_variable(name + '/identity_kernel', shape=(output_dim, output_dim), initializer=tf.initializers.identity())
+            # original_bias = tf.get_variable(name + '/identity_bias', shape=(input_dim, output_dim), initializer=tf.zeros_initializer())
+            original_weights = tf.eye(output_dim)
+            original_bias = tf.zeros((input_dim, output_dim))
         
         # position-relevant weights
         if proj_type == 'factorized':
@@ -100,8 +103,9 @@ def dense_with_custom_init(input_tensor,
             position_bias = tf.get_variable(name+"/pos_bias", shape=(pos_embed))
             full_bias = tf.concat((original_bias, position_bias), axis=0)
 
-        elif proj_type == 'downward' or proj_type == 'downward_init':
-            position_weights = tf.zeroes((pos_embed, weight_output_dim))
+        elif proj_type == 'downward' or proj_type == 'downward_identity':
+            position_weights = tf.zeros((pos_embed, output_dim))
+            # position_weights = tf.get_variable(name + '/pos_kernel', shape=[pos_embed, output_dim], initializer=tf.zeros_initializer())
             full_weights = tf.concat((original_weights, position_weights), axis=0)
             full_bias = original_bias
         

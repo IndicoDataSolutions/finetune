@@ -1,3 +1,4 @@
+import sys
 import functools
 import tensorflow as tf
 from tensorflow.contrib.crf import crf_log_likelihood
@@ -47,18 +48,19 @@ def gather_indexes(sequence_tensor, positions):
     return output_tensor
 
 
-def masked_language_model(*, X, M, mlm_weights, mlm_positions, mlm_ids, embed_weights, hidden, config, reuse=None, train=False):
+def masked_language_model(*, X, M, mlm_weights, mlm_positions, mlm_ids, embed_weights, hidden, config, reuse=None, train=False, **kwargs):
     hidden = merge_leading_dims(hidden, 3)
     with tf.variable_scope('model/masked-language-model'):
         gathered_hidden = gather_indexes(hidden, mlm_positions)
         final_proj = dense_with_custom_init(
             gathered_hidden,
-            units=config.n_embed,
+            config.n_embed,
             activation=act_fns[config.act_fn],
             kernel_initializer=tf.random_normal_initializer(stddev=config.weight_stddev),
             name='dense',
-            custom=config.use_auxiliary_info and config.mlm_baseline,
-            pos_embed=config.n_context_embed_per_channel * config.context_dim
+            custom=config.use_auxiliary_info and not config.mlm_baseline,
+            pos_embed=config.n_context_embed_per_channel * config.context_dim,
+            proj_type='downward'
         )
         normed_proj = norm(final_proj, 'LayerNorm')
         n_vocab = shape_list(embed_weights)[0]
@@ -79,8 +81,6 @@ def masked_language_model(*, X, M, mlm_weights, mlm_positions, mlm_ids, embed_we
         numerator = tf.reduce_sum(mlm_weights * per_example_loss)
         denominator = tf.reduce_sum(mlm_weights) + 1e-5
         mlm_loss = numerator / denominator
-
-        logits = tf.Print(logits, output_stream=sys.stderr)
 
         return {
             "logits": logits,

@@ -446,6 +446,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         return predictions
 
+    # def _inference(self, Xs, predict_keys=None, n_examples=None, context=None, force_build_lm=False):
     def _inference(self, Xs, predict_keys=None, n_examples=None, context=None):
         Xs = self.input_pipeline._format_for_inference(Xs)
 
@@ -456,7 +457,8 @@ class BaseModel(object, metaclass=ABCMeta):
         else:
             input_fn = self.input_pipeline.get_predict_input_fn(Xs, context=context)
             estimator, hooks = self.get_estimator(
-                build_explain=PredictMode.EXPLAIN in predict_keys
+                build_explain=PredictMode.EXPLAIN in predict_keys,
+                # force_build_lm=force_build_lm
             )
             length = len(Xs) if not callable(Xs) else None
 
