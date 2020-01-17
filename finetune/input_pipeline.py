@@ -309,7 +309,9 @@ class BasePipeline(metaclass=ABCMeta):
                 miniters=1,
                 leave=current_epoch == self.config.n_epochs and train,
                 update_hook=update_hook,
-                silent=self.config.debugging_logs
+                silent=self.config.debugging_logs,
+                current_epoch=current_epoch,
+                total_epochs=self.config.n_epochs
             ):
                 yield i
 
