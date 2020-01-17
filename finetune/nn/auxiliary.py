@@ -11,7 +11,6 @@ def layer_norm_with_custom_init(input_tensor, begin_norm_axis=-1, begin_params_a
     """Run layer normalization on the last dimension of the tensor."""
 
     if custom:
-        print('**if branch')
         bert_dimension = shape_list(input_tensor)[1] - pos_embed
 
         bert_tensor = input_tensor[:,:bert_dimension]
@@ -30,7 +29,6 @@ def layer_norm_with_custom_init(input_tensor, begin_norm_axis=-1, begin_params_a
 
         return full_layer_norm
     else:
-        print('**else branch')
         return tf.contrib.layers.layer_norm(inputs=input_tensor, begin_norm_axis=-1, begin_params_axis=-1, scope=name)
 
 def dense_with_custom_init(input_tensor,
@@ -42,7 +40,6 @@ def dense_with_custom_init(input_tensor,
                            pos_embed=None):
 
     if custom:
-        print('**if branch')
         # Subtracting pos_embed. input_tensor already includes context, and we
         # want separate weights for the words and the positional context
         original_weights = tf.get_variable(name+'/kernel',shape=(shape_list(input_tensor)[1]-pos_embed, output_dim-pos_embed))
@@ -70,7 +67,6 @@ def dense_with_custom_init(input_tensor,
             return z
 
     else:
-        print('**else branch')
         return tf.layers.dense(input_tensor, output_dim, activation=activation, name=name, kernel_initializer=kernel_initializer)
 
 
