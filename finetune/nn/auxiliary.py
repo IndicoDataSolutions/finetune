@@ -36,29 +36,75 @@ def dense_with_custom_init(input_tensor,
                            kernel_initializer,
                            name='dense',
                            custom=False,
-                           pos_embed=None):
+                           pos_embed=None,
+                           proj_type='factorized'):
+    """
+    Arguments:
+    - proj_type (str): defines the type of custom projection to perform.
+                       'factorized' factorizes the initial text weights and randomly initialize auxiliary weights, like so:
+                       [
+                           [W, W, W, 0, 0],
+                           [W, W, W, 0, 0],
+                           [W, W, W, 0, 0],
+                           [0, 0, 0, P, P],
+                           [0, 0, 0, P, P],
+                       ]
+                       'downward' projects out the additional auxiliary information, like so:
+                        [
+                           [W, W, W],
+                           [W, W, W],
+                           [W, W, W],
+                           [0, 0, 0],
+                           [0, 0, 0],
+                       ]
+                       'downward_identity' passes along the text inputs only, like so:
+                        [
+                           [1, 0, 0],
+                           [0, 1, 0],
+                           [0, 0, 1],
+                           [0, 0, 0],
+                           [0, 0, 0],
+                       ]
+    """
 
     if custom:
-        # Subtracting pos_embed. input_tensor already includes context, and we
-        # want separate weights for the words and the positional context
-        original_weights = tf.get_variable(name+'/kernel',shape=(shape_list(input_tensor)[1]-pos_embed, output_dim-pos_embed))
-        position_weights = tf.get_variable(name+"/pos_weights",
-                                           shape=(pos_embed, pos_embed))
+        # text-relevant weights
+        if proj_type == 'factorized' or proj_type == 'downward':
+            if proj_type == 'factorized':
+                weight_output_dim = output_dim-pos_embed
+            else:
+                weight_output_dim = output_dim
+            # Subtracting pos_embed. input_tensor already includes context, and we
+            # want separate weights for the words and the positional context
+            original_weights = tf.get_variable(name+'/kernel',shape=(shape_list(input_tensor)[1]-pos_embed, weight_output_dim))
+            original_bias = tf.get_variable(name+'/bias', shape=(weight_output_dim))
+        elif proj_type == 'downward_identity':
+            original_weights = tf.eye(shape_list(input_tensor)[1])
+            original_bias = tf.zeros((batch, output_dim))
+        
+        # position-relevant weights
+        if proj_type == 'factorized':
+            position_weights = tf.get_variable(name+"/pos_weights",
+                                            shape=(pos_embed, pos_embed))
+            original_weights = tf.pad(original_weights, tf.constant([[0,pos_embed], [0,0]]))
+            # Note: Need to keep the dimension of original_weights before we pad it. Below
+            # we use output_dim, put if we want to have a non-square matrix for original_weights
+            # we should saving the first dimension of original_weights
+            position_weights = tf.pad(position_weights, tf.constant([[shape_list(input_tensor)[1]-pos_embed,0], [0,0]]))
+            # This concat should blow up (or give the wrong dimensions)
+            full_weights = tf.concat((original_weights, position_weights), axis=1)
+ 
+            # Also using output_dim here in lieu of shape_list(original_weights)[0]
+            # If we did that, it would be pos_embed + pos_embed + output_dim
+            position_bias = tf.get_variable(name+"/pos_bias", shape=(pos_embed))
+            full_bias = tf.concat((original_bias, position_bias), axis=0)
 
-        original_weights = tf.pad(original_weights, tf.constant([[0,pos_embed], [0,0]]))
-        # Note: Need to keep the dimension of original_weights before we pad it. Below
-        # we use output_dim, put if we want to have a non-square matrix for original_weights
-        # we should saving the first dimension of original_weights
-        position_weights = tf.pad(position_weights, tf.constant([[shape_list(input_tensor)[1]-pos_embed,0], [0,0]]))
-        # This concat should blow up (or give the wrong dimensions)
-        full_weights = tf.concat((original_weights, position_weights), axis=1)
-
-
-        original_bias = tf.get_variable(name+'/bias', shape=(output_dim-pos_embed))
-        # Also using output_dim here in lieu of shape_list(original_weights)[0]
-        # If we did that, it would be pos_embed + pos_embed + output_dim
-        position_bias = tf.get_variable(name+"/pos_bias", shape=(pos_embed))
-        full_bias = tf.concat((original_bias, position_bias), axis=0)
+        elif proj_type == 'downward' or proj_type == 'downward_init':
+            position_weights = tf.zeroes((pos_embed, weight_output_dim))
+            full_weights = tf.concat((original_weights, position_weights), axis=0)
+            full_bias = original_bias
+        
+        # dense operation
         z = tf.matmul(input_tensor, full_weights) + full_bias
         if activation is not None:
             return activation(z)
