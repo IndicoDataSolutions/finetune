@@ -880,9 +880,13 @@ def full_block(
 
     # The activation is only applied to the "intermediate" hidden layer.
     with tf.variable_scope("intermediate"):
+        if config.use_auxiliary_info:
+            intermediate_dim = intermediate_size + pos_embed
+        else:
+            intermediate_dim = intermediate_size
         intermediate_output = dense_with_custom_init(
             attention_output,
-            intermediate_size + pos_embed,
+            intermediate_dim,
             activation=intermediate_act_fn,
             kernel_initializer=create_initializer(initializer_range),
             custom=config.use_auxiliary_info,
