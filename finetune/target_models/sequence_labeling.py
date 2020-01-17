@@ -192,7 +192,6 @@ class SequenceLabeler(BaseModel):
         step_size = chunk_size // 3
         doc_idx = -1
         for token_start_idx, token_end_idx, start_of_doc, end_of_doc, label_seq, proba_seq in self.process_long_sequence(X, context=context, **kwargs):
-            start, end = 0, None
             if start_of_doc:
                 # if this is the first chunk in a document, start accumulating from scratch
                 doc_subseqs = []
@@ -202,15 +201,7 @@ class SequenceLabeler(BaseModel):
                 doc_starts = []
 
                 doc_idx += 1
-                if not end_of_doc:
-                    end = step_size * 2
-            else:
-                if end_of_doc:
-                    # predict on the rest of sequence
-                    start = step_size
-                else:
-                    # predict only on middle third
-                    start, end = step_size, step_size * 2
+            start, end = self.input_pipeline.chunker.useful_chunk_section(start_of_doc, end_of_doc)
 
             label_seq = label_seq[start:end]
             end_of_token_seq = token_end_idx[start:end]
