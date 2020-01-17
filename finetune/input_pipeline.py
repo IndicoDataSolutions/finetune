@@ -27,7 +27,8 @@ LOGGER = logging.getLogger("finetune")
 class Chunker:
     def __init__(self, max_length, total_context_width, justify="c"):
         if total_context_width is None:
-            total_context_width = 2 * max_length // 2
+            total_context_width = 2 * max_length // 3
+        assert total_context_width < max_length
         assert justify.lower() in {"c", "l", "r"}
         
         self.max_length = max_length
@@ -48,11 +49,11 @@ class Chunker:
     def generate_chunks(self, length):
         for start in range(0, length, self.useful_chunk_width):
             end = start + self.chunk_size
-            yield start, start + self.chunk_size
+            yield start, end
             if end >= length:
                 break
 
-    def useful_chunk_section(start_of_doc, end_of_doc):
+    def useful_chunk_section(self, start_of_doc, end_of_doc):
         start = self.normal_start
         end = self.normal_end
         if start_of_doc:
@@ -71,7 +72,11 @@ class BasePipeline(metaclass=ABCMeta):
         self.pad_idx_ = None
         self.rebuild = False
         self.epoch = 0
-        self.chunker = Chunker(max_length=config.max_length, total_context_width=config.chunk_context)
+        self.chunker = Chunker(
+            max_length=config.max_length,
+            total_context_width=config.chunk_context,
+            justify=config.chunk_alignment
+        )
 
     @property
     def dataset_size(self):
@@ -88,7 +93,6 @@ class BasePipeline(metaclass=ABCMeta):
             types["context"] = tf.float32
             shapes["context"] = TS([None, self.config.context_dim])
         return types, shapes
-
 
     def feed_shape_type_def(self):
         TS = tf.TensorShape
@@ -507,7 +511,6 @@ class BasePipeline(metaclass=ABCMeta):
                 field_value = getattr(encoded, field)
                 if field_value is not None:
                     field_starts_and_ends[field] = (field_value[0], field_value[-1])
-
             for start, end in self.chunker.generate_chunks(length):
                 d = dict()
                 for field in EncodedOutput._fields:

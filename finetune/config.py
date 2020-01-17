@@ -329,6 +329,8 @@ def get_default_config():
         multi_label_sequences=False,
         multi_label_threshold=0.5,
         chunk_long_sequences=True,
+        chunk_context=None,
+        chunk_alignment="c", 
         add_eos_bos_to_chunk=True,
         filter_empty_examples=False,
         crf_sequence_labeling=True,
