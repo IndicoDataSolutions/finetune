@@ -103,15 +103,15 @@ class MaskedLanguageModel(BaseModel):
     def _get_input_pipeline(self):
         return MaskedLanguageModelPipeline(self.config)
 
-    def predict(self, *args, **kwargs):
-        """
-        Not supported by `MaskedLanguageModel`
-        """
-        raise FinetuneError(
-            "The `{}` class does not support calling `model.predict()`".format(
-                self.__class__.__name__
-            )
-        )
+    # def predict(self, *args, **kwargs):
+    #     """
+    #     Not supported by `MaskedLanguageModel`
+    #     """
+    #     raise FinetuneError(
+    #         "The `{}` class does not support calling `model.predict()`".format(
+    #             self.__class__.__name__
+    #         )
+    #     )
 
     def predict_proba(self, *args, **kwargs):
         """

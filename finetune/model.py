@@ -188,6 +188,7 @@ def get_model_fn(
                 ]
 
             if build_target_model:
+                print('BUILDING TARGET MODEL')
                 target_model_state = target_model_op(
                     featurizer_state=featurizer_state,
                     Y=Y,

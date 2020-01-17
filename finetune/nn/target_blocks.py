@@ -1,3 +1,4 @@
+import sys
 import functools
 import tensorflow as tf
 from tensorflow.contrib.crf import crf_log_likelihood
@@ -36,12 +37,13 @@ def masked_language_model(*, X, mlm_weights, mlm_ids, mlm_positions, embed_weigh
         gathered_hidden = gather_indexes(hidden, mlm_positions)
         final_proj = dense_with_custom_init(
             gathered_hidden,
-            units=config.n_embed,
+            config.n_embed,
             activation=act_fns[config.act_fn],
             kernel_initializer=tf.random_normal_initializer(stddev=config.weight_stddev),
             name='dense',
-            custom=config.use_auxiliary_info and config.mlm_baseline,
-            pos_embed=config.n_context_embed_per_channel * config.context_dim
+            custom=config.use_auxiliary_info and not config.mlm_baseline,
+            pos_embed=config.n_context_embed_per_channel * config.context_dim,
+            proj_type='downward'
         )
         final_proj = act_fns[config.act_fn](
             tf.matmul(gathered_hidden, final_proj_w, transpose_b=True) + final_proj_b
@@ -67,8 +69,6 @@ def masked_language_model(*, X, mlm_weights, mlm_ids, mlm_positions, embed_weigh
         numerator = tf.reduce_sum(mlm_weights * per_example_loss)
         denominator = tf.reduce_sum(mlm_weights) + 1e-5
         mlm_loss = numerator / denominator
-
-        logits = tf.Print(logits, output_stream=sys.stderr)
 
         return {
             "logits": logits,
