@@ -24,6 +24,43 @@ from finetune.util.timing import ProgressBar
 
 LOGGER = logging.getLogger("finetune")
 
+class Chunker:
+    def __init__(self, max_length, total_context_width, justify="c"):
+        if total_context_width is None:
+            total_context_width = 2 * max_length // 2
+        assert justify.lower() in {"c", "l", "r"}
+        
+        self.max_length = max_length
+        self.total_context_width = total_context_width
+        self.chunk_size = self.max_length - 2
+        self.useful_chunk_width = self.chunk_size - total_context_width 
+        self.justify = justify.lower()
+        
+        if self.justify == "l":
+            self.normal_start = 0
+        elif self.justify == "r":
+            self.normal_start = total_context_width
+        elif self.justify == "c":
+            self.normal_start =	total_context_width // 2
+            
+        self.normal_end = self.normal_start + self.useful_chunk_width
+
+    def generate_chunks(self, length):
+        for start in range(0, length, self.useful_chunk_width):
+            end = start + self.chunk_size
+            yield start, start + self.chunk_size
+            if end >= length:
+                break
+
+    def useful_chunk_section(start_of_doc, end_of_doc):
+        start = self.normal_start
+        end = self.normal_end
+        if start_of_doc:
+            start = 0    
+        if end_of_doc:
+            end = self.max_length
+        return start, end
+
 
 class BasePipeline(metaclass=ABCMeta):
     def __init__(self, config):
@@ -34,6 +71,7 @@ class BasePipeline(metaclass=ABCMeta):
         self.pad_idx_ = None
         self.rebuild = False
         self.epoch = 0
+        self.chunker = Chunker(max_length=config.max_length, total_context_width=config.chunk_context)
 
     @property
     def dataset_size(self):
@@ -411,6 +449,7 @@ class BasePipeline(metaclass=ABCMeta):
         train_dataset = (
             lambda: train_dataset_unbatched()
             .padded_batch(batch_size, padded_shapes=shapes, drop_remainder=False)
+            .cache()
             .repeat(self.config.n_epochs)
             .prefetch(prefetch_buffer)
         )
@@ -458,28 +497,19 @@ class BasePipeline(metaclass=ABCMeta):
         Xs = self._format_for_encoding(Xs)
         if self.config.chunk_long_sequences and len(Xs) == 1:
             # can only chunk single sequence inputs
-
-            chunk_size = self.config.max_length - 2
-
-            step_size = chunk_size // 3
-
             encoded = self.text_encoder.encode_multi_input(
                 Xs,
                 max_length=sys.maxsize,
             )
             length = len(encoded.token_ids)
-            assert length == len(encoded.token_ids)
-            starts = list(range(0, length, step_size))
             field_starts_and_ends = dict()
             for field in EncodedOutput._fields:
                 field_value = getattr(encoded, field)
                 if field_value is not None:
                     field_starts_and_ends[field] = (field_value[0], field_value[-1])
 
-            for start in starts:
+            for start, end in self.chunker.generate_chunks(length):
                 d = dict()
-                end = start + chunk_size
-
                 for field in EncodedOutput._fields:
                     field_value = getattr(encoded, field)
                     if field_value is not None:
@@ -492,8 +522,6 @@ class BasePipeline(metaclass=ABCMeta):
                                 fv = fv + [end_token]
                         d[field] = fv
                 yield self._array_format(EncodedOutput(**d))
-                if end > length:
-                    break
         else:
             encoder_out = self.text_encoder.encode_multi_input(
                 Xs,
