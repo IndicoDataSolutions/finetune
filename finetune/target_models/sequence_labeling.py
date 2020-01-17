@@ -40,12 +40,13 @@ class SequencePipeline(BasePipeline):
             if Y is None:
                 yield feats
             if Y is not None:
+                min_starts = min(out.token_starts)
+                max_ends = max(out.token_ends)
                 filtered_labels = [
-                    lab for lab in Y if lab["end"] >= min(out.token_starts) and lab["start"] <= max(out.token_ends)
+                    lab for lab in Y if lab["end"] >= min_starts and lab["start"] <= max_ends
                 ]
-                if self.config.filter_empty_examples:
-                    if len(filtered_labels) == 0:
-                        continue
+                if self.config.filter_empty_examples and len(filtered_labels) == 0:
+                    continue
                 yield feats, self.label_encoder.transform(out, filtered_labels)
 
     def _compute_class_counts(self, encoded_dataset):
