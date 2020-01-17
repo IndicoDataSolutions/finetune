@@ -11,7 +11,7 @@ REQUIREMENTS = [
     "tqdm>=4.0.0",
     "numpy>=1.13.0",
     "scipy>=1.1.0",
-    "scikit-learn>=0.20.2,<=0.22",
+    "scikit-learn>=0.20.2,<0.23",
     "ftfy>=4.4.0",
     "spacy>=2.0.0",
     "h5py>=2.8.0",
