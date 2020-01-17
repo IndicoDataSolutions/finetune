@@ -21,7 +21,7 @@ def train_tokenizer(filename, vocab_size=128000):
     spm.SentencePieceTrainer.train(
         (
             "--input={} --model_prefix={} --user_defined_symbols=<_start_>,<_delimiter_>,<_classify_> --unk_id=0 "
-            "--vocab_size={} --input_sentence_size=10000000 --shuffle_input_sentence=true --normalization_rule_name=identity"
+            "--vocab_size={} --input_sentence_size=10000000 --shuffle_input_sentence=true"
             " --max_sentence_length=10000000 --character_coverage=0.9999"
         ).format(filename, ENCODER_PATH, vocab_size))
 

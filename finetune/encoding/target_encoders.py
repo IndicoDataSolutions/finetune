@@ -197,7 +197,6 @@ class SequenceLabelingEncoder(BaseEncoder):
         self.lookup = {c: i for i, c in enumerate(self.classes_)}
 
     def pre_process_label(self, out, labels):
-        # TODO employ more complex strategies
         pad_idx = self.lookup[self.pad_token]
         return labels, pad_idx
 
