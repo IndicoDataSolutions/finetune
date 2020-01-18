@@ -212,7 +212,7 @@ def tokenize_context(context, encoded_output, config):
     default_context = [config.default_context[k] for k in context_keys]
     current_char_loc = 0
     tokenized_context = []
-    for char_loc in encoded_output.token_ends:
+    for token, char_loc in zip(encoded_output.tokens, encoded_output.token_ends):
         # Note: this assumes that the tokenization will never lump multiple tokens into one
         # (this would not be the case if multiple context spans make up the same token)
         if char_loc == -1:
