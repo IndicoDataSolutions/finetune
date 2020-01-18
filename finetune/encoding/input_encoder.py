@@ -191,8 +191,8 @@ class BaseEncoder(object):
 
 def get_relevant_context_for_chunk(context, encoded_output):
     # this is not always right given the tokenization might change the tokens and thus the length
-    start_idx = encoded_output.char_starts[1]
-    final_idx = encoded_output.char_locs[-2]
+    start_idx = encoded_output.token_starts[1]
+    final_idx = encoded_output.token_ends[-2]
     new_context = []
     for span in context:
         if span['end'] >= start_idx:
@@ -203,7 +203,7 @@ def get_relevant_context_for_chunk(context, encoded_output):
 def tokenize_context(context, encoded_output, config):
     """ Tokenize the context corresponding to a single sequence of text """
     # in the edge case where the chunk is just a single end token, we don't need to alter our context chunk
-    if len(encoded_output.char_locs) > 1:
+    if len(encoded_output.token_ends) > 1:
         context = get_relevant_context_for_chunk(context, encoded_output)
     seq_len = len(encoded_output.token_ids)
     context_keys = list(k for k in sorted(context[0].keys()) if k not in ['token', 'start', 'end'])
@@ -228,7 +228,7 @@ def tokenize_context(context, encoded_output, config):
 
             tokenized_context.append(context_by_char_loc[current_char_loc][1])
 
-    assert len(tokenized_context) == len(encoded_output.char_locs)
+    assert len(tokenized_context) == len(encoded_output.token_ends)
     # padded value doesn't matter since it will be masked out
     expanded_context = np.pad(tokenized_context, ((0, seq_len - len(tokenized_context)), (0, 0)), 'constant')
     assert len(expanded_context) == len(encoded_output.token_ids)
