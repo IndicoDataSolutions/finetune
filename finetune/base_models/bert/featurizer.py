@@ -139,9 +139,10 @@ def bert_featurizer(
                 # print('context', context)
                 sequence_features = tf.concat((sequence_features, context), -1)
                 features = tf.concat((features, tf.reduce_mean(context, 1)), -1)
-                # print('sequence_features after concat', sequence_features)
+                print('sequence_features after concat', sequence_features)
+                print('sequence_features merged', merge_leading_dims(sequence_features, 2))
                 # sequence_features = tf.Print(sequence_features, [sequence_features], summarize=1000)
-                tf.print(sequence_features, output_stream=sys.stderr)
+                # tf.print(sequence_features, output_stream=sys.stderr)
                 pos_embed = config.n_context_embed_per_channel * config.context_dim
                 # import ipdb; ipdb.set_trace()
                 sequence_features = dense_with_custom_init(
