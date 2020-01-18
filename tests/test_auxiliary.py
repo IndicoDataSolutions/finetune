@@ -151,7 +151,7 @@ class TestAuxiliary(unittest.TestCase):
     def default_config(self, **kwargs):
         defaults = {
             "lr": 1e-3,
-            "n_context_embed_per_channel": 768 / 2,
+            "n_context_embed_per_channel": 768 // 2,
             "batch_size": 3,
             "max_length": 32,
             "n_epochs": 1,  # we mostly are making sure nothing errors out
