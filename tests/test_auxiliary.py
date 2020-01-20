@@ -51,6 +51,7 @@ class TestAuxiliaryTokenization(unittest.TestCase):
             token_ends=[-1, 10, 12, 17, 19, 21, -1],
             token_starts=[-1, 0, 10, 13, 18, 19, -1],
             mask=[0, 1, 1, 1, 1, 1, 0],
+            labels=[0] * 7
         )
 
     def test_tokenize_context(self):
@@ -84,7 +85,6 @@ class TestAuxiliaryTokenization(unittest.TestCase):
             [True, 30],
             [True, 30],
             [False, 0],
-            [0, 0],
         ]
         np.testing.assert_array_equal(expected, expanded_context)
 
@@ -92,6 +92,7 @@ class TestAuxiliaryTokenization(unittest.TestCase):
         d = {}
         for field in self.encoded_output._fields:
             field_value = getattr(self.encoded_output, field)[3:]
+            field_value = [getattr(self.encoded_output, field)[0]] + field_value
             d[field] = field_value
         encoded_output = ArrayEncodedOutput(**d)
         results = get_relevant_context_for_chunk(self.context, encoded_output)
