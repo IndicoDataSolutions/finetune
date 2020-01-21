@@ -226,8 +226,8 @@ class SequenceLabelingEncoder(BaseEncoder):
                 if overlap:
                     if not agree:
                         raise ValueError("Tokens and labels do not align")
-
-                    if labels_out[i] != pad_idx:
+                    label_idx = self.lookup[label["label"]]
+                    if labels_out[i] != pad_idx and labels_out[i] != label_idx:
                         LOGGER.warning("Overlapping labels were found, consider multilabel_sequence=True")
                     if label["label"] not in self.lookup:
                         LOGGER.warning(
@@ -235,7 +235,7 @@ class SequenceLabelingEncoder(BaseEncoder):
                             "result in desirable behaviour. Available labels are {}".format(label["label"], self.lookup.keys())
                         )
                     else:
-                        labels_out[i] = self.lookup[label["label"]]
+                        labels_out[i] = label_idx
         return labels_out
 
     def inverse_transform(self, y):
