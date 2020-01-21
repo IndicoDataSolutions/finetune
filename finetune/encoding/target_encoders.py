@@ -226,8 +226,7 @@ class SequenceLabelingEncoder(BaseEncoder):
                 if overlap:
                     if not agree:
                         raise ValueError("Tokens and labels do not align")
-
-                    if labels_out[i] != pad_idx:
+                    if labels_out[i] != pad_idx and self.lookup[label["label"]] != labels_out[i]:
                         LOGGER.warning("Overlapping labels were found, consider multilabel_sequence=True")
                     if label["label"] not in self.lookup:
                         LOGGER.warning(
