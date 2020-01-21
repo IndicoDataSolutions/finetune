@@ -331,6 +331,7 @@ def get_default_config():
         add_eos_bos_to_chunk=True,
         filter_empty_examples=False,
         crf_sequence_labeling=True,
+        use_gpu_crf_predict=None,
 
         # Regression Params
         regression_loss="L2",

@@ -323,6 +323,11 @@ class SequenceLabeler(BaseModel):
     def _predict_op(self, logits, **kwargs):
         trans_mats = kwargs.get("transition_matrix")
         sequence_length = kwargs.get("sequence_length")
+        if self.config.use_gpu_crf_predict is None:
+            use_gpu_op = self.multi_label
+        else:
+            use_gpu_op = self.config.use_gpu_crf_predict
+
         if self.multi_label:
             logits = tf.unstack(logits, axis=-1)
             label_idxs = []
