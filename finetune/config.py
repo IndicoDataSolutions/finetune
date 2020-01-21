@@ -121,6 +121,7 @@ class Settings(dict):
         examples that are longer than max length.  The progress bar will display the number of chunks processed rather than the number of examples. Defaults to `True`.
     :param chunk_context: How much context to include arround chunked text.
     :param chunk_alignment: Alignment of the active section of the chunks "left", "right", "center".
+    :param use_gpu_crf_predict: Use GPU op for crf predictions. Defaults to `auto`.
     :param low_memory_mode: When True, only store partial gradients on forward pass
         and recompute remaining gradients incrementally in order to save memory.  Defaults to `False`.
     :param optimize_for: Optimize auto parameters for either `accuracy`, `speed`, or `predict_speed` Defaults to `accuracy`
