@@ -20,7 +20,7 @@ from finetune import Classifier, SequenceLabeler
 from finetune.base_models import GPT, GPT2, BERT
 from finetune.base_models.gpt.encoder import GPTEncoder
 from finetune.base_models.gpt2.encoder import GPT2Encoder
-from finetune.base_models.bert.roberta_encoder import RoBERTaEncoderV2
+from finetune.base_models.bert.roberta_encoder import RoBERTaEncoderV2, RoBERTaEncoder
 from finetune.base_models.bert.encoder import BERTEncoderMultuilingal, BERTEncoder
 from finetune.base_models.oscar.encoder import GPCEncoder
 
@@ -52,6 +52,7 @@ Powerلُلُصّبُلُلصّبُررً ॣ ॣh ॣ ॣ冗
 🏳0🌈️
 జ్ఞ‌ా
 گچپژ
+❑
 """
 
     def test_max_length(self):
@@ -81,6 +82,9 @@ class TestGPT2Encoder(TestGPTEncoder):
     Encoder = GPT2Encoder
 
 class TestRobertaEncoder(TestGPTEncoder):
+    Encoder = RoBERTaEncoder
+
+class TestRobertaV2Encoder(TestGPTEncoder):
     Encoder = RoBERTaEncoderV2
 
 class TestBertEncoderMulti(TestGPTEncoder):
