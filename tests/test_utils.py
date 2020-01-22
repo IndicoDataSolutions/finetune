@@ -7,6 +7,7 @@ from collections import Counter
 import numpy as np
 import tensorflow as tf
 import pandas as pd
+import joblib as jl
 
 import unicodedata
 
@@ -77,6 +78,10 @@ Powerلُلُصّبُلُلصّبُررً ॣ ॣh ॣ ॣ冗
             self.assertEqual(sub_seq, sub_seq.strip()) # no leading or trailing whitespace
             self.assertNotIn("\n", sub_seq)
             self.assertIn(make_comparible(sub_seq), make_comparible(tok))
+
+    def test_end_alignment(self):
+        encoded = self.encoder.encode_multi_input([self.text], max_length=2000)
+        self.assertEqual(encoded.token_ends[-2], len(self.text.rstrip()))
 
 class TestGPT2Encoder(TestGPTEncoder):
     Encoder = GPT2Encoder
