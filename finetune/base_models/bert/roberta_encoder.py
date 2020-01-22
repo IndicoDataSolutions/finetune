@@ -34,13 +34,13 @@ class RoBERTaEncoder(GPT2Encoder):
                     index += 1
                     continue
                 token_idx = int(line[:idx])
-                self.freqs[str(token_idx + self.offset)] = (
+                self.freqs[token_idx + self.offset] = (
                     index + self.offset
                 )  # add 4 for the special tokens at beginning
                 index += 1
 
     def _convert_to_embed_idx(self, idx):
-        return self.freqs[str(idx)]
+        return self.freqs[idx]
 
     def _add_extra_toks(self):
         self.special_tokens = []
@@ -48,6 +48,7 @@ class RoBERTaEncoder(GPT2Encoder):
         self.encoder["<PAD>"] = 1
         self.encoder["<EOS>"] = 2
         self.encoder["<UNK>"] = 3
+        self.freqs[3] = 3
         self.start_token = 0  # bos from roberta
         self.delimiter_token = 2  # eos from roberta
         self.end_token = 2  # eos from roberta
