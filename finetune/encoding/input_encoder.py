@@ -10,6 +10,7 @@ import numpy as np
 
 
 NLP = spacy.load("en", disable=["parser", "tagger", "ner", "textcat"])
+NLP.max_length = 8000000 # approximately one volume of the encyclopedia britannica.
 
 EncodedOutput = namedtuple(
     "EncodedOutput",
