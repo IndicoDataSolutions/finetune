@@ -7,7 +7,7 @@ from collections import namedtuple
 from functools import lru_cache
 
 import numpy as np
-from nltk.metrics.distance import edit_distance
+#from nltk.metrics.distance import edit_distance
 
 import finetune
 from finetune.errors import FinetuneError
@@ -217,9 +217,10 @@ class Settings(dict):
 
 def did_you_mean(keyword, keyword_pool):
     candidates = list(keyword_pool)
-    closest_match_idx = np.argmin(
-        [edit_distance(keyword, candidate) for candidate in candidates]
-    )
+#    closest_match_idx = np.argmin(
+#        [edit_distance(keyword, candidate) for candidate in candidates]
+#    )
+    closest_match_idx = 1
     return candidates[closest_match_idx]
 
 
