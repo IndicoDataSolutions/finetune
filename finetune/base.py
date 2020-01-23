@@ -34,6 +34,7 @@ from finetune.util.positional_embeddings import embedding_preprocessor
 from finetune.util.shapes import shape_list
 from finetune.util.timing import ProgressBar
 from finetune.util.in_memory_finetune import make_in_memory_finetune_hooks
+from finetune.util.indico_estimator import IndicoEstimator
 from finetune.base_models import GPTModel, GPTModelSmall
 from finetune.nn.auxiliary import add_context_embed
 
@@ -121,6 +122,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self._cached_predict = False
         self._closed = False
         self._to_pull = 0
+        self._cached_estimator = None
         
         try:
             self.estimator_dir = os.path.abspath(
@@ -359,47 +361,45 @@ class BaseModel(object, metaclass=ABCMeta):
         )
         return config
 
-    def get_estimator(self, force_build_lm=False, build_explain=False):
-        build_lm = force_build_lm or self.config.lm_loss_coef > 0.0
-        config = self._get_estimator_config()
-        model_fn = get_model_fn(
-            target_model_fn=self._target_model,
-            pre_target_model_hook=self._pre_target_model_hook,
-            predict_op=self._predict_op,
-            predict_proba_op=self._predict_proba_op,
-            build_target_model=self.input_pipeline.target_dim is not None,
-            lm_type=self.config.lm_type if build_lm else None,
-            encoder=self.input_pipeline.text_encoder,
-            target_dim=self.input_pipeline.target_dim,
-            label_encoder=self.input_pipeline.label_encoder,
-            build_explain=build_explain,
-            n_replicas=max(1, len(self.resolved_gpus))
-        )
+    def get_estimator(self, force_build_lm=False, build_explain=False, cache=False):
+        if self._cached_estimator is not None:
+            est = self._cached_estimator
+            hooks = []
+        else:
+            build_lm = force_build_lm or self.config.lm_loss_coef > 0.0
+            config = self._get_estimator_config()
+            model_fn = get_model_fn(
+                target_model_fn=self._target_model,
+                pre_target_model_hook=self._pre_target_model_hook,
+                predict_op=self._predict_op,
+                predict_proba_op=self._predict_proba_op,
+                build_target_model=self.input_pipeline.target_dim is not None,
+                lm_type=self.config.lm_type if build_lm else None,
+                encoder=self.input_pipeline.text_encoder,
+                target_dim=self.input_pipeline.target_dim,
+                label_encoder=self.input_pipeline.label_encoder,
+                build_explain=build_explain,
+                n_replicas=max(1, len(self.resolved_gpus))
+            )
+            est = IndicoEstimator(
+                model_dir=self.estimator_dir,
+                model_fn=model_fn,
+                config=config,
+                params=self.config,
+            )
 
-        hooks = [InitializeHook(self.saver)]
-        est = tf.estimator.Estimator(
-            model_dir=self.estimator_dir,
-            model_fn=model_fn,
-            config=config,
-            params=self.config,
-        )
+            hooks = [InitializeHook(self.saver)]
+
+        if cache:
+            self._cached_estimator = est
 
         return est, hooks
 
     def close(self):
-        self._closed = True
-
-        if self._predictions is not None:
-
-            # force input fn termination
-            try:
-                for _ in self._predictions:
-                    pass
-            except AttributeError:
-                pass
-
-            self._predictions = None
-
+        if self._cached_estimator is not None:
+            self._cached_estimator.close_predict()
+            self._cached_estimator = None
+        
     def _clear_prediction_queue(self):
         # Flush examples used to pad the last batch
         # of previous call to predict()
@@ -441,68 +441,39 @@ class BaseModel(object, metaclass=ABCMeta):
         self._cached_predict = False
         self.close()
 
-    def _cached_inference(self, Xs, predict_keys=None, n_examples=None, update_hook=None):
-        """
-        Ensure graph is not rebuilt on subsequent calls to .predict()
-        """
-        self._data = Xs
-        self._closed = False
-        n = n_examples or len(self._data)
-        if self._predictions is None:
-            input_fn = self.input_pipeline.get_predict_input_fn(self._data_generator)
-            _estimator, hooks = self.get_estimator()
-            self._predictions = _estimator.predict(
-                input_fn=input_fn, predict_keys=predict_keys, hooks=hooks
-            )
-
-        self._clear_prediction_queue()
-
-        predictions = [None] * n
-        
-        for i in ProgressBar(range(n), total=n, desc="Inference", update_hook=update_hook):
-            y = next(self._predictions)
-            try:
-                y = y[predict_keys[0]] if len(predict_keys) == 1 else y
-            except ValueError:
-                raise FinetuneError(
-                    "Cannot call `predict()` on a model that has not been fit."
-                )
-            predictions[i] = y
-
-        return predictions
-
     def _inference(self, Xs, predict_keys=None, n_examples=None, context=None, update_hook=None):
         Xs = self.input_pipeline._format_for_inference(Xs)
+        input_fn = self.input_pipeline.get_predict_input_fn(Xs, context=context)
+
+        estimator, hooks = self.get_estimator(
+            build_explain=PredictMode.EXPLAIN in predict_keys, cache=self._cached_predict
+        )
+        length = len(Xs) if not callable(Xs) else None
 
         if self._cached_predict:
-            return self._cached_inference(
-                Xs=Xs, predict_keys=predict_keys, n_examples=n_examples, update_hook=update_hook
+            prediction_iterator = estimator.cached_predict(
+                input_fn=input_fn, predict_keys=predict_keys, hooks=hooks
             )
         else:
-            input_fn = self.input_pipeline.get_predict_input_fn(Xs, context=context)
-            estimator, hooks = self.get_estimator(
-                build_explain=PredictMode.EXPLAIN in predict_keys
-            )
-            length = len(Xs) if not callable(Xs) else None
-
             prediction_iterator = estimator.predict(
                 input_fn=input_fn, predict_keys=predict_keys, hooks=hooks
             )
-            predictions = ProgressBar(
-                prediction_iterator, 
-                total=n_examples or length, 
-                desc="Inference", 
-                update_hook=update_hook
+        
+        predictions = ProgressBar(
+            prediction_iterator, 
+            total=n_examples or length, 
+            desc="Inference", 
+            update_hook=update_hook
+        )
+        try:
+            return [
+                pred[predict_keys[0]] if len(predict_keys) == 1 else pred
+                for pred in predictions
+            ]
+        except ValueError:
+            raise FinetuneError(
+                "Cannot call `predict()` on a model that has not been fit."
             )
-            try:
-                return [
-                    pred[predict_keys[0]] if len(predict_keys) == 1 else pred
-                    for pred in predictions
-                ]
-            except ValueError:
-                raise FinetuneError(
-                    "Cannot call `predict()` on a model that has not been fit."
-                )
 
     def fit(self, *args, **kwargs):
         """ An alias for finetune. """
@@ -619,6 +590,7 @@ class BaseModel(object, metaclass=ABCMeta):
         encoded = EncodedOutput(token_ids=token_ids)
 
         estimator, hooks = self.get_estimator(force_build_lm=True)
+
         predict = estimator.predict(
             input_fn=get_input_fn, predict_keys=[PredictMode.GENERATE_TEXT], hooks=hooks
         )
@@ -884,5 +856,6 @@ class BaseModel(object, metaclass=ABCMeta):
             yield token_start_idx, token_end_idx, start_of_doc, end_of_doc, label_seq, proba_seq
 
     def __del__(self):
+        self.close()
         if hasattr(self, "_tmp_dir") and self._tmp_dir is not None:
             self._tmp_dir.cleanup()
