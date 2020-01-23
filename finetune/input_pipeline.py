@@ -42,7 +42,7 @@ class Chunker:
         elif self.justify == "r":
             self.normal_start = total_context_width
         elif self.justify == "c":
-            self.normal_start =	total_context_width // 2
+            self.normal_start = total_context_width // 2
             
         self.normal_end = self.normal_start + self.useful_chunk_width
 
@@ -453,7 +453,6 @@ class BasePipeline(metaclass=ABCMeta):
         train_dataset = (
             lambda: train_dataset_unbatched()
             .padded_batch(batch_size, padded_shapes=shapes, drop_remainder=False)
-            .cache()
             .repeat(self.config.n_epochs)
             .prefetch(prefetch_buffer)
         )
