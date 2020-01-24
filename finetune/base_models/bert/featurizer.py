@@ -154,7 +154,8 @@ def bert_featurizer(
                 tf.print(sequence_features, output_stream=sys.stderr)
                 features = dense_with_custom_init(
                     features, config.n_embed, activation=None, kernel_initializer=None,
-                    custom=True, pos_embed=pos_embed, name='feats_proj', proj_type='downward_identity')
+                    custom=True, pos_embed=pos_embed, name='feats_proj', proj_type='downward_identity'
+                )
 
         output_state = {
             "embed_weights": embed_weights,
