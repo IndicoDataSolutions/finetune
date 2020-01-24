@@ -89,13 +89,18 @@ def dense_with_custom_init(input_tensor,
         if proj_type == 'factorized':
             position_weights = tf.get_variable(name+"/pos_weights",
                                             shape=(pos_embed, pos_embed))
-            original_weights = tf.pad(original_weights, tf.constant([[0,pos_embed], [0,0]]))
+            text_to_pos_weights = tf.get_variable(name + '/text_to_pos_weights', shape=(shape_list(input_tensor)[1]-pos_embed, pos_embed), initializer=tf.zeros_initializer)
+            pos_to_text_weights = tf.get_variable(name + '/pos_to_text_weights', shape=(pos_embed, weight_output_dim), initializer=tf.zeros_initializer)
+
+            full_text_weights = tf.concat((original_weights, text_to_pos_weights), axis=1)
+            full_pos_weights = tf.concat((position_weights, pos_to_text_weights), axis=1)
+            
             # Note: Need to keep the dimension of original_weights before we pad it. Below
             # we use output_dim, put if we want to have a non-square matrix for original_weights
             # we should saving the first dimension of original_weights
-            position_weights = tf.pad(position_weights, tf.constant([[shape_list(input_tensor)[1]-pos_embed,0], [0,0]]))
+
             # This concat should blow up (or give the wrong dimensions)
-            full_weights = tf.concat((original_weights, position_weights), axis=1)
+            full_weights = tf.concat((full_text_weights, full_pos_weights), axis=0)
  
             # Also using output_dim here in lieu of shape_list(original_weights)[0]
             # If we did that, it would be pos_embed + pos_embed + output_dim
