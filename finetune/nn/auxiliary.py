@@ -93,7 +93,7 @@ def dense_with_custom_init(input_tensor,
             pos_to_text_weights = tf.get_variable(name + '/pos_to_text_weights', shape=(pos_embed, weight_output_dim), initializer=tf.zeros_initializer)
 
             full_text_weights = tf.concat((original_weights, text_to_pos_weights), axis=1)
-            full_pos_weights = tf.concat((position_weights, pos_to_text_weights), axis=1)
+            full_pos_weights = tf.concat((pos_to_text_weights, position_weights), axis=1)
             
             # Note: Need to keep the dimension of original_weights before we pad it. Below
             # we use output_dim, put if we want to have a non-square matrix for original_weights
