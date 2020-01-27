@@ -118,6 +118,9 @@ class Settings(dict):
     :param chunk_long_sequences: When True, use a sliding window approach to predict on
         examples that are longer than max length.  The progress bar will display the number of chunks processed rather than the number of examples. Defaults to `True`.  
     :param use_gpu_crf_predict: Use GPU op for crf predictions. Defaults to `auto`.
+        examples that are longer than max length.  The progress bar will display the number of chunks processed rather than the number of examples. Defaults to `True`.
+    :param chunk_context: How much context to include arround chunked text.
+    :param chunk_alignment: Alignment of the active section of the chunks "left", "right", "center".
     :param low_memory_mode: When True, only store partial gradients on forward pass
         and recompute remaining gradients incrementally in order to save memory.  Defaults to `False`.
     :param interpolate_pos_embed: Interpolate positional embeddings when `max_length` differs from it's original value of
@@ -158,7 +161,6 @@ class Settings(dict):
     :param multi_label_sequences: Use a multi-labeling approach to sequence labeling to allow overlapping labels.
     :param multi_label_threshold: Threshold of sigmoid unit in multi label classifier.
         Can be increased or lowered to trade off precision / recall. Defaults to `0.5`.
-    :param autosave_path: Save current best model (as measured by validation loss) to this location. Defaults to `None`.
     :param tensorboard_folder: Directory for tensorboard logs. Tensorboard logs will not be written
         unless tensorboard_folder is explicitly provided. Defaults to `None`.
     :param log_device_placement: Log which device each operation is placed on for debugging purposes.  Defaults to `False`.
@@ -246,12 +248,12 @@ def get_default_config():
         save_adam_vars=True,
         shuffle_buffer_size=100,
         dataset_size=None,
-        batch_size=2,
+        batch_size="auto",
         predict_batch_size=20,
         visible_gpus=None,  # defaults to all available
-        n_epochs=GridSearchable(3, [1, 2, 3, 4]),
+        n_epochs="auto",
         seed=42,
-        max_length=512,
+        max_length="auto",
         weight_stddev=0.02,
         save_dtype=None,
         val_set=None,
@@ -259,6 +261,7 @@ def get_default_config():
         adapter_size=None,  # from Parameter Efficient Transfer Learning paper
         distribution_strategy="central_storage",
         xla=False,
+        optimize_for="accuracy", 
 
         # Regularization
         embed_p_drop=0.1,
@@ -269,7 +272,6 @@ def get_default_config():
         vector_l2=False,
         
         # Early Stopping and Validation
-        autosave_path=None,
         keep_best_model=False,
         early_stopping_steps=None,
         min_secs_between_eval=60,
@@ -329,8 +331,8 @@ def get_default_config():
         multi_label_sequences=False,
         multi_label_threshold=0.5,
         chunk_long_sequences=True,
-        chunk_context=None,
-        chunk_alignment="c", 
+        chunk_context="auto",
+        chunk_alignment="center", 
         add_eos_bos_to_chunk=True,
         filter_empty_examples=False,
         crf_sequence_labeling=True,

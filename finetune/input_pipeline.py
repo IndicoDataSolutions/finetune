@@ -29,7 +29,7 @@ class Chunker:
         if total_context_width is None:
             total_context_width = 2 * max_length // 3
         assert total_context_width < max_length
-        assert justify.lower() in {"c", "l", "r"}
+        assert justify.lower() in {"center", "left", "right"}
         
         self.max_length = max_length
         self.total_context_width = total_context_width
@@ -37,13 +37,13 @@ class Chunker:
         self.useful_chunk_width = self.chunk_size - total_context_width 
         self.justify = justify.lower()
         
-        if self.justify == "l":
+        if self.justify == "left":
             self.normal_start = 0
-        elif self.justify == "r":
+        elif self.justify == "right":
             self.normal_start = total_context_width
-        elif self.justify == "c":
+        elif self.justify == "center":
             self.normal_start = total_context_width // 2
-            
+
         self.normal_end = self.normal_start + self.useful_chunk_width
 
     def generate_chunks(self, length):

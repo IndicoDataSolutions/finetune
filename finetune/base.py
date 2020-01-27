@@ -25,7 +25,7 @@ import joblib
 
 from finetune.util import list_transpose
 from finetune.encoding.input_encoder import EncodedOutput
-from finetune.config import get_config, all_gpus, assert_valid_config, get_default_config
+from finetune.config import all_gpus, assert_valid_config, get_default_config
 from finetune.saver import Saver, InitializeHook
 from finetune.errors import FinetuneError
 from finetune.model import get_model_fn, PredictMode
@@ -63,7 +63,7 @@ class BaseModel(object, metaclass=ABCMeta):
         atexit.register(cleanup)
         d = deepcopy(self.defaults)
         d.update(kwargs)
-        self.config = get_config(**d)
+        self.config = self.resolve_config(**kwargs)
         self.resolved_gpus = None
         self.validate_config()
         download_data_if_required(self.config.base_model)
@@ -73,6 +73,47 @@ class BaseModel(object, metaclass=ABCMeta):
         if self.config.debugging_logs:
             os.environ["TF_CPP_MIN_LOG_LEVEL"] = "0"
             tf_logging.set_verbosity(tf_logging.DEBUG)
+
+    def resolve_config(self, **kwargs):
+        assert_valid_config(**kwargs)
+        config = get_default_config()
+        config.base_model = kwargs.get("base_model", config.base_model)
+        auto_keys = []
+        for k, v in config.items():
+            if not isinstance(v, str) or v.lower() != "auto":
+                # look for overrides
+                if k in kwargs:
+                    config[k] = kwargs[k]
+                elif k in config.base_model.settings:
+                    config[k] = config.base_model.settings[k]
+            else:
+                auto_keys.append(k)
+    
+        if config.optimize_for.lower() == "speed":
+            overrides = {
+                "max_length": 128 if config.chunk_long_sequences else config.base_model.settings["max_length"],
+                "n_epochs": 5,
+                "batch_size": 4,
+                "chunk_context": 16,
+            }
+        elif config.optimize_for.lower() == "accuracy":
+            overrides =	{
+                "max_length": config.base_model.settings["max_length"],
+                "n_epochs": 8,	
+                "batch_size": 2,
+                "chunk_context": None,
+            }
+            
+        else:
+            raise ValueError("Cannot optimise hyperparams for {}, must be either 'speed' or 'accuracy'".format(config.optimize_for))
+
+        for ak in auto_keys:
+            if ak == "val_size":
+                continue # this auto is resolved after data is provided.
+            if ak not in overrides:
+                raise ValueError("There is no auto setting for {}".format(ak))
+            config[ak] = overrides[ak]
+        return config 
 
     def validate_config(self):
         if (

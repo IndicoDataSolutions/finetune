@@ -5,6 +5,7 @@ import json
 import hashlib
 import io
 from pathlib import Path
+import time
 
 import pandas as pd
 from bs4 import BeautifulSoup as bs
@@ -78,8 +79,9 @@ if __name__ == "__main__":
         test_size=0.2,
         random_state=42
     )
-    model = SequenceLabeler(batch_size=1, n_epochs=3, val_size=0.0, max_length=512, chunk_long_sequences=True, subtoken_predictions=False, crf_sequence_labeling=True, multi_label_sequences=False)
+    model = SequenceLabeler(base_model=RoBERTa, optimize_for="speed")#, batch_size=4, n_epochs=8, val_size=0.0, max_length=128, chunk_long_sequences=True, subtoken_predictions=False, crf_sequence_labeling=True, multi_label_sequences=False, chunk_context=16)
+    start = time.time()
     model.fit(trainX, trainY)
     predictions = model.predict(testX)
-    print(predictions)
+    print(time.time() - start)
     print(annotation_report(testY, predictions))
