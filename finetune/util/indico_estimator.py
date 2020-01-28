@@ -108,28 +108,4 @@ class IndicoEstimator(tf.estimator.Estimator):
                             key: value[i]
                             for key, value in preds_evaluated.items()
                         }
-
-class Scheduler:
-    def __init__(self, models, max_models_per_gpu, num_gpus):
-        assert num_gpus == 1 # not yet
-        self.models = models
-        self.loaded_models = list()
-        self.max_models_per_gpu = max_models_per_gpu
-
-    def _rotate_in_model(self, model_id):
-        print(self.loaded_models)
-        model = self.models[model_id]
-        if model not in self.loaded_models:
-            if len(self.loaded_models) + 1 > self.max_models_per_gpu:
-                self.loaded_models.pop(0).close_predict()
-        else:
-            self.loaded_models.remove(model) # put it back at the end of the queue
-        self.loaded_models.append(model)
-        return model
-
-    def predict(self, model_id, input_fn, predict_keys=None, hooks=None, checkpoint_path=None, yield_single_examples=True):
-        model = self._rotate_in_model(model_id)
-        return model.indico_predict(
-            input_fn, predict_keys=predict_keys, hooks=hooks, checkpoint_path=checkpoint_path, yield_single_examples=yield_single_examples
-        )
         
