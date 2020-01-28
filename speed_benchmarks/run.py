@@ -29,7 +29,7 @@ def benchmark_sequence(config, runs=5):
 
 def benchmark_multi_sequence(config, runs=5):
     x, y = multi_label_sequence_data()
-    config["mutli_label_sequence"] = True
+    config["multi_label_sequences"] = True
     return benchmark(SequenceLabeler, config, x, y, runs=runs)
 
 if __name__ == "__main__":
@@ -45,7 +45,7 @@ if __name__ == "__main__":
         seq_train, seq_infer = benchmark_sequence(config, runs=runs)
         output.append(["Sequence", optimize_for, seq_train, seq_infer])
 
-        mutli_seq_train, mutli_seq_infer = benchmark_multi_sequence(config, runs=runs)
+        multi_seq_train, multi_seq_infer = benchmark_multi_sequence(config, runs=runs)
         output.append(["Multi Sequence", optimize_for, multi_seq_train, multi_seq_infer])
     print(tabulate(output))
     
