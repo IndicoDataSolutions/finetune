@@ -99,7 +99,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self._cached_predict = False
         self._closed = False
         self._to_pull = 0
-        
+
         try:
             self.estimator_dir = os.path.abspath(
                 os.path.join(self.config.tensorboard_folder, str(int(time.time())))
@@ -275,7 +275,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
                 tf.logging.info("Finishing pre-fit initialisation...")
             estimator.train(train_input_fn, hooks=train_hooks, steps=num_steps)
-        
+
         self._trained = True
 
     def _distribute_strategy(self, visible_gpus):
@@ -284,7 +284,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         Side effect: sets self.resolved_gpus for future use in computing steps per epoch
         """
-        
+
         if isinstance(visible_gpus, (list, tuple)):
             resolved_gpus = all_gpus(visible_gpus=tuple(visible_gpus))
         else:
@@ -306,7 +306,7 @@ class BaseModel(object, metaclass=ABCMeta):
                     raise FinetuneError("Distribute strategy {} is not supported, please try \"mirrored\" or \"central_storage\" or an instance of tf.distribute.Strategy")
             elif isinstance(self.config.distribution_strategy, tf.distribute.Strategy):
                 distribute_strategy = self.config.distribution_strategy
-                    
+
 
         self.resolved_gpus = resolved_gpus
         return distribute_strategy
@@ -321,8 +321,8 @@ class BaseModel(object, metaclass=ABCMeta):
                 self.config.per_process_gpu_memory_fraction
             )
         optimizer_options = conf.graph_options.optimizer_options
-        if self.config.xla:                                                     
-            optimizer_options.global_jit_level = tf.OptimizerOptions.ON_1 
+        if self.config.xla:
+            optimizer_options.global_jit_level = tf.OptimizerOptions.ON_1
 
         distribute_strategy = self._distribute_strategy(self.config.visible_gpus)
         config = tf.estimator.RunConfig(
@@ -437,7 +437,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self._clear_prediction_queue()
 
         predictions = [None] * n
-        
+
         for i in ProgressBar(range(n), total=n, desc="Inference", update_hook=update_hook):
             y = next(self._predictions)
             try:
@@ -468,9 +468,9 @@ class BaseModel(object, metaclass=ABCMeta):
                 input_fn=input_fn, predict_keys=predict_keys, hooks=hooks
             )
             predictions = ProgressBar(
-                prediction_iterator, 
-                total=n_examples or length, 
-                desc="Inference", 
+                prediction_iterator,
+                total=n_examples or length,
+                desc="Inference",
                 update_hook=update_hook
             )
             try:
@@ -522,7 +522,7 @@ class BaseModel(object, metaclass=ABCMeta):
         raise NotImplementedError(
             "'attention_weights' only supported for GPTModel and GPTModelSmall base models."
         )
-    
+
     def context_attention_weights(self, Xs, context=None):
         if not context:
             raise ValueError('Need to pass in context.')
@@ -579,7 +579,7 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         if use_extra_toks is None:
             use_extra_toks = self._trained
-    
+
         def dataset_encoded():
             while not dataset_encoded.finished:
                 yield {"tokens": arr_encoded.token_ids, "mask": arr_encoded.mask}
@@ -598,7 +598,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 "If you are not using the extra tokens, you must provide some non-empty seed text"
             )
         start = [self.input_pipeline.text_encoder.start_token] if use_extra_toks else []
-        token_ids = start 
+        token_ids = start
         if encoded.token_ids is not None and len(encoded.token_ids):
             token_ids += encoded.token_ids[0]
         encoded = EncodedOutput(token_ids=token_ids)
@@ -649,12 +649,12 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         if path is None:
             return
-        
+
         if isinstance(path, str):
             path = os.path.abspath(path)
         self.saver.save(self, path)
 
-    def create_base_model(self, filename, exists_ok=False):
+    def create_base_model(self, filename, exists_ok=False, save_lm_weights=False):
         """
         Saves the current weights into the correct file format to be used as a base model.
         :param filename: the path to save the base model relative to finetune's base model filestore.
@@ -677,7 +677,7 @@ class BaseModel(object, metaclass=ABCMeta):
         weights_stripped = {
             k: v
             for k, v in self.saver.variables.items()
-            if "featurizer" in k and "Adam" not in k
+            if ("featurizer" in k or (save_lm_weights and "language-model" in k)) and "Adam" not in k
         }
         joblib.dump(weights_stripped, base_model_path)
 
