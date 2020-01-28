@@ -123,6 +123,7 @@ class Settings(dict):
     :param chunk_alignment: Alignment of the active section of the chunks "left", "right", "center".
     :param low_memory_mode: When True, only store partial gradients on forward pass
         and recompute remaining gradients incrementally in order to save memory.  Defaults to `False`.
+    :param optimize_for: Optimize auto parameters for either `accuracy`, `speed`, or `predict_speed` Defaults to `accuracy`
     :param interpolate_pos_embed: Interpolate positional embeddings when `max_length` differs from it's original value of
         `512`. Defaults to `False`.
     :param embed_p_drop: Embedding dropout probability.  Defaults to `0.1`.
@@ -249,7 +250,7 @@ def get_default_config():
         shuffle_buffer_size=100,
         dataset_size=None,
         batch_size="auto",
-        predict_batch_size=20,
+        predict_batch_size="auto",
         visible_gpus=None,  # defaults to all available
         n_epochs="auto",
         seed=42,
