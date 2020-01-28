@@ -29,14 +29,14 @@ def benchmark_sequence(config, runs=5):
 
 def benchmark_multi_sequence(config, runs=5):
     x, y = multi_label_sequence_data()
-    config["mutlilabel_sequence"] = True
+    config["mutli_label_sequence"] = True
     return benchmark(SequenceLabeler, config, x, y, runs=runs)
 
 if __name__ == "__main__":
     runs = 1
     base_config = {"base_model": RoBERTa}
     output = [["Model", "Optimized For", "Train Time", "Predict Time"]]
-    for optimize_for in ["speed", "accuracy"]:
+    for optimize_for in ["speed", "accuracy", "inference_speed"]:
         config = dict(base_config)
         config["optimize_for"] = optimize_for
         clf_train, clf_infer = benchmark_classification(config, runs=runs)

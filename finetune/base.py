@@ -96,6 +96,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 "batch_size": 4,
                 "chunk_context": 16,
             }
+            
         elif config.optimize_for.lower() == "accuracy":
             overrides =	{
                 "max_length": config.base_model.settings["max_length"],
@@ -104,6 +105,14 @@ class BaseModel(object, metaclass=ABCMeta):
                 "chunk_context": None,
             }
             
+        elif config.optimize_for.lower() == "inference_speed":
+            overrides = {
+                "max_length": 128 if config.chunk_long_sequences else config.base_model.settings["max_length"],
+                "n_epochs": 8,
+		"batch_size": 2,
+                "chunk_context": 16,
+            }
+
         else:
             raise ValueError("Cannot optimise hyperparams for {}, must be either 'speed' or 'accuracy'".format(config.optimize_for))
 
