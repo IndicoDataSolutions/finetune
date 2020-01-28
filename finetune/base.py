@@ -1,4 +1,5 @@
 import os
+import gc
 import random
 import weakref
 import atexit
@@ -399,6 +400,7 @@ class BaseModel(object, metaclass=ABCMeta):
         if self._cached_estimator is not None:
             self._cached_estimator.close_predict()
             self._cached_estimator = None
+            gc.collect()
         
     def _clear_prediction_queue(self):
         # Flush examples used to pad the last batch
