@@ -20,8 +20,9 @@ REQUIREMENTS = [
     "imbalanced-learn>=0.6.0,<0.7.0",
     "nltk>=3.2.4",
     "regex>=2019.03.12",
-    "lxml>=4.3.3"
-    "sentencepiece>=0.1.83"
+    "lxml>=4.3.3",
+    "sentencepiece>=0.1.83",
+    "tabulate==0.8.6", 
 ]
 
 setup(

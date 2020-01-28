@@ -80,14 +80,14 @@ class BaseModel(object, metaclass=ABCMeta):
         config.base_model = kwargs.get("base_model", config.base_model)
         auto_keys = []
         for k, v in config.items():
-            if not isinstance(v, str) or v.lower() != "auto":
+            if isinstance(v, str) and v.lower() != "auto":
+                auto_keys.append(k)
+            else:
                 # look for overrides
                 if k in kwargs:
                     config[k] = kwargs[k]
                 elif k in config.base_model.settings:
                     config[k] = config.base_model.settings[k]
-            else:
-                auto_keys.append(k)
     
         if config.optimize_for.lower() == "speed":
             overrides = {
@@ -95,22 +95,25 @@ class BaseModel(object, metaclass=ABCMeta):
                 "n_epochs": 5,
                 "batch_size": 4,
                 "chunk_context": 16,
+                "predict_batch_size": 48,
             }
             
         elif config.optimize_for.lower() == "accuracy":
-            overrides =	{
+            overrides = {
                 "max_length": config.base_model.settings["max_length"],
                 "n_epochs": 8,	
                 "batch_size": 2,
                 "chunk_context": None,
+                "predict_batch_size": 20,
             }
             
-        elif config.optimize_for.lower() == "inference_speed":
+        elif config.optimize_for.lower() == "predict_speed":
             overrides = {
                 "max_length": 128 if config.chunk_long_sequences else config.base_model.settings["max_length"],
                 "n_epochs": 8,
 		"batch_size": 2,
                 "chunk_context": 16,
+                "predict_batch_size": 48,
             }
 
         else:

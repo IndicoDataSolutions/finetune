@@ -8,7 +8,7 @@ from synthetic_data import multi_label_sequence_data, sequence_data, classificat
 def benchmark(model_cls, config, x, y, runs):
     train_time = 0
     inference_time = 0	
-    for	_ in range(runs):
+    for _ in range(runs):
         model = model_cls(**config)
         train_start_time = time.time()
         model.fit(x, y)
@@ -33,19 +33,20 @@ def benchmark_multi_sequence(config, runs=5):
     return benchmark(SequenceLabeler, config, x, y, runs=runs)
 
 if __name__ == "__main__":
-    runs = 1
+    average_over_n_runs = 1
     base_config = {"base_model": RoBERTa}
-    output = [["Model", "Optimized For", "Train Time", "Predict Time"]]
-    for optimize_for in ["speed", "accuracy", "inference_speed"]:
+    output = []
+    headers = ["Model", "Optimized For", "Train Time", "Predict Time"]
+    for optimize_for in ["speed", "accuracy", "predict_speed"]:
         config = dict(base_config)
         config["optimize_for"] = optimize_for
-        clf_train, clf_infer = benchmark_classification(config, runs=runs)
+        clf_train, clf_infer = benchmark_classification(config, runs=average_over_n_runs)
         output.append(["Classification", optimize_for, clf_train, clf_infer])
 
-        seq_train, seq_infer = benchmark_sequence(config, runs=runs)
+        seq_train, seq_infer = benchmark_sequence(config, runs=average_over_n_runs)
         output.append(["Sequence", optimize_for, seq_train, seq_infer])
 
-        multi_seq_train, multi_seq_infer = benchmark_multi_sequence(config, runs=runs)
+        multi_seq_train, multi_seq_infer = benchmark_multi_sequence(config, runs=average_over_n_runs)
         output.append(["Multi Sequence", optimize_for, multi_seq_train, multi_seq_infer])
-    print(tabulate(output))
+    print(tabulate(output, headers=headers))
     
