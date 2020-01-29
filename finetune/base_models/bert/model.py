@@ -31,6 +31,7 @@ class BERTModelCased(SourceModel):
         "l2_reg": 0.01,
         "bert_intermediate_size": 3072,
         "base_model_path": os.path.join("bert", "bert_small_cased-v2.jl"),
+        "max_length": 512,
     }
     required_files = [
         {
@@ -85,6 +86,7 @@ class BERTModelLargeWWMCased(SourceModel):
         "l2_reg": 0.01,
         "bert_intermediate_size": 4096,
         "base_model_path": os.path.join("bert", "bert_wwm_large_cased-v2.jl"),
+        "max_length": 1024,
     }
     required_files = [
         {
@@ -111,6 +113,7 @@ class BERTModelMultilingualCased(SourceModel):
         "l2_reg": 0.01,
         "bert_intermediate_size": 3072,
         "base_model_path": os.path.join("bert", "bert_small_multi_cased-v2.jl"),
+        "max_length": 512,
     }
     required_files = [
         {
@@ -237,6 +240,7 @@ class DistilBERT(SourceModel):
         "bert_use_type_embed": False,
         "bert_intermediate_size": 3072,
         "base_model_path": os.path.join("bert", "distillbert.jl"),
+        "max_length": 512,
     }
     required_files = [
         {
@@ -266,6 +270,7 @@ class DistilRoBERTa(SourceModel):
         "bert_use_type_embed": False,
         "bert_intermediate_size": 3072,
         "base_model_path": os.path.join("bert", "distilroberta.jl"),
+        "max_length": 512,
     }
     required_files = [
         {
