@@ -349,6 +349,7 @@ class BaseModel(object, metaclass=ABCMeta):
             optimizer_options.global_jit_level = tf.OptimizerOptions.ON_1 
 
         distribute_strategy = self._distribute_strategy(self.config.visible_gpus)
+        print(self.config.val_interval)
         config = tf.estimator.RunConfig(
             tf_random_seed=self.config.seed,
             save_summary_steps=self.config.val_interval,

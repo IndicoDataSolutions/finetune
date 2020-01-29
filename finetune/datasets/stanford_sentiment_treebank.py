@@ -1,16 +1,14 @@
-import os
-import logging
-from pathlib import Path
 
 import numpy as np
 
 from sklearn.model_selection import train_test_split
-
+import os
+from pathlib import Path
 from finetune import Classifier
 from finetune.datasets import Dataset, generic_download
 from finetune.base_models.gpt.model import GPTModel
 from finetune.base_models.oscar.model import GPCModel
-logging.basicConfig(level=logging.DEBUG)
+#logging.basicConfig(level=logging.DEBUG)
 
 from sklearn.metrics import classification_report
 
@@ -46,12 +44,8 @@ if __name__ == "__main__":
     dataset = StanfordSentimentTreebank(nrows=1000).dataframe
     model = Classifier(
         debugging_logs=True,
-        interpolate_pos_embed=False, 
-        n_epochs=3,
-        batch_size=2,
-        lr_warmup=0.1,
-        max_length=64,
-        base_model=GPTModel
+        summarize_grads=True,
+#        val_interval=1000,
     )
     trainX, testX, trainY, testY = train_test_split(dataset.Text.values, dataset.Target.values, test_size=0.3, random_state=42)
     model.fit(trainX, trainY)

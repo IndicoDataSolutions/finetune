@@ -10,13 +10,22 @@ class Scheduler:
         self.in_use_op = tf.contrib.memory_stats.BytesInUse()
         self.peak_mem_op = tf.contrib.memory_stats.BytesInUse()
         self.model_cache = dict()
-        
+        self.max_above_resting = None
+        self.previous_in_use = 0
+        self.max_model_size = None
     def _memory_for_one_more(self):
         if self.session is None:
             return True # First prediction run?
         in_use, peak = self.session.run((self.in_use_op, self.peak_mem_op))
-        avg_model_size = in_use / len(self.loaded_models)
-        return (2 * avg_model_size) + peak < self.gpu_memory_limit
+        if self.max_above_resting is None or (peak - in_use) > self.max_above_resting:
+            self.max_above_resting = peak - in_use
+
+        if self.max_model_size is None or (in_use - self.previous_in_use) > self.max_model_size:
+            self.max_model_size = in_use - self.previous_in_use
+
+        self.previous_in_use = in_use
+        
+        return (in_use + self.max_above_resting + self.max_model_size * 2) < self.gpu_memory_limit
 
     def _rotate_in_model(self, model):
         if model not in self.loaded_models:
