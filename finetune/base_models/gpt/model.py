@@ -17,6 +17,7 @@ class GPTModel(SourceModel):
         'n_layer': 12,
         'act_fn': "gelu",
         "base_model_path": os.path.join("gpt", "model-lg.jl"),
+        'max_length': 512,
     }
     required_files = [
         {
@@ -36,6 +37,7 @@ class GPTModelSmall(GPTModel):
         'act_fn': "gelu",
         'num_layers_trained': 6,
         'base_model_path': os.path.join("gpt", "model-sm.jl"),
+        'max_length': 512,
     }
     required_files = [
         {

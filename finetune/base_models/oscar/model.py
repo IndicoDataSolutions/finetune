@@ -31,6 +31,7 @@ BASE_OSCAR_SETTINGS = {
     "embed_p_drop": 0.01,
     "lr_schedule": "warmup_linear",
     "lm_loss_coef": 0.5,
+    "max_length": 512,
 }
 
 
