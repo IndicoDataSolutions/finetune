@@ -8,11 +8,12 @@ class Scheduler:
         self.session = None
         self.gpu_memory_limit = None
         self.in_use_op = tf.contrib.memory_stats.BytesInUse()
-        self.peak_mem_op = tf.contrib.memory_stats.BytesInUse()
+        self.peak_mem_op = tf.contrib.memory_stats.MaxBytesInUse()
         self.model_cache = dict()
         self.max_above_resting = None
         self.previous_in_use = 0
         self.max_model_size = None
+        
     def _memory_for_one_more(self):
         if self.session is None:
             return True # First prediction run?
@@ -25,7 +26,7 @@ class Scheduler:
 
         self.previous_in_use = in_use
         
-        return (in_use + self.max_above_resting + self.max_model_size * 2) < self.gpu_memory_limit
+        return (in_use + self.max_above_resting + self.max_model_size) < self.gpu_memory_limit
 
     def _rotate_in_model(self, model):
         if model not in self.loaded_models:
@@ -36,7 +37,7 @@ class Scheduler:
                 name = self.loaded_models.pop(0)
                 self.model_cache[name].close()
                 del self.model_cache[name]
-            out_model =	Classifier.load(model) # doesn't matter its classifier                                                                        
+            out_model = Classifier.load(model) # doesn't matter its classifier                                                                        
             self.model_cache[model] = out_model
 
         else:
@@ -48,9 +49,9 @@ class Scheduler:
         
         return out_model
 
-    def predict(self, model_file, x):
+    def predict(self, model_file, x, *args, **kwargs):
         model = self._rotate_in_model(model_file)
-        predictions = model.predict(x)
+        predictions = model.predict(x, *args, **kwargs)
         if self.session is None:
             self.session = tf.Session() # delay this so that any options get applied from finetune.
             self.gpu_memory_limit = self.session.run(tf.contrib.memory_stats.BytesLimit())
