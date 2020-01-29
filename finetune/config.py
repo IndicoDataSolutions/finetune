@@ -11,7 +11,7 @@ from nltk.metrics.distance import edit_distance
 
 import finetune
 from finetune.errors import FinetuneError
-from finetune.base_models import GPTModel, GPT2Model, BERT, TextCNN
+from finetune.base_models import RoBERTa
 
 LOGGER = logging.getLogger("finetune")
 
@@ -363,7 +363,7 @@ def get_default_config():
         oscar_use_fused_kernel=False,
 
         # Location of model weights
-        base_model=GPTModel,
+        base_model=RoBERTa,
         base_model_path=None,
 
         # Possible `SourceModel` specific settings
