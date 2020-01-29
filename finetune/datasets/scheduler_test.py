@@ -33,16 +33,17 @@ if __name__ == "__main__":
     )
 
     n_models = 40
-    fn_to_preds = dict()
-    for i in range(n_models):
-        fn = "scheduler_models/scheduler_{}.model".format(i)
-        model = SequenceLabeler(base_model=RoBERTa)
-        model.fit([trainX[i]], [trainY[i]])
-        model.save(fn)
-        model = SequenceLabeler.load(fn)
-        preds = model.predict(testX)
-        fn_to_preds[fn] = preds
-    jl.dump(fn_to_preds, "fn_to_preds")
+#    fn_to_preds = dict()
+#    for i in range(n_models):
+#        fn = "scheduler_models/scheduler_{}.model".format(i)
+#        model = SequenceLabeler(base_model=RoBERTa)
+#        model.fit([trainX[i]], [trainY[i]])
+#        model.save(fn)
+#        model = SequenceLabeler.load(fn)
+#        preds = model.predict(testX)
+#        fn_to_preds[fn] = preds
+#    jl.dump(fn_to_preds, "fn_to_preds")
+    fn_to_preds = jl.load("fn_to_preds")
     fns = list(fn_to_preds.keys())
     sched = Scheduler()
     
