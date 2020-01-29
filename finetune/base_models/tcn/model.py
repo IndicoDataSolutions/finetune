@@ -27,6 +27,7 @@ class TCNModel(SourceModel):
         "train_embeddings": False,
         "lr": 0.1,
         "base_model_path": os.path.join("gpt2", "model-sm.jl"),
+        "max_length": 512,
     }
     required_files = [
         {
