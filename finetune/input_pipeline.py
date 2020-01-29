@@ -250,7 +250,7 @@ class BasePipeline(metaclass=ABCMeta):
         if self.config.val_interval is None:
             # sys.maxsize corresponds to never running validation
             # and is used when val_size is set to 0
-            val_interval = 4 * int(math.ceil(val_size / batch_size)) or sys.maxsize
+            val_interval = 4 * int(math.ceil(val_size / batch_size)) or (sys.maxsize // 2)
         else:
             val_interval = self.config.val_interval
 
