@@ -80,7 +80,7 @@ class BaseModel(object, metaclass=ABCMeta):
         config.base_model = kwargs.get("base_model", config.base_model)
         auto_keys = []
         for k, v in config.items():
-            if isinstance(v, str) and v.lower() != "auto":
+            if isinstance(v, str) and v.lower() == "auto":
                 auto_keys.append(k)
             else:
                 # look for overrides

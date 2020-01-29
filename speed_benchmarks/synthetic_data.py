@@ -1,8 +1,8 @@
 
-def sequence_data(num_docs=50, length=1024):
+def sequence_data(num_docs=50, length=8000):
     return multi_label_sequence_data(num_docs=num_docs, length=length, num_labels=1)
     
-def multi_label_sequence_data(num_docs=50, length=1024, num_labels=5):
+def multi_label_sequence_data(num_docs=50, length=8000, num_labels=5):
     string = "The quick brown fox jumped over the lazy dog. "
     multiplier = length // len(string)
     x = [string * multiplier] * num_docs
