@@ -79,9 +79,7 @@ if __name__ == "__main__":
         random_state=42
     )
     model = SequenceLabeler(batch_size=1, n_epochs=3, val_size=0.0, max_length=512, chunk_long_sequences=True, subtoken_predictions=False, crf_sequence_labeling=True, multi_label_sequences=False)
-    model.fit(trainX[:1], trainY[:1])
-    with model.cached_predict():
-        predictions = model.predict(testX * 100)
-        predictions2 = model.predict(testX * 100)
-    print(predictions == predictions2)
+    model.fit(trainX, trainY)
+    predictions = model.predict(testX)
+    print(predictions)
     print(annotation_report(testY, predictions))
