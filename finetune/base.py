@@ -64,9 +64,7 @@ class BaseModel(object, metaclass=ABCMeta):
         d = deepcopy(self.defaults)
         d.update(kwargs)
 
-        print("1", kwargs["n_epochs"])
-        self.config = self.resolve_config(**kwargs)
-        print("2", self.config.n_epochs)
+        self.config = self.resolve_config(**d)
         self.resolved_gpus = None
         self.validate_config()
         download_data_if_required(self.config.base_model)
