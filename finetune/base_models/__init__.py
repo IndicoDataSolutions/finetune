@@ -4,6 +4,10 @@ from abc import ABCMeta, abstractmethod
 class SourceModel(metaclass=ABCMeta):
     is_bidirectional = True
 
+    @classmethod
+    def get_optimal_params(cls, config):
+        return cls.settings
+
     @property
     @abstractmethod
     def encoder(cls):

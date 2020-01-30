@@ -88,40 +88,12 @@ class BaseModel(object, metaclass=ABCMeta):
                     config[k] = kwargs[k]
                 elif k in config.base_model.settings:
                     config[k] = config.base_model.settings[k]
-    
-        if config.optimize_for.lower() == "speed":
-            overrides = {
-                "max_length": 128 if config.chunk_long_sequences else config.base_model.settings["max_length"],
-                "n_epochs": 5,
-                "batch_size": 4,
-                "chunk_context": 16,
-                "predict_batch_size": 48,
-            }
-            
-        elif config.optimize_for.lower() == "accuracy":
-            overrides = {
-                "max_length": config.base_model.settings["max_length"],
-                "n_epochs": 8,	
-                "batch_size": 2,
-                "chunk_context": None,
-                "predict_batch_size": 20,
-            }
-            
-        elif config.optimize_for.lower() == "predict_speed":
-            overrides = {
-                "max_length": 128 if config.chunk_long_sequences else config.base_model.settings["max_length"],
-                "n_epochs": 8,
-		"batch_size": 2,
-                "chunk_context": 16,
-                "predict_batch_size": 48,
-            }
 
-        else:
-            raise ValueError("Cannot optimise hyperparams for {}, must be either 'speed' or 'accuracy'".format(config.optimize_for))
+        overrides = config.base_model.get_optimal_params(config)
 
         for ak in auto_keys:
             if ak == "val_size":
-                continue # this auto is resolved after data is provided.
+                continue  # this auto is resolved after data is provided.
             if ak not in overrides:
                 raise ValueError("There is no auto setting for {}".format(ak))
             config[ak] = overrides[ak]
@@ -356,7 +328,6 @@ class BaseModel(object, metaclass=ABCMeta):
                     raise FinetuneError("Distribute strategy {} is not supported, please try \"mirrored\" or \"central_storage\" or an instance of tf.distribute.Strategy")
             elif isinstance(self.config.distribution_strategy, tf.distribute.Strategy):
                 distribute_strategy = self.config.distribution_strategy
-                    
 
         self.resolved_gpus = resolved_gpus
         return distribute_strategy

@@ -11,12 +11,50 @@ from finetune.base_models.bert.encoder import (
 
 from finetune.base_models.bert.roberta_encoder import RoBERTaEncoder, RoBERTaEncoderV2
 from finetune.base_models.bert.featurizer import bert_featurizer
-from finetune.base_models.gpt2 import encoder as gpt2_encoder
 from finetune.util.download import BERT_BASE_URL, GPT2_BASE_URL, ROBERTA_BASE_URL, FINETUNE_BASE_FOLDER
 
 
-class BERTModelCased(SourceModel):
+class _BaseBert(SourceModel):
     is_bidirectional = True
+
+    @classmethod
+    def get_optimal_params(cls, config):
+        if config.optimize_for.lower() == "speed":
+            overrides = {
+                "max_length": 128 if config.chunk_long_sequences else config.base_model.settings["max_length"],
+                "n_epochs": 5,
+                "batch_size": 4,
+                "chunk_context": 16,
+                "predict_batch_size": 48,
+            }
+
+        elif config.optimize_for.lower() == "accuracy":
+            overrides = {
+                "max_length": config.base_model.settings["max_length"],
+                "n_epochs": 8,
+                "batch_size": 2,
+                "chunk_context": None,
+                "predict_batch_size": 20,
+            }
+
+        elif config.optimize_for.lower() == "predict_speed":
+            overrides = {
+                "max_length": 128 if config.chunk_long_sequences else config.base_model.settings["max_length"],
+                "n_epochs": 8,
+                "batch_size": 2,
+                "chunk_context": 16,
+                "predict_batch_size": 48,
+            }
+        else:
+            raise ValueError(
+                "Cannot optimise hyperparams for {}, must be either 'speed', 'predict_speed' or 'accuracy'".format(
+                    config.optimize_for
+                )
+            )
+        return overrides
+
+
+class BERTModelCased(_BaseBert):
     encoder = BERTEncoder
     featurizer = bert_featurizer
     settings = {
@@ -42,8 +80,7 @@ class BERTModelCased(SourceModel):
     ]
 
 
-class BERTModelLargeCased(SourceModel):
-    is_bidirectional = True
+class BERTModelLargeCased(_BaseBert):
     encoder = BERTEncoderLarge
     featurizer = bert_featurizer
     settings = {
@@ -69,8 +106,7 @@ class BERTModelLargeCased(SourceModel):
     ]
 
 
-class BERTModelLargeWWMCased(SourceModel):
-    is_bidirectional = True
+class BERTModelLargeWWMCased(_BaseBert):
     encoder = BERTEncoderLarge
     featurizer = bert_featurizer
     settings = {
@@ -97,8 +133,7 @@ class BERTModelLargeWWMCased(SourceModel):
     ]
 
 
-class BERTModelMultilingualCased(SourceModel):
-    is_bidirectional = True
+class BERTModelMultilingualCased(_BaseBert):
     encoder = BERTEncoderMultuilingal
     featurizer = bert_featurizer
     settings = {
@@ -124,8 +159,7 @@ class BERTModelMultilingualCased(SourceModel):
     ]
 
 
-class RoBERTa(SourceModel):
-    is_bidirectional = True
+class RoBERTa(_BaseBert):
     encoder = RoBERTaEncoderV2
     featurizer = bert_featurizer
     settings = {
@@ -176,7 +210,6 @@ class RoBERTa(SourceModel):
 
 
 class RoBERTaLarge(RoBERTa):
-    is_bidirectional = True
     encoder = RoBERTaEncoderV2
     featurizer = bert_featurizer
     settings = {
@@ -221,8 +254,7 @@ class RoBERTaLarge(RoBERTa):
 ZuckerBERT = RoBERTa
 
 
-class DistilBERT(SourceModel):
-    is_bidirectional = True
+class DistilBERT(_BaseBert):
     encoder = DistilBERTEncoder
     featurizer = bert_featurizer
     settings = {
@@ -240,7 +272,6 @@ class DistilBERT(SourceModel):
         "bert_use_type_embed": False,
         "bert_intermediate_size": 3072,
         "base_model_path": os.path.join("bert", "distillbert.jl"),
-        "max_length": 512,
     }
     required_files = [
         {
@@ -251,8 +282,7 @@ class DistilBERT(SourceModel):
     ]
 
 
-class DistilRoBERTa(SourceModel):
-    is_bidirectional = True
+class DistilRoBERTa(_BaseBert):
     encoder = RoBERTaEncoder
     featurizer = bert_featurizer
     settings = {
@@ -270,7 +300,6 @@ class DistilRoBERTa(SourceModel):
         "bert_use_type_embed": False,
         "bert_intermediate_size": 3072,
         "base_model_path": os.path.join("bert", "distilroberta.jl"),
-        "max_length": 512,
     }
     required_files = [
         {
