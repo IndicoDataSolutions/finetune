@@ -144,7 +144,7 @@ class SequenceLabeler(BaseModel):
     :param \**kwargs: key-value pairs of config items to override.
     """
 
-    defaults = {"n_epochs": 5, "add_eos_bos_to_chunk": False}
+    defaults = {"add_eos_bos_to_chunk": False}
 
     def __init__(self, **kwargs):
         """
