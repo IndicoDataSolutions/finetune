@@ -2,7 +2,6 @@ import os
 from urllib.parse import urljoin
 
 from finetune.base_models import SourceModel
-from finetune.base_models.gpt.encoder import GPTEncoder
 from finetune.base_models.gpt2.encoder import GPT2Encoder
 from finetune.base_models.textcnn.featurizer import textcnn_featurizer
 from finetune.util.download import GPT2_BASE_URL, FINETUNE_BASE_FOLDER
