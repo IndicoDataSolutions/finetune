@@ -63,7 +63,10 @@ class BaseModel(object, metaclass=ABCMeta):
         atexit.register(cleanup)
         d = deepcopy(self.defaults)
         d.update(kwargs)
+
+        print("1", kwargs["n_epochs"])
         self.config = self.resolve_config(**kwargs)
+        print("2", self.config.n_epochs)
         self.resolved_gpus = None
         self.validate_config()
         download_data_if_required(self.config.base_model)
@@ -79,15 +82,14 @@ class BaseModel(object, metaclass=ABCMeta):
         config = get_default_config()
         config.base_model = kwargs.get("base_model", config.base_model)
         auto_keys = []
+        config.update(kwargs)
         for k, v in config.items():
             if isinstance(v, str) and v.lower() == "auto":
                 auto_keys.append(k)
-            else:
-                # look for overrides
-                if k in kwargs:
-                    config[k] = kwargs[k]
-                elif k in config.base_model.settings:
-                    config[k] = config.base_model.settings[k]
+            elif k in kwargs:
+                continue
+            elif k in config.base_model.settings:
+                config[k] = config.base_model.settings[k]
 
         overrides = config.base_model.get_optimal_params(config)
 

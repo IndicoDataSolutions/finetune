@@ -1,12 +1,22 @@
 from abc import ABCMeta, abstractmethod
 
+COMMON_SETTINGS = {
+    'max_length': 512,
+    'batch_size': 2,
+    'n_epochs': 3,
+    'predict_batch_size': 20,
+    'chunk_context': None
+}
+
 
 class SourceModel(metaclass=ABCMeta):
     is_bidirectional = True
 
     @classmethod
     def get_optimal_params(cls, config):
-        return cls.settings
+        settings = dict(COMMON_SETTINGS)
+        settings.update(cls.settings)
+        return settings
 
     @property
     @abstractmethod

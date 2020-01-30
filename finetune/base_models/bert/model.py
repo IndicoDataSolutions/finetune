@@ -19,9 +19,10 @@ class _BaseBert(SourceModel):
 
     @classmethod
     def get_optimal_params(cls, config):
+        base_max_length = config.base_model.settings.get("max_length", 512)
         if config.optimize_for.lower() == "speed":
             overrides = {
-                "max_length": 128 if config.chunk_long_sequences else config.base_model.settings["max_length"],
+                "max_length": 128 if config.chunk_long_sequences else base_max_length,
                 "n_epochs": 5,
                 "batch_size": 4,
                 "chunk_context": 16,
@@ -30,7 +31,7 @@ class _BaseBert(SourceModel):
 
         elif config.optimize_for.lower() == "accuracy":
             overrides = {
-                "max_length": config.base_model.settings["max_length"],
+                "max_length": base_max_length,
                 "n_epochs": 8,
                 "batch_size": 2,
                 "chunk_context": None,
@@ -39,7 +40,7 @@ class _BaseBert(SourceModel):
 
         elif config.optimize_for.lower() == "predict_speed":
             overrides = {
-                "max_length": 128 if config.chunk_long_sequences else config.base_model.settings["max_length"],
+                "max_length": 128 if config.chunk_long_sequences else base_max_length,
                 "n_epochs": 8,
                 "batch_size": 2,
                 "chunk_context": 16,
@@ -69,7 +70,6 @@ class BERTModelCased(_BaseBert):
         "l2_reg": 0.01,
         "bert_intermediate_size": 3072,
         "base_model_path": os.path.join("bert", "bert_small_cased-v2.jl"),
-        "max_length": 512,
     }
     required_files = [
         {
@@ -148,7 +148,6 @@ class BERTModelMultilingualCased(_BaseBert):
         "l2_reg": 0.01,
         "bert_intermediate_size": 3072,
         "base_model_path": os.path.join("bert", "bert_small_multi_cased-v2.jl"),
-        "max_length": 512,
     }
     required_files = [
         {
@@ -175,7 +174,6 @@ class RoBERTa(_BaseBert):
         "epsilon": 1e-8,
         "bert_intermediate_size": 3072,
         "bert_use_pooler": False,
-        "max_length": 512,
         "base_model_path": os.path.join("bert", "roberta-model-sm-v2.jl"),
     }
     required_files = [
@@ -226,7 +224,6 @@ class RoBERTaLarge(RoBERTa):
         "epsilon": 1e-8,
         "bert_intermediate_size": 4096,
         "bert_use_pooler": False,
-        "max_length": 512,
         "base_model_path": os.path.join("bert", "roberta-model-lg-v2.jl"),
     }
     required_files = [
@@ -258,7 +255,6 @@ class DistilBERT(_BaseBert):
     encoder = DistilBERTEncoder
     featurizer = bert_featurizer
     settings = {
-        "max_length": 512,
         "n_embed": 768,
         "n_epochs": 8,
         "n_heads": 12,
@@ -286,7 +282,6 @@ class DistilRoBERTa(_BaseBert):
     encoder = RoBERTaEncoder
     featurizer = bert_featurizer
     settings = {
-        "max_length": 512,
         "n_embed": 768,
         "n_epochs": 8,
         "n_heads": 12,
