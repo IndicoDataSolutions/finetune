@@ -55,12 +55,13 @@ class InMemoryFinetune(tf.train.SessionRunHook):
                 train_x, train_y = self.train_data
                 model.fit(train_x, train_y, context=self.train_context)
                 test_x, test_y = self.test_data
-                test_accuracy = np.mean(model.predict(test_x, context=self.test_context) == test_y)
-                train_accuracy = np.mean(model.predict(train_x, context=self.train_context) == train_y)
+                test_f1 = summary_macro_f1(test_y, model.predict(test_x, context=self.test_context))
+                train_f1 = summary_macro_f1(train_y, model.predict(train_x, context=self.train_context))
+                
         except IOError as e:
             traceback.print_exc(file=sys.stdout)
-            test_accuracy = -1.0
-            train_accuracy = -1.0
+            test_f1 = -1.0
+            train_f1 = -1.0
 
         global_step = session.run(tf.train.get_or_create_global_step())
         directory = os.path.join(self._eval_dir, "..", "finetuning")
@@ -69,8 +70,8 @@ class InMemoryFinetune(tf.train.SessionRunHook):
             os.makedirs(directory)
         summary_writer = writer_cache.FileWriterCache.get(directory)
         summary_proto = summary_pb2.Summary()
-        summary_proto.value.add(tag="finetuning/{}_train_accurary".format(self._name), simple_value=float(train_accuracy))
-        summary_proto.value.add(tag="finetuning/{}_test_accurary".format(self._name), simple_value=float(test_accuracy))
+        summary_proto.value.add(tag="finetuning/{}_train_f1".format(self._name), simple_value=float(train_f1))
+        summary_proto.value.add(tag="finetuning/{}_test_f1".format(self._name), simple_value=float(test_f1))
         summary_writer.add_summary(summary_proto, global_step)
         summary_writer.flush()
     

@@ -184,6 +184,20 @@ def sequences_overlap(true_seq, pred_seq):
     end_contained = (pred_seq['end'] > true_seq['start'] and pred_seq['end'] <= true_seq['end'])
     return start_contained or end_contained
 
+def summary_macro_f1(true, predicted):
+    precisions = sequence_labeling_token_precision(true, predicted)
+    recalls = sequence_labeling_token_recall(true, predicted)
+    
+    f1s = dict()
+    for key in precisions.keys():
+        assert key in recalls
+        p = precisions[key]
+        r = recalls[key]
+        if p == 0 and r == 0:
+            f1s[key] = 0.0
+        else:
+            f1s[key] = 2 * p * r / (p + r)
+    return sum(f1s.values()) / len(f1s)
 
 def sequence_labeling_overlaps(true, predicted):
     """
