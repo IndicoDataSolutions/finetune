@@ -467,7 +467,7 @@ class BasePipeline(metaclass=ABCMeta):
     def get_predict_input_fn(self, Xs, batch_size=None, context=None):
         batch_size = batch_size or self.config.predict_batch_size
         _, shapes = self.feed_shape_type_def()
-        tf_dataset = lambda: self._dataset_without_targets(Xs, train=None, context=context).padded_batch(batch_size, padded_shapes=shapes[0], drop_remainder=False).prefetch(tf.data.experimental.AUTOTUNE)
+        tf_dataset = lambda: self._dataset_without_targets(Xs, train=None, context=context).padded_batch(batch_size, padded_shapes=shapes[0], drop_remainder=False)
         return tf_dataset
 
     @property
