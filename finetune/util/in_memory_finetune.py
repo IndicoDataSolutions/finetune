@@ -7,6 +7,8 @@ from tensorflow.python.summary.writer import writer_cache
 import tensorflow as tf
 import numpy as np
 
+from finetune.util.metrics import summary_macro_f1
+
 
 class InMemoryFinetune(tf.train.SessionRunHook):
 
@@ -73,6 +75,7 @@ class InMemoryFinetune(tf.train.SessionRunHook):
         summary_proto.value.add(tag="finetuning/{}_train_f1".format(self._name), simple_value=float(train_f1))
         summary_proto.value.add(tag="finetuning/{}_test_f1".format(self._name), simple_value=float(test_f1))
         summary_writer.add_summary(summary_proto, global_step)
+        print("Train F1: {} Test F1: {}".format(train_f1, test_f1))
         summary_writer.flush()
     
         self._timer.update_last_triggered_step(self._iter_count)
