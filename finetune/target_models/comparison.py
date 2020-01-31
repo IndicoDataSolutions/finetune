@@ -91,6 +91,8 @@ class Comparison(Classifier):
     defaults = {"chunk_long_sequences": False}
 
     def __init__(self, **kwargs):
+        d = copy.deepcopy(Comparison.defaults)
+        d.update(kwargs)
         super().__init__(**kwargs)
         if self.config.chunk_long_sequences:
             raise FinetuneError(
