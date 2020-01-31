@@ -35,7 +35,3 @@ class TCNModel(SourceModel):
         }
         for filename in ["encoder.json", "vocab.bpe", "model-sm.jl"]
     ]
-
-    @classmethod
-    def get_optimal_params(cls, config):
-        return cls.settings
