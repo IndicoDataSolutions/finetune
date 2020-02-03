@@ -220,43 +220,21 @@ class BertModel(object):
 
                 # Run the stacked transformer.
                 # `sequence_output` shape = [batch_size, seq_length, hidden_size].
-                if context is not None and config.use_auxiliary_info:
-                    hidden_and_auxiliary_dim = config.hidden_size + config.n_context_embed_per_channel * config.context_dim
-                    self.all_encoder_layers = transformer_model(
-                        input_tensor=,
-                        attention_mask=attention_mask,
-                        hidden_size=hidden_and_auxiliary_dim,
-                        num_hidden_layers=config.num_hidden_layers,
-                        num_attention_heads=config.num_attention_heads,  # TODO
-                        intermediate_size=config.intermediate_size,
-                        intermediate_act_fn=get_activation(config.hidden_act),
-                        hidden_dropout_prob=config.hidden_dropout_prob,
-                        attention_probs_dropout_prob=config.attention_probs_dropout_prob,
-                        initializer_range=config.initializer_range,
-                        adapter_size=config.adapter_size,
-                        do_return_all_layers=True,
-                        low_memory_mode=config.low_memory_mode and is_training,
-                        auxiliary_init=True,
-                        config=config
-                    )
-
-                else:
-                    self.all_encoder_layers = transformer_model(
-                        input_tensor=self.embedding_output,
-                        attention_mask=attention_mask,
-                        hidden_size=config.hidden_size,
-                        num_hidden_layers=config.num_hidden_layers,
-                        num_attention_heads=config.num_attention_heads,
-                        intermediate_size=config.intermediate_size,
-                        intermediate_act_fn=get_activation(config.hidden_act),
-                        hidden_dropout_prob=config.hidden_dropout_prob,
-                        attention_probs_dropout_prob=config.attention_probs_dropout_prob,
-                        initializer_range=config.initializer_range,
-                        adapter_size=config.adapter_size,
-                        do_return_all_layers=True,
-                        low_memory_mode=config.low_memory_mode and is_training,
-                        auxiliary_init=False,
-                        config=config
+                self.all_encoder_layers = transformer_model(
+                    input_tensor=self.embedding_output,
+                    attention_mask=attention_mask,
+                    hidden_size=config.hidden_size,
+                    num_hidden_layers=config.num_hidden_layers,
+                    num_attention_heads=config.num_attention_heads,  # TODO
+                    intermediate_size=config.intermediate_size,
+                    intermediate_act_fn=get_activation(config.hidden_act),
+                    hidden_dropout_prob=config.hidden_dropout_prob,
+                    attention_probs_dropout_prob=config.attention_probs_dropout_prob,
+                    initializer_range=config.initializer_range,
+                    adapter_size=config.adapter_size,
+                    do_return_all_layers=True,
+                    low_memory_mode=config.low_memory_mode and is_training,
+                    config=config
                     )
                 self.sequence_output = self.all_encoder_layers[-1]
 
@@ -927,7 +905,6 @@ def transformer_model(input_tensor,
                       do_return_all_layers=False,
                       adapter_size=0,
                       low_memory_mode=False,
-                      auxiliary_init=False,
                       config=None,
                       context=None):
     """Multi-headed, multi-layer Transformer from "Attention is All You Need".
@@ -993,7 +970,18 @@ def transformer_model(input_tensor,
     prev_output = reshape_to_matrix(input_tensor)
 
     all_layer_outputs = []
+    # add auxiliary info to the last n_layers_with_aux layers
+    auxiliary_init = True if config.n_layers_with_aux == -1 else False
     for layer_idx in range(num_hidden_layers):
+        if num_hidden_layers - layer_idx == config.n_layers_with_aux:
+            auxiliary_init = True
+            prev_output = tf.concat((prev_output, context), -1)
+            hidden_size = hidden_size + config.n_context_embed_per_channel * config.context_dim
+            if hidden_size % num_attention_heads != 0:
+                raise ValueError(
+                    "The hidden size (%d) is not a multiple of the number of attention "
+                    "heads (%d)" % (hidden_size, num_attention_heads))
+            attention_head_size = int(hidden_size / num_attention_heads)
         with tf.variable_scope("layer_%d" % layer_idx):
             layer_input = prev_output
 
