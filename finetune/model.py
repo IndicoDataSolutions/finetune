@@ -33,6 +33,8 @@ class PredictMode:
     NORMAL = "NORM"
     PROBAS = "PROBA"
     GENERATE_TEXT = "GEN_TEXT"
+    MLM_IDS = "mlm_ids"
+    MLM_POSITIONS = "mlm_positions"
     LM_PERPLEXITY = "PERPLEXITY"
     ATTENTION = "ATTENTION"
     CONTEXT_ATTENTION = "CONTEXT_ATTENTION"
@@ -74,7 +76,7 @@ def language_model_op(X, params, featurizer_state, mode, encoder):
 
 
 def masked_language_model_op(X, mlm_weights, mlm_ids, mlm_positions, params, featurizer_state, mode):
-    return masked_language_model(
+    language_model_state = masked_language_model(
         X=X,
         mlm_weights=mlm_weights,
         mlm_ids=mlm_ids,
@@ -84,8 +86,32 @@ def masked_language_model_op(X, mlm_weights, mlm_ids, mlm_positions, params, fea
         hidden=featurizer_state["sequence_features"],
         train=(mode == tf.estimator.ModeKeys.TRAIN)
     )
-    return language_model_state
+    lm_logits = language_model_state['logits']
 
+    lm_logit_mask = np.zeros(
+        [1, lm_logits.get_shape().as_list()[-1]], dtype=np.float32
+    )
+    lm_logit_mask[:, encoder.vocab_size :] = -np.inf
+
+    if "use_extra_toks" in params and not params.use_extra_toks:
+        lm_logit_mask[:, encoder.start_token] = -np.inf
+        lm_logit_mask[:, encoder.delimiter_token] = -np.inf
+        lm_logit_mask[:, encoder.end_token] = -np.inf
+
+        lm_logits += lm_logit_mask
+
+
+
+    relevant_logits = tf.boolean_mask(lm_logits, tf.reshape(mlm_weights, shape=(-1,)))
+    #relevant_logits = tf.reshape(lm_logits, shape=(-1,))
+    #relevant_ids = tf.boolean_mask(mlm_ids, tf.reshape(mlm_weights, shape=(-1,)))
+    #relevant_positions = tf.boolean_mask(mlm_positions, tf.reshape(mlm_weights, shape=(-1,)))
+    relevant_ids = tf.boolean_mask(mlm_ids, mlm_weights)
+    relevant_positions = tf.boolean_mask(mlm_positions, mlm_weights)
+
+    top_token_idxs = tf.argsort(relevant_logits, direction='ASCENDING', axis=-1)
+    return (top_token_idxs, relevant_ids, relevant_positions), language_model_state
+    #return best_token_idxs, language_model_state
 
 def get_model_fn(
     target_model_fn,
@@ -121,7 +147,7 @@ def get_model_fn(
                 label_encoder=label_encoder,
                 **kwargs
             )
-            
+
         return target_model_state
 
     def _model_fn(features, labels, mode, params):
@@ -178,7 +204,7 @@ def get_model_fn(
                 #         featurizer_state['sequence_features'] = seq_feats
 
             predictions = {
-                PredictMode.FEATURIZE: featurizer_state["features"], 
+                PredictMode.FEATURIZE: featurizer_state["features"],
                 PredictMode.SEQUENCE: featurizer_state["sequence_features"]
             }
 
@@ -221,7 +247,6 @@ def get_model_fn(
                     else:
                         predictions[PredictMode.NORMAL] = pred_op
                         predictions[PredictMode.PROBAS] = pred_proba_op
-
                     if build_explain:
                         predictions[PredictMode.EXPLAIN] = target_model_state[
                             "explanation"
@@ -236,19 +261,19 @@ def get_model_fn(
                     lm_predict_op, language_model_state = language_model_op(
                         X=X, params=params, featurizer_state=featurizer_state, mode=mode, encoder=encoder
                     )
+
                 elif lm_type.lower() == 'mlm':
-                    language_model_state = masked_language_model_op(
-                        X=X, 
+                    (lm_predict_op, mlm_ids, mlm_positions), language_model_state = masked_language_model_op(
+                        X=X,
                         mlm_weights=features['mlm_weights'],
                         mlm_ids=features['mlm_ids'],
                         mlm_positions=features['mlm_positions'],
-                        params=params, 
+                        params=params,
                         featurizer_state=featurizer_state,
-                        mode=mode
+                        mode=mode,
+                        encoder=encoder
                     )
-                    # No support for any form of text generation for MLM for now
-                    lm_predict_op = None
-                else: 
+                else:
                     raise FinetuneError("Unsupport `lm_type` option: {}".format(lm_type))
 
                 if (
@@ -261,9 +286,15 @@ def get_model_fn(
                 if mode == tf.estimator.ModeKeys.PREDICT:
                     if lm_predict_op is not None:
                         predictions[PredictMode.GENERATE_TEXT] = lm_predict_op
-                    predictions[PredictMode.LM_PERPLEXITY] = language_model_state[
-                        "perplexity"
-                    ]
+                        if lm_type.lower() == 'mlm':
+                            predictions[PredictMode.MLM_IDS] = mlm_ids
+                            predictions[PredictMode.MLM_POSITIONS] = mlm_positions
+                            #predictions[PredictMode.MLM_IDS] = features['mlm_ids']
+                            #predictions[PredictMode.MLM_POSITIONS] = features['mlm_positions']
+                    if lm_type.lower == 'lm':
+                        predictions[PredictMode.LM_PERPLEXITY] = language_model_state[
+                            "perplexity"
+                        ]
 
         if mode == tf.estimator.ModeKeys.TRAIN:
             total_num_steps = params.n_epochs * params.dataset_size // (params.batch_size * n_replicas)

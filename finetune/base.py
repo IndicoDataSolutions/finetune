@@ -241,7 +241,7 @@ class BaseModel(object, metaclass=ABCMeta):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             estimator.train(train_input_fn, hooks=train_hooks, steps=num_steps)
-        
+
         self._trained = True
 
     def _distribute_strategy(self, visible_gpus):
@@ -250,7 +250,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         Side effect: sets self.resolved_gpus for future use in computing steps per epoch
         """
-        
+
         if isinstance(visible_gpus, (list, tuple)):
             resolved_gpus = all_gpus(visible_gpus=tuple(visible_gpus))
         else:
@@ -286,8 +286,8 @@ class BaseModel(object, metaclass=ABCMeta):
                 self.config.per_process_gpu_memory_fraction
             )
         optimizer_options = conf.graph_options.optimizer_options
-        if self.config.xla:                                                     
-            optimizer_options.global_jit_level = tf.OptimizerOptions.ON_1 
+        if self.config.xla:
+            optimizer_options.global_jit_level = tf.OptimizerOptions.ON_1
 
         distribute_strategy = self._distribute_strategy(self.config.visible_gpus)
         config = tf.estimator.RunConfig(
@@ -353,6 +353,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self._cached_predict = False
         self.close()
 
+
     def _inference(self, Xs, predict_keys=None, n_examples=None, context=None, update_hook=None):
         Xs = self.input_pipeline._format_for_inference(Xs)
         input_fn = self.input_pipeline.get_predict_input_fn(Xs, context=context)
@@ -386,6 +387,7 @@ class BaseModel(object, metaclass=ABCMeta):
             raise FinetuneError(
                 "Cannot call `predict()` on a model that has not been fit."
             )
+
 
     def fit(self, *args, **kwargs):
         """ An alias for finetune. """
@@ -483,7 +485,7 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         if use_extra_toks is None:
             use_extra_toks = self._trained
-    
+
         def dataset_encoded():
             while not dataset_encoded.finished:
                 yield {"tokens": arr_encoded.token_ids, "mask": arr_encoded.mask}
@@ -502,7 +504,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 "If you are not using the extra tokens, you must provide some non-empty seed text"
             )
         start = [self.input_pipeline.text_encoder.start_token] if use_extra_toks else []
-        token_ids = start 
+        token_ids = start
         if encoded.token_ids is not None and len(encoded.token_ids):
             token_ids += encoded.token_ids[0]
         encoded = EncodedOutput(token_ids=token_ids)
@@ -554,7 +556,7 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         if path is None:
             return
-        
+
         if isinstance(path, str):
             path = os.path.abspath(path)
         self.saver.save(self, path)
