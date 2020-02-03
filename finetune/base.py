@@ -99,7 +99,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self._cached_predict = False
         self._closed = False
         self._to_pull = 0
-        
+
         try:
             self.estimator_dir = os.path.abspath(
                 os.path.join(self.config.tensorboard_folder, str(int(time.time())))
@@ -275,7 +275,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
                 tf.logging.info("Finishing pre-fit initialisation...")
             estimator.train(train_input_fn, hooks=train_hooks, steps=num_steps)
-        
+
         self._trained = True
 
     def _distribute_strategy(self, visible_gpus):
@@ -284,7 +284,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         Side effect: sets self.resolved_gpus for future use in computing steps per epoch
         """
-        
+
         if isinstance(visible_gpus, (list, tuple)):
             resolved_gpus = all_gpus(visible_gpus=tuple(visible_gpus))
         else:
@@ -306,7 +306,7 @@ class BaseModel(object, metaclass=ABCMeta):
                     raise FinetuneError("Distribute strategy {} is not supported, please try \"mirrored\" or \"central_storage\" or an instance of tf.distribute.Strategy")
             elif isinstance(self.config.distribution_strategy, tf.distribute.Strategy):
                 distribute_strategy = self.config.distribution_strategy
-                    
+
 
         self.resolved_gpus = resolved_gpus
         return distribute_strategy
@@ -321,8 +321,8 @@ class BaseModel(object, metaclass=ABCMeta):
                 self.config.per_process_gpu_memory_fraction
             )
         optimizer_options = conf.graph_options.optimizer_options
-        if self.config.xla:                                                     
-            optimizer_options.global_jit_level = tf.OptimizerOptions.ON_1 
+        if self.config.xla:
+            optimizer_options.global_jit_level = tf.OptimizerOptions.ON_1
 
         distribute_strategy = self._distribute_strategy(self.config.visible_gpus)
         config = tf.estimator.RunConfig(
@@ -420,7 +420,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self._cached_predict = False
         self.close()
 
-    def _cached_inference(self, Xs, predict_keys=None, n_examples=None, update_hook=None):
+    def _cached_inference(self, Xs, predict_keys=None, n_examples=None, update_hook=None, force_build_lm=None):
         """
         Ensure graph is not rebuilt on subsequent calls to .predict()
         """
@@ -429,7 +429,7 @@ class BaseModel(object, metaclass=ABCMeta):
         n = n_examples or len(self._data)
         if self._predictions is None:
             input_fn = self.input_pipeline.get_predict_input_fn(self._data_generator)
-            _estimator, hooks = self.get_estimator()
+            _estimator, hooks = self.get_estimator(force_build_lm=force_build_lm)
             self._predictions = _estimator.predict(
                 input_fn=input_fn, predict_keys=predict_keys, hooks=hooks
             )
@@ -437,7 +437,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self._clear_prediction_queue()
 
         predictions = [None] * n
-        
+
         for i in ProgressBar(range(n), total=n, desc="Inference", update_hook=update_hook):
             y = next(self._predictions)
             try:
@@ -450,17 +450,16 @@ class BaseModel(object, metaclass=ABCMeta):
 
         return predictions
 
-    def _inference(self, Xs, predict_keys=None, n_examples=None, context=None, update_hook=None):
+    def _inference(self, Xs, predict_keys=None, n_examples=None, context=None, update_hook=None, force_build_lm=None):
         Xs = self.input_pipeline._format_for_inference(Xs)
-
         if self._cached_predict:
             return self._cached_inference(
-                Xs=Xs, predict_keys=predict_keys, n_examples=n_examples, update_hook=update_hook
-            )
+                Xs=Xs, predict_keys=predict_keys, n_examples=n_examples, update_hook=update_hook, force_build_lm=force_build_lm)
         else:
             input_fn = self.input_pipeline.get_predict_input_fn(Xs, context=context)
             estimator, hooks = self.get_estimator(
                 build_explain=PredictMode.EXPLAIN in predict_keys,
+                force_build_lm=force_build_lm
             )
             length = len(Xs) if not callable(Xs) else None
 
@@ -468,17 +467,17 @@ class BaseModel(object, metaclass=ABCMeta):
                 input_fn=input_fn, predict_keys=predict_keys, hooks=hooks
             )
             predictions = ProgressBar(
-                prediction_iterator, 
-                total=n_examples or length, 
-                desc="Inference", 
+                prediction_iterator,
+                total=n_examples or length,
+                desc="Inference",
                 update_hook=update_hook
             )
             try:
                 return [
                     pred[predict_keys[0]] if len(predict_keys) == 1 else pred
-                    for pred in predictions
-                ]
+                    for pred in predictions]
             except ValueError:
+                import traceback; traceback.print_exc()
                 raise FinetuneError(
                     "Cannot call `predict()` on a model that has not been fit."
                 )
@@ -579,7 +578,7 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         if use_extra_toks is None:
             use_extra_toks = self._trained
-    
+
         def dataset_encoded():
             while not dataset_encoded.finished:
                 yield {"tokens": arr_encoded.token_ids, "mask": arr_encoded.mask}
@@ -598,7 +597,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 "If you are not using the extra tokens, you must provide some non-empty seed text"
             )
         start = [self.input_pipeline.text_encoder.start_token] if use_extra_toks else []
-        token_ids = start 
+        token_ids = start
         if encoded.token_ids is not None and len(encoded.token_ids):
             token_ids += encoded.token_ids[0]
         encoded = EncodedOutput(token_ids=token_ids)
@@ -649,7 +648,7 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         if path is None:
             return
-        
+
         if isinstance(path, str):
             path = os.path.abspath(path)
         self.saver.save(self, path)
