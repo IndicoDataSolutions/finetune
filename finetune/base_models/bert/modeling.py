@@ -46,7 +46,8 @@ class BertConfig(object):
             adapter_size=0,
             context_dim=0,
             n_context_embed_per_channel=0,
-            use_auxiliary_info=False
+            use_auxiliary_info=False,
+            n_layers_with_aux=-1
     ):
         """Constructs BertConfig.
 
@@ -88,6 +89,7 @@ class BertConfig(object):
         self.context_dim = context_dim
         self.n_context_embed_per_channel = n_context_embed_per_channel
         self.use_auxiliary_info = use_auxiliary_info
+        self.n_layers_with_aux = n_layers_with_aux
 
     @classmethod
     def from_dict(cls, json_object):
@@ -221,7 +223,7 @@ class BertModel(object):
                 if context is not None and config.use_auxiliary_info:
                     hidden_and_auxiliary_dim = config.hidden_size + config.n_context_embed_per_channel * config.context_dim
                     self.all_encoder_layers = transformer_model(
-                        input_tensor=tf.concat((self.embedding_output, context), -1),
+                        input_tensor=,
                         attention_mask=attention_mask,
                         hidden_size=hidden_and_auxiliary_dim,
                         num_hidden_layers=config.num_hidden_layers,
@@ -833,6 +835,7 @@ def full_block(
     with tf.variable_scope("attention"):
         attention_heads = []
         with tf.variable_scope("self"):
+            print(tf.get_default_graph().get_name_scope())
             attention_head = attention_layer(
                 from_tensor=layer_input,
                 to_tensor=layer_input,
@@ -925,7 +928,8 @@ def transformer_model(input_tensor,
                       adapter_size=0,
                       low_memory_mode=False,
                       auxiliary_init=False,
-                      config=None):
+                      config=None,
+                      context=None):
     """Multi-headed, multi-layer Transformer from "Attention is All You Need".
 
     This is almost an exact implementation of the original Transformer encoder.
