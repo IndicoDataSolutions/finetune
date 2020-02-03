@@ -62,7 +62,8 @@ def bert_featurizer(
         adapter_size=config.adapter_size,
         context_dim = config.context_dim,
         n_context_embed_per_channel = config.n_context_embed_per_channel,
-        use_auxiliary_info=config.use_auxiliary_info and not config.mlm_baseline
+        use_auxiliary_info=config.use_auxiliary_info and not config.mlm_baseline,
+        n_layers_with_aux=config.n_layers_with_aux
     )
 
     initial_shape = tf.shape(X)
