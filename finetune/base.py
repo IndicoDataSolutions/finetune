@@ -94,7 +94,7 @@ class BaseModel(object, metaclass=ABCMeta):
         overrides = config.base_model.get_optimal_params(config)
 
         for ak in auto_keys:
-            if ak == "val_size":
+            if ak in ["val_size", "use_gpu_crf_predict"]:
                 continue  # this auto is resolved after data is provided.
             if ak not in overrides:
                 raise ValueError("There is no auto setting for {}".format(ak))
@@ -349,7 +349,6 @@ class BaseModel(object, metaclass=ABCMeta):
             optimizer_options.global_jit_level = tf.OptimizerOptions.ON_1 
 
         distribute_strategy = self._distribute_strategy(self.config.visible_gpus)
-        print(self.config.val_interval)
         config = tf.estimator.RunConfig(
             tf_random_seed=self.config.seed,
             save_summary_steps=self.config.val_interval,
@@ -398,7 +397,7 @@ class BaseModel(object, metaclass=ABCMeta):
         return est, hooks
 
     def close(self):
-        if self._cached_estimator is not None:
+        if getattr(self, "_cached_estimator") is not None:
             self._cached_estimator.close_predict()
             self._cached_estimator = None
             gc.collect()
