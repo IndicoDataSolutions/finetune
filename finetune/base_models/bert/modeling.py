@@ -964,7 +964,8 @@ def transformer_model(input_tensor,
     for layer_idx in range(num_hidden_layers):
         if num_hidden_layers - layer_idx == config.n_layers_with_aux:
             auxiliary_init = True
-            prev_output = tf.concat((prev_output, context), -1)
+            context_reshaped = tf.reshape(context, [-1, get_shape_list(context)[-1]])
+            prev_output = tf.concat((prev_output, context_reshaped), -1)
             hidden_size = hidden_size + config.n_context_embed_per_channel * config.context_dim
             if hidden_size % num_attention_heads != 0:
                 raise ValueError(
