@@ -255,7 +255,7 @@ class BertModel(object):
                         config.hidden_size,
                         activation=tf.tanh,
                         kernel_initializer=create_initializer(config.initializer_range),
-                        custom=config.use_auxiliary_info,
+                        custom=auxiliary_init,
                         pos_embed=config.n_context_embed_per_channel*config.context_dim
                     )
                 else:
@@ -699,7 +699,7 @@ def attention_layer(
         activation=query_act,
         name="query",
         kernel_initializer=create_initializer(initializer_range),
-        custom=config.use_auxiliary_info,
+        custom=auxiliary_init,
         pos_embed=config.n_context_embed_per_channel*config.context_dim
     )
 
@@ -710,7 +710,7 @@ def attention_layer(
         activation=key_act,
         name="key",
         kernel_initializer=create_initializer(initializer_range),
-        custom=config.use_auxiliary_info,
+        custom=auxiliary_init,
         pos_embed=config.n_context_embed_per_channel*config.context_dim
     )
 
@@ -721,7 +721,7 @@ def attention_layer(
         activation=value_act,
         name="value",
         kernel_initializer=create_initializer(initializer_range),
-        custom=config.use_auxiliary_info,
+        custom=auxiliary_init,
         pos_embed=config.n_context_embed_per_channel*config.context_dim
     )
 
@@ -849,15 +849,15 @@ def full_block(
                 hidden_size,
                 activation=None,
                 kernel_initializer=create_initializer(initializer_range),
-                custom=config.use_auxiliary_info,
+                custom=auxiliary_init,
                 pos_embed=pos_embed)
             attention_output = dropout(attention_output, hidden_dropout_prob)
-            attention_output = layer_norm(attention_output + layer_input, custom=config.use_auxiliary_info,
+            attention_output = layer_norm(attention_output + layer_input, custom=auxiliary_init,
                                           pos_embed=pos_embed)
 
     # The activation is only applied to the "intermediate" hidden layer.
     with tf.variable_scope("intermediate"):
-        if config.use_auxiliary_info:
+        if auxiliary_init:
             intermediate_dim = intermediate_size + pos_embed
         else:
             intermediate_dim = intermediate_size
@@ -866,7 +866,7 @@ def full_block(
             intermediate_dim,
             activation=intermediate_act_fn,
             kernel_initializer=create_initializer(initializer_range),
-            custom=config.use_auxiliary_info,
+            custom=auxiliary_init,
             pos_embed=pos_embed)
 
     # Down-project back to `hidden_size` then add the residual.
@@ -876,10 +876,10 @@ def full_block(
             hidden_size,
             activation=None,
             kernel_initializer=create_initializer(initializer_range),
-            custom=config.use_auxiliary_info,
+            custom=auxiliary_init,
             pos_embed=pos_embed)
         layer_output = dropout(layer_output, hidden_dropout_prob)
-        layer_output = layer_norm(layer_output + attention_output, custom=config.use_auxiliary_info,
+        layer_output = layer_norm(layer_output + attention_output, custom=auxiliary_init,
                                   pos_embed=pos_embed)
         return layer_output
 
@@ -961,9 +961,9 @@ def transformer_model(input_tensor,
 
     all_layer_outputs = []
     # add auxiliary info to the last n_layers_with_aux layers
-    auxiliary_init = True if config.n_layers_with_aux == -1 else False
+    auxiliary_init = True if config.use_auxiliary_info and config.n_layers_with_aux == -1 else False
     for layer_idx in range(num_hidden_layers):
-        if num_hidden_layers - layer_idx == config.n_layers_with_aux:
+        if config.use_auxiliary_info and num_hidden_layers - layer_idx == config.n_layers_with_aux:
             auxiliary_init = True
             context_reshaped = tf.reshape(context, [-1, get_shape_list(context)[-1]])
             prev_output = tf.concat((prev_output, context_reshaped), -1)
