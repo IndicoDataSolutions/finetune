@@ -357,9 +357,9 @@ def indico_to_finetune_sequence(
             ):
 
                 raise ValueError(
-                    "Annotation text does not match text specified by `start` and `end` indexes. "
+                    "Annotation text does not match text specified by `start` and `end` indices for Document number: `{}`. "
                     "Text provided: `{}`.  Text extracted: `{}`.".format(
-                        label.get("text"), text[label["start"] : label["end"]]
+                        doc_idx, label.get("text"), text[label["start"] : label["end"]]
                     )
                 )
 
