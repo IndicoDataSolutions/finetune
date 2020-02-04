@@ -40,7 +40,7 @@ def bert_featurizer(
         vocab_size=encoder.vocab_size,
         hidden_size=config.n_embed,
         num_hidden_layers=config.n_layer,
-        num_attention_heads=config.num_attention_heads,
+        num_attention_heads=config.n_heads,
         intermediate_size=config.bert_intermediate_size,
         hidden_act=config.act_fn,
         hidden_dropout_prob=config.resid_p_drop,
