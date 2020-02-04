@@ -233,7 +233,8 @@ class BertModel(object):
                     adapter_size=config.adapter_size,
                     do_return_all_layers=True,
                     low_memory_mode=config.low_memory_mode and is_training,
-                    config=config
+                    config=config,
+                    context=context
                     )
                 self.sequence_output = self.all_encoder_layers[-1]
 
