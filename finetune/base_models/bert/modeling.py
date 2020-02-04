@@ -984,11 +984,10 @@ def transformer_model(input_tensor,
                     "The hidden size (%d) is not a multiple of the number of attention "
                     "heads (%d)" % (hidden_size, num_attention_heads))
             attention_head_size = int(hidden_size / num_attention_heads)
-            dim_per_head = config.n_embed / config.n_heads
             n_context_embed = config.n_context_embed_per_channel * config.context_dim
-            if n_context_embed % dim_per_head != 0:
+            if n_context_embed % attention_head_size != 0:
                 raise FinetuneError('The extra dimensions of the auxiliary information should be a multiple of the dimensions per attention head')
-            n_pos_heads = int(n_context_embed / dim_per_head)
+            n_pos_heads = int(n_context_embed / attention_head_size)
             num_attention_heads += n_pos_heads
         with tf.variable_scope("layer_%d" % layer_idx):
             layer_input = prev_output
