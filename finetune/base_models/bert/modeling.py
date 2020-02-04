@@ -24,6 +24,7 @@ import functools
 from finetune.nn.auxiliary import dense_with_custom_init, layer_norm_with_custom_init
 from finetune.base_models.gpt.featurizer import adapter
 from finetune.optimizers.recompute_grads import recompute_grad
+from finetune.errors import FinetuneError
 
 
 class BertConfig(object):
@@ -978,12 +979,13 @@ def transformer_model(input_tensor,
             auxiliary_init = True
             context_reshaped = tf.reshape(context, [-1, get_shape_list(context)[-1]])
             prev_output = tf.concat((prev_output, context_reshaped), -1)
+            # update hidden_size and num_attention_heads, keeping attention_head_size the same
+            attention_head_size = int(hidden_size / num_attention_heads)
             hidden_size = hidden_size + config.n_context_embed_per_channel * config.context_dim
             if hidden_size % num_attention_heads != 0:
                 raise ValueError(
                     "The hidden size (%d) is not a multiple of the number of attention "
                     "heads (%d)" % (hidden_size, num_attention_heads))
-            attention_head_size = int(hidden_size / num_attention_heads)
             n_context_embed = config.n_context_embed_per_channel * config.context_dim
             if n_context_embed % attention_head_size != 0:
                 raise FinetuneError('The extra dimensions of the auxiliary information should be a multiple of the dimensions per attention head')
