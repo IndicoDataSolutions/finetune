@@ -36,16 +36,6 @@ def bert_featurizer(
     is_roberta = issubclass(config.base_model.encoder, RoBERTaEncoder)
     model_filename = config.base_model_path.rpartition('/')[-1]
     is_roberta_v1 = is_roberta and model_filename in ("roberta-model-sm.jl", "roberta-model-lg.jl")
-
-    if config.use_auxiliary_info and not config.mlm_baseline:
-        dim_per_head = config.n_embed / config.n_heads
-        n_context_embed = config.n_context_embed_per_channel * config.context_dim
-        if n_context_embed % dim_per_head != 0:
-            raise FinetuneError('The extra dimensions of the auxiliary information should be a multiple of the dimensions per attention head')
-        n_pos_heads = int(n_context_embed / dim_per_head)
-        n_heads = config.n_heads + n_pos_heads
-    else:
-        n_heads = config.n_heads
     bert_config = BertConfig(
         vocab_size=encoder.vocab_size,
         hidden_size=config.n_embed,
