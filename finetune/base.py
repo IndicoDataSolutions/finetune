@@ -690,16 +690,25 @@ class BaseModel(object, metaclass=ABCMeta):
         saver = Saver()
         model = saver.load(path)
 
+        default_config = get_default_config()
+
         # Backwards compatability
         # Ensure old models get new default settings
-        for setting, default in get_default_config().items():
+        for setting, default in default_config.items():
             if not hasattr(model.config, setting):
                 if setting == "add_eos_bos_to_chunk":
                     model.config.add_eos_bos_to_chunk = False
                 else:
                     model.config.update({setting: default})
-
+        
         model.config.update(kwargs)
+        for setting in list(model.config.keys()):
+            if setting not in default_config:
+                LOGGER.warning("The config value {} is no longer supported".format(setting))
+                del model.config[setting]
+                
+        model.config = model.resolve_config(**model.config)
+        
         model.input_pipeline.config = model.config
         download_data_if_required(model.config.base_model)
         saver.set_fallback(model.config.base_model_path)
