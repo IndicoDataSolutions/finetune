@@ -84,7 +84,7 @@ class BasePipeline(metaclass=ABCMeta):
         raise NotImplementedError
     
     @property
-    def	chunker(self):
+    def chunker(self):
         if getattr(self, "_chunker", None) is None:
             self._chunker = Chunker(
                 max_length=self.config.max_length,
