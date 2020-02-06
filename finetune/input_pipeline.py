@@ -72,11 +72,7 @@ class BasePipeline(metaclass=ABCMeta):
         self.pad_idx_ = None
         self.rebuild = False
         self.epoch = 0
-        self.chunker = Chunker(
-            max_length=config.max_length,
-            total_context_width=config.chunk_context,
-            justify=config.chunk_alignment
-        )
+        self._chunker = None
 
     @property
     def dataset_size(self):
@@ -86,6 +82,17 @@ class BasePipeline(metaclass=ABCMeta):
     def _target_encoder(self):
         # Overridden by subclass to produce the right target encoding for a given target model.
         raise NotImplementedError
+    
+    @property
+    def	chunker(self):
+        if getattr(self, "_chunker", None) is None:
+            self._chunker = Chunker(
+                max_length=self.config.max_length,
+                total_context_width=self.config.chunk_context,
+                justify=self.config.chunk_alignment
+            )
+        return self._chunker
+
 
     def _add_context_info_if_present(self, types, shapes):
         if self.config.use_auxiliary_info:
