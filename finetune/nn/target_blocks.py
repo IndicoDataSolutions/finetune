@@ -52,16 +52,21 @@ def masked_language_model(*, X, M, mlm_weights, mlm_positions, mlm_ids, embed_we
     hidden = merge_leading_dims(hidden, 3)
     with tf.variable_scope('model/masked-language-model'):
         gathered_hidden = gather_indexes(hidden, mlm_positions)
-        final_proj = dense_with_custom_init(
-            gathered_hidden,
-            config.n_embed,
-            activation=act_fns[config.act_fn],
-            kernel_initializer=tf.random_normal_initializer(stddev=config.weight_stddev),
-            name='dense',
-            custom=config.use_auxiliary_info and not config.mlm_baseline,
-            pos_embed=config.n_context_embed_per_channel * config.context_dim,
-            proj_type='downward'
+        
+        final_proj_w = tf.get_variable(
+            'dense/kernel',
+            [config.n_embed, config.n_embed],
+            initializer=tf.random_normal_initializer(stddev=config.weight_stddev)
         )
+        final_proj_b = tf.get_variable(
+            'dense/bias',
+            [config.n_embed],
+            initializer=tf.zeros_initializer
+        )
+        final_proj = act_fns[config.act_fn](
+            tf.matmul(gathered_hidden, final_proj_w, transpose_b=True) + final_proj_b
+        )
+
         normed_proj = norm(final_proj, 'LayerNorm')
         n_vocab = shape_list(embed_weights)[0]
         output_bias = tf.get_variable(
@@ -69,6 +74,7 @@ def masked_language_model(*, X, M, mlm_weights, mlm_positions, mlm_ids, embed_we
             shape=[n_vocab],
             initializer=tf.zeros_initializer()
         )
+
         logits = tf.matmul(normed_proj, embed_weights, transpose_b=True)
         logits = tf.nn.bias_add(logits, output_bias)
         
