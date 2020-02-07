@@ -85,13 +85,7 @@ def masked_language_model(*, X, M, mlm_weights, mlm_positions, mlm_ids, embed_we
             shape=[n_vocab],
             initializer=tf.zeros_initializer()
         )
-        #print_op = tf.print("EMBED WEIGHTS!!",
-#               tf.count_nonzero(tf.math.equal(normed_proj, tf.constant(0.0))),
-        #        tf.math.reduce_sum(normed_proj),
-        #        summarize=100)
 
-        #with tf.control_dependencies([print_op]):
-        #    logits = tf.matmul(normed_proj, embed_weights, transpose_b=True)
         logits = tf.matmul(normed_proj, embed_weights, transpose_b=True)
         logits = tf.nn.bias_add(logits, output_bias)
 
