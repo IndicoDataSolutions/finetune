@@ -23,7 +23,7 @@ class TestActivationParity(unittest.TestCase):
     TEST_DATA = ["this is a test"]
 
     def test_gpt_multifield_parity(self):
-        model = MultiFieldClassifier()
+        model = MultiFieldClassifier(base_model=GPT)
         np.testing.assert_allclose(
             model.featurize(self.MULTIFIELD_TEST_DATA)[0], 
             np.load(

@@ -12,6 +12,7 @@ from finetune import MultiTask, Classifier, Comparison
 from finetune.datasets.stanford_sentiment_treebank import StanfordSentimentTreebank
 from finetune.datasets.quora_similarity import QuoraDuplicate
 from finetune.config import finetune_model_path
+from finetune.base_models import GPT
 SST_FILENAME = "SST-binary.csv"
 
 
@@ -29,6 +30,7 @@ class TestMTL(unittest.TestCase):
             n_epochs=2,
             optimizer="AdamaxW",
             max_length=200,
+            base_model=GPT #TODO: This seems like a strange requirement??
         )
 
         q_X1, q_X2, q_Y = q_dataset.Text1.values, q_dataset.Text2.values, q_dataset.Target.values

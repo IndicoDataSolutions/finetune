@@ -23,7 +23,7 @@ from sklearn.metrics import accuracy_score, recall_score
 
 from finetune import Classifier
 from finetune.model import PredictMode
-from finetune.base_models import GPTModelSmall
+from finetune.base_models import GPTModelSmall, GPT
 from finetune.datasets import generic_download
 from finetune.config import get_config
 from finetune.errors import FinetuneError
@@ -423,7 +423,7 @@ class TestClassifier(unittest.TestCase):
         model.fit(train_sample.Text, train_sample.Target)
 
     def test_explain(self):
-        model = Classifier(**self.default_config())
+        model = Classifier(base_model=GPT, **self.default_config())
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text, train_sample.Target)

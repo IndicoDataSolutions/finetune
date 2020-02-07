@@ -381,7 +381,7 @@ class BasePipeline(metaclass=ABCMeta):
         else:
             self.config.dataset_size = len(Xs)
 
-        self.config.val_size, val_interval = self.validation_settings(
+        self.config.val_size, self.config.val_interval = self.validation_settings(
             n_examples=len(Xs) if not callable(Xs) else self.config.dataset_size,
             batch_size=batch_size or self.config.batch_size,
         )
@@ -468,7 +468,7 @@ class BasePipeline(metaclass=ABCMeta):
             val_dataset,
             train_dataset,
             self.config.val_size,
-            val_interval,
+            self.config.val_interval,
         )
 
     def get_predict_input_fn(self, Xs, batch_size=None, context=None):
