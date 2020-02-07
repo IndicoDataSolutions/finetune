@@ -23,6 +23,7 @@ from bs4 import BeautifulSoup as bs
 from bs4.element import Tag
 
 from finetune import SequenceLabeler
+from finetune.base_models import GPT
 from finetune.config import get_config
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
 from finetune.util.metrics import (
@@ -89,6 +90,7 @@ class TestSequenceLabeler(unittest.TestCase):
 
     def default_config(self, **kwargs):
         d = dict(
+            base_model=GPT,
             batch_size=2,
             max_length=256,
             lm_loss_coef=0.0,
@@ -282,6 +284,7 @@ class TestSequenceLabeler(unittest.TestCase):
 class TestSequenceLabelerNoCRF(TestSequenceLabeler):
     def default_config(self, **kwargs):
         d = dict(
+            base_model=GPT,
             batch_size=2,
             max_length=256,
             lm_loss_coef=0.0,

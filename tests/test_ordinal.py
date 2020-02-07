@@ -11,6 +11,7 @@ import numpy as np
 
 from sklearn.model_selection import train_test_split
 from finetune import ComparisonOrdinalRegressor, OrdinalRegressor
+from finetune.base_models import GPT
 
 ANIMALS = ["dog", "cat", "horse", "cow", "pig", "sheep", "goat", "chicken", "guinea pig", "donkey", "turkey", "duck", "camel", "goose", "llama", "rabbit", "fox"]
 NUMBERS = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen"]
@@ -43,7 +44,7 @@ class TestOrdinal(unittest.TestCase):
         Ensure model returns predictions of the right type
         Test model loss at least outperforms naive baseline
         """
-        model = OrdinalRegressor(**self.default_config())
+        model = OrdinalRegressor(base_model=GPT, **self.default_config())
 
         # fake dataset generation
         targets = np.asarray([1] * len(ANIMALS) + [0] * len(NUMBERS))
