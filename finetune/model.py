@@ -33,8 +33,8 @@ class PredictMode:
     NORMAL = "NORM"
     PROBAS = "PROBA"
     GENERATE_TEXT = "GEN_TEXT"
-    MLM_IDS = "mlm_ids"
-    MLM_POSITIONS = "mlm_positions"
+    MLM_IDS = "MLM_IDS"
+    MLM_POSITIONS = "MLM_POSITIONS"
     LM_PERPLEXITY = "PERPLEXITY"
     ATTENTION = "ATTENTION"
     CONTEXT_ATTENTION = "CONTEXT_ATTENTION"
@@ -45,7 +45,26 @@ class PredictMode:
     EXPLAIN = "EXPLAIN"
 
 
-def language_model_op(X, M, params, featurizer_state, mode, encoder):
+def mask_logits(logits, encoder, mask_extra_toks=False):
+    
+    logit_mask = np.zeros(
+    [1, logits.get_shape().as_list()[-1]], dtype=np.float32
+    )
+    logit_mask[:, encoder.vocab_size:] = -np.inf
+    
+    if mask_extra_toks:
+        logit_mask[:, encoder.start_token] = -np.inf
+        logit_mask[:, encoder.delimiter_token] = -np.inf
+        logit_mask[:, encoder.end_token] = -np.inf
+    logit_mask[:, encoder.vocab_size :] = -np.inf
+    return logit_mask
+
+
+def language_model_op(
+        X, M, params,
+        featurizer_state,
+        mode, encoder):
+
     language_model_state = language_model(
         X=X,
         M=M,
@@ -56,26 +75,31 @@ def language_model_op(X, M, params, featurizer_state, mode, encoder):
     )
     lm_logits = language_model_state["logits"]
 
+    mask_extra_toks = "use_extra_toks" in params and not params.use_extra_toks
+
     if lm_logits is not None:
-
-        lm_logit_mask = np.zeros(
-            [1, lm_logits.get_shape().as_list()[-1]], dtype=np.float32
-        )
-        lm_logit_mask[:, encoder.vocab_size :] = -np.inf
-
-        if "use_extra_toks" in params and not params.use_extra_toks:
-            lm_logit_mask[:, encoder.start_token] = -np.inf
-            lm_logit_mask[:, encoder.delimiter_token] = -np.inf
-            lm_logit_mask[:, encoder.end_token] = -np.inf
-
-            lm_logits += lm_logit_mask
+        lm_logit_mask = mask_logits(
+                lm_logits,
+                encoder,
+                mask_extra_toks=mask_extra_toks)
+        lm_logits += lm_logit_mask
         lm_predict_op = sample_with_temperature(lm_logits, params.lm_temp)
     else:
         lm_predict_op = tf.no_op()
     return lm_predict_op, language_model_state
 
 
-def masked_language_model_op(X, M, mlm_weights, mlm_ids, mlm_positions, params, featurizer_state, mode, encoder):
+def masked_language_model_op(
+        X,
+        M,
+        mlm_weights,
+        mlm_ids,
+        mlm_positions,
+        params,
+        featurizer_state,
+        mode,
+        encoder):
+
     language_model_state = masked_language_model(
         X=X,
         M=M,
@@ -87,32 +111,21 @@ def masked_language_model_op(X, M, mlm_weights, mlm_ids, mlm_positions, params, 
         hidden=featurizer_state["sequence_features"],
         train=(mode == tf.estimator.ModeKeys.TRAIN)
     )
+
+    mask_extra_toks = "use_extra_toks" in params and not params.use_extra_toks
     lm_logits = language_model_state['logits']
-
-    lm_logit_mask = np.zeros(
-        [1, lm_logits.get_shape().as_list()[-1]], dtype=np.float32
-    )
-    lm_logit_mask[:, encoder.vocab_size :] = -np.inf
-
-    if "use_extra_toks" in params and not params.use_extra_toks:
-        lm_logit_mask[:, encoder.start_token] = -np.inf
-        lm_logit_mask[:, encoder.delimiter_token] = -np.inf
-        lm_logit_mask[:, encoder.end_token] = -np.inf
-
-        lm_logits += lm_logit_mask
-
-
+    lm_logit_mask = mask_logits(
+            lm_logits,
+            encoder,
+            mask_extra_toks=mask_extra_toks)
+    lm_logits += lm_logit_mask
 
     relevant_logits = tf.boolean_mask(lm_logits, tf.reshape(mlm_weights, shape=(-1,)))
-    #relevant_logits = tf.reshape(lm_logits, shape=(-1,))
-    #relevant_ids = tf.boolean_mask(mlm_ids, tf.reshape(mlm_weights, shape=(-1,)))
-    #relevant_positions = tf.boolean_mask(mlm_positions, tf.reshape(mlm_weights, shape=(-1,)))
     relevant_ids = tf.boolean_mask(mlm_ids, mlm_weights)
     relevant_positions = tf.boolean_mask(mlm_positions, mlm_weights)
 
     top_token_idxs = tf.argsort(relevant_logits, direction='ASCENDING', axis=-1)
     return (top_token_idxs, relevant_ids, relevant_positions), language_model_state
-    #return best_token_idxs, language_model_state
 
 def get_model_fn(
     target_model_fn,
@@ -292,12 +305,10 @@ def get_model_fn(
                         if lm_type.lower() == 'mlm':
                             predictions[PredictMode.MLM_IDS] = mlm_ids
                             predictions[PredictMode.MLM_POSITIONS] = mlm_positions
-                            #predictions[PredictMode.MLM_IDS] = features['mlm_ids']
-                            #predictions[PredictMode.MLM_POSITIONS] = features['mlm_positions']
-                    if lm_type.lower == 'lm':
-                        predictions[PredictMode.LM_PERPLEXITY] = language_model_state[
-                            "perplexity"
-                        ]
+                        if lm_type.lower == 'lm':
+                            predictions[PredictMode.LM_PERPLEXITY] = language_model_state[
+                                "perplexity"
+                            ]
 
         if mode == tf.estimator.ModeKeys.TRAIN:
             total_num_steps = params.n_epochs * params.dataset_size // (params.batch_size * n_replicas)

@@ -296,8 +296,6 @@ class Saver:
                       name.startswith("model/target/") and
                       name.replace("model/target/", "") in self.fallback.keys()):
                     saved_var = self.fallback[name.replace("model/target/", "")]
-                else:
-                    print("Randomly initialized!")
 
                 if zero_out_adapters and "adapter" in name:
                     var_loader.add(var, np.zeros(var.get_shape().as_list()))
