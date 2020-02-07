@@ -654,7 +654,7 @@ class BaseModel(object, metaclass=ABCMeta):
             path = os.path.abspath(path)
         self.saver.save(self, path)
 
-    def create_base_model(self, filename, exists_ok=False):
+    def create_base_model(self, filename, exists_ok=False, save_lm_weights=False):
         """
         Saves the current weights into the correct file format to be used as a base model.
         :param filename: the path to save the base model relative to finetune's base model filestore.
@@ -677,7 +677,11 @@ class BaseModel(object, metaclass=ABCMeta):
         weights_stripped = {
             k: v
             for k, v in self.saver.variables.items()
-            if "featurizer" in k and "Adam" not in k
+            if (
+                "featurizer" in k or 
+                (save_lm_weights and "language-model" in k)
+            )
+            and "Adam" not in k
         }
         joblib.dump(weights_stripped, base_model_path)
 
