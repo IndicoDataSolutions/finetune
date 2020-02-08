@@ -194,11 +194,13 @@ class BasePipeline(metaclass=ABCMeta):
     def _dataset_without_targets(self, Xs, train, context=None, update_hook=None):
         if context is not None:
             # we assume that X must have known length if we also provide context so this is safe
-            if callable(Xs):
+            if callable(Xs) and callable(context):
                 Xs_ = Xs()
+                context_ = context()
             else:
                 Xs_ = Xs
-            Xs_gen = lambda: zip(Xs_, [None] * len(Xs_), context)
+                context_ = context
+            Xs_gen = lambda: zip(Xs_, [None] * self.config.dataset_size, context_)
             Xs_fn = lambda: self.wrap_tqdm(Xs_gen(), train, update_hook=update_hook)
             dataset_encoded = lambda: itertools.chain.from_iterable(
                 map(lambda xyc: self.text_to_tokens_mask(*xyc), Xs_fn())
