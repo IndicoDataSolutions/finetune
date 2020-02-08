@@ -60,8 +60,24 @@ def masked_language_model(*, X, M, mlm_weights, mlm_positions, mlm_ids, embed_we
             name='dense',
             custom=config.use_auxiliary_info and not config.mlm_baseline,
             pos_embed=config.n_context_embed_per_channel * config.context_dim,
-            proj_type='downward'
+            proj_type='downward',
+            transpose_b=True
         )
+
+        # final_proj_w = tf.get_variable(
+        #     'dense/kernel',
+        #     [config.n_embed, config.n_embed],
+        #     initializer=tf.random_normal_initializer(stddev=config.weight_stddev)
+        # )
+        # final_proj_b = tf.get_variable(
+        #     'dense/bias',
+        #     [config.n_embed],
+        #     initializer=tf.zeros_initializer
+        # )
+        # final_proj = act_fns[config.act_fn](
+        #     tf.matmul(gathered_hidden, final_proj_w, transpose_b=True) + final_proj_b
+        # )
+
         normed_proj = norm(final_proj, 'LayerNorm')
         n_vocab = shape_list(embed_weights)[0]
         output_bias = tf.get_variable(

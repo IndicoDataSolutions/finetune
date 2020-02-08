@@ -114,6 +114,8 @@ def dense_with_custom_init(input_tensor,
             full_bias = original_bias
         
         # dense operation
+        if transpose_b:
+            full_weights = tf.transpose(full_weights)
         z = tf.matmul(input_tensor, full_weights) + full_bias
         if activation is not None:
             return activation(z)
@@ -121,7 +123,22 @@ def dense_with_custom_init(input_tensor,
             return z
 
     else:
-        return tf.layers.dense(input_tensor, output_dim, activation=activation, name=name, kernel_initializer=kernel_initializer)
+        if transpose_b:
+            weights = tf.get_variable(
+                'dense/kernel',
+                [shape_list(input_tensor)[1], output_dim],
+                initializer=kernel_initializer
+            )
+            bias = tf.get_variable(
+                'dense/bias',
+                [output_dim],
+                initializer=tf.zeros_initializer
+            )
+            return activation(
+                tf.matmul(input_tensor, weights, transpose_b=True) + bias
+            )
+        else:
+            return tf.layers.dense(input_tensor, output_dim, activation=activation, name=name, kernel_initializer=kernel_initializer)
 
 
 
