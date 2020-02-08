@@ -37,7 +37,8 @@ def dense_with_custom_init(input_tensor,
                            name='dense',
                            custom=False,
                            pos_embed=None,
-                           proj_type='factorized'):
+                           proj_type='factorized',
+                           transpose_b=False):
     """
     Arguments:
     - proj_type (str): defines the type of custom projection to perform.
@@ -85,6 +86,9 @@ def dense_with_custom_init(input_tensor,
             # original_weights = tf.eye(output_dim)
             # original_bias = tf.zeros((input_dim, output_dim))
         
+        if transpose_b:
+            original_weights = tf.transpose(original_weights)
+
         # position-relevant weights
         if proj_type == 'factorized':
             position_weights = tf.get_variable(name+"/pos_weights",
@@ -114,8 +118,6 @@ def dense_with_custom_init(input_tensor,
             full_bias = original_bias
         
         # dense operation
-        if transpose_b:
-            full_weights = tf.transpose(full_weights)
         z = tf.matmul(input_tensor, full_weights) + full_bias
         if activation is not None:
             return activation(z)
