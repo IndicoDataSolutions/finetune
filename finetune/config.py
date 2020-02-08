@@ -372,7 +372,7 @@ def get_default_config():
         context_dim=None,  # number of context dimensions to be inserted
         context_in_base_model=False,
         mlm_baseline=False,  # single projection after last layer of base model
-        n_layers_with_aux=-1,  # by default, add to all layers
+        n_layers_with_aux=0,  # if -1, add to all layers
 
         # Serialize finetune version with model
         version=VERSION,
