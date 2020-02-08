@@ -43,10 +43,8 @@ def masked_language_model(*, X, mlm_weights, mlm_ids, mlm_positions, embed_weigh
             name='dense',
             custom=config.use_auxiliary_info and not config.mlm_baseline,
             pos_embed=config.n_context_embed_per_channel * config.context_dim,
-            proj_type='downward'
-        )
-        final_proj = act_fns[config.act_fn](
-            tf.matmul(gathered_hidden, final_proj_w, transpose_b=True) + final_proj_b
+            proj_type='downward',
+            transpose_b=True
         )
 
         normed_proj = norm(final_proj, 'LayerNorm')
