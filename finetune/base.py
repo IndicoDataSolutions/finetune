@@ -567,6 +567,9 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         base_model_path = os.path.join(os.path.dirname(__file__), "model", filename)
 
+        if not os.path.exists(os.path.dirname(base_model_path)):
+            os.makedirs(base_model_path)
+
         if not exists_ok and os.path.exists(base_model_path):
             base_model_path = base_model_path + str(int(time.time()))
             LOGGER.warning(
