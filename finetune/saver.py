@@ -83,7 +83,22 @@ class SaverHook(_StopOnPredicateHook):
                 )
             )
             if self.cache_weights_to_file:
-                joblib.dump(self.saver.variables, os.path.join(self.estimator.eval_dir(), "..", "weights.jl"))
+                if not os.path.exists(self.estimator.eval_dir()):
+                    os.makedirs(self.estimator.eval_dir())
+
+                print(os.path.join(self.estimator.eval_dir(), "..", "weights.jl"))
+                print(os.path.exists(os.path.join(self.estimator.eval_dir(), "..", "weights.jl")))
+
+                print(os.path.join(self.estimator.eval_dir(), ".."))
+                print(os.path.exists(os.path.join(self.estimator.eval_dir(), "..")))
+
+                print(os.path.join(self.estimator.eval_dir()))
+                print(os.path.exists(os.path.join(self.estimator.eval_dir())))
+                try:
+                    joblib.dump(self.saver.variables, os.path.join(self.estimator.eval_dir(), "..", "weights.jl"))
+                except OSError:
+                    print("Path didn't exist: ", self.estimator.eval_dir())
+                    joblib.dump(self.saver.variables, "weights.jl")
             self.get_current_weights = False
 
     def after_run(self, run_context, run_values):
