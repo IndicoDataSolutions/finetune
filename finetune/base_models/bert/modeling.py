@@ -815,7 +815,6 @@ def full_block(
     with tf.variable_scope("attention"):
         attention_heads = []
         with tf.variable_scope("self"):
-            print(tf.get_default_graph().get_name_scope())
             attention_head = attention_layer(
                 from_tensor=layer_input,
                 to_tensor=layer_input,
