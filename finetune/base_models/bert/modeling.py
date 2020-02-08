@@ -963,7 +963,7 @@ def transformer_model(input_tensor,
     # add auxiliary info to the last n_layers_with_aux layers
     auxiliary_init = True if config.use_auxiliary_info and config.n_layers_with_aux == -1 else False
     for layer_idx in range(num_hidden_layers):
-        if config.use_auxiliary_info and num_hidden_layers - layer_idx == config.n_layers_with_aux:
+        if config.use_auxiliary_info and (num_hidden_layers - layer_idx == config.n_layers_with_aux or config.n_layers_with_aux == -1 and layer_idx == 0):
             auxiliary_init = True
             context_reshaped = tf.reshape(context, [-1, get_shape_list(context)[-1]])
             prev_output = tf.concat((prev_output, context_reshaped), -1)
