@@ -217,9 +217,10 @@ class BasePipeline(metaclass=ABCMeta):
                     class_counts=class_counts
                 )
         shape_def = self.feed_shape_type_def()
-        return Dataset.from_generator(
+        dataset = Dataset.from_generator(
             lambda: self.wrap_tqdm(dataset_encoded(), train, update_hook=update_hook), *shape_def
         )
+        return dataset.apply(tf.data.experimental.ignore_errors())
 
     def _dataset_without_targets(self, Xs, train, context=None, update_hook=None):
         if context is not None:
@@ -249,9 +250,10 @@ class BasePipeline(metaclass=ABCMeta):
             dataset_encoded_list = list(dataset_encoded())
             self.config.dataset_size = len(dataset_encoded_list)
         types, shapes = self.feed_shape_type_def()
-        return Dataset.from_generator(
+        dataset = Dataset.from_generator(
             dataset_encoded, types[0], shapes[0]
         )  # 0s cut out the targets
+        return dataset.apply(tf.data.experimental.ignore_errors())
 
     def _integer_val_size(self, val_size, dataset_size):
         if isinstance(val_size, float):
