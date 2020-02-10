@@ -15,7 +15,7 @@ from finetune import SequenceLabeler
 from finetune.datasets import Dataset
 from finetune.base_models import GPT, GPT2, TCN, RoBERTa
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
-from finetune.util.metrics import annotation_report
+from finetune.util.metrics import annotation_report, sequence_labeling_token_confusion
 
 XML_PATH = os.path.join("Data", "Sequence", "reuters.xml")
 DATA_PATH = os.path.join("Data", "Sequence", "reuters.json")
@@ -83,3 +83,4 @@ if __name__ == "__main__":
     predictions = model.predict(testX)
     print(predictions)
     print(annotation_report(testY, predictions))
+    sequence_labeling_token_confusion(testX, testY, predictions)
