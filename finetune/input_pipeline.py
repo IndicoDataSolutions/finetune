@@ -114,8 +114,14 @@ class BasePipeline(metaclass=ABCMeta):
             if context is None:
                 feats = {"tokens": out.token_ids, "mask": out.mask}
             else:
-                tokenized_context = tokenize_context(context, out, self.config)
-                feats = {"tokens": out.token_ids, "mask": out.mask, "context": tokenized_context}
+                try:
+                    tokenized_context = tokenize_context(context, out, self.config)
+                    feats = {"tokens": out.token_ids, "mask": out.mask, "context": tokenized_context}
+                except:
+                    print('Failure in context alignment for: ')
+                    print(out.tokens)
+                    print(context)
+                    continue
             if Y is None:
                 yield feats
             else:
@@ -190,7 +196,7 @@ class BasePipeline(metaclass=ABCMeta):
         dataset = Dataset.from_generator(
             lambda: self.wrap_tqdm(dataset_encoded(), train, update_hook=update_hook), *shape_def
         )
-        return dataset.apply(tf.data.experimental.ignore_errors())
+        return dataset
 
     def _dataset_without_targets(self, Xs, train, context=None, update_hook=None):
         if context is not None:
@@ -223,7 +229,7 @@ class BasePipeline(metaclass=ABCMeta):
         dataset = Dataset.from_generator(
             dataset_encoded, types[0], shapes[0]
         )  # 0s cut out the targets
-        return dataset.apply(tf.data.experimental.ignore_errors())
+        return dataset
 
     def _integer_val_size(self, val_size, dataset_size):
         if isinstance(val_size, float):
