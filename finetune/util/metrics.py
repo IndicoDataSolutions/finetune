@@ -2,9 +2,12 @@ import os
 from collections import defaultdict
 
 import numpy as np
+from sklearn.metrics import confusion_matrix
 
 from tensorflow.python.platform import gfile
 from tensorflow.python.summary import summary_iterator
+
+import tabulate
 
 from finetune.encoding.input_encoder import NLP
 
@@ -29,6 +32,45 @@ def _convert_to_token_list(annotations, doc_idx=None):
 
     return tokens
 
+def sequence_labeling_token_confusion(text, true, predicted):
+    none_class = "<None>"
+    unique_classes = list(set([seq['label'] for seqs in true for seq in seqs]))
+    unique_classes.append(none_class)
+
+    true_per_token_all = []
+    pred_per_token_all = []
+
+    for i, (text_i, true_list, pred_list) in enumerate(zip(text, true, predicted)):
+        tokens = NLP(text_i)
+        true_per_token = []
+        pred_per_token = []
+        for token in tokens:
+            token_start_end = {"start": token.idx, "end": token.idx + len(token.text)}
+            for true_i in true_list:
+                if sequences_overlap(
+                    token_start_end,
+                    true_i
+                ):
+                    true_per_token.append(true_i["label"])
+                    break
+            else:
+                true_per_token.append(none_class)
+
+            for	pred_i in pred_list:
+                if sequences_overlap(
+                    token_start_end,
+                    pred_i
+                ):
+                    pred_per_token.append(true_i["label"])
+                    break
+            else:
+                pred_per_token.append(none_class)
+        true_per_token_all.extend(true_per_token)
+        pred_per_token_all.extend(pred_per_token)
+    cm = confusion_matrix(y_true=true_per_token_all, y_pred=pred_per_token_all, labels=unique_classes)
+    return tabulate.tabulate([["True\nPredicted", *unique_classes]] + [[l, *r] for l, r in zip(unique_classes, cm)])
+    
+        
 
 def sequence_labeling_token_counts(true, predicted):
     """
