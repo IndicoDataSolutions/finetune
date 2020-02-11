@@ -127,10 +127,13 @@ class InitializeHook(SessionRunHook):
         elif self.model_portion == "entire_model":
             self.init_fn(None, session, self.model_portion)
         # import ipdb; ipdb.set_trace()
-        # mw = self.saver.fallback_
-        # gw = [w.name for w in tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)]
-        # print(len(set(mw) - set(gw)))
-        # print(len(set(gw) - set(mw)))
+        mw = self.saver.fallback_
+        gw = [w.name for w in tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)]
+        print(len(set(mw) - set(gw)))
+        print(set(mw) - set(gw))
+        print(len(set(gw) - set(mw)))
+        # import sys
+        # sys.exit()
 
     def before_run(self, run_context):
         if "featurizer" in self.model_portion and (

@@ -392,7 +392,7 @@ def get_default_config():
         textual_context=10,
         context_embed_stddev=1.0,
         default_context=None,
-        context_dim=None,  # number of context dimensions to be inserted
+        context_dim=0,  # number of context dimensions to be inserted
         context_in_base_model=False,
         mlm_baseline=False,  # single projection after last layer of base model
         n_layers_with_aux=0,  # if -1, add to all layers
