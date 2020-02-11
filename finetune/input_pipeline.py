@@ -207,7 +207,11 @@ class BasePipeline(metaclass=ABCMeta):
             else:
                 Xs_ = Xs
                 context_ = context
-            Xs_gen = lambda: zip(Xs_, [None] * self.config.dataset_size, context_)
+            if self.config.dataset_size:
+                num_examples = self.config.dataset_size
+            else:
+                num_examples = len(Xs_)
+            Xs_gen = lambda: zip(Xs_, [None] * num_examples, context_)
             Xs_fn = lambda: self.wrap_tqdm(Xs_gen(), train, update_hook=update_hook)
             dataset_encoded = lambda: itertools.chain.from_iterable(
                 map(lambda xyc: self.text_to_tokens_mask(*xyc), Xs_fn())
