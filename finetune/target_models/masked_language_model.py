@@ -44,10 +44,16 @@ class MaskedLanguageModelPipeline(BasePipeline):
         for out in out_gen:
             seq_len = out.token_ids.shape[0]
             if forced_mask:
-                # we need to align the indico-style mask with the tokenized text
-                # in the same way as we do for context
-                mlm_mask = tokenize_context(forced_mask, out, self.config, masking=True)
-                mask_type = ["mask"] * seq_len
+                try:
+                    # we need to align the indico-style mask with the tokenized text
+                    # in the same way as we do for context
+                    mlm_mask = tokenize_context(forced_mask, out, self.config, masking=True)
+                    mask_type = ["mask"] * seq_len
+                except:
+                    print('Failure in mask alignment for: ')
+                    # print(out.tokens)
+                    # print(forced_mask)
+                    continue
             else:
                 mlm_mask = np.random.rand(seq_len) < self.config.mask_proba
                 mask_type = np.random.choice(
@@ -68,6 +74,9 @@ class MaskedLanguageModelPipeline(BasePipeline):
                     ]
                 )
             ] = False
+
+            import ipdb; ipdb.set_trace()
+            print('*****mlm_mask', mlm_mask)
             mlm_ids = out.token_ids[:, 0][mlm_mask]
             expected_length = self.config.max_masked_tokens * self.config.batch_size
             pad_size = expected_length - len(mlm_ids)
