@@ -198,28 +198,33 @@ class BasePipeline(metaclass=ABCMeta):
         )
         return dataset_gen
 
-    def _dataset_without_targets(self, Xs, train, context=None, update_hook=None):
-        if context is not None:
-            # we assume that X must have known length if we also provide context so this is safe
-            if callable(Xs) and callable(context):
-                Xs_ = Xs()
-                context_ = context()
+    def _dataset_without_targets(self, Xs, train, context=None, update_hook=None, forced_mask=None):
+
+        def _format_for_pipeline(data):
+            if data is not None:
+                if callable(data):
+                    data_ = data()
+                else:
+                    data_ = data
             else:
-                Xs_ = Xs
-                context_ = context
-            Xs_gen = lambda: zip(Xs_, [None] * self.config.dataset_size, context_)
-            Xs_fn = lambda: self.wrap_tqdm(Xs_gen(), train, update_hook=update_hook)
-            dataset_encoded = lambda: itertools.chain.from_iterable(
-                map(lambda xyc: self.text_to_tokens_mask(*xyc), Xs_fn())
-            )
+                data_ = (None for _ in range(self.config.dataset_size))
+            return data
+
+        if callable(Xs):
+            Xs_ = Xs()
         else:
-            if not callable(Xs):
-                Xs_fn = lambda: self.wrap_tqdm(Xs, train, update_hook=update_hook)
-            else:
-                Xs_fn = lambda: self.wrap_tqdm(Xs(), train, update_hook=update_hook)
-            dataset_encoded = lambda: itertools.chain.from_iterable(
-                map(self.text_to_tokens_mask, Xs_fn())
-            )
+            Xs_ = Xs
+
+        ys_ = (None for _ in range(self.config.dataset_size))
+
+        context_ = _format_for_pipeline(context)
+        forced_mask_ = _format_for_pipeline(forced_mask)
+        
+        Xs_gen = lambda: zip(Xs_, ys_, context_, forced_mask_)
+        Xs_fn = lambda: self.wrap_tqdm(Xs_gen(), train, update_hook=update_hook)
+        dataset_encoded = lambda: itertools.chain.from_iterable(
+            map(lambda xycm: self.text_to_tokens_mask(*xycm), Xs_fn())
+        )
 
         if not callable(Xs) and self.config.chunk_long_sequences:
             # Adjust dataset size to account for long documents being chunked
@@ -432,10 +437,10 @@ class BasePipeline(metaclass=ABCMeta):
             self.config.val_interval,
         )
 
-    def get_predict_input_fn(self, Xs, batch_size=None, context=None):
+    def get_predict_input_fn(self, Xs, batch_size=None, context=None, forced_mask=None):
         batch_size = batch_size or self.config.predict_batch_size
         _, shapes = self.feed_shape_type_def()
-        tf_dataset = lambda: self._dataset_without_targets(Xs, train=None, context=context).padded_batch(batch_size, padded_shapes=shapes[0], drop_remainder=False)
+        tf_dataset = lambda: self._dataset_without_targets(Xs, train=None, context=context, forced_mask=forced_mask).padded_batch(batch_size, padded_shapes=shapes[0], drop_remainder=False)
         return tf_dataset
 
     @property

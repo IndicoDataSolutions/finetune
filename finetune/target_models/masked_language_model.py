@@ -38,17 +38,23 @@ class MaskedLanguageModelPipeline(BasePipeline):
             (shapes,),
         )
 
-    def text_to_tokens_mask(self, X, Y=None, context=None):
+    def text_to_tokens_mask(self, X, Y=None, context=None, forced_mask=None):
         out_gen = self._text_to_ids(X, pad_token=self.config.pad_token)
 
         for out in out_gen:
             seq_len = out.token_ids.shape[0]
-            mlm_mask = np.random.rand(seq_len) < self.config.mask_proba
-            mask_type = np.random.choice(
-                ["mask", "random", "unchanged"],
-                size=seq_len,
-                p=[0.8, 0.1, 0.1]
-            )
+            if forced_mask:
+                # we need to align the indico-style mask with the tokenized text
+                # in the same way as we do for context
+                mlm_mask = tokenize_context(forced_mask, out, self.config, masking=True)
+                mask_type = ["mask"] * seq_len
+            else:
+                mlm_mask = np.random.rand(seq_len) < self.config.mask_proba
+                mask_type = np.random.choice(
+                    ["mask", "random", "unchanged"],
+                    size=seq_len,
+                    p=[0.8, 0.1, 0.1]
+                )
             random_tokens = np.random.randint(0, self.text_encoder.vocab_size, size=seq_len)
 
             # Make sure we don't accidentally mask the start / separator / end token
@@ -107,7 +113,7 @@ class MaskedLanguageModel(BaseModel):
     def _get_input_pipeline(self):
         return MaskedLanguageModelPipeline(self.config)
 
-    def predict_top_k_report(self, input_text, k=5, context=None, **kwargs):
+    def predict_top_k_report(self, input_text, k=5, context=None, forced_mask=None, **kwargs):
         """
         Only works for a single example at a time.
 
@@ -123,6 +129,7 @@ class MaskedLanguageModel(BaseModel):
                     PredictMode.MLM_IDS,
                     PredictMode.MLM_POSITIONS],
                 context=[context],
+                forced_mask=[forced_mask],
                 force_build_lm=True,
                 **kwargs)
 
