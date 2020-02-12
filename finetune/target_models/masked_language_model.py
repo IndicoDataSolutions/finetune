@@ -108,13 +108,21 @@ class MaskedLanguageModel(BaseModel):
         return MaskedLanguageModelPipeline(self.config)
 
     def predict_top_k_report(self, input_text, k=5, context=None, **kwargs):
+        """
+        Only works for a single example at a time.
+
+        Args:
+        - input_text (str)
+        - context (list of dicts)
+
+        """
         prediction_info = self._inference(
                 [input_text],
                 predict_keys=[
                     PredictMode.GENERATE_TEXT,
                     PredictMode.MLM_IDS,
                     PredictMode.MLM_POSITIONS],
-                context=context,
+                context=[context],
                 force_build_lm=True,
                 **kwargs)
 
