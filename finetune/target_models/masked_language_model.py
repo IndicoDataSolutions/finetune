@@ -29,9 +29,9 @@ class MaskedLanguageModelPipeline(BasePipeline):
                 {
                     "tokens": TS([None, 2]),
                     "mask": TS([None]),
-                    "mlm_weights": TS([self.config.max_masked_tokens * self.config.batch_size]),
-                    "mlm_ids": TS([self.config.max_masked_tokens * self.config.batch_size]),
-                    "mlm_positions": TS([self.config.max_masked_tokens * self.config.batch_size]),
+                    "mlm_weights": TS([None]),
+                    "mlm_ids": TS([None]),
+                    "mlm_positions": TS([None]),
                 },
             ),
         )
@@ -59,15 +59,19 @@ class MaskedLanguageModelPipeline(BasePipeline):
                         self.text_encoder.end_token
                     ]
                 )
-            ] = False 
+            ] = False
+            mlm_positions = np.where(mlm_mask)[0]
+            
+            if len(mlm_positions) > self.config.max_masked_tokens: # subsample
+                np.random.shuffle(mlm_positions) # means we don't bias the begining of the sequence
+                mlm_positions = mlm_positions[:self.config.max_masked_tokens]
+                mlm_mask = np.zeros_like(mlm_mask)
+                mlm_mask[mlm_positions] = True
+                
             mlm_ids = out.token_ids[:, 0][mlm_mask]
-            expected_length = self.config.max_masked_tokens * self.config.batch_size
-            pad_size = expected_length - len(mlm_ids)
-            mlm_weights = np.pad(np.ones_like(mlm_ids), [(0, pad_size)], constant_values=0., mode="constant")
-            mlm_ids = np.pad(mlm_ids, [(0, pad_size)], constant_values=0, mode="constant")
-            mlm_positions = np.pad(np.where(mlm_mask)[0], [(0, pad_size)], constant_values=0, mode="constant")
+            mlm_weights = np.ones_like(mlm_ids)
 
-
+            
             out.token_ids[:, 0][mlm_mask & (mask_type == 'mask')] = self.text_encoder.mask_token
             out.token_ids[:, 0][mlm_mask & (mask_type == 'random')] = random_tokens[mlm_mask & (mask_type == 'random')]
 

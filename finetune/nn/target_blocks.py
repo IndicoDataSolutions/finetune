@@ -54,8 +54,7 @@ def masked_language_model(*, X, M, mlm_weights, mlm_positions, mlm_ids, embed_we
     hidden = merge_leading_dims(hidden, 3)
     batch, seq, _ = shape_list(X)
     with tf.variable_scope('model/masked-language-model'):
-        gathered_hidden = gather_indexes(hidden, mlm_positions)
-        
+        gathered_hidden = merge_leading_dims(tf.gather(hidden, mlm_positions, batch_dims=1), 2)
         final_proj_w = tf.get_variable(
             'dense/kernel',
             [config.n_embed, config.n_embed],
@@ -84,13 +83,12 @@ def masked_language_model(*, X, M, mlm_weights, mlm_positions, mlm_ids, embed_we
         mlm_ids = tf.reshape(mlm_ids, [-1])
         mlm_weights = tf.reshape(mlm_weights, [-1])
 
-        log_probs = tf.nn.log_softmax(logits, axis=-1)
-        one_hot_labels = tf.one_hot(mlm_ids, depth=n_vocab, dtype=tf.float32)
-        per_example_loss = -tf.reduce_sum(log_probs * one_hot_labels, axis=[-1])
-        numerator = tf.reduce_sum(mlm_weights * per_example_loss)
-        denominator = tf.reduce_sum(mlm_weights) + 1e-5
-        mlm_loss = numerator / denominator
-
+        mlm_loss = tf.contrib.losses.sparse_softmax_cross_entropy(            
+            logits,
+            mlm_ids,
+            weights=mlm_weights,
+        )
+        
         return {
             "logits": logits,
             "losses": mlm_loss,
