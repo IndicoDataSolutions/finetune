@@ -171,7 +171,6 @@ def get_model_fn(
         task_id = features.get("task_id", None)
         Y = labels
         pred_op = None
-
         with tf.variable_scope(tf.get_variable_scope()):
             train_loss = 0.0
             if params.context_in_base_model:
@@ -291,7 +290,7 @@ def get_model_fn(
                     lm_loss = tf.reduce_mean(language_model_state["losses"])
                     train_loss += lm_loss_coef * lm_loss
                     tf.summary.scalar("LanguageModelLoss", lm_loss)
-                    tf.summary.text("footext", tf.convert_to_tensor("text"))
+                    tf.summary.text("footext", X)
                 if mode == tf.estimator.ModeKeys.PREDICT:
                     if lm_predict_op is not None:
                         predictions[PredictMode.GENERATE_TEXT] = lm_predict_op
