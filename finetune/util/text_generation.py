@@ -14,7 +14,7 @@ def format_mlm_predictions(gen_text_key, mlm_ids_key, mlm_positions_key):
             force_build_lm=True,
             **kwargs)
 
-    predicted_tokens = [{'prediction_ids': [self.input_pipeline.text_encoder.decode([i]) for i in [-k:][::-1]],
+    predicted_tokens = [{'prediction_ids': [self.input_pipeline.text_encoder.decode([i]) for i in gen_text_key[-k:][::-1]],
                          'original_token_id': self.input_pipeline.text_encoder.decode([mlm_ids_key]),
                          'position': mlm_positions_key} for pred in prediction_info]
     mask_positions = [i['position'] for i in predicted_tokens]
