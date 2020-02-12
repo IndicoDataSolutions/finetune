@@ -260,6 +260,7 @@ def get_default_config():
         adapter_size=None,  # from Parameter Efficient Transfer Learning paper
         distribution_strategy="central_storage",
         xla=False,
+        save_summary_steps=1,
 
         # Regularization
         embed_p_drop=0.1,
