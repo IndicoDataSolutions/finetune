@@ -80,7 +80,6 @@ class MaskedLanguageModelPipeline(BasePipeline):
                 mlm_positions = np.random.choice(mlm_positions, size=self.config.max_masked_tokens, replace=False)
                 mlm_mask = np.zeros_like(mlm_mask)
                 mlm_mask[mlm_positions] = True
-                
             mlm_ids = out.token_ids[:, 0][mlm_mask]
             mlm_weights = np.ones_like(mlm_ids)
 
