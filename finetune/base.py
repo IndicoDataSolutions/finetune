@@ -355,13 +355,13 @@ class BaseModel(object, metaclass=ABCMeta):
         self.close()
 
 
-    def _inference(self, Xs, predict_keys=None, n_examples=None, context=None, update_hook=None):
+    def _inference(self, Xs, predict_keys=None, n_examples=None, context=None, update_hook=None, force_build_lm=None, forced_mask=None):
         self._set_random_seed(self.config.seed)
         Xs = self.input_pipeline._format_for_inference(Xs)
-        input_fn = self.input_pipeline.get_predict_input_fn(Xs, context=context)
+        input_fn = self.input_pipeline.get_predict_input_fn(Xs, context=context, forced_mask=forced_mask)
 
         estimator, hooks = self.get_estimator(
-            build_explain=PredictMode.EXPLAIN in predict_keys, cache=self._cached_predict
+            build_explain=PredictMode.EXPLAIN in predict_keys, cache=self._cached_predict, force_build_lm=force_build_lm
         )
         length = len(Xs) if not callable(Xs) else None
 

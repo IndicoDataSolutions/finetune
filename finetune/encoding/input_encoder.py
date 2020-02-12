@@ -200,16 +200,20 @@ def get_relevant_context_for_chunk(context, encoded_output):
     return new_context
 
 
-def tokenize_context(context, encoded_output, config):
+def tokenize_context(context, encoded_output, config, masking=False):
     """ Tokenize the context corresponding to a single sequence of text """
     # in the edge case where the chunk is just a single end token, we don't need to alter our context chunk
     if len(encoded_output.token_ends) > 1:
         context = get_relevant_context_for_chunk(context, encoded_output)
     seq_len = len(encoded_output.token_ids)
-    context_keys = list(k for k in sorted(context[0].keys()) if k not in ['token', 'start', 'end'])
-    context_by_char_loc = sorted([(c['end'], [c[k] for k in context_keys]) for c in context], key=lambda c: c[0])
-    # default context is set by user in config
-    default_context = [config.default_context[k] for k in context_keys]
+    if masking:
+        context_by_char_loc = sorted([(c['end'], [1]) for c in context], key=lambda c: c[0])
+        default_context = [0]
+    else:
+        context_keys = list(k for k in sorted(context[0].keys()) if k not in ['token', 'start', 'end'])
+        context_by_char_loc = sorted([(c['end'], [c[k] for k in context_keys]) for c in context], key=lambda c: c[0])
+        # default context is set by user in config
+        default_context = [config.default_context[k] for k in context_keys]
     current_char_loc = 0
     tokenized_context = []
     for token, char_loc in zip(encoded_output.tokens, encoded_output.token_ends):
