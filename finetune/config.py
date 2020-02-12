@@ -255,6 +255,7 @@ def get_default_config():
         distribution_strategy="central_storage",
         xla=False,
         optimize_for="accuracy", 
+        save_summary_steps=1,
 
         # Regularization
         embed_p_drop=0.1,

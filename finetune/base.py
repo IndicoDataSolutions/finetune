@@ -292,7 +292,7 @@ class BaseModel(object, metaclass=ABCMeta):
         distribute_strategy = self._distribute_strategy(self.config.visible_gpus)
         config = tf.estimator.RunConfig(
             tf_random_seed=self.config.seed,
-            save_summary_steps=1,
+            save_summary_steps=self.config.save_summary_steps,
             save_checkpoints_secs=None,
             save_checkpoints_steps=None,
             # disable auto summaries
