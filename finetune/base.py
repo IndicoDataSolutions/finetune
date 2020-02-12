@@ -451,14 +451,14 @@ class BaseModel(object, metaclass=ABCMeta):
 
         return predictions
 
-    def _inference(self, Xs, predict_keys=None, n_examples=None, context=None, update_hook=None, force_build_lm=None):
+    def _inference(self, Xs, predict_keys=None, n_examples=None, context=None, update_hook=None, force_build_lm=None, forced_mask=None):
         self._set_random_seed(self.config.seed)
         Xs = self.input_pipeline._format_for_inference(Xs)
         if self._cached_predict:
             return self._cached_inference(
                 Xs=Xs, predict_keys=predict_keys, n_examples=n_examples, update_hook=update_hook, force_build_lm=force_build_lm)
         else:
-            input_fn = self.input_pipeline.get_predict_input_fn(Xs, context=context)
+            input_fn = self.input_pipeline.get_predict_input_fn(Xs, context=context, forced_mask=forced_mask)
             estimator, hooks = self.get_estimator(
                 build_explain=PredictMode.EXPLAIN in predict_keys,
                 force_build_lm=force_build_lm
