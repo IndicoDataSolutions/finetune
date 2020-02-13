@@ -51,8 +51,7 @@ class MaskedLanguageModelPipeline(BasePipeline):
                     mask_type = ["mask"] * seq_len
                 except:
                     print('Failure in mask alignment for: ')
-                    import traceback; traceback.print_exc()
-                    # print(out.tokens)
+                    print(out.tokens)
                     # print(forced_mask)
                     continue
             else:
@@ -76,8 +75,6 @@ class MaskedLanguageModelPipeline(BasePipeline):
                 )
             ] = False
 
-            import ipdb; ipdb.set_trace()
-            print('*****mlm_mask', mlm_mask)
             mlm_ids = out.token_ids[:, 0][mlm_mask]
             expected_length = self.config.max_masked_tokens * self.config.batch_size
             pad_size = expected_length - len(mlm_ids)
