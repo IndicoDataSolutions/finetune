@@ -7,7 +7,7 @@ from finetune.base import PredictMode, BaseModel
 from finetune.base_models import RoBERTa, BERT
 from finetune.input_pipeline import BasePipeline
 from finetune.nn.target_blocks import masked_language_model
-from finetune.encoding.input_encoder import tokenize_context
+from finetune.encoding.input_encoder import tokenize_context, tokenize_masking
 from finetune.encoding.input_encoder import EncodedOutput
 from tensorflow.data import Dataset
 
@@ -47,10 +47,11 @@ class MaskedLanguageModelPipeline(BasePipeline):
                 try:
                     # we need to align the indico-style mask with the tokenized text
                     # in the same way as we do for context
-                    mlm_mask = tokenize_context(forced_mask, out, self.config, masking=True)
+                    mlm_mask = tokenize_masking(forced_mask, out).reshape(-1)
                     mask_type = ["mask"] * seq_len
                 except:
                     print('Failure in mask alignment for: ')
+                    import traceback; traceback.print_exc()
                     # print(out.tokens)
                     # print(forced_mask)
                     continue
