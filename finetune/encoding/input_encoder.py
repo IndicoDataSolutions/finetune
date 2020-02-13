@@ -200,20 +200,26 @@ def get_relevant_context_for_chunk(context, encoded_output):
     return new_context
 
 
-def tokenize_context(context, encoded_output, config, masking=False):
+def tokenize_masking(mask, encoded_output):
+    tokenized_mask = []
+    for char_start, char_end in zip(encoded_output.token_starts, encoded_output.token_ends):
+        if any([char_start >= m['start'] and char_end <= m['end'] for m in mask]):
+            tokenized_mask.append(True)
+        else:
+            tokenized_mask.append(False)
+    return np.array(tokenized_mask)
+
+
+def tokenize_context(context, encoded_output, config):
     """ Tokenize the context corresponding to a single sequence of text """
     # in the edge case where the chunk is just a single end token, we don't need to alter our context chunk
     if len(encoded_output.token_ends) > 1:
         context = get_relevant_context_for_chunk(context, encoded_output)
     seq_len = len(encoded_output.token_ids)
-    if masking:
-        context_by_char_loc = sorted([(c['end'], [1]) for c in context], key=lambda c: c[0])
-        default_context = [0]
-    else:
-        context_keys = list(k for k in sorted(context[0].keys()) if k not in ['token', 'start', 'end'])
-        context_by_char_loc = sorted([(c['end'], [c[k] for k in context_keys]) for c in context], key=lambda c: c[0])
-        # default context is set by user in config
-        default_context = [config.default_context[k] for k in context_keys]
+    context_keys = list(k for k in sorted(context[0].keys()) if k not in ['token', 'start', 'end'])
+    context_by_char_loc = sorted([(c['end'], [c[k] for k in context_keys]) for c in context], key=lambda c: c[0])
+    # default context is set by user in config
+    default_context = [config.default_context[k] for k in context_keys]
     current_char_loc = 0
     tokenized_context = []
     for token, char_loc in zip(encoded_output.tokens, encoded_output.token_ends):
@@ -223,23 +229,15 @@ def tokenize_context(context, encoded_output, config, masking=False):
             # print("Token {} assigned default".format(token))
             tokenized_context.append(default_context)
         elif token in ['\n</w>', 'Ċ', 'Ġ']:
-            if masking:
-                tokenized_context.append(default_context)
-            else:
-                tokenized_context.append(context_by_char_loc[current_char_loc][1])
+            tokenized_context.append(context_by_char_loc[current_char_loc][1])
         else:
             if char_loc > context_by_char_loc[current_char_loc][0]:
                 current_char_loc += 1
                 if current_char_loc >= len(context_by_char_loc):
                     # TODO: this is a workaround that has no guarantees of being correct
-                    if masking:
-                        current_char_loc = len(context_by_char_loc) - 1
-                    else:
-                        raise ValueError("Context cannot be fully matched as it appears to not cover the end of the sequence")
-            if masking:
-                tokenized_context.append(default_context)
-            else:
-                tokenized_context.append(context_by_char_loc[current_char_loc][1])
+                    # current_char_loc = len(context_by_char_loc) - 1
+                    raise ValueError("Context cannot be fully matched as it appears to not cover the end of the sequence")
+            tokenized_context.append(context_by_char_loc[current_char_loc][1])
 
     assert len(tokenized_context) == len(encoded_output.token_ends)
     # padded value doesn't matter since it will be masked out
