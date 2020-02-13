@@ -298,7 +298,6 @@ def get_model_fn(
                     lm_loss = tf.reduce_mean(language_model_state["losses"])
                     train_loss += lm_loss_coef * lm_loss
                     tf.summary.scalar("LanguageModelLoss", lm_loss)
-                    tf.summary.text("footext", X)
                 if mode == tf.estimator.ModeKeys.PREDICT:
                     if lm_predict_op is not None:
                         predictions[PredictMode.GENERATE_TEXT] = lm_predict_op
