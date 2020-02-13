@@ -67,7 +67,8 @@ def dense_with_custom_init(input_tensor,
                            [0, 0, 0],
                        ]
     """
-
+    # small_kernel_initializer = tf.zeros_initializer
+    small_kernel_initializer = tf.truncated_normal_initializer(stddev=.002)
     if custom:
         # text-relevant weights
         if proj_type == 'factorized' or proj_type == 'downward':
@@ -93,8 +94,8 @@ def dense_with_custom_init(input_tensor,
         if proj_type == 'factorized':
             position_weights = tf.get_variable(name+"/pos_weights",
                                             shape=(pos_embed, pos_embed))
-            text_to_pos_weights = tf.get_variable(name + '/text_to_pos_weights', shape=(shape_list(input_tensor)[1]-pos_embed, pos_embed), initializer=tf.zeros_initializer)
-            pos_to_text_weights = tf.get_variable(name + '/pos_to_text_weights', shape=(pos_embed, weight_output_dim), initializer=tf.zeros_initializer)
+            text_to_pos_weights = tf.get_variable(name + '/text_to_pos_weights', shape=(shape_list(input_tensor)[1]-pos_embed, pos_embed), initializer=small_kernel_initializer)
+            pos_to_text_weights = tf.get_variable(name + '/pos_to_text_weights', shape=(pos_embed, weight_output_dim), initializer=small_kernel_initializer)
 
             full_text_weights = tf.concat((original_weights, text_to_pos_weights), axis=1)
             full_pos_weights = tf.concat((pos_to_text_weights, position_weights), axis=1)
@@ -113,7 +114,7 @@ def dense_with_custom_init(input_tensor,
 
         elif proj_type == 'downward' or proj_type == 'downward_identity':
             # position_weights = tf.zeros((pos_embed, output_dim))
-            position_weights = tf.get_variable(name + '/pos_kernel', shape=[pos_embed, output_dim], initializer=tf.zeros_initializer)
+            position_weights = tf.get_variable(name + '/pos_kernel', shape=[pos_embed, output_dim], initializer=small_kernel_initializer)
             full_weights = tf.concat((original_weights, position_weights), axis=0)
             full_bias = original_bias
         
