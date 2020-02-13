@@ -208,7 +208,7 @@ class BasePipeline(metaclass=ABCMeta):
                     data_ = data
             else:
                 data_ = (None for _ in range(self.config.dataset_size))
-            return data
+            return data_
 
         if callable(Xs):
             Xs_ = Xs()
