@@ -33,18 +33,18 @@ def perceptron(x, ny, config, w_init=None, b_init=None):
 
 
 def masked_language_model(*, X, M, mlm_weights, mlm_ids, mlm_positions, embed_weights, hidden, config, reuse=None, train=False):
-    original_shape = tf.shape(hidden)
     
     with tf.variable_scope('model/masked-language-model'):
         batch, seq, feats = shape_list(hidden)
         flat_offsets = tf.reshape(
             tf.range(0, batch, dtype=tf.int32) * seq, [-1, 1]
         )
+
         not_padding = tf.reshape(mlm_weights, [-1]) > 1e-9
         flat_positions = tf.boolean_mask(tf.reshape(mlm_positions + flat_offsets, [-1]), not_padding) # take off the padding entirely
         gathered_hidden = tf.gather(tf.reshape(hidden, [batch * seq, feats]), flat_positions)
-        mlm_ids = tf.gather(tf.reshape(mlm_ids, [-1]), flat_positions)
-
+        mlm_ids = tf.boolean_mask(tf.reshape(mlm_ids, [-1]), not_padding)
+        
         final_proj_w = tf.get_variable(
             'dense/kernel',
             [config.n_embed, config.n_embed],
