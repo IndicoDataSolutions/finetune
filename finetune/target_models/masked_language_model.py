@@ -92,6 +92,9 @@ class MaskedLanguageModel(BaseModel):
     :param config: A :py:class:`finetune.config.Settings` object or None (for default config).
     :param \**kwargs: key-value pairs of config items to override.
     """
+
+    defaults = dict(low_memory_mode=True, batch_size=48, xla=True)
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if not issubclass(self.config.base_model, (BERT, RoBERTa)):
