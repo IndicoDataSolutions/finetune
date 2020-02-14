@@ -23,7 +23,8 @@ class MaskedLanguageModelPipeline(BasePipeline):
                 "mask": tf.float32,
                 "mlm_weights": tf.float32,
                 "mlm_ids": tf.int32,
-                "mlm_positions": tf.int32
+                "mlm_positions": tf.int32,
+                "cps_positions": tf.int32,
             }
         shapes = {
                 "tokens": TS([None, 2]),
@@ -31,6 +32,7 @@ class MaskedLanguageModelPipeline(BasePipeline):
                 "mlm_weights": TS([None]),
                 "mlm_ids": TS([None]),
                 "mlm_positions": TS([None]),
+                "cps_positions": TS([None]),
             }
         types, shapes = self._add_context_info_if_present(types, shapes)
         return (
@@ -82,11 +84,20 @@ class MaskedLanguageModelPipeline(BasePipeline):
                 "mask": out.mask,
                 "mlm_weights": mlm_weights,
                 "mlm_ids": mlm_ids,
-                "mlm_positions": mlm_positions
+                "mlm_positions": mlm_positions,
+                "cps_positions": [],
             }
             if context:
                 try:
                     tokenized_context = tokenize_context(context, out, self.config)
+                    if self.config.cps_swap_proba:
+                        cps_mask = np.random.rand(seq_len) < self.config.cps_swap_proba
+                        hold = tokenized_context[cps_mask]
+                        shuffled = np.random.permutation(hold)
+                        tokenized_context[cps_mask] = shuffled
+                        cps_mask[cps_mask] = cps_mask[cps_mask] & (shuffled != hold)
+                        feats['cps_positions'] = tf.where(cps_mask)
+                        
                     feats['context'] = tokenized_context
                 except:
                     print('Failure in context alignment for: ')
