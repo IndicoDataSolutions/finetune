@@ -30,11 +30,18 @@ def perceptron(x, ny, config, w_init=None, b_init=None):
         b = tf.get_variable("b", [ny], initializer=b_init)
         return tf.matmul(x, w) + b
 
-
-def masked_language_model(*, X, mlm_weights, mlm_ids, mlm_positions, embed_weights, hidden, config, reuse=None, train=False):
-    
+def masked_language_model(*, X, mlm_weights, mlm_positions, mlm_ids, embed_weights, hidden, config, reuse=None, train=False, **kwargs):
     with tf.variable_scope('model/masked-language-model'):
-        gathered_hidden = gather_indexes(hidden, mlm_positions)
+        batch, seq, feats = shape_list(hidden)
+        flat_offsets = tf.reshape(
+            tf.range(0, batch, dtype=tf.int32) * seq, [-1, 1]
+        )
+
+        not_padding = tf.reshape(mlm_weights, [-1]) > 1e-9
+        flat_positions = tf.boolean_mask(tf.reshape(mlm_positions + flat_offsets, [-1]), not_padding) # take off the padding entirely
+        gathered_hidden = tf.gather(tf.reshape(hidden, [batch * seq, feats]), flat_positions)
+        mlm_ids = tf.boolean_mask(tf.reshape(mlm_ids, [-1]), not_padding)
+
         final_proj = dense_with_custom_init(
             gathered_hidden,
             config.n_embed,
@@ -46,7 +53,21 @@ def masked_language_model(*, X, mlm_weights, mlm_ids, mlm_positions, embed_weigh
             proj_type='downward',
             transpose_b=True
         )
+#        final_proj_w = tf.get_variable(
+#            'dense/kernel',
+#            [config.n_embed, config.n_embed],
+#            initializer=tf.random_normal_initializer(stddev=config.weight_stddev)
+#        )
+#        final_proj_b = tf.get_variable(
+#            'dense/bias',
+#            [config.n_embed],
+#            initializer=tf.zeros_initializer
+#        )
+#        final_proj = act_fns[config.act_fn](
+#            tf.matmul(gathered_hidden, final_proj_w, transpose_b=True) + final_proj_b
+#        )
 
+>>>>>>> ADD: mlm memory improvements
         normed_proj = norm(final_proj, 'LayerNorm')
         n_vocab = shape_list(embed_weights)[0]
         output_bias = tf.get_variable(
@@ -57,17 +78,16 @@ def masked_language_model(*, X, mlm_weights, mlm_ids, mlm_positions, embed_weigh
 
         logits = tf.matmul(normed_proj, embed_weights, transpose_b=True)
         logits = tf.nn.bias_add(logits, output_bias)
+        mlm_loss = tf.contrib.losses.sparse_softmax_cross_entropy(            
+            logits,
+            mlm_ids,
+        ) # No weights needed as there is no padding.
 
-        mlm_ids = tf.reshape(mlm_ids, [-1])
-        mlm_weights = tf.reshape(mlm_weights, [-1])
-
-        log_probs = tf.nn.log_softmax(logits, axis=-1)
-        one_hot_labels = tf.one_hot(mlm_ids, depth=n_vocab, dtype=tf.float32)
-        per_example_loss = -tf.reduce_sum(log_probs * one_hot_labels, axis=[-1])
-        numerator = tf.reduce_sum(mlm_weights * per_example_loss)
-        denominator = tf.reduce_sum(mlm_weights) + 1e-5
-        mlm_loss = numerator / denominator
-
+        logits = tf.scatter_nd(
+            indices=flat_positions,
+            updates=logits,
+            shape=[batch * seq, n_vocab]
+        )
         return {
             "logits": logits,
             "losses": mlm_loss,
