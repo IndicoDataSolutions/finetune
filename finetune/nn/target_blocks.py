@@ -32,29 +32,19 @@ def perceptron(x, ny, config, w_init=None, b_init=None):
         return tf.matmul(x, w) + b
 
 
-def gather_indexes(sequence_tensor, positions):
-    """Gathers the vectors at the specific positions over a minibatch."""
-    sequence_shape = shape_list(sequence_tensor)
-    batch_size = sequence_shape[0]
-    seq_length = sequence_shape[1]
-    width = sequence_shape[2]
-
-    flat_offsets = tf.reshape(
-        tf.range(0, batch_size, dtype=tf.int32) * seq_length, [-1, 1]
-    )
-    flat_positions = tf.reshape(positions + flat_offsets, [-1])
-    flat_sequence_tensor = tf.reshape(sequence_tensor, [batch_size * seq_length, width])
-    output_tensor = tf.gather(flat_sequence_tensor, flat_positions)
-    return output_tensor
-
-
-def masked_language_model(*, X, M, mlm_weights, mlm_positions, mlm_ids, embed_weights, hidden, config, reuse=None, train=False):
-    X = merge_leading_dims(X, 3)
-    M = merge_leading_dims(M, 2)
-    hidden = merge_leading_dims(hidden, 3)
-    batch, seq, _ = shape_list(X)
+def masked_language_model(*, X, M, mlm_weights, mlm_ids, mlm_positions, embed_weights, hidden, config, reuse=None, train=False):
+    original_shape = tf.shape(hidden)
+    
     with tf.variable_scope('model/masked-language-model'):
-        gathered_hidden = merge_leading_dims(tf.gather(hidden, mlm_positions, batch_dims=1), 2)
+        batch, seq, feats = shape_list(hidden)
+        flat_offsets = tf.reshape(
+            tf.range(0, batch, dtype=tf.int32) * seq, [-1, 1]
+        )
+        not_padding = tf.reshape(mlm_weights, [-1]) > 1e-9
+        flat_positions = tf.boolean_mask(tf.reshape(mlm_positions + flat_offsets, [-1]), not_padding) # take off the padding entirely
+        gathered_hidden = tf.gather(tf.reshape(hidden, [batch * seq, feats]), flat_positions)
+        mlm_ids = tf.gather(tf.reshape(mlm_ids, [-1]), flat_positions)
+
         final_proj_w = tf.get_variable(
             'dense/kernel',
             [config.n_embed, config.n_embed],
@@ -80,15 +70,17 @@ def masked_language_model(*, X, M, mlm_weights, mlm_positions, mlm_ids, embed_we
         logits = tf.matmul(normed_proj, embed_weights, transpose_b=True)
         logits = tf.nn.bias_add(logits, output_bias)
         
-        mlm_ids = tf.reshape(mlm_ids, [-1])
-        mlm_weights = tf.reshape(mlm_weights, [-1])
-
         mlm_loss = tf.contrib.losses.sparse_softmax_cross_entropy(            
             logits,
             mlm_ids,
-            weights=mlm_weights,
+        ) # No weights needed as there is no padding.
+
+        logits = tf.scatter_nd(
+            indices=flat_positions,
+            updates=logits,
+            shape=[batch * seq, n_vocab]
         )
-        
+                
         return {
             "logits": logits,
             "losses": mlm_loss,
