@@ -28,9 +28,9 @@ class MaskedLanguageModelPipeline(BasePipeline):
         shapes = {
                 "tokens": TS([None, 2]),
                 "mask": TS([None]),
-                "mlm_weights": TS([self.config.max_masked_tokens * self.config.batch_size]),
-                "mlm_ids": TS([self.config.max_masked_tokens * self.config.batch_size]),
-                "mlm_positions": TS([self.config.max_masked_tokens * self.config.batch_size]),
+                "mlm_weights": TS([None]),
+                "mlm_ids": TS([None]),
+                "mlm_positions": TS([None]),
             }
         types, shapes = self._add_context_info_if_present(types, shapes)
         return (
@@ -74,15 +74,18 @@ class MaskedLanguageModelPipeline(BasePipeline):
                     ]
                 )
             ] = False
-
+            mlm_positions = np.where(mlm_mask)[0]
+            
+            if len(mlm_positions) > self.config.max_masked_tokens: # subsample
+                np.random.shuffle(mlm_positions) # means we don't bias the begining of the sequence
+                mlm_positions = mlm_positions[:self.config.max_masked_tokens]
+                mlm_mask = np.zeros_like(mlm_mask)
+                mlm_mask[mlm_positions] = True
+                
             mlm_ids = out.token_ids[:, 0][mlm_mask]
-            expected_length = self.config.max_masked_tokens * self.config.batch_size
-            pad_size = expected_length - len(mlm_ids)
-            mlm_weights = np.pad(np.ones_like(mlm_ids), [(0, pad_size)], constant_values=0., mode="constant")
-            mlm_ids = np.pad(mlm_ids, [(0, pad_size)], constant_values=0, mode="constant")
-            mlm_positions = np.pad(np.where(mlm_mask)[0], [(0, pad_size)], constant_values=0, mode="constant")
+            mlm_weights = np.ones_like(mlm_ids)
 
-
+            
             out.token_ids[:, 0][mlm_mask & (mask_type == 'mask')] = self.text_encoder.mask_token
             out.token_ids[:, 0][mlm_mask & (mask_type == 'random')] = random_tokens[mlm_mask & (mask_type == 'random')]
 
@@ -112,6 +115,9 @@ class MaskedLanguageModel(BaseModel):
     :param config: A :py:class:`finetune.config.Settings` object or None (for default config).
     :param \**kwargs: key-value pairs of config items to override.
     """
+
+    defaults = dict(low_memory_mode=True, batch_size=48, xla=True)
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if not issubclass(self.config.base_model, (BERT, RoBERTa)):
