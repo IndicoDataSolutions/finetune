@@ -70,6 +70,8 @@ def dense_with_custom_init(input_tensor,
     small_kernel_initializer = tf.zeros_initializer
     # small_kernel_initializer = tf.truncated_normal_initializer(stddev=.002)
     if custom:
+
+        small_kernel_initializer = tf.truncated_normal_initializer(stddev=.002)
         # text-relevant weights
         if proj_type == 'factorized' or proj_type == 'downward':
             if proj_type == 'factorized':
@@ -83,7 +85,7 @@ def dense_with_custom_init(input_tensor,
         elif proj_type == 'downward_identity':
             input_dim = shape_list(input_tensor)[0]
             original_weights = tf.get_variable(name + '/identity_kernel', shape=(output_dim, output_dim), initializer=tf.initializers.identity)
-            original_bias = tf.get_variable(name + '/identity_bias', shape=(output_dim), initializer=tf.zeros_initializer)
+            original_bias = tf.get_variable(name + '/identity_bias', shape=(output_dim), initializer=tf.zeros_initializer())
             # original_weights = tf.eye(output_dim)
             # original_bias = tf.zeros((input_dim, output_dim))
         

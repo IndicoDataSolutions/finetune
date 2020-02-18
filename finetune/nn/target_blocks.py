@@ -30,7 +30,42 @@ def perceptron(x, ny, config, w_init=None, b_init=None):
         b = tf.get_variable("b", [ny], initializer=b_init)
         return tf.matmul(x, w) + b
 
-def masked_language_model(*, X, mlm_weights, mlm_positions, mlm_ids, embed_weights, hidden, config, reuse=None, train=False, **kwargs):
+def gather_indexes(sequence_tensor, positions):
+    """Gathers the vectors at the specific positions over a minibatch."""
+    sequence_shape = shape_list(sequence_tensor)
+    batch_size = sequence_shape[0]
+    seq_length = sequence_shape[1]
+    width = sequence_shape[2]
+
+    flat_offsets = tf.reshape(
+        tf.range(0, batch_size, dtype=tf.int32) * seq_length, [-1, 1]
+    )
+    flat_positions = tf.reshape(positions + flat_offsets, [-1])
+    flat_sequence_tensor = tf.reshape(sequence_tensor, [batch_size * seq_length, width])
+    output_tensor = tf.gather(flat_sequence_tensor, flat_positions)
+    return output_tensor
+
+
+def cps_model(M, cps_mask, hidden, config):
+    M = merge_leading_dims(M, 1)
+    cps_mask = merge_leading_dims(cps_mask, 1)
+    hidden = merge_leading_dims(hidden, 2)
+    with tf.variable_scope("model/cls_model"):
+       logits = perceptron(hidden, 2, config)
+       pred = tf.argmax(logits, -1, output_type=tf.int32)
+       positives = tf.where(cps_mask)
+       tf.summary.scalar("Recall", tf.reduce_mean(tf.cast(tf.equal(tf.gather(pred, positives), tf.gather(cps_mask, positives)), tf.float32)))
+       predicted = tf.where(pred)
+       tf.summary.scalar("Precision", tf.reduce_mean(tf.cast(tf.equal(tf.gather(pred, predicted), tf.gather(cps_mask, predicted)), tf.float32)))
+       mlm_loss = tf.contrib.losses.sparse_softmax_cross_entropy(
+           logits,
+           cps_mask,
+           weights=M
+       )
+       mlm_loss *= (1 - tf.reduce_sum(tf.nn.softmax(logits) * tf.one_hot(cps_mask, 2, dtype=tf.float32), -1)) ** 2.0
+    return {"loss": mlm_loss, "logits": logits}
+    
+def masked_language_model(*, X, mlm_weights, mlm_ids, mlm_positions, embed_weights, hidden, config, reuse=None, train=False):
     with tf.variable_scope('model/masked-language-model'):
         batch, seq, feats = shape_list(hidden)
         flat_offsets = tf.reshape(

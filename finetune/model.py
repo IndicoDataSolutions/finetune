@@ -5,7 +5,7 @@ import numpy as np
 import tensorflow as tf
 
 
-from finetune.nn.target_blocks import language_model, masked_language_model, smooth_pos_attn
+from finetune.nn.target_blocks import language_model, masked_language_model, smooth_pos_attn, cps_model
 from finetune.util.text_generation import sample_with_temperature
 from finetune.optimizers.zero_grad import dont_optimize_zeros
 from finetune.optimizers.gradient_accumulation import get_grad_accumulation_optimizer
@@ -90,35 +90,51 @@ def masked_language_model_op(
         mlm_weights,
         mlm_ids,
         mlm_positions,
+        cps_mask,
         params,
         featurizer_state,
         mode,
         encoder):
 
-    language_model_state = masked_language_model(
-        X=X,
-        mlm_weights=mlm_weights,
-        mlm_ids=mlm_ids,
-        mlm_positions=mlm_positions,
-        config=params,
-        embed_weights=featurizer_state["embed_weights"],
-        hidden=featurizer_state["sequence_features"],
-        train=(mode == tf.estimator.ModeKeys.TRAIN)
-    )
-
-    mask_extra_toks = "use_extra_toks" in params and not params.use_extra_toks
-    lm_logits = language_model_state['logits']
-    lm_logit_mask = mask_logits(
+    if params.mask_proba and params.cps_swap_proba:
+        raise ValueError("CPS and MLM together is not YET supported, but adding it in is as simple as adding loss weighting")
+    
+    if params.mask_proba:
+        language_model_state = masked_language_model(
+            X=X,
+            M=M,
+            mlm_weights=mlm_weights,
+            mlm_ids=mlm_ids,
+            mlm_positions=mlm_positions,
+            config=params,
+            embed_weights=featurizer_state["embed_weights"],
+            hidden=featurizer_state["sequence_features"],
+            train=(mode == tf.estimator.ModeKeys.TRAIN)
+        )
+        
+        mask_extra_toks = "use_extra_toks" in params and not params.use_extra_toks
+        lm_logits = language_model_state['logits']
+        lm_logit_mask = mask_logits(
             lm_logits,
             encoder,
             mask_extra_toks=mask_extra_toks)
-    lm_logits += lm_logit_mask
+        lm_logits += lm_logit_mask
+        
+        relevant_logits = tf.boolean_mask(lm_logits, tf.reshape(mlm_weights, shape=(-1,)))
+        relevant_ids = tf.boolean_mask(mlm_ids, mlm_weights)
+        relevant_positions = tf.boolean_mask(mlm_positions, mlm_weights)
+        
+        top_token_idxs = tf.argsort(relevant_logits, direction='ASCENDING', axis=-1)
+    else:
+        top_token_idxs = None
+        relevant_ids = None
+        relevant_positions = None
+        language_model_state = {"losses": 0}
 
-    relevant_logits = tf.boolean_mask(lm_logits, tf.reshape(mlm_weights, shape=(-1,)))
-    relevant_ids = tf.boolean_mask(mlm_ids, mlm_weights)
-    relevant_positions = tf.boolean_mask(mlm_positions, mlm_weights)
+    if params.cps_swap_proba:
+        cps_model_state = cps_model(M=M, cps_mask=cps_mask, hidden=featurizer_state["sequence_features"], config=params)
+        language_model_state["losses"] += cps_model_state["loss"]
 
-    top_token_idxs = tf.argsort(relevant_logits, direction='ASCENDING', axis=-1)
     return (top_token_idxs, relevant_ids, relevant_positions), language_model_state
 
 def get_model_fn(
@@ -275,6 +291,7 @@ def get_model_fn(
                         mlm_weights=features['mlm_weights'],
                         mlm_ids=features['mlm_ids'],
                         mlm_positions=features['mlm_positions'],
+                        cps_mask=features["cps_mask"],
                         params=params,
                         featurizer_state=featurizer_state,
                         mode=mode,

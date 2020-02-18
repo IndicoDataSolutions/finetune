@@ -19,10 +19,15 @@ def concat_or_stack(tensors, axis=0):
 
 
 def merge_leading_dims(X, target_rank):
-    if len(X.get_shape().as_list()) == target_rank:
+    original_shape = X.get_shape().as_list()
+    original_rank = len(original_shape)
+    if target_rank > original_rank:
+        raise ValueError("Original rank is less than the target rank")
+    
+    if original_rank == target_rank:
         return X
-    shape = [-1] + X.get_shape().as_list()[1 - target_rank:]
-    return tf.reshape(X, shape)
+    output_shape = [-1] + original_shape[original_rank - target_rank + 1:]
+    return tf.reshape(X, output_shape)
 
 
 def lengths_from_eos_idx(eos_idx, max_length):
