@@ -397,6 +397,8 @@ def get_default_config():
         mlm_baseline=False,  # single projection after last layer of base model
         n_layers_with_aux=0,  # if -1, add to all layers
 
+        cps_swap_proba=0.0,
+
         # Serialize finetune version with model
         version=VERSION,
     )

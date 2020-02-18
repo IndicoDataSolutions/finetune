@@ -47,22 +47,25 @@ def gather_indexes(sequence_tensor, positions):
     return output_tensor
 
 
-def masked_language_model(*, X, M, mlm_weights, mlm_positions, mlm_ids, embed_weights, hidden, config, reuse=None, train=False, **kwargs):
-    hidden = merge_leading_dims(hidden, 3)
-    with tf.variable_scope('model/masked-language-model'):
-        gathered_hidden = gather_indexes(hidden, mlm_positions)
-        final_proj = dense_with_custom_init(
-            gathered_hidden,
-            config.n_embed,
-            activation=act_fns[config.act_fn],
-            kernel_initializer=tf.random_normal_initializer(stddev=config.weight_stddev),
-            name='dense',
-            custom=config.use_auxiliary_info and not config.mlm_baseline,
-            pos_embed=config.n_context_embed_per_channel * config.context_dim,
-            proj_type='downward',
-            transpose_b=True
-        )
-
+def cps_model(M, cps_mask, hidden, config):
+    M = merge_leading_dims(M, 1)
+    cps_mask = merge_leading_dims(cps_mask, 1)
+    hidden = merge_leading_dims(hidden, 2)
+    with tf.variable_scope("model/cls_model"):
+       logits = perceptron(hidden, 2, config)
+       pred = tf.argmax(logits, -1, output_type=tf.int32)
+       positives = tf.where(cps_mask)
+       tf.summary.scalar("Recall", tf.reduce_mean(tf.cast(tf.equal(tf.gather(pred, positives), tf.gather(cps_mask, positives)), tf.float32)))
+       predicted = tf.where(pred)
+       tf.summary.scalar("Precision", tf.reduce_mean(tf.cast(tf.equal(tf.gather(pred, predicted), tf.gather(cps_mask, predicted)), tf.float32)))
+       mlm_loss = tf.contrib.losses.sparse_softmax_cross_entropy(
+           logits,
+           cps_mask,
+           weights=M
+       )
+       mlm_loss *= (1 - tf.reduce_sum(tf.nn.softmax(logits) * tf.one_hot(cps_mask, 2, dtype=tf.float32), -1)) ** 2.0
+    return {"loss": mlm_loss, "logits": logits}
+    
 def masked_language_model(*, X, M, mlm_weights, mlm_ids, mlm_positions, embed_weights, hidden, config, reuse=None, train=False):
     
     with tf.variable_scope('model/masked-language-model'):
