@@ -153,6 +153,7 @@ class BaseModel(object, metaclass=ABCMeta):
         return steps
 
     def finetune(self, Xs, Y=None, batch_size=None, context=None, update_hook=None):
+        self._set_random_seed(self.config.seed)
         if (
             not callable(Xs)
             and Y is not None
@@ -451,6 +452,7 @@ class BaseModel(object, metaclass=ABCMeta):
         return predictions
 
     def _inference(self, Xs, predict_keys=None, n_examples=None, context=None, update_hook=None, force_build_lm=None):
+        self._set_random_seed(self.config.seed)
         Xs = self.input_pipeline._format_for_inference(Xs)
         if self._cached_predict:
             return self._cached_inference(

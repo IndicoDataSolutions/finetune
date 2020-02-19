@@ -5,7 +5,7 @@ import tensorflow as tf
 import numpy as np
 
 from finetune.base_models import RoBERTa
-from finetune import MaskedLanguageModel
+from finetune import MaskedLanguageModel, Classifier
 
 from copy import deepcopy
 
@@ -33,8 +33,8 @@ class TestAuxMLM(unittest.TestCase):
         #     'n_layers_with_aux': 0,
         #     'default_context': {'left': 0, 'right': 0, 'top': 0, 'bottom': 0},
         # }
-        self.model = MaskedLanguageModel(base_model=RoBERTa, n_epochs=1, lr=0, **no_aux_config)
-        self.model_with_pos = MaskedLanguageModel(base_model=RoBERTa, n_epochs=1, lr=0, **aux_config)
+        self.model = MaskedLanguageModel(base_model=RoBERTa, n_epochs=1, lr=0.0, **no_aux_config)
+        self.model_with_pos = MaskedLanguageModel(base_model=RoBERTa, n_epochs=1, lr=0.0, **aux_config)
         self.text = []
         self.context = []
         with open('tests/sample_text.ndjson') as f:
