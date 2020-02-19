@@ -176,6 +176,20 @@ class MaskedLanguageModel(BaseModel):
         """
         return super().finetune(X, Y=None, batch_size=batch_size, **kwargs)
 
+    def featurize(self, X, context=None):
+        hold_mask_proba = self.config.mask_proba
+        self.config.mask_proba = 0.0
+        output = super().featurize(X, context=context)
+        self.config.mask_proba = hold_mask_proba
+        return output
+
+    def	featurize_sequence(self, X, context=None):
+        hold_mask_proba = self.config.mask_proba
+        self.config.mask_proba = 0.0
+        output = super().featurize_sequence(X, context=context)
+        self.config.mask_proba = hold_mask_proba
+        return output
+
     @staticmethod
     def _target_model(
         config, featurizer_state, n_outputs, train=False, reuse=None, **kwargs

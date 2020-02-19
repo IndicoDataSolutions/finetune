@@ -175,6 +175,7 @@ class BaseModel(object, metaclass=ABCMeta):
         return steps
 
     def finetune(self, Xs, Y=None, batch_size=None, context=None, update_hook=None):
+        self._set_random_seed(self.config.seed)
         if (
             not callable(Xs)
             and Y is not None
@@ -355,6 +356,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
 
     def _inference(self, Xs, predict_keys=None, n_examples=None, context=None, update_hook=None):
+        self._set_random_seed(self.config.seed)
         Xs = self.input_pipeline._format_for_inference(Xs)
         input_fn = self.input_pipeline.get_predict_input_fn(Xs, context=context)
 
