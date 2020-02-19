@@ -183,7 +183,7 @@ class MaskedLanguageModel(BaseModel):
         self.config.mask_proba = hold_mask_proba
         return output
 
-    def	featurize_sequence(self, X, context=None):
+    def featurize_sequence(self, X, context=None):
         hold_mask_proba = self.config.mask_proba
         self.config.mask_proba = 0.0
         output = super().featurize_sequence(X, context=context)
