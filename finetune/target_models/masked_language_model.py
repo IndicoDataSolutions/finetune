@@ -46,7 +46,7 @@ class MaskedLanguageModelPipeline(BasePipeline):
                     # we need to align the indico-style mask with the tokenized text
                     # in the same way as we do for context
                     mlm_mask = tokenize_masking(forced_mask, out).reshape(-1)
-                    mask_type = ["mask"] * seq_len
+                    mask_type = np.array(["mask"] * seq_len)
                 except:
                     print('Failure in mask alignment for: ')
                     print(out.tokens)
