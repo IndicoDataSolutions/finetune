@@ -5,7 +5,7 @@ import tensorflow as tf
 import numpy as np
 
 from finetune.base_models import RoBERTa
-from finetune import MaskedLanguageModel, Classifier
+from finetune import MaskedLanguageModel
 
 from copy import deepcopy
 
