@@ -1,10 +1,21 @@
 import tensorflow as tf
+import tensorflow_addons as tfa
+
 from finetune.base_models.gpt.featurizer import dropout, embed, split_heads, merge_heads
 from finetune.util.shapes import shape_list, lengths_from_eos_idx
 from finetune.base_models.oscar.ra import recursive_agg, recursive_agg_tf
 from finetune.optimizers.recompute_grads import recompute_grad
 
 import functools
+
+def gelu(x):
+    return tfa.activations.gelu(x)
+
+
+def layer_norm(input_tensor):
+    return tf.contrib.layers.layer_norm(
+        inputs=input_tensor, begin_norm_axis=-1, begin_params_axis=-1
+    )
 
 
 def cast_maybe(t, dtype):
@@ -13,165 +24,142 @@ def cast_maybe(t, dtype):
     return tf.cast(t, dtype=dtype)
 
 
-def norm(x, scope, axis=-1, e=None, fp16=False):
-    with tf.variable_scope(scope):
-        e = e or 1e-5
-        n_state = shape_list(x)[-1]
-        g = tf.get_variable("g", [n_state], initializer=tf.constant_initializer(1))
-        b = tf.get_variable("b", [n_state], initializer=tf.constant_initializer(0))
-        if fp16:
-            g = tf.cast(g, tf.float16)
-            b = tf.cast(b, tf.float16)
-        u = tf.reduce_mean(x, axis=axis, keepdims=True)
-        s = tf.reduce_mean(tf.square(x - u), axis=axis, keepdims=True)
-        x = (x - u) * tf.rsqrt(s + e)
-        x = x * g + b
-        return x
-
-
 def embed_no_timing(X, we):
     return tf.gather(we, X[:, :, 0])
 
 
-def time_to_batch(value, dilation, pad_with=0):
-    with tf.name_scope('time_to_batch'):
-        shape = tf.shape(value)
-        pad_elements = dilation - 1 - (shape[1] + dilation - 1) % dilation
-        padded = tf.pad(value, [[0, 0], [0, pad_elements], [0, 0]], constant_values=pad_with)
-        reshaped = tf.reshape(padded, [-1, dilation, shape[2]])
-        transposed = tf.transpose(reshaped, perm=[1, 0, 2])
-        return tf.reshape(transposed, [shape[0] * dilation, -1, shape[2]]), pad_elements
+def dual_linear(x, hidden_dim, output_dim, use_fp16):
+    nx = shape_list(x)[-1]
+    with tf.variable_scope("dual_linear"):
+        w1 = tf.get_variable(name="W", shape=[1, nx, hidden_dim], initializer=tf.initializers.glorot_normal())
+        w2 = tf.get_variable(name="W", shape=[1, hidden_dim, output_dim], initializer=tf.initializers.glorot_normal())
+        if use_fp16:
+            w1 = tf.cast(w1, tf.float16)
+            w2 = tf.cast(w2, tf.float16)
+    hidden = tf.nn.conv1d(x, w1, stride=1, padding='VALID')
+    return tf.nn.conv1d(hidden, w2, stride=1, padding='VALID')
 
 
-def batch_to_time(value, dilation):
-    with tf.name_scope('batch_to_time'):
-        shape = tf.shape(value)
-        prepared = tf.reshape(value, [dilation, -1, shape[2]])
-        transposed = tf.transpose(prepared, perm=[1, 0, 2])
-        return tf.reshape(transposed,
-                          [tf.div(shape[0], dilation), -1, shape[2]])
-
-
-def cascaded_pool(value, kernel_size, dim=1, pool_len=None, use_fused_kernel=True):
-    shape = shape_list(value)
-    full_pool_len = pool_len or shape[dim]
+def pooling_through_time(*, x, kernel_size, pool_len, bidirectional, dual_linear_hidden, dim=1, use_fused_kernel=True):
+    shape = shape_list(x)
+    feats = shape[2]
     if use_fused_kernel:
         ra = recursive_agg
     else:
         ra = recursive_agg_tf
 
-    aggregated = ra(value, kernel_size, full_pool_len)
-    num_pooling_ops = shape_list(aggregated)[2]
+    if bidirectional:
+        pool_len = pool_len // 2
+        pool_input = tf.concat((x, tf.reverse(x, axis=1)), axis=2) # concat forward and backwards together.
+    else:
+        pool_input = x
+        
+    aggregated = ra(pool_input, kernel_size, pool_len) # batch, seq, pooling_ops, feats
 
-    ws = normal_1d_conv_block(
-        value, 1, "pool_w", value.dtype == tf.float16, output_dim=shape[-1]
-    )
-    wt = normal_1d_conv_block(
-        value, 1, "pool_t", value.dtype == tf.float16, output_dim=num_pooling_ops
-    )
-    weights = tf.nn.softmax(wt)
-    wt = tf.expand_dims(weights, -1)
+    if bidirectional:
+        aggregated = tf.concat((aggregated[:, :, :, :feats], tf.reverse(aggregated[:, :, :, feats:], 1)), axis=2)
 
-    weighted_over_time = tf.reduce_mean(aggregated * wt, 2) * tf.nn.sigmoid(ws)
+    _, _, pool_ops, feats_pooled = shape_list(aggregated)
+    
+    weights = tf.nn.softmax(dual_linear(x, dual_linear_hidden, pool_ops * feats_pooled, use_fp16))
+    weighted_over_time = tf.reduce_sum(aggregated * weights, 2)
+    
+    return layer_norm(weighted_over_time + x)
 
-    return weighted_over_time
-
-
-def causal_conv(value, filter_, dilation, name='causal_conv'):
-    conv_op = lambda x: tf.nn.conv1d(x, filter_, stride=1, padding='VALID')
-    with tf.name_scope(name):
-        if dilation > 1:
-            transformed, pad_elements = time_to_batch(value, dilation)
-            conv = conv_op(transformed)
-            restored = batch_to_time(conv, dilation)
-            restored = restored[:, :tf.shape(restored)[1] - pad_elements, :]
-        else:
-            restored = conv_op(value)
-        return restored
-
-
-def cumulative_state_net(X, name, use_fp16, pdrop, train, pool_kernel_size=2, nominal_pool_length=512, use_fused_kernel=True):
-    conv_kernel = 4
-    pool_kernel_size = pool_kernel_size or conv_kernel
-
+def conv_stack(*, x, num_convs, filter_width, use_fp16, bidirectional):
     nx = shape_list(X)[-1]
-    with tf.variable_scope(name):
-        output = tf.nn.relu(normal_1d_conv_block(X, conv_kernel, "1-" + str(conv_kernel), use_fp16, output_dim=nx))
-        output = tf.nn.relu(normal_1d_conv_block(output, conv_kernel, "2-" + str(conv_kernel), use_fp16, output_dim=nx))
-        output = normal_1d_conv_block(output, conv_kernel, "3-" + str(conv_kernel), use_fp16, output_dim=nx)
+    with tf.variable_scope("conv_stack"):
+        inp = x
+        for i in range(num_convs):
+            if i != 0:
+                inp = gelu(inp)
+            inp = 1d_conv_block(
+                inp,
+                kernel_width=filter_width,
+                layer_name=str(i),
+                use_fp16=use_fp16,
+                output_dim=None,
+                causal=not bidirectional
+            )
+    return layer_norm(inp + x)
 
-    output = dropout(output, pdrop, train)
-    aggregated = cascaded_pool(output, kernel_size=pool_kernel_size, pool_len=nominal_pool_length, use_fused_kernel=use_fused_kernel)
+def ffn(*, x, hidden_dim, use_fp16):
+    nx = shape_list(X)[-1]
+    with tf.variable_scope("ffn"):
+        inp = x
+        inp = 1d_conv_block(
+	    inp,
+            kernel_width=filter_width,
+	    layer_name="1",
+            use_fp16=use_fp16,
+	    output_dim=hidden_dim,
+            causal=False
+        )
+        inp = gelu(inp)
+        inp = 1d_conv_block(
+	    inp,
+            kernel_width=filter_width,
+	    layer_name="1",
+            use_fp16=use_fp16,
+            output_dim=hidden_dim,
+            causal=False
+        )
+    return layer_norm(inp + x)
 
-    return normal_1d_conv_block(aggregated, 1, "output_reproject", use_fp16, output_dim=nx)
 
-
-def normal_1d_conv_block(X, kernel_width, layer_name, use_fp16, dilation=1, output_dim=None, causal=True):
-    # layer_input shape = #batch, seq, embed_dim or batch, channels, seq, embed_dim
+def 1d_conv_block(x, kernel_width, layer_name, use_fp16, output_dim=None, causal=True):
     with tf.variable_scope(layer_name):
-        # Pad kernel_width (word_wise) - 1 to stop future viewing.
-        left_pad = (kernel_width - 1) * dilation
-
-        if causal:
+        if kernel_width > 1 and causal:
+            left_pad = (kernel_width - 1) * dilation
             paddings = [[0, 0], [left_pad, 0], [0, 0]]
+            padded_input = tf.pad(x, paddings, "CONSTANT")
         else:
-            paddings = [[0, 0], [left_pad // 2, left_pad - (left_pad // 2)], [0, 0]]
+            padded_input = x
 
-        if kernel_width > 1:
-            padded_input = tf.pad(X, paddings, "CONSTANT")
-        else:
-            padded_input = X
-
-        nx = shape_list(X)[-1]
+        nx = shape_list(x)[-1]
         if output_dim is None:
             output_dim = nx
+
         W = tf.get_variable(name="W", shape=[kernel_width, nx, output_dim], initializer=tf.initializers.glorot_normal())
         b = tf.get_variable(name="B", shape=[output_dim], initializer=tf.initializers.constant(0.0))
 
         if use_fp16:
             W = tf.cast(W, tf.float16)
             b = tf.cast(b, tf.float16)
-
-        conv = causal_conv(padded_input, W, dilation)
+        conv = tf.nn.conv1d(padded_input, w1, stride=1, padding='VALID' if causal else "SAME")
         conv = tf.nn.bias_add(conv, b)
     return conv
 
 
-def enc_dec_mix(enc, dec, enc_mask, dec_mask, n_head=16):
-    # enc = batch, seq, feats
-    # dec = batch, seq, feats
-    with tf.variable_scope("enc_dec_attn"):
-        batch, dec_seq, feats = shape_list(dec)
-        enc_seq = shape_list(enc)[1]
-        
-        enc_proj = normal_1d_conv_block(enc, 1, "enc_proj", use_fp16=enc.dtype == tf.float16, output_dim=feats * 2)
-        dec_proj = normal_1d_conv_block(dec, 1, "dec_proj", use_fp16=enc.dtype == tf.float16, output_dim=feats)
-        k, v = tf.split(enc_proj, 2, 2)
-        q = dec_proj
-        q = split_heads(q, n_head)
-        k = split_heads(k, n_head, k=True)
-        v = split_heads(v, n_head)
-        w = tf.matmul(q, k)
-        w = w * tf.rsqrt(cast_maybe(dec_seq, tf.float32))
-        
-        enc_mask = tf.reshape(tf.sequence_mask(enc_mask, maxlen=enc_seq, dtype=enc.dtype), [batch, 1, 1, enc_seq])
-        dec_mask = tf.reshape(tf.sequence_mask(dec_mask, maxlen=dec_seq, dtype=enc.dtype), [batch, 1, dec_seq, 1])
-        m = enc_mask * dec_mask
-        w = w * m + -1e9 * (1 - m)
-        w = tf.nn.softmax(w)
-        
-    return merge_heads(tf.matmul(w, v))
-
-
-def block(X, block_name, use_fp16, pool_idx=None, encoder_state=None, train=False, pdrop=0.1, nominal_pool_length=512, use_fused_kernel=True):
-    with tf.variable_scope(block_name):
-        h1 = cumulative_state_net(X, "cumulative_state_net", use_fp16, pdrop, train, nominal_pool_length=nominal_pool_length, use_fused_kernel=use_fused_kernel)
-        if encoder_state is not None:
-            mixed = enc_dec_mix(encoder_state["sequence_features"], h1, encoder_state["pool_idx"], pool_idx)
-            h1 = h1 + mixed
-        output = tf.nn.relu(dropout(norm(h1 + X, "norm", fp16=use_fp16, e=1e-2), pdrop, train))
-        return output
-
+def block(
+        x,
+        num_convs,
+        conv_filter_width,
+        pool_filter_width,
+        bidirectional,
+        use_fp16,
+        nominal_pool_length,
+        dual_linear_hidden,
+        ffn_hidden_dim,
+        use_fused_kernel=True
+):
+    with tf.variable_scope("oscar_block"):
+        x = conv_stack(
+            x=x,
+            num_convs=num_convs,
+            filter_width=conv_filter_width,
+            use_fp16=use_fp16,
+            bidirectional=bidirectional
+        )
+        x = pooling_through_time(
+            x=x,
+            kernel_size=pool_filter_width,
+            pool_len=nominal_pool_length,
+            bidirectional=bidirectional,
+            dual_linear_hidden=dual_linear_hidden,
+            use_fused_kernel=True
+        )
+        return ffn(x, hidden_dim, use_fp16)
 
 def featurizer(X, encoder, config, train=False, reuse=None, encoder_state=None, context=None, context_dim=None, **kwargs):
     """
@@ -197,7 +185,7 @@ def featurizer(X, encoder, config, train=False, reuse=None, encoder_state=None, 
         clf_token = encoder.end_token
         pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
         if encoder_state is None:
-            embed_weights = tf.get_variable("we", [encoder.vocab_size + config.max_length, config.n_embed],
+            embed_weights = tf.get_variable("we", [encoder.vocab_size, config.n_embed],
                                             initializer=tf.random_normal_initializer(stddev=config.weight_stddev))
         else:
             embed_weights = encoder_state["embed_weights"]
@@ -226,9 +214,16 @@ def featurizer(X, encoder, config, train=False, reuse=None, encoder_state=None, 
                     h = tf.stop_gradient(h)
 
                 block_fn_fwd = functools.partial(
-                    block, block_name='block%d_' % layer, use_fp16=config.oscar_use_fp16,
-                    pool_idx=None, encoder_state=encoder_state, train=train,
-                    pdrop=config.resid_p_drop, use_fused_kernel=config.oscar_use_fused_kernel,
+                    block,
+                    num_convs=config.oscar_num_convs,
+                    conv_filter_width=config.oscar_conv_filter_width,
+                    pool_filter_width=config.oscar_pool_filter_width,
+	            bidirectional=config.oscar_bidirectional,
+                    use_fp16=config.oscar_use_fp16,
+                    nominal_pool_length=config.oscar_nominal_pool_length,
+                    dual_linear_hidden=config.oscar_dual_linear_hidden,
+                    ffn_hidden_dim=config.oscar_ffn_hidden_dim,
+                    use_fused_kernel=config.oscar_use_fused_kernel
                 )
 
                 if config.low_memory_mode and train:

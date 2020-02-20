@@ -362,6 +362,14 @@ def get_default_config():
         oscar_feat_mode="final_state",
         oscar_use_fused_kernel=False,
 
+        oscar_num_convs=2
+        oscar_conv_filter_width=3,
+        oscar_pool_filter_width=2,
+        oscar_bidirectional=True,
+        oscar_nominal_pool_length=2048,
+        oscar_dual_linear_hidden=32,
+        oscar_ffn_hidden_dim=2048,
+
         # Location of model weights
         base_model=RoBERTa,
         base_model_path=None,
