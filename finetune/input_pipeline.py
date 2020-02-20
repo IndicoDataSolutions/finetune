@@ -108,7 +108,7 @@ class BasePipeline(metaclass=ABCMeta):
         )
         return output
 
-    def text_to_tokens_mask(self, X, Y=None, context=None):
+    def text_to_tokens_mask(self, X, Y=None, context=None, **kwargs):
         out_gen = self._text_to_ids(X, pad_token=self.config.pad_token)
         for i, out in enumerate(out_gen):
             if context is None:
