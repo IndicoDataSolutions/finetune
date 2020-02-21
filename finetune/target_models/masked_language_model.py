@@ -81,16 +81,14 @@ class MaskedLanguageModelPipeline(BasePipeline):
                 "mlm_positions": mlm_positions
             }
             if context:
-                # try:
-                #     tokenized_context = tokenize_context(context, out, self.config)
-                #     feats['context'] = tokenized_context
-                # except:
-                #     print('Failure in context alignment for: ')
-                #     print(out.tokens)
-                #     print(context)
-                #     continue
-                tokenized_context = tokenize_context(context, out, self.config)
-                feats['context'] = tokenized_context
+                try:
+                    tokenized_context = tokenize_context(context, out, self.config)
+                    feats['context'] = tokenized_context
+                except:
+                    print('Failure in context alignment for: ')
+                    print(out.tokens)
+                    print(context)
+                    continue
             yield feats
 
 
