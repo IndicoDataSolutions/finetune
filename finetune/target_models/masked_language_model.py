@@ -79,8 +79,7 @@ class MaskedLanguageModelPipeline(BasePipeline):
             mlm_positions = np.where(mlm_mask)[0]
             
             if len(mlm_positions) > self.config.max_masked_tokens: # subsample
-                np.random.shuffle(mlm_positions) # means we don't bias the begining of the sequence
-                mlm_positions = mlm_positions[:self.config.max_masked_tokens]
+                mlm_positions = np.random.choice(mlm_positions, size=self.config.max_masked_tokens, replace=False)
                 mlm_mask = np.zeros_like(mlm_mask)
                 mlm_mask[mlm_positions] = True
                 
