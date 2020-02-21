@@ -46,23 +46,6 @@ def gather_indexes(sequence_tensor, positions):
     output_tensor = tf.gather(flat_sequence_tensor, flat_positions)
     return output_tensor
 
-
-def masked_language_model(*, X, M, mlm_weights, mlm_positions, mlm_ids, embed_weights, hidden, config, reuse=None, train=False, **kwargs):
-    hidden = merge_leading_dims(hidden, 3)
-    with tf.variable_scope('model/masked-language-model'):
-        gathered_hidden = gather_indexes(hidden, mlm_positions)
-        final_proj = dense_with_custom_init(
-            gathered_hidden,
-            config.n_embed,
-            activation=act_fns[config.act_fn],
-            kernel_initializer=tf.random_normal_initializer(stddev=config.weight_stddev),
-            name='dense',
-            custom=config.use_auxiliary_info and not config.mlm_baseline,
-            pos_embed=config.n_context_embed_per_channel * config.context_dim,
-            proj_type='downward',
-            transpose_b=True
-        )
-
 def masked_language_model(*, X, M, mlm_weights, mlm_ids, mlm_positions, embed_weights, hidden, config, reuse=None, train=False):
     
     with tf.variable_scope('model/masked-language-model'):
