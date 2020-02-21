@@ -32,7 +32,6 @@ def bert_featurizer(
         features: The output of the featurizer_final state.
         sequence_features: The output of the featurizer at each timestep.
     """
-
     is_roberta = issubclass(config.base_model.encoder, RoBERTaEncoder)
     model_filename = config.base_model_path.rpartition('/')[-1]
     is_roberta_v1 = is_roberta and model_filename in ("roberta-model-sm.jl", "roberta-model-lg.jl")
@@ -52,8 +51,10 @@ def bert_featurizer(
         low_memory_mode=config.low_memory_mode,
         context_dim = config.context_dim,
         n_context_embed_per_channel = config.n_context_embed_per_channel,
-        use_auxiliary_info=config.use_auxiliary_info and not config.mlm_baseline,
-        n_layers_with_aux=config.n_layers_with_aux
+        use_auxiliary_info=config.use_auxiliary_info and not (config.mlm_baseline or config.pos_injection),
+        n_layers_with_aux=config.n_layers_with_aux,
+        pos_injection=config.pos_injection,
+        use_position_embeddings=config.use_reading_order_position,
     )
 
     initial_shape = tf.shape(X)
@@ -110,7 +111,7 @@ def bert_featurizer(
 
         embed_weights = bert.get_embedding_table()
 
-        if context is None or config.mlm_baseline:
+        if context is None or (config.mlm_baseline or config.pos_injection):
             n_embed = config.n_embed
         else:
             n_embed = config.n_embed + config.n_context_embed_per_channel * config.context_dim

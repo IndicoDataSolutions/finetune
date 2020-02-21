@@ -398,6 +398,8 @@ def get_default_config():
         n_layers_with_aux=0,  # if -1, add to all layers
 
         cps_swap_proba=0.0,
+        pos_injection=False,
+        use_reading_order_position=True,
 
         # Serialize finetune version with model
         version=VERSION,
