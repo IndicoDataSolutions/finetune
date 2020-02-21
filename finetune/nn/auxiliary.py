@@ -67,8 +67,8 @@ def dense_with_custom_init(input_tensor,
                            [0, 0, 0],
                        ]
     """
-    # small_kernel_initializer = tf.zeros_initializer
-    small_kernel_initializer = tf.truncated_normal_initializer(stddev=.002)
+    small_kernel_initializer = tf.zeros_initializer
+    # small_kernel_initializer = tf.truncated_normal_initializer(stddev=.002)
     if custom:
         # text-relevant weights
         if proj_type == 'factorized' or proj_type == 'downward':
