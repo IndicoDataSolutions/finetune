@@ -65,7 +65,8 @@ def cps_model(M, cps_mask, hidden, config):
        )
        #mlm_loss *= (1 - tf.reduce_sum(tf.nn.softmax(logits) * tf.one_hot(cps_mask, 2, dtype=tf.float32), -1)) ** 2.0
     return {"loss": mlm_loss, "logits": logits}
-    
+
+
 def masked_language_model(*, X, M, mlm_weights, mlm_ids, mlm_positions, embed_weights, hidden, config, reuse=None, train=False):
     
     with tf.variable_scope('model/masked-language-model'):
