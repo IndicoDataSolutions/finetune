@@ -48,7 +48,9 @@ class BertConfig(object):
             context_dim=0,
             n_context_embed_per_channel=0,
             use_auxiliary_info=False,
-            n_layers_with_aux=-1
+            n_layers_with_aux=-1,
+            pos_injection=False,
+            use_position_embeddings=True,
     ):
         """Constructs BertConfig.
 
@@ -90,6 +92,8 @@ class BertConfig(object):
         self.n_context_embed_per_channel = n_context_embed_per_channel
         self.use_auxiliary_info = use_auxiliary_info
         self.n_layers_with_aux = n_layers_with_aux
+        self.pos_injection = pos_injection
+        self.use_position_embeddings = use_position_embeddings
 
     @classmethod
     def from_dict(cls, json_object):
@@ -202,12 +206,14 @@ class BertModel(object):
                     token_type_ids=token_type_ids,
                     token_type_vocab_size=config.type_vocab_size,
                     token_type_embedding_name="token_type_embeddings",
-                    use_position_embeddings=True,
+                    use_position_embeddings=config.use_position_embeddings,
                     position_embedding_name="position_embeddings",
                     initializer_range=config.initializer_range,
                     max_position_embeddings=config.max_position_embeddings,
                     dropout_prob=config.hidden_dropout_prob,
-                    roberta=roberta
+                    roberta=roberta,
+                    context=context,
+                    pos_injection=config.pos_injection,
                 )
 
             with tf.variable_scope("encoder"):
@@ -448,6 +454,8 @@ def embedding_postprocessor(
         max_position_embeddings=512,
         dropout_prob=0.1,
         roberta=False,
+        context=None,
+        pos_injection=False,
 ):
     """Performs various post-processing on a word embedding tensor.
 
@@ -540,6 +548,10 @@ def embedding_postprocessor(
                 position_embeddings, position_broadcast_shape
             )
             output += position_embeddings
+    if pos_injection:
+        # xavier normal
+        init = tf.variance_scaling_initializer(scale=1.0, mode="fan_avg", distribution="truncated_normal")
+        output += tf.layers.dense(context, width, use_bias=False, kernel_initializer=init)
 
     output = layer_norm_and_dropout(output, dropout_prob)
     return output

@@ -62,7 +62,7 @@ def cps_model(M, cps_mask, hidden, config):
            cps_mask,
            weights=M
        )
-       mlm_loss *= (1 - tf.reduce_sum(tf.nn.softmax(logits) * tf.one_hot(cps_mask, 2, dtype=tf.float32), -1)) ** 2.0
+       #mlm_loss *= (1 - tf.reduce_sum(tf.nn.softmax(logits) * tf.one_hot(cps_mask, 2, dtype=tf.float32), -1)) ** 2.0
     return {"loss": mlm_loss, "logits": logits}
     
 def masked_language_model(*, X, mlm_weights, mlm_ids, mlm_positions, embed_weights, hidden, config, reuse=None, train=False):
@@ -83,7 +83,7 @@ def masked_language_model(*, X, mlm_weights, mlm_ids, mlm_positions, embed_weigh
             activation=act_fns[config.act_fn],
             kernel_initializer=tf.random_normal_initializer(stddev=config.weight_stddev),
             name='dense',
-            custom=config.use_auxiliary_info and not config.mlm_baseline,
+            custom=config.use_auxiliary_info and not (config.mlm_baseline or config.pos_injection),
             pos_embed=config.n_context_embed_per_channel * config.context_dim,
             proj_type='downward',
             transpose_b=True

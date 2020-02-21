@@ -189,7 +189,7 @@ def get_model_fn(
         pred_op = None
         with tf.variable_scope(tf.get_variable_scope()):
             train_loss = 0.0
-            if params.context_in_base_model:
+            if params.context_in_base_model or params.pos_injection:
                 if params.base_model.is_bidirectional:
                     batch, seq, _ = shape_list(X)
                     pos_embed = embed_position(context, params, batch, seq)
@@ -211,7 +211,7 @@ def get_model_fn(
                     train=train,
                     explain=build_explain,
                 )
-            if context is not None and not params.context_in_base_model:
+            if context is not None and not params.context_in_base_model and not params.pos_injection:
                 batch, seq, _ = shape_list(featurizer_state['sequence_features'])
                 pos_embed = embed_position(context, params, batch, seq)
                 featurizer_state['context'] = pos_embed
