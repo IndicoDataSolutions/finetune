@@ -358,11 +358,11 @@ def get_default_config():
         # Oscar only
         oscar_use_fp16=False,
         scale_loss=False,
-        oscar_use_timing=True,
+        oscar_use_timing=False,
         oscar_feat_mode="final_state",
         oscar_use_fused_kernel=False,
 
-        oscar_num_convs=2
+        oscar_num_convs=2,
         oscar_conv_filter_width=3,
         oscar_pool_filter_width=2,
         oscar_bidirectional=True,

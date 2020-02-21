@@ -4,7 +4,7 @@ import numpy as np
 
 from finetune.errors import FinetuneError
 from finetune.base import PredictMode, BaseModel
-from finetune.base_models import RoBERTa, BERT
+from finetune.base_models import RoBERTa, BERT, GPCModel
 from finetune.input_pipeline import BasePipeline
 from finetune.nn.target_blocks import masked_language_model
 
@@ -97,8 +97,8 @@ class MaskedLanguageModel(BaseModel):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if not issubclass(self.config.base_model, (BERT, RoBERTa)):
-            raise FinetuneError("MLM training is currently only supported for BERT and RoBERTa base models.")
+#        if not issubclass(self.config.base_model, (BERT, RoBERTa, GPCModel)):
+#            raise FinetuneError("MLM training is currently only supported for BERT and RoBERTa base models.")
 
     def _get_input_pipeline(self):
         return MaskedLanguageModelPipeline(self.config)
