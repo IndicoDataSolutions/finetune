@@ -98,7 +98,6 @@ def masked_language_model_op(
         featurizer_state,
         mode,
         encoder):
-#    tf.summary.text("footext", encoder.decode(X[0][:][0]))
     language_model_state = masked_language_model(
         X=X,
         M=M,
@@ -263,6 +262,7 @@ def get_model_fn(
                     lm_loss = tf.reduce_mean(language_model_state["losses"])
                     train_loss += lm_loss_coef * lm_loss
                     tf.summary.scalar("LanguageModelLoss", lm_loss)
+                    tf.summary.text("footext", tf.py_func(lambda x: encoder.decode(x), [X[0][:, 0]], tf.string))
                 if mode == tf.estimator.ModeKeys.PREDICT:
                     if lm_predict_op is not None:
                         predictions[PredictMode.GENERATE_TEXT] = lm_predict_op
