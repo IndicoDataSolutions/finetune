@@ -46,7 +46,7 @@ class MultipleChoicePipeline(BasePipeline):
         kwargs["mask"] = padded_stack([arr.mask for arr in arrays])
         yield ArrayEncodedOutput(**kwargs)
 
-    def text_to_tokens_mask(self, pair, Y=None, context=None):
+    def text_to_tokens_mask(self, pair, Y=None, context=None, forced_mask=None):
         out_gen = self._text_to_ids(pair, pad_token=self.config.pad_token)
         for i, out in enumerate(out_gen):
             if context is None:
