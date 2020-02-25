@@ -108,7 +108,7 @@ class BasePipeline(metaclass=ABCMeta):
         )
         return output
 
-    def text_to_tokens_mask(self, X, Y=None, context=None, **kwargs):
+    def text_to_tokens_mask(self, X, Y=None, context=None, forced_mask=None):
         out_gen = self._text_to_ids(X, pad_token=self.config.pad_token)
         for i, out in enumerate(out_gen):
             if context is None:
@@ -198,29 +198,24 @@ class BasePipeline(metaclass=ABCMeta):
         )
         return dataset_gen
 
-    def _dataset_without_targets(self, Xs, train, context=None, update_hook=None, forced_mask=None):
-
-        def _format_for_pipeline(data):
-            if data is not None:
-                if callable(data):
-                    data_ = data()
-                else:
-                    data_ = data
+    @staticmethod
+    def _format_for_pipeline(data):
+        if data is not None:
+            if callable(data):
+                data_ = data
             else:
-                data_ = (None for _ in range(self.config.dataset_size))
-            return data_
-
-        if callable(Xs):
-            Xs_ = Xs()
+                data_ = lambda: data
         else:
-            Xs_ = Xs
-
-        ys_ = (None for _ in range(self.config.dataset_size))
-
-        context_ = _format_for_pipeline(context)
-        forced_mask_ = _format_for_pipeline(forced_mask)
+            data_ = lambda: itertools.repeat(None)
+        return data_
         
-        Xs_gen = lambda: zip(Xs_, ys_, context_, forced_mask_)
+    def _dataset_without_targets(self, Xs, train, context=None, update_hook=None, forced_mask=None):
+        Xs_ = self._format_for_pipeline(Xs)
+        ys_ = self._format_for_pipeline(None)
+        context_ = self._format_for_pipeline(context)
+        forced_mask_ = self._format_for_pipeline(forced_mask)
+        
+        Xs_gen = lambda: zip(Xs_(), ys_(), context_(), forced_mask_())
         Xs_fn = lambda: self.wrap_tqdm(Xs_gen(), train, update_hook=update_hook)
         dataset_encoded = lambda: itertools.chain.from_iterable(
             map(lambda xycm: self.text_to_tokens_mask(*xycm), Xs_fn())
