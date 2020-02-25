@@ -208,6 +208,7 @@ def tokenize_masking(mask, encoded_output):
             tokenized_mask.append(False)
     return np.array(tokenized_mask)
 
+INFO_KEYS = ['token', 'start', 'end', 'first_col', 'first_row', 'last_col', 'last_row']
 
 def tokenize_context(context, encoded_output, config):
     """ Tokenize the context corresponding to a single sequence of text """
@@ -215,7 +216,7 @@ def tokenize_context(context, encoded_output, config):
     if len(encoded_output.token_ends) > 1:
         context = get_relevant_context_for_chunk(context, encoded_output)
     seq_len = len(encoded_output.token_ids)
-    context_keys = list(k for k in sorted(context[0].keys()) if k not in ['token', 'start', 'end'])
+    context_keys = list(k for k in sorted(context[0].keys()) if k not in INFO_KEYS)
     context_by_char_loc = sorted([(c['end'], [c[k] for k in context_keys]) for c in context], key=lambda c: c[0])
     # default context is set by user in config
     default_context = [config.default_context[k] for k in context_keys]
