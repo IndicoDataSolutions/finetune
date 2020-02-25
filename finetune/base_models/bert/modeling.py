@@ -188,6 +188,8 @@ class BertModel(object):
         if input_mask is None:
             input_mask = tf.ones(shape=[batch_size, seq_length], dtype=tf.int32)
 
+        auxiliary_init = True if config.use_auxiliary_info and config.n_layers_with_aux == -1 else False
+
         with tf.variable_scope(scope, default_name="bert"):
             with tf.variable_scope("embeddings"):
                 # Perform embedding lookup on the word ids.
@@ -242,7 +244,8 @@ class BertModel(object):
                     do_return_all_layers=True,
                     low_memory_mode=config.low_memory_mode and is_training,
                     config=config,
-                    context=context
+                    context=context,
+                    auxiliary_init=auxiliary_init,
                     )
                 self.sequence_output = self.all_encoder_layers[-1]
 
@@ -919,7 +922,8 @@ def transformer_model(input_tensor,
                       adapter_size=0,
                       low_memory_mode=False,
                       config=None,
-                      context=None):
+                      context=None,
+                      auxiliary_init=False):
     """Multi-headed, multi-layer Transformer from "Attention is All You Need".
 
     This is almost an exact implementation of the original Transformer encoder.
@@ -984,7 +988,6 @@ def transformer_model(input_tensor,
 
     all_layer_outputs = []
     # add auxiliary info to the last n_layers_with_aux layers
-    auxiliary_init = True if config.use_auxiliary_info and config.n_layers_with_aux == -1 else False
     for layer_idx in range(num_hidden_layers):
         if config.use_auxiliary_info and (num_hidden_layers - layer_idx == config.n_layers_with_aux or config.n_layers_with_aux == -1 and layer_idx == 0):
             auxiliary_init = True
