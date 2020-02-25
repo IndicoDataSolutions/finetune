@@ -33,7 +33,7 @@ class ComparisonPipeline(ClassificationPipeline):
         kwargs["mask"] = np.stack([arr_forward.mask, arr_backward.mask], 0)
         yield ArrayEncodedOutput(**kwargs)
 
-    def text_to_tokens_mask(self, pair, Y=None, context=None):
+    def text_to_tokens_mask(self, pair, Y=None, context=None, _=None):
         out_gen = self._text_to_ids(pair, pad_token=self.config.pad_token)
         for i, out in enumerate(out_gen):
             if context is None:

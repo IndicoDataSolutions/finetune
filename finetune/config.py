@@ -325,7 +325,7 @@ def get_default_config():
         max_masked_tokens=128,
 
         # Sequence Labeling
-        # seq_num_heads=16,
+        seq_num_heads=16,
         pad_token="<PAD>",
         pad_idx=None,
         subtoken_predictions=False,
