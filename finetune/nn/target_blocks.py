@@ -497,7 +497,7 @@ def sequence_labeler(
                     attn,
                     scope="seq_label_attn",
                     n_state=nx,
-                    n_head=config.n_heads,
+                    n_head=config.seq_num_heads,
                     resid_pdrop=config.resid_p_drop,
                     attn_pdrop=config.attn_p_drop,
                     train=train,
