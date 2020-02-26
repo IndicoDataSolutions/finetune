@@ -117,7 +117,7 @@ class BasePipeline(metaclass=ABCMeta):
                 try:
                     tokenized_context = tokenize_context(context, out, self.config)
                     feats = {"tokens": out.token_ids, "mask": out.mask, "context": tokenized_context}
-                except:
+                except (ValueError, AssertionError):
                     print('Failure in context alignment for: ')
                     print(out.tokens)
                     print(context)

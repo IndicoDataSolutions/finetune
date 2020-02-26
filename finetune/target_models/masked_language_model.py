@@ -98,7 +98,7 @@ class MaskedLanguageModelPipeline(BasePipeline):
                 try:
                     tokenized_context = tokenize_context(context, out, self.config)
                     feats['context'] = tokenized_context
-                except:
+                except (ValueError, AssertionError):
                     print('Failure in context alignment for: ')
                     print(out.tokens)
                     print(context)
