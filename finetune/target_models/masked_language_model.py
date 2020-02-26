@@ -95,25 +95,25 @@ class MaskedLanguageModelPipeline(BasePipeline):
                 "cps_mask": np.zeros_like(out.token_ids[:, 0]),
             }
             if context:
-#                try:
-                tokenized_context = tokenize_context(context, out, self.config)
-                if self.config.cps_swap_proba:
-                    if self.config.swap_cols:
-                        raise NotImplemented('TBD')
-                    else:
-                        cps_mask = np.random.rand(seq_len) < self.config.cps_swap_proba
-                        hold = tokenized_context[cps_mask]
-                        shuffled = np.random.permutation(hold)
-                        tokenized_context[cps_mask] = shuffled
-                        cps_mask[cps_mask] = cps_mask[cps_mask] & np.all(shuffled != hold, axis=1) # remove positions which shuffled to themselves.
-                        feats['cps_mask'] = cps_mask
+                try:
+                    tokenized_context = tokenize_context(context, out, self.config)
+                    if self.config.cps_swap_proba:
+                        if self.config.swap_cols:
+                            raise NotImplemented('TBD')
+                        else:
+                            cps_mask = np.random.rand(seq_len) < self.config.cps_swap_proba
+                            hold = tokenized_context[cps_mask]
+                            shuffled = np.random.permutation(hold)
+                            tokenized_context[cps_mask] = shuffled
+                            cps_mask[cps_mask] = cps_mask[cps_mask] & np.all(shuffled != hold, axis=1) # remove positions which shuffled to themselves.
+                            feats['cps_mask'] = cps_mask
                     
-                feats['context'] = tokenized_context
-#                except:
-#                    print('Failure in context alignment for: ')
-#                    print(out.tokens)
-#                    print(context)
-#                    continue
+                    feats['context'] = tokenized_context
+                except:
+                    print('Failure in context alignment for: ')
+                    print(out.tokens)
+                    print(context)
+                    continue
             yield feats
 
 
