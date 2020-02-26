@@ -553,8 +553,7 @@ def embedding_postprocessor(
             )
             output += position_embeddings
     if pos_injection:
-        # xavier normal
-        init = tf.variance_scaling_initializer(scale=1.0, mode="fan_avg", distribution="truncated_normal")
+        init = tf.variance_scaling_initializer(scale=0.02, mode="fan_avg", distribution="truncated_normal")
         output += tf.layers.dense(context, width, use_bias=False, kernel_initializer=init)
 
     output = layer_norm_and_dropout(output, dropout_prob)

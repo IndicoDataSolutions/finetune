@@ -46,7 +46,6 @@ def gather_indexes(sequence_tensor, positions):
     output_tensor = tf.gather(flat_sequence_tensor, flat_positions)
     return output_tensor
 
-
 def cps_model(M, cps_mask, hidden, config):
     M = merge_leading_dims(M, 1)
     cps_mask = merge_leading_dims(cps_mask, 1)
