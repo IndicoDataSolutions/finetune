@@ -31,7 +31,7 @@ def get_mask(seq_len, config):
         mlm_mask = [any(el) for el in zip(*masks)]
     else:
         mlm_mask = init_mlm_mask
-    return mlm_mask
+    return np.array(mlm_mask)
 
 def mask_out_whole_words(mlm_mask, out, seq_len):
     # extend end of mask spans to word boundaries
