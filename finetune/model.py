@@ -112,7 +112,7 @@ def masked_language_model_op(
             train=(mode == tf.estimator.ModeKeys.TRAIN)
         )
         
-        # mask_extra_toks = "use_extra_toks" in params and not params.use_extra_toks
+        mask_extra_toks = "use_extra_toks" in params and not params.use_extra_toks
         # NOTE: logits only contains the relevant logits for masked tokens we wish to predict
         lm_logits = language_model_state['logits']
 
