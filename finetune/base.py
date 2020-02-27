@@ -211,7 +211,27 @@ class BaseModel(object, metaclass=ABCMeta):
         )
         num_steps = steps_per_epoch * self.config.n_epochs
 
-        if val_size > 0:
+        if isinstance(val_input_fn, dict):
+            # Validation with MTL tasks
+            for task, input_fn in val_input_fn.items():
+                if isinstance(val_interval, dict):
+                    val_interval_task = val_interval[task]
+                    val_size_task = val_size[task]
+                else:
+                    val_interval_task = val_interval
+                    val_size_task = val_size
+                    train_hooks.append(
+                        tf.estimator.experimental.InMemoryEvaluatorHook(
+                            estimator,
+                            val_input_fn[task],
+                            every_n_iter=val_interval_task,
+                            steps=val_size_task // batch_size,
+                            name=task,
+                        )
+                    )
+            early_stopping_interval = sys.maxsize  # turn off early stopping for multi val
+
+        elif val_size > 0:
             # Validation with all other tasks.
             train_hooks.append(
                 tf.estimator.experimental.InMemoryEvaluatorHook(
