@@ -66,7 +66,7 @@ class InMemoryFinetune(tf.train.SessionRunHook):
             train_f1 = -1.0
 
         global_step = session.run(tf.train.get_or_create_global_step())
-        directory = os.path.join(self._eval_dir, "..", "finetuning")
+        directory = os.path.join(self._eval_dir)
 
         if not os.path.exists(directory):
             os.makedirs(directory)
