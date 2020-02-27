@@ -49,6 +49,7 @@ from finetune.base_models.bert.model import BERTModelCased, BERTModelLargeCased,
 from finetune.base_models.tcn.model import TCNModel
 from finetune.base_models.bert.model import BERTModelCased, BERTModelLargeCased, RoBERTa, RoBERTaLarge
 from finetune.base_models.oscar.model import GPCModel
+from finetune.base_models.glove.model import GloveModel
 
 # Aliases
 GPT = GPTModel

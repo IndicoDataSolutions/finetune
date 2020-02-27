@@ -33,13 +33,18 @@ def embedding_preprocessor(input_pipeline, config):
             vocab_size = input_pipeline.text_encoder.vocab_size
             word_embeddings = value[: vocab_size]
             positional_embed = value[vocab_size:]
+            
+            # glove, for instance
+            if not positional_embed.shape[0]:
+                value = word_embeddings
 
-            positional_embed = process_pos_embed(
-                positional_embed, config.max_length, config.interpolate_pos_embed
-            )
-            value = np.concatenate(
-                (word_embeddings, positional_embed), axis=0
-            )
+            else:
+                positional_embed = process_pos_embed(
+                    positional_embed, config.max_length, config.interpolate_pos_embed
+                )
+                value = np.concatenate(
+                    (word_embeddings, positional_embed), axis=0
+                )
 
         elif "position_embeddings" in name:
             length = config.max_length
