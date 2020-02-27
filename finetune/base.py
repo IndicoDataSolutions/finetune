@@ -38,6 +38,7 @@ from finetune.nn.auxiliary import add_context_embed
 
 from finetune.util.in_memory_finetune import make_in_memory_finetune_hooks
 from finetune.util.indico_estimator import IndicoEstimator
+from finetune.util.filtered_norms import make_filtered_norm_hooks
 from finetune.base_models import GPTModel, GPTModelSmall
 from finetune.nn.auxiliary import add_context_embed
 
@@ -258,6 +259,9 @@ class BaseModel(object, metaclass=ABCMeta):
 
         if self.config.in_memory_finetune is not None:
             train_hooks.extend(make_in_memory_finetune_hooks(self, estimator))
+
+        if self.config.filtered_norms is not None:
+            train_hooks.extend(make_filtered_norm_hooks(self, estimator))
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
