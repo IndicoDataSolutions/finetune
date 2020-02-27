@@ -13,10 +13,7 @@ from tensorflow.data import Dataset
 
 
 def get_mask(seq_len, config):
-    if config.mask_spans > 1:
-        mask_proba = config.mask_proba / config.mask_spans
-    else:
-        mask_proba = config.mask_proba
+    mask_proba = config.mask_proba / config.mask_spans
 
     a = np.random.rand(seq_len)
     if config.table_mask_bias:
@@ -38,13 +35,13 @@ def get_mask(seq_len, config):
 
 def mask_out_whole_words(mlm_mask, out, seq_len):
     # extend end of mask spans to word boundaries
-    for i in range(seq_len):
+    for i in range(seq_len - 1):
         curr_end = out.token_ends[i]
         next_start = out.token_starts[i + 1]
         if mlm_mask[i] and not mlm_mask[i + 1] and curr_end == next_start:
             mlm_mask[i + 1] = True
     # extend start of mask spans to word boundaries
-    for j in reversed(range(seq_len)):
+    for j in reversed(range(1, seq_len)):
         curr_start = out.token_starts[i]
         prev_end = out.token_starts[i - 1]
         if mlm_mask[j] and not mlm_mask[j - 1] and curr_start == prev_end:

@@ -15,7 +15,7 @@ from finetune import MaskedLanguageModel, Classifier
 from finetune.errors import FinetuneError
 from finetune.base_models import GPT2, BERT, RoBERTa
 from finetune.config import Settings
-from finetune.target_models.masked_language_model import _get_mask
+from finetune.target_models.masked_language_model import get_mask
 
 
 class TestMaskedLanguageModel(unittest.TestCase):
@@ -117,7 +117,7 @@ class TestMaskedLanguageModel(unittest.TestCase):
         ]
         np.random.seed(1)
         for config in configs:
-            mlm_mask = _get_mask(500, config)
+            mlm_mask = get_mask(500, config)
             self.assertEqual(len(mlm_mask), 500)
             if config.table_mask_bias:
                 self.assertGreater(np.mean(mlm_mask[:20]), np.mean(mlm_mask[-20:]))
