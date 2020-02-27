@@ -3,23 +3,25 @@ import tensorflow as tf
 from finetune.util.shapes import shape_list
 
 
-def format_mlm_predictions(gen_text_key, mlm_ids_key, mlm_positions_key):
-    prediction_info = self._inference(
-            [input_text],
-            predict_keys=[
-                PredictMode.GENERATE_TEXT,
-                PredictMode.MLM_IDS,
-                PredictMode.MLM_POSITIONS],
-            context=context,
-            force_build_lm=True,
-            **kwargs)
+def format_mlm_predictions(masked_tensor, gen_text_key, mlm_ids_key, mlm_positions_key, encoder):
+    
+    # Get the number of masks to predict from one of the predictions
+    
+    number_of_masks = gen_text_key.shape[0]
+    k=5
+    #return ' '.join([
+    #    str(gen_text_key.shape[0]),
+    #    str(mlm_ids_key.shape[0]),
+    #    str(mlm_positions_key.shape[0])])
+    
+    predicted_tokens = [{'prediction_ids': [encoder.decode([i]) for i in gen_text_key[mask][-k:][::-1]],
+                         'original_token_id': encoder.decode([mlm_ids_key[mask]]),
+                         'position': mlm_positions_key[mask]} for mask in range(number_of_masks)]
 
-    predicted_tokens = [{'prediction_ids': [self.input_pipeline.text_encoder.decode([i]) for i in gen_text_key[-k:][::-1]],
-                         'original_token_id': self.input_pipeline.text_encoder.decode([mlm_ids_key]),
-                         'position': mlm_positions_key} for pred in prediction_info]
     mask_positions = [i['position'] for i in predicted_tokens]
 
-    tokens = self.input_pipeline.text_encoder._encode([input_text]).tokens[0]
+    #tokens = encoder._encode([input_text]).tokens[0]
+    tokens = [encoder.decode([i]) for i in masked_tensor[0][:, 0]]
 
     mask_number = iter(range(len(predicted_tokens)))
     text_to_display = "".join([tokens[i] if i+1 not in mask_positions
