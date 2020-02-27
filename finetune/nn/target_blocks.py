@@ -90,19 +90,6 @@ def masked_language_model(*, X, M, mlm_weights, mlm_ids, mlm_positions, embed_we
             proj_type='downward',
             transpose_b=True
         )
-#        final_proj_w = tf.get_variable(
-#            'dense/kernel',
-#            [config.n_embed, config.n_embed],
-#            initializer=tf.random_normal_initializer(stddev=config.weight_stddev)
-#        )
-#        final_proj_b = tf.get_variable(
-#            'dense/bias',
-#            [config.n_embed],
-#            initializer=tf.zeros_initializer
-#        )
-#        final_proj = act_fns[config.act_fn](
-#            tf.matmul(gathered_hidden, final_proj_w, transpose_b=True) + final_proj_b
-#        )
 
         normed_proj = norm(final_proj, 'LayerNorm')
         n_vocab = shape_list(embed_weights)[0]
@@ -119,11 +106,8 @@ def masked_language_model(*, X, M, mlm_weights, mlm_ids, mlm_positions, embed_we
             mlm_ids,
         ) # No weights needed as there is no padding.
 
-        logits = tf.scatter_nd(
-            indices=flat_positions,
-            updates=logits,
-            shape=[batch * seq, n_vocab]
-        )
+        # NOTE: unlike logits from language_model, these logits have already been subsetted to
+        # only include the masked tokens
         return {
             "logits": logits,
             "losses": mlm_loss,
