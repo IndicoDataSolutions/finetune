@@ -378,9 +378,10 @@ def get_default_config():
         mlm_context_shuffle_val=False,
 
         cps_swap_proba=0.0,
-        swap_cols=False,
         pos_injection=False,
         use_reading_order_position=True,
+        table_mask_bias=False,
+        mask_spans=1,
 
         # Serialize finetune version with model
         version=VERSION,
