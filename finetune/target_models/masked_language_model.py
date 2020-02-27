@@ -12,6 +12,30 @@ from finetune.encoding.input_encoder import EncodedOutput
 from tensorflow.data import Dataset
 
 
+def _get_mask(seq_len, config):
+    if config.mask_spans > 1:
+        mask_proba = config.mask_proba / config.mask_spans
+    else:
+        mask_proba = config.mask_proba
+
+    a = np.random.rand(seq_len)
+    if config.table_mask_bias:
+        # init_mlm_mask = a < np.flip(np.arange(0, mask_proba * 2, mask_proba * 2/seq_len))
+        init_mlm_mask = a < [.5] * 20 + [mask_proba / 2] * (seq_len - 20)
+    else:
+        init_mlm_mask = a < mask_proba
+
+    if config.mask_spans > 1:
+        masks = [init_mlm_mask]
+        for _ in range(config.mask_spans - 1):
+            last_mask = masks[-1]
+            mlm_mask_shifted = np.insert(last_mask[:-1], False, 0)
+            masks.append(mlm_mask_shifted)
+        mlm_mask = [any(el) for el in zip(*masks)]
+    else:
+        mlm_mask = init_mlm_mask
+
+    return mlm_mask
 class MaskedLanguageModelPipeline(BasePipeline):
 
     def _target_encoder(self):
@@ -40,29 +64,6 @@ class MaskedLanguageModelPipeline(BasePipeline):
             (shapes,),
         )
 
-    def _get_mask(seq_len):
-        if self.config.mask_spans > 1:
-            mask_proba = self.config.mask_proba / self.config.mask_spans
-        else:
-            mask_proba = self.config.mask_proba
-
-        if self.config.table_mask_bias:
-            init_mlm_mask = np.random.rand(seq_len) > np.flip(np.arange(0, mask_proba * 2, 1/seq_len))
-        else:
-            init_mlm_mask = np.random.rand(seq_len) < mask_proba
-
-        if self.config.mask_spans > 1:
-            masks = [init_mlm_mask]
-            for _ in range(self.config.mask_spans):
-                last_mask = masks[-1]
-                mlm_mask_shifted = np.insert(last_mask[:-1], False, 0)
-                masks.append(mlm_mask_shifted)
-            mlm_mask = [any(el) for el in zip(*masks)]
-        else:
-            mlm_mask = init_mlm_mask
-
-        return mlm_mask
-
     def text_to_tokens_mask(self, X, Y=None, context=None, forced_mask=None):
         out_gen = self._text_to_ids(X, pad_token=self.config.pad_token)
 
@@ -80,7 +81,7 @@ class MaskedLanguageModelPipeline(BasePipeline):
                     # print(forced_mask)
                     continue
             else:
-                mlm_mask = self._get_mask(seq_len)
+                mlm_mask = _get_mask(seq_len, self.config)
                 mask_type = np.random.choice(
                     ["mask", "random", "unchanged"],
                     size=seq_len,

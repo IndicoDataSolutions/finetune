@@ -14,6 +14,8 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 from finetune import MaskedLanguageModel, Classifier
 from finetune.errors import FinetuneError
 from finetune.base_models import GPT2, BERT, RoBERTa
+from finetune.config import Settings
+from finetune.target_models.masked_language_model import _get_mask
 
 
 class TestMaskedLanguageModel(unittest.TestCase):
@@ -89,6 +91,49 @@ class TestMaskedLanguageModel(unittest.TestCase):
         """
         with self.assertRaises(FinetuneError):
             model = MaskedLanguageModel(base_model=GPT2)
+
+    def test_get_mask(self):
+        configs = [
+            Settings(
+                mask_proba=.15,
+                table_mask_bias=True,
+                mask_spans=3
+            ),
+            Settings(
+                mask_proba=.15,
+                table_mask_bias=False,
+                mask_spans=3
+            ),
+            Settings(
+                mask_proba=.15,
+                table_mask_bias=True,
+                mask_spans=1
+            ),
+            Settings(
+                mask_proba=.15,
+                table_mask_bias=False,
+                mask_spans=1
+            ),
+        ]
+        np.random.seed(1)
+        for config in configs:
+            mlm_mask = _get_mask(500, config)
+            self.assertEqual(len(mlm_mask), 500)
+            if config.table_mask_bias:
+                self.assertGreater(np.mean(mlm_mask[:20]), np.mean(mlm_mask[-20:]))
+            # calculate min_span
+            span = 0
+            min_span = 999
+            for el in mlm_mask:
+                if el:
+                    span += 1
+                elif span:
+                    min_span = min(span, min_span)
+                    span = 0
+                else:
+                    continue
+
+            self.assertTrue(min_span == config.mask_spans)
 
     def tearDown(self):
         for f in glob.glob('bert/test/test-mlm.*'):
