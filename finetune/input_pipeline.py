@@ -418,6 +418,26 @@ class BasePipeline(metaclass=ABCMeta):
             .cache()
             .prefetch(prefetch_buffer)
         )
+
+        if self.config.mlm_context_shuffle_val and context is not None:
+            
+            def shuffle_context(x):
+                context = tf.random.shuffle(x["context"])
+                x["context"] = context
+                return x
+            
+            shuffled_context_val = (
+                lambda: val_dataset_unbatched()
+                .map(shuffle_context)
+                .padded_batch(batch_size, padded_shapes=shapes, drop_remainder=False)
+                .cache()
+                .prefetch(prefetch_buffer)
+            )
+            val_dataset = {
+                None: val_dataset,
+                "context_shuffled_val": shuffled_context_val
+            }
+            
         train_dataset = (
             lambda: train_dataset_unbatched()
             .padded_batch(batch_size, padded_shapes=shapes, drop_remainder=False)
