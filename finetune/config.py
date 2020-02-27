@@ -146,6 +146,7 @@ class Settings(dict):
         dataset size exceeds a few thousand examples.  Defaults to `0.0`.
     :param tsa_schedule: Training Signal Annealing Schedule from 'Unsupervised Data Augmentation for Consistency Training'. One of {"linear_schedule", "exp_schedule", "log_schedule"}.  Defaults to `None`.
     :param summarize_grads: Include gradient summary information in tensorboard.  Defaults to `False`.
+    :param filtered_norms: List of strings denoting the variables we wish to filter when viewing weight norms. If a string is preceded by a `!`, denotes all gradients not containing the substring.  Defaults to `[]`.
     :param val_size: Validation set size if int. Validation set size as percentage of all training data if float.  Defaults to 0.  If value "auto" is provided, validation will not be run by default if n_examples < 50.
         If n_examples > 50, defaults to max(5, min(100, 0.05 * n_examples))
     :param val_interval: Evaluate on validation set after `val_interval` batches.
@@ -286,6 +287,7 @@ def get_default_config():
         tensorboard_folder=None,
         summarize_grads=False,
         norm_summary_regex=None,
+        filtered_norms=[],
         debugging_logs=False,
         cache_weights_to_file=False,
 
