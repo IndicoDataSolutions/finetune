@@ -214,7 +214,6 @@ def get_model_fn(
                     train_loss += (1 - lm_loss_coef) * target_loss
                     tf.summary.scalar("TargetModelLoss", target_loss)
                 if mode == tf.estimator.ModeKeys.PREDICT or tf.estimator.ModeKeys.EVAL:
-                    tf.summary.tensor_summary("footensor", X)
                     logits = target_model_state["logits"]
                     predict_params = target_model_state.get("predict_params", {})
                     if "_threshold" in params:
@@ -264,11 +263,9 @@ def get_model_fn(
                     lm_loss = tf.reduce_mean(language_model_state["losses"])
                     train_loss += lm_loss_coef * lm_loss
                     tf.summary.scalar("LanguageModelLoss", lm_loss)
-                    #tf.summary.text("footext", tf.strings.as_string(tf.map_fn(lambda x: encoder.decoder[x], X[0][:, 0], back_prop=False)))    
-                    tf.summary.text("footext", tf.gather([encoder.decoder[i] for i in sorted(encoder.decoder)], X[0][:, 0]))
-                    #tf.summary.text("footext", (tf.py_func(lambda x: encoder.decode([x]), X[0][:,0][0], tf.string)))
-                    #tf.summary.text("footext", tf.strings.as_string(tf.map_fn(encoder.decode, X[0][:, 0]), back_prop=False))
-                    #tf.summary.text("maptext", tf.strings.as_string(tf.map_fn(lambda x: x+1, X)))
+                    #tf.summary.text("footext", tf.py_func(lambda x: encoder.decode(x), [X[0][:, 0]], tf.string))
+                    tf.summary.text("footext", tf.py_func(lambda x: encoder.decode(x), [lm_predict_op[-5:][::-1]], tf.string))
+                    #tf.summary.text("footext", encoder.decode(mlm_ids))
                 if mode == tf.estimator.ModeKeys.PREDICT:
                     if lm_predict_op is not None:
                         predictions[PredictMode.GENERATE_TEXT] = lm_predict_op
