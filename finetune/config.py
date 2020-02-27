@@ -403,6 +403,7 @@ def get_default_config():
         use_reading_order_position=True,
         table_mask_bias=False,
         mask_spans=1,
+        word_masks=False,
 
         # Serialize finetune version with model
         version=VERSION,

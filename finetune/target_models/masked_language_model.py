@@ -12,7 +12,7 @@ from finetune.encoding.input_encoder import EncodedOutput
 from tensorflow.data import Dataset
 
 
-def _get_mask(seq_len, config):
+def get_mask(seq_len, config):
     if config.mask_spans > 1:
         mask_proba = config.mask_proba / config.mask_spans
     else:
@@ -34,8 +34,24 @@ def _get_mask(seq_len, config):
         mlm_mask = [any(el) for el in zip(*masks)]
     else:
         mlm_mask = init_mlm_mask
-
     return mlm_mask
+
+def mask_out_whole_words(mlm_mask, out, seq_len):
+    # extend end of mask spans to word boundaries
+    for i in range(seq_len):
+        curr_end = out.token_ends[i]
+        next_start = out.token_starts[i + 1]
+        if mlm_mask[i] and not mlm_mask[i + 1] and curr_end == next_start:
+            mlm_mask[i + 1] = True
+    # extend start of mask spans to word boundaries
+    for j in reversed(range(seq_len)):
+        curr_start = out.token_starts[i]
+        prev_end = out.token_starts[i - 1]
+        if mlm_mask[j] and not mlm_mask[j - 1] and curr_start == prev_end:
+            mlm_mask[j - 1] = True
+    return mlm_mask
+
+
 class MaskedLanguageModelPipeline(BasePipeline):
 
     def _target_encoder(self):
@@ -81,7 +97,10 @@ class MaskedLanguageModelPipeline(BasePipeline):
                     # print(forced_mask)
                     continue
             else:
-                mlm_mask = _get_mask(seq_len, self.config)
+                mlm_mask = get_mask(seq_len, self.config)
+                if self.config.word_masks:
+                    mlm_mask = mask_out_whole_words(mlm_mask, out, seq_len)
+
                 mask_type = np.random.choice(
                     ["mask", "random", "unchanged"],
                     size=seq_len,
