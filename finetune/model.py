@@ -116,19 +116,14 @@ def masked_language_model_op(
             train=(mode == tf.estimator.ModeKeys.TRAIN)
         )
         
-        mask_extra_toks = "use_extra_toks" in params and not params.use_extra_toks
+        # mask_extra_toks = "use_extra_toks" in params and not params.use_extra_toks
+        # NOTE: logits only contains the relevant logits for masked tokens we wish to predict
         lm_logits = language_model_state['logits']
-        lm_logit_mask = mask_logits(
-            lm_logits,
-            encoder,
-            mask_extra_toks=mask_extra_toks)
-        lm_logits += lm_logit_mask
         
-        relevant_logits = tf.boolean_mask(lm_logits, tf.reshape(mlm_weights, shape=(-1,)))
         relevant_ids = tf.boolean_mask(mlm_ids, mlm_weights)
         relevant_positions = tf.boolean_mask(mlm_positions, mlm_weights)
         
-        top_token_idxs = tf.argsort(relevant_logits, direction='ASCENDING', axis=-1)
+        top_token_idxs = tf.argsort(lm_logits, direction='ASCENDING', axis=-1)
     else:
         top_token_idxs = None
         relevant_ids = None
