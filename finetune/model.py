@@ -119,6 +119,12 @@ def masked_language_model_op(
         # mask_extra_toks = "use_extra_toks" in params and not params.use_extra_toks
         # NOTE: logits only contains the relevant logits for masked tokens we wish to predict
         lm_logits = language_model_state['logits']
+
+        lm_logit_mask = mask_logits(
+            lm_logits,
+            encoder,
+            mask_extra_toks=mask_extra_toks)
+        lm_logits += lm_logit_mask
         
         relevant_ids = tf.boolean_mask(mlm_ids, mlm_weights)
         relevant_positions = tf.boolean_mask(mlm_positions, mlm_weights)
