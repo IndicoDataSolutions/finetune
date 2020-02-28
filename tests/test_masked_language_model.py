@@ -117,23 +117,34 @@ class TestMaskedLanguageModel(unittest.TestCase):
         ]
         np.random.seed(1)
         for config in configs:
-            mlm_mask = get_mask(500, config)
-            self.assertEqual(len(mlm_mask), 500)
-            if config.table_mask_bias:
-                self.assertGreater(np.mean(mlm_mask[:20]), np.mean(mlm_mask[-20:]))
-            # calculate min_span
-            span = 0
-            min_span = 999
-            for el in mlm_mask:
-                if el:
-                    span += 1
-                elif span:
-                    min_span = min(span, min_span)
-                    span = 0
-                else:
-                    continue
-
-            self.assertTrue(min_span == config.mask_spans)
+            num_masked = []
+            for i in range(100):
+                text_len = 500
+                mlm_mask = get_mask(text_len, config)
+                self.assertEqual(len(mlm_mask), text_len)
+                if config.table_mask_bias:
+                    self.assertGreater(np.mean(mlm_mask[:40]), np.mean(mlm_mask[-40:]))
+                # calculate min_span
+                span = 0
+                min_span = 999
+                for el in mlm_mask:
+                    if el:
+                        span += 1
+                    elif span:
+                        min_span = min(span, min_span)
+                        span = 0
+                    else:
+                        continue
+                # print('*****', config, min_span)
+                # print(mlm_mask)
+                # self.assertTrue(min_span == config.mask_spans)
+            num_masked.append(sum(mlm_mask))
+            print(config)
+            print(np.mean(num_masked))
+            print(np.std(num_masked))
+                # self.assertGreaterEqual(np.sum(mlm_mask), 500 * .10)
+                # self.assertLessEqual(np.sum(mlm_mask), 500 * .20)
+        self.assertFalse(True)
 
     def tearDown(self):
         for f in glob.glob('bert/test/test-mlm.*'):

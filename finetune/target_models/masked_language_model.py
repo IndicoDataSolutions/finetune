@@ -1,6 +1,7 @@
 import tensorflow as tf
 from tensorflow import TensorShape as TS
 import numpy as np
+import math
 
 from finetune.errors import FinetuneError
 from finetune.base import PredictMode, BaseModel
@@ -13,12 +14,21 @@ from tensorflow.data import Dataset
 
 
 def get_mask(seq_len, config):
-    mask_proba = config.mask_proba / config.mask_spans
+    if config.mask_spans > 1:
+        # mask_proba = (config.mask_proba * seq_len) / config.mask_spans, seq_len)
+        mask_proba = config.mask_proba / config.mask_spans * 1.2
+        # print('mask_proba', mask_proba)
+    else:
+        mask_proba = config.mask_proba
 
     a = np.random.rand(seq_len)
     if config.table_mask_bias:
         # init_mlm_mask = a < np.flip(np.arange(0, mask_proba * 2, mask_proba * 2/seq_len))
-        init_mlm_mask = a < [.5] * 20 + [mask_proba / 2] * (seq_len - 20)
+        # we want the number of masked tokens to be 15% in expectation
+        num_header_tokens = 40
+        header_proba = .5
+        non_header_proba = ((mask_proba * seq_len) - (num_header_tokens * header_proba)) / (seq_len - num_header_tokens)
+        init_mlm_mask = a < [header_proba] * num_header_tokens + [non_header_proba] * (seq_len - num_header_tokens)
     else:
         init_mlm_mask = a < mask_proba
 
