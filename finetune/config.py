@@ -285,6 +285,7 @@ def get_default_config():
         soft_device_placement=True,
         tensorboard_folder=None,
         summarize_grads=False,
+        norm_summary_regex=None,
         debugging_logs=False,
         cache_weights_to_file=False,
 
