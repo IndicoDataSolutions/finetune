@@ -18,6 +18,7 @@ from finetune.base_models import GPTModel, GPTModelSmall
 from finetune.optimizers.adafactor import AdafactorWOptimizer, AdafactorOptimizer
 from finetune.nn.auxiliary import embed_context, embed_position, add_context_embed
 from finetune.util.shapes import shape_list
+from finetune.util.summaries import make_summary_optimizer
 
 LOGGER = logging.getLogger("finetune")
 
@@ -337,6 +338,8 @@ def get_model_fn(
                             list(OPTIMIZERS.keys()), params.optimizer
                         )
                     )
+                if params.norm_summary_regex:
+                    Optimizer = make_summary_optimizer(Optimizer, params.norm_summary_regex)
 
                 if params.accum_steps > 1:
                     Optimizer = get_grad_accumulation_optimizer(
