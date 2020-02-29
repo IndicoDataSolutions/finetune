@@ -258,7 +258,7 @@ def get_default_config():
         weight_stddev=0.02,
         save_dtype=None,
         val_set=None,
-        per_process_gpu_memory_fraction=None,
+        per_process_gpu_memory_fraction=0.9,#None,
         adapter_size=None,  # from Parameter Efficient Transfer Learning paper
         distribution_strategy="central_storage",
         xla=False,
@@ -360,14 +360,14 @@ def get_default_config():
         scale_loss=False,
         oscar_use_timing=False,
         oscar_feat_mode="final_state",
-        oscar_use_fused_kernel=False,
+        oscar_use_fused_kernel=True,
 
         oscar_num_convs=2,
         oscar_conv_filter_width=3,
         oscar_pool_filter_width=2,
         oscar_bidirectional=True,
         oscar_nominal_pool_length=2048,
-        oscar_dual_linear_hidden=32,
+        oscar_dual_linear_hidden=64,
         oscar_ffn_hidden_dim=2048,
 
         # Location of model weights

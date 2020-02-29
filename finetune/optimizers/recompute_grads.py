@@ -56,6 +56,8 @@ def _fn_with_custom_grad(fn, inputs, grad_fn, use_global_vars=False, use_entire_
     else:
         train_vars = get_vars_fn()[len_before_vars:]
 
+
+    print(train_vars)
     if grad_fn is None:
         return outputs
 

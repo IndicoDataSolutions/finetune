@@ -15,11 +15,11 @@ REQUIRED_FILES = [
 ]
 
 BASE_OSCAR_SETTINGS = {
-    'max_length': 2048,
+    'max_length': 2048, # TODO
     'n_embed': 512,
     "base_model_path": os.path.join("oscar", "fresh_start.jl"),
-    'n_layer': 12,
-    'num_layers_trained': 12,
+    'n_layer': 18,
+    'num_layers_trained': 18,
     'lr_warmup': 0.1,
     "distribution_strategy": "mirrored",
     'oscar_feat_mode': 'clf_tok',
