@@ -48,7 +48,13 @@ class SaverHook(_StopOnPredicateHook):
     def stop_if_no_metric_improvement_fn(self):
         if not self.keep_best_model:
             return False
-        eval_results = read_eval_metrics(self.estimator.eval_dir())
+        
+        eval_results = {
+            k: v for k, v in
+            read_eval_metrics(self.estimator.eval_dir()).items()
+            if "loss" in v # Filter out anything in eval that does not have a loss value
+        }
+        
         if len(eval_results) == 0:
             return False
         most_recent_eval = max(eval_results.items(), key=lambda x: x[0])  # last steps.

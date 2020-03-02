@@ -160,30 +160,19 @@ class BasePipeline(metaclass=ABCMeta):
     def _compute_class_weights(self, class_weights, class_counts):
         return compute_class_weights(class_weights=class_weights, class_counts=class_counts)
 
-    def _dataset_with_targets(self, Xs, Y, train, context=None, update_hook=None):
-        if context is not None:
-            if not callable(Xs) and not callable(Y) and not callable(context):
-                dataset = lambda: zip(Xs, Y, context)
-            elif callable(Xs) and callable(Y) and callable(context):
-                dataset = lambda: zip(Xs(), Y(), context())
-            else:
-                raise ValueError( "Either none or all of Xs and Y and context should be callable, not a mixture")
-
-            dataset_encoded = lambda: itertools.chain.from_iterable(
-                map(lambda xyc: self.text_to_tokens_mask(*xyc), dataset())
-            )
+    def _dataset_with_targets(self, Xs, Y, train, context=None, update_hook=None, from_generator=False):
+        if from_generator:
+            def dataset():
+                for x in Xs():
+                    yield x.get("X"), x.get("Y"), x.get("context")
         else:
-            if not callable(Xs) and not callable(Y):
-                dataset = lambda: zip(Xs, Y)
-            elif callable(Xs) and callable(Y):
-                dataset = lambda: zip(Xs(), Y())
-            else:
-                raise ValueError( "Either neither or both of Xs and Y should be callable, not a mixture")
-            dataset_encoded = lambda: itertools.chain.from_iterable(
-                map(lambda xy: self.text_to_tokens_mask(*xy), dataset())
-            )
+            context = self._format_for_pipeline(context)
+            dataset = lambda: zip(Xs, Y, context())
+        dataset_encoded = lambda: itertools.chain.from_iterable(
+            map(lambda xyc: self.text_to_tokens_mask(*xyc), dataset())
+        )
 
-        if not callable(Y) and train:
+        if not from_generator and train:
             dataset_encoded_list = list(dataset_encoded())
             self.config.dataset_size = len(dataset_encoded_list)
             if self.config.class_weights is not None:
@@ -209,13 +198,19 @@ class BasePipeline(metaclass=ABCMeta):
             data_ = lambda: itertools.repeat(None)
         return data_
         
-    def _dataset_without_targets(self, Xs, train, context=None, update_hook=None, forced_mask=None):
-        Xs_ = self._format_for_pipeline(Xs)
-        ys_ = self._format_for_pipeline(None)
-        context_ = self._format_for_pipeline(context)
-        forced_mask_ = self._format_for_pipeline(forced_mask)
+    def _dataset_without_targets(self, Xs, train, context=None, update_hook=None, forced_mask=None, from_generator=False):
+        if from_generator:
+            assert forced_mask is None, "Forced mask is not supported with generator inputs"
+            def Xs_gen():
+                for x in Xs():
+                    yield (x.get("X"), x.get("y"), x.get("context"), None)
+        else:                                            
+            Xs_ = self._format_for_pipeline(Xs)
+            ys_ = self._format_for_pipeline(None)
+            context_ = self._format_for_pipeline(context)
+            forced_mask_ = self._format_for_pipeline(forced_mask)
+            Xs_gen = lambda: zip(Xs_(), ys_(), context_(), forced_mask_())
         
-        Xs_gen = lambda: zip(Xs_(), ys_(), context_(), forced_mask_())
         Xs_fn = lambda: self.wrap_tqdm(Xs_gen(), train, update_hook=update_hook)
         dataset_encoded = lambda: itertools.chain.from_iterable(
             map(lambda xycm: self.text_to_tokens_mask(*xycm), Xs_fn())
@@ -269,11 +264,14 @@ class BasePipeline(metaclass=ABCMeta):
     def resampling(self, Xs, Y, context=None):
         return Xs, Y, context
 
-    def _make_dataset(self, Xs, Y, train=False, context=None, update_hook=None):
+    def _make_dataset(self, Xs, Y, train=False, context=None, update_hook=None, from_generator=False, has_targets=None):
         if Y is not None:
-            dataset = lambda: self._dataset_with_targets(Xs, Y, train=train, context=context, update_hook=update_hook)
+            has_targets = True
+
+        if has_targets:
+            dataset = lambda: self._dataset_with_targets(Xs, Y, train=train, context=context, update_hook=update_hook, from_generator=from_generator)
         else:
-            dataset = lambda: self._dataset_without_targets(Xs, train=train, context=context, update_hook=update_hook)
+            dataset = lambda: self._dataset_without_targets(Xs, train=train, context=context, update_hook=update_hook, from_generator=from_generator)
         return dataset
 
     def wrap_tqdm(self, gen, train, update_hook=None):
@@ -322,6 +320,101 @@ class BasePipeline(metaclass=ABCMeta):
 
         return internal_gen()
 
+    def get_train_input_fns_from_generator(self, Xs, batch_size=None, val_size=None, update_hook=None):
+        assert callable(Xs)
+        self.epoch = 1
+        has_targets = "y" in next(Xs())
+        batch_size = batch_size or self.config.batch_size
+
+        shuffle_buffer_size = self.config.shuffle_buffer_size
+        val_size = val_size or 0
+        prefetch_buffer = 2  # breaks the pipeline to allow concurrency
+
+        try:
+            self.config.dataset_size = len(Xs())
+        except TypeError:
+            if self.config.dataset_size is None:
+                raise FinetuneError(
+                    "Generator input function does not have a length and no `config.dataset_size` is specified. "
+                    "You must set `config.dataset_size` explicitly."
+                )
+
+        self.config.val_size, self.config.val_interval = self.validation_settings(
+            n_examples=len(Xs) if not callable(Xs) else self.config.dataset_size,
+            batch_size=batch_size or self.config.batch_size,
+        )
+        self.config.dataset_size -= val_size
+        self._post_data_initialization(Y=None)
+        self._skip_tqdm = val_size
+        dataset = self._make_dataset(Xs, None, train=True, update_hook=update_hook, from_generator=True, has_targets=has_targets)
+        val_dataset_unbatched = (
+            lambda: dataset()
+            .shuffle(
+                shuffle_buffer_size,
+                seed=self.config.seed,
+                reshuffle_each_iteration=False,
+            )
+            .take(self.config.val_size)
+        )
+        train_dataset_unbatched = (
+            lambda: dataset()
+            .shuffle(
+                shuffle_buffer_size,
+                seed=self.config.seed,
+                reshuffle_each_iteration=False,
+            )
+            .skip(self.config.val_size)
+        )
+
+        if self.config.chunk_long_sequences or self.config.class_weights:
+            raise ValueError("Chunk long sequences and class weights are not supported with generator input")
+
+        _, shapes = self.feed_shape_type_def()
+        if not has_targets:
+            shapes = shapes[0]
+
+        val_dataset = (
+            lambda: val_dataset_unbatched()
+            .padded_batch(batch_size, padded_shapes=shapes, drop_remainder=False)
+            .cache()
+            .prefetch(prefetch_buffer)
+        )
+
+        if self.config.mlm_context_shuffle_val and self.config.use_auxiliary_info:
+            
+            def shuffle_context(x):
+                context = tf.random.shuffle(x["context"])
+                x["context"] = context
+                return x
+            
+            shuffled_context_val = (
+                lambda: val_dataset_unbatched()
+                .map(shuffle_context)
+                .padded_batch(batch_size, padded_shapes=shapes, drop_remainder=False)
+                .cache()
+                .prefetch(prefetch_buffer)
+            )
+            val_dataset = {
+                None: val_dataset,
+                "context_shuffled_val": shuffled_context_val
+            }
+            
+        train_dataset = (
+            lambda: train_dataset_unbatched()
+            .padded_batch(batch_size, padded_shapes=shapes, drop_remainder=False)
+            .repeat(self.config.n_epochs)
+            .prefetch(prefetch_buffer)
+        )
+
+        return (
+            val_dataset,
+            train_dataset,
+            self.config.val_size,
+            self.config.val_interval,
+            has_targets
+        )
+
+
     def get_train_input_fns(self, Xs, Y=None, batch_size=None, val_size=None, context=None, update_hook=None):
         self.epoch = 1
         batch_size = batch_size or self.config.batch_size
@@ -331,6 +424,7 @@ class BasePipeline(metaclass=ABCMeta):
         prefetch_buffer = 2  # breaks the pipeline to allow concurrency
 
         if callable(Xs):
+            raise ValueError("get_train_input_fns no longer takes generator arguments, this is handled by get_train_input_fns_from_generator")
             try:
                 self.config.dataset_size = len(Xs())
             except TypeError:
