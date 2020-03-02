@@ -167,7 +167,7 @@ class BaseModel(object, metaclass=ABCMeta):
         val_input_fn, train_input_fn, val_size, val_interval = self.input_pipeline.get_train_input_fns(
             data, batch_size=batch_size, update_hook=update_hook
         )
-        return self._finetune_from_dataset(val_input_fn, train_input_fn, val_size, val_interval, batch_size, has_targets=has_targets)
+        return self._finetune_from_dataset(val_input_fn, train_input_fn, val_size, val_interval, batch_size, has_targets=False)
     
 
     def finetune(self, Xs, Y=None, batch_size=None, context=None, update_hook=None):
