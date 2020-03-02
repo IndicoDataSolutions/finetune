@@ -99,6 +99,7 @@ class MaskedLanguageModel(BaseModel):
         return MaskedLanguageModelPipeline(self.config)
 
     def predict_top_k_report(self, input_text, k=5, context=None, **kwargs):
+        """input_text: A string to mask, predict and display a report for."""
         prediction_info = self._inference(
                 [input_text],
                 predict_keys=[
@@ -109,9 +110,9 @@ class MaskedLanguageModel(BaseModel):
                 force_build_lm=True,
                 **kwargs)
 
-        predicted_tokens = [{'prediction_ids': [self.input_pipeline.text_encoder.decode([i]) for i in pred['GEN_TEXT'][-k:][::-1]],
-                             'original_token_id': self.input_pipeline.text_encoder.decode([pred['MLM_IDS']]),
-                             'position': pred['MLM_POSITIONS']} for pred in prediction_info]
+        predicted_tokens = [{'prediction_ids': [self.input_pipeline.text_encoder.decode([i]) for i in pred[PredictMode.GENERATE_TEXT][-k:][::-1]],
+                             'original_token_id': self.input_pipeline.text_encoder.decode([pred[PredictMode.MLM_IDS]]),
+                             'position': pred[PredictMode.MLM_POSITIONS]} for pred in prediction_info]
         mask_positions = [i['position'] for i in predicted_tokens]
 
         tokens = self.input_pipeline.text_encoder._encode([input_text]).tokens[0]
