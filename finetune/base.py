@@ -176,15 +176,24 @@ class BaseModel(object, metaclass=ABCMeta):
         return steps
 
     def finetune_from_generator(self, data, batch_size=None, update_hook=None):
+        """
+        Arguments:
+        - data: generator function where each element is a dictionary containing attributes 'X' if use_auxiliary_info=False,
+                or 'X' and 'context' if use_auxiliary_info=True
+        """
+        assert callable(data), "Must pass in a generator function to `finetune_from_generator`."
+        if "y" in next(data()):
+            raise ValueError("Cannot feed in supervised data using generator.")
         self._set_random_seed(self.config.seed)
         batch_size = batch_size or self.config.batch_size
-        val_input_fn, train_input_fn, val_size, val_interval, has_targets = self.input_pipeline.get_train_input_fns_from_generator(
-            data, batch_size=batch_size, update_hook=update_hook
+        val_input_fn, train_input_fn, val_size, val_interval = self.input_pipeline.get_train_input_fns(
+            data, batch_size=batch_size, context=context, update_hook=update_hook
         )
         return self._finetune_from_dataset(val_input_fn, train_input_fn, val_size, val_interval, batch_size, has_targets=has_targets)
     
 
     def finetune(self, Xs, Y=None, batch_size=None, context=None, update_hook=None):
+        assert not callable(Xs) and not callable(Y) and not callable(context), "If you would like to pass in a generator, use `finetune_from_generator`."
         self._set_random_seed(self.config.seed)
         if (
             Y is not None
