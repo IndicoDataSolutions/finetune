@@ -205,7 +205,7 @@ class MaskedLanguageModel(BaseModel):
                                              for i in range(len(tokens))]) + 2*'\n'
 
         for i in sorted(predicted_tokens, key=lambda x: x['position']):
-            text_to_display += (f"{'<':>3}{mask_positions.index(i['position']):>2}>|{i['original_token_id']:15}|{i['prediction_ids']}\n")
+            text_to_display += ""#(f"{'<':>3}{mask_positions.index(i['position']):>2}>|{i['original_token_id']:15}|{i['prediction_ids']}\n")
 
         return text_to_display
 

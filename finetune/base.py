@@ -175,11 +175,19 @@ class BaseModel(object, metaclass=ABCMeta):
         steps = int(math.ceil(n_examples / (batch_size * n_gpus)))
         return steps
 
+    def finetune_from_generator(self, data, batch_size=None, update_hook=None):
+        self._set_random_seed(self.config.seed)
+        batch_size = batch_size or self.config.batch_size
+        val_input_fn, train_input_fn, val_size, val_interval, has_targets = self.input_pipeline.get_train_input_fns_from_generator(
+            data, batch_size=batch_size, update_hook=update_hook
+        )
+        return self._finetune_from_dataset(val_input_fn, train_input_fn, val_size, val_interval, batch_size, has_targets=has_targets)
+    
+
     def finetune(self, Xs, Y=None, batch_size=None, context=None, update_hook=None):
         self._set_random_seed(self.config.seed)
         if (
-            not callable(Xs)
-            and Y is not None
+            Y is not None
             and len(Xs) != len(Y)
         ):
             raise FinetuneError(
@@ -192,6 +200,9 @@ class BaseModel(object, metaclass=ABCMeta):
         val_input_fn, train_input_fn, val_size, val_interval = self.input_pipeline.get_train_input_fns(
             Xs, Y, batch_size=batch_size, context=context, update_hook=update_hook
         )
+        return self._finetune_from_dataset(val_input_fn, train_input_fn, val_size, val_interval, batch_size, has_targets=Y is not None)
+
+    def _finetune_from_dataset(self, val_input_fn, train_input_fn, val_size, val_interval, batch_size, has_targets):
 
         if self.config.keep_best_model:
             if val_size <= 10:
@@ -201,7 +212,7 @@ class BaseModel(object, metaclass=ABCMeta):
                     )
                 )
 
-        force_build_lm = Y is None
+        force_build_lm = not has_targets
         estimator, hooks = self.get_estimator(force_build_lm=force_build_lm)
         train_hooks = hooks.copy()
 
@@ -230,7 +241,12 @@ class BaseModel(object, metaclass=ABCMeta):
                             name=task,
                         )
                     )
-            early_stopping_interval = sys.maxsize  # turn off early stopping for multi val
+            if None in val_input_fn:
+                saver_hook_interval = val_interval # has a default validation
+            else:
+                if self.config.keep_best_model:
+                    raise ValueError("Cannot use keep_best_model with MTL")
+                saver_hook_interval = sys.maxsize
 
         elif val_size > 0:
             # Validation with all other tasks.
@@ -242,9 +258,9 @@ class BaseModel(object, metaclass=ABCMeta):
                     steps=math.ceil(val_size / batch_size),
                 )
             )
-            early_stopping_interval = val_interval
+            saver_hook_interval = val_interval
         else:
-            early_stopping_interval = sys.maxsize
+            saver_hook_interval = sys.maxsize
 
         train_hooks.append(
             self.saver.get_saver_hook(
@@ -252,7 +268,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 keep_best_model=self.config.keep_best_model,
                 steps_per_epoch=steps_per_epoch,
                 early_stopping_steps=self.config.early_stopping_steps,
-                eval_frequency=early_stopping_interval,
+                eval_frequency=saver_hook_interval,
                 cache_weights_to_file=self.config.cache_weights_to_file
             )
         )

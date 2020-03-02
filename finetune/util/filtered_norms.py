@@ -36,7 +36,6 @@ class FilteredNormsHook(tf.train.SessionRunHook):
                     model_vars = {k: v for k, v in self.model.saver.variables.items() if "global_step" not in k and "Adam" not in k}
                 else:
                     model_vars = {k: v for k, v in self.model.saver.fallback_.items() if "global_step" not in k and "Adam" not in k}
-                print(self.filter)
                 if self.filter[0] == '!':
                     variables = np.array([v for k, v in model_vars.items() if self.filter not in k])
                 else:
@@ -58,7 +57,6 @@ class FilteredNormsHook(tf.train.SessionRunHook):
         summary_proto = summary_pb2.Summary()
         summary_proto.value.add(tag="norms/{}_weight_norm".format(self.filter), simple_value=weight_norm)
         summary_writer.add_summary(summary_proto, global_step)
-        print('{} weight norm: {}'.format(self.filter, weight_norm))
         summary_writer.flush()
     
         self._timer.update_last_triggered_step(self._iter_count)
