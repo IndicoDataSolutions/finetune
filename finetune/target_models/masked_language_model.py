@@ -245,7 +245,7 @@ class MaskedLanguageModel(BaseModel):
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
         """
-        return super().finetune(X, Y=None, batch_size=batch_size, **kwargs)
+        return super().finetune_from_generator(X, batch_size=batch_size, **kwargs)
     
     def finetune(self, X, batch_size=None, **kwargs):
         raise NotImplementedError("MaskedLanguageModel must take in a generator for finetuning. Please use `finetune_from_generator`.")
