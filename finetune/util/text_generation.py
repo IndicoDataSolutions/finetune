@@ -3,11 +3,14 @@ import tensorflow as tf
 from finetune.util.shapes import shape_list
 
 
-def format_mlm_predictions(masked_tensor, gen_text_key, mlm_ids_key, mlm_positions_key, encoder):
+def format_mlm_predictions(masked_tensor, gen_text_key, mlm_ids_key, mlm_positions_key, encoder, markdown=False):
     
     # Get the number of masks to predict from one of the predictions
     
     number_of_masks = gen_text_key.shape[0]
+    
+    # Currently number of predictions to display for each mask
+    # is hard coded.
     k=5
     #return ' '.join([
     #    str(gen_text_key.shape[0]),
@@ -18,24 +21,30 @@ def format_mlm_predictions(masked_tensor, gen_text_key, mlm_ids_key, mlm_positio
                          'original_token_id': encoder.decode([mlm_ids_key[mask]]),
                          'position': mlm_positions_key[mask]} for mask in range(number_of_masks)]
 
+    # Sort predicted token information
+    predicted_tokens = sorted(predicted_tokens, key=lambda x: x['position'])
     mask_positions = [i['position'] for i in predicted_tokens]
 
     #tokens = encoder._encode([input_text]).tokens[0]
     tokens = [encoder.decode([i]) for i in masked_tensor[0][:, 0]]
 
     mask_number = iter(range(len(predicted_tokens)))
-    text_to_display = "".join([tokens[i] if i+1 not in mask_positions
+    text_to_display = "".join([tokens[i] if i not in mask_positions
                                 else '<' + str(next(mask_number)) + '>'
                                 for i in range(len(tokens))]) + 2*'\n'
+    if markdown:
+        text_to_display += '------\n'
 
-    for i in sorted(predicted_tokens, key=lambda x: x['position']):
+    for i in predicted_tokens:
+        if markdown:
+            text_to_display += '-'
         text_to_display += (f"{'<':>3}{mask_positions.index(i['position']):>2}>|{i['original_token_id']:15}|{i['prediction_ids']}\n")
 
     return text_to_display
 
 def sample_with_temperature(logits, temperature):
     """Either argmax or random sampling.
-    Args:
+    Args:
       logits: a Tensor.
       temperature: a float  0.0=argmax 1.0=random
     Returns:

@@ -267,7 +267,7 @@ def get_model_fn(
                     #tf.summary.text("footensor", tf.strings.as_string(lm_predict_op[-5:][::-1]))
                     #tf.summary.text("footext", tf.py_func(lambda x: encoder.decode(x), [lm_predict_op[0][-5:][::-1]], tf.string))
                     from finetune.util.text_generation import format_mlm_predictions
-                    tf.summary.text("footext", tf.py_func(lambda w, x, y, z: format_mlm_predictions(w, x, y, z, encoder), [X, lm_predict_op, mlm_ids, mlm_positions], tf.string))
+                    tf.summary.text("footext", tf.py_func(lambda w, x, y, z: format_mlm_predictions(w, x, y, z, encoder, markdown=True), [X, lm_predict_op, mlm_ids, mlm_positions], tf.string))
                     #tf.summary.text("footext", encoder.decode(mlm_ids))
                 if mode == tf.estimator.ModeKeys.PREDICT:
                     if lm_predict_op is not None:
