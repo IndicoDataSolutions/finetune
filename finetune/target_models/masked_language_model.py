@@ -235,7 +235,7 @@ class MaskedLanguageModel(BaseModel):
     def _predict_proba_op(self):
         pass
 
-    def finetune(self, X, batch_size=None, **kwargs):
+    def finetune_from_generator(self, X, batch_size=None, **kwargs):
         """
         :param X: list or array of text.
         :param mask_proba: the likelihood of masking a subtoken.
@@ -243,6 +243,9 @@ class MaskedLanguageModel(BaseModel):
                            corresponds to the number of training examples provided to each GPU.
         """
         return super().finetune(X, Y=None, batch_size=batch_size, **kwargs)
+    
+    def finetune(self, X, batch_size=None, **kwargs):
+        raise NotImplementedError("MaskedLanguageModel must take in a generator for finetuning. Please use `finetune_from_generator`.")
 
     def featurize(self, X, context=None):
         hold_mask_proba = self.config.mask_proba
