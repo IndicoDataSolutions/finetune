@@ -25,10 +25,11 @@ def get_mask(seq_len, config):
     if config.table_mask_bias:
         # init_mlm_mask = a < np.flip(np.arange(0, mask_proba * 2, mask_proba * 2/seq_len))
         # we want the number of masked tokens to be 15% in expectation
-        num_header_tokens = 40
-        header_proba = .5
-        non_header_proba = ((mask_proba * seq_len) - (num_header_tokens * header_proba)) / (seq_len - num_header_tokens)
-        init_mlm_mask = a < [header_proba] * num_header_tokens + [non_header_proba] * (seq_len - num_header_tokens)
+        # num_header_tokens = 40
+        # header_proba = .5
+        # non_header_proba = ((mask_proba * seq_len) - (num_header_tokens * header_proba)) / (seq_len - num_header_tokens)
+        # init_mlm_mask = a < [header_proba] * num_header_tokens + [non_header_proba] * (seq_len - num_header_tokens)
+        init_mlm_mask = a < [.5] * 20 + [mask_proba / 1.6] * (seq_len - 20)
     else:
         init_mlm_mask = a < mask_proba
 
