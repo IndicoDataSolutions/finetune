@@ -318,7 +318,11 @@ class BasePipeline(metaclass=ABCMeta):
         return internal_gen()
 
 
-    def get_train_input_fns(self, Xs, Y=None, batch_size=None, val_size=None, context=None, update_hook=None):
+    def get_train_input_fns(self, Xs, Y=None, batch_size=None, val_size=None, context=None, update_hook=None, skip_n=None):
+        if skip_n:
+            LOGGER.warning(
+                "You are resuming a model, it is your responsibility to make sure that config is identical and the same number of GPUs are being used."
+            )
         self.epoch = 1
         batch_size = batch_size or self.config.batch_size
 
@@ -440,6 +444,7 @@ class BasePipeline(metaclass=ABCMeta):
             .padded_batch(batch_size, padded_shapes=shapes, drop_remainder=False)
             .repeat(self.config.n_epochs)
             .prefetch(prefetch_buffer)
+            .skip(skip_n)
         )
 
         return (
