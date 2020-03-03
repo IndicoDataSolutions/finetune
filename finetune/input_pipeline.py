@@ -165,7 +165,7 @@ class BasePipeline(metaclass=ABCMeta):
             raise ValueError('Cannot pass in generator for supervised dataset')
         else:
             context = self._format_for_pipeline(context)
-            dataset = lambda: zip(Xs, Y, context)
+            dataset = lambda: zip(Xs, Y, context())
         dataset_encoded = lambda: itertools.chain.from_iterable(
             map(lambda xyc: self.text_to_tokens_mask(*xyc), dataset())
         )
