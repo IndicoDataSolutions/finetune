@@ -7,8 +7,6 @@ from finetune.base import PredictMode, BaseModel
 from finetune.base_models import RoBERTa, BERT
 from finetune.input_pipeline import BasePipeline
 from finetune.nn.target_blocks import masked_language_model
-from finetune.encoding.input_encoder import EncodedOutput
-from tensorflow.data import Dataset
 
 
 class MaskedLanguageModelPipeline(BasePipeline):
@@ -100,6 +98,14 @@ class MaskedLanguageModel(BaseModel):
 
     def predict_top_k_report(self, input_text, k=5, context=None, **kwargs):
         """input_text: A string to mask, predict and display a report for."""
+
+        if self.chunk_long_sequences:
+            raise FinetuneError(
+                "Producing a prediction report while chunk_long_sequences is on is not supported.".format(
+                    self.__class__.__name__
+                )
+            )
+
         prediction_info = self._inference(
                 [input_text],
                 predict_keys=[

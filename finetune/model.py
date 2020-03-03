@@ -47,15 +47,14 @@ class PredictMode:
 def mask_logits(logits, encoder, mask_extra_toks=False):
     
     logit_mask = np.zeros(
-    [1, logits.get_shape().as_list()[-1]], dtype=np.float32
-    )
+        [1, logits.get_shape().as_list()[-1]], dtype=np.float32
+        )
     logit_mask[:, encoder.vocab_size:] = -np.inf
     
     if mask_extra_toks:
         logit_mask[:, encoder.start_token] = -np.inf
         logit_mask[:, encoder.delimiter_token] = -np.inf
         logit_mask[:, encoder.end_token] = -np.inf
-    logit_mask[:, encoder.vocab_size :] = -np.inf
     return logit_mask
 
 
@@ -262,14 +261,13 @@ def get_model_fn(
                     lm_loss = tf.reduce_mean(language_model_state["losses"])
                     train_loss += lm_loss_coef * lm_loss
                     tf.summary.scalar("LanguageModelLoss", lm_loss)
-                    tf.summary.text("footext", tf.py_func(lambda x: encoder.decode(x), [X[0][:, 0]], tf.string))
                 if mode == tf.estimator.ModeKeys.PREDICT:
                     if lm_predict_op is not None:
                         predictions[PredictMode.GENERATE_TEXT] = lm_predict_op
                         if lm_type.lower() == 'mlm':
                             predictions[PredictMode.MLM_IDS] = mlm_ids
                             predictions[PredictMode.MLM_POSITIONS] = mlm_positions
-                        if lm_type.lower == 'lm':
+                        if lm_type.lower() == 'lm':
                             predictions[PredictMode.LM_PERPLEXITY] = language_model_state[
                                 "perplexity"
                             ]
