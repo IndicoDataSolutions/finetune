@@ -397,7 +397,7 @@ class BaseModel(object, metaclass=ABCMeta):
         return est, hooks
 
     def close(self):
-        if getattr(self, "_cached_estimator") is not None:
+        if getattr(self, "_cached_estimator", None) is not None:
             self._cached_estimator.close_predict()
             self._cached_estimator = None
             gc.collect()
