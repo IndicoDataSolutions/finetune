@@ -165,7 +165,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self._set_random_seed(self.config.seed)
         batch_size = batch_size or self.config.batch_size
         val_input_fn, train_input_fn, val_size, val_interval = self.input_pipeline.get_train_input_fns(
-            data, batch_size=batch_size, update_hook=update_hook, skip_n=self.saver.get_initial_step()
+            data, batch_size=batch_size, update_hook=update_hook
         )
         return self._finetune_from_dataset(val_input_fn, train_input_fn, val_size, val_interval, batch_size, has_targets=False)
     
@@ -185,7 +185,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         batch_size = batch_size or self.config.batch_size
         val_input_fn, train_input_fn, val_size, val_interval = self.input_pipeline.get_train_input_fns(
-            Xs, Y, batch_size=batch_size, context=context, update_hook=update_hook, skip_n=self.saver.get_initial_step()
+            Xs, Y, batch_size=batch_size, context=context, update_hook=update_hook
         )
         return self._finetune_from_dataset(val_input_fn, train_input_fn, val_size, val_interval, batch_size, has_targets=Y is not None)
 
@@ -300,7 +300,9 @@ class BaseModel(object, metaclass=ABCMeta):
                         )
 
                 tf.logging.info("Finishing pre-fit initialisation...")
-            estimator.train(train_input_fn, hooks=train_hooks, steps=num_steps)
+
+            train_input_fn_skipped = lambda: train_input_fn().skip(self.saver.get_initial_step() * len(self.resolved_gpus))
+            estimator.train(train_input_fn_skipped, hooks=train_hooks, steps=num_steps)
 
         self._trained = True
 
