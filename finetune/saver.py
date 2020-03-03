@@ -234,6 +234,9 @@ class Saver:
             cache_weights_to_file=cache_weights_to_file
         )
 
+    def get_initial_step(self):
+        return self.fallback.get("global_step:0", 0)
+
     def save(self, finetune_obj, path, mkdir=True):
         if self.variables is None:
             raise FinetuneError("Cowardly refusing to save default model.")
@@ -290,8 +293,6 @@ class Saver:
             global_step_var = tf.train.get_global_step()
 
             for var in all_vars:
-                if global_step_var is not None and global_step_var.name == var.name:
-                    continue
                 name = var.name
                 saved_var = None
                 if name in variables_sv.keys():
