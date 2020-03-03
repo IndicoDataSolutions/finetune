@@ -142,6 +142,8 @@ class MaskedLanguageModelPipeline(BasePipeline):
                     tokenized_context = tokenize_context(context, out, self.config)
                     if self.config.cps_swap_proba:
                         cps_mask = np.random.rand(seq_len) < self.config.cps_swap_proba
+                        if self.config.word_masks:
+                            cps_mask = mask_out_whole_words(cps_mask, out, seq_len)
                         hold = tokenized_context[cps_mask]
                         shuffled = np.random.permutation(hold)
                         tokenized_context[cps_mask] = shuffled
