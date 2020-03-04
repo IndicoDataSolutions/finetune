@@ -1,27 +1,18 @@
 import os
 import unittest
-import shutil
-import json
-import random
 import time
-from pathlib import Path
+import shutil
 import warnings
 
 # prevent excessive warning logs
 warnings.filterwarnings('ignore')
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
-import pandas as pd
-import numpy as np
-from sklearn.model_selection import train_test_split
-
-from finetune.base_models import BERTModelCased, GPT2Model, RoBERTa
-from finetune import Classifier, DeploymentModel, SequenceLabeler, ComparisonRegressor
-from finetune.base_models import GPTModel
-from finetune.datasets import generic_download
+from finetune.base_models import RoBERTa
+from finetune import Classifier
 from finetune.scheduler import Scheduler
 
-class TestDeploymentModel(unittest.TestCase):
+class TestScheduler(unittest.TestCase):
 
     folder = "tests/saved-models"
     model1 = "1.jl"

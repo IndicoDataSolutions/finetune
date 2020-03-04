@@ -41,7 +41,7 @@ def bert_featurizer(
         hidden_act=config.act_fn,
         hidden_dropout_prob=config.resid_p_drop,
         attention_probs_dropout_prob=config.attn_p_drop,
-        max_position_embeddings=config.base_model.settings.get("max_length", 512),
+        max_position_embeddings=config.max_length, 
         type_vocab_size=2,
         initializer_range=config.weight_stddev,
         low_memory_mode=config.low_memory_mode

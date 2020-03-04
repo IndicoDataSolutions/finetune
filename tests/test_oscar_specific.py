@@ -5,22 +5,11 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 
 from finetune.base_models import OSCAR
-from finetune import LMPred, Classifier
+from finetune import Classifier
 from finetune.util.metrics import read_eval_metrics
 
 
 class TestOscarFeatures(unittest.TestCase):
-
-    def test_lm_predict(self):
-        """
-        Ensure LM only training does not error out
-        """
-        model = LMPred(base_model=OSCAR, max_length=32, batch_size=1, beam_size=1, decoder_sample_from=0, sample_temp=0.)
-        model.fit(["This is the beginning of this test sentence."] * 100)
-        predictions = model.predict(["This is the beginning of "] * 5)
-        for pred in predictions:
-            self.assertIsInstance(pred, str)
-            self.assertIn("This is the beginning of", pred)
 
     def test_in_memory_finetune(self):
         SST_FILENAME = "SST-binary.csv"

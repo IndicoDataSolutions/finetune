@@ -43,14 +43,13 @@ class MultipleChoicePipeline(BasePipeline):
         max_len = max([len(arr.token_ids) for arr in arrays])
         kwargs["tokens"] = [arr.tokens for arr in arrays]
         kwargs["token_ids"] = padded_stack([arr.token_ids for arr in arrays])
-        kwargs["mask"] = padded_stack([arr.mask for arr in arrays])
         yield ArrayEncodedOutput(**kwargs)
 
     def text_to_tokens_mask(self, pair, Y=None, context=None):
         out_gen = self._text_to_ids(pair, pad_token=self.config.pad_token)
         for i, out in enumerate(out_gen):
             if context is None:
-                feats = {"tokens": out.token_ids, "mask": out.mask}
+                feats = {"tokens": out.token_ids}
             else:
                 num_answers = len(out.tokens)
                 tokenized_context = []
@@ -60,11 +59,10 @@ class MultipleChoicePipeline(BasePipeline):
                         tokens=out.token_ids[answer_idx],
                         token_ends=out.token_ends,
                         token_starts=out.token_starts,
-                        mask=out.mask[answer_idx],
                     )
                     context_instance = context[0] + context[answer_idx + 1]
                     tokenized_context.append(tokenize_context(context_instance, out_instance, self.config))
-                feats = {"tokens": out.token_ids, "mask": out.mask, "context": tokenized_context}
+                feats = {"tokens": out.token_ids, "context": tokenized_context}
             if Y is None:
                 yield feats
             else:
@@ -76,10 +74,9 @@ class MultipleChoicePipeline(BasePipeline):
 
     def feed_shape_type_def(self):
         TS = tf.TensorShape
-        types = {"tokens": tf.int32, "mask": tf.float32}
+        types = {"tokens": tf.int32}
         shapes = {
-            "tokens": TS([self.target_dim, None, 2]),
-            "mask": TS([self.target_dim, None]),
+            "tokens": TS([self.target_dim, None]),
         }
         if self.config.use_auxiliary_info:
             TS = tf.TensorShape

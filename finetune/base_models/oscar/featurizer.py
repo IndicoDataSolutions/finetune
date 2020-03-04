@@ -185,7 +185,7 @@ def featurizer(X, encoder, config, train=False, reuse=None, encoder_state=None, 
         sequence_features: The output of the featurizer at each timestep.
     """
     initial_shape = [a or -1 for a in X.get_shape().as_list()]
-    if len(initial_shape) != 3:
+    if len(initial_shape) != 2:
         X = tf.reshape(X, shape=[-1] + initial_shape[-1:])
 
     x_shape = tf.shape(X)
@@ -254,6 +254,6 @@ def featurizer(X, encoder, config, train=False, reuse=None, encoder_state=None, 
             'features': cast_maybe(clf_h, tf.float32),
             'sequence_features': seq_feats,
             'eos_idx': pool_idx,
-            'encoded_input': X[:, :tf.reduce_min(pool_idx), 0],
+            'encoded_input': X[:, :tf.reduce_min(pool_idx)],
             'lengths': lengths_from_eos_idx(eos_idx=pool_idx, max_length=shape_list(X)[1])
         }
