@@ -18,7 +18,6 @@ class GPT2Model(SourceModel):
         'n_layer': 12,
         'l2_reg': 0.001,
         'act_fn': "gelu",
-        'interpolate_pos_embed': False,
         'base_model_path':  os.path.join("gpt2", "model-sm.jl")
     }
     required_files = [
@@ -42,7 +41,6 @@ class GPT2Model345(SourceModel):
         'num_layers_trained': 24,
         'l2_reg': 0.001,
         'act_fn': "gelu",
-        'interpolate_pos_embed': False,
         'base_model_path':  os.path.join("gpt2", "model-med.jl")
     }
     required_files = [
@@ -66,7 +64,6 @@ class GPT2Model762(SourceModel):
         'num_layers_trained': 36,
         'l2_reg': 0.001,
         'act_fn': "gelu",
-        'interpolate_pos_embed': False,
         'base_model_path':  os.path.join("gpt2", "model-lg.jl")
     }
     required_files = [
@@ -92,7 +89,6 @@ class GPT2Model1558(SourceModel):
         'num_layers_trained': 48,
         'l2_reg': 0.001,
         'act_fn': "gelu",
-        'interpolate_pos_embed': False,
         'base_model_path':  os.path.join("gpt2", "model-xl.jl")
     }
     required_files = [
