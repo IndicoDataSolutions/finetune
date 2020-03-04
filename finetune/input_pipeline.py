@@ -414,7 +414,7 @@ class BasePipeline(metaclass=ABCMeta):
             .prefetch(prefetch_buffer)
         )
 
-        if self.config.mlm_context_shuffle_val and context is not None:
+        if self.config.mlm_context_shuffle_val and self.config.use_auxiliary_info:
             
             def shuffle_context(x):
                 context = tf.random.shuffle(x["context"])
