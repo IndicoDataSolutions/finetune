@@ -2,6 +2,7 @@ import tensorflow as tf
 from finetune.base_models.gpt.featurizer import dropout, embed, split_heads, merge_heads
 from finetune.util.shapes import shape_list, lengths_from_eos_idx
 from finetune.base_models.oscar.ra import recursive_agg, recursive_agg_tf
+from finetune.base_models.gpt.featurizer import get_pos_values
 from finetune.optimizers.recompute_grads import recompute_grad
 
 import functools
@@ -27,10 +28,6 @@ def norm(x, scope, axis=-1, e=None, fp16=False):
         x = (x - u) * tf.rsqrt(s + e)
         x = x * g + b
         return x
-
-
-def embed_no_timing(X, we):
-    return tf.gather(we, X[:, :, 0])
 
 
 def time_to_batch(value, dilation, pad_with=0):
@@ -189,13 +186,13 @@ def featurizer(X, encoder, config, train=False, reuse=None, encoder_state=None, 
     """
     initial_shape = [a or -1 for a in X.get_shape().as_list()]
     if len(initial_shape) != 3:
-        X = tf.reshape(X, shape=[-1] + initial_shape[-2:])
+        X = tf.reshape(X, shape=[-1] + initial_shape[-1:])
 
     x_shape = tf.shape(X)
     with tf.variable_scope('model/featurizer', reuse=reuse):
         encoder._lazy_init()
         clf_token = encoder.end_token
-        pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
+        pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X, clf_token), tf.float32), 1), tf.int32)
         if encoder_state is None:
             embed_weights = tf.get_variable("we", [encoder.vocab_size + config.max_length, config.n_embed],
                                             initializer=tf.random_normal_initializer(stddev=config.weight_stddev))
@@ -210,12 +207,11 @@ def featurizer(X, encoder, config, train=False, reuse=None, encoder_state=None, 
         else:
             embed_weights = tf.stop_gradient(embed_weights)
 
-        X = tf.reshape(X, [-1, x_shape[1], 2])
-
+        X = tf.reshape(X, [-1, x_shape[1]])
+        h = tf.gather(embed_weights, X)
         if config.oscar_use_timing:
-            h = embed(X, embed_weights)
-        else:
-            h = embed_no_timing(X, embed_weights)
+            pos_values = get_pos_values(x_shape[1], encoder.vocab_size)
+            h += tf.gather(embed_weights, pos_values)
 
         for layer in range(config.n_layer):
             with tf.variable_scope('h%d_' % layer):
@@ -248,8 +244,8 @@ def featurizer(X, encoder, config, train=False, reuse=None, encoder_state=None, 
         else:
             raise ValueError("config.feat_mode should be one of clf_tok, mean_tok or max_tok")
 
-        if len(initial_shape) != 3:
-            seq_feats = tf.reshape(h, shape=initial_shape[:-1] + [config.n_embed])
+        if len(initial_shape) != 2:
+            seq_feats = tf.reshape(h, shape=initial_shape + [config.n_embed])
         else:
             seq_feats = h
 
@@ -259,5 +255,5 @@ def featurizer(X, encoder, config, train=False, reuse=None, encoder_state=None, 
             'sequence_features': seq_feats,
             'eos_idx': pool_idx,
             'encoded_input': X[:, :tf.reduce_min(pool_idx), 0],
-            'lengths': lengths_from_eos_idx(eos_idx=pool_idx, max_length=shape_list(X)[0])
+            'lengths': lengths_from_eos_idx(eos_idx=pool_idx, max_length=shape_list(X)[1])
         }

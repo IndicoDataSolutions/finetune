@@ -39,7 +39,7 @@ class TestActivationParity(unittest.TestCase):
         model = Classifier(base_model=GPT2)
         
         def dataset_encoded():
-            yield {"tokens": arr_encoded.token_ids, "mask": arr_encoded.mask}
+            yield {"tokens": arr_encoded.token_ids}
 
         def get_input_fn():
             types, shapes = model.input_pipeline.feed_shape_type_def()

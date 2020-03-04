@@ -103,7 +103,9 @@ class BasePipeline(metaclass=ABCMeta):
 
     def feed_shape_type_def(self):
         TS = tf.TensorShape
-        types = {"tokens": tf.int32, "mask": tf.float32}
+        types = {
+            "tokens": tf.int32
+        }
         shapes = {
             "tokens": TS([None]),
         }
@@ -124,7 +126,6 @@ class BasePipeline(metaclass=ABCMeta):
         x = np.zeros((seq_length), dtype=np.int32)
         if self.config.base_model.__name__ == "RoBERTa":
             x += 1
-        mask = np.zeros((seq_length), dtype=np.float32)
 
         # BPE embedding
         x[:] = encoded_output.token_ids
@@ -134,7 +135,6 @@ class BasePipeline(metaclass=ABCMeta):
             tokens=encoded_output.tokens,
             token_ends=encoded_output.token_ends,
             token_starts=encoded_output.token_starts,
-            mask=mask
         )
         return output
 
@@ -142,10 +142,10 @@ class BasePipeline(metaclass=ABCMeta):
         out_gen = self._text_to_ids(X, pad_token=self.config.pad_token)
         for i, out in enumerate(out_gen):
             if context is None:
-                feats = {"tokens": out.token_ids, "mask": out.mask}
+                feats = {"tokens": out.token_ids}
             else:
                 tokenized_context = tokenize_context(context, out, self.config)
-                feats = {"tokens": out.token_ids, "mask": out.mask, "context": tokenized_context}
+                feats = {"tokens": out.token_ids, "context": tokenized_context}
             if Y is None:
                 yield feats
             else:
