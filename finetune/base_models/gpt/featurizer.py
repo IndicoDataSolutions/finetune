@@ -193,7 +193,7 @@ def block(
 
 
 def embed(X, we):
-    return tf.gather(we, X)
+    return tf.reduce_sum(tf.gather(we, X), 2)
 
 
 def add_explain_tokens(X, max_length, pool_idx):
@@ -250,12 +250,12 @@ def gpt_featurizer(
             embed_weights = tf.stop_gradient(embed_weights)
 
         clf_token = encoder.end_token
-        pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X, clf_token), tf.float32), 1), tf.int32)
+        pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
 
         if explain:
             X = add_explain_tokens(X, sequence_length, pool_idx)
 
-        h = embed(X, embed_weights) + embed(pos_values, embed_weights)
+        h = embed(X, embed_weights)
         for layer in range(config.n_layer):
             if (
                 (config.n_layer - layer) == config.num_layers_trained
