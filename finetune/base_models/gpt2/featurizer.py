@@ -158,8 +158,8 @@ def gpt2_featurizer(
     **kwargs
 ):
     initial_shape = tf.shape(X)
-    X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-2:]), 0))
-    X.set_shape([None, None, None])
+    X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-1:]), 0))
+    X.set_shape([None, None])
 
     pos_values = get_pos_values(initial_shape[1], encoder.vocab_size)
     X = tf.stack((X, tf.tile(pos_values, [initial_shape[0], 1])), 2)
@@ -167,7 +167,7 @@ def gpt2_featurizer(
     with tf.variable_scope("model/featurizer", reuse=reuse):
         embed_weights = tf.get_variable(
             name="we",
-            shape=[encoder.vocab_size + config.base_model.settings.get("max_length", 512), config.n_embed],
+            shape=[encoder.vocab_size + config.max_length, config.n_embed],
             initializer=tf.random_normal_initializer(stddev=config.weight_stddev),
         )
         if config.train_embeddings:
@@ -209,10 +209,10 @@ def gpt2_featurizer(
             tf.range(shape_list(X)[0], dtype=tf.int32) * config.max_length + pool_idx,
         )
         clf_h = tf.reshape(
-            clf_h, shape=tf.concat((initial_shape[:-2], [config.n_embed]), 0)
+            clf_h, shape=tf.concat((initial_shape[:-1], [config.n_embed]), 0)
         )
         seq_feats = tf.reshape(
-            h, shape=tf.concat((initial_shape[:-1], [config.n_embed]), 0)
+            h, shape=tf.concat((initial_shape, [config.n_embed]), 0)
         )
 
         lengths = lengths_from_eos_idx(eos_idx=pool_idx, max_length=shape_list(X)[0])

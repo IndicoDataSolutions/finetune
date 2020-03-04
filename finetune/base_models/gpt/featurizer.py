@@ -237,11 +237,12 @@ def gpt_featurizer(
     X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-1:]), 0))
     sequence_length = tf.shape(X)[1]
     pos_values = get_pos_values(sequence_length, encoder.vocab_size)
+    X = tf.stack((X, tf.tile(pos_values, [initial_shape[0], 1])), 2)
 
     with tf.variable_scope("model/featurizer", reuse=reuse):
         embed_weights = tf.get_variable(
             name="we",
-            shape=[encoder.vocab_size + 512, config.n_embed],
+            shape=[encoder.vocab_size +  config.max_length, config.n_embed],
             initializer=tf.random_normal_initializer(stddev=config.weight_stddev),
         )
         if config.train_embeddings:

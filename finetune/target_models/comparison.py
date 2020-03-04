@@ -30,21 +30,19 @@ class ComparisonPipeline(ClassificationPipeline):
         kwargs["token_ids"] = np.stack(
             [arr_forward.token_ids, arr_backward.token_ids], 0
         )
-        kwargs["mask"] = np.stack([arr_forward.mask, arr_backward.mask], 0)
         yield ArrayEncodedOutput(**kwargs)
 
     def text_to_tokens_mask(self, pair, Y=None, context=None):
         out_gen = self._text_to_ids(pair, pad_token=self.config.pad_token)
         for i, out in enumerate(out_gen):
             if context is None:
-                feats = {"tokens": out.token_ids, "mask": out.mask}
+                feats = {"tokens": out.token_ids}
             else:
                 out_forward = ArrayEncodedOutput(
                     token_ids=out.token_ids[0],
                     tokens=out.token_ids[0],
                     token_ends=out.token_ends,
                     token_starts=out.token_starts,
-                    mask=out.mask[0],
                 )
                 out_backward = ArrayEncodedOutput(
                     token_ids=out.token_ids[1],
@@ -52,12 +50,11 @@ class ComparisonPipeline(ClassificationPipeline):
                     labels=None,
                     token_ends=out.token_ends,
                     token_starts=out.token_starts,
-                    mask=out.mask[1],
                 )
                 tokenized_context_forward = tokenize_context(context[0], out_forward, self.config)
                 tokenized_context_backward = tokenize_context(context[1], out_backward, self.config)
                 tokenized_context = [tokenized_context_forward, tokenized_context_backward]
-                feats = {"tokens": out.token_ids, "mask": out.mask, "context": tokenized_context}
+                feats = {"tokens": out.token_ids, "context": tokenized_context}
             if Y is None:
                 yield feats
             else:
@@ -65,10 +62,9 @@ class ComparisonPipeline(ClassificationPipeline):
 
     def feed_shape_type_def(self):
         TS = tf.TensorShape
-        types = {"tokens": tf.int32, "mask": tf.float32}
+        types = {"tokens": tf.int32}
         shapes = {
-            "tokens": TS([2, None, 2]),
-            "mask": TS([None, None]),
+            "tokens": TS([2, None])
         }
         if self.config.use_auxiliary_info:
             TS = tf.TensorShape

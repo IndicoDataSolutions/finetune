@@ -120,6 +120,8 @@ class BatchedVarLoad:
         self.feed = dict()
 
     def add(self, var, val):
+        if var.name.endswith("we:0"): # for backwards comaptibility with pre-saved models
+            val = val[:var.shape[0]]
         if hasattr(var, "_values"):
             underlying_vars = var._values
         else:
@@ -251,7 +253,7 @@ class Saver:
                 if fb_var_name == var_name:
                     for func in self.variable_transforms:
                         fb_var = func(var_name, fb_var)
-                    if np.allclose(fb_var, var_val):
+                    if fb_var.shape == var_val.shape and np.allclose(fb_var, var_val):
                         skip = True
                         break
             skips.append(skip)
