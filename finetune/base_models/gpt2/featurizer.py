@@ -5,7 +5,7 @@ import tensorflow as tf
 from finetune.util.shapes import shape_list, lengths_from_eos_idx
 from finetune.optimizers.recompute_grads import recompute_grad
 from finetune.nn.activations import gelu
-from finetune.base_models.gpt.featurizer import norm, dropout, adapter
+from finetune.base_models.gpt.featurizer import norm, dropout
 
 
 def softmax(x, axis=-1):
@@ -113,14 +113,8 @@ def mlp(x, scope, n_state, *, hparams, train=False):
 def block(x, *, past, hparams, train=False):
     nx = x.shape[-1].value
     a = attn(norm(x, "ln_1"), "attn", nx, past=past, hparams=hparams, train=train)
-    if hparams.adapter_size is not None:
-        with tf.variable_scope("attn_adapter"):
-            a = adapter(a, hparams.adapter_size, nx, train)
     x = x + a
     m = mlp(norm(x, "ln_2"), "mlp", nx * 4, hparams=hparams, train=train)
-    if hparams.adapter_size is not None:
-        with tf.variable_scope("dense_adapter"):
-            m = adapter(m, hparams.adapter_size, nx, train)
     x = x + m
     return x
 
@@ -187,7 +181,6 @@ def gpt2_featurizer(
             if (
                 (config.n_layer - layer) == config.num_layers_trained
                 and config.num_layers_trained != config.n_layer
-                and config.adapter_size is None
             ):
                 h = tf.stop_gradient(h)
                 train_layer = False

@@ -21,7 +21,6 @@ import numpy as np
 import tensorflow as tf
 import functools
 
-from finetune.base_models.gpt.featurizer import adapter
 from finetune.optimizers.recompute_grads import recompute_grad
 
 
@@ -42,7 +41,6 @@ class BertConfig(object):
             max_position_embeddings=512,
             type_vocab_size=16,
             initializer_range=0.02,
-            adapter_size=0,
     ):
         """Constructs BertConfig.
 
@@ -79,7 +77,6 @@ class BertConfig(object):
         self.max_position_embeddings = max_position_embeddings
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
-        self.adapter_size = adapter_size
         self.low_memory_mode = low_memory_mode
 
     @classmethod
@@ -221,7 +218,6 @@ class BertModel(object):
                     hidden_dropout_prob=config.hidden_dropout_prob,
                     attention_probs_dropout_prob=config.attention_probs_dropout_prob,
                     initializer_range=config.initializer_range,
-                    adapter_size=config.adapter_size,
                     do_return_all_layers=True,
                     low_memory_mode=config.low_memory_mode and is_training
                 )
@@ -781,7 +777,7 @@ def full_block(
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         initializer_range=0.02,
-        adapter_size=0):
+):
     with tf.variable_scope("attention"):
         attention_heads = []
         with tf.variable_scope("self"):
@@ -815,11 +811,6 @@ def full_block(
                 hidden_size,
                 kernel_initializer=create_initializer(initializer_range))
             attention_output = dropout(attention_output, hidden_dropout_prob)
-            # Insert an "adapter" layer from "Parameter Efficient Transfer Learning for NLP" paper
-            if adapter_size is not None:
-                with tf.variable_scope("attention_adapter"):
-                    attention_output = adapter(attention_output, adapter_size, hidden_size,
-                                               hidden_dropout_prob != 0)  # dropout prob is set to 0 above if not training, so we can use it to infer the 'train' argument for adapters
             attention_output = layer_norm(attention_output + layer_input)
 
     # The activation is only applied to the "intermediate" hidden layer.
@@ -837,10 +828,6 @@ def full_block(
             hidden_size,
             kernel_initializer=create_initializer(initializer_range))
         layer_output = dropout(layer_output, hidden_dropout_prob)
-        # Insert an "adapter" layer from "Parameter Efficient Transfer Learning for NLP" paper
-        if adapter_size is not None:
-            with tf.variable_scope("dense_adapter"):
-                layer_output = adapter(layer_output, adapter_size, hidden_size, hidden_dropout_prob != 0)
         layer_output = layer_norm(layer_output + attention_output)
         return layer_output
 
@@ -856,7 +843,6 @@ def transformer_model(input_tensor,
                       attention_probs_dropout_prob=0.1,
                       initializer_range=0.02,
                       do_return_all_layers=False,
-                      adapter_size=0,
                       low_memory_mode=False):
     """Multi-headed, multi-layer Transformer from "Attention is All You Need".
 
@@ -887,7 +873,6 @@ def transformer_model(input_tensor,
             normal).
         do_return_all_layers: Whether to also return all layers or just the final
             layer.
-        adapter_size: The size of adaptor modules to use. None to disable.
         low_memory_mode: Whether to use gradient checkpointing.
 
     Returns:
@@ -937,7 +922,7 @@ def transformer_model(input_tensor,
                                          hidden_dropout_prob=hidden_dropout_prob,
                                          attention_probs_dropout_prob=attention_probs_dropout_prob,
                                          initializer_range=initializer_range,
-                                         adapter_size=adapter_size)
+            )
 
             if low_memory_mode:
                 block_fn = recompute_grad(block_fn, use_entire_scope=True)

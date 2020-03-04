@@ -243,19 +243,7 @@ def get_model_fn(
                 ),
             )
 
-            if params.adapter_size is not None:
-                norm_variable_scopes = ["b:0", "g:0", "beta:0", "gamma:0"]
-                # trained variables include: adapter dense layers, scaling/bias factors, target model, and
-                # the bias values in 1dconv if this layer exists (since it also has a 'b' in its name/scope).
-                params.trained_variables = [
-                    v
-                    for v in tf.trainable_variables()
-                    if "adapter" in v.name
-                    or "target" in v.name
-                    or any(scope in v.name for scope in norm_variable_scopes)
-                ]
-            else:
-                params.trained_variables = [v for v in tf.trainable_variables()]
+            trained_variables = [v for v in tf.trainable_variables()]
 
             def optimizer(lr):
                 Optimizer = OPTIMIZERS.get(params.optimizer, None)
@@ -283,11 +271,6 @@ def get_model_fn(
                     for v in tf.global_variables()
                     if len(v.get_shape()) > 1 or params.vector_l2 and "OptimizeLoss" not in v.name
                 ]
-
-                if params.adapter_size is not None:
-                    decay_var_list = set(params.trained_variables).intersection(
-                        decay_var_list
-                    )
 
                 opt.apply_gradients = functools.partial(
                     opt.apply_gradients, decay_var_list=decay_var_list
@@ -320,7 +303,7 @@ def get_model_fn(
                 increment_global_step=True,
                 summaries=summaries,
                 colocate_gradients_with_ops=True,
-                variables=params.trained_variables,
+                variables=trained_variables,
             )
 
         if mode == tf.estimator.ModeKeys.PREDICT:
@@ -346,88 +329,3 @@ def get_model_fn(
         )
 
     return _model_fn
-
-
-def get_separate_model_fns(
-    target_model_fn,
-    pre_target_model_hook,
-    predict_op,
-    predict_proba_op,
-    build_target_model,
-    encoder,
-    target_dim,
-    label_encoder,
-    saver,
-    portion,
-    build_attn,
-):
-    def _featurizer_model_fn(features, labels, mode, params):
-        assert (
-            mode == tf.estimator.ModeKeys.PREDICT
-        ), "mode MUST be predict - model fns should not be separated on train"
-        X = features["tokens"]
-        featurizer_state = params.base_model.get_featurizer(
-            X,
-            encoder=encoder,
-            config=params,
-            train=False,
-        )
-        predictions = {
-            "features": featurizer_state["features"],
-            "sequence_features": featurizer_state["sequence_features"],
-            "eos_idx": featurizer_state["eos_idx"],
-            "lengths": featurizer_state["lengths"],
-        }
-
-        if params.base_model in [GPTModel, GPTModelSmall] and build_attn:
-            predictions["attention_weights"] = featurizer_state["attention_weights"]
-
-        return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
-
-    if portion == "featurizer":
-        return _featurizer_model_fn
-
-    def _target_model_fn(features, labels, mode, params):
-        assert (
-            mode == tf.estimator.ModeKeys.PREDICT
-        ), "Separated estimators are only supported for inference."
-        predictions = {}
-        featurizer_state = features
-
-        if params.base_model in [GPTModel, GPTModelSmall] and build_attn:
-            predictions[PredictMode.ATTENTION] = featurizer_state["attention_weights"]
-
-        with tf.variable_scope("model/target"):
-            pre_target_model_hook(featurizer_state)
-            target_model_state = target_model_fn(
-                config=params,
-                featurizer_state=featurizer_state,
-                targets=None,
-                n_outputs=target_dim,
-                train=False,
-                max_length=params.max_length,
-                class_weights=None,
-            )
-
-        logits = target_model_state["logits"]
-        predict_params = target_model_state.get("predict_params", {})
-        if "_threshold" in params:
-            predict_params["threshold"] = params._threshold
-        pred_op = predict_op(logits, **predict_params)
-
-        if type(pred_op) == tuple:
-            pred_op, pred_proba_op = pred_op
-        else:
-            pred_proba_op = predict_proba_op(logits, **predict_params)
-
-        if type(pred_op) == dict:
-            predictions.update(pred_op)
-            predictions.update(pred_proba_op)
-        else:
-            predictions[PredictMode.NORMAL] = pred_op
-            predictions[PredictMode.PROBAS] = pred_proba_op
-
-        return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
-
-    return _target_model_fn
-

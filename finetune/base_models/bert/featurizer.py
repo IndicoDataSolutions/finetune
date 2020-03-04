@@ -44,7 +44,6 @@ def bert_featurizer(
         max_position_embeddings=config.max_length,
         type_vocab_size=2,
         initializer_range=config.weight_stddev,
-        adapter_size=config.adapter_size,
         low_memory_mode=config.low_memory_mode
     )
 

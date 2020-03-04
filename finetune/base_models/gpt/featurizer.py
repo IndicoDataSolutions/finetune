@@ -162,25 +162,10 @@ def create_initializer(initializer_range=0.001):
     return tf.truncated_normal_initializer(stddev=initializer_range)
 
 
-def adapter(X, adapter_size, nx, train=False, hidden_dropout_prob=0.1):
-    down_projection = tf.layers.dense(
-        X,
-        adapter_size,
-        activation="sigmoid",
-        kernel_initializer=create_initializer(0.001),
-    )
-    down_projection = dropout(down_projection, hidden_dropout_prob, train)
-    up_projection = tf.layers.dense(
-        down_projection, nx, kernel_initializer=create_initializer(0.001)
-    )
-    return up_projection + X
-
-
 def block(
     x,
     n_head,
     act_fn,
-    adptr_size,
     resid_pdrop,
     attn_pdrop,
     scope,
@@ -201,14 +186,8 @@ def block(
             scale=scale,
             explain=explain,
         )
-        if adptr_size is not None:
-            with tf.variable_scope("attn_adapter"):
-                a = adapter(a, adptr_size, nx, train)
         n = norm(x + a, "ln_1")
         m = mlp(n, "mlp", nx * 4, act_fn, resid_pdrop, train=train)
-        if adptr_size is not None:
-            with tf.variable_scope("dense_adapter"):
-                m = adapter(m, adptr_size, nx, train)
         h = norm(n + m, "ln_2")
         return h
 
@@ -282,7 +261,6 @@ def gpt_featurizer(
             if (
                 (config.n_layer - layer) == config.num_layers_trained
                 and config.num_layers_trained != config.n_layer
-                and config.adapter_size is None
             ):
                 h = tf.stop_gradient(h)
                 train_layer = False
@@ -300,7 +278,6 @@ def gpt_featurizer(
                     train=train_layer,
                     scale=True,
                     explain=explain,
-                    adptr_size=config.adapter_size,
                 )
                 if config.low_memory_mode and train_layer:
                     block_fn = recompute_grad(block_fn, use_entire_scope=True)

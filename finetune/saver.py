@@ -98,39 +98,12 @@ class SaverHook(_StopOnPredicateHook):
 
 
 class InitializeHook(SessionRunHook):
-    def __init__(self, saver, model_portion="entire_model"):
+    def __init__(self, saver):
         self.saver = saver
-        self.model_portion = model_portion
-        self.need_to_refresh = True  # between predicts of the same model
-        self.refresh_base_model = (
-            False
-        )  # after we have loaded a model that has trained the entire featurizer, we need to reload from fallback for the next model
         self.init_fn = self.saver.get_scaffold_init_fn()
 
     def after_create_session(self, session, coord):
-        if self.model_portion != "entire_model" and self.need_to_refresh:
-            if self.model_portion == "target":
-                self.init_fn(None, session, self.model_portion)
-            else:
-                self.init_fn(
-                    None, session, "whole_featurizer"
-                )  # after_create_session only called at load_featurizer in deployment_model, so load entire featurizer
-            self.need_to_refresh = False
-        elif self.model_portion == "entire_model":
-            self.init_fn(None, session, self.model_portion)
-
-    def before_run(self, run_context):
-        if "featurizer" in self.model_portion and (
-            self.need_to_refresh or self.refresh_base_model
-        ):
-            if self.model_portion == "whole_featurizer":
-                self.refresh_base_model = True
-            self.init_fn(
-                None, run_context.session, self.model_portion, self.refresh_base_model
-            )
-            self.need_to_refresh = False
-            self.refresh_base_model = False
-
+        self.init_fn(None, session)
 
 class BatchedVarLoad:
     """
@@ -164,7 +137,6 @@ class Saver:
         exclude_matches=None,
         variable_transforms=None,
         save_dtype=None,
-        target_model_init_from_base_model=False
     ):
         self.variable_transforms = variable_transforms or []
         self.exclude_matches = exclude_matches
@@ -172,7 +144,6 @@ class Saver:
         self.save_dtype = save_dtype
         if fallback_filename is not None:
             self.set_fallback(fallback_filename)
-        self.target_model_init_from_base_model = target_model_init_from_base_model
 
     def set_fallback(self, fallback_filename):
         self.tpe = ThreadPoolExecutor()
@@ -188,12 +159,6 @@ class Saver:
             self.fallback_ = self.fallback_future.result()
             self.fallback_future = None
             self.tpe.shutdown()
-            if self.target_model_init_from_base_model:
-                if self.variables is None:
-                    self.variables = dict()
-                for k, v in self.fallback_.items():
-                    self.variables['model/target/' + k] = v
-                
         return self.fallback_
 
     def get_saver_hook(
@@ -250,7 +215,7 @@ class Saver:
 
     def get_scaffold_init_fn(self):
 
-        def init_fn(scaffold, session, model_portion=None, refresh_base_model=False):
+        def init_fn(scaffold, session):
             var_loader = BatchedVarLoad()
             self.var_val = []
 
@@ -259,14 +224,6 @@ class Saver:
             else:
                 variables_sv = dict()
             all_vars = tf.global_variables()
-
-            zero_out_adapters = False
-            if (
-                model_portion != "entire_model"
-            ):  # we must be loading in the case of two separate estimators
-                all_vars, zero_out_adapters = self.subset_to_load(
-                    model_portion, refresh_base_model, all_vars
-                )
 
             global_step_var = tf.train.get_global_step()
 
@@ -279,54 +236,12 @@ class Saver:
                     saved_var = variables_sv[name]
                 elif name in self.fallback.keys():
                     saved_var = self.fallback[name]
-                elif (self.target_model_init_from_base_model and
-                      name.startswith("model/target/") and
-                      name.replace("model/target/", "") in self.fallback.keys()):
-                    saved_var = self.fallback[name.replace("model/target/", "")]
-
-                if zero_out_adapters and "adapter" in name:
-                    var_loader.add(var, np.zeros(var.get_shape().as_list()))
                 if saved_var is not None:
                     for func in self.variable_transforms:
                         saved_var = func(name, saved_var)
                     var_loader.add(var, saved_var)
             var_loader.run(session)
         return init_fn
-
-    def subset_to_load(self, model_portion, refresh_base_model, all_vars):
-        assert model_portion in [
-            "featurizer",
-            "target",
-            "whole_featurizer",
-        ], "Must be using separate estimators if loading before graph creation"
-        base = [v for v in all_vars if "target" not in v.name]
-        zero_out_adapters = False
-        if (
-            model_portion == "whole_featurizer"
-        ):  # load every weight in featurizer - used to initialize and for loading without adapters
-            to_load = base
-            adapters = [v for v in base if "adapter" in v.name]
-            zero_out_adapters = True
-        elif (
-            model_portion == "featurizer"
-        ):  # update featurizer, loading adapters and scaling weights
-            norm_variable_scopes = ["b:0", "g:0", "beta:0", "gamma:0"]
-            to_load = (
-                base
-                if refresh_base_model
-                else [
-                    v
-                    for v in base
-                    if "target" not in v.name
-                    and (
-                        "adapter" in v.name
-                        or any(scope in v.name for scope in norm_variable_scopes)
-                    )
-                ]
-            )
-        elif model_portion == "target":  # update target model weights
-            to_load = [v for v in all_vars if "target" in v.name]
-        return to_load, zero_out_adapters
 
     def remove_unchanged(self, variable_names, variable_values, fallback_vars):
         skips = []
