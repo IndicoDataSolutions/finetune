@@ -32,7 +32,7 @@ def perceptron(x, ny, config, w_init=None, b_init=None):
         return tf.matmul(x, w) + b
 
 
-def masked_language_model(*, X, M, mlm_weights, mlm_ids, mlm_positions, embed_weights, hidden, config, reuse=None, train=False):
+def masked_language_model(*, X, mlm_weights, mlm_ids, mlm_positions, embed_weights, hidden, config, reuse=None, train=False):
     
     with tf.variable_scope('model/masked-language-model'):
         batch, seq, feats = shape_list(hidden)
@@ -87,7 +87,7 @@ def masked_language_model(*, X, M, mlm_weights, mlm_ids, mlm_positions, embed_we
         }
 
 
-def language_model(*, X, M, embed_weights, hidden, config, reuse=None, train=False):
+def language_model(*, X, sequence_lengths, embed_weights, hidden, config, reuse=None, train=False):
     """
     A language model output and loss for the language modelling objective described in the original finetune paper.
     This language model uses weights that are tied to the input embedding.
@@ -103,7 +103,7 @@ def language_model(*, X, M, embed_weights, hidden, config, reuse=None, train=Fal
 
     """
     X = merge_leading_dims(X, 3)
-    M = merge_leading_dims(M, 2)
+    M = tf.sequence_mask(sequence_lengths, dtype=tf.float32)
     hidden = merge_leading_dims(hidden, 3)
 
     batch, seq, _ = shape_list(X)
