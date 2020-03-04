@@ -161,8 +161,8 @@ def gpt2_featurizer(
     X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-1:]), 0))
     X.set_shape([None, None])
 
-    pos_values = get_pos_values(initial_shape[1], encoder.vocab_size)
-    X = tf.stack((X, tf.tile(pos_values, [initial_shape[0], 1])), 2)
+    pos_values = get_pos_values(tf.shape(X)[1], encoder.vocab_size)
+    X = tf.stack((X, tf.tile(pos_values, [tf.shape(X)[0], 1])), 2)
 
     with tf.variable_scope("model/featurizer", reuse=reuse):
         embed_weights = tf.get_variable(
