@@ -44,13 +44,11 @@ def sentences_heatmap(sentences, probs, clf):
 if __name__ == "__main__":
     dataset = StanfordSentimentTreebank(nrows=1000).dataframe
     model = Classifier(
-        interpolate_pos_embed=False,
         n_epochs=1,
         batch_size=2,
         lr_warmup=0.1,
         val_size=0.0,
         max_length=64,
-        prefit_init=False,
         base_model=GPTModel
     )
 

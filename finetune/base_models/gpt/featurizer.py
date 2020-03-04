@@ -298,7 +298,7 @@ def gpt_featurizer(
         if explain:
             explain_out = h_out[:, initial_shape[1] :]
             explain_out = tf.reshape(
-                explain_out, shape=tf.concat((initial_shape[:-1], [config.n_embed]), 0)
+                explain_out, shape=tf.concat((initial_shape, [config.n_embed]), 0)
             )
             h_out = h_out[:, : initial_shape[1]]
 
@@ -328,4 +328,3 @@ def gpt_featurizer(
         if explain:
             out["explain_out"] = explain_out
         return out
-

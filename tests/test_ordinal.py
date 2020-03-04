@@ -27,7 +27,6 @@ class TestOrdinal(unittest.TestCase):
             n_epochs=5,
             val_size=0.,
             l2_reg=0.,
-            interpolate_pos_embed=False,
             low_memory_mode=True,
         )
         d.update(kwargs)
