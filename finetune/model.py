@@ -41,10 +41,10 @@ class PredictMode:
     EXPLAIN = "EXPLAIN"
 
 
-def language_model_op(X, M, params, featurizer_state, mode, encoder):
+def language_model_op(X, params, featurizer_state, mode, encoder):
     language_model_state = language_model(
         X=X,
-        M=M,
+        sequence_lengths=featurizer_state["lengths"],
         config=params,
         embed_weights=featurizer_state['embed_weights'],
         hidden=featurizer_state['sequence_features'],
@@ -71,10 +71,9 @@ def language_model_op(X, M, params, featurizer_state, mode, encoder):
     return lm_predict_op, language_model_state
 
 
-def masked_language_model_op(X, M, mlm_weights, mlm_ids, mlm_positions, params, featurizer_state, mode):
+def masked_language_model_op(X, mlm_weights, mlm_ids, mlm_positions, params, featurizer_state, mode):
     return masked_language_model(
         X=X,
-        M=M,
         mlm_weights=mlm_weights,
         mlm_ids=mlm_ids,
         mlm_positions=mlm_positions,
@@ -132,7 +131,6 @@ def get_model_fn(
         estimator_mode = mode
         train = estimator_mode == tf.estimator.ModeKeys.TRAIN
         X = features["tokens"]
-        M = features["mask"]
         context = features.get("context", None)
         task_id = features.get("task_id", None)
         Y = labels
@@ -201,12 +199,11 @@ def get_model_fn(
             if lm_type is not None:
                 if lm_type.lower() == 'lm':
                     lm_predict_op, language_model_state = language_model_op(
-                        X=X, M=M, params=params, featurizer_state=featurizer_state, mode=mode, encoder=encoder
+                        X=X, params=params, featurizer_state=featurizer_state, mode=mode, encoder=encoder
                     )
                 elif lm_type.lower() == 'mlm':
                     language_model_state = masked_language_model_op(
                         X=X, 
-                        M=M, 
                         mlm_weights=features['mlm_weights'],
                         mlm_ids=features['mlm_ids'],
                         mlm_positions=features['mlm_positions'],
@@ -243,8 +240,6 @@ def get_model_fn(
                 ),
             )
 
-            trained_variables = [v for v in tf.trainable_variables()]
-
             def optimizer(lr):
                 Optimizer = OPTIMIZERS.get(params.optimizer, None)
                 if Optimizer is None:
@@ -279,9 +274,6 @@ def get_model_fn(
                 decay_var_list = [v for v in tf.global_variables() if len(v.get_shape()) > 1 or params.vector_l2]
                 opt.apply_gradients = functools.partial(opt.apply_gradients, decay_var_list=decay_var_list)
 
-                if params.dont_optimize_zero_gradients:
-                    opt = dont_optimize_zeros(opt)
-
                 if params.scale_loss:
                     opt = tf.train.experimental.MixedPrecisionLossScaleOptimizer(opt, "dynamic")
 
@@ -303,7 +295,7 @@ def get_model_fn(
                 increment_global_step=True,
                 summaries=summaries,
                 colocate_gradients_with_ops=True,
-                variables=trained_variables,
+#                variables=trained_variables,
             )
 
         if mode == tf.estimator.ModeKeys.PREDICT:

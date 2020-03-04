@@ -33,7 +33,7 @@ class SequencePipeline(BasePipeline):
         pad_token = [self.config.pad_token] if self.multi_label else self.config.pad_token
         out_gen = self._text_to_ids(X, pad_token=pad_token)
         for out in out_gen:
-            feats = {"tokens": out.token_ids, "mask": out.mask}
+            feats = {"tokens": out.token_ids}
             if context is not None:
                 tokenized_context = tokenize_context(context, out, self.config)
                 feats['context'] = tokenized_context
@@ -64,11 +64,8 @@ class SequencePipeline(BasePipeline):
 
     def feed_shape_type_def(self):
         TS = tf.TensorShape
-        types = {"tokens": tf.int32, "mask": tf.float32}
-        shapes = {
-            "tokens": TS([None, 2]),
-            "mask": TS([None]),
-        }
+        types = {"tokens": tf.int32}
+        shapes = {"tokens": TS([None])}
         types, shapes = self._add_context_info_if_present(types, shapes)
         target_shape = (
             [None, self.label_encoder.target_dim]

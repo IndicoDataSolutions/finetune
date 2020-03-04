@@ -105,8 +105,7 @@ class BasePipeline(metaclass=ABCMeta):
         TS = tf.TensorShape
         types = {"tokens": tf.int32, "mask": tf.float32}
         shapes = {
-            "tokens": TS([None, 2]),
-            "mask": TS([None]),
+            "tokens": TS([None]),
         }
         types, shapes = self._add_context_info_if_present(types, shapes)
         return (
@@ -122,32 +121,14 @@ class BasePipeline(metaclass=ABCMeta):
             1: positional embedding
         """
         seq_length = len(encoded_output.token_ids)
-        x = np.zeros((seq_length, 2), dtype=np.int32)
+        x = np.zeros((seq_length), dtype=np.int32)
         if self.config.base_model.__name__ == "RoBERTa":
             x += 1
         mask = np.zeros((seq_length), dtype=np.float32)
 
         # BPE embedding
-        x[:, 0] = encoded_output.token_ids
+        x[:] = encoded_output.token_ids
         # masking: value of 1 means "consider this in cross-entropy LM loss"
-        mask[1:] = 1
-
-        # positional_embeddings
-        x[:, 1] = np.arange(
-            self.text_encoder.vocab_size,
-            self.text_encoder.vocab_size + seq_length
-        )
-
-        # roberta uses different positional embedding structure
-        if self.config.base_model.__name__ == "RoBERTa":
-            mask = np.ones((seq_length), dtype=np.float32)
-            positions = np.cumsum(mask, dtype=np.int32)
-            positions += 1  # add padding idx because RoBERTa's pos embeds depend on it
-            positions += (
-                self.text_encoder.vocab_size + 1
-            )  # + 1 to include unused mask token in embedding layer
-            x[:, 1] = positions
-
         output = ArrayEncodedOutput(
             token_ids=x,
             tokens=encoded_output.tokens,
@@ -332,12 +313,7 @@ class BasePipeline(metaclass=ABCMeta):
             it = iter(gen)
 
             if train:
-                if self.config.prefit_init and self.epoch <= self.config.n_epochs:
-                    desc = "Initialization Epoch {}/{}".format(
-                        current_epoch, self.config.n_epochs
-                    )
-                else:
-                    desc = "Epoch {}/{}".format(current_epoch, self.config.n_epochs)
+                desc = "Epoch {}/{}".format(current_epoch, self.config.n_epochs)
             else:
                 desc = "Validation"
             for _, i in zip(range(self._skip_tqdm), it):

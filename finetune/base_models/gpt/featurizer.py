@@ -193,9 +193,7 @@ def block(
 
 
 def embed(X, we):
-    e = tf.gather(we, X)
-    h = tf.reduce_sum(e, 2)
-    return h
+    return tf.gather(we, X)
 
 
 def add_explain_tokens(X, max_length, pool_idx):
@@ -210,6 +208,8 @@ def add_explain_tokens(X, max_length, pool_idx):
     clf_tok_x_seq_w_pos = tf.concat((clf_tok_x_seq, flat_pos), -1)
     return tf.concat((X, clf_tok_x_seq_w_pos), 1)
 
+def get_pos_values(seq_len, vocab_size):
+    return tf.expand_dims(vocab_size + tf.range(seq_len), 0)
 
 def gpt_featurizer(
     X,
@@ -234,13 +234,14 @@ def gpt_featurizer(
         sequence_features: The output of the featurizer at each timestep.
     """
     initial_shape = tf.shape(X)
-    X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-2:]), 0))
+    X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-1:]), 0))
     sequence_length = tf.shape(X)[1]
+    pos_values = get_pos_values(sequence_length, encoder.vocab_size)
 
     with tf.variable_scope("model/featurizer", reuse=reuse):
         embed_weights = tf.get_variable(
             name="we",
-            shape=[encoder.vocab_size + config.max_length, config.n_embed],
+            shape=[encoder.vocab_size + 512, config.n_embed],
             initializer=tf.random_normal_initializer(stddev=config.weight_stddev),
         )
         if config.train_embeddings:
@@ -248,15 +249,13 @@ def gpt_featurizer(
         else:
             embed_weights = tf.stop_gradient(embed_weights)
 
-#        X = tf.reshape(X, [-1, config.max_length, 2])
-
         clf_token = encoder.end_token
-        pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
+        pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X, clf_token), tf.float32), 1), tf.int32)
 
         if explain:
             X = add_explain_tokens(X, sequence_length, pool_idx)
 
-        h = embed(X, embed_weights)
+        h = embed(X, embed_weights) + embed(pos_values, embed_weights)
         for layer in range(config.n_layer):
             if (
                 (config.n_layer - layer) == config.num_layers_trained
@@ -308,10 +307,10 @@ def gpt_featurizer(
             tf.range(shape_list(X)[0], dtype=tf.int32) * sequence_length + pool_idx,
         )
         clf_h = tf.reshape(
-            clf_h, shape=tf.concat((initial_shape[:-2], [config.n_embed]), 0)
+            clf_h, shape=tf.concat((initial_shape[:-1], [config.n_embed]), 0)
         )
         seq_feats = tf.reshape(
-            h_out, shape=tf.concat((initial_shape[:-1], [config.n_embed]), 0)
+            h_out, shape=tf.concat((initial_shape, [config.n_embed]), 0)
         )
 
         lengths = lengths_from_eos_idx(eos_idx=pool_idx, max_length=sequence_length)

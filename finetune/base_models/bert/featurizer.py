@@ -41,18 +41,17 @@ def bert_featurizer(
         hidden_act=config.act_fn,
         hidden_dropout_prob=config.resid_p_drop,
         attention_probs_dropout_prob=config.attn_p_drop,
-        max_position_embeddings=config.max_length,
+        max_position_embeddings=config.base_model.settings.get("max_length", 512),
         type_vocab_size=2,
         initializer_range=config.weight_stddev,
         low_memory_mode=config.low_memory_mode
     )
 
     initial_shape = tf.shape(X)
-    X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-2:]), 0))
-    X.set_shape([None, None, None])
+    X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-1:]), 0))
+    X.set_shape([None, None])
     # To fit the interface of finetune we are going to compute the mask and type id at runtime.
-    input_ids = X[:, :, 0]  # slice off pos-embed ids.
-    delimiters = tf.cast(tf.equal(input_ids, encoder.delimiter_token), tf.int32)
+    delimiters = tf.cast(tf.equal(X, encoder.delimiter_token), tf.int32)
 
     token_type_ids = tf.cumsum(delimiters, exclusive=True, axis=1)
 
@@ -88,7 +87,7 @@ def bert_featurizer(
         bert = BertModel(
             config=bert_config,
             is_training=train,
-            input_ids=input_ids,
+            input_ids=X,
             input_mask=mask,
             token_type_ids=token_type_ids,
             use_one_hot_embeddings=False,
@@ -101,11 +100,11 @@ def bert_featurizer(
         embed_weights = bert.get_embedding_table()
         features = tf.reshape(
             bert.get_pooled_output(),
-            shape=tf.concat((initial_shape[:-2], [config.n_embed]), 0),
+            shape=tf.concat((initial_shape[:-1], [config.n_embed]), 0),
         )
         sequence_features = tf.reshape(
             bert.get_sequence_output(),
-            shape=tf.concat((initial_shape[:-1], [config.n_embed]), 0),
+            shape=tf.concat((initial_shape, [config.n_embed]), 0),
         )
 
         output_state = {
