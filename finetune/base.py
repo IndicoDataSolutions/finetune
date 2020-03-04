@@ -31,7 +31,6 @@ from finetune.saver import Saver, InitializeHook
 from finetune.errors import FinetuneError
 from finetune.model import get_model_fn, PredictMode
 from finetune.util.download import download_data_if_required
-from finetune.util.positional_embeddings import embedding_preprocessor
 from finetune.util.shapes import shape_list
 from finetune.util.timing import ProgressBar
 from finetune.util.in_memory_finetune import make_in_memory_finetune_hooks
@@ -119,10 +118,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self._set_random_seed(self.config.seed)
 
         # state for prediction caching
-        self._predictions = None
         self._cached_predict = False
-        self._closed = False
-        self._to_pull = 0
         self._cached_estimator = None
         
         try:
@@ -142,9 +138,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self.saver = Saver(
             fallback_filename=self.config.base_model_path,
             exclude_matches=None if self.config.save_adam_vars else "Adam",
-            variable_transforms=[embedding_preprocessor(self.input_pipeline, self.config)],
             save_dtype=self.config.save_dtype,
-            target_model_init_from_base_model=self.config.target_model_init_from_base_model
         )
 
     @abstractmethod
@@ -195,9 +189,7 @@ class BaseModel(object, metaclass=ABCMeta):
         )
 
         if self.config.keep_best_model:
-            if isinstance(val_size, dict):
-                tf.logging.warning("Cannot early stop or keep best model with MTL")
-            elif val_size <= 10:
+            if val_size <= 10:
                 tf.logging.warning(
                     "Early stopping / keeping best model with a validation size of {} is likely to case undesired results".format(
                         val_size
@@ -215,31 +207,7 @@ class BaseModel(object, metaclass=ABCMeta):
         )
         num_steps = steps_per_epoch * self.config.n_epochs
 
-        if self.config.tasks is not None:
-            # Validation with MTL tasks
-            for task in self.config.tasks:
-                if val_size[task] > 0:
-                    train_hooks.append(
-                        tf.estimator.experimental.InMemoryEvaluatorHook(
-                            estimator,
-                            val_input_fn[task],
-                            every_n_iter=val_interval[task],
-                            steps=val_size[task] // batch_size,
-                            name=task,
-                        )
-                    )
-                    train_hooks.append(
-                        tf.estimator.experimental.InMemoryEvaluatorHook(
-                            estimator,
-                            val_input_fn[task + "_train"],
-                            every_n_iter=val_interval[task],
-                            steps=val_size[task] // batch_size,
-                            name=task + "_train",
-                        )
-                    )
-            early_stopping_interval = sys.maxsize  # turn off early stopping for mtl.
-
-        elif val_size > 0:
+        if val_size > 0:
             # Validation with all other tasks.
             train_hooks.append(
                 tf.estimator.experimental.InMemoryEvaluatorHook(
@@ -269,36 +237,6 @@ class BaseModel(object, metaclass=ABCMeta):
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            if self.config.prefit_init:
-                tf.logging.info("Starting pre-fit initialisation...")
-                num_layers_trained = self.config.num_layers_trained
-                self.config.num_layers_trained = 0
-                estimator.train(train_input_fn, hooks=train_hooks, steps=num_steps)
-                self.config.num_layers_trained = num_layers_trained
-                self.saver.variables = {
-                    k: v
-                    for k, v in self.saver.variables.items()
-                    if "adam" not in k and "global_step" not in k
-                }
-                for weight in self.saver.variables:
-                    if (
-                        weight.startswith("model/target/")
-                    ):
-                        w = self.saver.variables[weight]
-                        if len(w.shape) == 1:
-                            continue
-                        w_flat = np.reshape(w, [-1, w.shape[-1]])
-                        expectation_of_norm = (
-                            (self.config.weight_stddev ** 2) * w_flat.shape[0]
-                        ) ** 0.5
-                        self.saver.variables[weight] = np.reshape(
-                            expectation_of_norm
-                            * w_flat
-                            / np.linalg.norm(w_flat, axis=0),
-                            w.shape,
-                        )
-
-                tf.logging.info("Finishing pre-fit initialisation...")
             estimator.train(train_input_fn, hooks=train_hooks, steps=num_steps)
         
         self._trained = True
@@ -402,37 +340,6 @@ class BaseModel(object, metaclass=ABCMeta):
             self._cached_estimator = None
             gc.collect()
         
-    def _clear_prediction_queue(self):
-        # Flush examples used to pad the last batch
-        # of previous call to predict()
-        for i in range(self._to_pull):
-            next(self._predictions)
-
-        # Reset counter
-        self._to_pull = 0
-
-    def _data_generator(self):
-        self._cached_example = None
-        self._to_pull = 0
-        while not self._closed:
-            try:
-                example = self._data.pop(0)
-
-                # Ensure examples used for padding match expected input format
-                if isinstance(example, str):
-                    self._cached_example = ""
-                elif isinstance(example, (list, tuple)):
-                    self._cached_example = [""] * len(example)
-
-                yield example
-            except IndexError:
-                # _data_generator was asked for more examples than we had
-                # Feed a cached example through the input_pipeline
-                # to fill out the batch, but remember to clear it
-                # out of the queue later
-                self._to_pull += 1
-                yield self._cached_example
-
     @contextmanager
     def cached_predict(self):
         """

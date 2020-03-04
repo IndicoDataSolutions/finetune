@@ -124,8 +124,6 @@ class Settings(dict):
     :param low_memory_mode: When True, only store partial gradients on forward pass
         and recompute remaining gradients incrementally in order to save memory.  Defaults to `False`.
     :param optimize_for: Optimize auto parameters for either `accuracy`, `speed`, or `predict_speed` Defaults to `accuracy`
-    :param interpolate_pos_embed: Interpolate positional embeddings when `max_length` differs from it's original value of
-        `512`. Defaults to `False`.
     :param embed_p_drop: Embedding dropout probability.  Defaults to `0.1`.
     :param attn_p_drop: Attention dropout probability.  Defaults to `0.1`.
     :param resid_p_drop: Residual layer fully connected network dropout probability.  Defaults to `0.1`.
@@ -147,7 +145,6 @@ class Settings(dict):
         that indicates how to trade off between language modeling loss
         and target model loss.  Usually not beneficial to turn on unless
         dataset size exceeds a few thousand examples.  Defaults to `0.0`.
-    :param tsa_schedule: Training Signal Annealing Schedule from 'Unsupervised Data Augmentation for Consistency Training'. One of {"linear_schedule", "exp_schedule", "log_schedule"}.  Defaults to `None`.
     :param summarize_grads: Include gradient summary information in tensorboard.  Defaults to `False`.
     :param val_size: Validation set size if int. Validation set size as percentage of all training data if float.  Defaults to 0.  If value "auto" is provided, validation will not be run by default if n_examples < 50.
         If n_examples > 50, defaults to max(5, min(100, 0.05 * n_examples))
@@ -171,16 +168,12 @@ class Settings(dict):
     :param train_embeddings: Should embedding layer be finetuned? Defaults to `True`.
     :param class_weights: One of 'log', 'linear', or 'sqrt'. Auto-scales gradient updates based on class frequency.  Can also be a dictionary that maps from true class name to loss coefficient. Defaults to `None`.
     :param oversample: Should rare classes be oversampled?  Defaults to `False`.
-    :param params_device: Which device should gradient updates be aggregated on?
-        If you are using a single GPU and have more than 4Gb of GPU memory you should set this to GPU PCI number (0, 1, 2, etc.). Defaults to `"cpu"`.
     :param eval_acc: if True, calculates accuracy and writes it to the tensorboard summary files for valudation runs.
     :param save_dtype: specifies what precision to save model weights with.  Defaults to `np.float32`.
     :param regression_loss: the loss to use for regression models. One of `L1` or `L2`, defaults to `L2`.
-    :param prefit_init: if True, fit target model weigths before finetuning the entire model. Defaults to `False`.
     :param debugging_logs: if True, output tensorflow logs and turn off TQDM logging. Defaults to `False`.
     :param val_set: Where it is neccessary to use an explicit validation set, provide it here as a tuple (text, labels)
     :param per_process_gpu_memory_fraction: fraction of the overall amount of memory that each visible GPU should be allocated, defaults to `1.0`.
-    :param adapter_size: width of adapter module from 'Parameter Efficient Transfer Learning' paper, if defined. defaults to 'None'.
     """
 
     def get_grid_searchable(self):
@@ -245,8 +238,7 @@ def get_default_config():
     settings = Settings(
         # General Settings
         low_memory_mode=False,
-        interpolate_pos_embed=False,
-        save_adam_vars=True,
+        save_adam_vars=False,
         shuffle_buffer_size=100,
         dataset_size=None,
         batch_size="auto",
@@ -259,7 +251,6 @@ def get_default_config():
         save_dtype=None,
         val_set=None,
         per_process_gpu_memory_fraction=None,
-        adapter_size=None,  # from Parameter Efficient Transfer Learning paper
         distribution_strategy="central_storage",
         xla=False,
         optimize_for="accuracy", 
@@ -275,7 +266,6 @@ def get_default_config():
         # Early Stopping and Validation
         keep_best_model=False,
         early_stopping_steps=None,
-        min_secs_between_eval=60,
         eval_acc=False,
         val_size=0.,
         val_interval=None,
@@ -296,7 +286,6 @@ def get_default_config():
         # Class Imbalance
         class_weights=None,
         oversample=False,
-        params_device="cpu",
 
         # Optimization Params
         optimizer="AdamW",
@@ -307,13 +296,7 @@ def get_default_config():
         lr=GridSearchable(6.25e-5, [6.25e-4, 6.25e-5, 6.25e-6]),
         lr_warmup=0.002,
         max_grad_norm=1.0,
-        prefit_init=False,
         accum_steps=1,
-        tsa_schedule=None,
-
-        # MTL
-        tasks=None,
-        dont_optimize_zero_gradients=False,
 
         # Language Model Settings
         lm_loss_coef=0.0,
@@ -346,14 +329,6 @@ def get_default_config():
         viable_edges=None,
         association_types=None,
         assocation_loss_weight=100.0,
-
-        # LMPred and S2S specicif params
-        beam_search_alpha=0.6,
-        beam_size=10,
-        decoder_sample_from=40,
-        sample_temp=1.0,
-        target_model_init_from_base_model=False,
-        seq_decode_len=512,
 
         # Oscar only
         oscar_use_fp16=False,

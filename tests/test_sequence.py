@@ -95,7 +95,6 @@ class TestSequenceLabeler(unittest.TestCase):
             max_length=256,
             lm_loss_coef=0.0,
             val_size=0,
-            interpolate_pos_embed=False,
         )
         d.update(**kwargs)
         return d
@@ -289,7 +288,6 @@ class TestSequenceLabelerNoCRF(TestSequenceLabeler):
             max_length=256,
             lm_loss_coef=0.0,
             val_size=0,
-            interpolate_pos_embed=False,
             crf_sequence_labeling=False,
         )
         d.update(**kwargs)
