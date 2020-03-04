@@ -53,8 +53,7 @@ class SequencePipeline(BasePipeline):
         counter = Counter()
         for doc, target_arr in encoded_dataset:
             target_arr = np.asarray(target_arr)
-            targets = target_arr[doc["mask"].astype(np.bool)]
-            decoded_targets = self.label_encoder.inverse_transform(targets)
+            decoded_targets = self.label_encoder.inverse_transform(target_arr)
             if self.multi_label:
                 for label in decoded_targets:
                     counter.update(label)

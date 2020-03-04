@@ -5,7 +5,7 @@ import tensorflow as tf
 from finetune.util.shapes import shape_list, lengths_from_eos_idx
 from finetune.optimizers.recompute_grads import recompute_grad
 from finetune.nn.activations import gelu
-from finetune.base_models.gpt.featurizer import norm, dropout
+from finetune.base_models.gpt.featurizer import norm, dropout, get_pos_values
 
 
 def softmax(x, axis=-1):
@@ -161,18 +161,19 @@ def gpt2_featurizer(
     X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-2:]), 0))
     X.set_shape([None, None, None])
 
+    pos_values = get_pos_values(initial_shape[1], encoder.vocab_size)
+    X = tf.stack((X, tf.tile(pos_values, [initial_shape[0], 1])), 2)
+
     with tf.variable_scope("model/featurizer", reuse=reuse):
         embed_weights = tf.get_variable(
             name="we",
-            shape=[encoder.vocab_size + config.max_length, config.n_embed],
+            shape=[encoder.vocab_size + config.base_model.settings.get("max_length", 512), config.n_embed],
             initializer=tf.random_normal_initializer(stddev=config.weight_stddev),
         )
         if config.train_embeddings:
             embed_weights = dropout(embed_weights, config.embed_p_drop, train)
         else:
             embed_weights = tf.stop_gradient(embed_weights)
-
-#        X = tf.reshape(X, [-1, config.max_length, 2])
         h = embed(X, embed_weights)
 
         # Transformer
