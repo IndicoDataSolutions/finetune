@@ -30,7 +30,6 @@ ArrayEncodedOutput = namedtuple(
         "labels",  # object array shape (batch, seq_length)
         "token_ends",  # list of list of char_locs (int) passed through from `EncoderOutput`
         "token_starts",
-        "mask",  # int array shape (batch, seq_length)
     ],
 )
 ArrayEncodedOutput.__new__.__defaults__ = (None,) * len(ArrayEncodedOutput._fields)

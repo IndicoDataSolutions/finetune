@@ -120,7 +120,7 @@ class BatchedVarLoad:
         self.feed = dict()
 
     def add(self, var, val):
-        if var.name.endswith("we:0"): # for backwards comaptibility with pre-saved models
+        if var.name.endswith("we:0") or "bert/embeddings/position_embedding" in var.name: # for backwards comaptibility with pre-saved models
             val = val[:var.shape[0]]
         if hasattr(var, "_values"):
             underlying_vars = var._values

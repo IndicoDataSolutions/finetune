@@ -19,7 +19,6 @@ class MaskedLanguageModelPipeline(BasePipeline):
             (
                 {
                     "tokens": tf.int32,
-                    "mask": tf.float32,
                     "mlm_weights": tf.float32,
                     "mlm_ids": tf.int32,
                     "mlm_positions": tf.int32
@@ -27,8 +26,7 @@ class MaskedLanguageModelPipeline(BasePipeline):
             ),
             (
                 {
-                    "tokens": TS([None, 2]),
-                    "mask": TS([None]),
+                    "tokens": TS([None]),
                     "mlm_weights": TS([None]),
                     "mlm_ids": TS([None]),
                     "mlm_positions": TS([None]),
@@ -77,7 +75,6 @@ class MaskedLanguageModelPipeline(BasePipeline):
 
             feats = {
                 "tokens": out.token_ids, 
-                "mask": out.mask,
                 "mlm_weights": mlm_weights,
                 "mlm_ids": mlm_ids,
                 "mlm_positions": mlm_positions
