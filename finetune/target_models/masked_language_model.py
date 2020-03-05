@@ -50,7 +50,7 @@ class MaskedLanguageModelPipeline(BasePipeline):
             # Make sure we don't accidentally mask the start / separator / end token
             mlm_mask[
                 np.isin(
-                    out.token_ids[:, 0],
+                    out.token_ids,
                     [
                         self.text_encoder.start_token, 
                         self.text_encoder.delimiter_token,
@@ -66,12 +66,12 @@ class MaskedLanguageModelPipeline(BasePipeline):
                 mlm_mask = np.zeros_like(mlm_mask)
                 mlm_mask[mlm_positions] = True
                 
-            mlm_ids = out.token_ids[:, 0][mlm_mask]
+            mlm_ids = out.token_ids[mlm_mask]
             mlm_weights = np.ones_like(mlm_ids)
 
             
-            out.token_ids[:, 0][mlm_mask & (mask_type == 'mask')] = self.text_encoder.mask_token
-            out.token_ids[:, 0][mlm_mask & (mask_type == 'random')] = random_tokens[mlm_mask & (mask_type == 'random')]
+            out.token_ids[mlm_mask & (mask_type == 'mask')] = self.text_encoder.mask_token
+            out.token_ids[mlm_mask & (mask_type == 'random')] = random_tokens[mlm_mask & (mask_type == 'random')]
 
             feats = {
                 "tokens": out.token_ids, 

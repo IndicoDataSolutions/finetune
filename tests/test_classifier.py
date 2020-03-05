@@ -423,7 +423,7 @@ class TestClassifier(unittest.TestCase):
         model.fit(train_sample.Text, train_sample.Target)
 
     def test_explain(self):
-        model = Classifier(base_model=GPT, **self.default_config())
+        model = Classifier(**self.default_config(base_model=GPT))
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text, train_sample.Target)
