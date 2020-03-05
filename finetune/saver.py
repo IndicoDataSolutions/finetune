@@ -211,7 +211,8 @@ class Saver:
                 if self.variables is None:
                     self.variables = dict()
                 for k, v in self.fallback_.items():
-                    self.variables['model/target/' + k] = v
+                    if "featurizer" in k and 'Adam' not in k:
+                        self.variables['model/target/' + k] = v
                 
         return self.fallback_
 
