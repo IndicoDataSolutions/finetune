@@ -6,7 +6,7 @@ from finetune.errors import FinetuneError
 from finetune.base import PredictMode, BaseModel
 from finetune.base_models import RoBERTa, BERT
 from finetune.input_pipeline import BasePipeline
-from finetune.nn.target_blocks import masked_language_model
+from finetune.nn.target_blocks import masked_language_model_
 from finetune.encoding.input_encoder import tokenize_context, tokenize_masking
 from finetune.encoding.input_encoder import EncodedOutput
 from tensorflow.data import Dataset
@@ -127,7 +127,7 @@ class MaskedLanguageModelPipeline(BasePipeline):
 
             
             out.token_ids[:, 0][mlm_mask & (mask_type == 'mask')] = self.text_encoder.mask_token
-            out.token_ids[:, 0][mlm_mask & (mask_type == 'random')] = random_tokens[mlm_mask & (mask_type == 'random')]
+            #out.token_ids[:, 0][mlm_mask & (mask_type == 'random')] = random_tokens[mlm_mask & (mask_type == 'random')]
 
             feats = {
                 "tokens": out.token_ids,
@@ -147,7 +147,8 @@ class MaskedLanguageModelPipeline(BasePipeline):
                         tokenized_context[cps_mask] = shuffled
                         cps_mask[cps_mask] = cps_mask[cps_mask] & np.all(shuffled != hold, axis=1) # remove positions which shuffled to themselves.
                         feats['cps_mask'] = cps_mask
-                    
+                    # Adding this for position prediction
+                    tokenized_context[mlm_mask & (mask_type == 'mask')] = np.array([0, 0, 0, 0])
                     feats['context'] = tokenized_context
                 except:
                     print('Failure in context alignment for: ')
@@ -268,7 +269,7 @@ class MaskedLanguageModel(BaseModel):
     def _target_model(
         config, featurizer_state, n_outputs, train=False, reuse=None, **kwargs
     ):
-        return masked_language_model(
+        return masked_language_model_(
             hidden=featurizer_state["sequence_features"],
             targets=targets,
             n_targets=n_outputs,

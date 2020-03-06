@@ -5,7 +5,7 @@ import numpy as np
 import tensorflow as tf
 
 
-from finetune.nn.target_blocks import language_model, masked_language_model, smooth_pos_attn, cps_model
+from finetune.nn.target_blocks import language_model, masked_language_model_, smooth_pos_attn, cps_model
 from finetune.util.text_generation import sample_with_temperature
 from finetune.optimizers.zero_grad import dont_optimize_zeros
 from finetune.optimizers.gradient_accumulation import get_grad_accumulation_optimizer
@@ -100,16 +100,18 @@ def masked_language_model_op(
         params,
         featurizer_state,
         mode,
+        context_targets,
         encoder):
     if params.mask_proba and params.cps_swap_proba:
         raise ValueError("CPS and MLM together is not YET supported, but adding it in is as simple as adding loss weighting")
     
     if params.mask_proba:
-        language_model_state = masked_language_model(
+        language_model_state = masked_language_model_(
             X=X,
             M=M,
             mlm_weights=mlm_weights,
             mlm_ids=mlm_ids,
+            targets=context_targets,
             mlm_positions=mlm_positions,
             config=params,
             embed_weights=featurizer_state["embed_weights"],
@@ -120,21 +122,24 @@ def masked_language_model_op(
         mask_extra_toks = "use_extra_toks" in params and not params.use_extra_toks
         # NOTE: logits only contains the relevant logits for masked tokens we wish to predict
         lm_logits = language_model_state['logits']
-
-        lm_logit_mask = mask_logits(
-            lm_logits,
-            encoder,
-            mask_extra_toks=mask_extra_toks)
-        lm_logits += lm_logit_mask
         
+        # Only mask out logits if we aren't doing a regression loss
+        if context_targets is None:
+            lm_logit_mask = mask_logits(
+                lm_logits,
+                encoder,
+                mask_extra_toks=mask_extra_toks)
+            lm_logits += lm_logit_mask
+
         relevant_ids = tf.boolean_mask(mlm_ids, mlm_weights)
         relevant_positions = tf.boolean_mask(mlm_positions, mlm_weights)
-        
+
         top_token_idxs = tf.argsort(lm_logits, direction='ASCENDING', axis=-1)
     else:
         top_token_idxs = None
         relevant_ids = None
         relevant_positions = None
+        # Note: This is going to throw an error if it runs, because 0 is an integer.
         language_model_state = {"losses": 0}
 
     if params.cps_swap_proba:
@@ -303,6 +308,7 @@ def get_model_fn(
                         params=params,
                         featurizer_state=featurizer_state,
                         mode=mode,
+                        context_targets=features.get("context"),
                         encoder=encoder
                     )
                 else:
@@ -313,6 +319,7 @@ def get_model_fn(
                     or mode == tf.estimator.ModeKeys.EVAL
                 ):
                     lm_loss = tf.reduce_mean(language_model_state["losses"])
+                    # train_loss += lm_loss_coef * tf.cast(lm_loss, tf.dtypes.float64)
                     train_loss += lm_loss_coef * lm_loss
                     tf.summary.scalar("LanguageModelLoss", lm_loss)
                 if mode == tf.estimator.ModeKeys.PREDICT:
