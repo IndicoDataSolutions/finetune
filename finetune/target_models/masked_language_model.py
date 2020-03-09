@@ -125,9 +125,9 @@ class MaskedLanguageModelPipeline(BasePipeline):
             mlm_ids = out.token_ids[:, 0][mlm_mask]
             mlm_weights = np.ones_like(mlm_ids)
 
-            
+            # Have been experimenting with turning off random and masks
             out.token_ids[:, 0][mlm_mask & (mask_type == 'mask')] = self.text_encoder.mask_token
-            #out.token_ids[:, 0][mlm_mask & (mask_type == 'random')] = random_tokens[mlm_mask & (mask_type == 'random')]
+            out.token_ids[:, 0][mlm_mask & (mask_type == 'random')] = random_tokens[mlm_mask & (mask_type == 'random')]
 
             feats = {
                 "tokens": out.token_ids,
@@ -148,7 +148,7 @@ class MaskedLanguageModelPipeline(BasePipeline):
                         cps_mask[cps_mask] = cps_mask[cps_mask] & np.all(shuffled != hold, axis=1) # remove positions which shuffled to themselves.
                         feats['cps_mask'] = cps_mask
                     # Adding this for position prediction
-                    tokenized_context[mlm_mask & (mask_type == 'mask')] = np.array([0, 0, 0, 0])
+                    # tokenized_context[mlm_mask & (mask_type == 'mask')] = np.array([0, 0, 0, 0])
                     feats['context'] = tokenized_context
                 except:
                     print('Failure in context alignment for: ')
