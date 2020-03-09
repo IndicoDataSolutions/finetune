@@ -51,6 +51,7 @@ class BertConfig(object):
             n_layers_with_aux=-1,
             pos_injection=False,
             use_position_embeddings=True,
+            position_shuffle_percentage=0.
     ):
         """Constructs BertConfig.
 
@@ -95,6 +96,7 @@ class BertConfig(object):
         self.n_layers_with_aux = n_layers_with_aux
         self.pos_injection = pos_injection
         self.use_position_embeddings = use_position_embeddings
+        self.position_shuffle_percentage = position_shuffle_percentage
 
     @classmethod
     def from_dict(cls, json_object):
@@ -217,6 +219,7 @@ class BertModel(object):
                     roberta=roberta,
                     context=context,
                     pos_injection=config.pos_injection,
+                    position_shuffle_percentage=config.position_shuffle_percentage
                 )
 
             with tf.variable_scope("encoder"):
@@ -246,7 +249,7 @@ class BertModel(object):
                     config=config,
                     context=context,
                     auxiliary_init=auxiliary_init,
-                    )
+                )
                 self.sequence_output = self.all_encoder_layers[-1]
 
                 # The "pooler" converts the encoded sequence tensor of shape
@@ -460,6 +463,7 @@ def embedding_postprocessor(
         roberta=False,
         context=None,
         pos_injection=False,
+        position_shuffle_percentage=0.
 ):
     """Performs various post-processing on a word embedding tensor.
 
@@ -531,19 +535,37 @@ def embedding_postprocessor(
             # for position [0, 1, 2, ..., max_position_embeddings-1], and the current
             # sequence has positions [0, 1, 2, ... seq_length-1], so we can just
             # perform a slice.
+
             if roberta:
-                position_embeddings = tf.slice(
-                    full_position_embeddings, [2, 0], [seq_length, -1]
-                )
+                start = 2
+            else:
+                start = 0
+
+            if position_shuffle_percentage > 0.:        
+                indices = tf.range(start, seq_length)
+                
+                probs = tf.random.uniform(tf.shape(indices))
+                mask = probs < position_shuffle_percentage
+                swap_idxs = tf.where(mask)
+                constant_idxs = tf.where(~mask)
+
+                values_to_swap = tf.gather_nd(indices, swap_idxs)
+                swapped_values = tf.random.shuffle(values_to_swap)
+                unswapped_indices = tf.gather_nd(indices, constant_idxs)
+
+                new_indices = tf.scatter_nd(swap_idxs, swapped_values, [seq_length])
+                new_indices += tf.scatter_nd(constant_idxs, unswapped_indices, [seq_length])
+                position_embeddings = tf.gather(full_position_embeddings, new_indices)
             else:
                 position_embeddings = tf.slice(
-                    full_position_embeddings, [0, 0], [seq_length, -1]
+                    full_position_embeddings, [start, 0], [seq_length, -1]
                 )
-            num_dims = len(output.shape.as_list())
+            
 
             # Only the last two dimensions are relevant (`seq_length` and `width`), so
             # we broadcast among the first dimensions, which is typically just
             # the batch size.
+            num_dims = len(output.shape.as_list())
             position_broadcast_shape = []
             for _ in range(num_dims - 2):
                 position_broadcast_shape.append(1)
@@ -551,6 +573,7 @@ def embedding_postprocessor(
             position_embeddings = tf.reshape(
                 position_embeddings, position_broadcast_shape
             )
+
             output += position_embeddings
     if pos_injection:
         init = tf.variance_scaling_initializer(scale=0.02, mode="fan_avg", distribution="truncated_normal")
