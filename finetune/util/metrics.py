@@ -61,14 +61,14 @@ def sequence_labeling_token_confusion(text, true, predicted):
                     token_start_end,
                     pred_i
                 ):
-                    pred_per_token.append(true_i["label"])
+                    pred_per_token.append(pred_i["label"])
                     break
             else:
                 pred_per_token.append(none_class)
         true_per_token_all.extend(true_per_token)
         pred_per_token_all.extend(pred_per_token)
     cm = confusion_matrix(y_true=true_per_token_all, y_pred=pred_per_token_all, labels=unique_classes)
-    return tabulate.tabulate([["True\nPredicted", *unique_classes]] + [[l, *r] for l, r in zip(unique_classes, cm)])
+    return tabulate.tabulate([["Predicted\nTrue", *unique_classes]] + [[l, *r] for l, r in zip(unique_classes, cm)])
     
         
 
