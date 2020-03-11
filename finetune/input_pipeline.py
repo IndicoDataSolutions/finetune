@@ -115,29 +115,6 @@ class BasePipeline(metaclass=ABCMeta):
             (shapes, TS([self.target_dim]),),
         )
 
-    def _array_format(self, encoded_output):
-        """
-        Returns numpy array of token idxs and corresponding mask
-        Returned `x` array contains two channels:
-            0: byte-pair encoding embedding
-            1: positional embedding
-        """
-        seq_length = len(encoded_output.token_ids)
-        x = np.zeros((seq_length), dtype=np.int32)
-        if self.config.base_model.__name__ == "RoBERTa":
-            x += 1
-
-        # BPE embedding
-        x[:] = encoded_output.token_ids
-        # masking: value of 1 means "consider this in cross-entropy LM loss"
-        output = ArrayEncodedOutput(
-            token_ids=x,
-            tokens=encoded_output.tokens,
-            token_ends=encoded_output.token_ends,
-            token_starts=encoded_output.token_starts,
-        )
-        return output
-
     def text_to_tokens_mask(self, X, Y=None, context=None):
         out_gen = self._text_to_ids(X, pad_token=self.config.pad_token)
         for i, out in enumerate(out_gen):
@@ -506,7 +483,7 @@ class BasePipeline(metaclass=ABCMeta):
                             if fv[-1] != end_token:
                                 fv = fv + [end_token]
                         d[field] = fv
-                yield self._array_format(EncodedOutput(**d))
+                yield EncodedOutput(**d)
         else:
             encoder_out = self.text_encoder.encode_multi_input(
                 Xs,
@@ -519,4 +496,4 @@ class BasePipeline(metaclass=ABCMeta):
                 if field_value is not None:
                     d[field] = field_value
 
-            yield self._array_format(EncodedOutput(**d))
+            yield EncodedOutput(**d)

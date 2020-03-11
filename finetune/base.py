@@ -477,7 +477,7 @@ class BaseModel(object, metaclass=ABCMeta):
     
         def dataset_encoded():
             while not dataset_encoded.finished:
-                yield {"tokens": arr_encoded.token_ids, "mask": arr_encoded.mask}
+                yield {"tokens": encoded.token_ids, "mask": encoded.mask}
 
         dataset_encoded.finished = False
 
@@ -510,7 +510,6 @@ class BaseModel(object, metaclass=ABCMeta):
             for i in range(
                 len(encoded.token_ids) - 1, (max_length or self.config.max_length) - 2
             ):
-                arr_encoded = self.input_pipeline._array_format(encoded)
                 class_idx = next(predict)[PredictMode.GENERATE_TEXT]
                 encoded.token_ids.append(class_idx[-1])
                 if encoded.token_ids[-1] == EOS:
