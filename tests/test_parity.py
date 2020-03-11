@@ -47,16 +47,15 @@ class TestActivationParity(unittest.TestCase):
             return tf_dataset.batch(1)
 
         encoded = model.input_pipeline.text_encoder._encode(self.TEST_DATA)
-        encoded = EncodedOutput(token_ids=encoded.token_ids[0])
+        arr_encoded = EncodedOutput(token_ids=encoded.token_ids[0])
         estimator, hooks = model.get_estimator(force_build_lm=False)
         predict = estimator.predict(
             input_fn=get_input_fn, predict_keys=[PredictMode.SEQUENCE], hooks=hooks
         )
-        arr_encoded = model.input_pipeline._array_format(encoded)
         sequence_features = next(predict)[PredictMode.SEQUENCE]
 
         np.testing.assert_allclose(
-            sequence_features[:len(encoded.token_ids),:],
+            sequence_features[:len(arr_encoded.token_ids),:],
             np.load(
                 os.path.join(
                     DIRECTORY, 

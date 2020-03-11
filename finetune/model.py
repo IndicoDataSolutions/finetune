@@ -295,7 +295,6 @@ def get_model_fn(
                 increment_global_step=True,
                 summaries=summaries,
                 colocate_gradients_with_ops=True,
-#                variables=trained_variables,
             )
 
         if mode == tf.estimator.ModeKeys.PREDICT:
