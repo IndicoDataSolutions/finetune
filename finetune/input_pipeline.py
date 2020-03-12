@@ -18,7 +18,7 @@ from sklearn.preprocessing import LabelBinarizer
 from sklearn.utils import shuffle as dataset_shuffle
 import finetune
 from finetune.errors import FinetuneError
-from finetune.encoding.input_encoder import ArrayEncodedOutput, EncodedOutput, tokenize_context
+from finetune.encoding.input_encoder import EncodedOutput, tokenize_context
 from finetune.util.imbalance import compute_class_weights
 from finetune.util.timing import ProgressBar
 

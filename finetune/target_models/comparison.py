@@ -5,7 +5,7 @@ import copy
 from finetune.errors import FinetuneError
 from finetune.base import BaseModel
 from finetune.target_models.classifier import Classifier, ClassificationPipeline
-from finetune.encoding.input_encoder import ArrayEncodedOutput, tokenize_context
+from finetune.encoding.input_encoder import  EncodedOutput, tokenize_context
 from finetune.nn.auxiliary import add_context_embed
 
 
@@ -30,7 +30,7 @@ class ComparisonPipeline(ClassificationPipeline):
         kwargs["token_ids"] = np.stack(
             [arr_forward.token_ids, arr_backward.token_ids], 0
         )
-        yield ArrayEncodedOutput(**kwargs)
+        yield EncodedOutput(**kwargs)
 
     def text_to_tokens_mask(self, pair, Y=None, context=None):
         out_gen = self._text_to_ids(pair, pad_token=self.config.pad_token)
@@ -38,16 +38,15 @@ class ComparisonPipeline(ClassificationPipeline):
             if context is None:
                 feats = {"tokens": out.token_ids}
             else:
-                out_forward = ArrayEncodedOutput(
+                out_forward = EncodedOutput(
                     token_ids=out.token_ids[0],
                     tokens=out.token_ids[0],
                     token_ends=out.token_ends,
                     token_starts=out.token_starts,
                 )
-                out_backward = ArrayEncodedOutput(
+                out_backward = EncodedOutput(
                     token_ids=out.token_ids[1],
                     tokens=out.token_ids[1],
-                    labels=None,
                     token_ends=out.token_ends,
                     token_starts=out.token_starts,
                 )

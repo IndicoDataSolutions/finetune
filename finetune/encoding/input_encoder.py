@@ -22,17 +22,6 @@ EncodedOutput = namedtuple(
     ],
 )
 EncodedOutput.__new__.__defaults__ = (None,) * len(EncodedOutput._fields)
-ArrayEncodedOutput = namedtuple(
-    "ArrayEncodedOutput",
-    [
-        "token_ids",  # int array shape (batch, seq_length)
-        "tokens",  # list of list of subtokens (str) passed through from `EncoderOutput`
-        "labels",  # object array shape (batch, seq_length)
-        "token_ends",  # list of list of char_locs (int) passed through from `EncoderOutput`
-        "token_starts",
-    ],
-)
-ArrayEncodedOutput.__new__.__defaults__ = (None,) * len(ArrayEncodedOutput._fields)
 
 SUBS = {"—": "-", "–": "-", "―": "-", "…": "...", "´": "'"}
 
@@ -176,10 +165,10 @@ class BaseEncoder(object):
         token_starts = self._cut_and_concat(encoded=encoded.token_starts, max_length=max_length, special_tokens=-1)
 
         return EncodedOutput(
-            token_ids=token_ids,
-            tokens=tokens,
-            token_ends=token_ends,
-            token_starts=token_starts,
+            token_ids=np.asarray(token_ids),
+            tokens=np.array(tokens),
+            token_ends=np.asarray(token_ends),
+            token_starts=np.asarray(token_starts),
         )
 
     def __setstate__(self, state):

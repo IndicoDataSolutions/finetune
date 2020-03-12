@@ -21,7 +21,7 @@ from finetune.util.metrics import (
     sequence_labeling_token_recall,
 )
 from finetune.datasets.reuters import Reuters
-from finetune.encoding.input_encoder import tokenize_context, ArrayEncodedOutput
+from finetune.encoding.input_encoder import tokenize_context, EncodedOutput
 
 
 # prevent excessive warning logs
@@ -30,7 +30,7 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 class TestAuxiliaryTokenization(unittest.TestCase):
     def test_tokenize_context(self):
-        encoded_output = ArrayEncodedOutput(
+        encoded_output = EncodedOutput(
             token_ids=[
                 [40478, 40481],
                 [ 1180, 40482],
