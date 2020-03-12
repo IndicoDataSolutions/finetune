@@ -2,7 +2,6 @@ import tensorflow as tf
 import numpy as np
 
 from finetune.encoding.target_encoders import RegressionEncoder
-from finetune.encoding.input_encoder import ArrayEncodedOutput
 from finetune.target_models.comparison import ComparisonPipeline
 from finetune.nn.target_blocks import regressor
 from finetune.base import BaseModel

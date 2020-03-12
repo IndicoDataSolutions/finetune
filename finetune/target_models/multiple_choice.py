@@ -2,7 +2,7 @@ import numpy as np
 
 from finetune.base import BaseModel
 from finetune.input_pipeline import BasePipeline
-from finetune.encoding.input_encoder import ArrayEncodedOutput
+from finetune.encoding.input_encoder import EncodedOutput
 from finetune.encoding.target_encoders import IDEncoder
 import tensorflow as tf
 
@@ -43,7 +43,7 @@ class MultipleChoicePipeline(BasePipeline):
         max_len = max([len(arr.token_ids) for arr in arrays])
         kwargs["tokens"] = [arr.tokens for arr in arrays]
         kwargs["token_ids"] = padded_stack([arr.token_ids for arr in arrays])
-        yield ArrayEncodedOutput(**kwargs)
+        yield EncodedOutput(**kwargs)
 
     def text_to_tokens_mask(self, pair, Y=None, context=None):
         out_gen = self._text_to_ids(pair, pad_token=self.config.pad_token)
@@ -54,7 +54,7 @@ class MultipleChoicePipeline(BasePipeline):
                 num_answers = len(out.tokens)
                 tokenized_context = []
                 for answer_idx in range(num_answers):
-                    out_instance = ArrayEncodedOutput(
+                    out_instance = EncodedOutput(
                         token_ids=out.token_ids[answer_idx],
                         tokens=out.token_ids[answer_idx],
                         token_ends=out.token_ends,
