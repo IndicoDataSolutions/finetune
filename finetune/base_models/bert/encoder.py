@@ -69,10 +69,10 @@ class BERTEncoder(BaseEncoder):
             batch_char_starts.append(token_starts)
 
         return EncodedOutput(
-            token_ids=np.asarray(batch_token_idxs),
-            tokens=np.asarray(batch_tokens),
-            token_ends=np.asarray(batch_char_ends),
-            token_starts=np.asarray(batch_char_starts),
+            token_ids=batch_token_idxs,
+            tokens=batch_tokens,
+            token_ends=batch_char_ends,
+            token_starts=batch_char_starts,
         )
 
     def decode(self, ids):
