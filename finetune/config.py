@@ -54,7 +54,7 @@ def all_gpus(visible_gpus=None):
         device_ids = nvidia_device_ids()
         mapping = None
         # restricting GPUs based on env vars
-        if cuda_visible_devices:
+        if cuda_visible_devices is not None:
             device_ids = {
                 device_id: description
                 for device_id, description in device_ids.items()
