@@ -9,6 +9,49 @@ from finetune.nn.target_blocks import smooth_pos_attn
 from finetune.errors import FinetuneError
 from finetune.nn.auxiliary import dense_with_custom_init
 
+def get_decay_for_half(total_num_steps):
+    rate = tf.minimum(tf.cast(tf.train.get_global_step(), tf.float32) / (total_num_steps / 2), 1.0)
+    tf.summary.scalar("pos_decay", rate)
+    return tf.Print(rate, ["Current Decay Rate: ", rate])
+
+def non_normed_dropout(x, rate, noise_shape=None):
+    if noise_shape is None:
+        noise_shape = tf.shape(x)
+    return tf.cast(tf.random.uniform(shape=noise_shape) < rate, tf.float32) * x
+
+def pos_mask_dropout_scheduled(train, total_num_steps):
+    def proc(x):
+        rate = get_decay_for_half(total_num_steps)
+        return non_normed_dropout(x, rate, noise_shape=[tf.shape(x)[0], 1])
+    return proc
+
+def full_mask_dropout_scheduled(train, total_num_steps):
+    def	proc(x):
+        rate = get_decay_for_half(total_num_steps)
+        return non_normed_dropout(x, rate)
+    return proc
+
+def linear_decay(train, total_num_steps):
+    def proc(x):
+        return x * (1.0 - get_decay_for_half(total_num_steps))
+    return proc
+
+def get_pos_embedding_transform(proc_type, train, total_num_steps):
+    assert total_num_steps is not None
+    print(proc_type, train, total_num_steps)
+    if proc_type is None:
+        return None
+    if proc_type == "full_mask":
+        return full_mask_dropout_scheduled(train, total_num_steps)
+    elif proc_type == "pos_mask":
+        return pos_mask_dropout_scheduled(train, total_num_steps)
+    elif proc_type == "decay":
+        return linear_decay(train, total_num_steps)
+    elif proc_type == "zero_out":
+        return tf.zeros_like
+    else:
+        raise ValueError("embed proc {} not recognised".format(proc_type))
+
 
 def bert_featurizer(
     X,
@@ -17,6 +60,7 @@ def bert_featurizer(
     train=False,
     reuse=None,
     context=None,
+    total_num_steps=None,
     **kwargs
 ):
     """
@@ -55,6 +99,7 @@ def bert_featurizer(
         n_layers_with_aux=config.n_layers_with_aux,
         pos_injection=config.pos_injection,
         use_position_embeddings=config.use_reading_order_position,
+        pos_embedding_transform=get_pos_embedding_transform(config.pos_embedding_transform, train, total_num_steps)
     )
 
     initial_shape = tf.shape(X)

@@ -194,6 +194,7 @@ def get_model_fn(
         task_id = features.get("task_id", None)
         Y = labels
         pred_op = None
+        total_num_steps = params.n_epochs * params.dataset_size // (params.batch_size * n_replicas)
         with tf.variable_scope(tf.get_variable_scope()):
             train_loss = 0.0
             if params.context_in_base_model or params.pos_injection:
@@ -206,7 +207,8 @@ def get_model_fn(
                         config=params,
                         train=train,
                         explain=build_explain,
-                        context=pos_embed
+                        context=pos_embed,
+                        total_num_steps=total_num_steps,
                     )
                 else:
                     raise NotImplementedError('context_in_base_model not implemented for non-bidirectional models.')
@@ -217,6 +219,7 @@ def get_model_fn(
                     config=params,
                     train=train,
                     explain=build_explain,
+                    total_num_steps=total_num_steps,
                 )
             if context is not None and not params.context_in_base_model and not params.pos_injection:
                 batch, seq, _ = shape_list(featurizer_state['sequence_features'])
@@ -327,7 +330,6 @@ def get_model_fn(
                             ]
 
         if mode == tf.estimator.ModeKeys.TRAIN:
-            total_num_steps = params.n_epochs * params.dataset_size // (params.batch_size * n_replicas)
             lr_decay = lambda lr, global_step: tf.maximum(
                 0.0,
                 lr

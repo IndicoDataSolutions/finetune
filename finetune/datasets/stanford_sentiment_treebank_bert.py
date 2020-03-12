@@ -12,7 +12,10 @@ logging.basicConfig(level=logging.DEBUG)
 if __name__ == "__main__":
     # Train and evaluate on SST
     dataset = StanfordSentimentTreebank(nrows=1000).dataframe
-    model = Classifier(val_size=0.0, max_length=512, base_model=BERTModelCased, batch_size=32, low_memory_mode=True, accum_steps=3)
+    model = Classifier(val_size=0.0, max_length=512, base_model=BERTModelCased, batch_size=32, low_memory_mode=True,
+                       pos_embedding_transform="pos_mask"
+                       
+    )
     print(model.config.base_model_path)
     trainX, testX, trainY, testY = train_test_split(dataset.Text.values, dataset.Target.values, test_size=0.3, random_state=42)
     model.fit(trainX, trainY)

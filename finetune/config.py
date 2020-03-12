@@ -407,6 +407,7 @@ def get_default_config():
         table_mask_bias=False,
         mask_spans=1,
         word_masks=False,
+        pos_embedding_transform=None,
 
         # Serialize finetune version with model
         version=VERSION,

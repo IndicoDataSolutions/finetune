@@ -51,6 +51,7 @@ class BertConfig(object):
             n_layers_with_aux=-1,
             pos_injection=False,
             use_position_embeddings=True,
+            pos_embedding_transform=None,
     ):
         """Constructs BertConfig.
 
@@ -95,6 +96,7 @@ class BertConfig(object):
         self.n_layers_with_aux = n_layers_with_aux
         self.pos_injection = pos_injection
         self.use_position_embeddings = use_position_embeddings
+        self.pos_embedding_transform = pos_embedding_transform
 
     @classmethod
     def from_dict(cls, json_object):
@@ -217,6 +219,7 @@ class BertModel(object):
                     roberta=roberta,
                     context=context,
                     pos_injection=config.pos_injection,
+                    pos_embedding_transform=config.pos_embedding_transform,
                 )
 
             with tf.variable_scope("encoder"):
@@ -460,6 +463,7 @@ def embedding_postprocessor(
         roberta=False,
         context=None,
         pos_injection=False,
+        pos_embedding_transform=None
 ):
     """Performs various post-processing on a word embedding tensor.
 
@@ -522,6 +526,8 @@ def embedding_postprocessor(
                 shape=[max_position_embeddings, width],
                 initializer=create_initializer(initializer_range),
             )
+            if pos_embedding_transform:
+                full_position_embeddings = pos_embedding_transform(full_position_embeddings)
             # Since the position embedding table is a learned variable, we create it
             # using a (long) sequence length `max_position_embeddings`. The actual
             # sequence length might be shorter than this, for faster training of
