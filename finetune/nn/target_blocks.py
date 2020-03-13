@@ -96,8 +96,12 @@ def masked_language_model_(*, X, M, mlm_weights, mlm_ids, mlm_positions, targets
         normed_proj = norm(final_proj, 'LayerNorm')
         n_vocab = shape_list(embed_weights)[0]
         output_bias = tf.get_variable(
-            "output_bias",
-            shape=[n_vocab],
+            #"output_bias",
+            "output_bias_posreg",
+            #shape=[n_vocab],
+            # We are regressing into 4D space...
+            # might be a good idea to do top left + offset?
+            shape=[4],
             initializer=tf.zeros_initializer()
         )
         
@@ -111,7 +115,7 @@ def masked_language_model_(*, X, M, mlm_weights, mlm_ids, mlm_positions, targets
 
         logits = tf.matmul(normed_proj, embed_weights, transpose_b=True)
         logits = tf.reshape(tf.matmul(logits, regression_matrix), [-1,4])
-        #logits = tf.nn.bias_add(logits, output_bias)
+        logits = tf.nn.bias_add(logits, output_bias)
         # Swapping out old logit stuff
         #mlm_loss = tf.contrib.losses.sparse_softmax_cross_entropy(
         mlm_loss = tf.contrib.losses.mean_squared_error(
