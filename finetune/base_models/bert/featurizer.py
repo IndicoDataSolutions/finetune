@@ -17,7 +17,7 @@ def get_decay_for_half(total_num_steps):
 def non_normed_dropout(x, rate, noise_shape=None):
     if noise_shape is None:
         noise_shape = tf.shape(x)
-    return tf.cast(tf.random.uniform(shape=noise_shape) < rate, tf.float32) * x
+    return tf.cast(tf.random.uniform(shape=noise_shape) > rate, tf.float32) * x
 
 def pos_mask_dropout_scheduled(train, total_num_steps):
     def proc(x):
