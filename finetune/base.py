@@ -246,7 +246,8 @@ class BaseModel(object, metaclass=ABCMeta):
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            estimator.train(train_input_fn, hooks=train_hooks, steps=num_steps)
+            train_input_fn_skipped = lambda: train_input_fn().skip(self.saver.get_initial_step() * max(len(self.resolved_gpus), 1))
+            estimator.train(train_input_fn_skipped, hooks=train_hooks, steps=num_steps)
         
         self._trained = True
 
