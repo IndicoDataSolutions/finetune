@@ -184,6 +184,11 @@ class Saver:
             cache_weights_to_file=cache_weights_to_file
         )
 
+    def get_initial_step(self):
+        if not self.restart_global_step:
+            return self.fallback.get("global_step:0", 0)
+        return 0
+
     def save(self, finetune_obj, path, mkdir=True):
         if self.variables is None:
             raise FinetuneError("Cowardly refusing to save default model.")
