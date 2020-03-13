@@ -400,6 +400,7 @@ def get_default_config():
         mlm_baseline=False,  # single projection after last layer of base model
         n_layers_with_aux=0,  # if -1, add to all layers
         mlm_context_shuffle_val=False,
+        seq_labeling_2d_spans=True,
 
         cps_swap_proba=0.0,
         pos_injection=False,

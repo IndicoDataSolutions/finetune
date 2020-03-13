@@ -18,6 +18,7 @@ from finetune.encoding.sequence_encoder import (
 from finetune.encoding.input_encoder import NLP
 from finetune.input_pipeline import BasePipeline
 from finetune.encoding.input_encoder import tokenize_context
+from finetune.util.metrics import sequences_overlap
 
 
 class SequencePipeline(BasePipeline):
@@ -85,7 +86,40 @@ class SequencePipeline(BasePipeline):
             return SequenceMultiLabelingEncoder(pad_token=self.config.pad_token)
         return SequenceLabelingEncoder(pad_token=self.config.pad_token)
 
+def _context_same_cluster(a, b, thresholds=None):
+    thresholds = thresholds or {"lr": 0.5, "tb": 0.5} 
+    for ai in a:
+        atb = abs(ai["bottom"] - ai["top"])
+        alr = abs(ai["right"] - ai["left"])
+        for bi in b:
+            btb = abs(bi["bottom"] - bi["top"])
+            blr = abs(bi["right"] - bi["left"])
+            
+            ttb = max(btb, atb)
+            tlr = max(blr, alr)
+            if min(abs(ai["left"] - bi["right"]), abs(ai["right"] - bi["left"])) < thresholds["lr"] * tlr:
+                return True
+            if min(abs(ai["top"] - bi["bottom"]), abs(ai["bottom"] - bi["top"])) < thresholds["tb"] * ttb:
+                return True
+    return False
 
+
+def _format_positional_seqments(x):
+    start = x["start_segments"]
+    argsorted = [i for i, _ in sorted(enumerate(start), key=lambda i_s: i_s[1])]
+    x["start_segments"] = [x["start_segments"][i] for i in argsorted]
+    x["end_segments"] = [x["end_segments"][i] for i in argsorted]
+    x["text_segments"] = [x["text_segments"][i] for i in argsorted]
+    x["contexts"] = sorted(x["contexts"], key=lambda ci: ci["start"])
+    x["text"] = " ".join(x["text_segments"])
+    x["confidence_segments"] = [x["confidence_segments"][i] for i in argsorted]
+    count = len(x["confidence_segments"])
+    x["confidence"] = {
+        k: (
+            sum(conf[k] for conf in x["confidence_segments"]) / count
+        ) for k in x["confidence_segments"][0].keys()
+    }
+    
 def _combine_and_format(subtokens, start, end, raw_text):
     """
     Combine predictions on many subtokens into a single token prediction.
@@ -264,6 +298,46 @@ class SequenceLabeler(BaseModel):
             none_value=self.config.pad_token,
             subtoken_predictions=self.config.subtoken_predictions,
         )
+
+        if context is not None and self.config.seq_labeling_2d_spans:
+            doc_annotations_out = []
+            for annotation, sample_context in zip(doc_annotations, context):
+                for single_label in annotation:
+                    single_label["contexts"] = []
+                    for cont in sample_context:
+                        if sequences_overlap(cont, single_label):
+                            single_label["contexts"].append(cont) # cannot break here because one label has multiple contexts.
+                    if not single_label["contexts"] and single_label["text"].strip():
+                        print(single_label)
+                        raise FinetuneError("Context does not cover char idx: {} to {}".format(single_label["start"], single_label["end"]))
+                    single_label["start_segments"] = [single_label.pop("start")]
+                    single_label["end_segments"] = [single_label.pop("end")]
+                    single_label["text_segments"] = [single_label.pop("text")]
+                    single_label["confidence_segments"] = [single_label.pop("confidence")]
+      
+                for _ in range(len(annotation)):
+                    len_at_start = len(annotation)
+                    annotation_out = [annotation[0]]
+                    annotation = annotation[1:]
+                    for a in annotation:
+                        for out in annotation_out:
+                            if a["label"] == out["label"] and _context_same_cluster(a["contexts"], out["contexts"]):
+                                out["start_segments"] += a["start_segments"]
+                                out["end_segments"] += a["end_segments"]
+                                out["text_segments"] += a["text_segments"]
+                                out["contexts"] += a["contexts"]
+                                out["confidence_segments"] += a["confidence_segments"]
+                                break
+                        else:
+                            annotation_out.append(a)
+                    annotation = annotation_out
+                    if len(annotation_out) == len_at_start:
+                        break
+                    
+                for anno in annotation:
+                    _format_positional_seqments(anno)
+                doc_annotations_out.append(annotation)
+            doc_annotations = doc_annotations_out
 
         if per_token:
             return [
