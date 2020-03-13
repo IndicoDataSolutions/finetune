@@ -479,9 +479,9 @@ class BasePipeline(metaclass=ABCMeta):
                         if self.config.add_eos_bos_to_chunk:
                             start_token, end_token = field_starts_and_ends[field]
                             if fv[0] != start_token:
-                                fv = [start_token] + fv
+                                fv = np.concatenate(([start_token], fv))
                             if fv[-1] != end_token:
-                                fv = fv + [end_token]
+                                fv = np.concatenate((fv, [end_token]))
                         d[field] = fv
                 yield EncodedOutput(**d)
         else:
