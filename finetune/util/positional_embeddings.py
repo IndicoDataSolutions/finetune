@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 from scipy import interpolate
 
@@ -17,13 +19,14 @@ def process_pos_embed(positional_embed, max_length, interpolate):
         positional_embed = interpolate_pos_embed(positional_embed, max_length)
 
     elif max_length > len(positional_embed):
-        raise ValueError(
-            "Max Length cannot be greater than {} if interpolate_pos_embed is turned off".format(
-                len(positional_embed)
-            )
-        )
-    else:
-        positional_embed = positional_embed[:max_length]
+#        raise ValueError(
+#            "Max Length cannot be greater than {} if interpolate_pos_embed is turned off".format(
+#                len(positional_embed)
+#            )
+#        )
+        positional_embed = np.tile(positional_embed, [math.ceil(max_length / len(positional_embed)), 1])
+        
+    positional_embed = positional_embed[:max_length]
     return positional_embed
 
 

@@ -271,8 +271,8 @@ class Saver:
             global_step_var = tf.train.get_global_step()
 
             for var in all_vars:
-                if global_step_var is not None and global_step_var.name == var.name:
-                    continue
+#                if global_step_var is not None and global_step_var.name == var.name:
+#                    continue
                 name = var.name
                 saved_var = None
                 if name in variables_sv.keys():
