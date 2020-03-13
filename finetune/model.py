@@ -202,6 +202,11 @@ def get_model_fn(
                         X=X, params=params, featurizer_state=featurizer_state, mode=mode, encoder=encoder
                     )
                 elif lm_type.lower() == 'mlm':
+                    if "mlm_weights" not in features:
+                        raise FinetuneError(
+                            "MLM pretraining must be performed through MaskedLanguageModel model type,"
+                            " please either provide targets or switch to the MaskedLanagugeModel."
+                        )
                     language_model_state = masked_language_model_op(
                         X=X, 
                         mlm_weights=features['mlm_weights'],
