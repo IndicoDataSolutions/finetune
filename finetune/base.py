@@ -141,6 +141,16 @@ class BaseModel(object, metaclass=ABCMeta):
             save_dtype=self.config.save_dtype,
         )
 
+    def init_from_checkpoint(self, checkpoint_path):
+        if self._trained:
+            raise FinetuneError("Cannot reinitialize trained model from checkpoint")
+        self.saver = Saver(
+            fallback_filename=checkpoint_path,
+            exclude_matches=None if self.config.save_adam_vars else "Adam",
+            save_dtype=self.config.save_dtype,
+            restart_global_step=False,
+        )
+
     @abstractmethod
     def _predict_op(self, logits, **kwargs):
         raise NotImplementedError
@@ -182,7 +192,6 @@ class BaseModel(object, metaclass=ABCMeta):
                     len(Xs), len(Y)
                 )
             )
-
         batch_size = batch_size or self.config.batch_size
         val_input_fn, train_input_fn, val_size, val_interval = self.input_pipeline.get_train_input_fns(
             Xs, Y, batch_size=batch_size, context=context, update_hook=update_hook
