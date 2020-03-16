@@ -105,6 +105,7 @@ class BaseModel(object, metaclass=ABCMeta):
             self.estimator_dir = os.path.abspath(
                 os.path.join(self.config.tensorboard_folder, str(int(time.time())))
             )
+            self.config.tensorboard_folder = self.estimator_dir # TODO(ben) route this thhrough properly
             pathlib.Path(self.estimator_dir).mkdir(parents=True, exist_ok=True)
             self._tmp_dir = None
         except (TypeError, IOError):
