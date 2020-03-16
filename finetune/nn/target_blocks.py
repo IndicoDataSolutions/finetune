@@ -119,7 +119,8 @@ def masked_language_model_(*, X, M, mlm_weights, mlm_ids, mlm_positions, targets
         # Swapping out old logit stuff
         #mlm_loss = tf.contrib.losses.sparse_softmax_cross_entropy(
         mlm_loss = tf.contrib.losses.mean_squared_error(
-            logits,
+            #logits,
+            tf.broadcast_to(output_bias, tf.shape(targets)),
             targets,
             # Commenting out while testing positional loss
             #mlm_ids,
