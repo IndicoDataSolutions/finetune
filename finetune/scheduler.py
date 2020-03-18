@@ -37,7 +37,7 @@ class Scheduler:
                 name = self.loaded_models.pop(0)
                 self.model_cache[name].close()
                 del self.model_cache[name]
-            out_model = BaseModel.load(model) # doesn't matter its classifier                                                                        
+            out_model = BaseModel.load(model)                                                                        
             self.model_cache[model] = out_model
         else:
             out_model = self.model_cache[model]
