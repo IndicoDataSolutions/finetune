@@ -55,3 +55,6 @@ class TestScheduler(unittest.TestCase):
         time2_end = time.time()
         self.assertLess(time2_end - time2_start, time_mid - time_pre - 1) # Assert that it is still quicker.
         shed.predict_proba(m1, ["A"])
+        shed.featurize(m1, ["A"])
+        shed.featurize(m1, ["A"])
+        shed.featurize_sequence(m1, ["A"])
