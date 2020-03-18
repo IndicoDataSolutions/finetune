@@ -12,6 +12,8 @@ from finetune.nn.activations import act_fns
 from finetune.nn.nn_utils import norm
 from finetune.nn.auxiliary import dense_with_custom_init
 
+from finetune.utils.debias_loss import LearnedMixin
+
 def perceptron(x, ny, config, w_init=None, b_init=None):
     """
     A very standard linear Perceptron model.
@@ -592,11 +594,15 @@ def sequence_labeler(
                         weights = tf.sequence_mask(
                             lengths, maxlen=tf.shape(targets)[1], dtype=tf.float32
                         ) / tf.expand_dims(tf.cast(lengths, tf.float32), -1)
-                        loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(
-                            targets,
-                            logits,
-                            weights=weights
-                        )
+                        # simple cross entropy
+                        # loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(
+                        #     targets,
+                        #     logits,
+                        #     weights=weights
+                        # )
+
+                        # debiased loss
+                        loss = LearnedMixin.compute_clf_loss(hidden, logits, featurizer_state["bias"], targets, weights=weights)
 
         return {
             "logits": logits,
