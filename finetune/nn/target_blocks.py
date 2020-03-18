@@ -594,15 +594,15 @@ def sequence_labeler(
                         weights = tf.sequence_mask(
                             lengths, maxlen=tf.shape(targets)[1], dtype=tf.float32
                         ) / tf.expand_dims(tf.cast(lengths, tf.float32), -1)
-                        # simple cross entropy
-                        # loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(
-                        #     targets,
-                        #     logits,
-                        #     weights=weights
-                        # )
-
-                        # debiased loss
-                        loss = LearnedMixin.compute_clf_loss(hidden, logits, featurizer_state["bias"], targets, weights=weights)
+                        if config.debias_loss:
+                            # debiased loss
+                            loss = LearnedMixin.compute_clf_loss(hidden, logits, featurizer_state["bias"], targets, weights=weights)
+                        else:
+                            loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(
+                                targets,
+                                logits,
+                                weights=weights
+                            )
 
         return {
             "logits": logits,

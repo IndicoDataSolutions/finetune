@@ -410,6 +410,9 @@ def get_default_config():
 
         # Serialize finetune version with model
         version=VERSION,
+        
+        # debias loss
+        debias_loss=False,
     )
     return settings
 
