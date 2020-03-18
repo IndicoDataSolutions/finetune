@@ -304,7 +304,8 @@ class SequenceLabeler(BaseModel):
         :param X: A list / array of text, shape [batch]
         :returns: list of class labels.
         """
-        return self.predict(X, context=context, **kwargs)
+        return super().predict_proba(X, context=context, **kwargs)
+        # return self.predict(X, context=context, **kwargs)
 
     def _target_model(
         self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
