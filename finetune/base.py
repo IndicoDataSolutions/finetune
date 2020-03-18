@@ -361,6 +361,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self.close()
 
     def _inference(self, Xs, predict_keys=None, n_examples=None, context=None, update_hook=None):
+
         Xs = self.input_pipeline._format_for_inference(Xs)
         input_fn = self.input_pipeline.get_predict_input_fn(Xs, context=context)
 
@@ -370,6 +371,11 @@ class BaseModel(object, metaclass=ABCMeta):
         length = len(Xs) if not callable(Xs) else None
 
         if self._cached_predict:
+            # Add commonly used (cheap) predict keys to the graph to prevent having to rebuild
+            predict_keys = list(
+                {PredictMode.FEATURIZE, PredictMode.SEQUENCE, PredictMode.NORMAL, PredictMode.PROBAS} |
+                set(predict_keys or {})
+            )
             prediction_iterator = estimator.cached_predict(
                 input_fn=input_fn, predict_keys=predict_keys, hooks=hooks
             )
