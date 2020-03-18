@@ -12,7 +12,7 @@ from finetune.nn.activations import act_fns
 from finetune.nn.nn_utils import norm
 from finetune.nn.auxiliary import dense_with_custom_init
 
-from finetune.utils.debias_loss import LearnedMixin
+from finetune.util.debias_loss import LearnedMixin
 
 def perceptron(x, ny, config, w_init=None, b_init=None):
     """

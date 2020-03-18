@@ -1,7 +1,7 @@
 import tensorflow as tf
 
-from finetune.utils import debias_ops as ops
-from finetune.utils.debias_configured import Configured
+from finetune.util import debias_ops as ops
+from finetune.util.debias_configured import Configured
 
 
 class ClfDebiasLossFunction(Configured):
