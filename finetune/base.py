@@ -360,9 +360,23 @@ class BaseModel(object, metaclass=ABCMeta):
         self._cached_predict = False
         self.close()
 
+    def _sort_by_length(self, Xs):
+        """
+        Returns the sorted array and the idxs to invert the sort operation
+        """
+        lengths = [len(X) for X in Xs]
+        sorted_idxs = np.argsort(lengths)
+        invert_idxs = np.zeros(sorted_idxs.shape, dtype=int)
+        invert_idxs[sorted_idxs] = np.arange(sorted_idxs.shape[0])
+        return np.asarray(Xs)[sorted_idxs], invert_idxs
+
     def _inference(self, Xs, predict_keys=None, n_examples=None, context=None, update_hook=None):
 
         Xs = self.input_pipeline._format_for_inference(Xs)
+        
+        if self.config.sort_by_length:
+            Xs, invert_idxs = self._sort_by_length(Xs)
+
         input_fn = self.input_pipeline.get_predict_input_fn(Xs, context=context)
 
         estimator, hooks = self.get_estimator(
@@ -372,12 +386,12 @@ class BaseModel(object, metaclass=ABCMeta):
 
         if self._cached_predict:
             # Add commonly used (cheap) predict keys to the graph to prevent having to rebuild
-            predict_keys = list(
+            required_predict_keys = list(
                 {PredictMode.FEATURIZE, PredictMode.SEQUENCE, PredictMode.NORMAL, PredictMode.PROBAS} |
                 set(predict_keys or {})
             )
             prediction_iterator = estimator.cached_predict(
-                input_fn=input_fn, predict_keys=predict_keys, hooks=hooks
+                input_fn=input_fn, predict_keys=required_predict_keys, hooks=hooks
             )
         else:
             prediction_iterator = estimator.predict(
@@ -391,10 +405,14 @@ class BaseModel(object, metaclass=ABCMeta):
             update_hook=update_hook
         )
         try:
-            return [
+            outputs = np.asarray([
                 pred[predict_keys[0]] if len(predict_keys) == 1 else pred
                 for pred in predictions
-            ]
+            ])
+            if self.config.sort_by_length:
+                outputs = outputs[invert_idxs]
+            return outputs.tolist()
+
         except ValueError:
             raise FinetuneError(
                 "Cannot call `predict()` on a model that has not been fit."
