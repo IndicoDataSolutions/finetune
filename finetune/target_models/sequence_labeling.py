@@ -18,6 +18,7 @@ from finetune.encoding.sequence_encoder import (
 from finetune.encoding.input_encoder import NLP
 from finetune.input_pipeline import BasePipeline
 from finetune.encoding.input_encoder import tokenize_context
+from finetune.model import PredictMode
 
 
 class SequencePipeline(BasePipeline):
@@ -352,4 +353,11 @@ class SequenceLabeler(BaseModel):
         return label_idxs, label_probas
 
     def _predict_proba_op(self, logits, **kwargs):
-        return tf.no_op()
+        return logits
+
+    def _predict_proba(self, Xs, context=None, **kwargs):
+        """
+        Produce raw numeric outputs for proba predictions
+        """
+        raw_preds = self._inference(Xs, predict_keys=[PredictMode.SEQUENCE_PROBAS], context=context, **kwargs)
+        return raw_preds
