@@ -1,5 +1,5 @@
 import tensorflow as tf
-from finetune import Classifier
+from finetune.base import BaseModel
 
 class Scheduler:
     def __init__(self, max_models=None):
@@ -37,9 +37,8 @@ class Scheduler:
                 name = self.loaded_models.pop(0)
                 self.model_cache[name].close()
                 del self.model_cache[name]
-            out_model = Classifier.load(model) # doesn't matter its classifier                                                                        
+            out_model = BaseModel.load(model) # doesn't matter its classifier                                                                        
             self.model_cache[model] = out_model
-
         else:
             out_model = self.model_cache[model]
             self.loaded_models.remove(model) # put it back at the end of the queue
@@ -74,9 +73,9 @@ class Scheduler:
 
     def featurize(self, model_file, x, *args, **kwargs):
         model = self._rotate_in_model(model_file)
-        attn_weights = model.featurize(x, *args, **kwargs)
+        features = model.featurize(x, *args, **kwargs)
         self._update_memory_limit()
-        return attn_weights
+        return features
 
     def featurize_sequence(self, model_file, x, *args, **kwargs):
         model = self._rotate_in_model(model_file)
