@@ -276,7 +276,9 @@ def get_model_fn(
                         predictions.update(pred_proba_op)
                     else:
                         predictions[PredictMode.NORMAL] = pred_op
-                        predictions[PredictMode.PROBAS] = pred_proba_op
+                        # NOTE: this is a hack that needs to be fixed at some point
+                        # predictions[PredictMode.PROBAS] = pred_proba_op
+                        predictions[PredictMode.SEQUENCE_PROBAS] = pred_proba_op
                     if build_explain:
                         predictions[PredictMode.EXPLAIN] = target_model_state[
                             "explanation"
