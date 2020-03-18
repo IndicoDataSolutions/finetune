@@ -87,7 +87,13 @@ class SequencePipeline(BasePipeline):
         return SequenceLabelingEncoder(pad_token=self.config.pad_token)
 
 def _context_same_cluster(a, b, thresholds=None):
-    thresholds = thresholds or {"lr": 0.5, "tb": 0.5} 
+    thresholds = thresholds or {"lr": 0.5, "tb": 0.5}
+    if not isinstance(thresholds, dict):
+        thresholds = {"lr": thresholds, "tb": thresholds}
+
+    if "lr" not in thresholds or "tb" not in thresholds:
+        raise FinetuneError("threshold dict {} does not contain the required keys lr, and tb")
+        
     for ai in a:
         atb = abs(ai["bottom"] - ai["top"])
         alr = abs(ai["right"] - ai["left"])
@@ -97,6 +103,7 @@ def _context_same_cluster(a, b, thresholds=None):
             
             ttb = max(btb, atb)
             tlr = max(blr, alr)
+
             if min(abs(ai["left"] - bi["right"]), abs(ai["right"] - bi["left"])) < thresholds["lr"] * tlr:
                 return True
             if min(abs(ai["top"] - bi["bottom"]), abs(ai["bottom"] - bi["top"])) < thresholds["tb"] * ttb:
@@ -308,7 +315,6 @@ class SequenceLabeler(BaseModel):
                         if sequences_overlap(cont, single_label):
                             single_label["contexts"].append(cont) # cannot break here because one label has multiple contexts.
                     if not single_label["contexts"] and single_label["text"].strip():
-                        print(single_label)
                         raise FinetuneError("Context does not cover char idx: {} to {}".format(single_label["start"], single_label["end"]))
                     single_label["start_segments"] = [single_label.pop("start")]
                     single_label["end_segments"] = [single_label.pop("end")]
@@ -321,7 +327,7 @@ class SequenceLabeler(BaseModel):
                     annotation = annotation[1:]
                     for a in annotation:
                         for out in annotation_out:
-                            if a["label"] == out["label"] and _context_same_cluster(a["contexts"], out["contexts"]):
+                            if a["label"] == out["label"] and _context_same_cluster(a["contexts"], out["contexts"], thresholds=self.config.predict_span_threshold):
                                 out["start_segments"] += a["start_segments"]
                                 out["end_segments"] += a["end_segments"]
                                 out["text_segments"] += a["text_segments"]

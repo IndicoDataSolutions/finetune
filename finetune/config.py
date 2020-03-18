@@ -54,7 +54,7 @@ def all_gpus(visible_gpus=None):
         device_ids = nvidia_device_ids()
         mapping = None
         # restricting GPUs based on env vars
-        if cuda_visible_devices:
+        if cuda_visible_devices is not None:
             device_ids = {
                 device_id: description
                 for device_id, description in device_ids.items()
@@ -340,6 +340,7 @@ def get_default_config():
         filter_empty_examples=False,
         crf_sequence_labeling=True,
         use_gpu_crf_predict="auto",
+        predict_span_threshold=0.5,
 
         # Regression Params
         regression_loss="L2",
