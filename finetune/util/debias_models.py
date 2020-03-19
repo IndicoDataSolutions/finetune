@@ -20,9 +20,7 @@ class TextBiasModel(BiasModel):
         self.model = model
 
     def fit(self, X, y):
-        print(X[:5])
         X = anonymize_headers(X)
-        print(X[:5])
         self.model.fit(X, y)
     
     def get_log_probas(self, X):
