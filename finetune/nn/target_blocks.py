@@ -596,7 +596,7 @@ def sequence_labeler(
                         ) / tf.expand_dims(tf.cast(lengths, tf.float32), -1)
                         if config.debias_loss:
                             # debiased loss
-                            loss = LearnedMixin.compute_clf_loss(hidden, logits, featurizer_state["bias"], targets, weights=weights)
+                            loss = LearnedMixin(w=0.01).compute_clf_loss(hidden, logits, featurizer_state["bias"], targets, weights=weights)
                         else:
                             loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(
                                 targets,
