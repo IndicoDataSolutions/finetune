@@ -25,4 +25,5 @@ class TextBiasModel(BiasModel):
     
     def get_log_probas(self, X):
         probs = [results[5] for results in self.model.process_long_sequence(X)]
-        return tf.convert_to_tensor(np.log(np.array(probs)))
+        return np.log(np.array(probs))
+        # return tf.convert_to_tensor(np.log(np.array(probs)))
