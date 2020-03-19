@@ -11,7 +11,7 @@ class BiasModel(object):
 def anonymize_headers(X):
     new_X = []
     for text in X:
-        new_text = ' '.join([token if token.isdigit() else 'A' for token in text.split()])
+        new_text = ' '.join([token if token.isdigit() else 'A' * len(token) for token in text.split()])
         new_X.append(new_text)
     return new_X
 
@@ -20,6 +20,7 @@ class TextBiasModel(BiasModel):
         self.model = model
 
     def fit(self, X, y):
+        print(X[:5])
         X = anonymize_headers(X)
         print(X[:5])
         self.model.fit(X, y)
