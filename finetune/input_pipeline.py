@@ -387,7 +387,7 @@ class BasePipeline(metaclass=ABCMeta):
                     Xs_tr, Xs_va, Y_tr, Y_va, c_tr, c_va, b_tr, b_va = train_test_split(*to_shuffle, test_size=self.config.val_size, random_state=self.config.seed)
                 else:
                     Xs_tr, Y_tr, c_tr, b_tr = dataset_shuffle(*to_shuffle, random_state=self.config.seed)
-                    Xs_va, Y_va, c_va, b_va = self.config.val_set or ([], [], [])
+                    Xs_va, Y_va, c_va, b_va = self.config.val_set or ([], [], [], [])
 
                 Xs_tr, Y_tr, c_tr, b_tr = self.resampling(Xs_tr, Y_tr, c_tr, b_tr)
                 val_dataset_unbatched = self._make_dataset(Xs_va, Y_va, train=False, context=c_va, log_proba_biases=b_va)
