@@ -52,14 +52,12 @@ class BasePipeline(metaclass=ABCMeta):
         return types, shapes
 
     def _add_log_proba_biases_if_present(self, types, shapes):
-        if self.config.bias_model:
+        if self.config.debias_loss:
             TS = tf.TensorShape
             types["log_proba_biases"] = tf.float32
-            shapes["log_proba_biases"] = TS(
-                [None, self.label_encoder.target_dim]
-                if self.multi_label
-                else [None]
-            )
+            if self.multi_label:
+                raise NotImplementedError("No current support for biases with multilabel")
+            shapes["log_proba_biases"] = TS([None, 2])
         return types, shapes
 
 
