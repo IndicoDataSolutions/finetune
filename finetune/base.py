@@ -189,7 +189,7 @@ class BaseModel(object, metaclass=ABCMeta):
         else:
             log_proba_biases = None
         val_input_fn, train_input_fn, val_size, val_interval = self.input_pipeline.get_train_input_fns(
-            Xs, Y, batch_size=batch_size, context=context, update_hook=update_hook
+            Xs, Y, batch_size=batch_size, context=context, update_hook=update_hook, log_proba_biases=log_proba_biases
         )
         return self._finetune_from_dataset(val_input_fn, train_input_fn, val_size, val_interval, batch_size, has_targets=Y is not None)
 
