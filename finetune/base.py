@@ -187,9 +187,13 @@ class BaseModel(object, metaclass=ABCMeta):
         val_input_fn, train_input_fn, val_size, val_interval = self.input_pipeline.get_train_input_fns(
             Xs, Y, batch_size=batch_size, context=context, update_hook=update_hook
         )
-        return self._finetune_from_dataset(val_input_fn, train_input_fn, val_size, val_interval, batch_size, has_targets=Y is not None, bias_model=bias_model)
+        if bias_model:
+            log_proba_biases = bias_model.get_log_probas(Xs)
+        else:
+            log_proba_biases = None
+        return self._finetune_from_dataset(val_input_fn, train_input_fn, val_size, val_interval, batch_size, has_targets=Y is not None, log_proba_biases=log_proba_biases)
 
-    def _finetune_from_dataset(self, val_input_fn, train_input_fn, val_size, val_interval, batch_size, has_targets, bias_model=None):
+    def _finetune_from_dataset(self, val_input_fn, train_input_fn, val_size, val_interval, batch_size, has_targets, log_proba_biases=None):
 
         if self.config.keep_best_model:
             if isinstance(val_size, dict):
@@ -202,7 +206,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 )
 
         force_build_lm = not has_targets
-        estimator, hooks = self.get_estimator(force_build_lm=force_build_lm, bias_model=bias_model)
+        estimator, hooks = self.get_estimator(force_build_lm=force_build_lm, log_proba_biases=log_proba_biases)
         train_hooks = hooks.copy()
 
         steps_per_epoch = self._n_steps(
@@ -366,7 +370,7 @@ class BaseModel(object, metaclass=ABCMeta):
         )
         return config
 
-    def get_estimator(self, force_build_lm=False, build_explain=False, bias_model=None):
+    def get_estimator(self, force_build_lm=False, build_explain=False, log_proba_biases=None):
         build_lm = force_build_lm or self.config.lm_loss_coef > 0.0
         config = self._get_estimator_config()
         model_fn = get_model_fn(
@@ -381,7 +385,7 @@ class BaseModel(object, metaclass=ABCMeta):
             label_encoder=self.input_pipeline.label_encoder,
             build_explain=build_explain,
             n_replicas=max(1, len(self.resolved_gpus)),
-            bias_model=bias_model
+            log_proba_biases=log_proba_biases
         )
 
         hooks = [InitializeHook(self.saver)]
