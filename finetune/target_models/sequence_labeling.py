@@ -37,7 +37,10 @@ class SequencePipeline(BasePipeline):
             if context is not None:
                 tokenized_context = tokenize_context(context, out, self.config)
                 feats['context'] = tokenized_context
+            
+            print('lpb in ttm',log_proba_biases is not None)
             if log_proba_biases is not None:
+                print('lpb added to feats')
                 feats['log_proba_biases'] = log_proba_biases
             if Y is None:
                 yield feats
@@ -72,6 +75,7 @@ class SequencePipeline(BasePipeline):
             "mask": TS([None]),
         }
         types, shapes = self._add_context_info_if_present(types, shapes)
+        types, shapes = self._add_log_proba_biases_if_present(types, shapes)
         target_shape = (
             [None, self.label_encoder.target_dim]
             if self.multi_label

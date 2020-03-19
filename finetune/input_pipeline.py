@@ -51,6 +51,17 @@ class BasePipeline(metaclass=ABCMeta):
             shapes["context"] = TS([None, self.config.context_dim])
         return types, shapes
 
+    def _add_log_proba_biases_if_present(self, types, shapes):
+        if self.config.bias_model:
+            TS = tf.TensorShape
+            types["log_proba_biases"] = tf.float32
+            shapes["log_proba_biases"] = TS(
+                [None, self.label_encoder.target_dim]
+                if self.multi_label
+                else [None]
+            )
+        return types, shapes
+
 
     def feed_shape_type_def(self):
         TS = tf.TensorShape
