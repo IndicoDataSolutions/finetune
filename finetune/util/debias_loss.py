@@ -47,7 +47,7 @@ class LearnedMixin(ClfDebiasLossFunction):
     logits = tf.nn.log_softmax(logits)
 
     factor = tf.get_variable("factor-b", ())
-    factor += ops.last_dim_weighted_sum(hidden, "scale-w")
+    factor = factor + ops.last_dim_weighted_sum(hidden, "scale-w")
     factor = tf.nn.softplus(factor)
     bias *= tf.expand_dims(factor, 1)
 
