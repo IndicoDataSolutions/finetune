@@ -29,7 +29,7 @@ class SequencePipeline(BasePipeline):
         Y_ = list(itertools.chain.from_iterable(Y)) if Y is not None else None
         super()._post_data_initialization(Y_)
 
-    def text_to_tokens_mask(self, X, Y=None, context=None, _=None):
+    def text_to_tokens_mask(self, X, Y=None, context=None, _=None, log_proba_biases=None):
         pad_token = [self.config.pad_token] if self.multi_label else self.config.pad_token
         out_gen = self._text_to_ids(X, pad_token=pad_token)
         for out in out_gen:
@@ -37,6 +37,8 @@ class SequencePipeline(BasePipeline):
             if context is not None:
                 tokenized_context = tokenize_context(context, out, self.config)
                 feats['context'] = tokenized_context
+            if log_proba_biases is not None:
+                feats['log_proba_biases'] = log_proba_biases
             if Y is None:
                 yield feats
             if Y is not None:
