@@ -2,7 +2,11 @@ import tensorflow as tf
 
 from finetune.util import debias_ops as ops
 from finetune.util.debias_configured import Configured
+from finetune.util.shapes import shape_list
 
+
+def reshape_bias(bias, logits):
+  return bias[:, :shape_list(logits)[1], :]
 
 class ClfDebiasLossFunction(Configured):
   """Classification debiasing loss functions."""
@@ -20,12 +24,14 @@ class ClfDebiasLossFunction(Configured):
 
 class Plain(ClfDebiasLossFunction):
   def compute_clf_loss(self, hidden, logits, bias, labels, weights=None):
+    bias = reshape_bias(bias, logits)
     loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(logits=logits, labels=labels, weights=weights)
     return tf.reduce_mean(loss)
 
 
 class Reweight(ClfDebiasLossFunction):
   def compute_clf_loss(self, hidden, logits, bias, labels, weights=None):
+    bias = reshape_bias(bias, logits)
     loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(logits=logits, labels=labels, weights=weights)
     label_one_hot = tf.one_hot(labels, ops.get_shape_tuple(logits, 1))
     weights = 1 - tf.reduce_sum(tf.exp(bias) * label_one_hot, 1)
@@ -34,6 +40,7 @@ class Reweight(ClfDebiasLossFunction):
 
 class BiasProduct(ClfDebiasLossFunction):
   def compute_clf_loss(self, hidden, logits, bias, labels, weights=None):
+    bias = reshape_bias(bias, logits)
     logits = tf.nn.log_softmax(logits)
     loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(logits=logits+bias, labels=labels, weights=weights)
     return tf.reduce_mean(loss)
@@ -44,12 +51,13 @@ class LearnedMixin(ClfDebiasLossFunction):
     self.w = w
 
   def compute_clf_loss(self, hidden, logits, bias, labels, weights=None):
+    bias = reshape_bias(bias, logits)
     logits = tf.nn.log_softmax(logits)
 
     factor = tf.get_variable("factor-b", ())
     factor = factor + ops.last_dim_weighted_sum(hidden, "scale-w")
     factor = tf.nn.softplus(factor)
-    bias *= tf.expand_dims(factor, 1)
+    bias *= tf.expand_dims(factor, 2)
 
     loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(
       logits=logits+bias, labels=labels, weights=weights)
