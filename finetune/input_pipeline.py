@@ -123,6 +123,7 @@ class BasePipeline(metaclass=ABCMeta):
                     print(context)
                     continue
                 if log_proba_biases is not None:
+                    print('lpb added to feats')
                     feats['log_proba_biases'] = log_proba_biases
             if Y is None:
                 yield feats
@@ -168,7 +169,9 @@ class BasePipeline(metaclass=ABCMeta):
         else:
             context = self._format_for_pipeline(context)
             unused_mask = self._format_for_pipeline(None)
+            print('lpb before format', log_proba_biases)
             log_proba_biases = self._format_for_pipeline(log_proba_biases)
+            print('lpb after format', log_proba_biases())
             dataset = lambda: zip(Xs, Y, context(), unused_mask(), log_proba_biases())
         dataset_encoded = lambda: itertools.chain.from_iterable(
             map(lambda xycmb: self.text_to_tokens_mask(*xycmb), dataset())
@@ -378,6 +381,7 @@ class BasePipeline(metaclass=ABCMeta):
         else:
             self._skip_tqdm = 0
             if context is not None and log_proba_biases is not None:
+                print('train_input_fn context and lpb')
                 to_shuffle = (Xs, Y, context, log_proba_biases)
                 if self.config.val_size > 0 and self.config.val_set is None:
                     Xs_tr, Xs_va, Y_tr, Y_va, c_tr, c_va, b_tr, b_va = train_test_split(*to_shuffle, test_size=self.config.val_size, random_state=self.config.seed)
