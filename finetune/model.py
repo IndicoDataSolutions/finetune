@@ -233,7 +233,7 @@ def get_model_fn(
                 #         text_embed = hidden[:, :, :params.n_embed]
                 #         seq_feats = tf.matmul(w, text_embed)
                 #         featurizer_state['sequence_features'] = seq_feats
-            if log_proba_biases:
+            if log_proba_biases is not None:
                 featurizer_state['bias'] = log_proba_biases
 
             predictions = {
