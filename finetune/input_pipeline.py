@@ -108,7 +108,7 @@ class BasePipeline(metaclass=ABCMeta):
         )
         return output
 
-    def text_to_tokens_mask(self, X, Y=None, context=None, _=None):
+    def text_to_tokens_mask(self, X, Y=None, context=None, _=None, log_proba_biases=None):
         out_gen = self._text_to_ids(X, pad_token=self.config.pad_token)
         for i, out in enumerate(out_gen):
             if context is None:
@@ -122,6 +122,8 @@ class BasePipeline(metaclass=ABCMeta):
                     print(out.tokens)
                     print(context)
                     continue
+                if log_proba_biases is not None:
+                    feats['log_proba_biases'] = log_proba_biases
             if Y is None:
                 yield feats
             else:
@@ -160,14 +162,16 @@ class BasePipeline(metaclass=ABCMeta):
     def _compute_class_weights(self, class_weights, class_counts):
         return compute_class_weights(class_weights=class_weights, class_counts=class_counts)
 
-    def _dataset_with_targets(self, Xs, Y, train, context=None, update_hook=None):
+    def _dataset_with_targets(self, Xs, Y, train, context=None, update_hook=None, log_proba_biases=None):
         if callable(Xs):
             raise ValueError('Cannot pass in generator for supervised dataset')
         else:
             context = self._format_for_pipeline(context)
-            dataset = lambda: zip(Xs, Y, context())
+            unused_mask = self._format_for_pipeline(None)
+            log_proba_biases = self._format_for_pipeline(log_proba_biases)
+            dataset = lambda: zip(Xs, Y, context(), unused_mask(), log_proba_biases())
         dataset_encoded = lambda: itertools.chain.from_iterable(
-            map(lambda xyc: self.text_to_tokens_mask(*xyc), dataset())
+            map(lambda xycmb: self.text_to_tokens_mask(*xycmb), dataset())
         )
 
         if train:
@@ -259,13 +263,14 @@ class BasePipeline(metaclass=ABCMeta):
 
         return int(val_size), int(val_interval)
 
-    def resampling(self, Xs, Y, context=None):
-        return Xs, Y, context
+    def resampling(self, Xs, Y, context=None, log_proba_biases=None):
+        return Xs, Y, context, log_proba_biases
 
-    def _make_dataset(self, Xs, Y, train=False, context=None, update_hook=None):
+    def _make_dataset(self, Xs, Y, train=False, context=None, update_hook=None, log_proba_biases=None):
         if Y is not None:
-            dataset = lambda: self._dataset_with_targets(Xs, Y, train=train, context=context, update_hook=update_hook)
+            dataset = lambda: self._dataset_with_targets(Xs, Y, train=train, context=context, update_hook=update_hook, log_proba_biases=log_proba_biases)
         else:
+            assert log_proba_biases is None, "Finetune does not support passing in logit biases for unsupervised training"
             dataset = lambda: self._dataset_without_targets(Xs, train=train, context=context, update_hook=update_hook)
         return dataset
 
@@ -316,7 +321,7 @@ class BasePipeline(metaclass=ABCMeta):
         return internal_gen()
 
 
-    def get_train_input_fns(self, Xs, Y=None, batch_size=None, val_size=None, context=None, update_hook=None):
+    def get_train_input_fns(self, Xs, Y=None, batch_size=None, val_size=None, context=None, update_hook=None, log_proba_biases=None):
         self.epoch = 1
         batch_size = batch_size or self.config.batch_size
 
@@ -349,6 +354,7 @@ class BasePipeline(metaclass=ABCMeta):
 
         if callable(Xs):
             assert Y is None, "Cannot feed in supervised data using generator."
+            assert log_proba_biases is None, "Cannot feed in supervised logit biases using generator."
             self._skip_tqdm = val_size
             dataset = self._make_dataset(Xs, Y, train=True, context=context, update_hook=update_hook)
             val_dataset_unbatched = (
@@ -371,19 +377,39 @@ class BasePipeline(metaclass=ABCMeta):
             )
         else:
             self._skip_tqdm = 0
-            if context is not None:
-                to_shuffle = (Xs, Y, context)
+            if context is not None and log_proba_biases is not None:
+                to_shuffle = (Xs, Y, context, log_proba_biases)
+                if self.config.val_size > 0 and self.config.val_set is None:
+                    Xs_tr, Xs_va, Y_tr, Y_va, c_tr, c_va, b_tr, b_va = train_test_split(*to_shuffle, test_size=self.config.val_size, random_state=self.config.seed)
+                else:
+                    Xs_tr, Y_tr, c_tr, b_tr = dataset_shuffle(*to_shuffle, random_state=self.config.seed)
+                    Xs_va, Y_va, c_va, b_va = self.config.val_set or ([], [], [])
 
+                Xs_tr, Y_tr, c_tr, b_tr = self.resampling(Xs_tr, Y_tr, c_tr, b_tr)
+                val_dataset_unbatched = self._make_dataset(Xs_va, Y_va, train=False, context=c_va, log_proba_biases=b_va)
+                train_dataset_unbatched = self._make_dataset(Xs_tr, Y_tr, train=True, context=c_tr, update_hook=update_hook, log_proba_biases=b_tr)
+            elif context is not None and log_proba_biases is None:
+                to_shuffle = (Xs, Y, context)
                 if self.config.val_size > 0 and self.config.val_set is None:
                     Xs_tr, Xs_va, Y_tr, Y_va, c_tr, c_va = train_test_split(*to_shuffle, test_size=self.config.val_size, random_state=self.config.seed)
                 else:
                     Xs_tr, Y_tr, c_tr = dataset_shuffle(*to_shuffle, random_state=self.config.seed)
                     Xs_va, Y_va, c_va = self.config.val_set or ([], [], [])
 
-                Xs_tr, Y_tr, c_tr = self.resampling(Xs_tr, Y_tr, c_tr)
-                self.config.dataset_size = len(Xs_tr)
+                Xs_tr, Y_tr, c_tr, _ = self.resampling(Xs_tr, Y_tr, c_tr)
                 val_dataset_unbatched = self._make_dataset(Xs_va, Y_va, train=False, context=c_va)
                 train_dataset_unbatched = self._make_dataset(Xs_tr, Y_tr, train=True, context=c_tr, update_hook=update_hook)
+            elif log_proba_biases is not None and context is None:
+                to_shuffle = (Xs, Y, log_proba_biases)
+                if self.config.val_size > 0 and self.config.val_set is None:
+                    Xs_tr, Xs_va, Y_tr, Y_va, b_tr, b_va = train_test_split(*to_shuffle, test_size=self.config.val_size, random_state=self.config.seed)
+                else:
+                    Xs_tr, Y_tr, b_tr = dataset_shuffle(*to_shuffle, random_state=self.config.seed)
+                    Xs_va, Y_va, b_va = self.config.val_set or ([], [], [])
+
+                Xs_tr, Y_tr, _, b_tr = self.resampling(Xs_tr, Y_tr, b_tr)
+                val_dataset_unbatched = self._make_dataset(Xs_va, Y_va, train=False, log_proba_biases=b_va)
+                train_dataset_unbatched = self._make_dataset(Xs_tr, Y_tr, train=True, log_proba_biases=b_tr, update_hook=update_hook)
             else:
                 to_shuffle = (Xs, Y)
 
@@ -393,10 +419,12 @@ class BasePipeline(metaclass=ABCMeta):
                     Xs_tr, Y_tr = dataset_shuffle(*to_shuffle, random_state=self.config.seed)
                     Xs_va, Y_va = self.config.val_set or ([], [])
 
-                Xs_tr, Y_tr, _ = self.resampling(Xs_tr, Y_tr)
-                self.config.dataset_size = len(Xs_tr)
+                Xs_tr, Y_tr, _, _ = self.resampling(Xs_tr, Y_tr)
                 val_dataset_unbatched = self._make_dataset(Xs_va, Y_va, train=False)
                 train_dataset_unbatched = self._make_dataset(Xs_tr, Y_tr, train=True)
+
+            self.config.dataset_size = len(Xs_tr)
+
 
         if self.config.chunk_long_sequences or self.config.class_weights:
             # Certain settings require that the entire dataset be encoded before compiling the graph

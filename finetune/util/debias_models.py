@@ -25,10 +25,9 @@ class TextBiasModel(BiasModel):
     
     def get_log_probas(self, X):
         probs = [results[5] for results in self.model.process_long_sequence(X)]
-        # import ipdb; ipdb.set_trace()
         log_probs = [np.log(ps) for ps in probs]
         max_length = max([len(ps) for ps in probs])
         return np.array([np.append(log_ps, [[0, 0]] * (max_length - len(log_ps)), axis=0)
-                                    if len(log_ps) < max_length else log_ps for log_ps in log_probs])
+                        if len(log_ps) < max_length else log_ps for log_ps in log_probs])
         # return np.log(np.array(probs))
         # return tf.convert_to_tensor(np.log(np.array(probs)))

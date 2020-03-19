@@ -154,8 +154,7 @@ def get_model_fn(
     target_dim,
     label_encoder,
     build_explain,
-    n_replicas,
-    log_proba_biases=None
+    n_replicas
 ):
     def target_model_op(featurizer_state, Y, params, mode, **kwargs):
         weighted_tensor = None
@@ -233,8 +232,7 @@ def get_model_fn(
                 #         text_embed = hidden[:, :, :params.n_embed]
                 #         seq_feats = tf.matmul(w, text_embed)
                 #         featurizer_state['sequence_features'] = seq_feats
-            if log_proba_biases is not None:
-                featurizer_state['bias'] = log_proba_biases
+            featurizer_state['log_proba_biases'] = features.get("log_proba_biases", None)
 
             predictions = {
                 PredictMode.FEATURIZE: featurizer_state["features"],
