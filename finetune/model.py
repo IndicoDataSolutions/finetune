@@ -234,7 +234,7 @@ def get_model_fn(
                 #         seq_feats = tf.matmul(w, text_embed)
                 #         featurizer_state['sequence_features'] = seq_feats
             if bias_model:
-                featurizer_state['bias'] = bias_model.get_logits(X, context)
+                featurizer_state['bias'] = bias_model.get_log_probas(X, context)
 
             predictions = {
                 PredictMode.FEATURIZE: featurizer_state["features"],
