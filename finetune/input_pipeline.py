@@ -61,7 +61,7 @@ class BasePipeline(metaclass=ABCMeta):
         return types, shapes
 
 
-    def feed_shape_type_def(self):
+    def feed_shape_type_def(self, **kwargs):
         TS = tf.TensorShape
         types = {"tokens": tf.int32, "mask": tf.float32}
         shapes = {
@@ -490,7 +490,7 @@ class BasePipeline(metaclass=ABCMeta):
 
     def get_predict_input_fn(self, Xs, batch_size=None, context=None, forced_mask=None):
         batch_size = batch_size or self.config.predict_batch_size
-        _, shapes = self.feed_shape_type_def()
+        _, shapes = self.feed_shape_type_def(train=False)
         tf_dataset = lambda: self._dataset_without_targets(Xs, train=None, context=context, forced_mask=forced_mask).padded_batch(batch_size, padded_shapes=shapes[0], drop_remainder=False)
         return tf_dataset
 

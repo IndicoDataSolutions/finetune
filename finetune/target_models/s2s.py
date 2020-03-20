@@ -15,7 +15,7 @@ class S2SPipeline(BasePipeline):
         self.target_dim = 0
         self.label_encoder = self._target_encoder()
 
-    def feed_shape_type_def(self):
+    def feed_shape_type_def(self, **kwargs):
         TS = tf.TensorShape
         return (
             (

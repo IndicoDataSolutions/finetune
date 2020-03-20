@@ -67,7 +67,7 @@ class SequencePipeline(BasePipeline):
                 counter.update(decoded_targets)
         return counter
 
-    def feed_shape_type_def(self):
+    def feed_shape_type_def(self, train=True):
         TS = tf.TensorShape
         types = {"tokens": tf.int32, "mask": tf.float32}
         shapes = {
@@ -75,7 +75,8 @@ class SequencePipeline(BasePipeline):
             "mask": TS([None]),
         }
         types, shapes = self._add_context_info_if_present(types, shapes)
-        types, shapes = self._add_log_proba_biases_if_present(types, shapes)
+        if train:
+            types, shapes = self._add_log_proba_biases_if_present(types, shapes)
         target_shape = (
             [None, self.label_encoder.target_dim]
             if self.multi_label

@@ -63,7 +63,7 @@ class ComparisonPipeline(ClassificationPipeline):
             else:
                 yield feats, self.label_encoder.transform([Y])[0]
 
-    def feed_shape_type_def(self):
+    def feed_shape_type_def(self, **kwargs):
         TS = tf.TensorShape
         types = {"tokens": tf.int32, "mask": tf.float32}
         shapes = {

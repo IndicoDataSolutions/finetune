@@ -14,7 +14,7 @@ class ComparisonRegressionPipeline(ComparisonPipeline):
     def _target_encoder(self):
         return RegressionEncoder()
 
-    def feed_shape_type_def(self):
+    def feed_shape_type_def(self, **kwargs):
         TS = tf.TensorShape
         types = {"tokens": tf.int32, "mask": tf.int32}
         shapes = {"tokens": TS([2, None, 2]), "mask": TS([2, None])}

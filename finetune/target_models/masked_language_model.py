@@ -54,7 +54,7 @@ class MaskedLanguageModelPipeline(BasePipeline):
     def _target_encoder(self):
         pass
 
-    def feed_shape_type_def(self):
+    def feed_shape_type_def(self, **kwargs):
         types = {
                 "tokens": tf.int32,
                 "mask": tf.float32,
