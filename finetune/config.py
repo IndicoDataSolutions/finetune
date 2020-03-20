@@ -413,6 +413,7 @@ def get_default_config():
         
         # debias loss
         debias_loss=False,
+        mixin_entropy_penalty=0,  # no penalty
     )
     return settings
 

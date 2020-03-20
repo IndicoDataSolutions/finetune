@@ -29,5 +29,3 @@ class TextBiasModel(BiasModel):
         max_length = max([len(ps) for ps in probs])
         return np.array([np.append(log_ps, [[0, 0]] * (max_length - len(log_ps)), axis=0)
                         if len(log_ps) < max_length else log_ps for log_ps in log_probs])
-        # return np.log(np.array(probs))
-        # return tf.convert_to_tensor(np.log(np.array(probs)))
