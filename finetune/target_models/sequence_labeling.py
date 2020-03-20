@@ -38,9 +38,7 @@ class SequencePipeline(BasePipeline):
                 tokenized_context = tokenize_context(context, out, self.config)
                 feats['context'] = tokenized_context
             
-            print('lpb in ttm',log_proba_biases is not None)
             if log_proba_biases is not None:
-                print('lpb added to feats')
                 feats['log_proba_biases'] = log_proba_biases
             if Y is None:
                 yield feats

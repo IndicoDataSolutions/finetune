@@ -178,9 +178,7 @@ class BasePipeline(metaclass=ABCMeta):
         else:
             context = self._format_for_pipeline(context)
             unused_mask = self._format_for_pipeline(None)
-            print('lpb before format', log_proba_biases)
             log_proba_biases = self._format_for_pipeline(log_proba_biases)
-            print('lpb after format', log_proba_biases())
             dataset = lambda: zip(Xs, Y, context(), unused_mask(), log_proba_biases())
         dataset_encoded = lambda: itertools.chain.from_iterable(
             map(lambda xycmb: self.text_to_tokens_mask(*xycmb), dataset())
@@ -234,7 +232,7 @@ class BasePipeline(metaclass=ABCMeta):
             # Adjust dataset size to account for long documents being chunked
             dataset_encoded_list = list(dataset_encoded())
             self.config.dataset_size = len(dataset_encoded_list)
-        types, shapes = self.feed_shape_type_def()
+        types, shapes = self.feed_shape_type_def(train=False)
         dataset_gen = Dataset.from_generator(
             dataset_encoded, types[0], shapes[0]
         )  # 0s cut out the targets
