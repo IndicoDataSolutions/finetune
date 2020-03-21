@@ -36,12 +36,12 @@ def get_improvement_decay(total_num_steps, eval_dir, eval_freq, train):
         ),
         tf.float32
     )
-    decay = tf.get_variable("decay", shape=[], dtype=tf.float32, trainable=False, initializer=tf.zeros_initializer())
+    decay = tf.get_variable("decay", shape=[], dtype=tf.float32, trainable=False, initializer=tf.constant_initializer(0.0))
     decay_op = tf.assign(decay, get_decay_for_half(total_num_steps) * has_improved + decay * (1 - has_improved))
     with tf.control_dependencies([decay_op]):
         decay = tf.identity(decay)
     tf.summary.scalar("pos_decay", decay)
-    return decay        
+    return decay       
 
 def get_decay_for_half(total_num_steps):
     return tf.minimum(tf.cast(tf.train.get_global_step(), tf.float32) / (total_num_steps / 2), 1.0)
@@ -50,8 +50,8 @@ def non_normed_dropout(x, rate, noise_shape=None):
     if noise_shape is None:
         noise_shape = tf.shape(x)
     dropped = tf.cast(tf.random.uniform(shape=noise_shape) > rate, tf.float32)
-    placeholder_value = tf.get_variable("pos_placeholder", shape=[1, x.get_shape().as_list()[1]])
-    return dropped * x + (1 - dropped) * placeholder_value
+    placeholder_value = tf.get_variable("pos_placeholder", shape=[1, x.get_shape().as_list()[1]], dtype=tf.float32, trainable=False)
+    return dropped * x + (1.0 - dropped) * placeholder_value
 
 def pos_mask_dropout_scheduled(train, rate):
     def proc(x):
@@ -128,7 +128,7 @@ def bert_featurizer(
         low_memory_mode=config.low_memory_mode,
         context_dim = config.context_dim,
         n_context_embed_per_channel = config.n_context_embed_per_channel,
-        use_auxiliary_info=config.use_auxiliary_info and not (config.mlm_baseline or config.pos_injection),
+        use_auxiliary_info=config.use_auxiliary_info and not (config.mlm_baseline or (config.pos_injection and not config.pos_embedding_transform)),
         n_layers_with_aux=config.n_layers_with_aux,
         pos_injection=config.pos_injection,
         use_position_embeddings=config.use_reading_order_position,
@@ -195,7 +195,7 @@ def bert_featurizer(
 
         embed_weights = bert.get_embedding_table()
 
-        if context is None or (config.mlm_baseline or config.pos_injection):
+        if context is None or (config.mlm_baseline or (config.pos_injection and not config.pos_embedding_transform)):
             n_embed = config.n_embed
         else:
             n_embed = config.n_embed + config.n_context_embed_per_channel * config.context_dim

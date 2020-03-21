@@ -85,7 +85,7 @@ def masked_language_model(*, X, M, mlm_weights, mlm_ids, mlm_positions, embed_we
             activation=act_fns[config.act_fn],
             kernel_initializer=tf.random_normal_initializer(stddev=config.weight_stddev),
             name='dense',
-            custom=config.use_auxiliary_info and not (config.mlm_baseline or config.pos_injection),
+            custom=config.use_auxiliary_info and not (config.mlm_baseline or (config.pos_injection and not config.pos_embedding_transform)),
             pos_embed=config.n_context_embed_per_channel * config.context_dim,
             proj_type='downward',
             transpose_b=True

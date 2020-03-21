@@ -304,7 +304,7 @@ class Saver:
                       name.replace("model/target/", "") in self.fallback.keys()):
                     saved_var = self.fallback[name.replace("model/target/", "")]
                 elif "pos_placeholder" in name:
-                    saved_var = self.fallback["model/featurizer/bert/embeddings/position_embeddings"][:1]
+                    saved_var = self.fallback["model/featurizer/bert/embeddings/position_embeddings:0"][:1]
 
                 if zero_out_adapters and "adapter" in name:
                     var_loader.add(var, np.zeros(var.get_shape().as_list()))
