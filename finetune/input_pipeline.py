@@ -280,7 +280,7 @@ class BasePipeline(metaclass=ABCMeta):
         if Y is not None:
             dataset = lambda: self._dataset_with_targets(Xs, Y, train=train, context=context, update_hook=update_hook, log_proba_biases=log_proba_biases)
         else:
-            assert log_proba_biases is None, "Finetune does not support passing in logit biases for unsupervised training"
+            assert log_proba_biases is None or all([el is None for el in log_proba_biases]), "Finetune does not support passing in logit biases for unsupervised training"
             dataset = lambda: self._dataset_without_targets(Xs, train=train, context=context, update_hook=update_hook)
         return dataset
 
@@ -387,53 +387,20 @@ class BasePipeline(metaclass=ABCMeta):
             )
         else:
             self._skip_tqdm = 0
-            if context is not None and log_proba_biases is not None:
-                print('train_input_fn context and lpb')
-                to_shuffle = (Xs, Y, context, log_proba_biases)
-                if self.config.val_size > 0 and self.config.val_set is None:
-                    Xs_tr, Xs_va, Y_tr, Y_va, c_tr, c_va, b_tr, b_va = train_test_split(*to_shuffle, test_size=self.config.val_size, random_state=self.config.seed)
-                else:
-                    Xs_tr, Y_tr, c_tr, b_tr = dataset_shuffle(*to_shuffle, random_state=self.config.seed)
-                    Xs_va, Y_va, c_va, b_va = self.config.val_set or ([], [], [], [])
-
-                Xs_tr, Y_tr, c_tr, b_tr = self.resampling(Xs_tr, Y_tr, c_tr, b_tr)
-                val_dataset_unbatched = self._make_dataset(Xs_va, Y_va, train=False, context=c_va, log_proba_biases=b_va)
-                train_dataset_unbatched = self._make_dataset(Xs_tr, Y_tr, train=True, context=c_tr, update_hook=update_hook, log_proba_biases=b_tr)
-            elif context is not None and log_proba_biases is None:
-                to_shuffle = (Xs, Y, context)
-                if self.config.val_size > 0 and self.config.val_set is None:
-                    Xs_tr, Xs_va, Y_tr, Y_va, c_tr, c_va = train_test_split(*to_shuffle, test_size=self.config.val_size, random_state=self.config.seed)
-                else:
-                    Xs_tr, Y_tr, c_tr = dataset_shuffle(*to_shuffle, random_state=self.config.seed)
-                    Xs_va, Y_va, c_va = self.config.val_set or ([], [], [])
-
-                Xs_tr, Y_tr, c_tr, _ = self.resampling(Xs_tr, Y_tr, c_tr)
-                val_dataset_unbatched = self._make_dataset(Xs_va, Y_va, train=False, context=c_va)
-                train_dataset_unbatched = self._make_dataset(Xs_tr, Y_tr, train=True, context=c_tr, update_hook=update_hook)
-            elif log_proba_biases is not None and context is None:
-                to_shuffle = (Xs, Y, log_proba_biases)
-                if self.config.val_size > 0 and self.config.val_set is None:
-                    Xs_tr, Xs_va, Y_tr, Y_va, b_tr, b_va = train_test_split(*to_shuffle, test_size=self.config.val_size, random_state=self.config.seed)
-                else:
-                    Xs_tr, Y_tr, b_tr = dataset_shuffle(*to_shuffle, random_state=self.config.seed)
-                    Xs_va, Y_va, b_va = self.config.val_set or ([], [], [])
-
-                Xs_tr, Y_tr, _, b_tr = self.resampling(Xs_tr, Y_tr, b_tr)
-                val_dataset_unbatched = self._make_dataset(Xs_va, Y_va, train=False, log_proba_biases=b_va)
-                train_dataset_unbatched = self._make_dataset(Xs_tr, Y_tr, train=True, log_proba_biases=b_tr, update_hook=update_hook)
+            if context is None:
+                context = [None] * len(Xs)
+            if log_proba_biases is None:
+                log_proba_biases = [None] * len(Xs)
+            to_shuffle = (Xs, Y, context, log_proba_biases)
+            if self.config.val_size > 0 and self.config.val_set is None:
+                Xs_tr, Xs_va, Y_tr, Y_va, c_tr, c_va, b_tr, b_va = train_test_split(*to_shuffle, test_size=self.config.val_size, random_state=self.config.seed)
             else:
-                to_shuffle = (Xs, Y)
+                Xs_tr, Y_tr, c_tr, b_tr = dataset_shuffle(*to_shuffle, random_state=self.config.seed)
+                Xs_va, Y_va, c_va, b_va = self.config.val_set or ([], [], [], [])
 
-                if self.config.val_size > 0 and self.config.val_set is None:
-                    Xs_tr, Xs_va, Y_tr, Y_va = train_test_split(*to_shuffle, test_size=self.config.val_size, random_state=self.config.seed)
-                else:
-                    Xs_tr, Y_tr = dataset_shuffle(*to_shuffle, random_state=self.config.seed)
-                    Xs_va, Y_va = self.config.val_set or ([], [])
-
-                Xs_tr, Y_tr, _, _ = self.resampling(Xs_tr, Y_tr)
-                val_dataset_unbatched = self._make_dataset(Xs_va, Y_va, train=False)
-                train_dataset_unbatched = self._make_dataset(Xs_tr, Y_tr, train=True)
-
+            Xs_tr, Y_tr, c_tr, b_tr = self.resampling(Xs_tr, Y_tr, c_tr, b_tr)
+            val_dataset_unbatched = self._make_dataset(Xs_va, Y_va, train=False, context=c_va, log_proba_biases=b_va)
+            train_dataset_unbatched = self._make_dataset(Xs_tr, Y_tr, train=True, context=c_tr, update_hook=update_hook, log_proba_biases=b_tr)
             self.config.dataset_size = len(Xs_tr)
 
 
