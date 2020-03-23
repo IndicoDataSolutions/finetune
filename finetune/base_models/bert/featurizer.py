@@ -116,38 +116,46 @@ def bert_featurizer(
         else:
             n_embed = config.n_embed + config.n_context_embed_per_channel * config.context_dim
 
-        features = tf.reshape(
-            bert.get_pooled_output(),
-            shape=tf.concat((initial_shape[:-2], [n_embed]), 0),
-        )
-        sequence_features = tf.reshape(
-            bert.get_sequence_output(),
-            shape=tf.concat((initial_shape[:-1], [n_embed]), 0),
-        )
+        if config.simple_featurizer:
+            sequence_features = tf.reshape(
+                bert.get_embedding_output(),
+                shape=tf.concat((initial_shape[:-1], [n_embed]), 0),
+            )
+            features = tf.reduce_mean(sequence_features, axis=1)
 
-        # baseline just projects back to config.n_embed
-        if context is not None and config.mlm_baseline:
-            with tf.variable_scope('context'):
-                # print('sequence_features', sequence_features)
-                # print('context', context)
-                sequence_features = tf.concat((sequence_features, context), -1)
-                features = tf.concat((features, tf.reduce_mean(context, 1)), -1)
-                print('sequence_features after concat', sequence_features)
-                print('sequence_features merged', merge_leading_dims(sequence_features, 2))
-                # sequence_features = tf.Print(sequence_features, [sequence_features], summarize=1000)
-                # tf.print(sequence_features, output_stream=sys.stderr)
-                pos_embed = config.n_context_embed_per_channel * config.context_dim
-                # import ipdb; ipdb.set_trace()
-                sequence_features = dense_with_custom_init(
-                    merge_leading_dims(sequence_features, 2), config.n_embed, activation=None, name='seq_feats_proj',
-                    kernel_initializer=None, custom=True, pos_embed=pos_embed, proj_type='downward_identity')
-                sequence_features = tf.reshape(sequence_features, tf.concat((initial_shape[:-1], [config.n_embed]), 0))
-                # sequence_features = tf.Print(sequence_features, [sequence_features], summarize=1000)
-                tf.print(sequence_features, output_stream=sys.stderr)
-                features = dense_with_custom_init(
-                    features, config.n_embed, activation=None, kernel_initializer=None,
-                    custom=True, pos_embed=pos_embed, name='feats_proj', proj_type='downward_identity'
-                )
+        else:
+            features = tf.reshape(
+                bert.get_pooled_output(),
+                shape=tf.concat((initial_shape[:-2], [n_embed]), 0),
+            )
+            sequence_features = tf.reshape(
+                bert.get_sequence_output(),
+                shape=tf.concat((initial_shape[:-1], [n_embed]), 0),
+            )
+
+            # baseline just projects back to config.n_embed
+            if context is not None and config.mlm_baseline:
+                with tf.variable_scope('context'):
+                    # print('sequence_features', sequence_features)
+                    # print('context', context)
+                    sequence_features = tf.concat((sequence_features, context), -1)
+                    features = tf.concat((features, tf.reduce_mean(context, 1)), -1)
+                    print('sequence_features after concat', sequence_features)
+                    print('sequence_features merged', merge_leading_dims(sequence_features, 2))
+                    # sequence_features = tf.Print(sequence_features, [sequence_features], summarize=1000)
+                    # tf.print(sequence_features, output_stream=sys.stderr)
+                    pos_embed = config.n_context_embed_per_channel * config.context_dim
+                    # import ipdb; ipdb.set_trace()
+                    sequence_features = dense_with_custom_init(
+                        merge_leading_dims(sequence_features, 2), config.n_embed, activation=None, name='seq_feats_proj',
+                        kernel_initializer=None, custom=True, pos_embed=pos_embed, proj_type='downward_identity')
+                    sequence_features = tf.reshape(sequence_features, tf.concat((initial_shape[:-1], [config.n_embed]), 0))
+                    # sequence_features = tf.Print(sequence_features, [sequence_features], summarize=1000)
+                    tf.print(sequence_features, output_stream=sys.stderr)
+                    features = dense_with_custom_init(
+                        features, config.n_embed, activation=None, kernel_initializer=None,
+                        custom=True, pos_embed=pos_embed, name='feats_proj', proj_type='downward_identity'
+                    )
 
         output_state = {
             "embed_weights": embed_weights,

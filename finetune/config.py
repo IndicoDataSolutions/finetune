@@ -414,6 +414,7 @@ def get_default_config():
         # debias loss
         debias_loss=False,
         mixin_entropy_penalty=0,  # no penalty
+        simple_featurizer=False,  # if true, just an embedding table followed by dense layer
     )
     return settings
 

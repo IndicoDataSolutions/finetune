@@ -19,8 +19,9 @@ class TextBiasModel(BiasModel):
     def __init__(self, model):
         self.model = model
 
-    def fit(self, X, y):
-        X = anonymize_headers(X)
+    def fit(self, X, y, digits_only=False):
+        if digits_only:
+            X = anonymize_headers(X)
         self.model.fit(X, y)
     
     def get_log_probas(self, X):
