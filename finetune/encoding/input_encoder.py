@@ -43,19 +43,15 @@ def _flatten(nested_lists):
     return functools.reduce(lambda x, y: x + y, nested_lists, [])
 
 
-class SingletonMetaClass(type):
-    def __init__(cls, name, bases, dictionary):
-        super(SingletonMetaClass, cls).__init__(name, bases, dictionary)
-        original_new = cls.__new__
-        def new_new(cls, *args, **kwargs):
-            if cls.instance == None:
-                cls.instance = original_new(cls, *args, **kwargs)
-            return cls.instance
-        cls.instance = None
-        cls.__new__ = staticmethod(new_new)
+class SingletonMeta(type):
+    _instances = {}
+    def __call__(cls, *args, **kwargs):
+        if cls not in cls._instances:
+            cls._instances[cls] = super(SingletonMeta, cls).__call__(*args, **kwargs)
+        return cls._instances[cls]
 
 
-class BaseEncoder(metaclass=SingletonMetaClass):
+class BaseEncoder(metaclass=SingletonMeta):
     """
     Base class for text encoders.
     Translates raw texts into structured token arrays
