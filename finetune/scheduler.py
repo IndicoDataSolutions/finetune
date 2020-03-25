@@ -13,7 +13,7 @@ class Scheduler:
         self.max_above_resting = None
         self.previous_in_use = 0
         self.max_model_size = None
-        
+
     def _memory_for_one_more(self):
         if self.session is None:
             return True # First prediction run?
@@ -48,7 +48,11 @@ class Scheduler:
         
         return out_model
 
-    def _update_memory_limit(self):
+    def _update_memory_limit(self, model):
+        if hasattr(model.saver, "variables"):
+            del model.saver.variables
+            del model.saver.fallback_
+            
         if self.session is None:
             self.session = tf.Session() # delay this so that any options get applied from finetune.
             self.gpu_memory_limit = self.session.run(tf.contrib.memory_stats.BytesLimit())
@@ -56,29 +60,29 @@ class Scheduler:
     def predict(self, model_file, x, *args, **kwargs):
         model = self._rotate_in_model(model_file)
         predictions = model.predict(x, *args, **kwargs)
-        self._update_memory_limit()
+        self._update_memory_limit(model)
         return predictions
 
     def predict_proba(self, model_file, x, *args, **kwargs):
         model = self._rotate_in_model(model_file)
         probas = model.predict_proba(x, *args, **kwargs)
-        self._update_memory_limit()
+        self._update_memory_limit(model)
         return probas
 
     def attention_weights(self, model_file, x, *args, **kwargs):
         model = self._rotate_in_model(model_file)
         attn_weights = model.attention_weights(x, *args, **kwargs)
-        self._update_memory_limit()
+        self._update_memory_limit(model)
         return attn_weights
 
     def featurize(self, model_file, x, *args, **kwargs):
         model = self._rotate_in_model(model_file)
         features = model.featurize(x, *args, **kwargs)
-        self._update_memory_limit()
+        self._update_memory_limit(model)
         return features
 
     def featurize_sequence(self, model_file, x, *args, **kwargs):
         model = self._rotate_in_model(model_file)
         seq_features = model.featurize(x, *args, **kwargs)
-        self._update_memory_limit()
+        self._update_memory_limit(model)
         return seq_features

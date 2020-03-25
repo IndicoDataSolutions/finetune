@@ -31,6 +31,7 @@ class TestScheduler(unittest.TestCase):
         model.fit(["A", "B"], ["a", "b"])
         model.save(os.path.join(cls.folder, cls.model1))
         model.save(os.path.join(cls.folder, cls.model2))
+        
 
     @classmethod
     def tearDownClass(self):
