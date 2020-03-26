@@ -739,23 +739,33 @@ def attention_layer(
         pos_embed=config.n_context_embed_per_channel*config.context_dim
     )
 
-    # `query_layer` = [B, N, F, H]
-    query_layer = transpose_for_scores(
-        query_layer, batch_size, num_attention_heads, from_seq_length, size_per_head
-    )
+    additional_hidden = config.n_context_embed_per_channel * config.context_dim
+    if additional_hidden > 0:
+        print("Make sure this gets printed")
+        old_query, new_query = tf.split(query_layer, [config.n_embed, additional_hidden], 1)
+        old_query_heads = transpose_for_scores(old_query, batch_size, num_attention_heads, from_seq_length, tf.get_shape(old_query)[1] // num_attention_heads)
+        new_query_heads = transpose_for_scores(old_query, batch_size, num_attention_heads, from_seq_length, tf.get_shape(new_query[1]) // num_attention_heads)
+        # `query_layer` = [B, N, F, H]
+        query_layer = tf.concat([old_query_heads, new_query_heads], axis=1)
 
-    # `key_layer` = [B, N, T, H]
-    key_layer = transpose_for_scores(
-        key_layer, batch_size, num_attention_heads, to_seq_length, size_per_head
-    )
+        old_key, new_key = tf.split(key_layer, [config.n_embed, additional_hidden], 1)
+        old_key_heads = transpose_for_scores(old_key, batch_size, num_attention_heads, from_seq_length,)
+        new_key_heads = transpose_for_scores(old_key, batch_size, num_attention_heads, from_seq_length, tf.get_shape(new_key[1]) // num_attention_heads)
+        # `key_layer` = [B, N, T, H]
+        key_layer = tf.concat([old_key_heads, new_key_heads], axis=1)
+
+        old_value, new_value = tf.split(value_layer, [config.n_embed, additional_hidden], 1)
+        old_value_heads = tf.reshape(old_value, [batch_size, to_seq_length, num_attention_heads, tf.get_shape(old_value[1]) // num_attention_heads])
+        new_value_heads = tf.reshape(new_value, [batch_size, to_seq_length, num_attention_heads, tf.get_shape(new_value[1]) // num_attention_heads])
+        # `value_layer` = [B, T, N, H]
+        value_layer = tf.concat([old_value_heads, new_value_heads], axis=2)
 
     # Take the dot product between "query" and "key" to get the raw
     # attention scores.
     # `attention_scores` = [B, N, F, T]
-
     attention_scores = tf.matmul(query_layer, key_layer, transpose_b=True)
     attention_scores = tf.multiply(
-        attention_scores, 1.0 / math.sqrt(float(size_per_head))
+        attention_scores, 1.0 / math.sqrt(float(tf.get_shape(old_key)[1] // num_attention_heads))
     )
 
     if attention_mask is not None:
@@ -778,11 +788,6 @@ def attention_layer(
     # This is actually dropping out entire tokens to attend to, which might
     # seem a bit unusual, but is taken from the original Transformer paper.
     attention_probs = dropout(attention_probs, attention_probs_dropout_prob)
-
-    # `value_layer` = [B, T, N, H]
-    value_layer = tf.reshape(
-        value_layer, [batch_size, to_seq_length, num_attention_heads, size_per_head]
-    )
 
     # `value_layer` = [B, N, T, H]
     value_layer = tf.transpose(value_layer, [0, 2, 1, 3])
