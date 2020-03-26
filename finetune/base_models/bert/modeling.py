@@ -744,7 +744,6 @@ def attention_layer(
 
     additional_hidden = config.n_context_embed_per_channel * config.context_dim
     if additional_hidden > 0:
-        print("CONFIG HIDDEN SIZE", config.hidden_size)
         old_query, new_query = tf.split(query_layer, [config.hidden_size, additional_hidden], 1)
         old_query_heads = transpose_for_scores(old_query, batch_size, num_attention_heads, from_seq_length, prev_size_per_head)
         new_query_heads = transpose_for_scores(new_query, batch_size, num_attention_heads, from_seq_length, new_size_per_head)
@@ -762,7 +761,6 @@ def attention_layer(
         new_value_heads = tf.reshape(new_value, [batch_size, to_seq_length, num_attention_heads, new_size_per_head])
         # `value_layer` = [B, T, N, H]
         value_layer = tf.concat([old_value_heads, new_value_heads], axis=-1)
-        print(value_layer)
     else:
         query_layer = transpose_for_scores(query_layer, batch_size, num_attention_heads, from_seq_length, size_per_head)      
         key_layer = transpose_for_scores(key_layer, batch_size, num_attention_heads, to_seq_length, size_per_head)
@@ -806,17 +804,29 @@ def attention_layer(
     context_layer = tf.transpose(context_layer, [0, 2, 1, 3])
 
     if do_return_2d_tensor:
-        # `context_layer` = [B*F, N*H]
-        context_layer = tf.reshape(
-            context_layer,
-            [batch_size * from_seq_length, num_attention_heads * size_per_head],
-        )
+        if size_per_head == prev_size_per_head:
+            # `context_layer` = [B*F, N*H]
+            context_layer = tf.reshape(
+                context_layer,
+                [batch_size * from_seq_length, num_attention_heads * size_per_head],
+            )
+        else:
+           old_context, new_context = tf.split(context_layer, [prev_size_per_head, new_size_per_head], axis=-1)
+           old_context = tf.reshape(old_context, [batch_size * from_seq_length, num_attention_heads * prev_size_per_head])
+           new_context = tf.reshape(new_context, [batch_size * from_seq_length, num_attention_heads * new_size_per_head])
+           context_layer = tf.concat([old_context, new_context], axis=-1)
     else:
-        context_layer = tf.reshape(
-            context_layer,
-            # `context_layer` = [B, F, N*H]
-            [batch_size, from_seq_length, num_attention_heads * size_per_head],
-        )
+        if size_per_head == prev_size_per_head:
+            context_layer = tf.reshape(
+                context_layer,
+                # `context_layer` = [B, F, N*H]
+                [batch_size, from_seq_length, num_attention_heads * size_per_head],
+            )
+        else:
+            old_context, new_context = tf.split(context_layer, [prev_size_per_head, new_size_per_head], axis=-1)
+            old_context = tf.reshape(old_context, [batch_size, from_seq_length, num_attention_heads * prev_size_per_head])
+            new_context = tf.reshape(new_context, [batch_size, from_seq_length, num_attention_heads * new_size_per_head])
+            context_layer = tf.concat([old_context, new_context], axis=-1)
 
     return context_layer
 
