@@ -93,7 +93,7 @@ def dense_with_custom_init(input_tensor,
         # position-relevant weights
         if proj_type == 'factorized':
             position_weights = tf.get_variable(name+"/pos_weights",
-                                            shape=(pos_embed, pos_embed))
+                                            shape=(pos_embed, pos_embed), initializer=small_kernel_initializer)
             text_to_pos_weights = tf.get_variable(name + '/text_to_pos_weights', shape=(shape_list(input_tensor)[1]-pos_embed, pos_embed), initializer=small_kernel_initializer)
             pos_to_text_weights = tf.get_variable(name + '/pos_to_text_weights', shape=(pos_embed, weight_output_dim), initializer=small_kernel_initializer)
 

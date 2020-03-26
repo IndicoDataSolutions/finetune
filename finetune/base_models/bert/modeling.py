@@ -707,6 +707,9 @@ def attention_layer(
     to_tensor_2d = reshape_to_matrix(to_tensor)
 
     # `query_layer` = [B*F, N*H]
+    prev_size_per_head = size_per_head
+    new_size_per_head = int(config.n_context_embed_per_channel * config.context_dim // num_attention_heads)
+    size_per_head = prev_size_per_head + new_size_per_head
     query_layer = dense_with_custom_init(
         from_tensor_2d,
         num_attention_heads * size_per_head,
@@ -741,31 +744,35 @@ def attention_layer(
 
     additional_hidden = config.n_context_embed_per_channel * config.context_dim
     if additional_hidden > 0:
-        print("Make sure this gets printed")
-        old_query, new_query = tf.split(query_layer, [config.n_embed, additional_hidden], 1)
-        old_query_heads = transpose_for_scores(old_query, batch_size, num_attention_heads, from_seq_length, tf.get_shape(old_query)[1] // num_attention_heads)
-        new_query_heads = transpose_for_scores(old_query, batch_size, num_attention_heads, from_seq_length, tf.get_shape(new_query[1]) // num_attention_heads)
+        print("CONFIG HIDDEN SIZE", config.hidden_size)
+        old_query, new_query = tf.split(query_layer, [config.hidden_size, additional_hidden], 1)
+        old_query_heads = transpose_for_scores(old_query, batch_size, num_attention_heads, from_seq_length, prev_size_per_head)
+        new_query_heads = transpose_for_scores(new_query, batch_size, num_attention_heads, from_seq_length, new_size_per_head)
         # `query_layer` = [B, N, F, H]
-        query_layer = tf.concat([old_query_heads, new_query_heads], axis=1)
+        query_layer = tf.concat([old_query_heads, new_query_heads], axis=-1)
 
-        old_key, new_key = tf.split(key_layer, [config.n_embed, additional_hidden], 1)
-        old_key_heads = transpose_for_scores(old_key, batch_size, num_attention_heads, from_seq_length,)
-        new_key_heads = transpose_for_scores(old_key, batch_size, num_attention_heads, from_seq_length, tf.get_shape(new_key[1]) // num_attention_heads)
+        old_key, new_key = tf.split(key_layer, [config.hidden_size, additional_hidden], 1)
+        old_key_heads = transpose_for_scores(old_key, batch_size, num_attention_heads, from_seq_length, prev_size_per_head)
+        new_key_heads = transpose_for_scores(new_key, batch_size, num_attention_heads, from_seq_length, new_size_per_head)
         # `key_layer` = [B, N, T, H]
-        key_layer = tf.concat([old_key_heads, new_key_heads], axis=1)
+        key_layer = tf.concat([old_key_heads, new_key_heads], axis=-1)
 
-        old_value, new_value = tf.split(value_layer, [config.n_embed, additional_hidden], 1)
-        old_value_heads = tf.reshape(old_value, [batch_size, to_seq_length, num_attention_heads, tf.get_shape(old_value[1]) // num_attention_heads])
-        new_value_heads = tf.reshape(new_value, [batch_size, to_seq_length, num_attention_heads, tf.get_shape(new_value[1]) // num_attention_heads])
+        old_value, new_value = tf.split(value_layer, [config.hidden_size, additional_hidden], 1)
+        old_value_heads = tf.reshape(old_value, [batch_size, to_seq_length, num_attention_heads, prev_size_per_head])
+        new_value_heads = tf.reshape(new_value, [batch_size, to_seq_length, num_attention_heads, new_size_per_head])
         # `value_layer` = [B, T, N, H]
-        value_layer = tf.concat([old_value_heads, new_value_heads], axis=2)
-
+        value_layer = tf.concat([old_value_heads, new_value_heads], axis=-1)
+        print(value_layer)
+    else:
+        query_layer = transpose_for_scores(query_layer, batch_size, num_attention_heads, from_seq_length, size_per_head)      
+        key_layer = transpose_for_scores(key_layer, batch_size, num_attention_heads, to_seq_length, size_per_head)
+        value_layer = tf.reshape(value_layer, [batch_size, to_seq_length, num_attention_heads, size_per_head])
     # Take the dot product between "query" and "key" to get the raw
     # attention scores.
     # `attention_scores` = [B, N, F, T]
     attention_scores = tf.matmul(query_layer, key_layer, transpose_b=True)
     attention_scores = tf.multiply(
-        attention_scores, 1.0 / math.sqrt(float(tf.get_shape(old_key)[1] // num_attention_heads))
+        attention_scores, 1.0 / math.sqrt(float(config.hidden_size // num_attention_heads))
     )
 
     if attention_mask is not None:
@@ -1004,10 +1011,8 @@ def transformer_model(input_tensor,
                     "The hidden size (%d) is not a multiple of the number of attention "
                     "heads (%d)" % (hidden_size, num_attention_heads))
             n_context_embed = config.n_context_embed_per_channel * config.context_dim
-            if n_context_embed % attention_head_size != 0:
-                raise FinetuneError('The extra dimensions of the auxiliary information should be a multiple of the dimensions per attention head')
-            n_pos_heads = int(n_context_embed / attention_head_size)
-            num_attention_heads += n_pos_heads
+            if n_context_embed % num_attention_heads != 0:
+                raise FinetuneError('The extra dimensions of the auxiliary information should be a multiple of the number of attention_heads')
         with tf.variable_scope("layer_%d" % layer_idx):
             layer_input = prev_output
 
