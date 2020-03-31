@@ -40,7 +40,7 @@ def get_improvement_decay(total_num_steps, eval_dir, eval_freq, train):
     decay_op = tf.assign(decay, get_decay_for_half(total_num_steps) * has_improved + decay * (1 - has_improved))
     with tf.control_dependencies([decay_op]):
         decay = tf.identity(decay)
-    tf.summary.scalar("pos_decay", decay)
+#    tf.summary.scalar("pos_decay", decay)
     return decay       
 
 def get_decay_for_half(total_num_steps):
@@ -73,7 +73,7 @@ def get_pos_embedding_transform(proc_type, train, total_num_steps, eval_freq, ev
     print(proc_type, train, total_num_steps)
     if proc_type is None:
         return None
-    rate = get_improvement_decay(total_num_steps, eval_dir, eval_freq, train)
+#    rate = get_improvement_decay(total_num_steps, eval_dir, eval_freq, train)
     if proc_type == "full_mask":
         return full_mask_dropout_scheduled(train, rate)
     elif proc_type == "pos_mask":
@@ -81,7 +81,7 @@ def get_pos_embedding_transform(proc_type, train, total_num_steps, eval_freq, ev
     elif proc_type == "decay":
         return linear_decay(train, rate)
     elif proc_type == "zero_out":
-        return tf.zeros_like
+        return lambda x: non_normed_dropout(x, 1.1)
     else:
         raise ValueError("embed proc {} not recognised".format(proc_type))
 
@@ -137,7 +137,7 @@ def bert_featurizer(
             train,
             total_num_steps,
             config.val_interval,
-            os.path.join(config.tensorboard_folder, "eval")
+            None,#os.path.join(config.tensorboard_folder, "eval")
         )
     )
 
