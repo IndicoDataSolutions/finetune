@@ -13,7 +13,6 @@ from finetune.util.metrics import read_eval_metrics
 
 def get_improvement_decay(total_num_steps, eval_dir, eval_freq, train):
     def py_has_improved():
-        print("ENTERING HERE {} {}".format(eval_dir, train))
         if not train:
             return False
         eval_results = {
@@ -23,11 +22,12 @@ def get_improvement_decay(total_num_steps, eval_dir, eval_freq, train):
         }
         if len(eval_results) == 0:
             return False
-        most_recent_eval = max(eval_results.items(), key=lambda x: x[0])  # last steps.                                                               
-        best_eval = min(eval_results.items(), key=lambda x: x[1]["loss"])  # lowest_loss                                                              
+        most_recent_eval = max(eval_results.items(), key=lambda x: x[0])  # last steps.
+        best_eval = min(eval_results.items(), key=lambda x: x[1]["loss"])  # lowest_loss
         if most_recent_eval == best_eval:
             return True
         return False
+    
     has_improved = tf.cast(
         tf.cond(
             tf.equal((tf.train.get_global_step() - 1) % eval_freq, 0),
@@ -40,50 +40,49 @@ def get_improvement_decay(total_num_steps, eval_dir, eval_freq, train):
     decay_op = tf.assign(decay, get_decay_for_half(total_num_steps) * has_improved + decay * (1 - has_improved))
     with tf.control_dependencies([decay_op]):
         decay = tf.identity(decay)
-#    tf.summary.scalar("pos_decay", decay)
     return decay       
 
 def get_decay_for_half(total_num_steps):
     return tf.minimum(tf.cast(tf.train.get_global_step(), tf.float32) / (total_num_steps / 2), 1.0)
 
-def non_normed_dropout(x, rate, noise_shape=None):
+def non_normed_dropout(x, rate, noise_shape=None, placeholder=None):
+    if placeholder is None:
+        placeholder = 0.0
     if noise_shape is None:
         noise_shape = tf.shape(x)
     dropped = tf.cast(tf.random.uniform(shape=noise_shape) > rate, tf.float32)
-    placeholder_value = tf.get_variable("pos_placeholder", shape=[1, x.get_shape().as_list()[1]], dtype=tf.float32, trainable=False)
-    return dropped * x + (1.0 - dropped) * placeholder_value
+    return dropped * x + (1.0 - dropped) * placeholder
 
-def pos_mask_dropout_scheduled(train, rate):
+def pos_mask_dropout_zero(train, rate):
     def proc(x):
         return non_normed_dropout(x, rate, noise_shape=[tf.shape(x)[0], 1])
     return proc
 
-def full_mask_dropout_scheduled(train, rate):
-    def	proc(x):
-        return non_normed_dropout(x, rate)
-    return proc
-
-def linear_decay(train, rate):
+def pos_mask_dropout_placeholder(train, rate):
     def proc(x):
-        return x * (1.0 - rate)
+	return non_normed_dropout(
+            x, rate, noise_shape=[tf.shape(x)[0], 1],
+            placeholder=tf.get_variable("pos_placeholder", shape=[1, x.get_shape().as_list()[1]], dtype=tf.float32)
+        )
     return proc
 
-def get_pos_embedding_transform(proc_type, train, total_num_steps, eval_freq, eval_dir):
+def get_pos_embedding_transform(pos_removal_mode, pos_decay_mode, train, total_num_steps, eval_freq, eval_dir):
     assert total_num_steps is not None
-    print(proc_type, train, total_num_steps)
-    if proc_type is None:
+    if pos_removal_mode is None:
         return None
-#    rate = get_improvement_decay(total_num_steps, eval_dir, eval_freq, train)
-    if proc_type == "full_mask":
-        return full_mask_dropout_scheduled(train, rate)
-    elif proc_type == "pos_mask":
+    if pos_decay_mode.lower() == "fixed":
+        rate = 1.0
+    elif pos_decay_mode.lower() == "step":
+        rate = get_improvement_decay(total_num_steps, eval_dir, eval_freq, train)
+    elif pos_decay_mode.lower() == "smooth":
+        rate = get_decay_for_half(total_num_steps)
+    tf.summary.scalar("pos_decay", rate)
+    if pos_removal_mode.lower() == "zero_out":
+        
+    elif pos_removal_mode.lower() == "placeholder":    
         return pos_mask_dropout_scheduled(train, rate)
-    elif proc_type == "decay":
-        return linear_decay(train, rate)
-    elif proc_type == "zero_out":
-        return lambda x: non_normed_dropout(x, 1.1)
-    else:
-        raise ValueError("embed proc {} not recognised".format(proc_type))
+    
+    raise ValueError("pos_removal_mode {} not recognised".format(pos_removal_mode))
 
 
 def bert_featurizer(
@@ -128,7 +127,7 @@ def bert_featurizer(
         low_memory_mode=config.low_memory_mode,
         context_dim = config.context_dim,
         n_context_embed_per_channel = config.n_context_embed_per_channel,
-        use_auxiliary_info=config.use_auxiliary_info and not (config.mlm_baseline or (config.pos_injection and not config.pos_embedding_transform)),
+        use_auxiliary_info=config.use_auxiliary_info and config.sidekick and not config.mlm_baseline,
         n_layers_with_aux=config.n_layers_with_aux,
         pos_injection=config.pos_injection,
         use_position_embeddings=config.use_reading_order_position,
@@ -195,10 +194,10 @@ def bert_featurizer(
 
         embed_weights = bert.get_embedding_table()
 
-        if context is None or (config.mlm_baseline or (config.pos_injection and not config.pos_embedding_transform)):
-            n_embed = config.n_embed
-        else:
+        if context is not None and config.sidekick:
             n_embed = config.n_embed + config.n_context_embed_per_channel * config.context_dim
+        else:
+            n_embed = config.n_embed
 
         features = tf.reshape(
             bert.get_pooled_output(),
@@ -227,7 +226,6 @@ def bert_featurizer(
                     kernel_initializer=None, custom=True, pos_embed=pos_embed, proj_type='downward_identity')
                 sequence_features = tf.reshape(sequence_features, tf.concat((initial_shape[:-1], [config.n_embed]), 0))
                 # sequence_features = tf.Print(sequence_features, [sequence_features], summarize=1000)
-                tf.print(sequence_features, output_stream=sys.stderr)
                 features = dense_with_custom_init(
                     features, config.n_embed, activation=None, kernel_initializer=None,
                     custom=True, pos_embed=pos_embed, name='feats_proj', proj_type='downward_identity'

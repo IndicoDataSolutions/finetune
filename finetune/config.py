@@ -400,6 +400,7 @@ def get_default_config():
         mlm_baseline=False,  # single projection after last layer of base model
         n_layers_with_aux=0,  # if -1, add to all layers
         mlm_context_shuffle_val=False,
+        sidekick=True,
 
         cps_swap_proba=0.0,
         pos_injection=False,
@@ -407,7 +408,8 @@ def get_default_config():
         table_mask_bias=False,
         mask_spans=1,
         word_masks=False,
-        pos_embedding_transform=None,
+        pos_removal_mode=None, #"placeholder" or "zero_out"
+        pos_decay_mode=None, #"fixed", "step" or "smooth"
 
         # Serialize finetune version with model
         version=VERSION,
