@@ -70,6 +70,7 @@ def get_pos_embedding_transform(pos_removal_mode, pos_decay_mode, train, total_n
     assert total_num_steps is not None
     if pos_removal_mode is None:
         return None
+    
     if pos_decay_mode.lower() == "fixed":
         rate = 1.0
     elif pos_decay_mode.lower() == "step":
@@ -77,10 +78,11 @@ def get_pos_embedding_transform(pos_removal_mode, pos_decay_mode, train, total_n
     elif pos_decay_mode.lower() == "smooth":
         rate = get_decay_for_half(total_num_steps)
     tf.summary.scalar("pos_decay", rate)
+    
     if pos_removal_mode.lower() == "zero_out":
-        
+        return pos_mask_dropout_zero(train, rate):
     elif pos_removal_mode.lower() == "placeholder":    
-        return pos_mask_dropout_scheduled(train, rate)
+        return pos_mask_dropout_placeholder(train, rate)
     
     raise ValueError("pos_removal_mode {} not recognised".format(pos_removal_mode))
 
