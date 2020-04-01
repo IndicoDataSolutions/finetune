@@ -16,7 +16,7 @@ def process_pos_embed(positional_embed, max_length, interpolate):
     if interpolate and max_length != len(positional_embed):
         positional_embed = interpolate_pos_embed(positional_embed, max_length)
 
-    elif max_length > len(positional_embed):
+    elif max_length > len(positional_embed) and len(positional_embed) != 0:
         raise ValueError(
             "Max Length cannot be greater than {} if interpolate_pos_embed is turned off".format(
                 len(positional_embed)
