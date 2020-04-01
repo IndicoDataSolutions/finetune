@@ -27,12 +27,17 @@ class TestDocumentLabeler(unittest.TestCase):
                 {'start': 7082, 'end': 7099, 'label': 'city of hollywood', 'text': 'City of Hollywood'}
             ]
         ]
-        with open("tests/data/test_ocr_documents.jl", "rt") as fp:
+        with open("tests/data/test_ocr_documents.json", "rt") as fp:
             self.documents = json.load(fp)
 
     def test_fit_predict(self):
-        model = DocumentLabeler()
+        model = DocumentLabeler(n_epochs=20)
         model.fit(self.documents, self.labels)
         preds = model.predict(self.documents)
         self.assertEqual(len(preds), len(self.documents))
-        print(preds)
+        for pred, lab in zip(preds, self.labels):
+            # checks that an overfit model, will produce the exact same output as was given as
+            # input even after being sliced up and put back together.
+            for p, l in zip(pred, lab):
+                del p["confidence"]
+                self.assertEqual(p, l)
