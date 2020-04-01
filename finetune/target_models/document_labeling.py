@@ -1,14 +1,13 @@
 from finetune.target_models.sequence_labeling import SequenceLabeler
 
-def get_context(item, dpi_norm):
+def get_context(document, dpi_norm):
     context = []
-    for page in item:
+    for page in document:
         for token in page["tokens"]:
             pos = token["position"]
             offset = token["doc_offset"]
             if dpi_norm:
                 dpi = page["pages"][0]["dpi"]
-#                dpi = item["pages"][token["page_num"]]["dpi"]
                 x_norm = 300 / dpi["dpix"]
                 y_norm = 300 / dpi["dpiy"]
             else:
@@ -18,12 +17,12 @@ def get_context(item, dpi_norm):
             context.append(
                 {
                     'top': pos["top"] * y_norm,
-		    'bottom': pos["bottom"] * y_norm,
+                    'bottom': pos["bottom"] * y_norm,
                     'left': pos["left"] * x_norm,
-		    'right': pos["right"] * x_norm,
-		    'text': token["text"],
-		    'start': offset["start"],
-		    'end': offset["end"],
+                    'right': pos["right"] * x_norm,
+                    'text': token["text"],
+                    'start': offset["start"],
+                    'end': offset["end"],
                 }
 	    )
     return context
@@ -41,7 +40,7 @@ def reblock_by_offsets(offsets, texts, to_reblock):
         while not (page_start <= block["start"] < page_end):
             page_idx += 1
             if page_idx == len(offsets):
-                raise ValueError("Block: {} does not not align with offsets")
+                raise ValueError("Block: {} does not not align with offsets".format(block))
             page_start = offsets[page_idx]["start"]
             page_end = offsets[page_idx]["end"]
             
@@ -52,7 +51,7 @@ def reblock_by_offsets(offsets, texts, to_reblock):
         output[page_idx].append(block)
     return output
 
-def _single_convert_to_finetune(document, labels=None, dpi_norm=True, input_level="page", doc_id=None):
+def _single_convert_to_finetune(*, document, labels=None, dpi_norm=True, input_level="page", doc_id=None):
     context = get_context(document, dpi_norm)
     texts = []
     offsets = []
@@ -69,9 +68,9 @@ def _single_convert_to_finetune(document, labels=None, dpi_norm=True, input_leve
                 offsets.append(block_obj["doc_offset"])
     else:
         raise ValueError("input_level should be either page or block")
-    if doc_id is not None:
-        for offset in offsets:
-            offset["doc_id"] = doc_id
+
+    for offset in offsets:
+        offset["doc_id"] = doc_id
         
     context_reblocked = reblock_by_offsets(offsets, texts, context)
     if labels is not None:
@@ -100,15 +99,20 @@ def finetune_to_odl(preds, offsets, reblock_to_docs=True):
 def odl_to_finetune(batch, labels=None, dpi_norm=True, input_level="page"):
     text = []
     context = []
-    labels_out = []
     offsets = []
+    
+    if labels is not None:
+        labels_out = []
+    else:
+        labels_out = None
+        
     for doc_id, document in enumerate(batch):
         if labels is not None:
             doc_label = labels[doc_id]
         else:
             doc_label = None
         t, c, l, o = _single_convert_to_finetune(
-            document,
+            document=document,
             doc_id=doc_id,
             labels=doc_label,
             dpi_norm=dpi_norm,
@@ -116,17 +120,22 @@ def odl_to_finetune(batch, labels=None, dpi_norm=True, input_level="page"):
         )
         text.extend(t)
         context.extend(c)
-        labels_out.extend(l)
         offsets.extend(o)
+        if l is not None:
+            labels_out.extend(l)
     return text, context, labels_out, offsets
         
 
 class DocumentLabeler(SequenceLabeler):
+    """
+    A wrapper to use SequenceLabeler ontop of indico's PDFExtraction APi 
+    in ondocument mode with labels at a document charachter level.
+    """
     def finetune(self, documents, labels):
         text, context, labels_per_page, _ = odl_to_finetune(documents, labels=labels)
         return super().finetune(text, labels_per_page, context=context if self.config.context_dim else None)
 
     def predict(self, documents):
-        text_pred, context_pred, _, offsets_pred = odl_to_finetune(documents, labels=labels_raw)
-        preds_raw = model.predict(text_pred, context=context_pred if self.config.context_dim else None)
+        text_pred, context_pred, _, offsets_pred = odl_to_finetune(documents, labels=None)
+        preds_raw = super().predict(text_pred, context=context_pred if self.config.context_dim else None)
         return finetune_to_odl(preds_raw, offsets_pred)
