@@ -197,7 +197,7 @@ def get_model_fn(
         total_num_steps = params.n_epochs * params.dataset_size // (params.batch_size * n_replicas)
         with tf.variable_scope(tf.get_variable_scope()):
             train_loss = 0.0
-            if params.context_in_base_model or params.pos_injection:
+            if params.sidekick or params.pos_injection:
                 if params.base_model.is_bidirectional:
                     batch, seq, _ = shape_list(X)
                     pos_embed = embed_position(context, params, batch, seq)
@@ -211,7 +211,7 @@ def get_model_fn(
                         total_num_steps=total_num_steps,
                     )
                 else:
-                    raise NotImplementedError('context_in_base_model not implemented for non-bidirectional models.')
+                    raise NotImplementedError('context not implemented for non-bidirectional models.')
             else:
                 featurizer_state = params.base_model.get_featurizer(
                     X,
@@ -221,7 +221,7 @@ def get_model_fn(
                     explain=build_explain,
                     total_num_steps=total_num_steps,
                 )
-            if context is not None and not params.context_in_base_model and not params.pos_injection:
+            if context is not None and not params.sidekick and not params.pos_injection:
                 batch, seq, _ = shape_list(featurizer_state['sequence_features'])
                 pos_embed = embed_position(context, params, batch, seq)
                 featurizer_state['context'] = pos_embed

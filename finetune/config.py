@@ -396,14 +396,15 @@ def get_default_config():
         context_embed_stddev=1.0,
         default_context=None,
         context_dim=0,  # number of context dimensions to be inserted
-        context_in_base_model=False,
         mlm_baseline=False,  # single projection after last layer of base model
         n_layers_with_aux=0,  # if -1, add to all layers
         mlm_context_shuffle_val=False,
-        sidekick=True,
+        
+        sidekick=False,
+        target_model_context=False,
+        pos_injection=False,
 
         cps_swap_proba=0.0,
-        pos_injection=False,
         use_reading_order_position=True,
         table_mask_bias=False,
         mask_spans=1,

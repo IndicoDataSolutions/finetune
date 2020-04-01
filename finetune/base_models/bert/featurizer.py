@@ -12,6 +12,7 @@ from finetune.util.metrics import read_eval_metrics
 
 
 def get_improvement_decay(total_num_steps, eval_dir, eval_freq, train):
+    eval_dir = os.path.join(eval_dir, "eval")
     def py_has_improved():
         if not train:
             return False
@@ -134,11 +135,12 @@ def bert_featurizer(
         pos_injection=config.pos_injection,
         use_position_embeddings=config.use_reading_order_position,
         pos_embedding_transform=get_pos_embedding_transform(
-            config.pos_embedding_transform,
+            config.pos_removal_mode,
+            config.pos_decay_mode,
             train,
             total_num_steps,
             config.val_interval,
-            None,#os.path.join(config.tensorboard_folder, "eval")
+            config.tensorboard_folder
         )
     )
 
