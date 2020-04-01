@@ -60,7 +60,7 @@ def pos_mask_dropout_zero(train, rate):
 
 def pos_mask_dropout_placeholder(train, rate):
     def proc(x):
-	return non_normed_dropout(
+        return non_normed_dropout(
             x, rate, noise_shape=[tf.shape(x)[0], 1],
             placeholder=tf.get_variable("pos_placeholder", shape=[1, x.get_shape().as_list()[1]], dtype=tf.float32)
         )
@@ -80,7 +80,7 @@ def get_pos_embedding_transform(pos_removal_mode, pos_decay_mode, train, total_n
     tf.summary.scalar("pos_decay", rate)
     
     if pos_removal_mode.lower() == "zero_out":
-        return pos_mask_dropout_zero(train, rate):
+        return pos_mask_dropout_zero(train, rate)
     elif pos_removal_mode.lower() == "placeholder":    
         return pos_mask_dropout_placeholder(train, rate)
     
