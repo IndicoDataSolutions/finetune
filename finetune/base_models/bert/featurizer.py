@@ -63,7 +63,7 @@ def pos_mask_dropout_placeholder(train, rate):
     def proc(x):
         return non_normed_dropout(
             x, rate, noise_shape=[tf.shape(x)[0], 1],
-            placeholder=tf.get_variable("pos_placeholder", shape=[1, x.get_shape().as_list()[1]], dtype=tf.float32)
+            placeholder=tf.get_variable("pos_placeholder", shape=[1, x.get_shape().as_list()[1]], dtype=tf.float32, trainable=False)
         )
     return proc
 
