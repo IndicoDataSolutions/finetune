@@ -25,10 +25,6 @@ class SequencePipeline(BasePipeline):
         super(SequencePipeline, self).__init__(config)
         self.multi_label = multi_label
 
-    def _post_data_initialization(self, Y):
-        Y_ = list(itertools.chain.from_iterable(Y)) if Y is not None else None
-        super()._post_data_initialization(Y_)
-
     def text_to_tokens_mask(self, X, Y=None, context=None):
         pad_token = [self.config.pad_token] if self.multi_label else self.config.pad_token
         out_gen = self._text_to_ids(X, pad_token=pad_token)

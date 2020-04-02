@@ -119,14 +119,14 @@ class Classifier(BaseModel):
             formatted_predictions.append(dict(zip(classes, probas)))
         return formatted_predictions
 
-    def finetune(self, X, Y=None, batch_size=None, context=None, **kwargs):
+    def finetune(self, X, Y=None, context=None, **kwargs):
         """
         :param X: list or array of text.
         :param Y: integer or string-valued class labels.
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
         """
-        return super().finetune(X, Y=Y, batch_size=batch_size, context=context, **kwargs)
+        return super().finetune(X, Y=Y, context=context, **kwargs)
 
     @classmethod
     def get_eval_fn(cls):

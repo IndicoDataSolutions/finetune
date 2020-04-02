@@ -32,8 +32,8 @@ class ComparisonPipeline(ClassificationPipeline):
         )
         yield EncodedOutput(**kwargs)
 
-    def text_to_tokens_mask(self, pair, Y=None, context=None):
-        out_gen = self._text_to_ids(pair, pad_token=self.config.pad_token)
+    def text_to_tokens_mask(self, X, Y=None, context=None):
+        out_gen = self._text_to_ids(X, pad_token=self.config.pad_token)
         for i, out in enumerate(out_gen):
             if context is None:
                 feats = {"tokens": out.token_ids}
