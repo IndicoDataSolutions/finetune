@@ -30,10 +30,12 @@ class InputMode:
 
 def batch_dataset(dataset, batch_size, shapes, n_epochs=1):
     def batched_dataset():
-        return dataset()
-        .padded_batch(batch_size, padded_shapes=shapes, drop_remainder=False)
-        .repeat(self.config.n_epochs)
-        .prefetch(tf.data.experimental.AUTOTUNE)
+        return (
+            dataset()
+            .padded_batch(batch_size, padded_shapes=shapes, drop_remainder=False)
+            .repeat(n_epochs)
+            .prefetch(tf.data.experimental.AUTOTUNE)
+        )
     return batched_dataset
 
 class Chunker:
@@ -89,7 +91,6 @@ class BasePipeline(metaclass=ABCMeta):
     @property
     def dataset_size(self):
         return self.config.dataset_size
-
     @abstractmethod
     def _target_encoder(self):
         # Overridden by subclass to produce the right target encoding for a given target model.
@@ -126,6 +127,25 @@ class BasePipeline(metaclass=ABCMeta):
             (shapes, TS([self.target_dim]),),
         )
 
+    def zip_list_to_dict(self, X, Y=None, context=None):
+        if Y is not None:
+            Y = list(Y)
+            if len(X) != len(Y):
+                raise FinetuneError("the length of your labels does not match the length of your text")
+        if context is not None:
+            context = list(context)
+            if len(X) != len(context):
+                raise FinetuneError("the length of your context does not match the length of your text")
+        out = []
+        for i, x in enumerate(X):
+            sample = {"X": x}
+            if Y is not None:
+                sample["Y"] = Y[i]
+            if context is not None:
+                sample["context"] = context[i]
+            out.append(sample)
+        return out
+
     def text_to_tokens_mask(self, X, Y=None, context=None):
         out_gen = self._text_to_ids(X, pad_token=self.config.pad_token)
         for i, out in enumerate(out_gen):
@@ -140,11 +160,11 @@ class BasePipeline(metaclass=ABCMeta):
                 yield feats, self.label_encoder.transform([Y])[0]
 
     def _post_data_initialization(self, dataset=None):
-        if "y" in dataset[0]:
-            ys = [data["y"] for data in dataset]
+        if "Y" in dataset[0]:
+            ys = [data["Y"] for data in dataset]
             if self.label_encoder is None:
                 self.label_encoder = self._target_encoder()
-                self.label_encoder.fit(Y)
+                self.label_encoder.fit(ys)
             
             self.config.pad_idx = self.pad_idx
 
@@ -169,18 +189,29 @@ class BasePipeline(metaclass=ABCMeta):
     def _compute_class_weights(self, class_weights, class_counts):
         return compute_class_weights(class_weights=class_weights, class_counts=class_counts)
 
-    def get_dataset_from_generator(self, generator_fn, input_fn_mode):
+    def make_dataset_fn(self, data_fn, tqdm_mode, update_hook, shapes, types):
+        def dataset_fn():
+            return Dataset.from_generator(
+                self.wrap_tqdm(data_fn, tqdm_mode, update_hook=update_hook), types, shapes
+            )
+        return dataset_fn
+
+    def get_dataset_from_generator(self, generator_fn, input_mode, update_hook=None):
         def chunked_and_tokenized_dataset():
             for d in generator_fn():
                 yield self.text_to_tokens_mask(**d)
 
         types, shapes = self.feed_shape_type_def()
-        tqdm_mode = "predict" if input_fn_mode == InputMode.Predict else "train"
+        tqdm_mode = "predict" if input_mode == InputMode.PREDICT else "train"
         
-        raw_dataset = Dataset.from_generator(
-            self.wrap_tqdm(chunked_and_tokenized_dataset, tqdm_mode, update_hook=update_hook), types, shapes
+        raw_dataset = self.make_dataset_fn(
+            data_fn=chunked_and_tokenized_dataset,
+            tqdm_mode=tqdm_mode,
+            update_hook=update_hook,
+            types=types,
+            shapes=shapes
         )
-        if input_fn_mode == InputMode.PREDICT:
+        if input_mode == InputMode.PREDICT:
             return {
                 "predict_dataset": batch_dataset(
 		    raw_dataset,
@@ -190,19 +221,19 @@ class BasePipeline(metaclass=ABCMeta):
             }
         
         if self.config.chunk_long_sequences:
-	    LOGGING.warning("The dataset size is not adjusted for chunk long sequences when training from a generator")
+            LOGGING.warning("The dataset size is not adjusted for chunk long sequences when training from a generator")
 
         if self.config.dataset_size is None:
             raise FinetuneError("If you are using a callable as input you must provide config.dataset_size")
 
-	if self.config.class_weights is not None self.config.oversample:
-	    raise FinetuneError("Cannot use class weights or resampling in generator mode")
+        if self.config.class_weights is not None or self.config.oversample:
+            raise FinetuneError("Cannot use class weights or resampling in generator mode")
 
-	self.epoch = 1
+        self.epoch = 1
 
         self._skip_tqdm = self.config.val_size
 
-	self.config.val_size, self.config.val_interval = self.validation_settings(
+        self.config.val_size, self.config.val_interval = self.validation_settings(
             n_examples=self.config.dataset_size,
             batch_size=self.config.batch_size,
         )
@@ -212,7 +243,7 @@ class BasePipeline(metaclass=ABCMeta):
         val_dataset = (
             lambda: raw_dataset()
             .shuffle(
-                self.config.shuffle_buffer_size
+                self.config.shuffle_buffer_size,
                 seed=self.config.seed,
                 reshuffle_each_iteration=False,
             )
@@ -220,13 +251,13 @@ class BasePipeline(metaclass=ABCMeta):
         )
         train_dataset = (
             lambda: raw_dataset()
-	    .shuffle(
-		self.config.shuffle_buffer_size
-	        seed=self.config.seed,
-		reshuffle_each_iteration=False,
+            .shuffle(
+	        self.config.shuffle_buffer_size,
+                seed=self.config.seed,
+                reshuffle_each_iteration=False,
             )
             .skip(self.config.val_size)
-	)
+        )
 
         return {
             "train_dataset": batch_dataset(
@@ -234,7 +265,7 @@ class BasePipeline(metaclass=ABCMeta):
                 batch_size=self.config.batch_size,
                 shapes=shapes,
                 n_epochs=self.config.n_epochs
-            )
+            ),
             "val_dataset": batch_dataset(
                 val_dataset_unbatched,
                 batch_size=self.config.batch_size,
@@ -243,29 +274,30 @@ class BasePipeline(metaclass=ABCMeta):
         }
 
 
-    def get_dataset_from_list(self, data_list, input_fn_mode):
-        assert input_fn_mode == InputMode.TRAIN, "use the generator path for prediction"
+    def get_dataset_from_list(self, data_list, input_mode, update_hook=None):
+        assert input_mode == InputMode.TRAIN, "use the generator path for prediction"
         self.epoch = 1
-        self._skip_tqdm = self.config.val_size
         
-        data_raw = list(data_list)
-        self._post_data_initialization(Y=data_list)
+        data_list = list(data_list)
+        self._post_data_initialization(data_list)
             
         dataset_tokenized = list(
             itertools.chain.from_iterable(
-                self.text_to_tokens_mask(**d) for d in data_raw
+                self.text_to_tokens_mask(**d) for d in data_list
             )
         )
             
         self.config.val_size, self.config.val_interval = self.validation_settings(
-            n_examples=len(data_list)
+            n_examples=len(data_list),
             batch_size=self.config.batch_size,
 	) # TODO strange, the estimated times may be bad if a really long document falls into the validation split???
+
+        self._skip_tqdm = 0
 
         if self.config.val_size > 0 and self.config.val_set is None:
             train_split, val_split = train_test_split(data_list, test_size=self.config.val_size, random_state=self.config.seed)
         else:
-            train_split = dataset_shuffle(*to_shuffle, random_state=self.config.seed)
+            train_split = dataset_shuffle(data_list, random_state=self.config.seed)
             val_split = self.config.val_set or []
 
         self.config.dataset_size = len(train_split)
@@ -289,15 +321,22 @@ class BasePipeline(metaclass=ABCMeta):
                 class_counts=class_counts
             )
             
-        shape_def = self.feed_shape_type_def()
+        types, shapes = self.feed_shape_type_def()
 
-        train_dataset_unbatched = Dataset.from_generator(
-            self.wrap_tqdm(chunked_and_tokenized_dataset, "train", update_hook=update_hook), *shape_def
+        train_dataset_unbatched = self.make_dataset_fn(
+            data_fn=lambda: tokenized_train_split,
+            tqdm_mode="train",
+            update_hook=update_hook,
+            types=types,
+            shapes=shapes
         )
-
-        val_dataset_unbatched = Dataset.from_generator(
-            self.wrap_tqdm(chunked_and_tokenized_dataset, "evaluation", update_hook=update_hook), *shape_def
-	)
+        val_dataset_unbatched = self.make_dataset_fn(
+            data_fn=lambda: tokenized_val_split,
+            tqdm_mode="evaluate",
+            update_hook=update_hook,
+            types=types,
+            shapes=shapes
+        )
         
         return {
 	    "train_dataset": batch_dataset(
@@ -305,7 +344,7 @@ class BasePipeline(metaclass=ABCMeta):
 		batch_size=self.config.batch_size,
                 shapes=shapes,
                 n_epochs=self.config.n_epochs
-            )
+            ),
             "val_dataset": batch_dataset(
 		val_dataset_unbatched,
 	        batch_size=self.config.batch_size,
@@ -318,7 +357,7 @@ class BasePipeline(metaclass=ABCMeta):
             return int(val_size * dataset_size)
         return val_size
 
-   def validation_settings(self, n_examples, batch_size):
+    def validation_settings(self, n_examples, batch_size):
         """
         Auto-select reasonable validation settings
         """
@@ -352,7 +391,7 @@ class BasePipeline(metaclass=ABCMeta):
         return Xs, Y, context
 
     def wrap_tqdm(self, gen, mode, update_hook=None):
-        assert "mode" in {"train", "predict", "evaluate"}
+        assert mode in {"train", "predict", "evaluate"}
         if mode == "predict":
             return gen # tqdm is handled elsewhere (not sure why)
 
@@ -366,7 +405,7 @@ class BasePipeline(metaclass=ABCMeta):
 
         def internal_gen():
             current_epoch = (self.epoch - 1) % self.config.n_epochs + 1
-            it = iter(gen)
+            it = iter(gen())
 
             if mode == "train":
                 desc = "Epoch {}/{}".format(current_epoch, self.config.n_epochs)
@@ -388,7 +427,7 @@ class BasePipeline(metaclass=ABCMeta):
             ):
                 yield i
 
-            if train:
+            if mode == "train":
                 self.epoch += 1
 
         return internal_gen

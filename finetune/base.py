@@ -37,6 +37,7 @@ from finetune.util.in_memory_finetune import make_in_memory_finetune_hooks
 from finetune.util.indico_estimator import IndicoEstimator
 from finetune.base_models import GPTModel, GPTModelSmall
 from finetune.nn.auxiliary import add_context_embed
+from finetune.input_pipeline import InputMode
 
 LOGGER = logging.getLogger("finetune")
 
@@ -181,27 +182,22 @@ class BaseModel(object, metaclass=ABCMeta):
         steps = int(math.ceil(n_examples / (batch_size * n_gpus)))
         return steps
 
-    def finetune(self, Xs, Y=None, batch_size=None, context=None, update_hook=None):
-        if (
-            not callable(Xs)
-            and Y is not None
-            and len(Xs) != len(Y)
-        ):
-            raise FinetuneError(
-                "Mismatch between number of examples ({}) and number of targets ({}) provided.".format(
-                    len(Xs), len(Y)
-                )
+    def finetune(self, Xs, Y=None, context=None, update_hook=None):
+        if callable(Xs):
+            datasets = self.input_pipeline.get_dataset_from_generator(
+                generator_fn, input_mode=InputMode.TRAIN, update_hook=update_hook
             )
-        batch_size = batch_size or self.config.batch_size
-        val_input_fn, train_input_fn, val_size, val_interval = self.input_pipeline.get_train_input_fns(
-            Xs, Y, batch_size=batch_size, context=context, update_hook=update_hook
-        )
-
+        else:
+            zipped_data_list = self.input_pipeline.zip_list_to_dict(X=Xs, Y=Y, context=context)
+            datasets = self.input_pipeline.get_dataset_from_list(
+                zipped_data_list, input_mode=InputMode.TRAIN, update_hook=update_hook
+            )
+                
         if self.config.keep_best_model:
-            if val_size <= 10:
+            if self.config.val_size <= 10:
                 tf.logging.warning(
                     "Early stopping / keeping best model with a validation size of {} is likely to case undesired results".format(
-                        val_size
+                        self.config.val_size
                     )
                 )
 
@@ -211,22 +207,22 @@ class BaseModel(object, metaclass=ABCMeta):
 
         steps_per_epoch = self._n_steps(
             n_examples=self.input_pipeline.dataset_size,
-            batch_size=batch_size,
+            batch_size=self.config.batch_size,
             n_gpus=max(1, len(self.resolved_gpus)),
         )
         num_steps = steps_per_epoch * self.config.n_epochs
 
-        if val_size > 0:
+        if self.config.val_size > 0:
             # Validation with all other tasks.
             train_hooks.append(
                 tf.estimator.experimental.InMemoryEvaluatorHook(
                     estimator,
-                    val_input_fn,
-                    every_n_iter=val_interval,
-                    steps=math.ceil(val_size / batch_size),
+                    datasets["val_dataset"],
+                    every_n_iter=self.config.val_interval,
+                    steps=math.ceil(self.config.val_size / self.config.batch_size),
                 )
             )
-            early_stopping_interval = val_interval
+            early_stopping_interval = self.config.val_interval
         else:
             early_stopping_interval = sys.maxsize
 
@@ -246,7 +242,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            train_input_fn_skipped = lambda: train_input_fn().skip(self.saver.get_initial_step() * max(len(self.resolved_gpus), 1))
+            train_input_fn_skipped = lambda: datasets["train_dataset"]().skip(self.saver.get_initial_step() * max(len(self.resolved_gpus), 1))
             estimator.train(train_input_fn_skipped, hooks=train_hooks, steps=num_steps)
         
         self._trained = True
@@ -371,16 +367,21 @@ class BaseModel(object, metaclass=ABCMeta):
         invert_idxs[sorted_idxs] = np.arange(sorted_idxs.shape[0])
         return sorted_Xs, invert_idxs
 
-    def _inference(self, Xs, predict_keys=None, n_examples=None, context=None, update_hook=None):
+    def _inference(self, Xs, predict_keys=None, context=None, update_hook=None):
 
         Xs = self.input_pipeline._format_for_inference(Xs)
 
-        input_fn = self.input_pipeline.get_predict_input_fn(Xs, context=context)
+        def get_zipped_data():
+            return self.input_pipeline.zip_list_to_dict(X=Xs, context=context)
+        
+        input_fn = self.input_pipeline.get_dataset_from_generator(
+            get_zipped_data, input_mode=InputMode.PREDICT, update_hook=update_hook
+        )["predict_dataset"]
 
         estimator, hooks = self.get_estimator(
             build_explain=PredictMode.EXPLAIN in predict_keys, cache=self._cached_predict
         )
-        length = len(Xs) if not callable(Xs) else None
+        length = len(Xs)
 
         if self._cached_predict:
             # Add commonly used (cheap) predict keys to the graph to prevent having to rebuild
@@ -398,7 +399,7 @@ class BaseModel(object, metaclass=ABCMeta):
         
         predictions = ProgressBar(
             prediction_iterator, 
-            total=n_examples or length, 
+            total=length, 
             desc="Inference", 
             update_hook=update_hook
         )
@@ -517,53 +518,7 @@ class BaseModel(object, metaclass=ABCMeta):
         :param seed_text: Defaults to the empty string. This will form the starting point to begin modelling
         :return: A string containing the generated text.
         """
-        if use_extra_toks is None:
-            use_extra_toks = self._trained
-    
-        def dataset_encoded():
-            while not dataset_encoded.finished:
-                yield {"tokens": encoded.token_ids, "mask": encoded.mask}
-
-        dataset_encoded.finished = False
-
-        def get_input_fn():
-            types, shapes = self.input_pipeline.feed_shape_type_def()
-            tf_dataset = Dataset.from_generator(dataset_encoded, types[0], shapes[0])
-            return tf_dataset.batch(1)
-
-        self.config.use_extra_toks = use_extra_toks
-        encoded = self.input_pipeline.text_encoder._encode([seed_text])
-        if encoded.token_ids == [] and not use_extra_toks:
-            raise ValueError(
-                "If you are not using the extra tokens, you must provide some non-empty seed text"
-            )
-        start = [self.input_pipeline.text_encoder.start_token] if use_extra_toks else []
-        token_ids = start 
-        if encoded.token_ids is not None and len(encoded.token_ids):
-            token_ids += encoded.token_ids[0]
-        encoded = EncodedOutput(token_ids=token_ids)
-
-        estimator, hooks = self.get_estimator(force_build_lm=True)
-
-        predict = estimator.predict(
-            input_fn=get_input_fn, predict_keys=[PredictMode.GENERATE_TEXT], hooks=hooks
-        )
-
-        EOS = self.input_pipeline.text_encoder.end_token
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore")
-            for i in range(
-                len(encoded.token_ids) - 1, (max_length or self.config.max_length) - 2
-            ):
-                class_idx = next(predict)[PredictMode.GENERATE_TEXT]
-                encoded.token_ids.append(class_idx[-1])
-                if encoded.token_ids[-1] == EOS:
-                    break
-            dataset_encoded.finished = True
-
-        del self.config["use_extra_toks"]
-
-        return self.input_pipeline.text_encoder.decode(encoded.token_ids)
+        raise NotImplementedError("Need to rewrite this with cached predict interface")
 
     def __getstate__(self):
         """
@@ -797,7 +752,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 sequence_id.append(i)
 
         labels, batch_probas = [], []
-        for pred in self._inference(X, predict_keys=[PredictMode.PROBAS, PredictMode.NORMAL], n_examples=len(flat_array_encoded), context=context, **kwargs):
+        for pred in self._inference(X, predict_keys=[PredictMode.PROBAS, PredictMode.NORMAL], context=context, **kwargs):
             normal_pred = pred[PredictMode.NORMAL]
             if not hasattr(self, 'multi_label'):
                 normal_pred = np.expand_dims(normal_pred, 0)

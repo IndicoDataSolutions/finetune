@@ -193,7 +193,7 @@ class SequenceLabelingEncoder(BaseEncoder):
         self.lookup = None
 
     def fit(self, labels):
-        self.classes_ = list(set(lab["label"] for lab in labels) | {self.pad_token})
+        self.classes_ = list(set(lab_i["label"] for lab in labels for lab_i in lab) | {self.pad_token})
         self.lookup = {c: i for i, c in enumerate(self.classes_)}
 
     def pre_process_label(self, out, labels):
