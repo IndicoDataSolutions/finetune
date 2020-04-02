@@ -199,10 +199,15 @@ class BasePipeline(metaclass=ABCMeta):
     def get_dataset_from_generator(self, generator_fn, input_mode, update_hook=None):
         def chunked_and_tokenized_dataset():
             for d in generator_fn():
-                yield self.text_to_tokens_mask(**d)
+                yield from self.text_to_tokens_mask(**d)
 
         types, shapes = self.feed_shape_type_def()
-        tqdm_mode = "predict" if input_mode == InputMode.PREDICT else "train"
+        if input_mode == InputMode.PREDICT:
+            tqdm_mode = "predict"
+            types = types[0]
+            shapes = shapes[0] # no targets
+        else:
+            tqdm_mode = "train"
         
         raw_dataset = self.make_dataset_fn(
             data_fn=chunked_and_tokenized_dataset,
@@ -419,7 +424,7 @@ class BasePipeline(metaclass=ABCMeta):
                 desc=desc,
                 total=total,
                 miniters=1,
-                leave=current_epoch == self.config.n_epochs and train,
+                leave=current_epoch == self.config.n_epochs and mode == "train",
                 update_hook=update_hook,
                 silent=self.config.debugging_logs,
                 current_epoch=current_epoch,
