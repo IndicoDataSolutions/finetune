@@ -126,14 +126,12 @@ class MaskedLanguageModel(BaseModel):
     def _predict_proba_op(self):
         pass
 
-    def finetune(self, X, batch_size=None, **kwargs):
+    def finetune(self, X, **kwargs):
         """
         :param X: list or array of text.
         :param mask_proba: the likelihood of masking a subtoken.
-        :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
-                           corresponds to the number of training examples provided to each GPU.
         """
-        return super().finetune(X, Y=None, batch_size=batch_size, **kwargs)
+        return super().finetune(X, Y=None, **kwargs)
 
     @staticmethod
     def _target_model(

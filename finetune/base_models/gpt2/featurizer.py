@@ -204,9 +204,10 @@ def gpt2_featurizer(
         pool_idx = tf.cast(
             tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32
         )
+        batch, length, _ = shape_list(X)
         clf_h = tf.gather(
             clf_h,
-            tf.range(shape_list(X)[0], dtype=tf.int32) * config.max_length + pool_idx,
+            tf.range(batch, dtype=tf.int32) * length + pool_idx,
         )
         clf_h = tf.reshape(
             clf_h, shape=tf.concat((initial_shape[:-1], [config.n_embed]), 0)

@@ -90,14 +90,14 @@ class ComparisonRegressor(BaseModel):
         """
         return super().featurize(pairs, **kwargs)
     
-    def finetune(self, pairs, Y=None, batch_size=None, context=None, **kwargs):
+    def finetune(self, pairs, Y=None, context=None, **kwargs):
         """
         :param pairs: Array of text, shape [batch_size, 2]
         :param Y: floating point targets
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
         """
-        return super().finetune(pairs, Y=Y, batch_size=batch_size, context=context, **kwargs)
+        return super().finetune(pairs, Y=Y, context=context, **kwargs)
     
     def _predict_op(self, logits, **kwargs):
         return logits

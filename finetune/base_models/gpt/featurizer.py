@@ -243,7 +243,7 @@ def gpt_featurizer(
     with tf.variable_scope("model/featurizer", reuse=reuse):
         embed_weights = tf.get_variable(
             name="we",
-            shape=[encoder.vocab_size +  config.max_length, config.n_embed],
+            shape=[encoder.vocab_size + config.max_length, config.n_embed],
             initializer=tf.random_normal_initializer(stddev=config.weight_stddev),
         )
         if config.train_embeddings:
