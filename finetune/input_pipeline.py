@@ -28,6 +28,13 @@ class InputMode:
     PREDICT = "predict"
     TRAIN = "train"
 
+def has_targets(generator):
+    sample = next(iter(generator()))
+    assert isinstance(sample, tuple)
+    return len(sample) == 2
+    
+
+
 def batch_dataset(dataset, batch_size, shapes, n_epochs=1):
     def batched_dataset():
         return (
@@ -98,7 +105,7 @@ class BasePipeline(metaclass=ABCMeta):
     
     @property
     def chunker(self):
-        if getattr(self, "_chunker", None) is None:
+        if getattr(self, "_chunker", None) is None or self.config.max_length != self._chunker.max_length:
             self._chunker = Chunker(
                 max_length=self.config.max_length,
                 total_context_width=self.config.chunk_context,
@@ -202,12 +209,15 @@ class BasePipeline(metaclass=ABCMeta):
                 yield from self.text_to_tokens_mask(**d)
 
         types, shapes = self.feed_shape_type_def()
+        
         if input_mode == InputMode.PREDICT:
             tqdm_mode = "predict"
-            types = types[0]
-            shapes = shapes[0] # no targets
         else:
             tqdm_mode = "train"
+
+        if input_mode == InputMode.PREDICT or not has_targets(generator_fn):
+            types = types[0]
+            shapes = shapes[0]
         
         raw_dataset = self.make_dataset_fn(
             data_fn=chunked_and_tokenized_dataset,
@@ -327,6 +337,11 @@ class BasePipeline(metaclass=ABCMeta):
             )
             
         types, shapes = self.feed_shape_type_def()
+        if not has_targets(lambda: tokenized_train_split):
+            raise ValueError()
+            exit()
+            types = types[0]
+            shapes = shapes[0]
 
         train_dataset_unbatched = self.make_dataset_fn(
             data_fn=lambda: tokenized_train_split,

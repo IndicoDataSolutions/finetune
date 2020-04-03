@@ -94,14 +94,14 @@ class MultiLabelClassifier(BaseModel):
         """
         return super().predict_proba(X, context=context, **kwargs)
 
-    def finetune(self, X, Y=None, batch_size=None, context=None, **kwargs):
+    def finetune(self, X, Y=None, context=None, **kwargs):
         """
         :param X: list or array of text.
         :param Y: A list of lists containing labels for the corresponding X
         :param batch_size: integer number of examples per batch. When N_GPUS > 1, this number
                            corresponds to the number of training examples provided to each GPU.
         """
-        return super().finetune(X, Y=Y, batch_size=batch_size, context=context, **kwargs)
+        return super().finetune(X, Y=Y, context=context, **kwargs)
 
     def _target_model(self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
         return multi_classifier(
