@@ -30,8 +30,7 @@ class InputMode:
 
 def has_targets(generator):
     sample = next(iter(generator()))
-    assert isinstance(sample, tuple)
-    return len(sample) == 2
+    return isinstance(sample, tuple) and len(sample) == 2
     
 
 
@@ -338,8 +337,6 @@ class BasePipeline(metaclass=ABCMeta):
             
         types, shapes = self.feed_shape_type_def()
         if not has_targets(lambda: tokenized_train_split):
-            raise ValueError()
-            exit()
             types = types[0]
             shapes = shapes[0]
 
