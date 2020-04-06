@@ -185,7 +185,7 @@ class BaseModel(object, metaclass=ABCMeta):
     def finetune(self, Xs, Y=None, context=None, update_hook=None):
         if callable(Xs):
             datasets = self.input_pipeline.get_dataset_from_generator(
-                generator_fn, input_mode=InputMode.TRAIN, update_hook=update_hook
+                Xs, input_mode=InputMode.TRAIN, update_hook=update_hook
             )
         else:
             zipped_data_list = self.input_pipeline.zip_list_to_dict(X=Xs, Y=Y, context=context)

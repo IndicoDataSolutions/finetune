@@ -60,8 +60,26 @@ class TestMaskedLanguageModel(unittest.TestCase):
         sample = self.dataset.sample(n=self.n_sample)
         model.fit(sample.Text)
 
-        with self.assertRaises(Exception):
-            predictions = model.predict(valid_sample.Text)
+        with self.assertRaises(FinetuneError):
+            predictions = model.predict(sample.Text)
+
+    def test_fit_predict_bert_generators(self):
+        """                                                                                                                                            
+        Ensure saving + loading does not cause errors                                                                                                  
+        Ensure saving + loading does not change predictions                                                                                            
+        """
+        model = MaskedLanguageModel(base_model=BERT, dataset_size=self.n_sample)
+        save_file = "tests/saved-models/test-mlm"
+        sample = self.dataset.sample(n=self.n_sample)
+        def generator_fn():
+            for x in sample.Text:
+                yield {"X": x}
+        
+        model.fit(generator_fn)
+
+        with self.assertRaises(FinetuneError):
+            predictions = model.predict(generator_fn)
+
 
     def test_create_new_base_model_roberta(self):
         """
