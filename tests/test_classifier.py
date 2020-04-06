@@ -30,9 +30,6 @@ from finetune.errors import FinetuneError
 
 SST_FILENAME = "SST-binary.csv"
 
-SKIP_LM_TESTS = get_config().base_model.is_bidirectional
-
-
 class TestClassifier(unittest.TestCase):
     n_sample = 20
     dataset_path = os.path.join("Data", "Classify", "SST-binary.csv")
@@ -76,14 +73,11 @@ class TestClassifier(unittest.TestCase):
         defaults.update(kwargs)
         return dict(get_config(**defaults))
 
-    @pytest.mark.skipif(
-        SKIP_LM_TESTS, reason="Bidirectional models do not yet support LM functions"
-    )
     def test_fit_lm_only(self):
         """
         Ensure LM only training does not error out
         """
-        model = Classifier()
+        model = Classifier(base_model=GPT)
         train_sample = self.dataset.sample(n=self.n_sample)
         valid_sample = self.dataset.sample(n=self.n_sample)
 
@@ -355,16 +349,13 @@ class TestClassifier(unittest.TestCase):
         predY = model.predict(teX)
         self.assertEqual(accuracy_score(teY, predY), 1.00)
 
-    @pytest.mark.skipif(
-        SKIP_LM_TESTS, reason="Bidirectional models do not yet support LM functions"
-    )
     def test_save_load_language_model(self):
         """
         Ensure saving + loading does not cause errors
         Ensure saving + loading does not change predictions
         """
         save_file = "tests/saved-models/test-save-load"
-        model = Classifier()
+        model = Classifier(base_model=GPT)
 
         lm_out = model.generate_text("The quick brown fox", 6)
         start_id = model.input_pipeline.text_encoder.start_token
@@ -384,11 +375,8 @@ class TestClassifier(unittest.TestCase):
         
         self.assertIn("{}Indico RULE".format(start_token).lower(), lm_out_2.lower()) # Both of these models use extra toks
 
-    @pytest.mark.skipif(
-        SKIP_LM_TESTS, reason="Bidirectional models do not yet support LM functions"
-    )
     def test_generate_text_stop_early(self):
-        model = Classifier()
+        model = Classifier(base_model=GPT)
 
         # A dirty mock to make all model inferences output a hundred _classify_ tokens
         fake_estimator = MagicMock()

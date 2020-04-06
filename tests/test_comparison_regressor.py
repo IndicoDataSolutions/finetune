@@ -64,7 +64,7 @@ class TestComparisonRegression(unittest.TestCase):
         naive_baseline = max(np.mean(targets == 1), np.mean(targets == 0))
         naive_baseline_mse = np.mean([(naive_baseline - true)**2 for true in t_te])
         self.assertIsInstance(predictions, np.ndarray)
-        self.assertIsInstance(predictions[0], np.float32)
+        self.assertIsInstance(predictions[0], np.float64)
         self.assertGreater(naive_baseline_mse, mse)
 
 

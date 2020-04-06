@@ -34,18 +34,10 @@ class ClassificationPipeline(BasePipeline):
     def _target_encoder(self):
         return OneHotLabelEncoder()
 
-    def feed_shape_type_def(self):
-        return super(ClassificationPipeline, self).feed_shape_type_def()
-
-
 class NoisyClassificationPipeline(BasePipeline):
 
     def _target_encoder(self):
         return NoisyLabelEncoder()
-
-    def feed_shape_type_def(self):
-        return super(NoisyClassificationPipeline, self).feed_shape_type_def()
-
 
 class Classifier(BaseModel):
     """
