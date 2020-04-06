@@ -15,7 +15,6 @@ from contextlib import contextmanager
 import pathlib
 import logging
 
-import tqdm
 import numpy as np
 import tensorflow as tf
 from tensorflow.data import Dataset
@@ -367,8 +366,7 @@ class BaseModel(object, metaclass=ABCMeta):
         invert_idxs[sorted_idxs] = np.arange(sorted_idxs.shape[0])
         return sorted_Xs, invert_idxs
 
-    def _inference(self, Xs, predict_keys=None, context=None, update_hook=None):
-        Xs = self.input_pipeline._format_for_inference(Xs)
+    def _inference(self, Xs, predict_keys=None, context=None, update_hook=None, chunked_length=None):
 
         def get_zipped_data():
             return self.input_pipeline.zip_list_to_dict(X=Xs, context=context)
@@ -380,7 +378,7 @@ class BaseModel(object, metaclass=ABCMeta):
         estimator, hooks = self.get_estimator(
             build_explain=PredictMode.EXPLAIN in predict_keys, cache=self._cached_predict
         )
-        length = len(Xs)
+        length = chunked_length if chunked_length is not None else len(Xs)
 
         if self._cached_predict:
             # Add commonly used (cheap) predict keys to the graph to prevent having to rebuild
@@ -797,7 +795,13 @@ class BaseModel(object, metaclass=ABCMeta):
                 sequence_id.append(i)
 
         labels, batch_probas = [], []
-        for pred in self._inference(X, predict_keys=[PredictMode.PROBAS, PredictMode.NORMAL], context=context, **kwargs):
+        for pred in self._inference(
+                X,
+                predict_keys=[PredictMode.PROBAS, PredictMode.NORMAL],
+                context=context,
+                chunked_length=len(flat_array_encoded),
+                **kwargs
+        ):
             normal_pred = pred[PredictMode.NORMAL]
             if not hasattr(self, 'multi_label'):
                 normal_pred = np.expand_dims(normal_pred, 0)
