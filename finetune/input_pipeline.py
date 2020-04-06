@@ -189,16 +189,13 @@ class BasePipeline(metaclass=ABCMeta):
             }
         
         if self.config.chunk_long_sequences:
-            LOGGING.warning("The dataset size is not adjusted for chunk long sequences when training from a generator")
+            LOGGER.warning("The dataset size is not adjusted for chunk long sequences when training from a generator")
 
         if self.config.dataset_size is None:
             raise FinetuneError("If you are using a callable as input you must provide config.dataset_size")
 
         if self.config.class_weights is not None or self.config.oversample:
             raise FinetuneError("Cannot use class weights or resampling in generator mode")
-
-
-        self._skip_tqdm = self.config.val_size
 
         self.config.val_size, self.config.val_interval = validation_settings(
             dataset_size=self.config.dataset_size,
@@ -231,13 +228,13 @@ class BasePipeline(metaclass=ABCMeta):
 
         return {
             "train_dataset": batch_dataset(
-                train_dataset_unbatched,
+                train_dataset,
                 batch_size=self.config.batch_size,
                 shapes=shapes,
                 n_epochs=self.config.n_epochs
             ),
             "val_dataset": batch_dataset(
-                val_dataset_unbatched,
+                val_dataset,
                 batch_size=self.config.batch_size,
                 shapes=shapes
             )
