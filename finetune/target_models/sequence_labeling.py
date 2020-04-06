@@ -1,6 +1,7 @@
 import itertools
 import copy
 from collections import Counter
+import random
 
 import tensorflow as tf
 import numpy as np
@@ -45,7 +46,11 @@ class SequencePipeline(BasePipeline):
                 filtered_labels = [
                     lab for lab in Y if lab["end"] >= min_starts and lab["start"] <= max_ends
                 ]
-                if self.config.filter_empty_examples and len(filtered_labels) == 0:
+                if (
+                        self.config.filter_empty_examples_rate > 0 and
+                        len(filtered_labels) == 0 and
+                        random.uniform(0, 1) < self.config.filter_empty_examples_rate
+                ):
                     continue
                 yield feats, self.label_encoder.transform(out, filtered_labels)
 

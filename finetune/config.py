@@ -319,7 +319,7 @@ def get_default_config():
         chunk_context="auto",
         chunk_alignment="center", 
         add_eos_bos_to_chunk=True,
-        filter_empty_examples=False,
+        filter_empty_examples_rate=0.0,
         crf_sequence_labeling=True,
         use_gpu_crf_predict="auto",
 
