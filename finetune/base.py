@@ -368,7 +368,6 @@ class BaseModel(object, metaclass=ABCMeta):
         return sorted_Xs, invert_idxs
 
     def _inference(self, Xs, predict_keys=None, context=None, update_hook=None):
-
         Xs = self.input_pipeline._format_for_inference(Xs)
 
         def get_zipped_data():
@@ -518,8 +517,54 @@ class BaseModel(object, metaclass=ABCMeta):
         :param seed_text: Defaults to the empty string. This will form the starting point to begin modelling
         :return: A string containing the generated text.
         """
-        raise NotImplementedError("Need to rewrite this with cached predict interface")
-
+        if use_extra_toks is None:
+            use_extra_toks = self._trained
+            
+        def dataset_encoded():
+            while not dataset_encoded.finished:
+                yield {"tokens": encoded.token_ids}
+                
+        dataset_encoded.finished = False
+        
+        def get_input_fn():
+            types, shapes = self.input_pipeline.feed_shape_type_def()
+            tf_dataset = Dataset.from_generator(dataset_encoded, types[0], shapes[0])
+            return tf_dataset.batch(1)
+        
+        self.config.use_extra_toks = use_extra_toks
+        encoded = self.input_pipeline.text_encoder._encode([seed_text])
+        if encoded.token_ids == [] and not use_extra_toks:
+            raise ValueError(
+                "If you are not using the extra tokens, you must provide some non-empty seed text"
+            )
+        start = [self.input_pipeline.text_encoder.start_token] if use_extra_toks else []
+        token_ids = start
+        if encoded.token_ids is not None and len(encoded.token_ids):
+            token_ids += encoded.token_ids[0]
+        encoded = EncodedOutput(token_ids=token_ids)
+            
+        estimator, hooks = self.get_estimator(force_build_lm=True)
+        
+        predict = estimator.predict(
+            input_fn=get_input_fn, predict_keys=[PredictMode.GENERATE_TEXT], hooks=hooks
+        )
+        
+        EOS = self.input_pipeline.text_encoder.end_token
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore")
+            for i in range(
+                len(encoded.token_ids) - 1, (max_length or self.config.max_length) - 2
+            ):
+                class_idx = next(predict)[PredictMode.GENERATE_TEXT]
+                encoded.token_ids.append(class_idx[-1])
+                if encoded.token_ids[-1] == EOS:
+                    break
+            dataset_encoded.finished = True
+                
+        del self.config["use_extra_toks"]
+                
+        return self.input_pipeline.text_encoder.decode(encoded.token_ids)
+                
     def __getstate__(self):
         """
         Leave serialization of all tf objects to tf
@@ -741,7 +786,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
     def process_long_sequence(self, X, context=None, **kwargs):
         arr_encoded = [
-            self.input_pipeline._text_to_ids(x) for x in self.input_pipeline._format_for_inference(X)
+            self.input_pipeline._text_to_ids(x) for x in X
         ]
 
         flat_array_encoded = []

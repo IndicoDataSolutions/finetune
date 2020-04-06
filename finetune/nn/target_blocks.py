@@ -101,11 +101,11 @@ def language_model(*, X, sequence_lengths, embed_weights, hidden, config, reuse=
         loss: The masked language modelling loss.
 
     """
-    X = merge_leading_dims(X, 3)
+    X = merge_leading_dims(X, 2)
     M = tf.sequence_mask(sequence_lengths, dtype=tf.float32)
     hidden = merge_leading_dims(hidden, 3)
 
-    batch, seq, _ = shape_list(X)
+    batch, seq = shape_list(X)
     vocab_size, hidden_dim = shape_list(embed_weights)
 
     with tf.variable_scope('model/language-model', reuse=reuse):
@@ -119,7 +119,7 @@ def language_model(*, X, sequence_lengths, embed_weights, hidden, config, reuse=
         
         lm_losses = tf.losses.sparse_softmax_cross_entropy(
             logits=lm_logits_offset,
-            labels=tf.reshape(X[:, 1:, 0], [-1]),
+            labels=tf.reshape(X[:, 1:], [-1]),
             weights=tf.reshape(M[:, 1:], [-1])
         )
 

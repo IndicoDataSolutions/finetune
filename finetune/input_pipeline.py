@@ -20,67 +20,9 @@ import finetune
 from finetune.errors import FinetuneError
 from finetune.encoding.input_encoder import EncodedOutput, tokenize_context
 from finetune.util.imbalance import compute_class_weights
-from finetune.util.timing import ProgressBar
+from finetune.util.input_utils import InputMode, validation_settings, wrap_tqdm, Chunker, has_targets, batch_dataset
 
 LOGGER = logging.getLogger("finetune")
-
-class InputMode:
-    PREDICT = "predict"
-    TRAIN = "train"
-
-def has_targets(generator):
-    sample = next(iter(generator()))
-    return isinstance(sample, tuple) and len(sample) == 2
-    
-
-
-def batch_dataset(dataset, batch_size, shapes, n_epochs=1):
-    def batched_dataset():
-        return (
-            dataset()
-            .padded_batch(batch_size, padded_shapes=shapes, drop_remainder=False)
-            .repeat(n_epochs)
-            .prefetch(tf.data.experimental.AUTOTUNE)
-        )
-    return batched_dataset
-
-class Chunker:
-    def __init__(self, max_length, total_context_width, justify="c"):
-        if total_context_width is None:
-            total_context_width = 2 * max_length // 3
-        assert total_context_width < max_length
-        assert justify.lower() in {"center", "left", "right"}
-        
-        self.max_length = max_length
-        self.total_context_width = total_context_width
-        self.chunk_size = self.max_length - 2
-        self.useful_chunk_width = self.chunk_size - total_context_width 
-        self.justify = justify.lower()
-        
-        if self.justify == "left":
-            self.normal_start = 0
-        elif self.justify == "right":
-            self.normal_start = total_context_width
-        elif self.justify == "center":
-            self.normal_start = total_context_width // 2
-
-        self.normal_end = self.normal_start + self.useful_chunk_width
-
-    def generate_chunks(self, length):
-        for start in range(0, length, self.useful_chunk_width):
-            end = start + self.chunk_size
-            yield start, end
-            if end >= length:
-                break
-
-    def useful_chunk_section(self, start_of_doc, end_of_doc):
-        start = self.normal_start
-        end = self.normal_end
-        if start_of_doc:
-            start = 0    
-        if end_of_doc:
-            end = self.max_length
-        return start, end
 
 
 class BasePipeline(metaclass=ABCMeta):
@@ -91,12 +33,12 @@ class BasePipeline(metaclass=ABCMeta):
         self.target_dim = None
         self.pad_idx_ = None
         self.rebuild = False
-        self.epoch = 0
         self._chunker = None
 
     @property
     def dataset_size(self):
         return self.config.dataset_size
+    
     @abstractmethod
     def _target_encoder(self):
         # Overridden by subclass to produce the right target encoding for a given target model.
@@ -195,10 +137,21 @@ class BasePipeline(metaclass=ABCMeta):
     def _compute_class_weights(self, class_weights, class_counts):
         return compute_class_weights(class_weights=class_weights, class_counts=class_counts)
 
-    def make_dataset_fn(self, data_fn, tqdm_mode, update_hook, shapes, types):
+    def make_dataset_fn(self, data_fn, tqdm_mode, update_hook, shapes, types, skip_val=False):
         def dataset_fn():
             return Dataset.from_generator(
-                self.wrap_tqdm(data_fn, tqdm_mode, update_hook=update_hook), types, shapes
+                wrap_tqdm(
+                    gen=data_fn,
+                    mode=tqdm_mode,
+                    n_epochs=self.config.n_epochs,
+                    val_size=self.config.val_size,
+                    dataset_size=self.config.dataset_size,
+                    skip_val=skip_val,
+                    silent=self.config.debugging_logs,
+                    update_hook=update_hook
+                ),
+                types,
+                shapes
             )
         return dataset_fn
 
@@ -223,7 +176,8 @@ class BasePipeline(metaclass=ABCMeta):
             tqdm_mode=tqdm_mode,
             update_hook=update_hook,
             types=types,
-            shapes=shapes
+            shapes=shapes,
+            skip_val=input_mode == InputMode.TRAIN
         )
         if input_mode == InputMode.PREDICT:
             return {
@@ -243,13 +197,15 @@ class BasePipeline(metaclass=ABCMeta):
         if self.config.class_weights is not None or self.config.oversample:
             raise FinetuneError("Cannot use class weights or resampling in generator mode")
 
-        self.epoch = 1
 
         self._skip_tqdm = self.config.val_size
 
-        self.config.val_size, self.config.val_interval = self.validation_settings(
-            n_examples=self.config.dataset_size,
+        self.config.val_size, self.config.val_interval = validation_settings(
+            dataset_size=self.config.dataset_size,
             batch_size=self.config.batch_size,
+            val_size=self.config.val_size,
+            val_interval=self.config.val_interval,
+            keep_best_model=self.config.keep_best_model
         )
 
         self.config.dataset_size -= self.config.val_size
@@ -290,7 +246,6 @@ class BasePipeline(metaclass=ABCMeta):
 
     def get_dataset_from_list(self, data_list, input_mode, update_hook=None):
         assert input_mode == InputMode.TRAIN, "use the generator path for prediction"
-        self.epoch = 1
         
         data_list = list(data_list)
         self._post_data_initialization(data_list)
@@ -301,12 +256,13 @@ class BasePipeline(metaclass=ABCMeta):
             )
         )
             
-        self.config.val_size, self.config.val_interval = self.validation_settings(
-            n_examples=len(data_list),
+        self.config.val_size, self.config.val_interval = validation_settings(
+            dataset_size=len(data_list),
             batch_size=self.config.batch_size,
-	) # TODO strange, the estimated times may be bad if a really long document falls into the validation split???
-
-        self._skip_tqdm = 0
+            val_size=self.config.val_size,
+            val_interval=self.config.val_interval,
+            keep_best_model=self.config.keep_best_model
+	)
 
         if self.config.val_size > 0 and self.config.val_set is None:
             train_split, val_split = train_test_split(data_list, test_size=self.config.val_size, random_state=self.config.seed)
@@ -369,85 +325,8 @@ class BasePipeline(metaclass=ABCMeta):
             )
         }
                 
-    def _integer_val_size(self, val_size, dataset_size):
-        if isinstance(val_size, float):
-            return int(val_size * dataset_size)
-        return val_size
-
-    def validation_settings(self, n_examples, batch_size):
-        """
-        Auto-select reasonable validation settings
-        """
-        if self.config.val_size is not None and self.config.val_interval is not None:
-            return (
-                self._integer_val_size(self.config.val_size, n_examples),
-                self.config.val_interval,
-            )
-
-        # Auto-select reasonable validation size
-        if self.config.val_size == 'auto':
-            if n_examples < 50 and not self.config.keep_best_model:
-                val_size = 0
-            else:
-                val_size = max(5, int(0.05 * n_examples))
-                val_size = min(100, val_size)
-        else:
-            val_size = self._integer_val_size(self.config.val_size, n_examples)
-
-        # Auto-select reasonable validation interval
-        if self.config.val_interval is None:
-            # sys.maxsize corresponds to never running validation
-            # and is used when val_size is set to 0
-            val_interval = 4 * int(math.ceil(val_size / batch_size)) or None
-        else:
-            val_interval = int(self.config.val_interval)
-
-        return int(val_size), val_interval
-
     def resampling(self, Xs, Y, context=None):
         return Xs, Y, context
-
-    def wrap_tqdm(self, gen, mode, update_hook=None):
-        assert mode in {"train", "predict", "evaluate"}
-        if mode == "predict":
-            return gen # tqdm is handled elsewhere (not sure why)
-
-        try:
-            total = len(gen)
-        except:
-            if mode == "train":
-                total = self.config.dataset_size
-            else: #mode == "evaluate":
-                total = self.config.val_size
-
-        def internal_gen():
-            current_epoch = (self.epoch - 1) % self.config.n_epochs + 1
-            it = iter(gen())
-
-            if mode == "train":
-                desc = "Epoch {}/{}".format(current_epoch, self.config.n_epochs)
-            else:
-                desc = "Validation"
-            for _, i in zip(range(self._skip_tqdm), it):
-                yield i
-
-            for i in ProgressBar(
-                it,
-                desc=desc,
-                total=total,
-                miniters=1,
-                leave=current_epoch == self.config.n_epochs and mode == "train",
-                update_hook=update_hook,
-                silent=self.config.debugging_logs,
-                current_epoch=current_epoch,
-                total_epochs=self.config.n_epochs
-            ):
-                yield i
-
-            if mode == "train":
-                self.epoch += 1
-
-        return internal_gen
 
     @property
     def pad_idx(self):
@@ -471,9 +350,6 @@ class BasePipeline(metaclass=ABCMeta):
         This method is responsible for standardizing inputs to the above format
         """
         return [X]
-
-    def _format_for_inference(self, X):
-        return list(X)
 
     def _text_to_ids(self, Xs, pad_token=None):
         Xs = self._format_for_encoding(Xs)
