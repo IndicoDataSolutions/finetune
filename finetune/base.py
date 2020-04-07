@@ -366,10 +366,10 @@ class BaseModel(object, metaclass=ABCMeta):
         invert_idxs[sorted_idxs] = np.arange(sorted_idxs.shape[0])
         return sorted_Xs, invert_idxs
 
-    def _inference(self, Xs, predict_keys=None, context=None, update_hook=None, chunked_length=None):
+    def _inference(self, zipped_data, predict_keys=None, context=None, update_hook=None, chunked_length=None):
 
         def get_zipped_data():
-            return self.input_pipeline.zip_list_to_dict(X=Xs, context=context)
+            return iter(zipped_data)
         
         input_fn = self.input_pipeline.get_dataset_from_generator(
             get_zipped_data, input_mode=InputMode.PREDICT, update_hook=update_hook
@@ -378,7 +378,7 @@ class BaseModel(object, metaclass=ABCMeta):
         estimator, hooks = self.get_estimator(
             build_explain=PredictMode.EXPLAIN in predict_keys, cache=self._cached_predict
         )
-        length = chunked_length if chunked_length is not None else len(Xs)
+        length = chunked_length if chunked_length is not None else len(zipped_data)
 
         if self._cached_predict:
             # Add commonly used (cheap) predict keys to the graph to prevent having to rebuild
@@ -416,66 +416,67 @@ class BaseModel(object, metaclass=ABCMeta):
         """ An alias for finetune. """
         return self.finetune(*args, **kwargs)
 
-    def _predict(self, Xs, context=None, **kwargs):
+    def _predict(self, zipped_data, **kwargs):
         raise NotImplemented()
 
     def predict(self, Xs, context=None, **kwargs):
-        if self.config.sort_by_length:
-            Xs, invert_idxs = self._sort_by_length(Xs)
+        zipped_data = self.input_pipeline.zip_list_to_dict(X=Xs, context=context)
         
-        outputs = self._predict(Xs, context=context, **kwargs)
+        if self.config.sort_by_length:
+            zipped_data, invert_idxs = self._sort_by_length(zipped_data)
+            
+        outputs = self._predict(zipped_data, **kwargs)
 
         if self.config.sort_by_length:
             outputs = [outputs[i] for i in invert_idxs]
 
         return outputs
 
-    def _predict_proba(self, Xs, context=None, **kwargs):
+    def _predict_proba(self, zipped_data, **kwargs):
         """
         Produce raw numeric outputs for proba predictions
         """
-        raw_preds = self._inference(Xs, predict_keys=[PredictMode.PROBAS], context=context, **kwargs)
-        return raw_preds
+        raise NotImplemented()
 
-    def predict_proba(self, *args, **kwargs):
+    def predict_proba(self, Xs, context=None, **kwargs):
         """
         The base method for predicting from the model.
         """
-        raw_probas = self._predict_proba(*args, **kwargs)
+        zipped_data = self.input_pipeline.zip_list_to_dict(Xs=Xs, context=context)
+
+        if self.config.sort_by_length:
+            zipped_data, invert_idxs = self._sort_by_length(zipped_data)
+
+        raw_probas = self._predict_proba(zipped_data)
         classes = self.input_pipeline.label_encoder.classes_
 
         formatted_predictions = []
         for probas in raw_probas:
             formatted_predictions.append(dict(zip(classes, probas)))
+
+        if self.config.sort_by_length:
+            formatted_predictions = [formatted_predictions[i] for i in invert_idxs]
         return formatted_predictions
 
-    def attention_weights(self, Xs):
-        if self.config.base_model in [GPTModel, GPTModelSmall]:
-            raw_preds = self._inference(Xs, predict_keys=[PredictMode.ATTENTION])
-            return raw_preds
-        raise NotImplementedError(
-            "'attention_weights' only supported for GPTModel and GPTModelSmall base models."
-        )
+    def attention_weights(self, Xs, context=None):
+        if self.config.base_model not in [GPTModel, GPTModelSmall]:
+            raise NotImplementedError(
+                "'attention_weights' only supported for GPTModel and GPTModelSmall base models."
+            )
+        zipped_data = self.input_pipeline.zip_list_to_dict(X=Xs, context=context)
+        raw_preds = self._inference(zipped_data, predict_keys=[PredictMode.ATTENTION])
+        return raw_preds    
 
-    def _featurize(self, Xs, **kwargs):
-        raw_preds = self._inference(Xs, predict_keys=[PredictMode.FEATURIZE], **kwargs)
-        return np.asarray(raw_preds)
-
-    def _featurize_sequence(self, Xs, **kwargs):
-        raw_preds = self._inference(Xs, predict_keys=[PredictMode.SEQUENCE], **kwargs)
-        return np.asarray(raw_preds)
-
-    def featurize(self, Xs, *args, **kwargs):
+    def featurize(self, Xs, context=None, **kwargs):
         """
         Base method to get raw features out of the model.
         These features are the same features that are fed into the target_model.
         """
         if self.config.chunk_long_sequences:
             warnings.warn("`chunk_long_sequences` is currently not compatible with featurize_sequence")
-
-        features = self._featurize(Xs, *args, **kwargs)
-
-        return features
+        zipped_data = self.input_pipeline.zip_list_to_dict(X=Xs, context=context)
+        raw_preds = self._inference(zipped_data, predict_keys=[PredictMode.FEATURIZE], **kwargs)
+        return np.asarray(raw_preds)
 
     def featurize_sequence(self, Xs, *args, **kwargs):
         """
@@ -484,10 +485,10 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         if self.config.chunk_long_sequences:
             warnings.warn("`chunk_long_sequences` is currently not compatible with featurize_sequence")
-
-        features = self._featurize(Xs, *args, **kwargs)
-
-        return features
+            
+        zipped_data = self.input_pipeline.zip_list_to_dict(X=Xs, context=context)
+        raw_preds = self._inference(zipped_data, predict_keys=[PredictMode.SEQUENCE], **kwargs)
+        return np.asarray(raw_preds)
 
     @classmethod
     def get_eval_fn(cls):
@@ -782,9 +783,9 @@ class BaseModel(object, metaclass=ABCMeta):
 
         return max(aggregated_results, key=lambda x: x[1])[0]
 
-    def process_long_sequence(self, X, context=None, **kwargs):
+    def process_long_sequence(self, zipped_data):
         arr_encoded = [
-            self.input_pipeline._text_to_ids(x) for x in X
+            self.input_pipeline._text_to_ids(d["X"]) for d in zipped_data
         ]
 
         flat_array_encoded = []
@@ -796,11 +797,9 @@ class BaseModel(object, metaclass=ABCMeta):
 
         labels, batch_probas = [], []
         for pred in self._inference(
-                X,
+                zipped_data,
                 predict_keys=[PredictMode.PROBAS, PredictMode.NORMAL],
-                context=context,
                 chunked_length=len(flat_array_encoded),
-                **kwargs
         ):
             normal_pred = pred[PredictMode.NORMAL]
             if not hasattr(self, 'multi_label'):

@@ -9,6 +9,7 @@ import tensorflow as tf
 from finetune.nn.target_blocks import multi_choice_question
 from finetune.util import list_transpose
 from finetune.encoding.input_encoder import tokenize_context
+from finetune.model import PredictMode
 
 def padded_stack(arrays):
     lens = [arr.shape[0] for arr in arrays]
@@ -182,7 +183,9 @@ class MultipleChoice(BaseModel):
         :param answers: List or array of text, shape [batch, n_answers]
         :returns: list of class labels.
         """
-        raw_ids = BaseModel.predict(self, list(zip(questions, answers)), context=context, **kwargs)
+        zipped_data = self.input_pipeline.zip_list_to_dict(X=list(zip(questions, answers)), context=context)
+        raw_preds = self._inference(zipped_data, predict_keys=[PredictMode.NORMAL], context=context, **kwargs)
+        raw_ids = self.input_pipeline.label_encoder.inverse_transform(np.asarray(raw_preds))
         return [ans[i] for ans, i in zip(answers, raw_ids)]
 
     def predict_proba(self, questions, answers, context=None, **kwargs):
@@ -195,8 +198,8 @@ class MultipleChoice(BaseModel):
         :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
         """
         answers = list_transpose(answers)
-        raw_probas = super().predict_proba(zip(questions, answers), context=context, **kwargs)
-
+        zipped_data = self.input_pipeline.zip_list_to_dict(X=list(zip(questions, answers)), context=context)
+        raw_probas = self._inference(zipped_data, predict_keys=[PredictMode.PROBAS], **kwargs)
         formatted_predictions = []
         for probas, *answers_per_sample in zip(raw_probas, *answers):
             formatted_predictions.append(dict(zip(answers_per_sample, probas)))
@@ -210,4 +213,4 @@ class MultipleChoice(BaseModel):
         :param answers: List or array of text, shape [n_answers, batch]
         :returns: np.array of features of shape (n_examples, embedding_size).
         """
-        return BaseModel.featurize(self, zip(questions, answers), **kwargs)
+        return super.featurize(self, zip(questions, answers), **kwargs)
