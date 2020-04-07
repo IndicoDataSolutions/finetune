@@ -31,14 +31,23 @@ class Regressor(BaseModel):
         :param X: list or array of text to embed.
         :returns: np.array of features of shape (n_examples, embedding_size).
         """
-        return self._featurize(X, **kwargs)
+        return super().featurize(X, **kwargs)
 
-    def _predict(self, X, context=None, **kwargs):
+    def predict(self, X, context=None, **kwargs):
         """
-        Produces a list of most likely class labels as determined by the fine-tuned model.
+        Produces a list of most likely output values as determined by the fine-tuned model.
 
         :param X: list or array of text to embed.
-        :returns: list of class labels.
+        :returns: list of floats
+        """
+        return super().predict(X, context=context, **kwargs)
+    
+    def _predict(self, X, context=None, **kwargs):
+        """
+        Produces a list of most likely output values as determined by the fine-tuned model.
+
+        :param X: list or array of text to embed.
+        :returns: list of floats
         """
         all_labels=[]
         for _, _, start_of_doc, end_of_doc, label, _ in self.process_long_sequence(X, context=context, **kwargs):

@@ -17,25 +17,26 @@ class TestSortByLength(unittest.TestCase):
         random.shuffle(fake_data)
 
         model = Classifier(optimize_for='predict_speed', sort_by_length=False)
+        model.fit(["A", "A"], ["B", "B"])
         model._cached_predict = True
 
         # Prime the pipes
         model.featurize(['Test'])
 
         start = time.time()
-        features = model.featurize(fake_data)
+        probas = model.predict_proba(fake_data)
         end = time.time()
         total_no_sort = end - start
 
         model.config.sort_by_length = True
         start = time.time()
-        features_sorted = model.featurize(fake_data)
+        probas_sorted = model.predict_proba(fake_data)
         end = time.time()
         total_sorted = end - start
 
         assert total_sorted < total_no_sort
-        assert np.allclose(features, features_sorted, atol=1e-3)
-        
+        for pair in zip(probas, probas_sorted):
+            assert np.allclose(list(pair[0].values()), list(pair[1].values()), atol=1e-6)
 
     def test_chunk_long_sequences(self):
         fake_data = ["A"] * 2 + ["B " * 1200] * 2
@@ -43,10 +44,13 @@ class TestSortByLength(unittest.TestCase):
         random.shuffle(fake_data)
 
         model = Classifier(optimize_for='predict_speed', chunk_long_sequences=True, sort_by_length=False)
+        model.fit(["A", "A"], ["B", "B"])
 
-        features = model.featurize(fake_data)
+        probas = model.predict_proba(fake_data)
         model.config.sort_by_length = True
-        features_sorted = model.featurize(fake_data)
-        assert np.allclose(features, features_sorted, atol=1e-3)
+        probas_sorted = model.predict_proba(fake_data)
+
+        for pair in zip(probas, probas_sorted):
+            assert np.allclose(list(pair[0].values()), list(pair[1].values()), atol=1e-6)
 
         

@@ -172,6 +172,16 @@ class SequenceLabeler(BaseModel):
         self.multi_label = self.config.multi_label_sequences
         return super()._initialize()
 
+    def predict(self, X, per_token=False, context=None, **kwargs):
+        """
+        Produces a list of most likely class labels as determined by the fine-tuned model.
+
+        :param X: A list / array of text, shape [batch]
+        :param per_token: If True, return raw probabilities and labels on a per token basis
+        :returns: list of class labels.
+        """
+        super().predict(X, per_token=per_token, context=context, **kwargs)
+
     def _predict(self, X, per_token=False, context=None, **kwargs):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
@@ -279,7 +289,7 @@ class SequenceLabeler(BaseModel):
         :param Xs: An iterable of lists or array of text, shape [batch, n_inputs, tokens]
         :returns: np.array of features of shape (n_examples, embedding_size).
         """
-        return self._featurize(X, **kwargs)
+        return super().featurize(X, **kwargs)
 
     def predict_proba(self, X, context=None, **kwargs):
         """

@@ -427,7 +427,7 @@ class BaseModel(object, metaclass=ABCMeta):
         if self.config.sort_by_length:
             Xs, invert_idxs = self._sort_by_length(Xs)
         
-        outputs = self._predict(Xs, context=context, **kwargs)
+        outputs = np.asarray(self._predict(Xs, context=context, **kwargs))
         
         if self.config.sort_by_length:
             outputs = outputs[invert_idxs]
@@ -474,13 +474,10 @@ class BaseModel(object, metaclass=ABCMeta):
         Base method to get raw features out of the model.
         These features are the same features that are fed into the target_model.
         """
-        if self.config.sort_by_length:
-            Xs, invert_idxs = self._sort_by_length(Xs)
+        if self.config.chunk_long_sequences:
+            warnings.warn("`chunk_long_sequences` is currently not compatible with featurize_sequence")
 
         features = self._featurize(Xs, *args, **kwargs)
-
-        if self.config.sort_by_length:
-            features = features[invert_idxs]
 
         return features
 
@@ -489,13 +486,10 @@ class BaseModel(object, metaclass=ABCMeta):
         Base method to get raw token-level features out of the model.
         These features are the same features that are fed into the target_model.
         """
-        if self.config.sort_by_length:
-            Xs, invert_idxs = self._sort_by_length(Xs)
+        if self.config.chunk_long_sequences:
+            warnings.warn("`chunk_long_sequences` is currently not compatible with featurize_sequence")
 
-        features = self._featurize_sequence(Xs, *args, **kwargs)
-
-        if self.config.sort_by_length:
-            features = features[invert_idxs]
+        features = self._featurize(Xs, *args, **kwargs)
 
         return features
 
