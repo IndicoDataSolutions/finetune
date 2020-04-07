@@ -56,7 +56,7 @@ class ComparisonRegressor(BaseModel):
             **kwargs
         )
 
-    def predict(self, pairs, context=None, **kwargs):
+    def _predict(self, pairs, context=None, **kwargs):
         """
         Produces a floating point prediction determined by the fine-tuned model.
 

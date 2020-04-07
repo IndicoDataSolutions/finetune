@@ -373,9 +373,6 @@ class BaseModel(object, metaclass=ABCMeta):
     def _inference(self, Xs, predict_keys=None, n_examples=None, context=None, update_hook=None):
 
         Xs = self.input_pipeline._format_for_inference(Xs)
-        
-        if self.config.sort_by_length:
-            Xs, invert_idxs = self._sort_by_length(Xs)
 
         input_fn = self.input_pipeline.get_predict_input_fn(Xs, context=context)
 
@@ -409,9 +406,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 pred[predict_keys[0]] if len(predict_keys) == 1 else pred
                 for pred in predictions
             ])
-            if self.config.sort_by_length:
-                outputs = outputs[invert_idxs]
-            return outputs.tolist()
+            return outputs
 
         except ValueError:
             raise FinetuneError(
@@ -429,7 +424,15 @@ class BaseModel(object, metaclass=ABCMeta):
         )
 
     def predict(self, Xs, context=None, **kwargs):
-        return self._predict(Xs, context=context, **kwargs)
+        if self.config.sort_by_length:
+            Xs, invert_idxs = self._sort_by_length(Xs)
+        
+        outputs = self._predict(Xs, context=context, **kwargs)
+        
+        if self.config.sort_by_length:
+            outputs = outputs[invert_idxs]
+
+        return outputs.tolist()
 
     def _predict_proba(self, Xs, context=None, **kwargs):
         """

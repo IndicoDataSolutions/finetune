@@ -53,7 +53,7 @@ class MultiLabelClassifier(BaseModel):
         """
         return super().featurize(X, **kwargs)
 
-    def predict(self, X, threshold=None, context=None, **kwargs):
+    def _predict(self, X, threshold=None, context=None, **kwargs):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
