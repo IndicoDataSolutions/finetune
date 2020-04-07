@@ -172,7 +172,7 @@ class SequenceLabeler(BaseModel):
         self.multi_label = self.config.multi_label_sequences
         return super()._initialize()
 
-    def predict(self, X, per_token=False, context=None, **kwargs):
+    def _predict(self, X, per_token=False, context=None, **kwargs):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 

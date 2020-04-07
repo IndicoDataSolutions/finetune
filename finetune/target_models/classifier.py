@@ -68,7 +68,7 @@ class Classifier(BaseModel):
         """
         return super().featurize(X, **kwargs)
 
-    def predict(self, X, probas=False, context=None, **kwargs):
+    def _predict(self, X, probas=False, context=None, **kwargs):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
         :param X: list or array of text to embed.

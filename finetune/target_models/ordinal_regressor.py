@@ -46,7 +46,7 @@ class OrdinalRegressor(BaseModel):
         """
         return self._featurize(X, **kwargs)
 
-    def predict(self, X, context=None, **kwargs):
+    def _predict(self, X, context=None, **kwargs):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
