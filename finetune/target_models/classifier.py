@@ -60,7 +60,7 @@ class Classifier(BaseModel):
         """
         return super().featurize(X, **kwargs)
 
-    def predict(self, X, probas=False, context=None, **kwargs):
+    def predict(self, X, context=None, **kwargs):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
         :param X: list or array of text to embed.
@@ -69,13 +69,13 @@ class Classifier(BaseModel):
         Chunk idx for prediction.  Dividers at `step_size` increments.
         [  1  |  1  |  2  |  3  |  3  ]
         """
-        return super().predict(X, probas=probas, context=context, **kwargs)
+        return super().predict(X, context=context, **kwargs)
 
-    def _predict(self, X, probas=False, context=None, **kwargs):
+    def _predict(self, zipped_data, probas=False, **kwargs):
         all_labels = []
         all_probs = []
         doc_probs = []
-        for _,  _, start_of_doc, end_of_doc, _, proba in self.process_long_sequence(X, context=context, **kwargs):
+        for _,  _, start_of_doc, end_of_doc, _, proba in self.process_long_sequence(zipped_data, **kwargs):
             start, end = 0, None
             doc_probs.append(proba)
 
@@ -94,22 +94,17 @@ class Classifier(BaseModel):
         if probas:
             return all_probs
         else:
-            assert len(all_labels) == len(X)
+            assert len(all_labels) == len(zipped_data)
             return np.asarray(all_labels)
 
-    def predict_proba(self, X, context=None, **kwargs):
+    def _predict_proba(self, X, context=None, **kwargs):
         """
         Produces a probability distribution over classes for each example in X.
         :param X: list or array of text to embed.
         :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
         """
         # this is simply a vector of probabilities, not a dict from classes to class probs
-        raw_probas = self.predict(X, probas=True, context=context, **kwargs)
-        classes = self.input_pipeline.label_encoder.classes_
-        formatted_predictions = []
-        for probas in raw_probas:
-            formatted_predictions.append(dict(zip(classes, probas)))
-        return formatted_predictions
+        return self._predict(X, probas=True, context=context, **kwargs)
 
     def finetune(self, X, Y=None, context=None, **kwargs):
         """

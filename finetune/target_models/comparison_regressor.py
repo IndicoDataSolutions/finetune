@@ -6,6 +6,7 @@ from finetune.target_models.comparison import ComparisonPipeline
 from finetune.nn.target_blocks import regressor
 from finetune.base import BaseModel
 from finetune.nn.auxiliary import add_context_embed
+from finetune.model import PredictMode
 
 
 class ComparisonRegressionPipeline(ComparisonPipeline):
@@ -63,18 +64,10 @@ class ComparisonRegressor(BaseModel):
         :param pairs: Array of text, shape [batch, 2]
         :returns: list of floats, shape [batch]
         """
-        return super().predict(pairs=pairs, context=context, **kwargs)
+        zipped_data = self.input_pipeline.zip_list_to_dict(X=pairs, context=context)
+        raw_preds = self._inference(zipped_data, predict_keys=[PredictMode.NORMAL], context=context, **kwargs)
+        return self.input_pipeline.label_encoder.inverse_transform(np.asarray(raw_preds))
     
-    def _predict(self, pairs, context=None, **kwargs):
-        """
-        Produces a floating point prediction determined by the fine-tuned model.
-
-
-        :param pairs: Array of text, shape [batch, 2]
-        :returns: list of floats, shape [batch]
-        """
-        return super().predict(pairs, context=context, **kwargs)
-
     def predict_proba(self, pairs, context=None):
         """
         Not implemented in regression task.
