@@ -56,6 +56,15 @@ class ComparisonRegressor(BaseModel):
             **kwargs
         )
 
+    def predict(self, pairs, context=None, **kwargs):
+        """
+        Produces a floating point prediction determined by the fine-tuned model.
+
+        :param pairs: Array of text, shape [batch, 2]
+        :returns: list of floats, shape [batch]
+        """
+        return super().predict(pairs=pairs, context=context, **kwargs)
+    
     def _predict(self, pairs, context=None, **kwargs):
         """
         Produces a floating point prediction determined by the fine-tuned model.
@@ -79,8 +88,7 @@ class ComparisonRegressor(BaseModel):
         :param pairs: Array of text, shape [batch, 2]
         :returns: np.array of features of shape (n_examples, embedding_size).
         """
-        return self._featurize(pairs, **kwargs)
-    
+        return super().featurize(pairs, **kwargs)
     
     def finetune(self, pairs, Y=None, batch_size=None, context=None, **kwargs):
         """

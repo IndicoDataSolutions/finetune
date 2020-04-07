@@ -83,6 +83,6 @@ class Scheduler:
 
     def featurize_sequence(self, model_file, x, *args, **kwargs):
         model = self._rotate_in_model(model_file)
-        seq_features = model.featurize(x, *args, **kwargs)
+        seq_features = model.featurize_sequence(x, *args, **kwargs)
         self._update_memory_limit(model)
         return seq_features
