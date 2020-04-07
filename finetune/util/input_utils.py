@@ -27,7 +27,7 @@ def validation_settings(dataset_size, batch_size, val_size, val_interval, keep_b
 
         # Auto-select reasonable validation size
     if val_size == 'auto':
-        if n_examples < 50 and not keep_best_model:
+        if dataset_size < 50 and not keep_best_model:
             val_size = 0
         else:
             val_size = max(5, int(0.05 * dataset_size))
