@@ -8,7 +8,6 @@ def make_summary_optimizer(optimizer, regex):
                 if re.search(regex, v.name):
                     tf.summary.scalar("weight_norm/{}".format(v.name), tf.norm(v))
                     if g is not None:
-                        g = tf.Print(g, [g, v], summarize=100)
                         tf.summary.scalar("grad_norm/{}".format(v.name), tf.norm(g))
             return super().apply_gradients(grads_and_vars, *args, **kwargs)
     return SummaryOptimizer
