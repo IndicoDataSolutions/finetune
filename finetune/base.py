@@ -366,9 +366,10 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         lengths = [len(X) for X in Xs]
         sorted_idxs = np.argsort(lengths)
+        sorted_Xs = [Xs[i] for i in sorted_idxs]
         invert_idxs = np.zeros(sorted_idxs.shape, dtype=int)
         invert_idxs[sorted_idxs] = np.arange(sorted_idxs.shape[0])
-        return np.asarray(Xs)[sorted_idxs], invert_idxs
+        return sorted_Xs, invert_idxs
 
     def _inference(self, Xs, predict_keys=None, n_examples=None, context=None, update_hook=None):
 
@@ -418,21 +419,18 @@ class BaseModel(object, metaclass=ABCMeta):
         return self.finetune(*args, **kwargs)
 
     def _predict(self, Xs, context=None, **kwargs):
-        raw_preds = self._inference(Xs, predict_keys=[PredictMode.NORMAL], context=context, **kwargs)
-        return self.input_pipeline.label_encoder.inverse_transform(
-            np.asarray(raw_preds)
-        )
+        raise NotImplemented()
 
     def predict(self, Xs, context=None, **kwargs):
         if self.config.sort_by_length:
             Xs, invert_idxs = self._sort_by_length(Xs)
         
-        outputs = np.asarray(self._predict(Xs, context=context, **kwargs))
-        
-        if self.config.sort_by_length:
-            outputs = outputs[invert_idxs]
+        outputs = self._predict(Xs, context=context, **kwargs)
 
-        return outputs.tolist()
+        if self.config.sort_by_length:
+            outputs = [outputs[i] for i in invert_idxs]
+
+        return outputs
 
     def _predict_proba(self, Xs, context=None, **kwargs):
         """

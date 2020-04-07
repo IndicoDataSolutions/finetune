@@ -180,7 +180,7 @@ class SequenceLabeler(BaseModel):
         :param per_token: If True, return raw probabilities and labels on a per token basis
         :returns: list of class labels.
         """
-        super().predict(X, per_token=per_token, context=context, **kwargs)
+        return super().predict(X, per_token=per_token, context=context, **kwargs)
 
     def _predict(self, X, per_token=False, context=None, **kwargs):
         """
