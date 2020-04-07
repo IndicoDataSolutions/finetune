@@ -16,7 +16,7 @@ class TestSortByLength(unittest.TestCase):
         # Blend in the long examples
         random.shuffle(fake_data)
 
-        model = Classifier(optimize_for='predict_speed')
+        model = Classifier(optimize_for='predict_speed', sort_by_length=False)
         model._cached_predict = True
 
         # Prime the pipes
@@ -35,4 +35,18 @@ class TestSortByLength(unittest.TestCase):
 
         assert total_sorted < total_no_sort
         assert np.allclose(features, features_sorted, atol=1e-3)
+        
+
+    def test_chunk_long_sequences(self):
+        fake_data = ["A"] * 2 + ["B " * 1200] * 2
+
+        random.shuffle(fake_data)
+
+        model = Classifier(optimize_for='predict_speed', chunk_long_sequences=True, sort_by_length=False)
+
+        features = model.featurize(fake_data)
+        model.config.sort_by_length = True
+        features_sorted = model.featurize(fake_data)
+        assert np.allclose(features, features_sorted, atol=1e-3)
+
         
