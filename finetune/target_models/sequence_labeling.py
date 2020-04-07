@@ -178,7 +178,7 @@ class SequenceLabeler(BaseModel):
         """
         return super().predict(X, per_token=per_token, context=context, **kwargs)
 
-    def _predict(self, X, per_token=False, context=None, **kwargs):
+    def _predict(self, zipped_data, per_token=False, **kwargs):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
@@ -193,7 +193,8 @@ class SequenceLabeler(BaseModel):
         chunk_size = self.config.max_length - 2
         step_size = chunk_size // 3
         doc_idx = -1
-        for token_start_idx, token_end_idx, start_of_doc, end_of_doc, label_seq, proba_seq in self.process_long_sequence(X, context=context, **kwargs):
+        raw_text = [data["X"] for data in zipped_data]
+        for token_start_idx, token_end_idx, start_of_doc, end_of_doc, label_seq, proba_seq in self.process_long_sequence(zipped_data, **kwargs):
             if start_of_doc:
                 # if this is the first chunk in a document, start accumulating from scratch
                 doc_subseqs = []
@@ -219,14 +220,14 @@ class SequenceLabeler(BaseModel):
                 # or the current subsequence has the wrong label
                 if not doc_subseqs or label != doc_labels[-1] or per_token:
                     # start new subsequence
-                    doc_subseqs.append(X[doc_idx][start_idx: end_idx])
+                    doc_subseqs.append(raw_text[doc_idx][start_idx: end_idx])
                     doc_labels.append(label)
                     doc_probs.append([proba])
                     doc_positions.append((start_idx, end_idx))
                     doc_starts.append(start_idx)
                 else:
                     # continue appending to current subsequence
-                    doc_subseqs[-1] = X[doc_idx][doc_starts[-1]: end_idx]
+                    doc_subseqs[-1] = raw_text[doc_idx][doc_starts[-1]: end_idx]
                     doc_probs[-1].append(proba)
 
             if end_of_doc:
@@ -247,7 +248,7 @@ class SequenceLabeler(BaseModel):
                 all_positions.append(doc_positions)
 
         _, doc_annotations = finetune_to_indico_sequence(
-            raw_texts=X,
+            raw_texts=raw_text,
             subseqs=all_subseqs,
             labels=all_labels,
             probs=all_probs,
