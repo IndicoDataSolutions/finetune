@@ -469,19 +469,35 @@ class BaseModel(object, metaclass=ABCMeta):
         raw_preds = self._inference(Xs, predict_keys=[PredictMode.SEQUENCE], **kwargs)
         return np.asarray(raw_preds)
 
-    def featurize(self, *args, **kwargs):
+    def featurize(self, Xs, *args, **kwargs):
         """
         Base method to get raw features out of the model.
         These features are the same features that are fed into the target_model.
         """
-        return self._featurize(*args, **kwargs)
+        if self.config.sort_by_length:
+            Xs, invert_idxs = self._sort_by_length(Xs)
 
-    def featurize_sequence(self, *args, **kwargs):
+        features = self._featurize(Xs, *args, **kwargs)
+
+        if self.config.sort_by_length:
+            features = features[invert_idxs]
+
+        return features
+
+    def featurize_sequence(self, Xs, *args, **kwargs):
         """
         Base method to get raw token-level features out of the model.
         These features are the same features that are fed into the target_model.
         """
-        return self._featurize_sequence(*args, **kwargs)
+        if self.config.sort_by_length:
+            Xs, invert_idxs = self._sort_by_length(Xs)
+
+        features = self._featurize_sequence(Xs, *args, **kwargs)
+
+        if self.config.sort_by_length:
+            features = features[invert_idxs]
+
+        return features
 
     @classmethod
     def get_eval_fn(cls):
