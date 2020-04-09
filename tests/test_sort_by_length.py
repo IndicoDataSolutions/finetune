@@ -11,12 +11,12 @@ class TestSortByLength(unittest.TestCase):
 
     def test_sort_by_length(self):
         # Construct a fake dataset where lengths vary wildly
-        fake_data = ["A"] * 1000 + ["B " * 120] * 48
+        fake_data = (["A"] * 15 + ["B " * 120]) * 64
 
         # Blend in the long examples
-        random.shuffle(fake_data)
+#        random.shuffle(fake_data)
 
-        model = Classifier(optimize_for='predict_speed', sort_by_length=False)
+        model = Classifier(optimize_for='predict_speed', sort_by_length=False, predict_batch_size=16)
         model.fit(["A", "A"], ["B", "B"])
         model._cached_predict = True
 
@@ -33,6 +33,8 @@ class TestSortByLength(unittest.TestCase):
         probas_sorted = model.predict_proba(fake_data)
         end = time.time()
         total_sorted = end - start
+
+        print(total_sorted, total_no_sort)
 
         assert total_sorted < total_no_sort
         for pair in zip(probas, probas_sorted):
