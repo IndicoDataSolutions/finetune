@@ -2,10 +2,11 @@ import tensorflow as tf
 from finetune.base import BaseModel
 
 class Scheduler:
-    def __init__(self, max_models=None):
+    def __init__(self, max_models=None, gpu_fraction=None):
         self.loaded_models = list() # model queue
         self.max_models = max_models
         self.session = None
+        self.gpu_fraction = gpu_fraction
         self.gpu_memory_limit = None
         self.in_use_op = tf.contrib.memory_stats.BytesInUse()
         self.peak_mem_op = tf.contrib.memory_stats.MaxBytesInUse()
@@ -17,6 +18,7 @@ class Scheduler:
     def _memory_for_one_more(self):
         if self.session is None:
             return True # First prediction run?
+            
         in_use, peak = self.session.run((self.in_use_op, self.peak_mem_op))
         if self.max_above_resting is None or (peak - in_use) > self.max_above_resting:
             self.max_above_resting = peak - in_use
@@ -31,7 +33,7 @@ class Scheduler:
     def _rotate_in_model(self, model):
         if model not in self.loaded_models:
             if (
-                    self.max_models is not None and len(self.loaded_models) + 1 > self.max_models_per_gpu or
+                    self.max_models is not None and len(self.loaded_models) + 1 > self.max_models or
                     not self._memory_for_one_more()
             ):
                 name = self.loaded_models.pop(0)
@@ -55,7 +57,7 @@ class Scheduler:
             
         if self.session is None:
             self.session = tf.Session() # delay this so that any options get applied from finetune.
-            self.gpu_memory_limit = self.session.run(tf.contrib.memory_stats.BytesLimit())
+            self.gpu_memory_limit = self.gpu_fraction * self.session.run(tf.contrib.memory_stats.BytesLimit())
 
     def predict(self, model_file, x, *args, **kwargs):
         model = self._rotate_in_model(model_file)
