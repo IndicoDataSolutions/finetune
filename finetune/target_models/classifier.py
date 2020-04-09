@@ -71,7 +71,7 @@ class Classifier(BaseModel):
         """
         return super().predict(X, context=context, **kwargs)
 
-    def _predict(self, zipped_data, probas=False, **kwargs):
+    def _predict_internal(self, zipped_data, probas=False, **kwargs):
         all_labels = []
         all_probs = []
         doc_probs = []
@@ -97,14 +97,17 @@ class Classifier(BaseModel):
             assert len(all_labels) == len(zipped_data)
             return np.asarray(all_labels)
 
-    def _predict_proba(self, X, context=None, **kwargs):
+    def _predict(self, zipped_data, **kwargs):
+        return self._predict_internal(zipped_data, probas=False, **kwargs)
+
+    def _predict_proba(self, zipped_data, **kwargs):
         """
         Produces a probability distribution over classes for each example in X.
         :param X: list or array of text to embed.
         :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
         """
         # this is simply a vector of probabilities, not a dict from classes to class probs
-        return self._predict(X, probas=True, context=context, **kwargs)
+        return self._predict_internal(zipped_data, probas=True, **kwargs)
 
     def finetune(self, X, Y=None, context=None, **kwargs):
         """
@@ -154,9 +157,10 @@ class Classifier(BaseModel):
             )
         return clf_out
 
-    def explain(self, Xs):
+    def explain(self, Xs, context=None):
+        zipped_data = self.input_pipeline.zip_list_to_dict(X=Xs, context=context)
         explanation = self._inference(
-            Xs, predict_keys=[PredictMode.EXPLAIN, PredictMode.NORMAL]
+            zipped_data, predict_keys=[PredictMode.EXPLAIN, PredictMode.NORMAL]
         )
         classes = self.input_pipeline.label_encoder.target_labels
         out = []

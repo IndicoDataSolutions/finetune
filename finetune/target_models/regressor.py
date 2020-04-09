@@ -42,7 +42,7 @@ class Regressor(BaseModel):
         """
         return super().predict(X, context=context, **kwargs)
     
-    def _predict(self, X, context=None, **kwargs):
+    def _predict(self, zipped_data, **kwargs):
         """
         Produces a list of most likely output values as determined by the fine-tuned model.
 
@@ -50,7 +50,7 @@ class Regressor(BaseModel):
         :returns: list of floats
         """
         all_labels=[]
-        for _, _, start_of_doc, end_of_doc, label, _ in self.process_long_sequence(X, context=context, **kwargs):
+        for _, _, start_of_doc, end_of_doc, label, _ in self.process_long_sequence(zipped_data, **kwargs):
             if start_of_doc:
                 # if this is the first chunk in a document, start accumulating from scratch
                 doc_labels = []

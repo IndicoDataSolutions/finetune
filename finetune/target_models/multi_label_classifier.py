@@ -62,16 +62,10 @@ class MultiLabelClassifier(BaseModel):
         """
         return super().predict(X, threshold=threshold, context=context, **kwargs)
 
-    def _predict(self, X, threshold=None, context=None, **kwargs):
-        """
-        Produces a list of most likely class labels as determined by the fine-tuned model.
-
-        :param X: list or array of text to embed.
-        :returns: list of class labels.
-        """
+    def _predict_internal(self, zipped_data, threshold=None, probas=False, **kwargs):
         threshold = self._get_threshold(threshold)
         all_labels = []
-        for _, _, start_of_doc, end_of_doc, _, proba in self.process_long_sequence(X, context=context, **kwargs):
+        for _, _, start_of_doc, end_of_doc, _, proba in self.process_long_sequence(zipped_data, **kwargs):
             if start_of_doc:
                 # if this is the first chunk in a document, start accumulating from scratch
                 doc_probs = []
@@ -81,18 +75,18 @@ class MultiLabelClassifier(BaseModel):
             if end_of_doc:
                 # last chunk in a document
                 means = np.mean(doc_probs, axis=0)
-                label = self.input_pipeline.label_encoder.inverse_transform(np.expand_dims(means, 0) > threshold)[0]
-                all_labels.append(list(label))
+                if probas:
+                    all_labels.append(means)
+                else:
+                    label = self.input_pipeline.label_encoder.inverse_transform(np.expand_dims(means, 0) > threshold)[0]
+                    all_labels.append(list(label))
         return all_labels
 
-    def predict_proba(self, X, context=None, **kwargs):
-        """
-        Produces a probability distribution over classes for each example in X.
+    def _predict(self, zipped_data, threshold=None, **kwargs):
+        return self._predict_internal(zipped_data, threshold=threshold, probas=False, **kwargs)
 
-        :param X: list or array of text to embed.
-        :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
-        """
-        return super().predict_proba(X, context=context, **kwargs)
+    def _predict_proba(self, zipped_data, **kwargs):
+        return self._predict_internal(zipped_data, threshold=None, probas=True, **kwargs)
 
     def finetune(self, X, Y=None, context=None, **kwargs):
         """

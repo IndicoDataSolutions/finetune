@@ -100,7 +100,7 @@ class MaskedLanguageModel(BaseModel):
     def _get_input_pipeline(self):
         return MaskedLanguageModelPipeline(self.config)
 
-    def _predict(self, *args, **kwargs):
+    def predict(self, *args, **kwargs):
         """
         Not supported by `MaskedLanguageModel`
         """

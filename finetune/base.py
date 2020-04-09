@@ -442,10 +442,12 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         The base method for predicting from the model.
         """
-        zipped_data = self.input_pipeline.zip_list_to_dict(Xs=Xs, context=context)
+        zipped_data = self.input_pipeline.zip_list_to_dict(X=Xs, context=context)
 
+        start_sort = time.time()
         if self.config.sort_by_length:
             zipped_data, invert_idxs = self._sort_by_length(zipped_data)
+        end_sort = time.time()
 
         raw_probas = self._predict_proba(zipped_data)
         classes = self.input_pipeline.label_encoder.classes_
@@ -453,9 +455,11 @@ class BaseModel(object, metaclass=ABCMeta):
         formatted_predictions = []
         for probas in raw_probas:
             formatted_predictions.append(dict(zip(classes, probas)))
-
+        start_sort = time.time()
         if self.config.sort_by_length:
             formatted_predictions = [formatted_predictions[i] for i in invert_idxs]
+        end_sort = time.time()
+
         return formatted_predictions
 
     def attention_weights(self, Xs, context=None):
@@ -478,7 +482,7 @@ class BaseModel(object, metaclass=ABCMeta):
         raw_preds = self._inference(zipped_data, predict_keys=[PredictMode.FEATURIZE], **kwargs)
         return np.asarray(raw_preds)
 
-    def featurize_sequence(self, Xs, *args, **kwargs):
+    def featurize_sequence(self, Xs, context=None, **kwargs):
         """
         Base method to get raw token-level features out of the model.
         These features are the same features that are fed into the target_model.
