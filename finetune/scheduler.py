@@ -2,11 +2,10 @@ import tensorflow as tf
 from finetune.base import BaseModel
 
 class Scheduler:
-    def __init__(self, max_models=None, gpu_fraction=None):
-        self.loaded_models = list() # model queue
+    def __init__(self, max_models=None, config=None, reserved=500000000):
+        self.loaded_models = list() 
         self.max_models = max_models
         self.session = None
-        self.gpu_fraction = gpu_fraction
         self.gpu_memory_limit = None
         self.in_use_op = tf.contrib.memory_stats.BytesInUse()
         self.peak_mem_op = tf.contrib.memory_stats.MaxBytesInUse()
@@ -14,6 +13,8 @@ class Scheduler:
         self.max_above_resting = None
         self.previous_in_use = 0
         self.max_model_size = None
+        self.config = config or {}
+        self.reserved = reserved
 
     def _memory_for_one_more(self):
         if self.session is None:
@@ -27,8 +28,7 @@ class Scheduler:
             self.max_model_size = in_use - self.previous_in_use
 
         self.previous_in_use = in_use
-        
-        return (in_use + self.max_above_resting + self.max_model_size) < self.gpu_memory_limit
+        return (in_use + self.max_above_resting + self.max_model_size + self.reserved) < self.gpu_memory_limit
 
     def _rotate_in_model(self, model):
         if model not in self.loaded_models:
@@ -39,7 +39,7 @@ class Scheduler:
                 name = self.loaded_models.pop(0)
                 self.model_cache[name].close()
                 del self.model_cache[name]
-            out_model = BaseModel.load(model)                                                                        
+            out_model = BaseModel.load(model, **self.config)
             self.model_cache[model] = out_model
         else:
             out_model = self.model_cache[model]
@@ -57,7 +57,7 @@ class Scheduler:
             
         if self.session is None:
             self.session = tf.Session() # delay this so that any options get applied from finetune.
-            self.gpu_memory_limit = self.gpu_fraction * self.session.run(tf.contrib.memory_stats.BytesLimit())
+            self.gpu_memory_limit = self.session.run(tf.contrib.memory_stats.BytesLimit())
 
     def predict(self, model_file, x, *args, **kwargs):
         model = self._rotate_in_model(model_file)

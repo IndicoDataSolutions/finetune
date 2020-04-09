@@ -29,7 +29,7 @@ class IndicoEstimator(tf.estimator.Estimator):
             features, initializer = parse_input_fn_result(result)
             if type(features) == tuple and predict:
                 features = features[0]
-            with tf.Session() as sess:
+            with tf.Session(config=self._session_config) as sess:
                 sess.run(initializer)
                 output = []
                 while True:

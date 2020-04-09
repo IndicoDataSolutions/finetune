@@ -53,6 +53,7 @@ class TestScheduler(unittest.TestCase):
         self.assertLess(time_end - time_mid, time_mid - time_pre - 1) # Assert that it is at least 1 second quicker
         self.assertEqual(pred1a, pred1b)
         pred2a = shed.predict(m2, ["A"]) # Load another model.
+        self.assertEqual(len(shed.loaded_models), 2)
         time2_start = time.time()
         pred1b = shed.predict(m1, ["A"])
         time2_end = time.time()
@@ -63,3 +64,18 @@ class TestScheduler(unittest.TestCase):
         shed.featurize(m1, ["A"])
         shed.featurize(m1, ["A"])
         shed.featurize_sequence(m1, ["A"])
+
+    def test_scheduler_memory_fraction(self):
+        m1 = os.path.join(self.folder, self.model1)
+        m2 = os.path.join(self.folder, self.model2)
+        shed = Scheduler(max_models=1)
+        time_pre = time.time()
+        pred1a = shed.predict(m1, ["A"])
+        time_mid = time.time()
+        pred1b = shed.predict(m1, ["A"])
+        time_end = time.time()
+        self.assertLess(time_end - time_mid, time_mid - time_pre - 1) # Assert that it is at least 1 second quicker
+        self.assertEqual(pred1a, pred1b)
+        pred2a = shed.predict(m2, ["A"]) # Load another model.
+        self.assertEqual(len(shed.loaded_models), 1)
+
