@@ -154,7 +154,10 @@ def micro_f1(true, predicted, count_fn):
         FP += len(counts['false_positives'])
     recall = TP/float(FN + TP)
     precision = TP / float(FP + TP)
-    f1 = 2 * (recall * precision) / (recall + precision)
+    try:
+        f1 = 2 * (recall * precision) / (recall + precision)
+    except ZeroDivisionError:
+        return 0.0
     return f1
 
 def sequence_labeling_token_precision(true, predicted):
@@ -220,6 +223,10 @@ def sequence_labeling_overlaps(true, predicted):
 
         for pred_annotation in predicted_annotations:
             for true_annotation in true_annotations:
+                # factor out equality function here, then calculate equality
+                # functions separately
+                # then use the 3 different equality functions in order to 
+                # calculate (1) overlap, (2) exact match, (3) superset scores
                 if (sequences_overlap(true_annotation, pred_annotation) and
                         true_annotation['label'] == pred_annotation['label']):
                     break
@@ -241,6 +248,13 @@ def sequence_labeling_overlap_recall(true, predicted):
     Sequence overlap recall
     """
     return seq_recall(true, predicted, count_fn=sequence_labeling_overlaps)
+
+
+def sequence_labeling_micro_f1(true, predicted):
+    """
+    Sequence overlap F1
+    """
+    return micro_f1(true, predicted, count_fn=sequence_labeling_overlaps)
 
 
 def annotation_report(y_true, y_pred, labels=None, target_names=None, sample_weight=None, digits=2, width=20):
