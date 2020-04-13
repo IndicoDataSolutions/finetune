@@ -4,8 +4,6 @@ import time
 import shutil
 import warnings
 
-from multiprocessing import Process
-
 # prevent excessive warning logs
 warnings.filterwarnings('ignore')
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -22,7 +20,7 @@ class TestScheduler(unittest.TestCase):
     model2 = "2.jl"
 
     @classmethod
-    def _setup(cls):
+    def setUpClass(cls):
         try:
             os.mkdir("tests/saved-models")
         except FileExistsError:
@@ -38,13 +36,6 @@ class TestScheduler(unittest.TestCase):
         model.fit(["A", "B"], ["a", "b"])
         model.save(os.path.join(cls.folder, cls.model2))
     
-    @classmethod
-    def setUpClass(cls):
-        p = Process(target=cls._setup)
-        p.start()
-        p.join()
-        p.terminate()
-        
     @classmethod
     def tearDownClass(self):
         shutil.rmtree("tests/saved-models/")
@@ -88,19 +79,3 @@ class TestScheduler(unittest.TestCase):
         self.assertEqual(pred1a, pred1b)
         pred2a = shed.predict(m2, ["A"]) # Load another model.
         self.assertEqual(len(shed.loaded_models), 1)
-
-    def test_scheduler_memory_fraction(self):
-        m1 = os.path.join(self.folder, self.model1)
-        m2 = os.path.join(self.folder, self.model2)
-        # Needs to not evaluate to False
-        shed = Scheduler(config={'per_process_gpu_memory_fraction': 0.})
-        time_pre = time.time()
-        pred1a = shed.predict(m1, ["A"])
-        time_mid = time.time()
-        pred1b = shed.predict(m1, ["A"])
-        time_end = time.time()
-        self.assertLess(time_end - time_mid, time_mid - time_pre - 1) # Assert that it is at least 1 second quicker
-        self.assertEqual(pred1a, pred1b)
-        pred2a = shed.predict(m2, ["A"]) # Load another model.
-        self.assertEqual(len(shed.loaded_models), 1)
-
