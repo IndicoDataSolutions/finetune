@@ -209,7 +209,6 @@ def model_f1(true, predicted, span_type="token", average=None):
         for cls_ in f1s:
             classes.append(f1s[cls_]["f1-score"])
             supports.append(f1s[cls_]["support"])
-        import ipdb; ipdb.set_trace()
         return np.average(np.array(classes), weights=np.array(supports))
     if average == "macro":
         f1_scores = [f1s[cls_]["f1-score"] for cls_ in f1s]
