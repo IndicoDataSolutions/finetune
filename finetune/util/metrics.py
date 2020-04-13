@@ -188,7 +188,7 @@ def sequences_overlap(true_seq, pred_seq):
     return start_contained or end_contained
 
 
-def sequence_labeling_overlaps(true, predicted):
+def sequence_labeling_counts(true, predicted, equality_fn):
     """
     Return FP, FN, and TP counts
     """
@@ -211,7 +211,7 @@ def sequence_labeling_overlaps(true, predicted):
         
         for true_annotation in true_annotations:
             for pred_annotation in predicted_annotations:
-                if sequences_overlap(true_annotation, pred_annotation):
+                if equality_fn(pred_annotation=pred_annotation, true_annotation=true_annotation):
                     if pred_annotation['label'] == true_annotation['label']:
                         d[true_annotation['label']]['correct'].append(true_annotation)
                     else:
@@ -223,12 +223,12 @@ def sequence_labeling_overlaps(true, predicted):
 
         for pred_annotation in predicted_annotations:
             for true_annotation in true_annotations:
-                # factor out equality function here, then calculate equality
-                # functions separately
-                # then use the 3 different equality functions in order to 
-                # calculate (1) overlap, (2) exact match, (3) superset scores
-                if (sequences_overlap(true_annotation, pred_annotation) and
-                        true_annotation['label'] == pred_annotation['label']):
+                if (
+                    equality_fn(
+                        pred_annotation=pred_annotation, true_annotation=true_annotation
+                    )
+                    and true_annotation["label"] == pred_annotation["label"]
+                ):
                     break
             else:
                 d[pred_annotation['label']]['false_positives'].append(pred_annotation)
@@ -236,25 +236,95 @@ def sequence_labeling_overlaps(true, predicted):
     return d
 
 
+def sequence_labeling_overlap_counts(true, predicted):
+    def equality(pred_annotation, true_annotation):
+        return sequences_overlap(pred_annotation, true_annotation)
+
+    return sequence_labeling_counts(true, predicted, equality_fn=equality)
+
+
+def sequence_labeling_superset_counts(true, predicted):
+    def equality(pred_annotation, true_annotation):
+        return (
+            pred_annotation["start"] <= true_annotation["start"]
+            and pred_annotation["end"] >= true_annotation["end"]
+        )
+
+    return sequence_labeling_counts(true, predicted, equality_fn=equality)
+
+
+def sequence_labeling_exact_counts(true, predicted):
+    def equality(pred_annotation, true_annotation):
+        return (
+            pred_annotation["start"] == true_annotation["start"]
+            and pred_annotation["end"] == true_annotation["end"]
+        )
+
+    return sequence_labeling_counts(true, predicted, equality_fn=equality)
+
+
 def sequence_labeling_overlap_precision(true, predicted):
     """
     Sequence overlap precision
     """
-    return seq_precision(true, predicted, count_fn=sequence_labeling_overlaps)
+    return seq_precision(true, predicted, count_fn=sequence_labeling_overlap_counts)
 
 
 def sequence_labeling_overlap_recall(true, predicted):
     """
     Sequence overlap recall
     """
-    return seq_recall(true, predicted, count_fn=sequence_labeling_overlaps)
+    return seq_recall(true, predicted, count_fn=sequence_labeling_overlap_counts)
 
 
-def sequence_labeling_micro_f1(true, predicted):
+def sequence_labeling_overlap_micro_f1(true, predicted):
     """
-    Sequence overlap F1
+    Sequence overlap micro F1
     """
-    return micro_f1(true, predicted, count_fn=sequence_labeling_overlaps)
+    return micro_f1(true, predicted, count_fn=sequence_labeling_overlap_counts)
+
+
+def sequence_exact_precision(true, predicted):
+    """
+    Sequence overlap exact match precision
+    """
+    return seq_precision(true, predicted, count_fn=sequence_labeling_exact_counts)
+
+
+def sequence_exact_recall(true, predicted):
+    """
+    Sequence overlap exact match recall
+    """
+    return seq_recall(true, predicted, count_fn=sequence_labeling_exact_counts)
+
+
+def sequence_exact_micro_f1(true, predicted):
+    """
+    Sequence overlap exact match micro-f1
+    """
+    return micro_f1(true, predicted, count_fn=sequence_labeling_exact_counts)
+
+
+def sequence_superset_precision(true, predicted):
+    """
+    Sequence overlap superset match precision
+    """
+    return seq_precision(true, predicted, count_fn=sequence_labeling_superset_counts)
+
+
+def sequence_superset_recall(true, predicted):
+    """
+    Sequence overlap superset match recall
+    """
+    return seq_recall(true, predicted, count_fn=sequence_labeling_superset_counts)
+
+
+def sequence_superset_micro_f1(true, predicted):
+    """
+    Sequence overlap superset match micro-f1
+    """
+    return micro_f1(true, predicted, count_fn=sequence_labeling_superset_counts)
+
 
 
 def annotation_report(y_true, y_pred, labels=None, target_names=None, sample_weight=None, digits=2, width=20):
