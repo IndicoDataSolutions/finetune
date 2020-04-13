@@ -55,7 +55,7 @@ class TestMetrics(unittest.TestCase):
         self.Y_superset = self.extend_label(self.X, y_superset, 10)
         self.Y_false_neg = self.extend_label(self.X, y_false_neg, 10)
 
-        self.seq_expected_correct = expected = {
+        self.seq_expected_correct = {
             "entity": {
                 "false_positives": 0,
                 "false_negatives": 0,
