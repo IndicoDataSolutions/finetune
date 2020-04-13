@@ -1,21 +1,10 @@
 import unittest
 from finetune.util.metrics import (
-    sequence_labeling_token_precision,
-    sequence_labeling_token_recall,
-    sequence_labeling_micro_token_f1,
-    sequence_labeling_overlap_precision,
-    sequence_labeling_overlap_recall,
-    sequence_labeling_token_counts,
-    sequence_labeling_overlap_counts,
-    sequence_labeling_overlap_micro_f1,
-    sequence_labeling_superset_counts,
-    sequence_labeling_exact_counts,
-    sequence_exact_precision,
-    sequence_exact_recall,
-    sequence_exact_micro_f1,
-    sequence_superset_precision,
-    sequence_superset_recall,
-    sequence_superset_micro_f1,
+    seq_recall,
+    seq_precision,
+    get_seq_count_fn,
+    micro_f1,
+    model_f1,
 )
 
 
@@ -62,6 +51,7 @@ class TestMetrics(unittest.TestCase):
                 "correct": 10,
                 "precision": 1.0,
                 "recall": 1.0,
+                "f1-score": 1.0,
             },
             "date": {
                 "false_positives": 0,
@@ -69,8 +59,11 @@ class TestMetrics(unittest.TestCase):
                 "correct": 10,
                 "precision": 1.0,
                 "recall": 1.0,
+                "f1-score": 1.0,
             },
             "micro-f1": 1.0,
+            "weighted-f1": 1.0,
+            "macro-f1": 1.0,
         }
         self.seq_expected_incorrect = {
             "entity": {
@@ -79,6 +72,7 @@ class TestMetrics(unittest.TestCase):
                 "correct": 0,
                 "precision": 0.0,
                 "recall": 0.0,
+                "f1-score": 0.0,
             },
             "date": {
                 "false_positives": 10,
@@ -86,8 +80,11 @@ class TestMetrics(unittest.TestCase):
                 "correct": 0,
                 "precision": 0.0,
                 "recall": 0.0,
+                "f1-score": 0.0,
             },
             "micro-f1": 0.0,
+            "macro-f1": 0.0,
+            "weighted-f1": 0.0,
         }
 
     def remove_label(self, recs, label):
@@ -108,31 +105,27 @@ class TestMetrics(unittest.TestCase):
     def extend_label(self, text, label, amt):
         return self.insert_text(text, [label for _ in range(amt)])
 
-    def check_metrics(
-        self,
-        Y,
-        Y_pred,
-        expected,
-        count_fn=None,
-        precision_fn=None,
-        recall_fn=None,
-        f1_fn=None,
-    ):
-        counts = count_fn(Y, Y_pred)
-        precisions = precision_fn(Y, Y_pred)
-        recalls = recall_fn(Y, Y_pred)
+    def check_metrics(self, Y, Y_pred, expected, span_type=None):
+        counts = get_seq_count_fn(span_type)(Y, Y_pred)
+        precisions = seq_precision(Y, Y_pred, span_type=span_type)
+        recalls = seq_recall(Y, Y_pred, span_type=span_type)
+        micro_f1_score = model_f1(Y, Y_pred, span_type=span_type, average="micro")
+        per_class_f1s = model_f1(Y, Y_pred, span_type=span_type)
+        weighted_f1 = model_f1(Y, Y_pred, span_type=span_type, average="weighted")
+        macro_f1 = model_f1(Y, Y_pred, span_type=span_type, average="macro")
         for cls_ in counts:
             for metric in counts[cls_]:
-                self.assertAlmostEqual(
-                    len(counts[cls_][metric]), expected[cls_][metric], places=3
-                )
+                self.assertEqual(len(counts[cls_][metric]), expected[cls_][metric])
+            self.assertAlmostEqual(recalls[cls_], expected[cls_]["recall"], places=3)
+            self.assertAlmostEqual(
+                per_class_f1s[cls_]["f1-score"], expected[cls_]["f1-score"], places=3
+            )
             self.assertAlmostEqual(
                 precisions[cls_], expected[cls_]["precision"], places=3
             )
-            self.assertAlmostEqual(recalls[cls_], expected[cls_]["recall"], places=3)
-        if f1_fn:
-            micro_f1 = f1_fn(Y, Y_pred)
-            self.assertAlmostEqual(micro_f1, expected["micro-f1"], places=3)
+        self.assertAlmostEqual(micro_f1_score, expected["micro-f1"], places=3)
+        self.assertAlmostEqual(weighted_f1, expected["weighted-f1"], places=3)
+        self.assertAlmostEqual(macro_f1, expected["macro-f1"], places=3)
 
     def test_token_incorrect(self):
         expected = {
@@ -142,6 +135,7 @@ class TestMetrics(unittest.TestCase):
                 "correct": 0,
                 "precision": 0.0,
                 "recall": 0.0,
+                "f1-score": 0.0,
             },
             "date": {
                 "false_positives": 10,
@@ -149,18 +143,13 @@ class TestMetrics(unittest.TestCase):
                 "correct": 0,
                 "precision": 0.0,
                 "recall": 0.0,
+                "f1-score": 0.0,
             },
             "micro-f1": 0.0,
+            "macro-f1": 0.0,
+            "weighted-f1": 0.0,
         }
-        self.check_metrics(
-            self.Y_true,
-            self.Y_false_pos,
-            expected,
-            count_fn=sequence_labeling_token_counts,
-            precision_fn=sequence_labeling_token_precision,
-            recall_fn=sequence_labeling_token_recall,
-            f1_fn=sequence_labeling_micro_token_f1,
-        )
+        self.check_metrics(self.Y_true, self.Y_false_pos, expected, span_type="token")
 
     def test_token_correct(self):
         expected = {
@@ -170,6 +159,7 @@ class TestMetrics(unittest.TestCase):
                 "correct": 20,
                 "precision": 1.0,
                 "recall": 1.0,
+                "f1-score": 1.0,
             },
             "date": {
                 "false_positives": 0,
@@ -177,19 +167,14 @@ class TestMetrics(unittest.TestCase):
                 "correct": 40,
                 "precision": 1.0,
                 "recall": 1.0,
+                "f1-score": 1.0,
             },
             "micro-f1": 1.0,
+            "macro-f1": 1.0,
+            "weighted-f1": 1.0,
         }
 
-        self.check_metrics(
-            self.Y_true,
-            self.Y_true,
-            expected,
-            count_fn=sequence_labeling_token_counts,
-            precision_fn=sequence_labeling_token_precision,
-            recall_fn=sequence_labeling_token_recall,
-            f1_fn=sequence_labeling_micro_token_f1,
-        )
+        self.check_metrics(self.Y_true, self.Y_true, expected, span_type="token")
 
     def test_token_mixed(self):
         Y_mixed = self.Y_false_pos[:5] + self.Y_true[:5]
@@ -200,6 +185,7 @@ class TestMetrics(unittest.TestCase):
                 "correct": 10,
                 "precision": 0.66666,
                 "recall": 0.5,
+                "f1-score": 0.571,
             },
             "date": {
                 "false_positives": 5,
@@ -207,17 +193,15 @@ class TestMetrics(unittest.TestCase):
                 "correct": 20,
                 "precision": 0.8,
                 "recall": 0.5,
+                "f1-score": 0.6153,
             },
             "micro-f1": 0.6,
+            "macro-f1": 0.593,
+            "weighted-f1": 0.601,
         }
+
         self.check_metrics(
-            self.Y_true,
-            Y_mixed,
-            expected,
-            count_fn=sequence_labeling_token_counts,
-            precision_fn=sequence_labeling_token_precision,
-            recall_fn=sequence_labeling_token_recall,
-            f1_fn=sequence_labeling_micro_token_f1,
+            self.Y_true, Y_mixed, expected, span_type="token",
         )
 
         # Move some predictions from correct to false negative
@@ -230,16 +214,13 @@ class TestMetrics(unittest.TestCase):
             "correct": 8,
             "precision": 0.615,
             "recall": 0.2,
+            "f1-score": 0.302,
         }
         expected["micro-f1"] = 0.409
+        expected["macro-f1"] = 0.437
+        expected["weighted-f1"] = 0.392
         self.check_metrics(
-            self.Y_true,
-            Y_mixed_false_negs,
-            expected,
-            count_fn=sequence_labeling_token_counts,
-            precision_fn=sequence_labeling_token_precision,
-            recall_fn=sequence_labeling_token_recall,
-            f1_fn=sequence_labeling_micro_token_f1,
+            self.Y_true, Y_mixed_false_negs, expected, span_type="token",
         )
 
     def test_seq_correct(self):
@@ -247,24 +228,12 @@ class TestMetrics(unittest.TestCase):
         # Overlaps
         for y_set in [self.Y_true, self.Y_overlap, self.Y_extra_overlap]:
             self.check_metrics(
-                self.Y_true,
-                y_set,
-                self.seq_expected_correct,
-                count_fn=sequence_labeling_overlap_counts,
-                precision_fn=sequence_labeling_overlap_precision,
-                recall_fn=sequence_labeling_overlap_recall,
-                f1_fn=sequence_labeling_overlap_micro_f1,
+                self.Y_true, y_set, self.seq_expected_correct, span_type="overlap"
             )
 
         # Exact
         self.check_metrics(
-            self.Y_true,
-            self.Y_true,
-            self.seq_expected_correct,
-            count_fn=sequence_labeling_exact_counts,
-            precision_fn=sequence_exact_precision,
-            recall_fn=sequence_exact_recall,
-            f1_fn=sequence_exact_micro_f1,
+            self.Y_true, self.Y_true, self.seq_expected_correct, span_type="exact"
         )
 
         # Superset
@@ -272,10 +241,7 @@ class TestMetrics(unittest.TestCase):
             self.Y_true,
             self.Y_superset,
             self.seq_expected_correct,
-            count_fn=sequence_labeling_superset_counts,
-            precision_fn=sequence_superset_precision,
-            recall_fn=sequence_superset_recall,
-            f1_fn=sequence_superset_micro_f1,
+            span_type="superset",
         )
 
     def test_seq_incorrect(self):
@@ -284,10 +250,7 @@ class TestMetrics(unittest.TestCase):
             self.Y_true,
             self.Y_false_pos,
             self.seq_expected_incorrect,
-            count_fn=sequence_labeling_overlap_counts,
-            precision_fn=sequence_labeling_overlap_precision,
-            recall_fn=sequence_labeling_overlap_recall,
-            f1_fn=sequence_labeling_overlap_micro_f1,
+            span_type="overlap",
         )
 
         # Exact
@@ -295,10 +258,7 @@ class TestMetrics(unittest.TestCase):
             self.Y_true,
             self.Y_false_pos,
             self.seq_expected_incorrect,
-            count_fn=sequence_labeling_exact_counts,
-            precision_fn=sequence_exact_precision,
-            recall_fn=sequence_exact_recall,
-            f1_fn=sequence_exact_micro_f1,
+            span_type="exact",
         )
 
         # Superset
@@ -306,10 +266,7 @@ class TestMetrics(unittest.TestCase):
             self.Y_true,
             self.Y_false_pos,
             self.seq_expected_incorrect,
-            count_fn=sequence_labeling_superset_counts,
-            precision_fn=sequence_superset_precision,
-            recall_fn=sequence_superset_recall,
-            f1_fn=sequence_superset_micro_f1,
+            span_type="superset",
         )
 
     def test_seq_mixed(self):
@@ -320,6 +277,7 @@ class TestMetrics(unittest.TestCase):
                 "correct": 6,
                 "precision": 0.6,
                 "recall": 0.6,
+                "f1-score": 0.6,
             },
             "date": {
                 "false_positives": 4,
@@ -327,21 +285,18 @@ class TestMetrics(unittest.TestCase):
                 "correct": 6,
                 "precision": 0.6,
                 "recall": 0.6,
+                "f1-score": 0.6,
             },
             "micro-f1": 0.6,
+            "macro-f1": 0.6,
+            "weighted-f1": 0.6,
         }
         Y_mixed_overlap = self.Y_false_pos[:4] + self.Y_overlap[:6]
         Y_mixed_extra_overlap = self.Y_false_pos[:4] + self.Y_extra_overlap[:6]
         Y_mixed_exact = self.Y_false_pos[:4] + self.Y_true[:6]
         for y_set in [Y_mixed_overlap, Y_mixed_extra_overlap, Y_mixed_exact]:
             self.check_metrics(
-                self.Y_true,
-                y_set,
-                expected=expected,
-                count_fn=sequence_labeling_overlap_counts,
-                precision_fn=sequence_labeling_overlap_precision,
-                recall_fn=sequence_labeling_overlap_recall,
-                f1_fn=sequence_labeling_overlap_micro_f1,
+                self.Y_true, y_set, expected=expected, span_type="overlap"
             )
 
         # Move 3 predictions from correct to false negative
@@ -354,28 +309,22 @@ class TestMetrics(unittest.TestCase):
             "correct": 3,
             "precision": 0.42857,
             "recall": 0.3,
+            "f1-score": 0.353,
         }
         expected["micro-f1"] = 0.4864
+        expected["weighted-f1"] = 0.476
+        expected["macro-f1"] = 0.476
         self.check_metrics(
             self.Y_true,
             Y_mixed_overlap_false_negs,
             expected=expected,
-            count_fn=sequence_labeling_overlap_counts,
-            precision_fn=sequence_labeling_overlap_precision,
-            recall_fn=sequence_labeling_overlap_recall,
-            f1_fn=sequence_labeling_overlap_micro_f1,
+            span_type="overlap",
         )
         Y_mixed_exact_false_negs = (
             self.Y_false_pos[:4] + self.Y_true[:3] + self.Y_false_neg[:3]
         )
         self.check_metrics(
-            self.Y_true,
-            Y_mixed_exact_false_negs,
-            expected=expected,
-            count_fn=sequence_labeling_exact_counts,
-            precision_fn=sequence_exact_precision,
-            recall_fn=sequence_exact_recall,
-            f1_fn=sequence_exact_micro_f1,
+            self.Y_true, Y_mixed_exact_false_negs, expected=expected, span_type="exact"
         )
         Y_mixed_superset_false_negs = (
             self.Y_false_pos[:4] + self.Y_superset[:3] + self.Y_false_neg[:3]
@@ -384,8 +333,5 @@ class TestMetrics(unittest.TestCase):
             self.Y_true,
             Y_mixed_superset_false_negs,
             expected=expected,
-            count_fn=sequence_labeling_superset_counts,
-            precision_fn=sequence_superset_precision,
-            recall_fn=sequence_superset_recall,
-            f1_fn=sequence_superset_micro_f1,
+            span_type="superset",
         )

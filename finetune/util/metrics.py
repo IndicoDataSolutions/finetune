@@ -1,4 +1,5 @@
 import os
+from functools import partial
 from collections import defaultdict
 
 import numpy as np
@@ -120,64 +121,123 @@ def sequence_labeling_token_counts(true, predicted):
     return d
 
 
-def seq_recall(true, predicted, count_fn):
+def calc_recall(TP, FN):
+    try:
+        return TP / float(FN + TP)
+    except ZeroDivisionError:
+        return 0.0
+
+
+def calc_precision(TP, FP):
+    try:
+        return TP / float(FP + TP)
+    except ZeroDivisionError:
+        return 0.0
+
+
+def calc_f1(recall, precision):
+    try:
+        return 2 * (recall * precision) / (recall + precision)
+    except ZeroDivisionError:
+        return 0.0
+
+
+def seq_recall(true, predicted, span_type="token"):
+    count_fn = get_seq_count_fn(span_type)
     class_counts = count_fn(true, predicted)
     results = {}
     for cls_, counts in class_counts.items():
         FN = len(counts['false_negatives'])
         TP = len(counts['correct'])
-        try:
-            results[cls_] = TP / float(FN + TP)
-        except ZeroDivisionError: 
-            results[cls_] = 0.
+        results[cls_] = calc_recall(TP, FN)
     return results
 
 
-def seq_precision(true, predicted, count_fn):
+def seq_precision(true, predicted, span_type="token"):
+    count_fn = get_seq_count_fn(span_type)
     class_counts = count_fn(true, predicted)
     results = {}
     for cls_, counts in class_counts.items():
         FP = len(counts['false_positives'])
         TP = len(counts['correct'])
-        try:
-            results[cls_] = TP / float(FP + TP)
-        except ZeroDivisionError:
-            results[cls_] = 0.
+        results[cls_] = calc_precision(TP, FP)
     return results
 
-def micro_f1(true, predicted, count_fn):
+
+def micro_f1(true, predicted, span_type="token"):
+    count_fn = get_seq_count_fn(span_type)
     class_counts = count_fn(true, predicted)
     TP, FP, FN = 0, 0, 0
     for cls_, counts in class_counts.items():
         FN += len(counts['false_negatives'])
         TP += len(counts['correct'])
         FP += len(counts['false_positives'])
-    recall = TP/float(FN + TP)
-    precision = TP / float(FP + TP)
-    try:
-        f1 = 2 * (recall * precision) / (recall + precision)
-    except ZeroDivisionError:
-        return 0.0
-    return f1
+    recall = calc_recall(TP, FN)
+    precision = calc_precision(TP, FP)
+    return calc_f1(recall, precision)
+
+
+def per_class_f1(true, predicted, span_type="token"):
+    """
+    F1-scores per class
+    """
+    count_fn = get_seq_count_fn(span_type)
+    class_counts = count_fn(true, predicted)
+    results = {}
+    for cls_, counts in class_counts.items():
+        results[cls_] = {}
+        FP = len(counts["false_positives"])
+        FN = len(counts["false_negatives"])
+        TP = len(counts["correct"])
+        recall = calc_recall(TP, FN)
+        precision = calc_precision(TP, FP)
+        results[cls_]["support"] = FN + TP
+        results[cls_]["f1-score"] = calc_f1(recall, precision)
+    return results
+
+
+def model_f1(true, predicted, span_type="token", average=None):
+    """
+    If average = None, return per-class F1 scores
+    """
+    if average == "micro":
+        return micro_f1(true, predicted, span_type)
+    else:
+        f1s = per_class_f1(true, predicted, span_type)
+    if average == "weighted":
+        classes, supports = [], []
+        for cls_ in f1s:
+            classes.append(f1s[cls_]["f1-score"])
+            supports.append(f1s[cls_]["support"])
+        import ipdb; ipdb.set_trace()
+        return np.average(np.array(classes), weights=np.array(supports))
+    if average == "macro":
+        f1_scores = [f1s[cls_]["f1-score"] for cls_ in f1s]
+        return np.average(f1_scores)
+    if not average:
+        return f1s
+
 
 def sequence_labeling_token_precision(true, predicted):
     """
     Token level precision
     """
-    return seq_precision(true, predicted, count_fn=sequence_labeling_token_counts)
+    return seq_precision(true, predicted, span_type="token")
 
 
 def sequence_labeling_token_recall(true, predicted):
     """
     Token level recall
     """
-    return seq_recall(true, predicted, count_fn=sequence_labeling_token_counts)
+    return seq_recall(true, predicted, span_type="token")
+
 
 def sequence_labeling_micro_token_f1(true, predicted):
     """
     Token level F1
     """
-    return micro_f1(true, predicted, count_fn=sequence_labeling_token_counts)
+    return micro_f1(true, predicted, span_type="token")
+
 
 def sequences_overlap(true_seq, pred_seq):
     """
@@ -186,6 +246,26 @@ def sequences_overlap(true_seq, pred_seq):
     start_contained = (pred_seq['start'] < true_seq['end'] and pred_seq['start'] >= true_seq['start'])
     end_contained = (pred_seq['end'] > true_seq['start'] and pred_seq['end'] <= true_seq['end'])
     return start_contained or end_contained
+
+
+def sequence_exact_match(true_seq, pred_seq):
+    """
+    Boolean return value indicates whether or not seqs are exact match
+    """
+    return (
+            pred_seq["start"] == true_seq["start"]
+            and pred_seq["end"] == true_seq["end"]
+        )
+
+
+def sequence_superset(true_seq, pred_seq):
+    """
+    Boolean return value indicates whether or predicted seq is a superset of target
+    """
+    return (
+            pred_seq["start"] <= true_seq["start"]
+            and pred_seq["end"] >= true_seq["end"]
+        )
 
 
 def sequence_labeling_counts(true, predicted, equality_fn):
@@ -208,10 +288,9 @@ def sequence_labeling_counts(true, predicted, equality_fn):
         for annotations in [true_annotations, predicted_annotations]:
             for annotation in annotations:
                 annotation['doc_idx'] = i
-        
         for true_annotation in true_annotations:
             for pred_annotation in predicted_annotations:
-                if equality_fn(pred_annotation=pred_annotation, true_annotation=true_annotation):
+                if equality_fn(true_annotation, pred_annotation):
                     if pred_annotation['label'] == true_annotation['label']:
                         d[true_annotation['label']]['correct'].append(true_annotation)
                     else:
@@ -225,7 +304,7 @@ def sequence_labeling_counts(true, predicted, equality_fn):
             for true_annotation in true_annotations:
                 if (
                     equality_fn(
-                        pred_annotation=pred_annotation, true_annotation=true_annotation
+                        true_annotation, pred_annotation
                     )
                     and true_annotation["label"] == pred_annotation["label"]
                 ):
@@ -236,94 +315,35 @@ def sequence_labeling_counts(true, predicted, equality_fn):
     return d
 
 
-def sequence_labeling_overlap_counts(true, predicted):
-    def equality(pred_annotation, true_annotation):
-        return sequences_overlap(pred_annotation, true_annotation)
-
-    return sequence_labeling_counts(true, predicted, equality_fn=equality)
-
-
-def sequence_labeling_superset_counts(true, predicted):
-    def equality(pred_annotation, true_annotation):
-        return (
-            pred_annotation["start"] <= true_annotation["start"]
-            and pred_annotation["end"] >= true_annotation["end"]
-        )
-
-    return sequence_labeling_counts(true, predicted, equality_fn=equality)
-
-
-def sequence_labeling_exact_counts(true, predicted):
-    def equality(pred_annotation, true_annotation):
-        return (
-            pred_annotation["start"] == true_annotation["start"]
-            and pred_annotation["end"] == true_annotation["end"]
-        )
-
-    return sequence_labeling_counts(true, predicted, equality_fn=equality)
+def get_seq_count_fn(span_type="token"):
+    span_type_fn_mapping = {
+        "token": sequence_labeling_token_counts,
+        "overlap": partial(sequence_labeling_counts, equality_fn=sequences_overlap),
+        "exact": partial(sequence_labeling_counts, equality_fn=sequence_exact_match),
+        "superset": partial(sequence_labeling_counts, equality_fn=sequence_superset),
+    }
+    return span_type_fn_mapping[span_type]
 
 
 def sequence_labeling_overlap_precision(true, predicted):
     """
     Sequence overlap precision
     """
-    return seq_precision(true, predicted, count_fn=sequence_labeling_overlap_counts)
+    return seq_precision(true, predicted, span_type="overlap")
 
 
 def sequence_labeling_overlap_recall(true, predicted):
     """
     Sequence overlap recall
     """
-    return seq_recall(true, predicted, count_fn=sequence_labeling_overlap_counts)
+    return seq_recall(true, predicted, span_type="overlap")
 
 
 def sequence_labeling_overlap_micro_f1(true, predicted):
     """
     Sequence overlap micro F1
     """
-    return micro_f1(true, predicted, count_fn=sequence_labeling_overlap_counts)
-
-
-def sequence_exact_precision(true, predicted):
-    """
-    Sequence overlap exact match precision
-    """
-    return seq_precision(true, predicted, count_fn=sequence_labeling_exact_counts)
-
-
-def sequence_exact_recall(true, predicted):
-    """
-    Sequence overlap exact match recall
-    """
-    return seq_recall(true, predicted, count_fn=sequence_labeling_exact_counts)
-
-
-def sequence_exact_micro_f1(true, predicted):
-    """
-    Sequence overlap exact match micro-f1
-    """
-    return micro_f1(true, predicted, count_fn=sequence_labeling_exact_counts)
-
-
-def sequence_superset_precision(true, predicted):
-    """
-    Sequence overlap superset match precision
-    """
-    return seq_precision(true, predicted, count_fn=sequence_labeling_superset_counts)
-
-
-def sequence_superset_recall(true, predicted):
-    """
-    Sequence overlap superset match recall
-    """
-    return seq_recall(true, predicted, count_fn=sequence_labeling_superset_counts)
-
-
-def sequence_superset_micro_f1(true, predicted):
-    """
-    Sequence overlap superset match micro-f1
-    """
-    return micro_f1(true, predicted, count_fn=sequence_labeling_superset_counts)
+    return micro_f1(true, predicted, span_type="overlap")
 
 
 
