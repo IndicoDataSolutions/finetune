@@ -238,6 +238,7 @@ def get_default_config():
     settings = Settings(
         # General Settings
         low_memory_mode=False,
+        float_16_predict=True,
         save_adam_vars=False,
         shuffle_buffer_size=100,
         dataset_size=None,

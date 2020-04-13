@@ -471,8 +471,9 @@ def embedding_postprocessor(
         )
         # This vocab will be small so we always do one-hot here, since it is always
         # faster for a small vocabulary.
+        token_type_table = tf.convert_to_tensor(token_type_table)
         flat_token_type_ids = tf.reshape(token_type_ids, [-1])
-        one_hot_ids = tf.one_hot(flat_token_type_ids, depth=token_type_vocab_size)
+        one_hot_ids = tf.one_hot(flat_token_type_ids, depth=token_type_vocab_size, dtype=token_type_table.dtype)
         token_type_embeddings = tf.matmul(one_hot_ids, token_type_table)
         token_type_embeddings = tf.reshape(
             token_type_embeddings, [batch_size, seq_length, width]
@@ -539,14 +540,14 @@ def create_attention_mask_from_input_mask(from_tensor, to_mask):
     to_shape = get_shape_list(to_mask, expected_rank=2)
     to_seq_length = to_shape[1]
 
-    to_mask = tf.cast(tf.reshape(to_mask, [batch_size, 1, to_seq_length]), tf.float32)
+    to_mask = tf.cast(tf.reshape(to_mask, [batch_size, 1, to_seq_length]), dtype=to_mask.dtype)
 
     # We don't assume that `from_tensor` is a mask (although it could be). We
     # don't actually care if we attend *from* padding tokens (only *to* padding)
     # tokens so we create a tensor of all ones.
     #
     # `broadcast_ones` = [batch_size, from_seq_length, 1]
-    broadcast_ones = tf.ones(shape=[batch_size, from_seq_length, 1], dtype=tf.float32)
+    broadcast_ones = tf.ones(shape=[batch_size, from_seq_length, 1], dtype=to_mask.dtype)
 
     # Here we broadcast along two dimensions to create the mask.
     mask = broadcast_ones * to_mask
@@ -720,7 +721,7 @@ def attention_layer(
         # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
         # masked positions, this operation will create a tensor which is 0.0 for
         # positions we want to attend and -10000.0 for masked positions.
-        adder = (1.0 - tf.cast(attention_mask, tf.float32)) * -10000.0
+        adder = (1.0 - tf.cast(attention_mask, attention_scores.dtype)) * -10000.0
 
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.

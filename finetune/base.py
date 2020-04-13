@@ -34,7 +34,7 @@ from finetune.util.shapes import shape_list
 from finetune.util.timing import ProgressBar
 from finetune.util.in_memory_finetune import make_in_memory_finetune_hooks
 from finetune.util.indico_estimator import IndicoEstimator
-from finetune.base_models import GPTModel, GPTModelSmall
+from finetune.base_models import GPTModel, GPT2Model, GPTModelSmall
 from finetune.nn.auxiliary import add_context_embed
 from finetune.input_pipeline import InputMode
 
@@ -80,6 +80,9 @@ class BaseModel(object, metaclass=ABCMeta):
         assert_valid_config(**kwargs)
         config = get_default_config()
         config.base_model = kwargs.get("base_model", config.base_model)
+        if config.base_model in [GPTModel, GPT2Model, GPTModelSmall] and config.float_16_predict:
+            LOGGER.warning("float_16_predict not supported by GPT and GPT2")
+            config.float_16_predict = False
         auto_keys = []
         config.update(kwargs)
         for k, v in config.items():
@@ -367,7 +370,6 @@ class BaseModel(object, metaclass=ABCMeta):
         return sorted_Xs, invert_idxs
 
     def _inference(self, zipped_data, predict_keys=None, context=None, update_hook=None, chunked_length=None):
-
         def get_zipped_data():
             return iter(zipped_data)
         
@@ -401,10 +403,10 @@ class BaseModel(object, metaclass=ABCMeta):
             update_hook=update_hook
         )
         try:
-            outputs = np.asarray([
+            outputs = [
                 pred[predict_keys[0]] if len(predict_keys) == 1 else pred
                 for pred in predictions
-            ])
+            ]
             return outputs
 
         except ValueError:
@@ -662,7 +664,6 @@ class BaseModel(object, metaclass=ABCMeta):
                 del model.config[setting]
                 
         model.config = model.resolve_config(**model.config)
-        
         model.input_pipeline.config = model.config
         download_data_if_required(model.config.base_model)
         saver.set_fallback(model.config.base_model_path)

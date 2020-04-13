@@ -23,6 +23,7 @@ def embed_context(context, featurizer_state, config, train):
 def add_context_embed(featurizer_state):
     if "context" in featurizer_state:
         context_embed = featurizer_state["context"]
+        dtype = context_embed.dtype
 
         shape = shape_list(context_embed)
         if len(shape) == 4:
@@ -37,8 +38,8 @@ def add_context_embed(featurizer_state):
         seq_mask = tf.sequence_mask(featurizer_state['lengths'])
         for key in ['features', 'explain_out']:
             if key in featurizer_state:
-                float_mask = tf.cast(seq_mask, tf.float32)
-                binary_mask = tf.constant(1.) - float_mask
+                float_mask = tf.cast(seq_mask, dtype)
+                binary_mask = tf.constant(1., dtype=dtype) - float_mask
                 flat_embed = flat_embed * tf.expand_dims(binary_mask, -1)
                 sum_context = tf.reduce_sum(flat_embed, 1)
                 mean_context = sum_context / tf.reduce_sum(float_mask)

@@ -66,6 +66,7 @@ class TestComparisonRegression(unittest.TestCase):
         self.assertIsInstance(predictions, np.ndarray)
         self.assertIsInstance(predictions[0], np.floating)
         # whether it is float32 or float64 depends on whether it is run on cpu or gpu.
+
         self.assertGreater(naive_baseline_mse, mse)
 
 

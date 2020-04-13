@@ -119,4 +119,4 @@ class TestModel(unittest.TestCase):
         preds = model_test.predict(x_test)
         self.assertIsInstance(preds, list)
         self.assertIsInstance(preds[0], list)
-        self.assertIsInstance(preds[0][0], (float, np.float32))
+        self.assertIsInstance(preds[0][0], np.floating)
