@@ -11,7 +11,7 @@ from finetune.nn.nn_utils import dropout, norm
 
 def mask_attn_weights(w):
     n = shape_list(w)[-1]
-    b = tf.matrix_band_part(tf.ones([n, n]), -1, 0)
+    b = tf.cast(tf.matrix_band_part(tf.ones([n, n]), -1, 0), w.dtype)
     b = tf.reshape(b, [1, 1, n, n])
     w = w * b + -1e9 * (1 - b)
     return w
@@ -21,7 +21,7 @@ def mask_pad(w, lengths):
     batch = shape_list(lengths)[0]
     maxlen = tf.cast(tf.reduce_max(lengths), tf.int32)
     seq_mask = tf.reshape(tf.sequence_mask(lengths, maxlen=maxlen), [batch, 1, 1, maxlen])
-    b = tf.cast(seq_mask, tf.float32)
+    b = tf.cast(seq_mask, w.dtype)
     w = w * b + -1e9 * (1 - b)
     return w
 
@@ -50,7 +50,7 @@ def attn_weights(q, k, v, scale=False, mask=True, explain=False, lengths=None):
 
     if scale:
         n_state = shape_list(v)[-1]
-        w = w * tf.rsqrt(tf.cast(n_state, tf.float32))
+        w = w * tf.rsqrt(tf.cast(n_state, w.dtype))
 
     if mask:
         if explain:

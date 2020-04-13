@@ -40,6 +40,16 @@ class PredictMode:
     ASSOCIATION_PROBAS = "ASSOCIATION_PROBA"
     EXPLAIN = "EXPLAIN"
 
+def fp16_variable_getter(getter, name, shape=None, dtype=None,
+                         initializer=None, regularizer=None,
+                         trainable=True,
+                         *args, **kwargs):
+    dtype = tf.float16 if dtype in [tf.float16, tf.float32] else dtype
+    return getter(name, shape, dtype=dtype,
+                      initializer=initializer, regularizer=regularizer,
+                      trainable=trainable,
+                      *args, **kwargs)
+
 
 def language_model_op(X, params, featurizer_state, mode, encoder):
     language_model_state = language_model(
@@ -132,11 +142,17 @@ def get_model_fn(
         train = estimator_mode == tf.estimator.ModeKeys.TRAIN
         X = features["tokens"]
         context = features.get("context", None)
-        task_id = features.get("task_id", None)
         Y = labels
         pred_op = None
 
-        with tf.variable_scope(tf.get_variable_scope()):
+        if estimator_mode == tf.estimator.ModeKeys.PREDICT and params.float_16_predict:
+            custom_getter = fp16_variable_getter
+            if context is not None:
+                context = tf.cast(context, tf.float16)
+            # inputs should all be int types except Y which is not used at prediction
+        else:
+            custom_getter = None
+        with tf.variable_scope(tf.get_variable_scope(), custom_getter=custom_getter):
             train_loss = 0.0
             featurizer_state = params.base_model.get_featurizer(
                 X,
@@ -163,7 +179,6 @@ def get_model_fn(
                     Y=Y,
                     params=params,
                     mode=mode,
-                    task_id=task_id,
                 )
                 if (
                     mode == tf.estimator.ModeKeys.TRAIN

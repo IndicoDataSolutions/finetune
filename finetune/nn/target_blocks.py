@@ -432,6 +432,7 @@ def sequence_labeler(
                     seq_lab_internal, use_entire_scope=True
                 )
             logits = seq_lab_internal(hidden)
+            logits = tf.cast(logits, tf.float32) # always run the crf in float32
 
         loss = 0.0
 

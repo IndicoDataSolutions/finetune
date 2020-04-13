@@ -202,8 +202,8 @@ class SequenceLabeler(BaseModel):
                 doc_probs = []
                 doc_positions = []
                 doc_starts = []
-
                 doc_idx += 1
+
             start, end = self.input_pipeline.chunker.useful_chunk_section(start_of_doc, end_of_doc)
 
             label_seq = label_seq[start:end]

@@ -110,7 +110,7 @@ def tcn_featurizer(
         mask = tf.expand_dims(
             1.0
             - tf.sequence_mask(
-                pool_idx, maxlen=tf.shape(representation)[1], dtype=tf.float32
+                pool_idx, maxlen=tf.shape(representation)[1], dtype=seq_feats.dtype
             ),
             -1,
         )

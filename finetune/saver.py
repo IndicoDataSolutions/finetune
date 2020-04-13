@@ -249,6 +249,7 @@ class Saver:
                     for func in self.variable_transforms:
                         saved_var = func(name, saved_var)
                     var_loader.add(var, saved_var)
+                    
             var_loader.run(session)
         return init_fn
 
