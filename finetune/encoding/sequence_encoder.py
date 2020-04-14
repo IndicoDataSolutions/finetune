@@ -43,10 +43,10 @@ def _merge_confidences(annotation):
 def round_to_nearest_start_and_end(label, token_starts, token_ends, text):
     # Update label start / end / text to align with nearest token start_token and end
     # Applies in-place modification to `label` obj.
-    end_distances = np.abs(np.asarray(token_ends) - label["end"])
+    end_distances = np.abs(token_ends - label["end"])
     label["end"] = token_ends[np.argmin(end_distances)]
 
-    token_starts = [s for s in token_starts if s < label["end"]]  # label cannot end before it starts
+    token_starts = token_starts[token_starts < label["end"]]
     start_distances = np.abs(np.asarray(token_starts) - label["start"])
     label["start"] = token_starts[np.argmin(start_distances)]
 
@@ -89,11 +89,11 @@ def finetune_to_indico_sequence(
     :return: Texts, annoatations both in the 'indico' format.
     """
     annotations = []
-    loop_vals = zip(raw_texts, subseqs, labels, probs or [None] * len(raw_texts))
-    for doc_idx, (raw_text, doc_seq, label_seq, prob_seq) in enumerate(loop_vals):
-        spacy_tokens = NLP(raw_text)
-        spacy_token_starts = [token.idx for token in spacy_tokens]
-        spacy_token_ends = [token.idx + len(token.text) for token in spacy_tokens]
+    spacy_docs = NLP.pipe(raw_texts)
+    loop_vals = zip(raw_texts, spacy_docs, subseqs, labels, probs or [None] * len(raw_texts))
+    for doc_idx, (raw_text, spacy_tokens, doc_seq, label_seq, prob_seq) in enumerate(loop_vals):
+        spacy_token_starts = np.asarray([token.idx for token in spacy_tokens])
+        spacy_token_ends = np.asarray([token.idx + len(token.text) for token in spacy_tokens])
         doc_annotations = []
         annotation_ranges = set()
         raw_annotation_start = 0
@@ -103,8 +103,10 @@ def finetune_to_indico_sequence(
         ):
             subtoken_to_label_idx.append(len(doc_annotations))
             if not isinstance(raw_label, tuple):
+                multilabel = False
                 label_list = [raw_label]
             else:
+                multilabel = True
                 label_list = raw_label
 
             for label_idx, label in enumerate(label_list):
@@ -128,7 +130,7 @@ def finetune_to_indico_sequence(
                     continue
 
                 extended_existing_label = False
-                for item in doc_annotations:
+                for item in (doc_annotations if multilabel else doc_annotations[-1:]):
                     # handle case where we extend existing annotation
                     if (
                         # same label
@@ -153,8 +155,8 @@ def finetune_to_indico_sequence(
                 )
 
                 annotation = {
-                    "start": int(annotation_start),
-                    "end": int(annotation_end),
+                    "start": annotation_start,
+                    "end": annotation_end,
                     "label": label,
                     "text": raw_text[annotation_start:annotation_end],
                 }
@@ -177,19 +179,6 @@ def finetune_to_indico_sequence(
                 if annotation_tuple not in annotation_ranges:
                     annotation_ranges.add(annotation_tuple)
                     doc_annotations.append(annotation)
-
-        if associations:
-            associations_seq = assign_associations(
-                associations[doc_idx], none_value, subtoken_to_label_idx
-            )
-            for label_i, annotation in enumerate(doc_annotations):
-                if label_i in associations_seq:
-                    index, relationship, prob = associations_seq[label_i]
-                    annotation["associations"] = {
-                        "index": index,
-                        "relationship": relationship,
-                        "prob": prob,
-                    }
 
         doc_annotations = sorted(
             [dict(items) for items in doc_annotations], key=lambda x: span(x)
