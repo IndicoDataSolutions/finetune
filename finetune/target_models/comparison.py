@@ -61,9 +61,10 @@ class ComparisonPipeline(ClassificationPipeline):
 
     def feed_shape_type_def(self):
         TS = tf.TensorShape
-        types = {"tokens": tf.int32}
+        token_type, token_shape = self.config.base_model.get_token_type_shape()
+        types = {"tokens": token_type}
         shapes = {
-            "tokens": TS([2, None])
+            "tokens": TS([2] + token_shape)
         }
         if self.config.use_auxiliary_info:
             TS = tf.TensorShape

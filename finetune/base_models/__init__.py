@@ -1,5 +1,7 @@
 from abc import ABCMeta, abstractmethod
 
+import tensorflow as tf
+
 COMMON_SETTINGS = {
     'max_length': 512,
     'batch_size': 2,
@@ -11,6 +13,10 @@ COMMON_SETTINGS = {
 
 class SourceModel(metaclass=ABCMeta):
     is_bidirectional = True
+
+    @classmethod
+    def get_token_type_shape(cls):
+        return tf.int32, [None]
 
     @classmethod
     def get_optimal_params(cls, config):

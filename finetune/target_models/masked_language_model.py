@@ -15,10 +15,11 @@ class MaskedLanguageModelPipeline(BasePipeline):
         pass
 
     def feed_shape_type_def(self):
+        token_type, token_shape = self.config.base_model.get_token_type_shape()
         return (
             (
                 {
-                    "tokens": tf.int32,
+                    "tokens": token_type,
                     "mlm_weights": tf.float32,
                     "mlm_ids": tf.int32,
                     "mlm_positions": tf.int32
@@ -26,7 +27,7 @@ class MaskedLanguageModelPipeline(BasePipeline):
             ),
             (
                 {
-                    "tokens": TS([None]),
+                    "tokens": TS(token_shape),
                     "mlm_weights": TS([None]),
                     "mlm_ids": TS([None]),
                     "mlm_positions": TS([None]),

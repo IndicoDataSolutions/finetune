@@ -59,8 +59,9 @@ class SequencePipeline(BasePipeline):
 
     def feed_shape_type_def(self):
         TS = tf.TensorShape
-        types = {"tokens": tf.int32}
-        shapes = {"tokens": TS([None])}
+        token_type, token_shape = self.config.base_model.get_token_type_shape()
+        types = {"tokens": token_type}
+        shapes = {"tokens": TS(token_shape)}
         types, shapes = self._add_context_info_if_present(types, shapes)
         target_shape = (
             [None, self.label_encoder.target_dim]
