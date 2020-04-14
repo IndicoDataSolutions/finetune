@@ -318,6 +318,10 @@ def get_model_fn(
             )
 
         if mode == tf.estimator.ModeKeys.PREDICT:
+            for k, v in predictions.items():
+                if v.dtype == tf.float16:
+                    predictions[k] = tf.cast(v, tf.float32)
+                
             return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
 
         if mode == tf.estimator.ModeKeys.TRAIN:
