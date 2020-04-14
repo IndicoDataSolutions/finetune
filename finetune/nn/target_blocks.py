@@ -453,7 +453,7 @@ def sequence_labeler(
                 logits = []
                 for i in range(n_targets):
                     transition_params.append(
-                        tf.get_variable("Transition_matrix_{}".format(i), shape=[2, 2])
+                        tf.cast(tf.get_variable("Transition_matrix_{}".format(i), shape=[2, 2]), tf.float32)
                     )
                     logits.append(
                         tf.stack(
@@ -493,8 +493,11 @@ def sequence_labeler(
                     )
                     logits = class_reweighting(per_token_weights)(logits)
                                                                                                           
-                transition_params = tf.get_variable(
-                    "Transition_matrix", shape=[n_targets, n_targets]
+                transition_params = tf.cast(
+                    tf.get_variable(
+                        "Transition_matrix", shape=[n_targets, n_targets]
+                    ),
+                    tf.float32
                 )
                 if targets is not None:
                     if use_crf:
