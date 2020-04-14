@@ -4,7 +4,7 @@ from finetune.util.metrics import (
     seq_precision,
     get_seq_count_fn,
     micro_f1,
-    model_f1,
+    sequence_f1,
 )
 
 
@@ -48,7 +48,7 @@ class TestMetrics(unittest.TestCase):
             "entity": {
                 "false_positives": 0,
                 "false_negatives": 0,
-                "correct": 10,
+                "true_positives": 10,
                 "precision": 1.0,
                 "recall": 1.0,
                 "f1-score": 1.0,
@@ -56,7 +56,7 @@ class TestMetrics(unittest.TestCase):
             "date": {
                 "false_positives": 0,
                 "false_negatives": 0,
-                "correct": 10,
+                "true_positives": 10,
                 "precision": 1.0,
                 "recall": 1.0,
                 "f1-score": 1.0,
@@ -69,7 +69,7 @@ class TestMetrics(unittest.TestCase):
             "entity": {
                 "false_positives": 10,
                 "false_negatives": 10,
-                "correct": 0,
+                "true_positives": 0,
                 "precision": 0.0,
                 "recall": 0.0,
                 "f1-score": 0.0,
@@ -77,7 +77,7 @@ class TestMetrics(unittest.TestCase):
             "date": {
                 "false_positives": 10,
                 "false_negatives": 10,
-                "correct": 0,
+                "true_positives": 0,
                 "precision": 0.0,
                 "recall": 0.0,
                 "f1-score": 0.0,
@@ -109,10 +109,10 @@ class TestMetrics(unittest.TestCase):
         counts = get_seq_count_fn(span_type)(Y, Y_pred)
         precisions = seq_precision(Y, Y_pred, span_type=span_type)
         recalls = seq_recall(Y, Y_pred, span_type=span_type)
-        micro_f1_score = model_f1(Y, Y_pred, span_type=span_type, average="micro")
-        per_class_f1s = model_f1(Y, Y_pred, span_type=span_type)
-        weighted_f1 = model_f1(Y, Y_pred, span_type=span_type, average="weighted")
-        macro_f1 = model_f1(Y, Y_pred, span_type=span_type, average="macro")
+        micro_f1_score = sequence_f1(Y, Y_pred, span_type=span_type, average="micro")
+        per_class_f1s = sequence_f1(Y, Y_pred, span_type=span_type)
+        weighted_f1 = sequence_f1(Y, Y_pred, span_type=span_type, average="weighted")
+        macro_f1 = sequence_f1(Y, Y_pred, span_type=span_type, average="macro")
         for cls_ in counts:
             for metric in counts[cls_]:
                 self.assertEqual(len(counts[cls_][metric]), expected[cls_][metric])
@@ -132,7 +132,7 @@ class TestMetrics(unittest.TestCase):
             "entity": {
                 "false_positives": 10,
                 "false_negatives": 20,
-                "correct": 0,
+                "true_positives": 0,
                 "precision": 0.0,
                 "recall": 0.0,
                 "f1-score": 0.0,
@@ -140,7 +140,7 @@ class TestMetrics(unittest.TestCase):
             "date": {
                 "false_positives": 10,
                 "false_negatives": 40,
-                "correct": 0,
+                "true_positives": 0,
                 "precision": 0.0,
                 "recall": 0.0,
                 "f1-score": 0.0,
@@ -156,7 +156,7 @@ class TestMetrics(unittest.TestCase):
             "entity": {
                 "false_positives": 0,
                 "false_negatives": 0,
-                "correct": 20,
+                "true_positives": 20,
                 "precision": 1.0,
                 "recall": 1.0,
                 "f1-score": 1.0,
@@ -164,7 +164,7 @@ class TestMetrics(unittest.TestCase):
             "date": {
                 "false_positives": 0,
                 "false_negatives": 0,
-                "correct": 40,
+                "true_positives": 40,
                 "precision": 1.0,
                 "recall": 1.0,
                 "f1-score": 1.0,
@@ -182,7 +182,7 @@ class TestMetrics(unittest.TestCase):
             "entity": {
                 "false_positives": 5,
                 "false_negatives": 10,
-                "correct": 10,
+                "true_positives": 10,
                 "precision": 0.66666,
                 "recall": 0.5,
                 "f1-score": 0.571,
@@ -190,7 +190,7 @@ class TestMetrics(unittest.TestCase):
             "date": {
                 "false_positives": 5,
                 "false_negatives": 20,
-                "correct": 20,
+                "true_positives": 20,
                 "precision": 0.8,
                 "recall": 0.5,
                 "f1-score": 0.6153,
@@ -211,7 +211,7 @@ class TestMetrics(unittest.TestCase):
         expected["date"] = {
             "false_positives": 5,
             "false_negatives": 32,
-            "correct": 8,
+            "true_positives": 8,
             "precision": 0.615,
             "recall": 0.2,
             "f1-score": 0.302,
@@ -274,7 +274,7 @@ class TestMetrics(unittest.TestCase):
             "entity": {
                 "false_positives": 4,
                 "false_negatives": 4,
-                "correct": 6,
+                "true_positives": 6,
                 "precision": 0.6,
                 "recall": 0.6,
                 "f1-score": 0.6,
@@ -282,7 +282,7 @@ class TestMetrics(unittest.TestCase):
             "date": {
                 "false_positives": 4,
                 "false_negatives": 4,
-                "correct": 6,
+                "true_positives": 6,
                 "precision": 0.6,
                 "recall": 0.6,
                 "f1-score": 0.6,
@@ -306,7 +306,7 @@ class TestMetrics(unittest.TestCase):
         expected["date"] = {
             "false_positives": 4,
             "false_negatives": 7,
-            "correct": 3,
+            "true_positives": 3,
             "precision": 0.42857,
             "recall": 0.3,
             "f1-score": 0.353,

@@ -1,6 +1,7 @@
 import os
+import copy
 from functools import partial
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 
 import numpy as np
 from sklearn.metrics import confusion_matrix
@@ -84,7 +85,7 @@ def sequence_labeling_token_counts(true, predicted):
         cls_: {
             'false_positives': [],
             'false_negatives': [],
-            'correct': []
+            'true_positives': []
         }
         for cls_ in unique_classes
     }
@@ -100,7 +101,7 @@ def sequence_labeling_token_counts(true, predicted):
                     pred_token['end'] == true_token['end']):
 
                     if pred_token['label'] == true_token['label']:
-                        d[true_token['label']]['correct'].append(true_token)
+                        d[true_token['label']]['true_positives'].append(true_token)
                     else:
                         d[true_token['label']]['false_negatives'].append(true_token)
                         d[pred_token['label']]['false_positives'].append(pred_token)
@@ -148,7 +149,7 @@ def seq_recall(true, predicted, span_type="token"):
     results = {}
     for cls_, counts in class_counts.items():
         FN = len(counts['false_negatives'])
-        TP = len(counts['correct'])
+        TP = len(counts['true_positives'])
         results[cls_] = calc_recall(TP, FN)
     return results
 
@@ -159,7 +160,7 @@ def seq_precision(true, predicted, span_type="token"):
     results = {}
     for cls_, counts in class_counts.items():
         FP = len(counts['false_positives'])
-        TP = len(counts['correct'])
+        TP = len(counts['true_positives'])
         results[cls_] = calc_precision(TP, FP)
     return results
 
@@ -170,7 +171,7 @@ def micro_f1(true, predicted, span_type="token"):
     TP, FP, FN = 0, 0, 0
     for cls_, counts in class_counts.items():
         FN += len(counts['false_negatives'])
-        TP += len(counts['correct'])
+        TP += len(counts['true_positives'])
         FP += len(counts['false_positives'])
     recall = calc_recall(TP, FN)
     precision = calc_precision(TP, FP)
@@ -183,12 +184,12 @@ def per_class_f1(true, predicted, span_type="token"):
     """
     count_fn = get_seq_count_fn(span_type)
     class_counts = count_fn(true, predicted)
-    results = {}
+    results = OrderedDict()
     for cls_, counts in class_counts.items():
         results[cls_] = {}
         FP = len(counts["false_positives"])
         FN = len(counts["false_negatives"])
-        TP = len(counts["correct"])
+        TP = len(counts["true_positives"])
         recall = calc_recall(TP, FN)
         precision = calc_precision(TP, FP)
         results[cls_]["support"] = FN + TP
@@ -196,25 +197,24 @@ def per_class_f1(true, predicted, span_type="token"):
     return results
 
 
-def model_f1(true, predicted, span_type="token", average=None):
+def sequence_f1(true, predicted, span_type="token", average=None):
     """
-    If average = None, return per-class F1 scores
+    If average = None, return per-class F1 scores, otherwise
+    return the requested model-level score.
     """
     if average == "micro":
         return micro_f1(true, predicted, span_type)
-    else:
-        f1s = per_class_f1(true, predicted, span_type)
+
+    f1s_by_class = per_class_f1(true, predicted, span_type)
+    f1s = [value.get("f1-score") for key, value in f1s_by_class.items()]
+    supports = [value.get("support") for key, value in f1s_by_class.items()]
+
     if average == "weighted":
-        classes, supports = [], []
-        for cls_ in f1s:
-            classes.append(f1s[cls_]["f1-score"])
-            supports.append(f1s[cls_]["support"])
-        return np.average(np.array(classes), weights=np.array(supports))
+        return np.average(np.array(f1s), weights=np.array(supports))
     if average == "macro":
-        f1_scores = [f1s[cls_]["f1-score"] for cls_ in f1s]
-        return np.average(f1_scores)
-    if not average:
-        return f1s
+        return np.average(f1s)
+    else:
+        return f1s_by_class
 
 
 def sequence_labeling_token_precision(true, predicted):
@@ -251,20 +251,14 @@ def sequence_exact_match(true_seq, pred_seq):
     """
     Boolean return value indicates whether or not seqs are exact match
     """
-    return (
-            pred_seq["start"] == true_seq["start"]
-            and pred_seq["end"] == true_seq["end"]
-        )
+    return pred_seq["start"] == true_seq["start"] and pred_seq["end"] == true_seq["end"]
 
 
 def sequence_superset(true_seq, pred_seq):
     """
     Boolean return value indicates whether or predicted seq is a superset of target
     """
-    return (
-            pred_seq["start"] <= true_seq["start"]
-            and pred_seq["end"] >= true_seq["end"]
-        )
+    return pred_seq["start"] <= true_seq["start"] and pred_seq["end"] >= true_seq["end"]
 
 
 def sequence_labeling_counts(true, predicted, equality_fn):
@@ -277,7 +271,7 @@ def sequence_labeling_counts(true, predicted, equality_fn):
         cls_: {
             'false_positives': [],
             'false_negatives': [],
-            'correct': []
+            'true_positives': []
         }
         for cls_ in unique_classes
     }
@@ -291,7 +285,7 @@ def sequence_labeling_counts(true, predicted, equality_fn):
             for pred_annotation in predicted_annotations:
                 if equality_fn(true_annotation, pred_annotation):
                     if pred_annotation['label'] == true_annotation['label']:
-                        d[true_annotation['label']]['correct'].append(true_annotation)
+                        d[true_annotation['label']]['true_positives'].append(true_annotation)
                     else:
                         d[true_annotation['label']]['false_negatives'].append(true_annotation)
                         d[pred_annotation['label']]['false_positives'].append(pred_annotation)
