@@ -62,7 +62,7 @@ class MultiLabelClassifier(BaseModel):
         """
         return super().predict(X, threshold=threshold, context=context, **kwargs)
 
-    def _predict_internal(self, zipped_data, threshold=None, probas=False, **kwargs):
+    def _predict(self, zipped_data, threshold=None, probas=False, **kwargs):
         threshold = self._get_threshold(threshold)
         all_labels = []
         for _, _, start_of_doc, end_of_doc, _, proba in self.process_long_sequence(zipped_data, **kwargs):
@@ -82,11 +82,8 @@ class MultiLabelClassifier(BaseModel):
                     all_labels.append(list(label))
         return all_labels
 
-    def _predict(self, zipped_data, threshold=None, **kwargs):
-        return self._predict_internal(zipped_data, threshold=threshold, probas=False, **kwargs)
-
     def _predict_proba(self, zipped_data, **kwargs):
-        return self._predict_internal(zipped_data, threshold=None, probas=True, **kwargs)
+        return self._predict(zipped_data, threshold=None, probas=True, **kwargs)
 
     def finetune(self, X, Y=None, context=None, **kwargs):
         """
