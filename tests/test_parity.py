@@ -90,3 +90,30 @@ class TestActivationParity(unittest.TestCase):
             ),
             atol=1e-1
         )
+
+    def test_bert_featurize_fp16(self):
+        model = Classifier(base_model=BERT, float_16_predict=True)
+        np.testing.assert_allclose(
+            model.featurize(self.TEST_DATA)[0],
+            np.load(
+                os.path.join(
+                    DIRECTORY,
+                    'data/test-bert-activations.npy'
+                )
+            ),
+            atol=1e-1
+        )
+        
+    def test_roberta_featurize_fp16(self):
+        model = Classifier(base_model=RoBERTa, float_16_predict=True)
+        np.testing.assert_allclose(
+            model.featurize_sequence(self.TEST_DATA)[:,:6,:],
+            np.load(
+                os.path.join(
+                    DIRECTORY,
+                    'data/test-roberta-activations.npy'
+                )
+            ),
+            atol=1e-1
+        )
+                                         

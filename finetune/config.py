@@ -123,6 +123,7 @@ class Settings(dict):
     :param chunk_alignment: Alignment of the active section of the chunks "left", "right", "center".
     :param low_memory_mode: When True, only store partial gradients on forward pass
         and recompute remaining gradients incrementally in order to save memory.  Defaults to `False`.
+    :param float_16_predict: Whether to run prediction in float 16 mode, this is only available for bert based models and will likely only yield performance improvements on GPUs with native float16 support such as Volta and Tesla.
     :param optimize_for: Optimize auto parameters for either `accuracy`, `speed`, or `predict_speed` Defaults to `accuracy`
     :param embed_p_drop: Embedding dropout probability.  Defaults to `0.1`.
     :param attn_p_drop: Attention dropout probability.  Defaults to `0.1`.
@@ -238,7 +239,7 @@ def get_default_config():
     settings = Settings(
         # General Settings
         low_memory_mode=False,
-        float_16_predict=True,
+        float_16_predict=False,
         save_adam_vars=False,
         shuffle_buffer_size=100,
         dataset_size=None,
