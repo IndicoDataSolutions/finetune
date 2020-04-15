@@ -1,6 +1,8 @@
 import os
 from urllib.parse import urljoin
 
+import tensorflow as tf
+
 from finetune.base_models import SourceModel
 from finetune.base_models.long_doc.featurizer import long_doc_featurizer
 

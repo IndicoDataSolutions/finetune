@@ -17,6 +17,8 @@ LOGGER = logging.getLogger("finetune")
 
 
 def finetune_model_path(path):
+    if path is None:
+        return None
     return os.path.abspath(
         os.path.join(os.path.dirname(finetune.__file__), "model", path)
     )
@@ -191,7 +193,7 @@ class Settings(dict):
 
         if attr == "base_model_path":
             full_path = finetune_model_path(self["base_model_path"])
-            if os.path.exists(full_path):
+            if full_path and os.path.exists(full_path):
                 return full_path
 
         return self[attr]

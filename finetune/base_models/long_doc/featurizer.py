@@ -27,12 +27,14 @@ def long_doc_featurizer(
         sequence_features: The output of the featurizer at each timestep.
     """
     initial_shape = tf.shape(X)
-    X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-1:]), 0))
+    print(X.get_shape().as_list())
+    X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-2:]), 0))
+    print(X.get_shape().as_list())
     sequence_length = tf.shape(X)[1]
     with tf.variable_scope("model/featurizer", reuse=reuse):
         h = X # X is already embedded
 
-        clf_token = encoder["_classify_"]
+        clf_token = encoder.start_token
 
         with tf.variable_scope("tcn_stack"):
             representation = h
@@ -46,6 +48,7 @@ def long_doc_featurizer(
                 )(representation)
 
         seq_feats = tf.reshape(representation, shape=[-1, sequence_length, config.n_filter])
+        print(seq_feats.get_shape().as_list())
 
         # mask out the values past the classify token before performing pooling
         pool_idx = tf.cast(
@@ -64,7 +67,7 @@ def long_doc_featurizer(
         pool = tf.reduce_max(representation + mask * -1e9, 1)
         clf_h = pool
         clf_h = tf.reshape(
-            clf_h, shape=tf.concat((initial_shape[:-1], [config.n_filter]), 0)
+            clf_h, shape=tf.concat((initial_shape[:-2], [config.n_filter]), 0)
         )
 
         # note that, due to convolution and pooling, the dimensionality of the features is much smaller than in the
@@ -72,7 +75,6 @@ def long_doc_featurizer(
 
         lengths = lengths_from_eos_idx(eos_idx=pool_idx, max_length=sequence_length)
         return {
-            "embed_weights": embed_weights,
             "features": clf_h,  # [batch_size, n_embed] for classify, [batch_size, 1, n_embed] for comparison, etc.
             "sequence_features": seq_feats,  # [batch_size, seq_len, n_embed]
             "eos_idx": pool_idx,  # [batch_size]

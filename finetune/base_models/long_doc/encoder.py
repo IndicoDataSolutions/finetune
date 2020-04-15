@@ -24,6 +24,11 @@ class LongDocEncoder(BaseEncoder):
 
     def _lazy_init(self):
         self.nlp = spacy.load("en")
+        self.start_token = np.zeros([300], np.float32)
+        self.delimiter_token = self.start_token
+        self.mask_token = self.start_token
+        self.end_token = self.start_token
+
         self.initialized = True
 
     def _encode(self, texts, stochastic=False):
