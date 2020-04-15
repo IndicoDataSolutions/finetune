@@ -34,7 +34,7 @@ from finetune.util.shapes import shape_list
 from finetune.util.timing import ProgressBar
 from finetune.util.in_memory_finetune import make_in_memory_finetune_hooks
 from finetune.util.indico_estimator import IndicoEstimator
-from finetune.base_models import GPTModel, GPT2Model, GPTModelSmall, OSCAR
+from finetune.base_models.bert.model import _BaseBert
 from finetune.nn.auxiliary import add_context_embed
 from finetune.input_pipeline import InputMode
 
@@ -80,9 +80,7 @@ class BaseModel(object, metaclass=ABCMeta):
         assert_valid_config(**kwargs)
         config = get_default_config()
         config.base_model = kwargs.get("base_model", config.base_model)
-        if config.base_model in [GPTModel, GPT2Model, GPTModelSmall, OSCAR] and config.float_16_predict:
-            LOGGER.warning("float_16_predict not supported by GPT and GPT2")
-            config.float_16_predict = False
+
         auto_keys = []
         config.update(kwargs)
         for k, v in config.items():
@@ -95,6 +93,10 @@ class BaseModel(object, metaclass=ABCMeta):
 
         overrides = config.base_model.get_optimal_params(config)
 
+        if not issubclass(config.base_model, _BaseBert) and config.float_16_predict:
+            LOGGER.warning("float_16_predict only supported by bert based models")
+            config.float_16_predict = False
+                                            
         for ak in auto_keys:
             if ak in ["val_size", "use_gpu_crf_predict"]:
                 continue  # this auto is resolved after data is provided.

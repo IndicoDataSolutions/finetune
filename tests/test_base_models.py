@@ -241,6 +241,23 @@ class TestClassifierTextCNN(TestModelBase):
         for i, prediction in enumerate(predictions):
             self.assertEqual(prediction, new_predictions[i])
 
+    def test_fp_16_equality(self):
+        config = self.default_config(save_adam_vars=False, float_16_predict=True)
+        model = Classifier(**config)
+        train_sample = self.dataset.sample(n=self.n_sample)
+        valid_sample = self.dataset.sample(n=self.n_sample)
+        model.fit(train_sample.Text, train_sample.Target)
+        predictions = model.predict(valid_sample.Text)
+        model.config.float_16_predict = False
+        # important to do it this way for the models that do not support fp16 as
+        # config resolution is only done when the config is set correctly.
+        new_predictions = model.predict(valid_sample.Text)
+        errors = 0
+        for prediction, new_prediction in zip(predictions, new_predictions):
+            if prediction != new_prediction:
+                errors += 1
+        self.assertEqual(errors, 0)
+            
     def test_featurize(self):
         """
         Ensure featurization returns an array of the right shape

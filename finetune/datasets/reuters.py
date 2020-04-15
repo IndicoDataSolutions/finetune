@@ -5,7 +5,6 @@ import json
 import hashlib
 import io
 from pathlib import Path
-import time
 
 import pandas as pd
 from bs4 import BeautifulSoup as bs
@@ -79,21 +78,9 @@ if __name__ == "__main__":
         test_size=0.2,
         random_state=42
     )
-    #float_16_predict=True
-    model = SequenceLabeler(batch_size=1, n_epochs=3, val_size=0.0, chunk_long_sequences=True, multi_label_sequences=False, optimize_for="predict_speed", float_16_predict=False)
-    model.fit(trainX[:5], trainY[:5])
-#    model.config.predict_batch_size = 128
-    start = time.time()
-    predictions = model.predict(testX * 15)
-    print("Elapsed Time: ", time.time() - start)
-    exit()
-#    print(annotation_report(testY, predictions))
-    model.config.float_16_predict=False
-    model.config.predict_batch_size = 32
-    predictions_fp16 = model.predict(testX * 100)
-#    print(annotation_report(testY, predictions_fp16))
-    exit()
-    for x, x16 in zip(predictions, predictions_fp16):
-        print(x)
-        print(x16)
-        input()
+    model = SequenceLabeler(batch_size=1, n_epochs=3, val_size=0.0, max_length=512, chunk_long_sequences=True, subtoken_predictions=False, crf_sequence_labeling=True, multi_label_sequences=False)
+    model.fit(trainX, trainY)
+    predictions = model.predict(testX)
+    print(predictions)
+    print(annotation_report(testY, predictions))
+    sequence_labeling_token_confusion(testX, testY, predictions)
