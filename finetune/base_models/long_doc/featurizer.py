@@ -78,5 +78,5 @@ def long_doc_featurizer(
             "features": clf_h,  # [batch_size, n_embed] for classify, [batch_size, 1, n_embed] for comparison, etc.
             "sequence_features": seq_feats,  # [batch_size, seq_len, n_embed]
             "eos_idx": pool_idx,  # [batch_size]
-            "lengths": lengths
+            "lengths": None
         }

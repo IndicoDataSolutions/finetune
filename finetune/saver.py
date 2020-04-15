@@ -145,11 +145,13 @@ class Saver:
         self.exclude_matches = exclude_matches
         self.variables = None
         self.save_dtype = save_dtype
-        if fallback_filename is not None:
-            self.set_fallback(fallback_filename)
+        self.set_fallback(fallback_filename)
         self.restart_global_step = restart_global_step
 
     def set_fallback(self, fallback_filename):
+        if fallback_filename is None:
+            self.fallback_ = {}
+            return
         self.tpe = ThreadPoolExecutor()
         if not os.path.exists(fallback_filename):
             raise FileNotFoundError("Error loading base model - file not found.")

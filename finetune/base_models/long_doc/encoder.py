@@ -20,15 +20,16 @@ class LongDocEncoder(BaseEncoder):
 
     def __init__(self, encoder_path=None, vocab_path=None):
         self.nlp = None
+        self.punkt = None
         pass
 
     def _lazy_init(self):
-        self.nlp = spacy.load("en")
+        self.nlp = spacy.load("en_vectors_web_lg")
         self.start_token = np.zeros([300], np.float32)
         self.delimiter_token = self.start_token
         self.mask_token = self.start_token
         self.end_token = self.start_token
-
+        self.punkt = nltk.data.load('tokenizers/punkt/english.pickle')
         self.initialized = True
 
     def _encode(self, texts, stochastic=False):
@@ -46,11 +47,20 @@ class LongDocEncoder(BaseEncoder):
             sent_vecs = []
             sent_starts = []
             sent_ends = []
-            for sent in self.nlp(text).sents:
-                sent_texts.append(sent.text)
-                sent_vecs.append(sent.vector)
-                sent_starts.append(sent.start_char)
-                sent_ends.append(sent.end_char)
+            last_end = 0
+            sentences = self.punkt.sentences_from_text(text)
+            vectors = [x.vector for x in self.nlp.pipe(sentences)]
+            for sent_text, vector in zip(sentences, vectors):
+                start_idx = text.find(sent_text, last_end)
+                end_idx = start_idx + len(sent_text)
+                
+                vector = self.nlp(sent_text).vector
+                
+                sent_texts.append(sent_text)
+                sent_vecs.append(vector)
+                sent_starts.append(start_idx)
+                sent_ends.append(end_idx)
+                
             batch_tokens.append(sent_texts)
             batch_token_idxs.append(sent_vecs)
             batch_character_locs.append(sent_ends)
