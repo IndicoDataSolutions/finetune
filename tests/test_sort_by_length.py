@@ -13,9 +13,6 @@ class TestSortByLength(unittest.TestCase):
         # Construct a fake dataset where lengths vary wildly
         fake_data = (["A"] * 15 + ["B " * 120]) * 64
 
-        # Blend in the long examples
-#        random.shuffle(fake_data)
-
         model = Classifier(optimize_for='predict_speed', sort_by_length=False, predict_batch_size=16)
         model.fit(["A", "A"], ["B", "B"])
         model._cached_predict = True

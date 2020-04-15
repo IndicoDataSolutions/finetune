@@ -71,7 +71,7 @@ class Classifier(BaseModel):
         """
         return super().predict(X, context=context, **kwargs)
 
-    def _predict_internal(self, zipped_data, probas=False, **kwargs):
+    def _predict(self, zipped_data, probas=False, **kwargs):
         all_labels = []
         all_probs = []
         doc_probs = []
@@ -97,9 +97,6 @@ class Classifier(BaseModel):
             assert len(all_labels) == len(zipped_data)
             return np.asarray(all_labels)
 
-    def _predict(self, zipped_data, **kwargs):
-        return self._predict_internal(zipped_data, probas=False, **kwargs)
-
     def _predict_proba(self, zipped_data, **kwargs):
         """
         Produces a probability distribution over classes for each example in X.
@@ -107,7 +104,7 @@ class Classifier(BaseModel):
         :returns: list of dictionaries.  Each dictionary maps from a class label to its assigned class probability.
         """
         # this is simply a vector of probabilities, not a dict from classes to class probs
-        return self._predict_internal(zipped_data, probas=True, **kwargs)
+        return self._predict(zipped_data, probas=True, **kwargs)
 
     def finetune(self, X, Y=None, context=None, **kwargs):
         """
