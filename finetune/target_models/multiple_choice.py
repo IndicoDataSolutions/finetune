@@ -213,4 +213,4 @@ class MultipleChoice(BaseModel):
         :param answers: List or array of text, shape [n_answers, batch]
         :returns: np.array of features of shape (n_examples, embedding_size).
         """
-        return super.featurize(self, zip(questions, answers), **kwargs)
+        return super().featurize(self, zip(questions, answers), **kwargs)
