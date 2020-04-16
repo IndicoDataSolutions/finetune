@@ -297,7 +297,6 @@ class BasePipeline(metaclass=ABCMeta):
         val_dataset_unbatched = self.make_dataset_fn(
             data_fn=lambda: tokenized_val_split,
             tqdm_mode="evaluate",
-            update_hook=update_hook,
             types=types,
             shapes=shapes
         )
