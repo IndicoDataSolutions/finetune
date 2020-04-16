@@ -253,10 +253,12 @@ class TestSequenceLabeler(unittest.TestCase):
             text, labels = json.load(fp)
 
         self.model.finetune(text * 10, labels * 10)
+        self.assertEqual(self.model.config.dataset_size, 40)
 
         predictions = self.model.predict(test_sequence)
         self.assertEqual(len(predictions[0]), 20)
         self.assertTrue(any(pred["text"].strip() == "dog" for pred in predictions[0]))
+        
 
     def test_fit_predict_multi_model(self):
         """
