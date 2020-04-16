@@ -247,12 +247,6 @@ class BasePipeline(metaclass=ABCMeta):
         data_list = list(data_list)
         self._post_data_initialization(data_list)
             
-        dataset_tokenized = list(
-            itertools.chain.from_iterable(
-                self.text_to_tokens_mask(**d) for d in data_list
-            )
-        )
-            
         self.config.val_size, self.config.val_interval = validation_settings(
             dataset_size=len(data_list),
             batch_size=self.config.batch_size,
@@ -267,13 +261,13 @@ class BasePipeline(metaclass=ABCMeta):
             train_split = dataset_shuffle(data_list, random_state=self.config.seed)
             val_split = self.config.val_set or []
 
-        self.config.dataset_size = len(train_split)
-
         tokenized_train_split = list(
             itertools.chain.from_iterable(
                 self.text_to_tokens_mask(**d) for d in train_split
             )
         )
+
+        self.config.dataset_size = len(tokenized_train_split)
 
         tokenized_val_split = list(
             itertools.chain.from_iterable(
