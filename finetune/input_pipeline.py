@@ -137,7 +137,7 @@ class BasePipeline(metaclass=ABCMeta):
     def _compute_class_weights(self, class_weights, class_counts):
         return compute_class_weights(class_weights=class_weights, class_counts=class_counts)
 
-    def make_dataset_fn(self, data_fn, tqdm_mode, update_hook, shapes, types, skip_val=False):
+    def make_dataset_fn(self, data_fn, tqdm_mode, shapes, types, update_hook=None, skip_val=False):
         def dataset_fn():
             return Dataset.from_generator(
                 wrap_tqdm(
