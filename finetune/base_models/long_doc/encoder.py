@@ -2,6 +2,7 @@ import os
 import json
 import regex as re
 import logging
+import time
 from functools import lru_cache
 
 import numpy as np
@@ -22,15 +23,17 @@ class LongDocEncoder(BaseEncoder):
     def __init__(self, encoder_path=None, vocab_path=None):
         self.nlp = None
         self.punkt = None
+        self.initialized = False
         pass
 
     def _lazy_init(self):
-        self.nlp = spacy.load("en_vectors_web_lg")
-        self.start_token = np.zeros([300], np.float32)
-        self.delimiter_token = self.start_token
-        self.mask_token = self.start_token
-        self.end_token = self.start_token
-        self.punkt = nltk.data.load('tokenizers/punkt/english.pickle')
+        if not self.initialized:
+            self.nlp = spacy.load("en_vectors_web_lg")
+            self.start_token = np.zeros([300], np.float32)
+            self.delimiter_token = self.start_token
+            self.mask_token = self.start_token
+            self.end_token = self.start_token
+            self.punkt = nltk.data.load('tokenizers/punkt/english.pickle')
         self.initialized = True
 
     def _encode(self, texts, stochastic=False):
@@ -49,13 +52,13 @@ class LongDocEncoder(BaseEncoder):
             sent_starts = []
             sent_ends = []
             last_end = 0
+            before_tok = time.time()
             sentences = self.punkt.sentences_from_text(text)
+            before_vec = time.time()
             vectors = [x.vector for x in self.nlp.pipe(sentences)]
             for sent_text, vector in zip(sentences, vectors):
                 start_idx = text.find(sent_text, last_end)
                 end_idx = start_idx + len(sent_text)
-                
-                vector = self.nlp(sent_text).vector
                 
                 sent_texts.append(sent_text)
                 sent_vecs.append(vector)
