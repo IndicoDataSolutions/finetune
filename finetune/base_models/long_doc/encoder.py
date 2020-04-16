@@ -5,6 +5,7 @@ import logging
 from functools import lru_cache
 
 import numpy as np
+import nltk.data
 
 import finetune
 import spacy
