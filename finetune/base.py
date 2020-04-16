@@ -120,7 +120,7 @@ class BaseModel(object, metaclass=ABCMeta):
         # state for prediction caching
         self._cached_predict = False
         self._cached_estimator = None
-        
+
         try:
             self.estimator_dir = os.path.abspath(
                 os.path.join(self.config.tensorboard_folder, str(int(time.time())))
@@ -522,18 +522,18 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         if use_extra_toks is None:
             use_extra_toks = self._trained
-            
+ 
         def dataset_encoded():
             while not dataset_encoded.finished:
                 yield {"tokens": encoded.token_ids}
-                
+
         dataset_encoded.finished = False
-        
+
         def get_input_fn():
             types, shapes = self.input_pipeline.feed_shape_type_def()
             tf_dataset = Dataset.from_generator(dataset_encoded, types[0], shapes[0])
             return tf_dataset.batch(1)
-        
+
         self.config.use_extra_toks = use_extra_toks
         encoded = self.input_pipeline.text_encoder._encode([seed_text])
         if encoded.token_ids == [] and not use_extra_toks:
@@ -545,13 +545,13 @@ class BaseModel(object, metaclass=ABCMeta):
         if encoded.token_ids is not None and len(encoded.token_ids):
             token_ids += encoded.token_ids[0]
         encoded = EncodedOutput(token_ids=token_ids)
-            
+
         estimator, hooks = self.get_estimator(force_build_lm=True)
-        
+
         predict = estimator.predict(
             input_fn=get_input_fn, predict_keys=[PredictMode.GENERATE_TEXT], hooks=hooks
         )
-        
+
         EOS = self.input_pipeline.text_encoder.end_token
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
@@ -563,11 +563,11 @@ class BaseModel(object, metaclass=ABCMeta):
                 if encoded.token_ids[-1] == EOS:
                     break
             dataset_encoded.finished = True
-                
+
         del self.config["use_extra_toks"]
-                
+
         return self.input_pipeline.text_encoder.decode(encoded.token_ids)
-                
+
     def __getstate__(self):
         """
         Leave serialization of all tf objects to tf
