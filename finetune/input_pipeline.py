@@ -271,7 +271,7 @@ class BasePipeline(metaclass=ABCMeta):
 
         tokenized_val_split = list(
             itertools.chain.from_iterable(
-                self.text_to_tokens_mask(**d) for d in train_split
+                self.text_to_tokens_mask(**d) for d in val_split
             )
         )
         
