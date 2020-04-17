@@ -39,15 +39,15 @@ class Scheduler:
         LOGGER.info(
             (
                 "models loaded: {num_models}, in_use: {in_use}, max_above_resting: {mar},"
-                " max_model_size: {mms}, gpu_memory_limit: {mem_limit}")
-            .format(
+                " max_model_size: {mms}, gpu_memory_limit: {mem_limit}"
+            ).format(
                 num_models=len(self.loaded_models),
                 in_use=bytes_to_meg(in_use),
                 mar=bytes_to_meg(self.max_above_resting),
                 mms=bytes_to_meg(self.max_model_size),
                 mem_limit=bytes_to_meg(self.gpu_memory_limit)
-                )
             )
+        )
         return (in_use + self.max_above_resting + self.max_model_size + self.reserved) < self.gpu_memory_limit
 
     def _rotate_in_model(self, model):
