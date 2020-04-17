@@ -1,8 +1,16 @@
+import gc
+import logging
+
 import tensorflow as tf
 from finetune.base import BaseModel
 
+LOGGER = logging.getLogger("finetune")
+
+def bytes_to_meg(x):
+    return x / 1024 / 1024
+
 class Scheduler:
-    def __init__(self, max_models=None, config=None, reserved=500000000):
+    def __init__(self, max_models=None, config=None, reserved=750000000):
         self.loaded_models = list() 
         self.max_models = max_models
         self.session = None
@@ -28,6 +36,18 @@ class Scheduler:
             self.max_model_size = in_use - self.previous_in_use
 
         self.previous_in_use = in_use
+        LOGGER.info(
+            (
+                "models loaded: {num_models}, in_use: {in_use}, max_above_resting: {mar},"
+                " max_model_size: {mms}, gpu_memory_limit: {mem_limit}")
+            .format(
+                num_models=len(self.loaded_models),
+                in_use=bytes_to_meg(in_use),
+                mar=bytes_to_meg(self.max_above_resting),
+                mms=bytes_to_meg(self.max_model_size),
+                mem_limit=bytes_to_meg(self.gpu_memory_limit)
+                )
+            )
         return (in_use + self.max_above_resting + self.max_model_size + self.reserved) < self.gpu_memory_limit
 
     def _rotate_in_model(self, model):
@@ -39,6 +59,7 @@ class Scheduler:
                 name = self.loaded_models.pop(0)
                 self.model_cache[name].close()
                 del self.model_cache[name]
+                gc.collect()
             out_model = BaseModel.load(model, **self.config)
             self.model_cache[model] = out_model
         else:
