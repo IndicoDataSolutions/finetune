@@ -6,7 +6,6 @@ import time
 from functools import lru_cache
 
 import numpy as np
-import nltk.data
 
 import finetune
 import spacy
@@ -22,7 +21,6 @@ class LongDocEncoder(BaseEncoder):
 
     def __init__(self, encoder_path=None, vocab_path=None):
         self.nlp = None
-        self.punkt = None
         self.initialized = False
         pass
 
@@ -33,7 +31,6 @@ class LongDocEncoder(BaseEncoder):
             self.delimiter_token = self.start_token
             self.mask_token = self.start_token
             self.end_token = self.start_token
-            self.punkt = nltk.data.load('tokenizers/punkt/english.pickle')
         self.initialized = True
 
     def _encode(self, texts, stochastic=False):
@@ -46,29 +43,20 @@ class LongDocEncoder(BaseEncoder):
         batch_token_idxs = []
         batch_character_locs = []
         batch_char_starts = []
-        for text in texts:
-            sent_texts = []
+        for text, split_points in texts:
             sent_vecs = []
-            sent_starts = []
-            sent_ends = []
-            last_end = 0
-            before_tok = time.time()
-            sentences = self.punkt.sentences_from_text(text)
-            before_vec = time.time()
-            vectors = [x.vector for x in self.nlp.pipe(sentences)]
-            for sent_text, vector in zip(sentences, vectors):
-                start_idx = text.find(sent_text, last_end)
-                end_idx = start_idx + len(sent_text)
-                
-                sent_texts.append(sent_text)
-                sent_vecs.append(vector)
-                sent_starts.append(start_idx)
-                sent_ends.append(end_idx)
-                
-            batch_tokens.append(sent_texts)
+            sent_starts = [split[0] for split in split_points]
+            sent_ends = [split[1] for split in split_points]
+            sent_text = [
+                text[start_idx: end_idx] for start_idx, end_idx in zip(sent_starts, sent_ends)
+            ]
+            sent_vecs = [x.vector for x in self.nlp.pipe(sent_text)]
+
+            batch_tokens.append(sent_text)
             batch_token_idxs.append(sent_vecs)
             batch_character_locs.append(sent_ends)
             batch_char_starts.append(sent_starts)
+
         return EncodedOutput(
             token_ids=batch_token_idxs,
             tokens=batch_tokens,

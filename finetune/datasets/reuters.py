@@ -14,6 +14,7 @@ from sklearn.model_selection import train_test_split
 from finetune import SequenceLabeler
 from finetune.datasets import Dataset
 from finetune.base_models.long_doc.model import LongDocModel
+from finetune.base_models.long_doc.splitters import sentence_split
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
 from finetune.util.metrics import annotation_report, sequence_labeling_token_confusion
 
@@ -79,8 +80,9 @@ if __name__ == "__main__":
         random_state=42
     )
     model = SequenceLabeler(batch_size=1, n_epochs=3, val_size=0.0, max_length=512, chunk_long_sequences=True, subtoken_predictions=False, crf_sequence_labeling=True, multi_label_sequences=False, base_model=LongDocModel)
-    model.fit(trainX, trainY)
-    predictions = model.predict(testX)
+    print(len(sentence_split(trainX)), len(trainY))
+    model.fit(sentence_split(trainX), trainY)
+    predictions = model.predict(sentence_split(testX))
     print(predictions)
     print(annotation_report(testY, predictions))
     sequence_labeling_token_confusion(testX, testY, predictions)

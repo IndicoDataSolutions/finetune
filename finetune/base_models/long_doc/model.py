@@ -17,6 +17,7 @@ class LongDocModel(SourceModel):
         return tf.float32, [None, cls.settings["n_embed_featurizer"]]
         
     is_bidirectional = True
+    requires_pre_tokenized = True
     encoder = LongDocEncoder
     featurizer = long_doc_featurizer
     settings = {

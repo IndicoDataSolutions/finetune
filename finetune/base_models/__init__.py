@@ -12,6 +12,7 @@ COMMON_SETTINGS = {
 
 
 class SourceModel(metaclass=ABCMeta):
+    requires_pre_tokenized = False
     is_bidirectional = True
 
     @classmethod

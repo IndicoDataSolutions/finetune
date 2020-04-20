@@ -43,6 +43,7 @@ class SequencePipeline(BasePipeline):
                 ]
                 if self.config.filter_empty_examples and len(filtered_labels) == 0:
                     continue
+                print(out)
                 yield feats, self.label_encoder.transform(out, filtered_labels)
 
     def _compute_class_counts(self, encoded_dataset):
@@ -194,7 +195,10 @@ class SequenceLabeler(BaseModel):
         chunk_size = self.config.max_length - 2
         step_size = chunk_size // 3
         doc_idx = -1
-        raw_text = [data["X"] for data in zipped_data]
+        if self.config.base_model.requires_pre_tokenized:
+            raw_text = [data["X"][0] for data in zipped_data]
+        else:
+            raw_text = [data["X"] for data in zipped_data]
         for token_start_idx, token_end_idx, start_of_doc, end_of_doc, label_seq, proba_seq in self.process_long_sequence(zipped_data, **kwargs):
             if start_of_doc:
                 # if this is the first chunk in a document, start accumulating from scratch
