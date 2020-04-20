@@ -52,6 +52,11 @@ class LongDocEncoder(BaseEncoder):
             ]
             sent_vecs = [x.vector for x in self.nlp.pipe(sent_text)]
 
+            for e, s in zip([0] + sent_ends, sent_starts + [len(text)]):
+                assert e <= s, "Defined sentece splits overlap"
+                assert len(text[e: s].strip()) == 0, "Not all of the non-whitespace text is captured in the defined splits"
+                
+
             batch_tokens.append(sent_text)
             batch_token_idxs.append(sent_vecs)
             batch_character_locs.append(sent_ends)
