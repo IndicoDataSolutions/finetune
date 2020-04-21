@@ -22,7 +22,7 @@ import tensorflow as tf
 import functools
 
 from finetune.optimizers.recompute_grads import recompute_grad
-
+from finetune.nn.auxiliary import embed_position
 
 class BertConfig(object):
     """Configuration for `BertModel`."""
@@ -41,6 +41,10 @@ class BertConfig(object):
             max_position_embeddings=512,
             type_vocab_size=16,
             initializer_range=0.02,
+            pos_injection=False,
+            reading_order_removed=False,
+            anneal_reading_order=False,
+            positional_channels=None,
     ):
         """Constructs BertConfig.
 
@@ -78,6 +82,10 @@ class BertConfig(object):
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.low_memory_mode = low_memory_mode
+        self.pos_injection = pos_injection
+        self.reading_order_removed = reading_order_removed
+        self.anneal_reading_order = anneal_reading_order
+        self.positional_channels = positional_channels
 
     @classmethod
     def from_dict(cls, json_object):
@@ -134,12 +142,14 @@ class BertModel(object):
             is_training,
             input_ids,
             input_mask=None,
+            input_context=None,
             token_type_ids=None,
             use_one_hot_embeddings=False,
             scope=None,
             use_pooler=True,
             roberta=False,
-            use_token_type=True
+            use_token_type=True,
+            reading_order_decay_rate=None,
     ):
         """Constructor for BertModel.
 
@@ -185,16 +195,21 @@ class BertModel(object):
                 # normalize and perform dropout.
                 self.embedding_output = embedding_postprocessor(
                     input_tensor=self.embedding_output,
+                    input_context=input_context,
                     use_token_type=use_token_type,
                     token_type_ids=token_type_ids,
                     token_type_vocab_size=config.type_vocab_size,
                     token_type_embedding_name="token_type_embeddings",
-                    use_position_embeddings=True,
+                    use_position_embeddings=not config.reading_order_removed,
                     position_embedding_name="position_embeddings",
                     initializer_range=config.initializer_range,
                     max_position_embeddings=config.max_position_embeddings,
                     dropout_prob=config.hidden_dropout_prob,
-                    roberta=roberta
+                    roberta=roberta,
+                    pos_injection=config.pos_injection,
+                    positional_channels=config.positional_channels,
+                    reading_order_decay_rate=reading_order_decay_rate,
+                    anneal_reading_order=config.anneal_reading_order,
                 )
 
             with tf.variable_scope("encoder"):
@@ -415,6 +430,7 @@ def embedding_lookup(
 
 def embedding_postprocessor(
         input_tensor,
+        input_context=None,
         use_token_type=False,
         token_type_ids=None,
         token_type_vocab_size=16,
@@ -425,6 +441,10 @@ def embedding_postprocessor(
         max_position_embeddings=512,
         dropout_prob=0.1,
         roberta=False,
+        pos_injection=False,
+        positional_channels=None,
+        reading_order_decay_rate=None,
+        anneal_reading_order=False,
 ):
     """Performs various post-processing on a word embedding tensor.
 
@@ -488,6 +508,16 @@ def embedding_postprocessor(
                 shape=[max_position_embeddings, width],
                 initializer=create_initializer(initializer_range),
             )
+
+            if anneal_reading_order:
+                full_position_embeddings *= tf.cast(
+                    tf.random.uniform(
+                        shape=tf.shape(full_position_embeddings
+                        )
+                    ) > reading_order_decay_rate,
+                    tf.float32
+                )
+
             # Since the position embedding table is a learned variable, we create it
             # using a (long) sequence length `max_position_embeddings`. The actual
             # sequence length might be shorter than this, for faster training of
@@ -518,6 +548,11 @@ def embedding_postprocessor(
                 position_embeddings, position_broadcast_shape
             )
             output += position_embeddings
+            
+    if pos_injection:
+        init = tf.variance_scaling_initializer(scale=0.02, mode="fan_avg", distribution="truncated_normal")
+        embedded_input_context = embed_position(input_context, positional_channels, batch_size, sequence_length)
+        output += tf.layers.dense(embedded_input_context, width, use_bias=False, kernel_initializer=init)
 
     output = layer_norm_and_dropout(output, dropout_prob)
     return output

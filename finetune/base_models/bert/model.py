@@ -206,6 +206,48 @@ class RoBERTa(_BaseBert):
         else:
             return RoBERTaEncoder(**kwargs)
 
+class DocRep(_BaseBert):
+    encoder = RoBERTaEncoderV2
+    featurizer = bert_featurizer
+    settings = {
+	"lm_type": "mlm",
+        "n_embed": 768,
+        "n_epochs": 8,
+        "n_heads": 12,
+	"n_layer": 12,
+        "act_fn": "gelu",
+        "lr_warmup": 0.1,
+	"lr": 1e-5,
+        "l2_reg": 0.1,
+	"epsilon": 1e-8,
+        "bert_intermediate_size": 3072,
+        "bert_use_pooler": False,
+        "context_injection": True,
+        "reading_order_removed": True,
+        "context_channels": 256, # TODO: Check that this is correct.
+#        "base_model_path": # TODO: Add base model
+    }
+    required_files = [
+        # TODO: Add base model.
+        {
+            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "dict.txt"),
+            "url": urljoin(ROBERTA_BASE_URL, "dict.txt"),
+        },
+        {
+            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "roberta_vocab.bpe"),
+            "url": urljoin(ROBERTA_BASE_URL, "roberta_vocab.bpe"),
+        },
+        {
+            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "roberta_encoder.json"),
+            "url": urljoin(ROBERTA_BASE_URL, "roberta_encoder.json"),
+        },
+    ]
+
+    @classmethod
+    def get_encoder(cls, config=None, **kwargs):
+        return cls.encoder(**kwargs)
+
+
 
 class RoBERTaLarge(RoBERTa):
     encoder = RoBERTaEncoderV2

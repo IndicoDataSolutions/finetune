@@ -2,58 +2,51 @@ import tensorflow as tf
 from finetune.util.shapes import shape_list
 
 
-def embed_context(context, featurizer_state, config, train):
+def add_timing_signal_from_position(x, position, timescales):
+    """
+    Args:
+      x: a Tensor with shape [batch, len, channels]
+      position: [batch, len, nd]
+      min_timescale: a float
+      max_timescale: a float
+    Returns:
+      a Tensor the same shape as x.
+    """
+    channels = shape_list(x)[2]
+    num_dims = shape_list(position)[2]
+
+    num_timescales = channels // (num_dims * 2)
+
+    for dim, timescale in zip(range(num_dims), timescales):
+        min_timescale, max_timescale = timescale
+        log_timescale_increment = (
+            math.log(float(max_timescale) / float(min_timescale)) / (tf.to_float(num_timescales) - 1)
+        )
+        inv_timescales = min_timescale * tf.exp(tf.to_float(tf.range(num_timescales)) * log_timescale_increment)
+        position_x = tf.expand_dims(tf.to_float(position[:, :, dim]), 2)  # batch, len, 1 # where 1 will be the chanels dim
+        scaled_time = position_x * tf.expand_dims(tf.expand_dims(inv_timescales, 0), 0)  # batch , len, num_timescales
+        signal = tf.concat([tf.sin(scaled_time), tf.cos(scaled_time)], axis=2)  # batch channels//num_dims
+        prepad = dim * 2 * num_timescales
+        postpad = channels - (dim + 1) * 2 * num_timescales
+        signal = tf.pad(signal, [[0, 0], [0, 0], [prepad, postpad]])
+        x = x + signal
+    return x
+
+def embed_position(context, context_channels, batch, seq):
     with tf.variable_scope("context_embedding"):
         context_dim = shape_list(context)[-1]
-        context_weight = tf.get_variable(
-            name="ce",	
-            shape=[context_dim, config.n_context_embed],
-            initializer=tf.random_normal_initializer(stddev=config.context_embed_stddev),	
-        )
-        context_bias = tf.get_variable(
-            name="ca",	
-            shape=[config.n_context_embed],	
-            initializer=tf.zeros_initializer(),	
-        )
-        c_embed = tf.add(tf.multiply(context, context_weight), context_bias)
-    featurizer_state['context'] = c_embed
-    return featurizer_state
+        if context_channels is None:
+            raise ValueError("context_channels is not set but you are trying to embed context")
+        x = tf.zeros(shape=(batch, seq, context_channels))
+        pos_embed = add_timing_signal_from_position(
+            x,
+            context,
+            timescales = [
+                [
+                    (math.pi / 2) * (1 / 2500),
+                    (25 * math.pi) * (1 / 2500)
+                ]
+            ] * context_dim
+        ) / (float(context_channels) / 32)
+    return pos_embed
 
-
-def add_context_embed(featurizer_state):
-    if "context" in featurizer_state:
-        context_embed = featurizer_state["context"]
-        dtype = context_embed.dtype
-
-        shape = shape_list(context_embed)
-        if len(shape) == 4:
-            # comparison / multiple choice 
-            flat_embed = tf.reshape(
-                context_embed, 
-                [shape[0] * shape[1], shape[2], shape[3]],
-            )
-        else:
-            flat_embed = context_embed
-
-        seq_mask = tf.sequence_mask(featurizer_state['lengths'])
-        for key in ['features', 'explain_out']:
-            if key in featurizer_state:
-                float_mask = tf.cast(seq_mask, dtype)
-                binary_mask = tf.constant(1., dtype=dtype) - float_mask
-                flat_embed = flat_embed * tf.expand_dims(binary_mask, -1)
-                sum_context = tf.reduce_sum(flat_embed, 1)
-                mean_context = sum_context / tf.reduce_sum(float_mask)
-
-                if len(shape) == 4:
-                    mean_context = tf.reshape(
-                        mean_context, 
-                        [shape[0], shape[1], shape[3]]
-                    )
-    
-                featurizer_state[key] = tf.concat(
-                    (featurizer_state[key], mean_context), -1
-                )
-
-        featurizer_state['sequence_features'] = tf.concat(
-            (featurizer_state['sequence_features'], context_embed), -1
-        )
