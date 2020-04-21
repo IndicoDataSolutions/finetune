@@ -104,7 +104,7 @@ def fp16_variable_getter(
     return getter(
         name,
         shape,
-        dtype=tf.float16 if dtype in [tf.float16, tf.float32] else dtype
+        dtype=tf.float16 if dtype in [tf.float16, tf.float32] else dtype,
         initializer=initializer,
         regularizer=regularizer,
         trainable=trainable,
@@ -117,7 +117,7 @@ def get_variable_getter(estimator_mode, features, fp16_predict):
     if estimator_mode == tf.estimator.ModeKeys.PREDICT and fp16_predict:
         custom_getter = fp16_variable_getter
         features = tf.nest.map_structure(
-            lambda feat: tf.cast(feat, tf.float16) if feat.dype == tf.float32 else feat,
+            lambda feat: tf.cast(feat, tf.float16) if feat.dtype == tf.float32 else feat,
             features
         )
     else:
