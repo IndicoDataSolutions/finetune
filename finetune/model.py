@@ -95,6 +95,35 @@ def masked_language_model_op(X, mlm_weights, mlm_ids, mlm_positions, params, fea
     return language_model_state
 
 
+def fp16_variable_getter(
+        getter, name, shape=None, dtype=None,
+        initializer=None, regularizer=None,
+        trainable=True,
+        *args, **kwargs
+):
+    return getter(
+        name,
+        shape,
+        dtype=tf.float16 if dtype in [tf.float16, tf.float32] else dtype
+        initializer=initializer,
+        regularizer=regularizer,
+        trainable=trainable,
+        *args,
+        **kwargs
+    )
+
+
+def get_variable_getter(estimator_mode, features, fp16_predict):
+    if estimator_mode == tf.estimator.ModeKeys.PREDICT and fp16_predict:
+        custom_getter = fp16_variable_getter
+        features = tf.nest.map_structure(
+            lambda feat: tf.cast(feat, tf.float16) if feat.dype == tf.float32 else feat,
+            features
+        )
+    else:
+        custom_getter = None
+    return custom_getter, features
+
 def get_model_fn(
     target_model_fn,
     pre_target_model_hook,
@@ -107,6 +136,7 @@ def get_model_fn(
     label_encoder,
     build_explain,
     n_replicas,
+    fp16_predict,
 ):
     def target_model_op(featurizer_state, Y, params, mode, **kwargs):
         weighted_tensor = None
@@ -133,6 +163,7 @@ def get_model_fn(
         return target_model_state
 
     def _model_fn(features, labels, mode, params):
+        var_getter, features = get_variable_getter(mode, features, fp16_predict)
         if not build_target_model:
             lm_loss_coef = 1.0
         else:
@@ -145,14 +176,7 @@ def get_model_fn(
         Y = labels
         pred_op = None
 
-        if estimator_mode == tf.estimator.ModeKeys.PREDICT and params.float_16_predict:
-            custom_getter = fp16_variable_getter
-            if context is not None:
-                context = tf.cast(context, tf.float16)
-            # inputs should all be int types except Y which is not used at prediction
-        else:
-            custom_getter = None
-        with tf.variable_scope(tf.get_variable_scope(), custom_getter=custom_getter):
+        with tf.variable_scope(tf.get_variable_scope(), custom_getter=var_getter):
             train_loss = 0.0
             featurizer_state = params.base_model.get_featurizer(
                 X,

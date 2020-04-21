@@ -34,6 +34,7 @@ from finetune.util.shapes import shape_list
 from finetune.util.timing import ProgressBar
 from finetune.util.in_memory_finetune import make_in_memory_finetune_hooks
 from finetune.util.indico_estimator import IndicoEstimator
+from finetune.util.gpu_info import gpu_info
 from finetune.base_models.bert.model import _BaseBert
 from finetune.nn.auxiliary import add_context_embed
 from finetune.input_pipeline import InputMode
@@ -317,6 +318,12 @@ class BaseModel(object, metaclass=ABCMeta):
         else:
             build_lm = force_build_lm or self.config.lm_loss_coef > 0.0
             config = self._get_estimator_config()
+            
+            fp16_predict = self.config.float_16_predict
+            if fp16_predict:
+                if not gpu_info(config.session_config)["fp16_inference"]:
+                    fp16_predict = False
+            
             model_fn = get_model_fn(
                 target_model_fn=self._target_model,
                 pre_target_model_hook=self._pre_target_model_hook,
@@ -328,7 +335,8 @@ class BaseModel(object, metaclass=ABCMeta):
                 target_dim=self.input_pipeline.target_dim,
                 label_encoder=self.input_pipeline.label_encoder,
                 build_explain=build_explain,
-                n_replicas=max(1, len(self.resolved_gpus))
+                n_replicas=max(1, len(self.resolved_gpus)),
+                fp16_predict=fp16_predict,
             )
             est = IndicoEstimator(
                 model_dir=self.estimator_dir,
