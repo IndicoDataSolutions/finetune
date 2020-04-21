@@ -20,9 +20,9 @@ def get_context(document, dpi_norm):
                     'bottom': pos["bottom"] * y_norm,
                     'left': pos["left"] * x_norm,
                     'right': pos["right"] * x_norm,
-                    'text': token["text"],
                     'start': offset["start"],
                     'end': offset["end"],
+                    'text': token["text"],
                 }
 	    )
     return context
@@ -43,7 +43,6 @@ def reblock_by_offsets(offsets, texts, to_reblock):
                 raise ValueError("Block: {} does not not align with offsets".format(block))
             page_start = offsets[page_idx]["start"]
             page_end = offsets[page_idx]["end"]
-            
         if texts[page_idx][block["start"] - page_start: block["end"] - page_start] != block["text"]:
             raise ValueError("Text does not align for token: {}, is is possible labels span between pages?".format(block))
         block["start"] -= page_start

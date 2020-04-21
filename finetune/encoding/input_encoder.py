@@ -24,7 +24,7 @@ EncodedOutput = namedtuple(
 EncodedOutput.__new__.__defaults__ = (None,) * len(EncodedOutput._fields)
 
 SUBS = {"—": "-", "–": "-", "―": "-", "…": "...", "´": "'"}
-INFO_KEYS = ['token', 'start', 'end', 'first_col', 'first_row', 'last_col', 'last_row']
+INFO_KEYS = ['text', 'start', 'end', 'first_col', 'first_row', 'last_col', 'last_row']
 
 
 def get_pairs(word):

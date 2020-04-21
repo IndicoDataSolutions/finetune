@@ -1,6 +1,7 @@
 import json
 import unittest
 from finetune import DocumentLabeler
+from finetune.base_models import DocRep
 
 class TestDocumentLabeler(unittest.TestCase):
     def setUp(self):
@@ -41,3 +42,16 @@ class TestDocumentLabeler(unittest.TestCase):
             for p, l in zip(pred, lab):
                 del p["confidence"]
                 self.assertEqual(p, l)
+
+    def test_fit_predict_doc_rep(self):
+        model = DocumentLabeler(n_epochs=20, base_model=DocRep, crf_sequence_labeling=True)
+        model.fit(self.documents, self.labels)
+        preds = model.predict(self.documents)
+        self.assertEqual(len(preds), len(self.documents))
+        for pred, lab in zip(preds, self.labels):
+            # checks that an overfit model, will produce the exact same output as was given as                                                        
+            # input even after being sliced up and put back together.
+            for p, l in zip(pred, lab):
+                del p["confidence"]
+                self.assertEqual(p, l)
+
