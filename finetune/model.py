@@ -131,6 +131,7 @@ def get_model_fn(
         estimator_mode = mode
         train = estimator_mode == tf.estimator.ModeKeys.TRAIN
         X = features["tokens"]
+        lengths = features["length"]
         context = features.get("context", None)
         task_id = features.get("task_id", None)
         Y = labels
@@ -144,6 +145,7 @@ def get_model_fn(
                 config=params,
                 train=train,
                 explain=build_explain,
+                lengths=lengths,
             )
             if context is not None:
                 featurizer_state = embed_context(context, featurizer_state, params, train)

@@ -20,7 +20,8 @@ import requests
 from bs4 import BeautifulSoup as bs
 from bs4.element import Tag
 
-from finetune.base_models import TextCNN, BERTModelCased, GPT2Model, GPTModel, RoBERTa, OSCAR, TCNModel, DistilBERT
+from finetune.base_models import TextCNN, BERTModelCased, GPT2Model, GPTModel, RoBERTa, OSCAR, TCNModel, DistilBERT, LongDocModel
+from finetune.base_models.long_doc.splitters import sentence_split
 
 from finetune import Classifier, Comparison, SequenceLabeler
 from finetune.datasets import generic_download
@@ -455,6 +456,62 @@ class TestSequenceLabelerTextCNN(TestModelBase):
         self.model.save(self.save_file)
         model = SequenceLabeler.load(self.save_file)
         model.predict(test_texts)
+
+class TestLongDocModel(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        TestClassifierTextCNN._download_sst()
+        TestSequenceLabelerTextCNN._download_reuters()
+
+    def setUp(self):
+        self.clf_dataset = pd.read_csv(TestClassifierTextCNN.dataset_path, nrows=200)
+        with open(TestSequenceLabelerTextCNN.processed_path, "rt") as fp:
+            self.sequence_texts, self.sequence_labels = json.load(fp)
+
+        try:
+            os.mkdir("tests/saved-models")
+        except FileExistsError:
+            warnings.warn(
+                "tests/saved-models still exists, it is possible that some test is not cleaning up properly."
+            )
+            pass
+    
+    def test_fit_predict_classifier(self):
+        model = Classifier(base_model=LongDocModel)
+        train_sample = self.clf_dataset.sample(n=100)
+        valid_sample = self.clf_dataset.sample(n=100)
+
+        with self.assertRaises(FinetuneError):
+            model.fit(sentence_split(train_sample.Text), train_sample.Target[:1])
+
+        model.fit(sentence_split(train_sample.Text.values), train_sample.Target.values)
+
+        predictions = model.predict(sentence_split(valid_sample.Text.values))
+        for prediction in predictions:
+            self.assertIsInstance(prediction, (np.int, np.int64))
+
+        probabilities = model.predict_proba(sentence_split(valid_sample.Text.values))
+        for proba in probabilities:
+            self.assertIsInstance(proba, dict)
+
+    def test_fit_predict_sequence(self):
+        raw_docs = ["".join(text) for text in self.sequence_texts]
+        texts, annotations = finetune_to_indico_sequence(
+            raw_docs, self.sequence_texts, self.sequence_labels, none_value="<PAD>"
+        )
+        train_texts, test_texts, train_annotations, test_annotations = train_test_split(
+            texts, annotations, test_size=0.1
+        )
+        model = SequenceLabeler(base_model=LongDocModel)
+
+        model.fit(sentence_split(train_texts), train_annotations)
+        predictions = model.predict(sentence_split(test_texts))
+        probas = model.predict_proba(sentence_split(test_texts))
+
+        self.assertIsInstance(probas, list)
+        self.assertIsInstance(probas[0], list)
+        self.assertIsInstance(probas[0][0], dict)
+        self.assertIsInstance(probas[0][0]["confidence"], dict)
 
 
 class TestSequenceLabelerBert(TestSequenceLabelerTextCNN):

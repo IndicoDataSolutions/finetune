@@ -43,7 +43,6 @@ class SequencePipeline(BasePipeline):
                 ]
                 if self.config.filter_empty_examples and len(filtered_labels) == 0:
                     continue
-                print(out)
                 yield feats, self.label_encoder.transform(out, filtered_labels)
 
     def _compute_class_counts(self, encoded_dataset):

@@ -34,9 +34,6 @@ class LongDocEncoder(BaseEncoder):
         self.initialized = True
 
     def _encode(self, texts, stochastic=False):
-        """
-        Convert a batch of raw text to a batch of byte-pair encoded token indices.
-        """
         self._lazy_init()
 
         batch_tokens = []

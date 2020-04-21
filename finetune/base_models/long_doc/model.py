@@ -22,18 +22,18 @@ class LongDocModel(SourceModel):
     featurizer = long_doc_featurizer
     settings = {
         "batch_size": 32,
-        "n_epochs": 100,
+        "n_epochs": 200,
         "n_embed_featurizer": 300,
         "n_layer": 3,
         "num_layers_trained": 3,
-        "n_filter": 3,
-        "n_embed": 3,
+        "n_filter": 10,
+        "n_embed": 10,
+        "kernel_size": 3,
         "val_size": "auto",
         "keep_best_model": True,
-        "early_stopping_steps": 100,
-        "kernel_size": 5,
         "train_embeddings": False,
-        "lr": 0.1,
+        "lr": 0.3,
         "base_model_path": None,
+        "reweighting": "sqrt"
     }
     required_files = []

@@ -1,4 +1,5 @@
 import math
+import copy
 
 import tensorflow as tf
 
@@ -50,11 +51,23 @@ def has_targets(generator):
     sample = next(iter(generator()))
     return isinstance(sample, tuple) and len(sample) == 2
 
+def add_length(features, targets=None):
+    features["length"] = tf.shape(features["tokens"])[0]
+    if targets is None:
+        return features
+    return features, targets
 
 def batch_dataset(dataset, batch_size, shapes, n_epochs=1):
+    shapes = copy.deepcopy(shapes)
+    if isinstance(shapes, tuple):
+        feature_shapes = shapes[0]
+    else:
+        feature_shapes = shapes
+    feature_shapes["length"] = tf.TensorShape([])
     def batched_dataset():
         return (
             dataset()
+            .map(add_length)
             .padded_batch(batch_size, padded_shapes=shapes, drop_remainder=False)
             .repeat(n_epochs)
             .prefetch(tf.data.experimental.AUTOTUNE)

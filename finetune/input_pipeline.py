@@ -275,6 +275,8 @@ class BasePipeline(metaclass=ABCMeta):
                 self.text_to_tokens_mask(**d) for d in val_split
             )
         )
+
+        self.config.val_size = len(tokenized_val_split)
         
         if self.config.class_weights is not None:
             class_counts = self._compute_class_counts(tokenized_train_split)
@@ -364,9 +366,9 @@ class BasePipeline(metaclass=ABCMeta):
                         fv = field_value[start:end]
                         if self.config.add_eos_bos_to_chunk:
                             start_token, end_token = field_starts_and_ends[field]
-                            if fv[0] != start_token:
+                            if np.all(fv[0] != start_token):
                                 fv = np.concatenate(([start_token], fv))
-                            if fv[-1] != end_token:
+                            if np.all(fv[-1] != end_token):
                                 fv = np.concatenate((fv, [end_token]))
                         d[field] = fv
                 yield EncodedOutput(**d)
