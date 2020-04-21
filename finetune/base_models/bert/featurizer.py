@@ -5,6 +5,10 @@ from finetune.util.shapes import lengths_from_eos_idx
 from finetune.base_models.bert.roberta_encoder import RoBERTaEncoder
 from finetune.base_models.bert.modeling import BertConfig, BertModel
 
+def get_decay_for_half(total_num_steps):
+    decay = tf.minimum(tf.cast(tf.train.get_global_step(), tf.float32) / (total_num_steps / 2), 1.0)
+    tf.summary.scalar("positional_decay_rate", decay)
+    return decay
 
 def bert_featurizer(
     X,
@@ -12,6 +16,8 @@ def bert_featurizer(
     config,
     train=False,
     reuse=None,
+    context=None,
+    total_num_steps=None,
     **kwargs
 ):
     """
@@ -44,7 +50,12 @@ def bert_featurizer(
         max_position_embeddings=config.max_length, 
         type_vocab_size=2,
         initializer_range=config.weight_stddev,
-        low_memory_mode=config.low_memory_mode
+        low_memory_mode=config.low_memory_mode,
+        
+        pos_injection=config.context_injection,
+        reading_order_removed=config.reading_order_removed,
+        anneal_reading_order=config.anneal_reading_order,
+        positional_channels=config.context_channels,
     )
 
     initial_shape = tf.shape(X)
@@ -83,18 +94,25 @@ def bert_featurizer(
             "Bert base model does not support num_layers_trained not equal to 0 or n_layer"
         )
 
+    if config.anneal_reading_order:
+        reading_order_decay_rate = get_decay_for_half(total_num_steps)
+    else:
+        reading_order_decay_rate = None
+
     with tf.variable_scope("model/featurizer", reuse=reuse):
         bert = BertModel(
             config=bert_config,
             is_training=train,
             input_ids=X,
             input_mask=mask,
+            input_context=context,
             token_type_ids=token_type_ids,
             use_one_hot_embeddings=False,
             scope=None,
             use_pooler=config.bert_use_pooler,
             use_token_type=config.bert_use_type_embed,
-            roberta=is_roberta
+            roberta=is_roberta,
+            reading_order_decay_rate=reading_order_decay_rate,
         )
 
         embed_weights = bert.get_embedding_table()

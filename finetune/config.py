@@ -371,6 +371,12 @@ def get_default_config():
         default_context=None,
         context_dim=None,  # number of context dimensions to be inserted
 
+        # Document Representation
+        context_injection=False,
+        reading_order_removed=False,
+        anneal_reading_order=False,
+        context_channels=None,
+
         # Serialize finetune version with model
         version=VERSION,
     )
