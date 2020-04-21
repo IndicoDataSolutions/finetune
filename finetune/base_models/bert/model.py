@@ -224,8 +224,18 @@ class DocRep(_BaseBert):
         "bert_use_pooler": False,
         "context_injection": True,
         "reading_order_removed": True,
-        "context_channels": 256, # TODO: Check that this is correct.
-#        "base_model_path": # TODO: Add base model
+        "context_channels": 192,
+        "base_model_path": os.path.join("bert", "doc_rep_v1.jl"),
+        "crf_sequence_labeling": False,
+        "context_dim": 4,
+        "default_context":{
+            'left': 0,
+            'right': 0,
+            'top': 0,
+            'bottom': 0,
+        },
+        "use_auxiliary_info": True
+
     }
     required_files = [
         # TODO: Add base model.

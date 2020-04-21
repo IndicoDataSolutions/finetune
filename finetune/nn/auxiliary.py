@@ -1,3 +1,5 @@
+import math
+
 import tensorflow as tf	
 from finetune.util.shapes import shape_list
 

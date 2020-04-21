@@ -35,8 +35,9 @@ from finetune.util.timing import ProgressBar
 from finetune.util.in_memory_finetune import make_in_memory_finetune_hooks
 from finetune.util.indico_estimator import IndicoEstimator
 from finetune.util.gpu_info import gpu_info
+
 from finetune.base_models.bert.model import _BaseBert
-from finetune.nn.auxiliary import add_context_embed
+from finetune.base_models import GPTModel, GPTModelSmall
 from finetune.input_pipeline import InputMode
 
 LOGGER = logging.getLogger("finetune")
@@ -181,7 +182,7 @@ class BaseModel(object, metaclass=ABCMeta):
         raise NotImplementedError
 
     def _pre_target_model_hook(self, featurizer_state):
-        add_context_embed(featurizer_state)
+        pass
 
     def _n_steps(self, n_examples, batch_size, n_gpus):
         steps = int(math.ceil(n_examples / (batch_size * n_gpus)))

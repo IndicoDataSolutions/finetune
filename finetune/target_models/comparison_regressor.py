@@ -5,7 +5,6 @@ from finetune.encoding.target_encoders import RegressionEncoder
 from finetune.target_models.comparison import ComparisonPipeline
 from finetune.nn.target_blocks import regressor
 from finetune.base import BaseModel
-from finetune.nn.auxiliary import add_context_embed
 from finetune.model import PredictMode
 
 
