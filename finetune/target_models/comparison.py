@@ -6,7 +6,6 @@ from finetune.errors import FinetuneError
 from finetune.base import BaseModel
 from finetune.target_models.classifier import Classifier, ClassificationPipeline
 from finetune.encoding.input_encoder import  EncodedOutput, tokenize_context
-from finetune.nn.auxiliary import add_context_embed
 
 
 class ComparisonPipeline(ClassificationPipeline):
@@ -98,7 +97,6 @@ class Comparison(Classifier):
         return ComparisonPipeline(self.config)
 
     def _pre_target_model_hook(self, featurizer_state):
-        add_context_embed(featurizer_state)
         featurizer_state["sequence_features"] = tf.abs(
             tf.reduce_sum(featurizer_state["sequence_features"], 1)
         )

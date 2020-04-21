@@ -551,7 +551,7 @@ def embedding_postprocessor(
             
     if pos_injection:
         init = tf.variance_scaling_initializer(scale=0.02, mode="fan_avg", distribution="truncated_normal")
-        embedded_input_context = embed_position(input_context, positional_channels, batch_size, sequence_length)
+        embedded_input_context = embed_position(input_context, positional_channels, batch_size, seq_length)
         output += tf.layers.dense(embedded_input_context, width, use_bias=False, kernel_initializer=init)
 
     output = layer_norm_and_dropout(output, dropout_prob)

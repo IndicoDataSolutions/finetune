@@ -172,7 +172,7 @@ class GPT2Encoder(BaseEncoder):
             char_ends = []
             char_starts = []
             token_start = 0
-
+            
             tokens = re.findall(self.pat, text)
             for j, token in enumerate(tokens):
                 encoded_token = "".join(

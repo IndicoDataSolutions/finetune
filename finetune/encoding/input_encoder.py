@@ -24,6 +24,7 @@ EncodedOutput = namedtuple(
 EncodedOutput.__new__.__defaults__ = (None,) * len(EncodedOutput._fields)
 
 SUBS = {"—": "-", "–": "-", "―": "-", "…": "...", "´": "'"}
+INFO_KEYS = ['token', 'start', 'end', 'first_col', 'first_row', 'last_col', 'last_row']
 
 
 def get_pairs(word):
@@ -184,6 +185,17 @@ class BaseEncoder(metaclass=SingletonMeta):
 
     def __getstate__(self):
         return {"Encoder": None}
+
+
+def get_relevant_context_for_chunk(context, encoded_output):
+    # this is not always right given the tokenization might change the tokens and thus the length
+    start_idx = encoded_output.token_starts[1]
+    final_idx = encoded_output.token_ends[-2]
+    new_context = []
+    for span in context:
+        if span['end'] >= start_idx:
+            new_context.append(span)
+    return new_context
 
 
 def tokenize_context(context, encoded_output, config):
