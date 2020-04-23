@@ -837,7 +837,9 @@ class BaseModel(object, metaclass=ABCMeta):
                 chunk_idx + 1 == len(flat_array_encoded) or
                 sequence_id[chunk_idx] != sequence_id[chunk_idx + 1]
             )
-            yield token_start_idx, token_end_idx, start_of_doc, end_of_doc, label_seq, proba_seq
+            useful_start = flat_array_encoded[chunk_idx].useful_start
+            useful_end = flat_array_encoded[chunk_idx].useful_end
+            yield token_start_idx, token_end_idx, start_of_doc, end_of_doc, label_seq, proba_seq, useful_start, useful_end
 
     def __del__(self):
         self.close()

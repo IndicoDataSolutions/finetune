@@ -355,7 +355,7 @@ class BasePipeline(metaclass=ABCMeta):
                 field_value = getattr(encoded, field)
                 if field_value is not None:
                     field_starts_and_ends[field] = (field_value[0], field_value[-1])
-            for start, end in self.chunker.generate_chunks(length):
+            for start, end, (useful_start, useful_end) in self.chunker.generate_chunks(length):
                 d = dict()
                 for field in EncodedOutput._fields:
                     field_value = getattr(encoded, field)
@@ -368,7 +368,7 @@ class BasePipeline(metaclass=ABCMeta):
                             if fv[-1] != end_token:
                                 fv = np.concatenate((fv, [end_token]))
                         d[field] = fv
-                yield EncodedOutput(**d)
+                yield EncodedOutput(useful_start=useful_start, useful_end=useful_end, **d)
         else:
             encoder_out = self.text_encoder.encode_multi_input(
                 Xs,

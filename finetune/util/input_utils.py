@@ -125,11 +125,18 @@ class Chunker:
         self.normal_end = self.normal_start + self.useful_chunk_width
 
     def generate_chunks(self, length):
+        is_start = True
+        is_end = False
         for start in range(0, length, self.useful_chunk_width):
             end = start + self.chunk_size
-            yield start, end
-            if end >= length:
+            if end + self.useful_chunk_width >= length:
+                is_end = True
+        
+            yield start, end, self.useful_chunk_section(is_start, is_end)
+            
+            if is_end:
                 break
+            is_start = False
 
     def useful_chunk_section(self, start_of_doc, end_of_doc):
         start = self.normal_start
