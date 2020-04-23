@@ -39,9 +39,7 @@ class ComparisonRegressor(BaseModel):
     def _get_input_pipeline(self):
         return ComparisonRegressionPipeline(self.config)
 
-    
     def _pre_target_model_hook(self, featurizer_state):
-        add_context_embed(featurizer_state)
         featurizer_state["sequence_features"] = tf.abs(tf.reduce_sum(featurizer_state["sequence_features"], 1))
         featurizer_state["features"] = tf.abs(tf.reduce_sum(featurizer_state["features"], 1))
 
