@@ -75,7 +75,7 @@ class Classifier(BaseModel):
         all_labels = []
         all_probs = []
         doc_probs = []
-        for _,  _, start_of_doc, end_of_doc, _, proba in self.process_long_sequence(zipped_data, **kwargs):
+        for _,  _, start_of_doc, end_of_doc, _, proba, _, _ in self.process_long_sequence(zipped_data, **kwargs):
             start, end = 0, None
             doc_probs.append(proba)
 
