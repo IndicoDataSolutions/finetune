@@ -322,6 +322,9 @@ class BaseModel(object, metaclass=ABCMeta):
             fp16_predict = self.config.float_16_predict
             if fp16_predict:
                 if not gpu_info(config.session_config)["fp16_inference"]:
+                    LOGGER.info(
+                        "config.float_16_predict is true but the GPU does not support float16, it is being turned off"
+                    )
                     fp16_predict = False
             
             model_fn = get_model_fn(
