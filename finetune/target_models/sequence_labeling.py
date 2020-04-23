@@ -112,7 +112,6 @@ def _spacy_token_predictions(raw_text, tokens, probas, positions):
         to_combine.append(
             {"start": start, "end": end, "token": token, "probabilities": prob}
         )
-
         try:
             end_match = spacy_token_ends.index(end, spacy_token_idx)
             start = spacy_token_starts[end_match]
@@ -193,8 +192,8 @@ class SequenceLabeler(BaseModel):
         chunk_size = self.config.max_length - 2
         step_size = chunk_size // 3
         doc_idx = -1
-        raw_text = [data["X"] for data in zipped_data]
-        for token_start_idx, token_end_idx, start_of_doc, end_of_doc, label_seq, proba_seq in self.process_long_sequence(zipped_data, **kwargs):
+        raw_text = [data.get("raw_text", data["X"]) for data in zipped_data]
+        for token_start_idx, token_end_idx, start_of_doc, end_of_doc, label_seq, proba_seq, useful_start, useful_end in self.process_long_sequence(zipped_data, **kwargs):
             if start_of_doc:
                 # if this is the first chunk in a document, start accumulating from scratch
                 doc_subseqs = []
@@ -204,7 +203,8 @@ class SequenceLabeler(BaseModel):
                 doc_starts = []
 
                 doc_idx += 1
-            start, end = self.input_pipeline.chunker.useful_chunk_section(start_of_doc, end_of_doc)
+            start = useful_start
+            end = useful_end
 
             label_seq = label_seq[start:end]
             end_of_token_seq = token_end_idx[start:end]

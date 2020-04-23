@@ -19,6 +19,8 @@ EncodedOutput = namedtuple(
         "tokens",  # list of list of subtokens (strs)
         "token_ends",  # list of list of character locations (ints)
         "token_starts",  # list of list of character starts (locs are character ends) (ints)
+        "useful_start",
+        "useful_end",
     ],
 )
 EncodedOutput.__new__.__defaults__ = (None,) * len(EncodedOutput._fields)
@@ -215,8 +217,8 @@ def tokenize_context(context, encoded_output, config):
         # (this would not be the case if multiple context spans make up the same token)
         if char_loc == -1:
             tokenized_context.append(default_context)
-#        elif token in ['\n</w>', 'Ċ', 'Ġ']: # TODO: Remove: I dont think this is needed anymore 
-#            tokenized_context.append(context_by_char_loc[current_char_loc][1])
+        elif token in ['\n']:
+            tokenized_context.append(context_by_char_loc[current_char_loc][1])
         else:
             if char_loc > context_by_char_loc[current_char_loc][0]:
                 current_char_loc += 1

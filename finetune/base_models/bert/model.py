@@ -212,12 +212,13 @@ class DocRep(_BaseBert):
     settings = {
 	"lm_type": "mlm",
         "n_embed": 768,
-        "n_epochs": 8,
+        "n_epochs": 32,
+        "batch_size": 8,
         "n_heads": 12,
 	"n_layer": 12,
         "act_fn": "gelu",
         "lr_warmup": 0.1,
-	"lr": 1e-5,
+	"lr": 1e-4,
         "l2_reg": 0.1,
 	"epsilon": 1e-8,
         "bert_intermediate_size": 3072,
@@ -238,7 +239,10 @@ class DocRep(_BaseBert):
 
     }
     required_files = [
-        # TODO: Add base model.
+        {
+            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "doc_rep_v1.jl"),
+            "url": urljoin(BERT_BASE_URL, "doc_rep_v1.jl"),
+        },
         {
             "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "dict.txt"),
             "url": urljoin(ROBERTA_BASE_URL, "dict.txt"),
