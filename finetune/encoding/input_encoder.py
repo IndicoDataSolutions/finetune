@@ -189,18 +189,6 @@ class BaseEncoder(metaclass=SingletonMeta):
         return {"Encoder": None}
 
 
-def get_relevant_context_for_chunk(context, encoded_output):
-    # this is not always right given the tokenization might change the tokens and thus the length
-    start_idx = encoded_output.token_starts[1]
-    final_idx = encoded_output.token_ends[-2]
-    
-    new_context = []
-    for span in context:
-        if span['end'] >= start_idx:# and span["start"] <= final_idx:
-            new_context.append(span)
-    return new_context
-
-
 def tokenize_context(context, encoded_output, config):
     """ Tokenize the context corresponding to a single sequence of text """
     # in the edge case where the chunk is just a single end token, we don't need to alter our context chunk
@@ -224,7 +212,6 @@ def tokenize_context(context, encoded_output, config):
             while char_loc > context_by_char_loc[current_char_loc][0]:
                 current_char_loc += 1
                 if current_char_loc >= len(context_by_char_loc):
-                    # TODO: this is a workaround that has no guarantees of being correct
                     raise ValueError("Context cannot be fully matched as it appears to not cover the end of the sequence for token {}".format(token))
             if token.strip() not in context_by_char_loc[current_char_loc][2]:
                 warnings.warn("subtoken: {} has matched up with the context for token: {}".format(repr(token), repr(context_by_char_loc[current_char_loc][2])))
