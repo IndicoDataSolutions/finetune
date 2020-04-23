@@ -65,7 +65,7 @@ class MultiLabelClassifier(BaseModel):
     def _predict(self, zipped_data, threshold=None, probas=False, **kwargs):
         threshold = self._get_threshold(threshold)
         all_labels = []
-        for _, _, start_of_doc, end_of_doc, _, proba in self.process_long_sequence(zipped_data, **kwargs):
+        for _, _, start_of_doc, end_of_doc, _, proba, _, _ in self.process_long_sequence(zipped_data, **kwargs):
             if start_of_doc:
                 # if this is the first chunk in a document, start accumulating from scratch
                 doc_probs = []

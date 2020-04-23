@@ -212,7 +212,6 @@ class SequenceLabelingEncoder(BaseEncoder):
         # Don't run check if text wasn't provided
         if 'text' in label:
             sub_text = label["text"][tok_start - label["start"]: tok_end - label["start"]]
-            print(repr(sub_text) + " == " + repr(tok_text), label, tok_start, tok_end)
             strings_agree = sub_text.lower() in tok_text.lower()
         else:
             strings_agree = True

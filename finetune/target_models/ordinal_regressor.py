@@ -63,7 +63,7 @@ class OrdinalRegressor(BaseModel):
         :returns: list of class labels.
         """
         all_labels = []
-        for _,  _, start_of_doc, end_of_doc, label, _ in self.process_long_sequence(zipped_data, **kwargs):
+        for _,  _, start_of_doc, end_of_doc, label, _, _, _ in self.process_long_sequence(zipped_data, **kwargs):
             if start_of_doc:
                 # if this is the first chunk in a document, start accumulating from scratch
                 doc_labels = []
