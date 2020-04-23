@@ -193,9 +193,10 @@ def get_relevant_context_for_chunk(context, encoded_output):
     # this is not always right given the tokenization might change the tokens and thus the length
     start_idx = encoded_output.token_starts[1]
     final_idx = encoded_output.token_ends[-2]
+    
     new_context = []
     for span in context:
-        if span['end'] >= start_idx:
+        if span['end'] >= start_idx:# and span["start"] <= final_idx:
             new_context.append(span)
     return new_context
 
@@ -203,28 +204,30 @@ def get_relevant_context_for_chunk(context, encoded_output):
 def tokenize_context(context, encoded_output, config):
     """ Tokenize the context corresponding to a single sequence of text """
     # in the edge case where the chunk is just a single end token, we don't need to alter our context chunk
-    if len(encoded_output.token_ends) > 1:
-        context = get_relevant_context_for_chunk(context, encoded_output)
+#    if len(encoded_output.token_ends) > 1:
+#        context = get_relevant_context_for_chunk(context, encoded_output)
     seq_len = len(encoded_output.token_ids)
     context_keys = list(k for k in sorted(context[0].keys()) if k not in INFO_KEYS)
-    context_by_char_loc = sorted([(c['end'], [c[k] for k in context_keys]) for c in context], key=lambda c: c[0])
+    context_by_char_loc = sorted([(c['end'], [c[k] for k in context_keys], c["text"]) for c in context], key=lambda c: c[0])
     # default context is set by user in config
     default_context = [config.default_context[k] for k in context_keys]
     current_char_loc = 0
     tokenized_context = []
-    for token, char_loc in zip(encoded_output.tokens, encoded_output.token_ends):
+    assert len(encoded_output.tokens) == len(encoded_output.token_ends)
+    assert encoded_output.token_starts[1] < encoded_output.token_ends[-2]
+    for i, (token, char_loc) in enumerate(zip(encoded_output.tokens, encoded_output.token_ends)):
         # Note: this assumes that the tokenization will never lump multiple tokens into one
         # (this would not be the case if multiple context spans make up the same token)
         if char_loc == -1:
             tokenized_context.append(default_context)
-        elif token in ['\n']:
-            tokenized_context.append(context_by_char_loc[current_char_loc][1])
         else:
-            if char_loc > context_by_char_loc[current_char_loc][0]:
+            while char_loc > context_by_char_loc[current_char_loc][0]:
                 current_char_loc += 1
                 if current_char_loc >= len(context_by_char_loc):
                     # TODO: this is a workaround that has no guarantees of being correct
-                    raise ValueError("Context cannot be fully matched as it appears to not cover the end of the sequence")
+                    raise ValueError("Context cannot be fully matched as it appears to not cover the end of the sequence for token {}".format(token))
+            if token.strip() not in context_by_char_loc[current_char_loc][2]:
+                warnings.warn("subtoken: {} has matched up with the context for token: {}".format(repr(token), repr(context_by_char_loc[current_char_loc][2])))
             tokenized_context.append(context_by_char_loc[current_char_loc][1])
 
     assert len(tokenized_context) == len(encoded_output.token_ends)
