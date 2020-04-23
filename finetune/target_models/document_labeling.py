@@ -1,4 +1,5 @@
 from finetune.target_models.sequence_labeling import SequenceLabeler, SequencePipeline
+from finetune.encoding.input_encoder import EncodedOutput
 
 def get_context(document, dpi_norm):
     context = []
@@ -67,10 +68,12 @@ class DocumentPipeline(SequencePipeline):
                 # This is done to allow chunk long sequences to rejoin labels for us.
             }
             if self.config.default_context:
+                for cii in context:
+                    assert cii["text"] == joined_text[cii["start"]: cii["end"]]
                 sample["context"] = context
+                
             if Y is not None:
                 for yii in Y[i]:
-                    print(yii["text"], joined_text[yii["start"]: yii["end"]])
                     assert yii["text"] == joined_text[yii["start"]: yii["end"]]
                 sample["Y"] = Y[i]
             out.append(sample)
@@ -80,12 +83,11 @@ class DocumentPipeline(SequencePipeline):
         offset = 0
         for X_page in X:
             for chunk in super()._text_to_ids(X_page, pad_token):
-                for i in range(len(chunk.token_starts)):
-                    if chunk.token_starts[i] == -1:
-                        continue
-                    chunk.token_starts[i] += offset
-                    chunk.token_ends[i] += offset
-                yield chunk
+                assert len(chunk.token_starts) == len(chunk.token_ends)
+                chunk_dict = chunk._asdict()
+                chunk_dict["token_starts"] = [start + offset for start in chunk_dict["token_starts"]]
+                chunk_dict["token_ends"] = [start + offset for start in chunk_dict["token_ends"]]
+                yield EncodedOutput(**chunk_dict)
             offset += len(X_page)
 
 class DocumentLabeler(SequenceLabeler):
