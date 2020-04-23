@@ -162,6 +162,7 @@ class TestSequenceLabeler(unittest.TestCase):
 
         self.model.fit(train_texts, train_annotations)
         predictions = self.model.predict(test_texts)
+        per_token_predictions = self.model.predict(test_texts, per_token=True)
         probas = self.model.predict_proba(test_texts)
 
         self.assertIsInstance(probas, list)

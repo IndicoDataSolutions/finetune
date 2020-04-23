@@ -260,15 +260,15 @@ class SequenceLabeler(BaseModel):
             return [
                 {
                     "tokens": _spacy_token_predictions(
-                        raw_text=raw_text,
+                        raw_text=text,
                         tokens=tokens,
                         probas=probas,
                         positions=positions,
                     ),
                     "prediction": predictions,
                 }
-                for raw_text, tokens, labels, probas, positions, predictions in zip(
-                    X,
+                for text, tokens, labels, probas, positions, predictions in zip(
+                    raw_text,
                     all_subseqs,
                     all_labels,
                     all_probs,
