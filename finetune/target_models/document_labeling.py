@@ -91,8 +91,8 @@ class DocumentPipeline(SequencePipeline):
             for chunk in super()._text_to_ids(X_page, pad_token):
                 assert len(chunk.token_starts) == len(chunk.token_ends)
                 chunk_dict = chunk._asdict()
-                chunk_dict["token_starts"] = [start + offset for start in chunk_dict["token_starts"]]
-                chunk_dict["token_ends"] = [start + offset for start in chunk_dict["token_ends"]]
+                chunk_dict["token_starts"] = [start if start == -1 else start + offset for start in chunk_dict["token_starts"]]
+                chunk_dict["token_ends"] = [end if end == -1 else end + offset for end in chunk_dict["token_ends"]]
                 yield EncodedOutput(**chunk_dict)
             offset += len(X_page)
 

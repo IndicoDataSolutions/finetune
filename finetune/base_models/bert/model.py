@@ -13,6 +13,49 @@ from finetune.base_models.bert.roberta_encoder import RoBERTaEncoder, RoBERTaEnc
 from finetune.base_models.bert.featurizer import bert_featurizer
 from finetune.util.download import BERT_BASE_URL, GPT2_BASE_URL, ROBERTA_BASE_URL, FINETUNE_BASE_FOLDER
 
+BERT_BASE_PARAMS = {
+    "lm_type": "mlm",
+    "n_embed": 768,
+    "n_epochs": 8,
+    "n_heads": 12,
+    "n_layer": 12,
+    "act_fn": "gelu",
+    "lr_warmup": 0.1,
+    "lr": 1e-5,
+    "l2_reg": 0.01,
+    "bert_intermediate_size": 3072,
+}
+
+BERT_LARGE_PARAMS = {
+    "lm_type": "mlm",
+    "n_embed": 1024,
+    "n_epochs": 8,
+    "n_heads": 16,
+    "n_layer": 24,
+    "num_layers_trained": 24,
+    "act_fn": "gelu",
+    "lr_warmup": 0.1,
+    "lr": 1e-5,
+    "l2_reg": 0.01,
+    "bert_intermediate_size": 4096,
+    "max_length": 1024,
+}
+
+DISTIL_BERT_PARAMS = {
+    "n_embed": 768,
+    "n_epochs": 8,
+    "n_heads": 12,
+    "n_layer": 6,
+    "num_layers_trained": 6,
+    "act_fn": "gelu",
+    "lr_warmup": 0.1,
+    "lr": 1e-5,
+    "l2_reg": 0.01,
+    "bert_use_pooler": False,
+    "bert_use_type_embed": False,
+    "bert_intermediate_size": 3072,
+}
+
 
 class _BaseBert(SourceModel):
     is_bidirectional = True
@@ -20,8 +63,8 @@ class _BaseBert(SourceModel):
     @classmethod
     def get_optimal_params(cls, config):
         base_max_length = config.base_model.settings.get("max_length", 512)
-        base_n_epochs = config.base_model.settings["n_epochs"]
-        base_batch_size = config.base_model.settings["batch_size"]
+        base_n_epochs = config.base_model.settings.get("n_epochs", 8)
+        base_batch_size = config.base_model.settings.get("batch_size", 2)
         if config.optimize_for.lower() == "speed":
             overrides = {
                 "max_length": 128 if config.chunk_long_sequences else base_max_length,
@@ -61,16 +104,7 @@ class BERTModelCased(_BaseBert):
     encoder = BERTEncoder
     featurizer = bert_featurizer
     settings = {
-        "lm_type": "mlm",
-        "n_embed": 768,
-        "n_epochs": 8,
-        "n_heads": 12,
-        "n_layer": 12,
-        "act_fn": "gelu",
-        "lr_warmup": 0.1,
-        "lr": 1e-5,
-        "l2_reg": 0.01,
-        "bert_intermediate_size": 3072,
+        **BERT_BASE_PARAMS,
         "base_model_path": os.path.join("bert", "bert_small_cased-v2.jl"),
     }
     required_files = [
@@ -86,17 +120,7 @@ class BERTModelLargeCased(_BaseBert):
     encoder = BERTEncoderLarge
     featurizer = bert_featurizer
     settings = {
-        "lm_type": "mlm",
-        "n_embed": 1024,
-        "n_epochs": 8,
-        "n_heads": 16,
-        "n_layer": 24,
-        "num_layers_trained": 24,
-        "act_fn": "gelu",
-        "lr_warmup": 0.1,
-        "lr": 1e-5,
-        "l2_reg": 0.01,
-        "bert_intermediate_size": 4096,
+        **BERT_LARGE_PARAMS,
         "base_model_path": os.path.join("bert", "bert_large_cased-v2.jl"),
     }
     required_files = [
@@ -112,19 +136,8 @@ class BERTModelLargeWWMCased(_BaseBert):
     encoder = BERTEncoderLarge
     featurizer = bert_featurizer
     settings = {
-        "lm_type": "mlm",
-        "n_embed": 1024,
-        "n_epochs": 8,
-        "n_heads": 16,
-        "n_layer": 24,
-        "num_layers_trained": 24,
-        "act_fn": "gelu",
-        "lr_warmup": 0.1,
-        "lr": 1e-5,
-        "l2_reg": 0.01,
-        "bert_intermediate_size": 4096,
+         **BERT_LARGE_PARAMS,
         "base_model_path": os.path.join("bert", "bert_wwm_large_cased-v2.jl"),
-        "max_length": 1024,
     }
     required_files = [
         {
@@ -139,16 +152,7 @@ class BERTModelMultilingualCased(_BaseBert):
     encoder = BERTEncoderMultuilingal
     featurizer = bert_featurizer
     settings = {
-        "lm_type": "mlm",
-        "n_embed": 768,
-        "n_epochs": 8,
-        "n_heads": 12,
-        "n_layer": 12,
-        "act_fn": "gelu",
-        "lr_warmup": 0.1,
-        "lr": 1e-5,
-        "l2_reg": 0.01,
-        "bert_intermediate_size": 3072,
+        **BERT_BASE_PARAMS,
         "base_model_path": os.path.join("bert", "bert_small_multi_cased-v2.jl"),
     }
     required_files = [
@@ -164,25 +168,14 @@ class RoBERTa(_BaseBert):
     encoder = RoBERTaEncoderV2
     featurizer = bert_featurizer
     settings = {
-        "lm_type": "mlm",
-        "n_embed": 768,
-        "n_epochs": 8,
-        "n_heads": 12,
-        "n_layer": 12,
-        "act_fn": "gelu",
-        "lr_warmup": 0.1,
-        "lr": 1e-5,
-        "l2_reg": 0.1,
+        **BERT_BASE_PARAMS,
         "epsilon": 1e-8,
-        "bert_intermediate_size": 3072,
         "bert_use_pooler": False,
         "base_model_path": os.path.join("bert", "roberta-model-sm-v2.jl"),
     }
     required_files = [
         {
-            "file": os.path.join(
-                FINETUNE_BASE_FOLDER, "model", "bert", "roberta-model-sm-v2.jl"
-            ),
+            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "roberta-model-sm-v2.jl"),
             "url": urljoin(ROBERTA_BASE_URL, "roberta-model-sm-v2.jl"),
         },
         {
@@ -211,35 +204,26 @@ class RoBERTa(_BaseBert):
 class DocRep(_BaseBert):
     encoder = RoBERTaEncoderV2
     featurizer = bert_featurizer
-    settings = {
-	"lm_type": "mlm",
-        "n_embed": 768,
-        "n_epochs": 32,
-        "batch_size": 8,
-        "n_heads": 12,
-	"n_layer": 12,
-        "act_fn": "gelu",
-        "lr_warmup": 0.1,
-	"lr": 1e-4,
-        "l2_reg": 0.1,
-	"epsilon": 1e-8,
-        "bert_intermediate_size": 3072,
-        "bert_use_pooler": False,
-        "context_injection": True,
-        "reading_order_removed": True,
-        "context_channels": 192,
-        "base_model_path": os.path.join("bert", "doc_rep_v1.jl"),
-        "crf_sequence_labeling": False,
-        "context_dim": 4,
-        "default_context":{
-            'left': 0,
-            'right': 0,
-            'top': 0,
-            'bottom': 0,
-        },
-        "use_auxiliary_info": True
-
-    }
+    settings = dict(RoBERTa.settings)
+    settings.update(
+        {
+	    "lr": 1e-4,
+            "context_injection": True,
+            "reading_order_removed": True,
+            "context_channels": 192,
+            "crf_sequence_labeling": False,
+            "context_dim": 4,
+            "default_context":{
+                'left': 0,
+                'right': 0,
+                'top': 0,
+                'bottom': 0,
+            },
+            "use_auxiliary_info": True,
+            "low_memory_mode": True,
+            "base_model_path": os.path.join("bert", "doc_rep_v1.jl"),
+        }
+    )
     required_files = [
         {
             "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "doc_rep_v1.jl"),
@@ -269,18 +253,7 @@ class RoBERTaLarge(RoBERTa):
     encoder = RoBERTaEncoderV2
     featurizer = bert_featurizer
     settings = {
-        "lm_type": "mlm",
-        "n_embed": 1024,
-        "n_epochs": 8,
-        "n_heads": 16,
-        "n_layer": 24,
-        "num_layers_trained": 24,
-        "act_fn": "gelu",
-        "lr_warmup": 0.1,
-        "lr": 1e-5,
-        "l2_reg": 0.1,
-        "epsilon": 1e-8,
-        "bert_intermediate_size": 4096,
+         **BERT_LARGE_PARAMS,
         "bert_use_pooler": False,
         "base_model_path": os.path.join("bert", "roberta-model-lg-v2.jl"),
     }
@@ -313,18 +286,7 @@ class DistilBERT(_BaseBert):
     encoder = DistilBERTEncoder
     featurizer = bert_featurizer
     settings = {
-        "n_embed": 768,
-        "n_epochs": 8,
-        "n_heads": 12,
-        "n_layer": 6,
-        "num_layers_trained": 6,
-        "act_fn": "gelu",
-        "lr_warmup": 0.1,
-        "lr": 1e-5,
-        "l2_reg": 0.01,
-        "bert_use_pooler": False,
-        "bert_use_type_embed": False,
-        "bert_intermediate_size": 3072,
+        **DISTIL_BERT_PARAMS,
         "base_model_path": os.path.join("bert", "distillbert.jl"),
     }
     required_files = [
@@ -340,18 +302,7 @@ class DistilRoBERTa(_BaseBert):
     encoder = RoBERTaEncoder
     featurizer = bert_featurizer
     settings = {
-        "n_embed": 768,
-        "n_epochs": 8,
-        "n_heads": 12,
-        "n_layer": 6,
-        "num_layers_trained": 6,
-        "act_fn": "gelu",
-        "lr_warmup": 0.1,
-        "lr": 1e-5,
-        "l2_reg": 0.01,
-        "bert_use_pooler": False,
-        "bert_use_type_embed": False,
-        "bert_intermediate_size": 3072,
+        **DISTIL_BERT_PARAMS,
         "base_model_path": os.path.join("bert", "distilroberta.jl"),
     }
     required_files = [
