@@ -20,6 +20,8 @@ class _BaseBert(SourceModel):
     @classmethod
     def get_optimal_params(cls, config):
         base_max_length = config.base_model.settings.get("max_length", 512)
+        base_n_epochs = config.base_model.settings["n_epochs"]
+        base_batch_size = config.base_model.settings["batch_size"]
         if config.optimize_for.lower() == "speed":
             overrides = {
                 "max_length": 128 if config.chunk_long_sequences else base_max_length,
@@ -32,8 +34,8 @@ class _BaseBert(SourceModel):
         elif config.optimize_for.lower() == "accuracy":
             overrides = {
                 "max_length": base_max_length,
-                "n_epochs": 8,
-                "batch_size": 2,
+                "n_epochs": base_n_epochs,
+                "batch_size": base_batch_size,
                 "chunk_context": None,
                 "predict_batch_size": 20,
             }
@@ -41,8 +43,8 @@ class _BaseBert(SourceModel):
         elif config.optimize_for.lower() == "predict_speed":
             overrides = {
                 "max_length": 128 if config.chunk_long_sequences else base_max_length,
-                "n_epochs": 8,
-                "batch_size": 2,
+                "n_epochs": base_n_epochs,
+                "batch_size": base_batch_size,
                 "chunk_context": 16,
                 "predict_batch_size": 48,
             }

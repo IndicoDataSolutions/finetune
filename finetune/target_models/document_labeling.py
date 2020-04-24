@@ -2,19 +2,24 @@ from finetune.target_models.sequence_labeling import SequenceLabeler, SequencePi
 from finetune.encoding.input_encoder import EncodedOutput
 
 def get_context(document, dpi_norm):
+    """
+    Gets the context as formatted for the DocRep base model from 
+    the output of indico's PDFExtraction api.
+    """
     context = []
     for page in document:
+        # This norm factor is 
+        if dpi_norm:
+            dpi = page["pages"][0]["dpi"]
+            x_norm = 300 / dpi["dpix"]
+            y_norm = 300 / dpi["dpiy"]
+        else:
+            x_norm = 1.
+            y_norm = 1.
+
         for token in page["tokens"]:
             pos = token["position"]
             offset = token["doc_offset"]
-            if dpi_norm:
-                dpi = page["pages"][0]["dpi"]
-                x_norm = 300 / dpi["dpix"]
-                y_norm = 300 / dpi["dpiy"]
-            else:
-                x_norm = 1.
-                y_norm = 1.
-
             context.append(
                 {
                     'top': pos["top"] * y_norm,
@@ -74,7 +79,8 @@ class DocumentPipeline(SequencePipeline):
                 
             if Y is not None:
                 for yii in Y[i]:
-                    assert yii["text"] == joined_text[yii["start"]: yii["end"]]
+                    if "text" in yii:
+                        assert yii["text"] == joined_text[yii["start"]: yii["end"]]
                 sample["Y"] = Y[i]
             out.append(sample)
         return out
