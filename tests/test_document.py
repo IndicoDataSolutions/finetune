@@ -1,7 +1,20 @@
+import os
 import json
 import unittest
+
+import pandas as pd
+
+from sklearn.model_selection import train_test_split
+
 from finetune import DocumentLabeler
 from finetune.base_models import DocRep
+
+from finetune.util.metrics import sequence_labeling_micro_token_f1
+    
+
+
+
+DATA_PATH = os.path.join("Data", "Sequence", "doc_rep_integration.csv")
 
 class TestDocumentLabeler(unittest.TestCase):
     def setUp(self):
@@ -43,7 +56,6 @@ class TestDocumentLabeler(unittest.TestCase):
                 del p["confidence"]
                 self.assertEqual(p, l)
 
-    @unittest.skip
     def test_fit_predict_doc_rep(self):
         model = DocumentLabeler(n_epochs=20, base_model=DocRep, crf_sequence_labeling=True)
         model.fit(self.documents, self.labels)
@@ -56,4 +68,27 @@ class TestDocumentLabeler(unittest.TestCase):
             for p, l in zip(pred, lab):
                 del p["confidence"]
                 self.assertEqual(p, l)
+
+    def test_integration(self):
+        model = DocumentLabeler(base_model=DocRep, crf_sequence_labeling=True)
+        df = pd.read_csv(DATA_PATH)
+        
+        ocr = [json.loads(o) for o in df.ocr.values]
+        labels = [json.loads(l) for l in df.labels.values]
+
+        train_ocr, test_ocr, train_labels, test_labels = train_test_split(ocr, labels, random_state=42, test_size=0.2)
+
+        model.fit(train_ocr, train_labels)
+        model_preds = model.predict(test_ocr)
+        model_f1 = sequence_labeling_micro_token_f1(test_labels, model_preds)
+
+        baseline_model = DocumentLabeler() # RoBERTa
+        baseline_model.fit(train_ocr, train_labels)
+        baseline_model_preds = baseline_model.predict(test_ocr)
+        baseline_model_f1 = sequence_labeling_micro_token_f1(test_labels, baseline_model_preds)
+        print(model_f1, baseline_model_f1)
+        self.assertGreater(model_f1, baseline_model_f1)
+
+
+        
 
