@@ -189,8 +189,6 @@ class SequenceLabeler(BaseModel):
         all_labels = []
         all_probs = []
         all_positions = []
-        chunk_size = self.config.max_length - 2
-        step_size = chunk_size // 3
         doc_idx = -1
         raw_text = [data.get("raw_text", data["X"]) for data in zipped_data]
         for token_start_idx, token_end_idx, start_of_doc, end_of_doc, label_seq, proba_seq, start, end in self.process_long_sequence(zipped_data, **kwargs):
@@ -201,8 +199,8 @@ class SequenceLabeler(BaseModel):
                 doc_probs = []
                 doc_positions = []
                 doc_starts = []
-
                 doc_idx += 1
+                last_end = 0
 
             label_seq = label_seq[start:end]
             end_of_token_seq = token_end_idx[start:end]
@@ -210,13 +208,18 @@ class SequenceLabeler(BaseModel):
             proba_seq = proba_seq[start:end]
 
             for label, start_idx, end_idx, proba in zip(label_seq, start_of_token_seq, end_of_token_seq, proba_seq):
-                if end == -1:
+                if end_idx == -1:
                     # indicates padding / special tokens
                     continue
+                
+                assert start_idx >= last_end, "Start idx: {}, last_end: {}".format(start_idx, last_end)
+                last_end = end_idx
+
 
                 # if there are no current subsequences
                 # or the current subsequence has the wrong label
                 if not doc_subseqs or label != doc_labels[-1] or per_token:
+                    assert start_idx <= end_idx, "Start: {}, End: {}".format(start_idx, end_idx)
                     # start new subsequence
                     doc_subseqs.append(raw_text[doc_idx][start_idx: end_idx])
                     doc_labels.append(label)
@@ -225,6 +228,7 @@ class SequenceLabeler(BaseModel):
                     doc_starts.append(start_idx)
                 else:
                     # continue appending to current subsequence
+                    assert doc_starts[-1] <= end_idx, "Start: {}, End: {}".format(doc_starts[-1], end_idx)
                     doc_subseqs[-1] = raw_text[doc_idx][doc_starts[-1]: end_idx]
                     doc_probs[-1].append(proba)
 
