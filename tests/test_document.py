@@ -86,5 +86,5 @@ class TestDocumentLabeler(unittest.TestCase):
         baseline_model.fit(train_ocr, train_labels)
         baseline_model_preds = baseline_model.predict(test_ocr)
         baseline_model_f1 = sequence_labeling_micro_token_f1(test_labels, baseline_model_preds)
-        print(model_f1, baseline_model_f1)
         self.assertGreater(model_f1, baseline_model_f1)
+        self.assertGreater(model_f1, 0.95)
