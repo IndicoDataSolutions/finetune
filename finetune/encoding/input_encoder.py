@@ -46,6 +46,31 @@ def _flatten(nested_lists):
     return functools.reduce(lambda x, y: x + y, nested_lists, [])
 
 
+def _remove_repeated_whitespace(encoded):
+    batch_token_idxs = []
+    batch_tokens = []
+    batch_char_ends = []
+    batch_char_starts = []
+    for token_ids, tokens, token_ends, token_starts in zip(
+            encoded.token_ids,
+            encoded.tokens,
+            encoded.token_ends,
+            encoded.token_starts
+    ):
+        mask = [i != 0 and token == tokens[i - 1] == " " for i, token in enumerate(tokens)]
+        batch_token_idxs.append([x for x, c in zip(token_ids, mask) if not c])
+        batch_tokens.append([x for x, c in zip(tokens, mask) if not c])
+        batch_char_ends.append([x for x, c in zip(token_ends, mask) if not c])
+        batch_char_starts.append([x for x, c in zip(token_starts, mask) if not c])
+    
+    return EncodedOutput(
+	token_ids=batch_token_idxs,
+        tokens=batch_tokens,
+        token_ends=batch_char_ends,
+        token_starts=batch_char_starts,
+    )
+
+
 class SingletonMeta(type):
     _instances = {}
     def __call__(cls, *args, **kwargs):
@@ -159,7 +184,7 @@ class BaseEncoder(metaclass=SingletonMeta):
     def _token_length(self, token):
         return len(token)
 
-    def encode_multi_input(self, Xs, max_length=None):
+    def encode_multi_input(self, Xs, max_length=None, remove_repeated_whitespace=False):
         """
         Encodes the text for passing to the model, also tracks the location of each token to allow reconstruction.
         It can also, optionally, construct a per-token labels as required for training.
@@ -169,6 +194,8 @@ class BaseEncoder(metaclass=SingletonMeta):
         :return: A Labeled Sequence Object.
         """
         encoded = self._encode(Xs)
+        if remove_repeated_whitespace:
+            encoded = _remove_repeated_whitespace(encoded)
         # merge fields + truncate if necessary
         token_ids = self._cut_and_concat(encoded=encoded.token_ids, max_length=max_length)
         tokens = self._cut_and_concat(encoded=encoded.tokens, max_length=max_length)

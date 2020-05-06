@@ -348,6 +348,7 @@ class BasePipeline(metaclass=ABCMeta):
             encoded = self.text_encoder.encode_multi_input(
                 Xs,
                 max_length=sys.maxsize,
+                remove_repeated_whitespace=self.config.collapse_whitespace,
             )
             length = len(encoded.token_ids)
             field_starts_and_ends = dict()

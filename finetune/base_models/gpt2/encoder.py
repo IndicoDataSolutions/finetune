@@ -198,7 +198,6 @@ class GPT2Encoder(BaseEncoder):
                     lens[i] = len(tok.strip())
                     
                 token_char_ends = np.cumsum(lens) + token_start
-                
                 token_char_starts = [token_start] + token_char_ends[:-1].tolist()
                 token_start += len(token.strip())
                 char_ends.extend(token_char_ends)
