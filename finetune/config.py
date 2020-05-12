@@ -48,7 +48,7 @@ def all_gpus(visible_gpus=None):
         GPU 2: GeForce GTX TITAN X (UUID: GPU-9e01f108-e7de-becd-2589-966dcc1c778f)
     """
     if visible_gpus is not None:
-        visible_gpus = [int(gpu) for gpu in visible_gpus]
+        return [int(gpu) for gpu in visible_gpus]
     try:
         cuda_visible_devices = os.getenv("CUDA_VISIBLE_DEVICES")
         device_ids = nvidia_device_ids()
@@ -62,14 +62,6 @@ def all_gpus(visible_gpus=None):
             }
             mapping = {
                 dev_id: i for i, (dev_id, _) in enumerate(sorted(device_ids.items()))
-            }
-
-        # restricting GPUs based on config
-        if visible_gpus is not None:
-            device_ids = {
-                device_id: description
-                for device_id, description in device_ids.items()
-                if device_id in visible_gpus
             }
 
         LOGGER.info(
