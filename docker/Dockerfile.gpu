@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 FROM tensorflow/tensorflow:2.2.0-gpu
+=======
+FROM tensorflow/tensorflow:1.15.2-gpu-py3
+>>>>>>> ADD: optimize loss port from contrib
 LABEL Author="Ben Townsend, Madison May"
 
 # tensorboard
