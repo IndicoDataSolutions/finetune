@@ -201,7 +201,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 
         if self.config.keep_best_model:
             if self.config.val_size <= 10:
-                tf.logging.warning(
+                tf.compat.v1.logging.warning(
                     "Early stopping / keeping best model with a validation size of {} is likely to case undesired results".format(
                         self.config.val_size
                     )
@@ -267,7 +267,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         resolved_gpus_string = ['/gpu:{}'.format(gpu) for gpu in resolved_gpus]
         if len(resolved_gpus_string) == 1:
-            distribute_strategy = tf.contrib.distribute.OneDeviceStrategy(resolved_gpus_string[0])
+            distribute_strategy = tf.distribute.OneDeviceStrategy(resolved_gpus_string[0])
         else:
             if self.config.per_process_gpu_memory_fraction is not None:
                 warnings.warn("Setting `per_process_gpu_memory_fraction` is currently unsupported in multi-gpu environments.")
@@ -286,7 +286,7 @@ class BaseModel(object, metaclass=ABCMeta):
         return distribute_strategy
 
     def _get_estimator_config(self):
-        conf = tf.ConfigProto(
+        conf = tf.compat.v1.ConfigProto(
             allow_soft_placement=self.config.soft_device_placement,
             log_device_placement=self.config.log_device_placement,
         )
@@ -296,7 +296,7 @@ class BaseModel(object, metaclass=ABCMeta):
             )
         optimizer_options = conf.graph_options.optimizer_options
         if self.config.xla:                                                     
-            optimizer_options.global_jit_level = tf.OptimizerOptions.ON_1 
+            optimizer_options.global_jit_level = tf.compat.v1.OptimizerOptions.ON_1 
 
         distribute_strategy = self._distribute_strategy(self.config.visible_gpus)
         config = tf.estimator.RunConfig(
@@ -526,7 +526,7 @@ class BaseModel(object, metaclass=ABCMeta):
         seed = seed or self.config.seed
         random.seed(seed)
         np.random.seed(seed)
-        tf.set_random_seed(seed)
+        tf.compat.v1.set_random_seed(seed)
 
     @property
     def classes(self):

@@ -62,5 +62,5 @@ def class_weight_tensor(class_weights, target_dim, label_encoder):
     for i, cls in enumerate(label_encoder.target_labels):
         class_weight_arr[i] = class_weights.get(cls, 1.0)
 
-    class_weight_tensor = tf.convert_to_tensor(class_weight_arr)
+    class_weight_tensor = tf.convert_to_tensor(value=class_weight_arr)
     return class_weight_tensor

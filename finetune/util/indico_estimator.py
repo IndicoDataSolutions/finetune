@@ -2,11 +2,11 @@ import numpy as np
 import tensorflow as tf
 
 def placeholder_like(tensor):
-    return tf.placeholder(tensor.dtype, shape=tensor.shape)
+    return tf.compat.v1.placeholder(tensor.dtype, shape=tensor.shape)
 
 
 def parse_input_fn_result(result):
-    iterator = tf.data.make_initializable_iterator(result)
+    iterator = tf.compat.v1.data.make_initializable_iterator(result)
     init = iterator.initializer
     result = iterator.get_next()
     return result, init
@@ -29,7 +29,7 @@ class IndicoEstimator(tf.estimator.Estimator):
             features, initializer = parse_input_fn_result(result)
             if type(features) == tuple and predict:
                 features = features[0]
-            with tf.Session(config=self._session_config) as sess:
+            with tf.compat.v1.Session(config=self._session_config) as sess:
                 sess.run(initializer)
                 output = []
                 while True:
@@ -58,7 +58,7 @@ class IndicoEstimator(tf.estimator.Estimator):
                 yield_single_examples=True):
         # Check that model has been trained.
         self.g = self.g or tf.Graph()
-        tf.set_random_seed(self._config.tf_random_seed)
+        tf.compat.v1.set_random_seed(self._config.tf_random_seed)
         features_real, features = self.get_features_from_fn(input_fn)
         with self.g.as_default():
             if self.estimator_spec is None:
@@ -66,10 +66,10 @@ class IndicoEstimator(tf.estimator.Estimator):
                 if not checkpoint_path:
                     checkpoint_path = tf.train.latest_checkpoint(self._model_dir)
                 if not checkpoint_path:
-                    tf.logging.info('Could not find trained model in model_dir: {}, running '
+                    tf.compat.v1.logging.info('Could not find trained model in model_dir: {}, running '
                                     'initialization to predict.'.format(self._model_dir))
 
-                self.placeholder_feats = tf.contrib.framework.nest.map_structure(placeholder_like, features)
+                self.placeholder_feats = tf.nest.map_structure(placeholder_like, features)
                 self.estimator_spec = self._call_model_fn(
                     self.placeholder_feats, None, tf.estimator.ModeKeys.PREDICT, self.config)
                 # Call to warm_start has to be after model_fn is called.
@@ -80,8 +80,8 @@ class IndicoEstimator(tf.estimator.Estimator):
                 all_hooks = hooks or []
                 all_hooks.extend(list(self.estimator_spec.prediction_hooks or []))
 
-                self.mon_sess = tf.train.MonitoredSession(
-                    session_creator=tf.train.ChiefSessionCreator(
+                self.mon_sess = tf.compat.v1.train.MonitoredSession(
+                    session_creator=tf.compat.v1.train.ChiefSessionCreator(
                         checkpoint_filename_with_path=checkpoint_path,
                         master=self._config.master,
                         scaffold=self.estimator_spec.scaffold,

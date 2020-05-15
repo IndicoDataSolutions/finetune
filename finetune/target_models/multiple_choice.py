@@ -152,7 +152,7 @@ class MultipleChoice(BaseModel):
         if "context" in featurizer_state:
             context_embed = featurizer_state["context"]
             featurizer_state['features'] = tf.concat(
-                (featurizer_state['features'], tf.reduce_mean(context_embed, 2)), -1
+                (featurizer_state['features'], tf.reduce_mean(input_tensor=context_embed, axis=2)), -1
             )
 
     def _target_model(
@@ -169,7 +169,7 @@ class MultipleChoice(BaseModel):
         )
 
     def _predict_op(self, logits, **kwargs):
-        return tf.argmax(logits, -1)
+        return tf.argmax(input=logits, axis=-1)
 
     def _predict_proba_op(self, logits, **kwargs):
         return tf.nn.softmax(logits, -1)

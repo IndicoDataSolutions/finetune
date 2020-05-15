@@ -43,7 +43,7 @@ def _fn_with_custom_grad(fn, inputs, grad_fn, use_global_vars=False, use_entire_
     Returns:
       fn(*inputs)
     """
-    vs = tf.get_variable_scope()
+    vs = tf.compat.v1.get_variable_scope()
 
     # Use a function attribute to store the local variables. This means that on graph rebuild,
     # When variables already exist we know what variables relate to this function.
@@ -67,7 +67,7 @@ def _fn_with_custom_grad(fn, inputs, grad_fn, use_global_vars=False, use_entire_
 
     def custom_grad_fn(op, *dys):
         """Custom grad fn applying grad_fn for identity Defun."""
-        fn_inputs, fn_vars, fn_outputs = tf.contrib.framework.nest.pack_sequence_as(
+        fn_inputs, fn_vars, fn_outputs = tf.nest.pack_sequence_as(
             defun_inputs, list(op.inputs))
         dys = list(dys)
         assert len(fn_outputs) == len(outputs)
@@ -91,10 +91,10 @@ def _fn_with_custom_grad(fn, inputs, grad_fn, use_global_vars=False, use_entire_
         python_grad_func=custom_grad_fn,
         shape_func=lambda _: [t.get_shape() for t in outputs])
     def identity(*args):
-        _, _, outs = tf.contrib.framework.nest.pack_sequence_as(defun_inputs, args)
+        _, _, outs = tf.nest.pack_sequence_as(defun_inputs, args)
         return tuple([tf.identity(t) for t in outs])
 
-    flat_inputs = tf.contrib.framework.nest.flatten(defun_inputs)
+    flat_inputs = tf.nest.flatten(defun_inputs)
     id_out = identity(*flat_inputs)
 
     return id_out
@@ -142,7 +142,6 @@ def _recompute_grad(fn, args, use_entire_scope):
     """See recompute_grad."""
 
     cached_vs = []
-    cached_arg_scope = []
 
     def grad_fn(inputs, variables, outputs, output_grads):
         """Recompute outputs for gradient computation."""
@@ -150,15 +149,14 @@ def _recompute_grad(fn, args, use_entire_scope):
         variables = [underlying_variable_ref(v) for v in variables]
         # Recompute outputs
         with tf.control_dependencies(output_grads):
-            with tf.contrib.framework.arg_scope(cached_arg_scope[0]):
-                with tf.variable_scope(cached_vs[0], reuse=True):
-                    outputs = fn(*inputs)
+            with tf.compat.v1.variable_scope(cached_vs[0], reuse=True):
+                outputs = fn(*inputs)
 
         if not isinstance(outputs, (list, tuple)):
             outputs = [outputs]
         outputs = list(outputs)
         input_vars = inputs + variables
-        grads = tf.gradients(outputs, input_vars, output_grads)
+        grads = tf.gradients(ys=outputs, xs=input_vars, grad_ys=output_grads)
 
         grad_inputs = grads[:len(inputs)]
         grad_vars = grads[len(inputs):]
@@ -166,8 +164,7 @@ def _recompute_grad(fn, args, use_entire_scope):
 
     @fn_with_custom_grad(grad_fn, use_entire_scope=use_entire_scope)
     def fn_with_recompute(*args):
-        cached_vs.append(tf.get_variable_scope())
-        cached_arg_scope.append(tf.contrib.framework.current_arg_scope())
+        cached_vs.append(tf.compat.v1.get_variable_scope())
         return fn(*args)
 
     return fn_with_recompute(*args)

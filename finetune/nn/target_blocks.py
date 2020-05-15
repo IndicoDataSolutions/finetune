@@ -19,38 +19,38 @@ def perceptron(x, ny, config, w_init=None, b_init=None):
     :param b_init: Bias initializer.
     :return: The output of the perceptron model.
     """
-    w_init = w_init or tf.random_normal_initializer(stddev=config.weight_stddev)
-    b_init = b_init or tf.constant_initializer(0)
+    w_init = w_init or tf.compat.v1.random_normal_initializer(stddev=config.weight_stddev)
+    b_init = b_init or tf.compat.v1.constant_initializer(0)
 
-    with tf.variable_scope('perceptron'):
+    with tf.compat.v1.variable_scope('perceptron'):
         nx = config.n_embed
-        w = tf.get_variable("w", [nx, ny], initializer=w_init)
-        b = tf.get_variable("b", [ny], initializer=b_init)
+        w = tf.compat.v1.get_variable("w", [nx, ny], initializer=w_init)
+        b = tf.compat.v1.get_variable("b", [ny], initializer=b_init)
         return tf.matmul(x, w) + b
 
 
 def masked_language_model(*, X, mlm_weights, mlm_ids, mlm_positions, embed_weights, hidden, config, reuse=None, train=False):
     
-    with tf.variable_scope('model/masked-language-model'):
+    with tf.compat.v1.variable_scope('model/masked-language-model'):
         batch, seq, feats = shape_list(hidden)
         flat_offsets = tf.reshape(
             tf.range(0, batch, dtype=tf.int32) * seq, [-1, 1]
         )
 
         not_padding = tf.reshape(mlm_weights, [-1]) > 1e-9
-        flat_positions = tf.boolean_mask(tf.reshape(mlm_positions + flat_offsets, [-1]), not_padding) # take off the padding entirely
+        flat_positions = tf.boolean_mask(tensor=tf.reshape(mlm_positions + flat_offsets, [-1]), mask=not_padding) # take off the padding entirely
         gathered_hidden = tf.gather(tf.reshape(hidden, [batch * seq, feats]), flat_positions)
-        mlm_ids = tf.boolean_mask(tf.reshape(mlm_ids, [-1]), not_padding)
+        mlm_ids = tf.boolean_mask(tensor=tf.reshape(mlm_ids, [-1]), mask=not_padding)
         
-        final_proj_w = tf.get_variable(
+        final_proj_w = tf.compat.v1.get_variable(
             'dense/kernel',
             [config.n_embed, config.n_embed],
-            initializer=tf.random_normal_initializer(stddev=config.weight_stddev)
+            initializer=tf.compat.v1.random_normal_initializer(stddev=config.weight_stddev)
         )
-        final_proj_b = tf.get_variable(
+        final_proj_b = tf.compat.v1.get_variable(
             'dense/bias',
             [config.n_embed],
-            initializer=tf.zeros_initializer
+            initializer=tf.compat.v1.zeros_initializer
         )
         final_proj = act_fns[config.act_fn](
             tf.matmul(gathered_hidden, final_proj_w, transpose_b=True) + final_proj_b
@@ -58,18 +58,18 @@ def masked_language_model(*, X, mlm_weights, mlm_ids, mlm_positions, embed_weigh
 
         normed_proj = norm(final_proj, 'LayerNorm')
         n_vocab = shape_list(embed_weights)[0]
-        output_bias = tf.get_variable(
+        output_bias = tf.compat.v1.get_variable(
             "output_bias",
             shape=[n_vocab],
-            initializer=tf.zeros_initializer()
+            initializer=tf.compat.v1.zeros_initializer()
         )
         
         logits = tf.matmul(normed_proj, embed_weights, transpose_b=True)
         logits = tf.nn.bias_add(logits, output_bias)
         
-        mlm_loss = tf.contrib.losses.sparse_softmax_cross_entropy(            
-            logits,
-            mlm_ids,
+        mlm_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(            
+            logits=logits,
+            labels=mlm_ids,
         ) # No weights needed as there is no padding.
 
         logits = tf.scatter_nd(
@@ -106,22 +106,22 @@ def language_model(*, X, sequence_lengths, embed_weights, hidden, config, reuse=
     batch, seq = shape_list(X)
     vocab_size, hidden_dim = shape_list(embed_weights)
 
-    with tf.variable_scope('model/language-model', reuse=reuse):
+    with tf.compat.v1.variable_scope('model/language-model', reuse=reuse):
         # language model ignores last hidden state because we don't have a target
         lm_h = tf.reshape(hidden, [-1, config.n_embed])  # [batch, seq_len, embed] --> [batch * seq_len, embed]
         lm_logits = tf.matmul(lm_h, embed_weights, transpose_b=True)  # tied weights
         lm_logits = tf.cast(lm_logits, tf.float32)
-        hidden_shape = tf.shape(hidden)
+        hidden_shape = tf.shape(input=hidden)
         logits = tf.reshape(lm_logits, shape=tf.concat([hidden_shape[:-1], [vocab_size]], axis=0))
         lm_logits_offset = tf.reshape(logits[:, :-1], [-1, vocab_size])
         
-        lm_losses = tf.losses.sparse_softmax_cross_entropy(
+        lm_losses = tf.compat.v1.losses.sparse_softmax_cross_entropy(
             logits=lm_logits_offset,
             labels=tf.reshape(X[:, 1:], [-1]),
             weights=tf.reshape(M[:, 1:], [-1])
         )
 
-        perplexity = tf.reduce_sum(tf.exp(lm_losses) * M[:, 1:], 1) / tf.reduce_sum(M[:, 1:], 1)
+        perplexity = tf.reduce_sum(input_tensor=tf.exp(lm_losses) * M[:, 1:], axis=1) / tf.reduce_sum(input_tensor=M[:, 1:], axis=1)
 
         return {
             "logits": logits,
@@ -134,10 +134,10 @@ def _apply_class_weight(losses, targets, class_weights=None):
     if class_weights is not None:
         # loss multiplier applied based on true class
         weights = (
-            tf.reduce_sum(class_weights * tf.to_float(targets), axis=1)
+            tf.reduce_sum(input_tensor=class_weights * tf.cast(targets, dtype=tf.float32), axis=1)
         )
-        weights *= tf.to_float(tf.reduce_prod(tf.shape(weights))) / tf.reduce_sum(
-            weights
+        weights *= tf.cast(tf.reduce_prod(input_tensor=tf.shape(input=weights)), dtype=tf.float32) / tf.reduce_sum(
+            input_tensor=weights
         )
         losses *= tf.expand_dims(weights, 1)
     return losses
@@ -148,12 +148,12 @@ def _apply_multilabel_class_weight(losses, targets, class_weights=None):
         # loss multiplier applied based on true class
         weights = (
             # contribution of positive class
-            class_weights * tf.to_float(targets) + 
+            class_weights * tf.cast(targets, dtype=tf.float32) + 
             # contribution of negative class
-            tf.ones_like(class_weights) * (1 - tf.to_float(targets))
+            tf.ones_like(class_weights) * (1 - tf.cast(targets, dtype=tf.float32))
         )
-        weights *= tf.to_float(tf.reduce_prod(tf.shape(weights))) / tf.reduce_sum(
-            weights
+        weights *= tf.cast(tf.reduce_prod(input_tensor=tf.shape(input=weights)), dtype=tf.float32) / tf.reduce_sum(
+            input_tensor=weights
         )
         losses *= weights
     return losses
@@ -175,13 +175,13 @@ def classifier(hidden, targets, n_targets, config, train=False, reuse=None, **kw
         logits: The unnormalised log probabilities of each class.
         losses: The loss for the classifier.
     """
-    with tf.variable_scope("classifier", reuse=reuse):
+    with tf.compat.v1.variable_scope("classifier", reuse=reuse):
         hidden = dropout(hidden, config.clf_p_drop, train)
         clf_logits = perceptron(hidden, n_targets, config)
         if targets is None:
             clf_losses = None
         else:
-            clf_losses = tf.nn.softmax_cross_entropy_with_logits_v2(
+            clf_losses = tf.nn.softmax_cross_entropy_with_logits(
                 logits=clf_logits, labels=tf.stop_gradient(targets)
             )
 
@@ -201,7 +201,7 @@ def multi_choice_question(
     reuse=None, 
     **kwargs
 ):
-    with tf.variable_scope("model", reuse=reuse):
+    with tf.compat.v1.variable_scope("model", reuse=reuse):
         if targets is not None:
             targets = tf.cast(targets, tf.int32)
         hidden = dropout(hidden, config.clf_p_drop, train)
@@ -243,7 +243,7 @@ def multi_classifier(
         logits: The unnormalised log probabilities of each class.
         losses: The loss for the classifier.
     """
-    with tf.variable_scope("model", reuse=reuse):
+    with tf.compat.v1.variable_scope("model", reuse=reuse):
         hidden = dropout(hidden, config.clf_p_drop, train)
         clf_logits = perceptron(hidden, n_targets, config)
         if targets is None:
@@ -274,7 +274,7 @@ def regressor(hidden, targets, n_targets, config, train=False, reuse=None, **kwa
         logits: The regression outputs.
         losses: L2 Loss for the regression targets.
     """
-    with tf.variable_scope("regressor", reuse=reuse):
+    with tf.compat.v1.variable_scope("regressor", reuse=reuse):
         hidden = dropout(hidden, config.clf_p_drop, train)
         outputs = perceptron(hidden, n_targets, config)
         if targets is None:
@@ -318,14 +318,14 @@ def ordinal_regressor(
         logits: The regression outputs.
         losses: All-threshold Loss for the regression targets.
     """
-    with tf.variable_scope("ordinalregressor", reuse=reuse):
+    with tf.compat.v1.variable_scope("ordinalregressor", reuse=reuse):
         hidden = dropout(hidden, config.clf_p_drop, train)
         if shared_threshold_weights:
-            w_init = tf.random_normal_initializer(stddev=config.weight_stddev)
-            b_init = tf.random_normal_initializer(0)
+            w_init = tf.compat.v1.random_normal_initializer(stddev=config.weight_stddev)
+            b_init = tf.compat.v1.random_normal_initializer(0)
             nx = config.n_embed
-            w = tf.get_variable("w", [nx, 1], initializer=w_init)
-            b = tf.get_variable("b", [n_targets], initializer=b_init)
+            w = tf.compat.v1.get_variable("w", [nx, 1], initializer=w_init)
+            b = tf.compat.v1.get_variable("b", [n_targets], initializer=b_init)
             logits = tf.matmul(hidden, w) + b
         else:
             logits = perceptron(hidden, n_targets, config)
@@ -346,7 +346,7 @@ def class_reweighting(class_weights):
     def custom_grad(logits):
         def grad(g):
             new_g = g * class_weights
-            ratio = tf.norm(g) / tf.norm(new_g)
+            ratio = tf.norm(tensor=g) / tf.norm(tensor=new_g)
             return new_g * ratio
 
         return tf.identity(logits), grad
@@ -392,7 +392,7 @@ def sequence_labeler(
         "losses": The negative log likelihood for the sequence targets.
         "predict_params": A dictionary of params to be fed to the viterbi decode function.
     """
-    with tf.variable_scope("sequence-labeler", reuse=reuse):
+    with tf.compat.v1.variable_scope("sequence-labeler", reuse=reuse):
 
         if targets is not None:
             targets = tf.cast(targets, dtype=tf.int32)
@@ -416,13 +416,13 @@ def sequence_labeler(
                 )
                 n = norm(attn_fn(hidden) + hidden, "seq_label_residual")
             
-            flat_logits = tf.layers.dense(n, n_targets)
+            flat_logits = tf.compat.v1.layers.dense(n, n_targets)
             logits = tf.reshape(
-                flat_logits, tf.concat([tf.shape(hidden)[:2], [n_targets]], 0)
+                flat_logits, tf.concat([tf.shape(input=hidden)[:2], [n_targets]], 0)
             )
             return logits
 
-        with tf.variable_scope("seq_lab_attn"):
+        with tf.compat.v1.variable_scope("seq_lab_attn"):
             if config.low_memory_mode and train:
                 seq_lab_internal = recompute_grad(
                     seq_lab_internal, use_entire_scope=True
@@ -432,8 +432,8 @@ def sequence_labeler(
 
         loss = 0.0
 
-        default_lengths = tf.shape(hidden)[1] * tf.ones(
-            tf.shape(hidden)[0], dtype=tf.int32
+        default_lengths = tf.shape(input=hidden)[1] * tf.ones(
+            tf.shape(input=hidden)[0], dtype=tf.int32
         )
         if lengths is None:
             lengths = default_lengths
@@ -449,7 +449,7 @@ def sequence_labeler(
                 logits = []
                 for i in range(n_targets):
                     transition_params.append(
-                        tf.cast(tf.get_variable("Transition_matrix_{}".format(i), shape=[2, 2]), tf.float32)
+                        tf.cast(tf.compat.v1.get_variable("Transition_matrix_{}".format(i), shape=[2, 2]), tf.float32)
                     )
                     logits.append(
                         tf.stack(
@@ -472,7 +472,7 @@ def sequence_labeler(
                             )[0]
                         else:
                             weights = tf.sequence_mask(
-                                lengths, maxlen=tf.shape(targets_individual[i])[1], dtype=tf.float32
+                                lengths, maxlen=tf.shape(input=targets_individual[i])[1], dtype=tf.float32
                             ) / tf.expand_dims(tf.cast(lengths, tf.float32), -1)
                             loss += tf.compat.v1.losses.sparse_softmax_cross_entropy(
                                 targets_individual[i],
@@ -485,12 +485,12 @@ def sequence_labeler(
                     class_weights = tf.reshape(class_weights, [1, 1, -1])
                     one_hot_class_weights = class_weights * tf.one_hot(targets, depth=n_targets)
                     per_token_weights = tf.reduce_sum(
-                        one_hot_class_weights, axis=-1, keep_dims=True
+                        input_tensor=one_hot_class_weights, axis=-1, keepdims=True
                     )
                     logits = class_reweighting(per_token_weights)(logits)
                                                                                                           
                 transition_params = tf.cast(
-                    tf.get_variable(
+                    tf.compat.v1.get_variable(
                         "Transition_matrix", shape=[n_targets, n_targets]
                     ),
                     tf.float32
@@ -503,7 +503,7 @@ def sequence_labeler(
                         loss = -log_likelihood
                     else:
                         weights = tf.sequence_mask(
-                            lengths, maxlen=tf.shape(targets)[1], dtype=tf.float32
+                            lengths, maxlen=tf.shape(input=targets)[1], dtype=tf.float32
                         ) / tf.expand_dims(tf.cast(lengths, tf.float32), -1)
                         loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(
                             targets,
@@ -540,7 +540,7 @@ def association(
         "losses": The negative log likelihood for the sequence targets.
         "predict_params": A dictionary of params to be fed to the viterbi decode function.
     """
-    with tf.variable_scope("sequence-labeler", reuse=reuse):
+    with tf.compat.v1.variable_scope("sequence-labeler", reuse=reuse):
         nx = config.n_embed
         length = config.max_length
         num_associations = len(config.association_types) + 1
@@ -559,14 +559,14 @@ def association(
                 lengths=lengths,
             )
             n = norm(attn_fn(hidden) + hidden, "seq_label_residual")
-            flat_logits = tf.layers.dense(n, n_targets)
+            flat_logits = tf.compat.v1.layers.dense(n, n_targets)
             logits = tf.reshape(
-                flat_logits, tf.concat([tf.shape(hidden)[:2], [n_targets]], 0)
+                flat_logits, tf.concat([tf.shape(input=hidden)[:2], [n_targets]], 0)
             )
 
-            association_head = tf.layers.dense(n, nx)
+            association_head = tf.compat.v1.layers.dense(n, nx)
             association_head = tf.reshape(
-                association_head, tf.concat([tf.shape(hidden)[:2], [nx]], 0)
+                association_head, tf.concat([tf.shape(input=hidden)[:2], [nx]], 0)
             )
 
             a = tf.expand_dims(association_head, 1)
@@ -582,7 +582,7 @@ def association(
                 ],
                 axis=-1,
             )
-            associations_flat = tf.layers.dense(
+            associations_flat = tf.compat.v1.layers.dense(
                 tf.reshape(features, shape=[-1, nx * 4]), num_associations
             )
             associations = tf.reshape(
@@ -591,7 +591,7 @@ def association(
 
             return logits, associations_flat, associations
 
-        with tf.variable_scope("seq_lab_attn"):
+        with tf.compat.v1.variable_scope("seq_lab_attn"):
             if config.low_memory_mode and train:
                 seq_lab_internal = recompute_grad(
                     seq_lab_internal, use_entire_scope=True
@@ -605,14 +605,14 @@ def association(
         if class_weights is not None:
             logits = class_reweighting(class_weights)(logits)
 
-        transition_params = tf.get_variable(
+        transition_params = tf.compat.v1.get_variable(
             "Transition_matrix", shape=[n_targets, n_targets]
         )
         if targets is not None:
             log_likelihood, _ = crf_log_likelihood(
                 logits,
                 targets["labels"],
-                kwargs.get("max_length") * tf.ones(tf.shape(targets["labels"])[0]),
+                kwargs.get("max_length") * tf.ones(tf.shape(input=targets["labels"])[0]),
                 transition_params=transition_params,
             )
             sequence_mask = tf.sequence_mask(
@@ -620,7 +620,7 @@ def association(
             )
             mask = tf.expand_dims(sequence_mask, 1) * tf.expand_dims(sequence_mask, 2)
 
-            association_loss = tf.losses.sparse_softmax_cross_entropy(
+            association_loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(
                 logits=associations_flat,
                 labels=tf.reshape(targets["associations"], shape=[-1]),
                 weights=tf.reshape(mask, shape=[-1]),

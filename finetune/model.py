@@ -134,7 +134,7 @@ def get_model_fn(
                 target_dim=target_dim,
                 label_encoder=label_encoder,
             )
-        with tf.variable_scope("model/target"):
+        with tf.compat.v1.variable_scope("model/target"):
             pre_target_model_hook(featurizer_state)
             target_model_state = target_model_fn(
                 config=params,
@@ -169,7 +169,7 @@ def get_model_fn(
         else:
             total_num_steps = params.n_epochs * params.dataset_size // (params.batch_size * n_replicas)
             
-        with tf.variable_scope(tf.get_variable_scope(), custom_getter=var_getter):
+        with tf.compat.v1.variable_scope(tf.compat.v1.get_variable_scope(), custom_getter=var_getter):
             train_loss = 0.0
             featurizer_state = params.base_model.get_featurizer(
                 X,
@@ -201,9 +201,9 @@ def get_model_fn(
                     mode == tf.estimator.ModeKeys.TRAIN
                     or mode == tf.estimator.ModeKeys.EVAL
                 ) and Y is not None:
-                    target_loss = tf.reduce_mean(target_model_state["losses"])
+                    target_loss = tf.reduce_mean(input_tensor=target_model_state["losses"])
                     train_loss += (1 - lm_loss_coef) * target_loss
-                    tf.summary.scalar("TargetModelLoss", target_loss)
+                    tf.compat.v1.summary.scalar("TargetModelLoss", target_loss)
                 if mode == tf.estimator.ModeKeys.PREDICT or tf.estimator.ModeKeys.EVAL:
                     logits = target_model_state["logits"]
                     predict_params = target_model_state.get("predict_params", {})
@@ -257,9 +257,9 @@ def get_model_fn(
                     mode == tf.estimator.ModeKeys.TRAIN
                     or mode == tf.estimator.ModeKeys.EVAL
                 ):
-                    lm_loss = tf.reduce_mean(language_model_state["losses"])
+                    lm_loss = tf.reduce_mean(input_tensor=language_model_state["losses"])
                     train_loss += lm_loss_coef * lm_loss
-                    tf.summary.scalar("LanguageModelLoss", lm_loss)
+                    tf.compat.v1.summary.scalar("LanguageModelLoss", lm_loss)
                 if mode == tf.estimator.ModeKeys.PREDICT:
                     if lm_predict_op is not None:
                         predictions[PredictMode.GENERATE_TEXT] = lm_predict_op
@@ -305,8 +305,8 @@ def get_model_fn(
         )
         if params.eval_acc and pred_op is not None:
             LOGGER.info("Adding evaluation metrics, Accuracy")
-            labels_dense = tf.argmax(labels, -1)
-            metrics = {"Accuracy": tf.metrics.accuracy(tf.argmax(pred_op, -1), labels_dense)}
+            labels_dense = tf.argmax(input=labels, axis=-1)
+            metrics = {"Accuracy": tf.compat.v1.metrics.accuracy(tf.argmax(input=pred_op, axis=-1), labels_dense)}
         else:
             metrics = None
 

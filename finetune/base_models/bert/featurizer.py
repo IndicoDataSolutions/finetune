@@ -6,8 +6,8 @@ from finetune.base_models.bert.roberta_encoder import RoBERTaEncoder
 from finetune.base_models.bert.modeling import BertConfig, BertModel
 
 def get_decay_for_half(total_num_steps):
-    decay = tf.minimum(tf.cast(tf.train.get_global_step(), tf.float32) / (total_num_steps / 2), 1.0)
-    tf.summary.scalar("positional_decay_rate", decay)
+    decay = tf.minimum(tf.cast(tf.compat.v1.train.get_global_step(), tf.float32) / (total_num_steps / 2), 1.0)
+    tf.compat.v1.summary.scalar("positional_decay_rate", decay)
     return decay
 
 def bert_featurizer(
@@ -58,7 +58,7 @@ def bert_featurizer(
         positional_channels=config.context_channels,
     )
 
-    initial_shape = tf.shape(X)
+    initial_shape = tf.shape(input=X)
     X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-1:]), 0))
     X.set_shape([None, None])
     # To fit the interface of finetune we are going to compute the mask and type id at runtime.
@@ -66,10 +66,10 @@ def bert_featurizer(
 
     token_type_ids = tf.cumsum(delimiters, exclusive=True, axis=1)
 
-    seq_length = tf.shape(delimiters)[1]
+    seq_length = tf.shape(input=delimiters)[1]
 
     eos_idx = tf.argmax(
-        tf.cast(delimiters, tf.float32)
+        input=tf.cast(delimiters, tf.float32)
         * tf.expand_dims(
             tf.range(tf.cast(seq_length, tf.float32), dtype=tf.float32), 0
         ),
@@ -99,7 +99,7 @@ def bert_featurizer(
     else:
         reading_order_decay_rate = None
 
-    with tf.variable_scope("model/featurizer", reuse=reuse):
+    with tf.compat.v1.variable_scope("model/featurizer", reuse=reuse):
         bert = BertModel(
             config=bert_config,
             is_training=train,

@@ -266,13 +266,13 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
 class TestGradientAccumulation(unittest.TestCase):
 
     def test_gradient_accumulating_optimizer(self):
-        loss = tf.get_variable("loss", shape=1)
+        loss = tf.compat.v1.get_variable("loss", shape=1)
         lr = 0.1
-        opt = get_grad_accumulation_optimizer(tf.train.GradientDescentOptimizer, 2)(lr)
+        opt = get_grad_accumulation_optimizer(tf.compat.v1.train.GradientDescentOptimizer, 2)(lr)
         train_op = opt.minimize(tf.abs(loss))
 
-        sess = tf.Session()
-        sess.run(tf.global_variables_initializer())
+        sess = tf.compat.v1.Session()
+        sess.run(tf.compat.v1.global_variables_initializer())
         for i in range(100):
             val_before = sess.run(loss)
             grad_before = np.sign(val_before)

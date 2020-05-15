@@ -98,7 +98,7 @@ class BertConfig(object):
     @classmethod
     def from_json_file(cls, json_file):
         """Constructs a `BertConfig` from a json file of parameters."""
-        with tf.gfile.GFile(json_file, "r") as reader:
+        with tf.io.gfile.GFile(json_file, "r") as reader:
             text = reader.read()
         return cls.from_dict(json.loads(text))
 
@@ -180,8 +180,8 @@ class BertModel(object):
         if input_mask is None:
             input_mask = tf.ones(shape=[batch_size, seq_length], dtype=tf.int32)
 
-        with tf.variable_scope(scope, default_name="bert"):
-            with tf.variable_scope("embeddings"):
+        with tf.compat.v1.variable_scope(scope, default_name="bert"):
+            with tf.compat.v1.variable_scope("embeddings"):
                 # Perform embedding lookup on the word ids.
                 (self.embedding_output, self.embedding_table) = embedding_lookup(
                     input_ids=input_ids,
@@ -212,7 +212,7 @@ class BertModel(object):
                     anneal_reading_order=config.anneal_reading_order,
                 )
 
-            with tf.variable_scope("encoder"):
+            with tf.compat.v1.variable_scope("encoder"):
                 # This converts a 2D mask of shape [batch_size, seq_length] to a 3D
                 # mask of shape [batch_size, seq_length, seq_length] which is used
                 # for the attention scores.
@@ -243,13 +243,13 @@ class BertModel(object):
                 # [batch_size, hidden_size]. This is necessary for segment-level
                 # (or segment-pair-level) classification tasks where we need a fixed
                 # dimensional representation of the segment.
-            with tf.variable_scope("pooler"):
+            with tf.compat.v1.variable_scope("pooler"):
                 # We "pool" the model by simply taking the hidden state corresponding
                 # to the first token. We assume that this has been pre-trained
 
                 first_token_tensor = tf.squeeze(self.sequence_output[:, 0:1, :], axis=1)
                 if use_pooler:
-                    self.pooled_output = tf.layers.dense(
+                    self.pooled_output = tf.compat.v1.layers.dense(
                         first_token_tensor,
                         config.hidden_size,
                         activation=tf.tanh,
@@ -355,15 +355,50 @@ def dropout(input_tensor, dropout_prob):
     if dropout_prob is None or dropout_prob == 0.0:
         return input_tensor
 
-    output = tf.nn.dropout(input_tensor, 1.0 - dropout_prob)
+    output = tf.nn.dropout(input_tensor, 1 - (1.0 - dropout_prob))
     return output
 
 
 def layer_norm(input_tensor, name=None):
-    """Run layer normalization on the last dimension of the tensor."""
-    return tf.contrib.layers.layer_norm(
-        inputs=input_tensor, begin_norm_axis=-1, begin_params_axis=-1, scope=name
-    )
+    with tf.compat.v1.variable_scope(name, 'LayerNorm', [input_tensor]) as sc:
+        inputs_shape = input_tensor.shape
+        inputs_rank = inputs_shape.ndims
+
+        dtype = input_tensor.dtype.base_dtype
+        begin_norm_axis = inputs_rank -1
+
+        params_shape = inputs_shape[-1:]
+
+        # Allocate parameters for the beta and gamma of the normalization.
+        beta = tf.compat.v1.get_variable(
+            'beta',
+            shape=params_shape,
+            dtype=dtype,
+            initializer=tf.zeros_initializer(),
+            trainable=True
+        )
+        gamma = tf.compat.v1.get_variable(
+            'gamma',
+            shape=params_shape,
+            dtype=dtype,
+            initializer=tf.ones_initializer(),
+            trainable=True
+        )
+        # Calculate the moments on the last axis (layer activations).
+        norm_axes = list(range(begin_norm_axis, inputs_rank))
+        mean, variance = tf.nn.moments(input_tensor, norm_axes, keepdims=True)
+        # Compute layer normalization using the batch_normalization function.
+        variance_epsilon = 1e-12 if dtype != tf.float16 else 1e-3
+        outputs = tf.nn.batch_normalization(
+            input_tensor,
+            mean,
+            variance,
+            offset=beta,
+            scale=gamma,
+            variance_epsilon=variance_epsilon)
+        outputs.set_shape(inputs_shape)
+    return outputs
+
 
 
 def layer_norm_and_dropout(input_tensor, dropout_prob, name=None):
@@ -375,7 +410,7 @@ def layer_norm_and_dropout(input_tensor, dropout_prob, name=None):
 
 def create_initializer(initializer_range=0.02):
     """Creates a `truncated_normal_initializer` with the given range."""
-    return tf.truncated_normal_initializer(stddev=initializer_range)
+    return tf.compat.v1.truncated_normal_initializer(stddev=initializer_range)
 
 
 def embedding_lookup(
@@ -409,7 +444,7 @@ def embedding_lookup(
     if input_ids.shape.ndims == 2:
         input_ids = tf.expand_dims(input_ids, axis=[-1])
 
-    embedding_table = tf.get_variable(
+    embedding_table = tf.compat.v1.get_variable(
         name=word_embedding_name,
         shape=[vocab_size, embedding_size],
         initializer=create_initializer(initializer_range),
@@ -484,14 +519,14 @@ def embedding_postprocessor(
             raise ValueError(
                 "`token_type_ids` must be specified if" "`use_token_type` is True."
             )
-        token_type_table = tf.get_variable(
+        token_type_table = tf.compat.v1.get_variable(
             name=token_type_embedding_name,
             shape=[token_type_vocab_size, width],
             initializer=create_initializer(initializer_range),
         )
         # This vocab will be small so we always do one-hot here, since it is always
         # faster for a small vocabulary.
-        token_type_table = tf.convert_to_tensor(token_type_table)
+        token_type_table = tf.convert_to_tensor(value=token_type_table)
         flat_token_type_ids = tf.reshape(token_type_ids, [-1])
         one_hot_ids = tf.one_hot(flat_token_type_ids, depth=token_type_vocab_size, dtype=token_type_table.dtype)
         token_type_embeddings = tf.matmul(one_hot_ids, token_type_table)
@@ -501,9 +536,9 @@ def embedding_postprocessor(
         output += token_type_embeddings
 
     if use_position_embeddings:
-        assert_op = tf.assert_less_equal(seq_length, max_position_embeddings)
+        assert_op = tf.compat.v1.assert_less_equal(seq_length, max_position_embeddings)
         with tf.control_dependencies([assert_op]):
-            full_position_embeddings = tf.get_variable(
+            full_position_embeddings = tf.compat.v1.get_variable(
                 name=position_embedding_name,
                 shape=[max_position_embeddings, width],
                 initializer=create_initializer(initializer_range),
@@ -512,7 +547,7 @@ def embedding_postprocessor(
             if anneal_reading_order:
                 full_position_embeddings *= tf.cast(
                     tf.random.uniform(
-                        shape=tf.shape(full_position_embeddings
+                        shape=tf.shape(input=full_position_embeddings
                         )
                     ) > reading_order_decay_rate,
                     tf.float32
@@ -550,9 +585,9 @@ def embedding_postprocessor(
             output += position_embeddings
             
     if pos_injection:
-        init = tf.variance_scaling_initializer(scale=0.02, mode="fan_avg", distribution="truncated_normal")
+        init = tf.compat.v1.variance_scaling_initializer(scale=0.02, mode="fan_avg", distribution="truncated_normal")
         embedded_input_context = embed_position(input_context, positional_channels, batch_size, seq_length)
-        output += tf.layers.dense(embedded_input_context, width, use_bias=False, kernel_initializer=init)
+        output += tf.compat.v1.layers.dense(embedded_input_context, width, use_bias=False, kernel_initializer=init)
 
     output = layer_norm_and_dropout(output, dropout_prob)
     return output
@@ -670,7 +705,7 @@ def attention_layer(
             input_tensor, [batch_size, seq_length, num_attention_heads, width]
         )
 
-        output_tensor = tf.transpose(output_tensor, [0, 2, 1, 3])
+        output_tensor = tf.transpose(a=output_tensor, perm=[0, 2, 1, 3])
         return output_tensor
 
     from_shape = get_shape_list(from_tensor, expected_rank=[2, 3])
@@ -704,7 +739,7 @@ def attention_layer(
     to_tensor_2d = reshape_to_matrix(to_tensor)
 
     # `query_layer` = [B*F, N*H]
-    query_layer = tf.layers.dense(
+    query_layer = tf.compat.v1.layers.dense(
         from_tensor_2d,
         num_attention_heads * size_per_head,
         activation=query_act,
@@ -713,7 +748,7 @@ def attention_layer(
     )
 
     # `key_layer` = [B*T, N*H]
-    key_layer = tf.layers.dense(
+    key_layer = tf.compat.v1.layers.dense(
         to_tensor_2d,
         num_attention_heads * size_per_head,
         activation=key_act,
@@ -722,7 +757,7 @@ def attention_layer(
     )
 
     # `value_layer` = [B*T, N*H]
-    value_layer = tf.layers.dense(
+    value_layer = tf.compat.v1.layers.dense(
         to_tensor_2d,
         num_attention_heads * size_per_head,
         activation=value_act,
@@ -776,13 +811,13 @@ def attention_layer(
     )
 
     # `value_layer` = [B, N, T, H]
-    value_layer = tf.transpose(value_layer, [0, 2, 1, 3])
+    value_layer = tf.transpose(a=value_layer, perm=[0, 2, 1, 3])
 
     # `context_layer` = [B, N, F, H]
     context_layer = tf.matmul(attention_probs, value_layer)
 
     # `context_layer` = [B, F, N, H]
-    context_layer = tf.transpose(context_layer, [0, 2, 1, 3])
+    context_layer = tf.transpose(a=context_layer, perm=[0, 2, 1, 3])
 
     if do_return_2d_tensor:
         # `context_layer` = [B*F, N*H]
@@ -814,9 +849,9 @@ def full_block(
         attention_probs_dropout_prob=0.1,
         initializer_range=0.02,
 ):
-    with tf.variable_scope("attention"):
+    with tf.compat.v1.variable_scope("attention"):
         attention_heads = []
-        with tf.variable_scope("self"):
+        with tf.compat.v1.variable_scope("self"):
             attention_head = attention_layer(
                 from_tensor=layer_input,
                 to_tensor=layer_input,
@@ -841,8 +876,8 @@ def full_block(
 
         # Run a linear projection of `hidden_size` then add a residual
         # with `layer_input`.
-        with tf.variable_scope("output"):
-            attention_output = tf.layers.dense(
+        with tf.compat.v1.variable_scope("output"):
+            attention_output = tf.compat.v1.layers.dense(
                 attention_output,
                 hidden_size,
                 kernel_initializer=create_initializer(initializer_range))
@@ -850,16 +885,16 @@ def full_block(
             attention_output = layer_norm(attention_output + layer_input)
 
     # The activation is only applied to the "intermediate" hidden layer.
-    with tf.variable_scope("intermediate"):
-        intermediate_output = tf.layers.dense(
+    with tf.compat.v1.variable_scope("intermediate"):
+        intermediate_output = tf.compat.v1.layers.dense(
             attention_output,
             intermediate_size,
             activation=intermediate_act_fn,
             kernel_initializer=create_initializer(initializer_range))
 
     # Down-project back to `hidden_size` then add the residual.
-    with tf.variable_scope("output"):
-        layer_output = tf.layers.dense(
+    with tf.compat.v1.variable_scope("output"):
+        layer_output = tf.compat.v1.layers.dense(
             intermediate_output,
             hidden_size,
             kernel_initializer=create_initializer(initializer_range))
@@ -943,7 +978,7 @@ def transformer_model(input_tensor,
 
     all_layer_outputs = []
     for layer_idx in range(num_hidden_layers):
-        with tf.variable_scope("layer_%d" % layer_idx):
+        with tf.compat.v1.variable_scope("layer_%d" % layer_idx):
             layer_input = prev_output
 
             block_fn = functools.partial(full_block,
@@ -1009,7 +1044,7 @@ def get_shape_list(tensor, expected_rank=None, name=None):
     if not non_static_indexes:
         return shape
 
-    dyn_shape = tf.shape(tensor)
+    dyn_shape = tf.shape(input=tensor)
     for index in non_static_indexes:
         shape[index] = dyn_shape[index]
     return shape
@@ -1066,7 +1101,7 @@ def assert_rank(tensor, expected_rank, name=None):
 
     actual_rank = tensor.shape.ndims
     if actual_rank not in expected_rank_dict:
-        scope_name = tf.get_variable_scope().name
+        scope_name = tf.compat.v1.get_variable_scope().name
         raise ValueError(
             "For the tensor `%s` in scope `%s`, the actual rank "
             "`%d` (shape = %s) is not equal to the expected rank `%s`"

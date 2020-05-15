@@ -1,6 +1,6 @@
 import numpy as np
 import tensorflow as tf
-
+import tensorflow_addons as tfa
 
 def np_softmax(x, t=1, axis=-1):
     x = x / t
@@ -40,10 +40,10 @@ def viterbi_decode(score, transition_params):
 def sequence_decode(logits, transition_matrix, sequence_length, use_gpu_op, use_crf):
     """ A simple py_func wrapper around the Viterbi decode allowing it to be included in the tensorflow graph. """
     if not use_crf:
-        return tf.argmax(logits, -1), tf.nn.softmax(logits, -1)
+        return tf.argmax(input=logits, axis=-1), tf.nn.softmax(logits, -1)
 
     if use_gpu_op:
-        tags, _ = tf.contrib.crf.crf_decode(
+        tags, _ = tfa.text.crf.crf_decode(
             logits,
             transition_matrix,
             sequence_length
@@ -60,4 +60,4 @@ def sequence_decode(logits, transition_matrix, sequence_length, use_gpu_op, use_
                 all_logits.append(viterbi_logits)
             return np.array(all_predictions, dtype=np.int32), np.array(all_logits, dtype=np.float32)
         
-        return tf.py_func(_sequence_decode, [logits, transition_matrix], [tf.int32, tf.float32])
+        return tf.compat.v1.py_func(_sequence_decode, [logits, transition_matrix], [tf.int32, tf.float32])

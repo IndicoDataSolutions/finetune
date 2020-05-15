@@ -56,7 +56,7 @@ class SaverHook(_StopOnPredicateHook):
         if most_recent_eval == best_eval:
             self.get_current_weights = True
         steps_diff = most_recent_eval[0] - best_eval[0]
-        tf.logging.info("No improvement in {} steps".format(steps_diff))
+        tf.compat.v1.logging.info("No improvement in {} steps".format(steps_diff))
 
         if (
             steps_diff > self.early_stopping_steps
@@ -72,7 +72,7 @@ class SaverHook(_StopOnPredicateHook):
 
     def begin(self):
         super().begin()
-        self.included = tf.global_variables()
+        self.included = tf.compat.v1.global_variables()
 
     def _get_weights(self, session):
         if not self.keep_best_model or self.saver.variables is None or self.get_current_weights:
@@ -232,9 +232,9 @@ class Saver:
                 variables_sv = self.variables
             else:
                 variables_sv = dict()
-            all_vars = tf.global_variables()
+            all_vars = tf.compat.v1.global_variables()
 
-            global_step_var = tf.train.get_global_step()
+            global_step_var = tf.compat.v1.train.get_global_step()
 
             for var in all_vars:
                 if self.restart_global_step and global_step_var is not None and global_step_var.name == var.name:
@@ -249,6 +249,9 @@ class Saver:
                     for func in self.variable_transforms:
                         saved_var = func(name, saved_var)
                     var_loader.add(var, saved_var)
+                else:
+                    if name.startswith("model/featurizer"):
+                        raise ValueError("Uninitialized featurizer variable {}".format(name))
                     
             var_loader.run(session)
         return init_fn

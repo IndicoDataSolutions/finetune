@@ -9,9 +9,9 @@ from finetune.base_models.gpt.featurizer import norm, dropout, get_pos_values
 
 
 def softmax(x, axis=-1):
-    x = x - tf.reduce_max(x, axis=axis, keepdims=True)
+    x = x - tf.reduce_max(input_tensor=x, axis=axis, keepdims=True)
     ex = tf.exp(x)
-    return ex / tf.reduce_sum(ex, axis=axis, keepdims=True)
+    return ex / tf.reduce_sum(input_tensor=ex, axis=axis, keepdims=True)
 
 
 def split_states(x, n):
@@ -27,14 +27,14 @@ def merge_states(x):
 
 
 def conv1d(x, scope, nf, *, w_init_stdev=0.02):
-    with tf.variable_scope(scope):
+    with tf.compat.v1.variable_scope(scope):
         *start, nx = shape_list(x)
-        w = tf.get_variable(
+        w = tf.compat.v1.get_variable(
             "w",
             [1, nx, nf],
-            initializer=tf.random_normal_initializer(stddev=w_init_stdev),
+            initializer=tf.compat.v1.random_normal_initializer(stddev=w_init_stdev),
         )
-        b = tf.get_variable("b", [nf], initializer=tf.constant_initializer(0))
+        b = tf.compat.v1.get_variable("b", [nf], initializer=tf.compat.v1.constant_initializer(0))
         c = tf.reshape(
             tf.matmul(tf.reshape(x, [-1, nx]), tf.reshape(w, [-1, nf])) + b,
             start + [nf],
@@ -62,11 +62,11 @@ def attn(x, scope, n_state, *, past, hparams, train=False):
 
     def split_heads(x):
         # From [batch, sequence, features] to [batch, heads, sequence, features]
-        return tf.transpose(split_states(x, hparams.n_heads), [0, 2, 1, 3])
+        return tf.transpose(a=split_states(x, hparams.n_heads), perm=[0, 2, 1, 3])
 
     def merge_heads(x):
         # Reverse of split_heads
-        return merge_states(tf.transpose(x, [0, 2, 1, 3]))
+        return merge_states(tf.transpose(a=x, perm=[0, 2, 1, 3]))
 
     def mask_attn_weights(w):
         # w has shape [batch, heads, dst_sequence, src_sequence], where information flows from src to dst.
@@ -79,7 +79,7 @@ def attn(x, scope, n_state, *, past, hparams, train=False):
     def multihead_attn(q, k, v, attn_p_drop, train=False):
         # q, k, v have shape [batch, heads, sequence, features]
         w = tf.matmul(q, k, transpose_b=True)
-        w = w * tf.rsqrt(tf.cast(v.shape[-1].value, w.dtype))
+        w = w * tf.math.rsqrt(tf.cast(v.shape[-1], w.dtype))
 
         w = mask_attn_weights(w)
         w = softmax(w)
@@ -87,7 +87,7 @@ def attn(x, scope, n_state, *, past, hparams, train=False):
         a = tf.matmul(w, v)
         return a
 
-    with tf.variable_scope(scope):
+    with tf.compat.v1.variable_scope(scope):
         c = conv1d(x, "c_attn", n_state * 3)
         q, k, v = map(split_heads, tf.split(c, 3, axis=2))
         if past is not None:
@@ -102,8 +102,8 @@ def attn(x, scope, n_state, *, past, hparams, train=False):
 
 
 def mlp(x, scope, n_state, *, hparams, train=False):
-    with tf.variable_scope(scope):
-        nx = x.shape[-1].value
+    with tf.compat.v1.variable_scope(scope):
+        nx = x.shape[-1]
         h = gelu(conv1d(x, "c_fc", n_state))
         h2 = conv1d(h, "c_proj", nx)
         h2 = dropout(h2, hparams.resid_p_drop, train=train)
@@ -111,7 +111,7 @@ def mlp(x, scope, n_state, *, hparams, train=False):
 
 
 def block(x, *, past, hparams, train=False):
-    nx = x.shape[-1].value
+    nx = x.shape[-1]
     a = attn(norm(x, "ln_1"), "attn", nx, past=past, hparams=hparams, train=train)
     x = x + a
     m = mlp(norm(x, "ln_2"), "mlp", nx * 4, hparams=hparams, train=train)
@@ -132,20 +132,20 @@ def past_shape(*, hparams, batch_size=None, sequence=None):
 
 def expand_tile(value, size):
     """Add a new axis of given size."""
-    value = tf.convert_to_tensor(value, name="value")
+    value = tf.convert_to_tensor(value=value, name="value")
     ndims = value.shape.ndims
     return tf.tile(tf.expand_dims(value, axis=0), [size] + [1] * ndims)
 
 
 def positions_for(tokens, past_length):
-    batch_size = tf.shape(tokens)[0]
-    nsteps = tf.shape(tokens)[1]
+    batch_size = tf.shape(input=tokens)[0]
+    nsteps = tf.shape(input=tokens)[1]
     return expand_tile(past_length + tf.range(nsteps), batch_size)
 
 
 def embed(X, we):
     e = tf.gather(we, X)
-    h = tf.reduce_sum(e, 2)
+    h = tf.reduce_sum(input_tensor=e, axis=2)
     return h
 
 
@@ -157,18 +157,18 @@ def gpt2_featurizer(
     reuse=None,
     **kwargs
 ):
-    initial_shape = tf.shape(X)
+    initial_shape = tf.shape(input=X)
     X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-1:]), 0))
     X.set_shape([None, None])
 
-    pos_values = get_pos_values(tf.shape(X)[1], encoder.vocab_size)
-    X = tf.stack((X, tf.tile(pos_values, [tf.shape(X)[0], 1])), 2)
+    pos_values = get_pos_values(tf.shape(input=X)[1], encoder.vocab_size)
+    X = tf.stack((X, tf.tile(pos_values, [tf.shape(input=X)[0], 1])), 2)
 
-    with tf.variable_scope("model/featurizer", reuse=reuse):
-        embed_weights = tf.get_variable(
+    with tf.compat.v1.variable_scope("model/featurizer", reuse=reuse):
+        embed_weights = tf.compat.v1.get_variable(
             name="we",
             shape=[encoder.vocab_size + config.max_length, config.n_embed],
-            initializer=tf.random_normal_initializer(stddev=config.weight_stddev),
+            initializer=tf.compat.v1.random_normal_initializer(stddev=config.weight_stddev),
         )
         if config.train_embeddings:
             embed_weights = dropout(embed_weights, config.embed_p_drop, train)
@@ -188,7 +188,7 @@ def gpt2_featurizer(
             else:
                 train_layer = train
 
-            with tf.variable_scope("h%d" % layer):
+            with tf.compat.v1.variable_scope("h%d" % layer):
                 block_fn = functools.partial(
                     block, past=past, hparams=config, train=train
                 )
@@ -202,7 +202,7 @@ def gpt2_featurizer(
         clf_h = tf.reshape(h, [-1, config.n_embed])  # [batch * seq_len, embed]
         clf_token = encoder["_classify_"]
         pool_idx = tf.cast(
-            tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32
+            tf.argmax(input=tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), axis=1), tf.int32
         )
         batch, length, _ = shape_list(X)
         clf_h = tf.gather(

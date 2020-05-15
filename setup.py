@@ -2,9 +2,11 @@
 IndicoAPI setup
 """
 import os
-from sys import version_info
+import warnings
+import subprocess
+from sys import version_info, argv
 from setuptools import setup, find_packages
-
+from setuptools.command.build_ext import build_ext
 
 REQUIREMENTS = [
     "pandas>=0.23.1",
@@ -25,6 +27,13 @@ REQUIREMENTS = [
     "tabulate>=0.8.6,<0.9.0", 
 ]
 
+
+class OpsBuild(build_ext):
+    def run(self):
+        script = os.path.join(os.path.dirname(__file__), "finetune", "custom_ops", "build.sh")
+        if subprocess.run(["sh", script]).returncode != 0:
+            warnings.warn("Failed to build the finetune ops, most aspects of finetune should function anyway.")
+
 setup(
     name="finetune",
     packages=find_packages(),
@@ -34,5 +43,10 @@ setup(
         "tf": ["tensorflow==1.14.0"],
         "tf_gpu": ["tensorflow-gpu==1.14.0"],
     },
-    include_package_data=False
+    include_package_data=False,
+    zip_safe=False,
+    cmdclass={
+        'build_ext': OpsBuild,
+    },
+    package_data={"finetune": ["libindico_kernels.so"]}
 )

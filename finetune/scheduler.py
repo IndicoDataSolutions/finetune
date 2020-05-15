@@ -3,6 +3,7 @@ import logging
 
 import tensorflow as tf
 from finetune.base import BaseModel
+from finetune.custom_ops import BytesInUse, BytesLimit, MaxBytesInUse
 
 LOGGER = logging.getLogger("finetune")
 
@@ -13,10 +14,7 @@ class Scheduler:
     def __init__(self, max_models=None, config=None, reserved=750000000):
         self.loaded_models = list() 
         self.max_models = max_models
-        self.session = None
         self.gpu_memory_limit = None
-        self.in_use_op = tf.contrib.memory_stats.BytesInUse()
-        self.peak_mem_op = tf.contrib.memory_stats.MaxBytesInUse()
         self.model_cache = dict()
         self.max_above_resting = None
         self.previous_in_use = 0
@@ -25,10 +23,10 @@ class Scheduler:
         self.reserved = reserved
 
     def _memory_for_one_more(self):
-        if self.session is None:
-            return True # First prediction run?
-            
-        in_use, peak = self.session.run((self.in_use_op, self.peak_mem_op))
+        if self.gpu_memory_limit is None:
+            return True # first run
+        in_use = BytesInUse()
+        peak = MaxBytesInUse()
         if self.max_above_resting is None or (peak - in_use) > self.max_above_resting:
             self.max_above_resting = peak - in_use
 
@@ -75,10 +73,7 @@ class Scheduler:
         if hasattr(model.saver, "variables"):
             del model.saver.variables
             del model.saver.fallback_
-            
-        if self.session is None:
-            self.session = tf.Session() # delay this so that any options get applied from finetune.
-            self.gpu_memory_limit = self.session.run(tf.contrib.memory_stats.BytesLimit())
+        self.gpu_memory_limit = BytesLimit() # delay this so that any options get applied from finetune.
 
     def predict(self, model_file, x, *args, **kwargs):
         model = self._rotate_in_model(model_file)
