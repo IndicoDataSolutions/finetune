@@ -537,6 +537,14 @@ class BaseModel(object, metaclass=ABCMeta):
             if class_name != self.config.pad_token
         ]
 
+    @property
+    def classes(self):
+        return [
+            class_name 
+            for class_name in finetune_model.input_pipeline.label_encoder.target_labels
+            if class_name != self.config.pad_token
+        ]
+
     def generate_text(self, seed_text="", max_length=None, use_extra_toks=None):
         """
         Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
