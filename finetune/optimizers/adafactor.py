@@ -19,6 +19,7 @@ from __future__ import division
 from __future__ import print_function
 
 import tensorflow as tf
+import tensorflow_addons as tfa
 
 
 def cast_like(x, y):
@@ -41,7 +42,7 @@ def cast_like(x, y):
     return cast_x
 
 
-class AdafactorOptimizer(tf.compat.v1.train.Optimizer):
+class AdafactorOptimizer(tf.keras.optimizers.Optimizer):
     """Optimizer that implements the Adafactor algorithm.
 
     Adafactor is described in https://arxiv.org/abs/1804.04235.
@@ -164,9 +165,6 @@ class AdafactorOptimizer(tf.compat.v1.train.Optimizer):
         self._parameter_encoding = parameter_encoding
         self._epsilon1 = epsilon1
         self._epsilon2 = epsilon2
-
-    def apply_gradients(self, grads_and_vars, global_step=None, name=None, **kwargs):
-        return tf.cast(super().apply_gradients(grads_and_vars=grads_and_vars, global_step=global_step, name=name), tf.bool)
 
     def _should_use_factored_second_moment_estimate(self, shape):
         """Should we use a factored second moment estimator.
@@ -308,4 +306,4 @@ def reduce_rms(x):
     return tf.sqrt(tf.reduce_mean(tf.square(x)))
 
 
-AdafactorWOptimizer = tf.contrib.opt.extend_with_decoupled_weight_decay(AdafactorOptimizer)
+AdafactorWOptimizer = tfa.optimizers.extend_with_decoupled_weight_decay(AdafactorOptimizer)

@@ -7,8 +7,8 @@ import warnings
 import joblib
 import numpy as np
 import tensorflow as tf
-from tensorflow.estimator import SessionRunHook
-from tensorflow.contrib.estimator.python.estimator.early_stopping import _StopOnPredicateHook
+from tensorflow.compat.v1.train import SessionRunHook
+from tensorflow_estimator.python.estimator.early_stopping import _StopOnPredicateHook
 
 from finetune.errors import FinetuneError
 from finetune.config import get_config
