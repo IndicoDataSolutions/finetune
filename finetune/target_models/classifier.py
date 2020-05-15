@@ -2,6 +2,7 @@ from warnings import warn
 import itertools
 import copy
 import tensorflow as tf
+import tensorflow_addons as tfa
 import numpy as np
 from imblearn.over_sampling import RandomOverSampler
 from sklearn.utils import shuffle
@@ -125,7 +126,7 @@ class Classifier(BaseModel):
         self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
     ):
         if "explain_out" in featurizer_state:
-            shape = tf.shape(featurizer_state["explain_out"])  # batch, seq, hidden
+            shape = tf.shape(input=featurizer_state["explain_out"])  # batch, seq, hidden
             flat_explain = tf.reshape(
                 featurizer_state["explain_out"], [shape[0] * shape[1], shape[2]]
             )
@@ -148,7 +149,7 @@ class Classifier(BaseModel):
             clf_out["explanation"] = tf.nn.softmax(
                 tf.reshape(
                     logits[shape[0] :],
-                    tf.concat((shape[:2], [tf.shape(logits)[-1]]), 0),
+                    tf.concat((shape[:2], [tf.shape(input=logits)[-1]]), 0),
                 ),
                 -1,
             )
@@ -192,7 +193,7 @@ class Classifier(BaseModel):
         return processed
 
     def _predict_op(self, logits, **kwargs):
-        return tf.contrib.seq2seq.hardmax(logits)
+        return tfa.seq2seq.hardmax(logits)
 
     def _predict_proba_op(self, logits, **kwargs):
         return tf.nn.softmax(logits, -1)

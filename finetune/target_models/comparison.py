@@ -98,10 +98,10 @@ class Comparison(Classifier):
 
     def _pre_target_model_hook(self, featurizer_state):
         featurizer_state["sequence_features"] = tf.abs(
-            tf.reduce_sum(featurizer_state["sequence_features"], 1)
+            tf.reduce_sum(input_tensor=featurizer_state["sequence_features"], axis=1)
         )
         featurizer_state["features"] = tf.abs(
-            tf.reduce_sum(featurizer_state["features"], 1)
+            tf.reduce_sum(input_tensor=featurizer_state["features"], axis=1)
         )
 
     def _target_model(

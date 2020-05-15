@@ -15,7 +15,7 @@ class TemporalBlock:
             padding="same",
             activation=tf.nn.relu,
             dilation_rate=dilation_rate,
-            kernel_initializer=tf.initializers.glorot_normal,
+            kernel_initializer=tf.compat.v1.initializers.glorot_normal,
             name="conv1",
         )
         self.conv2 = tf.keras.layers.Conv1D(
@@ -24,13 +24,13 @@ class TemporalBlock:
             padding="same",
             dilation_rate=dilation_rate,
             activation=tf.nn.relu,
-            kernel_initializer=tf.initializers.glorot_normal,
+            kernel_initializer=tf.compat.v1.initializers.glorot_normal,
             name="conv2",
         )
         self.downsample = tf.keras.layers.Conv1D(filters=n_filters, kernel_size=1, padding="same")
 
     def __call__(self, X):
-        with tf.variable_scope(self.scope):
+        with tf.compat.v1.variable_scope(self.scope):
             conv1_out = self.conv1(X)
             conv1_dropout = tf.nn.dropout(conv1_out, rate=self.rate)
             conv2_out = self.conv2(conv1_dropout)
@@ -67,14 +67,14 @@ def tcn_featurizer(
         features: The output of the featurizer_final state.
         sequence_features: The output of the featurizer at each timestep.
     """
-    initial_shape = tf.shape(X)
+    initial_shape = tf.shape(input=X)
     X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-1:]), 0))
-    sequence_length = tf.shape(X)[1]
-    with tf.variable_scope("model/featurizer", reuse=reuse):
-        embed_weights = tf.get_variable(
+    sequence_length = tf.shape(input=X)[1]
+    with tf.compat.v1.variable_scope("model/featurizer", reuse=reuse):
+        embed_weights = tf.compat.v1.get_variable(
             name="we",
             shape=[encoder.vocab_size + config.max_length, config.n_embed_featurizer],
-            initializer=tf.random_normal_initializer(stddev=config.weight_stddev),
+            initializer=tf.compat.v1.random_normal_initializer(stddev=config.weight_stddev),
         )
 
         if config.train_embeddings:
@@ -87,7 +87,7 @@ def tcn_featurizer(
         # keep track of the classify token
         clf_token = encoder["_classify_"]
 
-        with tf.variable_scope("tcn_stack"):
+        with tf.compat.v1.variable_scope("tcn_stack"):
             representation = h
             for layer_num in range(config.n_layer):
                 representation = TemporalBlock(
@@ -102,7 +102,7 @@ def tcn_featurizer(
 
         # mask out the values past the classify token before performing pooling
         pool_idx = tf.cast(
-            tf.argmax(tf.cast(tf.equal(X, clf_token), tf.float32), 1),
+            tf.argmax(input=tf.cast(tf.equal(X, clf_token), tf.float32), axis=1),
             tf.int32,
         )
 
@@ -110,11 +110,11 @@ def tcn_featurizer(
         mask = tf.expand_dims(
             1.0
             - tf.sequence_mask(
-                pool_idx, maxlen=tf.shape(representation)[1], dtype=tf.float32
+                pool_idx, maxlen=tf.shape(input=representation)[1], dtype=tf.float32
             ),
             -1,
         )
-        pool = tf.reduce_max(representation + mask * -1e9, 1)
+        pool = tf.reduce_max(input_tensor=representation + mask * -1e9, axis=1)
         clf_h = pool
         clf_h = tf.reshape(
             clf_h, shape=tf.concat((initial_shape[:-1], [config.n_filter]), 0)

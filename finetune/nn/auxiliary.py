@@ -22,20 +22,20 @@ def add_timing_signal_from_position(x, position, timescales):
     for dim, timescale in zip(range(num_dims), timescales):
         min_timescale, max_timescale = timescale
         log_timescale_increment = (
-            math.log(float(max_timescale) / float(min_timescale)) / (tf.to_float(num_timescales) - 1)
+            math.log(float(max_timescale) / float(min_timescale)) / (tf.cast(num_timescales, dtype=tf.float32) - 1)
         )
-        inv_timescales = min_timescale * tf.exp(tf.to_float(tf.range(num_timescales)) * log_timescale_increment)
-        position_x = tf.expand_dims(tf.to_float(position[:, :, dim]), 2)  # batch, len, 1 # where 1 will be the chanels dim
+        inv_timescales = min_timescale * tf.exp(tf.cast(tf.range(num_timescales), dtype=tf.float32) * log_timescale_increment)
+        position_x = tf.expand_dims(tf.cast(position[:, :, dim], dtype=tf.float32), 2)  # batch, len, 1 # where 1 will be the chanels dim
         scaled_time = position_x * tf.expand_dims(tf.expand_dims(inv_timescales, 0), 0)  # batch , len, num_timescales
         signal = tf.concat([tf.sin(scaled_time), tf.cos(scaled_time)], axis=2)  # batch channels//num_dims
         prepad = dim * 2 * num_timescales
         postpad = channels - (dim + 1) * 2 * num_timescales
-        signal = tf.pad(signal, [[0, 0], [0, 0], [prepad, postpad]])
+        signal = tf.pad(tensor=signal, paddings=[[0, 0], [0, 0], [prepad, postpad]])
         x = x + signal
     return x
 
 def embed_position(context, context_channels, batch, seq):
-    with tf.variable_scope("context_embedding"):
+    with tf.compat.v1.variable_scope("context_embedding"):
         context_dim = shape_list(context)[-1]
         if context_channels is None:
             raise ValueError("context_channels is not set but you are trying to embed context")

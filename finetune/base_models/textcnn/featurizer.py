@@ -25,14 +25,14 @@ def textcnn_featurizer(
         features: The output of the featurizer_final state.
         sequence_features: The output of the featurizer at each timestep.
     """
-    initial_shape = tf.shape(X)
+    initial_shape = tf.shape(input=X)
     X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-1:]), 0))
-    sequence_length = tf.shape(X)[1]
-    with tf.variable_scope("model/featurizer", reuse=reuse):
-        embed_weights = tf.get_variable(
+    sequence_length = tf.shape(input=X)[1]
+    with tf.compat.v1.variable_scope("model/featurizer", reuse=reuse):
+        embed_weights = tf.compat.v1.get_variable(
             name="we",
             shape=[encoder.vocab_size + config.max_length, config.n_embed_featurizer],
-            initializer=tf.random_normal_initializer(stddev=config.weight_stddev),
+            initializer=tf.compat.v1.random_normal_initializer(stddev=config.weight_stddev),
         )
 
         if config.train_embeddings:
@@ -47,14 +47,14 @@ def textcnn_featurizer(
 
         # mask out the values past the classify token before performing pooling
         pool_idx = tf.cast(
-            tf.argmax(tf.cast(tf.equal(X, clf_token), tf.float32), 1),
+            tf.argmax(input=tf.cast(tf.equal(X, clf_token), tf.float32), axis=1),
             tf.int32,
         )
         # mask is past the classify token (i.e. make those results extremely negative)
         mask = tf.expand_dims(
             1.0
             - tf.sequence_mask(
-                pool_idx, maxlen=tf.shape(h)[1], dtype=tf.float32
+                pool_idx, maxlen=tf.shape(input=h)[1], dtype=tf.float32
             ),
             -1,
         )
@@ -63,17 +63,17 @@ def textcnn_featurizer(
         pool_layers = []
         conv_layers = []
         for i, kernel_size in enumerate(config.kernel_sizes):
-            conv = tf.layers.conv1d(
+            conv = tf.compat.v1.layers.conv1d(
                 inputs=h,
                 filters=config.num_filters_per_size,
                 kernel_size=kernel_size,
                 padding="same",
                 activation=tf.nn.relu,
                 name="conv" + str(i),
-                kernel_initializer=tf.initializers.glorot_normal,
+                kernel_initializer=tf.compat.v1.initializers.glorot_normal,
             )
             conv_layers.append(conv)
-            pool = tf.reduce_max(conv + mask * -1e9, 1)
+            pool = tf.reduce_max(input_tensor=conv + mask * -1e9, axis=1)
             pool_layers.append(pool)
 
         # Concat the output of the convolutional layers for use in sequence embedding

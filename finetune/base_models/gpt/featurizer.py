@@ -11,7 +11,7 @@ from finetune.nn.nn_utils import dropout, norm
 
 def mask_attn_weights(w):
     n = shape_list(w)[-1]
-    b = tf.matrix_band_part(tf.ones([n, n]), -1, 0)
+    b = tf.linalg.band_part(tf.ones([n, n]), -1, 0)
     b = tf.reshape(b, [1, 1, n, n])
     w = w * b + -1e9 * (1 - b)
     return w
@@ -19,7 +19,7 @@ def mask_attn_weights(w):
 
 def mask_pad(w, lengths):
     batch = shape_list(lengths)[0]
-    maxlen = tf.cast(tf.reduce_max(lengths), tf.int32)
+    maxlen = tf.cast(tf.reduce_max(input_tensor=lengths), tf.int32)
     seq_mask = tf.reshape(tf.sequence_mask(lengths, maxlen=maxlen), [batch, 1, 1, maxlen])
     b = tf.cast(seq_mask, tf.float32)
     w = w * b + -1e9 * (1 - b)
@@ -31,7 +31,7 @@ def explain_mask_attn_weights(w):
     # lengths is [batch]
     batch, _, _, n = shape_list(w)
     seq = n // 2
-    main_mask = tf.matrix_band_part(tf.ones([seq, seq]), -1, 0)
+    main_mask = tf.linalg.band_part(tf.ones([seq, seq]), -1, 0)
     top = tf.expand_dims(
         tf.concat((main_mask, tf.zeros([seq, seq])), 1), 0
     )  # 1, seq, 2 * seq
@@ -50,7 +50,7 @@ def attn_weights(q, k, v, scale=False, mask=True, explain=False, lengths=None):
 
     if scale:
         n_state = shape_list(v)[-1]
-        w = w * tf.rsqrt(tf.cast(n_state, tf.float32))
+        w = w * tf.math.rsqrt(tf.cast(n_state, tf.float32))
 
     if mask:
         if explain:
@@ -80,13 +80,13 @@ def merge_states(x):
 
 def split_heads(x, n, k=False):
     if k:
-        return tf.transpose(split_states(x, n), [0, 2, 3, 1])
+        return tf.transpose(a=split_states(x, n), perm=[0, 2, 3, 1])
     else:
-        return tf.transpose(split_states(x, n), [0, 2, 1, 3])
+        return tf.transpose(a=split_states(x, n), perm=[0, 2, 1, 3])
 
 
 def merge_heads(x):
-    return merge_states(tf.transpose(x, [0, 2, 1, 3]))
+    return merge_states(tf.transpose(a=x, perm=[0, 2, 1, 3]))
 
 
 def conv1d(
@@ -94,22 +94,22 @@ def conv1d(
     scope,
     nf,
     rf,
-    w_init=tf.random_normal_initializer(stddev=0.02),
-    b_init=tf.constant_initializer(0),
+    w_init=tf.compat.v1.random_normal_initializer(stddev=0.02),
+    b_init=tf.compat.v1.constant_initializer(0),
     pad="VALID",
     train=False,
 ):
-    with tf.variable_scope(scope):
+    with tf.compat.v1.variable_scope(scope):
         nx = shape_list(x)[-1]
-        w = tf.get_variable("w", [rf, nx, nf], initializer=w_init)
-        b = tf.get_variable("b", [nf], initializer=b_init)
+        w = tf.compat.v1.get_variable("w", [rf, nx, nf], initializer=w_init)
+        b = tf.compat.v1.get_variable("b", [nf], initializer=b_init)
         if rf == 1:  # faster 1x1 conv
             c = tf.reshape(
                 tf.matmul(tf.reshape(x, [-1, nx]), tf.reshape(w, [-1, nf])) + b,
                 shape_list(x)[:-1] + [nf],
             )
         else:  # was used to train LM
-            c = tf.nn.conv1d(x, w, stride=1, padding=pad) + b
+            c = tf.nn.conv1d(input=x, filters=w, stride=1, padding=pad) + b
         return c
 
 
@@ -136,7 +136,7 @@ def attn(
     lengths=None,
 ):
     assert n_state % n_head == 0
-    with tf.variable_scope(scope):
+    with tf.compat.v1.variable_scope(scope):
         q, k, v = multihead_qkv(x, n_state, n_head, train, explain)
         w = attn_weights(q, k, v, scale=scale, mask=mask, explain=explain, lengths=lengths)
         w = dropout(w, attn_pdrop, train)
@@ -148,7 +148,7 @@ def attn(
 
 
 def mlp(x, scope, n_state, act_fn, resid_pdrop, train=False):
-    with tf.variable_scope(scope):
+    with tf.compat.v1.variable_scope(scope):
         nx = shape_list(x)[-1]
         act = act_fns[act_fn]
         h = act(conv1d(x, "c_fc", n_state, 1, train=train))
@@ -159,7 +159,7 @@ def mlp(x, scope, n_state, act_fn, resid_pdrop, train=False):
 
 def create_initializer(initializer_range=0.001):
     """Creates a `truncated_normal_initializer` with the given range."""
-    return tf.truncated_normal_initializer(stddev=initializer_range)
+    return tf.compat.v1.truncated_normal_initializer(stddev=initializer_range)
 
 
 def block(
@@ -173,7 +173,7 @@ def block(
     scale=False,
     explain=False,
 ):
-    with tf.variable_scope(scope):
+    with tf.compat.v1.variable_scope(scope):
         nx = shape_list(x)[-1]
         a = attn(
             x,
@@ -193,7 +193,7 @@ def block(
 
 
 def embed(X, we):
-    return tf.reduce_sum(tf.gather(we, X), 2)
+    return tf.reduce_sum(input_tensor=tf.gather(we, X), axis=2)
 
 
 def add_explain_tokens(X, max_length, pool_idx):
@@ -233,18 +233,18 @@ def gpt_featurizer(
         features: The output of the featurizer_final state.
         sequence_features: The output of the featurizer at each timestep.
     """
-    initial_shape = tf.shape(X)
+    initial_shape = tf.shape(input=X)
     X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-1:]), 0))
-    x_shape = tf.shape(X)
+    x_shape = tf.shape(input=X)
     sequence_length = x_shape[1]
     pos_values = get_pos_values(sequence_length, encoder.vocab_size)
     X = tf.stack((X, tf.tile(pos_values, [x_shape[0], 1])), 2)
 
-    with tf.variable_scope("model/featurizer", reuse=reuse):
-        embed_weights = tf.get_variable(
+    with tf.compat.v1.variable_scope("model/featurizer", reuse=reuse):
+        embed_weights = tf.compat.v1.get_variable(
             name="we",
             shape=[encoder.vocab_size + config.max_length, config.n_embed],
-            initializer=tf.random_normal_initializer(stddev=config.weight_stddev),
+            initializer=tf.compat.v1.random_normal_initializer(stddev=config.weight_stddev),
         )
         if config.train_embeddings:
             embed_weights = dropout(embed_weights, config.embed_p_drop, train)
@@ -252,7 +252,7 @@ def gpt_featurizer(
             embed_weights = tf.stop_gradient(embed_weights)
 
         clf_token = encoder.end_token
-        pool_idx = tf.cast(tf.argmax(tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), 1), tf.int32)
+        pool_idx = tf.cast(tf.argmax(input=tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), axis=1), tf.int32)
 
         if explain:
             X = add_explain_tokens(X, sequence_length, pool_idx)
@@ -268,7 +268,7 @@ def gpt_featurizer(
             else:
                 train_layer = train
 
-            with tf.variable_scope("h%d_" % layer):
+            with tf.compat.v1.variable_scope("h%d_" % layer):
                 block_fn = functools.partial(
                     block,
                     n_head=config.n_heads,
@@ -289,7 +289,7 @@ def gpt_featurizer(
 
             # get the attention weights from the last layer
             if layer == config.n_layer - 1:
-                with tf.variable_scope("h%d_/h%d/attn" % (layer, layer), reuse=True):
+                with tf.compat.v1.variable_scope("h%d_/h%d/attn" % (layer, layer), reuse=True):
                     q, k, v = multihead_qkv(
                         h, n_state=shape_list(h)[-1], n_head=config.n_heads, train=train
                     )

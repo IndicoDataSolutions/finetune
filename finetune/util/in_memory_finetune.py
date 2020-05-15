@@ -8,7 +8,7 @@ import tensorflow as tf
 import numpy as np
 
 
-class InMemoryFinetune(tf.train.SessionRunHook):
+class InMemoryFinetune(tf.estimator.SessionRunHook):
 
     def __init__(self, config_to_eval, model, eval_dir, X, Y, X_test, Y_test, name=None, every_n_iter=100):
         if every_n_iter is None or every_n_iter <= 0:
@@ -18,7 +18,7 @@ class InMemoryFinetune(tf.train.SessionRunHook):
         self._config_to_finetune = config_to_eval
         self._name = name
         self._every_n_iter = every_n_iter
-        self._timer = tf.train.SecondOrStepTimer(every_steps=every_n_iter)
+        self._timer = tf.estimator.SecondOrStepTimer(every_steps=every_n_iter)
         self._eval_dir = eval_dir
         self.train_data = (X, Y)
         self.test_data = (X_test, Y_test)
@@ -57,7 +57,7 @@ class InMemoryFinetune(tf.train.SessionRunHook):
             test_accuracy = -1.0
             train_accuracy = -1.0
 
-        global_step = session.run(tf.train.get_or_create_global_step())
+        global_step = session.run(tf.compat.v1.train.get_or_create_global_step())
         directory = os.path.join(self._eval_dir, "..", "finetuning")
 
         if not os.path.exists(directory):

@@ -13,10 +13,10 @@ def sample_with_temperature(logits, temperature):
     """
     logits_shape = shape_list(logits)
     if temperature == 0.0:
-        return tf.argmax(logits, axis=-1)
+        return tf.argmax(input=logits, axis=-1)
     else:
         assert temperature > 0.0
         reshaped_logits = tf.reshape(logits, [-1, logits_shape[-1]]) / temperature
-        choices = tf.multinomial(reshaped_logits, 1)
+        choices = tf.random.categorical(logits=reshaped_logits, num_samples=1)
         choices = tf.reshape(choices, logits_shape[:-1])
         return choices

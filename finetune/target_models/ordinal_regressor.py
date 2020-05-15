@@ -145,14 +145,14 @@ class ComparisonOrdinalRegressor(OrdinalRegressor):
         self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
     ):
         featurizer_state["sequence_features"] = tf.abs(
-            tf.reduce_sum(featurizer_state["sequence_features"], 1)
+            tf.reduce_sum(input_tensor=featurizer_state["sequence_features"], axis=1)
         )
         featurizer_state["features"] = tf.abs(
-            tf.reduce_sum(featurizer_state["features"], 1)
+            tf.reduce_sum(input_tensor=featurizer_state["features"], axis=1)
         )
         if 'context' in featurizer_state:
             featurizer_state["context"] = tf.abs(
-                tf.reduce_sum(featurizer_state["context"], 1)
+                tf.reduce_sum(input_tensor=featurizer_state["context"], axis=1)
             )
         return super(ComparisonOrdinalRegressor, self)._target_model(
             config=config,
