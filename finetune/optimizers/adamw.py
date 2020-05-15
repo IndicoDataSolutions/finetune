@@ -2,7 +2,7 @@ from tensorflow.python.ops import resource_variable_ops
 from tensorflow.python.framework import ops
 from tensorflow.contrib.opt.python.training.weight_decay_optimizers import AdamWOptimizer as AdamWOptimizerBroken
 
-import tensorflow as tf
+import tensorflow_addons as tfa
 
 
 class AdamWOptimizer(AdamWOptimizerBroken):

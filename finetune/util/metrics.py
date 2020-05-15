@@ -11,13 +11,15 @@ from tensorflow.python.summary import summary_iterator
 
 import tabulate
 
-from finetune.encoding.input_encoder import NLP
+from finetune.encoding.input_encoder import get_spacy
 
 _EVENT_FILE_GLOB_PATTERN = 'events.out.tfevents.*'
 
 
 def _convert_to_token_list(annotations, doc_idx=None):
+    nlp = get_spacy()
     tokens = []
+    annotations = copy.deepcopy(annotations)
 
     for annotation in annotations:
         start_idx = annotation.get('start')
@@ -29,12 +31,13 @@ def _convert_to_token_list(annotations, doc_idx=None):
                 'label': annotation.get('label'),
                 'doc_idx': doc_idx
             }
-            for token in NLP(annotation.get('text'))
+            for token in nlp(annotation.get('text'))
         ])
 
     return tokens
 
 def sequence_labeling_token_confusion(text, true, predicted):
+    nlp = get_spacy()
     none_class = "<None>"
     unique_classes = list(set([seq['label'] for seqs in true for seq in seqs]))
     unique_classes.append(none_class)
@@ -43,7 +46,7 @@ def sequence_labeling_token_confusion(text, true, predicted):
     pred_per_token_all = []
 
     for i, (text_i, true_list, pred_list) in enumerate(zip(text, true, predicted)):
-        tokens = NLP(text_i)
+        tokens = nlp(text_i)
         true_per_token = []
         pred_per_token = []
         for token in tokens:

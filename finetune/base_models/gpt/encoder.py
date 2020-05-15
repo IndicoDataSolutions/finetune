@@ -11,7 +11,7 @@ import numpy as np
 from ftfy.fixes import uncurl_quotes
 
 import finetune
-from finetune.encoding.input_encoder import NLP, EncodedOutput, BaseEncoder, get_pairs
+from finetune.encoding.input_encoder import get_spacy, EncodedOutput, BaseEncoder, get_pairs
 
 
 FINETUNE_FOLDER = os.path.dirname(finetune.__file__)
@@ -124,6 +124,7 @@ class GPTEncoder(BaseEncoder):
         """
         Convert a batch of raw text to a batch of byte-pair encoded token indices.
         """
+        nlp = get_spacy()
 
         self._lazy_init()
         batch_tokens = []
@@ -139,7 +140,7 @@ class GPTEncoder(BaseEncoder):
             
             # Only fine to apply this fix because it preserves character locations
             ftfy_text = uncurl_quotes(raw_text)
-            tokens = NLP(_text_standardize(text))
+            tokens = nlp(_text_standardize(text))
             subtokens = []
             subtoken_idxs = []
             char_starts = []

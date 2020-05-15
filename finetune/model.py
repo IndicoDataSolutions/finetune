@@ -7,24 +7,13 @@ import tensorflow as tf
 
 from finetune.nn.target_blocks import language_model, masked_language_model
 from finetune.util.text_generation import sample_with_temperature
-from finetune.optimizers.zero_grad import dont_optimize_zeros
-from finetune.optimizers.gradient_accumulation import get_grad_accumulation_optimizer
-from finetune.optimizers.learning_rate_schedules import schedules
-from finetune.optimizers.adamax import AdamaxWOptimizer
-from finetune.optimizers.adamw import AdamWOptimizer
+from finetune.util.optimize_loss import optimize_loss
+
 from finetune.util.imbalance import class_weight_tensor
 from finetune.errors import FinetuneError
 from finetune.base_models import GPTModel, GPTModelSmall
-from finetune.optimizers.adafactor import AdafactorWOptimizer, AdafactorOptimizer
 
 LOGGER = logging.getLogger("finetune")
-
-OPTIMIZERS = {
-    "AdamW": AdamWOptimizer,
-    "AdamaxW": AdamaxWOptimizer,
-    "AdafactorW": AdafactorWOptimizer,
-    "Adafactor": AdafactorOptimizer
-}
 
 class PredictMode:
     FEATURIZE = "FEAT"
@@ -280,69 +269,23 @@ def get_model_fn(
 
         if mode == tf.estimator.ModeKeys.TRAIN:
             total_num_steps = params.n_epochs * params.dataset_size // (params.batch_size * n_replicas)
-            lr_decay = lambda lr, global_step: tf.maximum(
-                0.0,
-                lr
-                * schedules[params.lr_schedule](
-                    tf.to_float(global_step) / total_num_steps, warmup=params.lr_warmup
-                ),
-            )
 
-            def optimizer(lr):
-                Optimizer = OPTIMIZERS.get(params.optimizer, None)
-                if Optimizer is None:
-                    raise FinetuneError(
-                        "Optimizer must be in {}, not {}".format(
-                            list(OPTIMIZERS.keys()), params.optimizer
-                        )
-                    )
-
-                if params.accum_steps > 1:
-                    Optimizer = get_grad_accumulation_optimizer(
-                        Optimizer, params.accum_steps
-                    )
-
-                opt = Optimizer(
-                    learning_rate=lr,
-                    beta1=params.b1,
-                    beta2=params.b2,
-                    epsilon=params.epsilon,
-                    weight_decay=params.l2_reg * lr,
-                )
-                decay_var_list = [
-                    v
-                    for v in tf.global_variables()
-                    if len(v.get_shape()) > 1 or params.vector_l2 and "OptimizeLoss" not in v.name
-                ]
-
-                opt.apply_gradients = functools.partial(
-                    opt.apply_gradients, decay_var_list=decay_var_list
-                )
-
-                decay_var_list = [v for v in tf.global_variables() if len(v.get_shape()) > 1 or params.vector_l2]
-                opt.apply_gradients = functools.partial(opt.apply_gradients, decay_var_list=decay_var_list)
-
-                if params.scale_loss:
-                    opt = tf.train.experimental.MixedPrecisionLossScaleOptimizer(opt, "dynamic")
-
-                return opt
-
-            summaries = (
-                tf.contrib.layers.OPTIMIZER_SUMMARIES
-                if params.summarize_grads
-                else None
-            )
-
-            train_op = tf.contrib.layers.optimize_loss(
+            train_op = optimize_loss(
                 loss=train_loss,
-                global_step=tf.train.get_or_create_global_step(),
-                learning_rate=tf.constant(params.lr),
-                optimizer=optimizer,
+                learning_rate=params.lr,
+                optimizer_name=params.optimizer,
                 clip_gradients=float(params.max_grad_norm),
-                learning_rate_decay_fn=lr_decay,
-                increment_global_step=True,
-                summaries=summaries,
-                colocate_gradients_with_ops=True,
+                lr_schedule=params.lr_schedule,
+                lr_warmup=params.lr_warmup,
+                total_num_steps=total_num_steps,
+                summarize_grads=params.summarize_grads,
+                scale_loss=params.scale_loss,
+                b1=params.b1,
+                b2=params.b2,
+                epsilon=params.epsilon,
+                l2_reg=params.l2_reg,
+                vector_l2=params.vector_l2,
+                accumulate_steps=params.accum_steps,
             )
 
         if mode == tf.estimator.ModeKeys.PREDICT:

@@ -187,7 +187,7 @@ class OrdinalRegressionEncoder(OrdinalEncoder, BaseEncoder):
 
 class SequenceLabelingEncoder(BaseEncoder):
 
-    def __init__(self, pad_token="<PAD>"):
+    def __init__(self, pad_token):
         self.classes_ = None
         self.pad_token = pad_token
         self.lookup = None
@@ -247,7 +247,7 @@ class SequenceLabelingEncoder(BaseEncoder):
 
 class SequenceMultiLabelingEncoder(SequenceLabelingEncoder):
     def transform(self, out, labels):
-        labels, pad_idx = self.pre_process_label(out, labels)
+        labels, _ = self.pre_process_label(out, labels)
         labels_out = [[0 for _ in self.classes_] for _ in out.tokens]
         for i, (start, end) in enumerate(zip(out.token_starts, out.token_ends)):
             for label in labels:
