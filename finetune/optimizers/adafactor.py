@@ -41,7 +41,7 @@ def cast_like(x, y):
     return cast_x
 
 
-class AdafactorOptimizer(tf.train.Optimizer):
+class AdafactorOptimizer(tf.compat.v1.train.Optimizer):
     """Optimizer that implements the Adafactor algorithm.
 
     Adafactor is described in https://arxiv.org/abs/1804.04235.

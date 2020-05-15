@@ -15,7 +15,7 @@ from finetune.nn.crf import sequence_decode
 from finetune.encoding.sequence_encoder import (
     finetune_to_indico_sequence,
 )
-from finetune.encoding.input_encoder import NLP
+from finetune.encoding.input_encoder import get_spacy
 from finetune.input_pipeline import BasePipeline
 from finetune.encoding.input_encoder import tokenize_context
 
@@ -101,9 +101,10 @@ def _spacy_token_predictions(raw_text, tokens, probas, positions):
     Go from GPT subtoken level predictions, to spacy token predictions
     """
     to_combine = []
+    nlp = get_spacy()
 
     spacy_token_starts, spacy_token_ends = zip(
-        *[(token.idx, token.idx + len(token.text)) for token in NLP(raw_text)]
+        *[(token.idx, token.idx + len(token.text)) for token in nlp(raw_text)]
     )
     spacy_token_idx = 0
     spacy_results = []

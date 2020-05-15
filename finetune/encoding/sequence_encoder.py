@@ -2,7 +2,7 @@ import warnings
 
 import numpy as np
 
-from finetune.encoding.input_encoder import NLP
+from finetune.encoding.input_encoder import get_spacy
 
 
 def assign_associations(associations, none_value, idx_lookup):
@@ -89,7 +89,7 @@ def finetune_to_indico_sequence(
     :return: Texts, annoatations both in the 'indico' format.
     """
     annotations = []
-    spacy_docs = NLP.pipe(raw_texts)
+    spacy_docs = get_spacy().pipe(raw_texts)
     loop_vals = zip(raw_texts, spacy_docs, subseqs, labels, probs or [None] * len(raw_texts))
     for doc_idx, (raw_text, spacy_tokens, doc_seq, label_seq, prob_seq) in enumerate(loop_vals):
         spacy_token_starts = np.asarray([token.idx for token in spacy_tokens])
@@ -250,7 +250,7 @@ def overlap_handler(current_annotation, annotation, text, multi_label):
                     annotation, current_annotation
                 )
             )
-        spacy_tokens = NLP(text)
+        spacy_tokens = get_spacy()(text)
         spacy_token_starts = [token.idx for token in spacy_tokens]
         if second["label"] in spacy_token_starts:
             second_label = second["label"]

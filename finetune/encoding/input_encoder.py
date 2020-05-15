@@ -8,9 +8,15 @@ from collections import namedtuple, Counter
 import spacy
 import numpy as np
 
+NLP = None
 
-NLP = spacy.load("en", disable=["parser", "tagger", "ner", "textcat"])
-NLP.max_length = 8000000 # approximately one volume of the encyclopedia britannica.
+def get_spacy():
+    global NLP
+    if NLP is None:
+        NLP = spacy.load("en", disable=["parser", "tagger", "ner", "textcat"])
+        NLP.max_length = 8000000 # approximately one volume of the encyclopedia britannica.
+    return NLP
+
 
 EncodedOutput = namedtuple(
     "EncodedOutput",
