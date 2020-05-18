@@ -250,6 +250,7 @@ def get_default_config():
         optimize_for="accuracy", 
         sort_by_length=True,
         collapse_whitespace=False,
+        permit_uninitialized=None,
 
         # Regularization
         embed_p_drop=0.1,

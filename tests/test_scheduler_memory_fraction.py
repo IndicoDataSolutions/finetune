@@ -4,6 +4,8 @@ import time
 import shutil
 import warnings
 
+import pytest
+
 from multiprocessing import Process
 
 # prevent excessive warning logs
@@ -50,7 +52,8 @@ class TestScheduler(unittest.TestCase):
     @classmethod
     def tearDownClass(self):
         shutil.rmtree("tests/saved-models/")
-        
+
+    @pytest.mark.skip()
     def test_scheduler_memory_fraction(self):
         m1 = os.path.join(self.folder, self.model1)
         m2 = os.path.join(self.folder, self.model2)

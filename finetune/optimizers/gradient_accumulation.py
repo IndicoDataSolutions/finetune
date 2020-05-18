@@ -50,7 +50,7 @@ def get_grad_accumulation_optimizer(optimizer_class, accum_steps):
                 def apply_grads():
                     with tf.control_dependencies([
                         super(GradAccumulationOptimizer, self).apply_gradients(
-                            grads_and_accumulated_vars, global_step=global_step, name=name, *args, **kwargs
+                            grads_and_accumulated_vars, name=name, *args, **kwargs
                         )
                     ]):
                         apply_grads_op = tf.group(*[g.assign(g.initial_value) for g in accumulation_vars])
@@ -59,7 +59,7 @@ def get_grad_accumulation_optimizer(optimizer_class, accum_steps):
                 return tf.cond(
                     pred=tf.equal(global_step % accum_steps, accum_steps - 1),
                     true_fn=apply_grads,
-                    false_fn=lambda: tf.group(global_step.assign_add(1))
+                    false_fn=lambda: tf.no_op()
                 )
 
     return GradAccumulationOptimizer
