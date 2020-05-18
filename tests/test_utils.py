@@ -3,6 +3,7 @@ import os.path
 import random
 import json
 from collections import Counter
+import math
 
 import numpy as np
 import tensorflow as tf
@@ -265,27 +266,31 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
 
 class TestGradientAccumulation(unittest.TestCase):
 
+    @tf.function
     def test_gradient_accumulating_optimizer(self):
-        loss = tf.compat.v1.get_variable("loss", shape=1)
-        lr = 0.1
-        opt = get_grad_accumulation_optimizer(tf.compat.v1.train.GradientDescentOptimizer, 2)(lr)
-        train_op = opt.minimize(tf.abs(loss))
+        with tf.Graph().as_default():
+            loss = tf.compat.v1.get_variable("loss", shape=1)
+            lr = 0.1
+            opt = get_grad_accumulation_optimizer(tf.keras.optimizers.SGD, 2)(lr)
+            global_step = tf.compat.v1.train.get_or_create_global_step()
+            with tf.control_dependencies([opt.minimize(lambda: tf.abs(loss), [loss])]):
+                train_op = global_step.assign_add(1)
 
-        sess = tf.compat.v1.Session()
-        sess.run(tf.compat.v1.global_variables_initializer())
-        for i in range(100):
-            val_before = sess.run(loss)
-            grad_before = np.sign(val_before)
-            sess.run(train_op)
+            sess = tf.compat.v1.Session()
+            sess.run(tf.compat.v1.global_variables_initializer())
+            for i in range(100):
+                val_before = sess.run(loss)
+                grad_before = np.sign(val_before)
+                sess.run(train_op)
 
-            val_after1 = sess.run(loss)
-            grad_after1 = np.sign(val_after1)
-            sess.run(train_op)
+                val_after1 = sess.run(loss)
+                grad_after1 = np.sign(val_after1)
+                sess.run(train_op)
 
-            val_after2 = sess.run(loss)
+                val_after2 = sess.run(loss)
 
-            self.assertEqual(val_before - (grad_before + grad_after1) * lr, val_after2)  # check 2 steps of update have been made.
-            self.assertEqual(val_before, val_after1)  # first step should not actually do anything
+                self.assertEqual(val_before - (grad_before + grad_after1) * lr, val_after2)
+                self.assertEqual(val_before, val_after1)  # first step should not actually do anything
 
 
 class TestProgressBar(unittest.TestCase):

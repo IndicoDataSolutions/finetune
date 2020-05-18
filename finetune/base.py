@@ -146,6 +146,7 @@ class BaseModel(object, metaclass=ABCMeta):
             fallback_filename=self.config.base_model_path,
             exclude_matches=None if self.config.save_adam_vars else "Adam",
             save_dtype=self.config.save_dtype,
+            permit_uninitialized=self.config.permit_uninitialized,
         )
 
     def init_from_checkpoint(self, checkpoint_path):

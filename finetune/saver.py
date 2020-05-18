@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 import logging
 import sys
 import warnings
+import re
 
 import joblib
 import numpy as np
@@ -140,6 +141,7 @@ class Saver:
         variable_transforms=None,
         save_dtype=None,
         restart_global_step=True,
+        permit_uninitialized=None,
     ):
         self.variable_transforms = variable_transforms or []
         self.exclude_matches = exclude_matches
@@ -148,6 +150,7 @@ class Saver:
         if fallback_filename is not None:
             self.set_fallback(fallback_filename)
         self.restart_global_step = restart_global_step
+        self.permit_uninitialized = permit_uninitialized
 
     def set_fallback(self, fallback_filename):
         self.tpe = ThreadPoolExecutor()
@@ -251,7 +254,9 @@ class Saver:
                     var_loader.add(var, saved_var)
                 else:
                     if name.startswith("model/featurizer"):
-                        raise ValueError("Uninitialized featurizer variable {}".format(name))
+                        permitted = self.permit_uninitialized is not None and re.findall(self.permit_uninitialized, name)
+                        if not permitted:
+                            raise ValueError("Uninitialized featurizer variable {}".format(name))
                     
             var_loader.run(session)
         return init_fn
