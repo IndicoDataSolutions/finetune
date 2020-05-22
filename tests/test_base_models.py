@@ -441,8 +441,9 @@ class TestSequenceLabelerTextCNN(TestModelBase):
         )
         self.model.fit(train_texts, train_annotations)
         with self.model.cached_predict():
-            self.model.predict(test_texts)
-            self.model.predict(test_texts)
+            pred1 = self.model.predict(test_texts)
+            pred2 = self.model.predict(test_texts)
+        self.assertEqual(pred1, pred2)
 
     def test_fit_predict_multi_model(self):
         """
@@ -465,7 +466,7 @@ class TestSequenceLabelerTextCNN(TestModelBase):
             texts, annotations, test_size=0.1
         )
         self.model.fit(train_texts, train_annotations)
-        self.model.predict(test_texts)
+        pre_save_preds = self.model.predict(test_texts)
         probas = self.model.predict_proba(test_texts)
         self.assertIsInstance(probas, list)
         self.assertIsInstance(probas[0], list)
@@ -473,7 +474,8 @@ class TestSequenceLabelerTextCNN(TestModelBase):
         self.assertIsInstance(probas[0][0]["confidence"], dict)
         self.model.save(self.save_file)
         model = SequenceLabeler.load(self.save_file)
-        model.predict(test_texts)
+        post_load_preds = model.predict(test_texts)
+        self.assertEqual(post_load_preds, pre_save_preds)
 
 
 class TestSequenceLabelerBert(TestSequenceLabelerTextCNN):
@@ -536,21 +538,53 @@ try:
     from transformers.modeling_tf_electra import TFElectraMainLayer
 
     HFElectra = finetune_model_from_huggingface(
-            pretrained_weights="google/electra-base-generator",
-            archive_map=TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
-            hf_featurizer=TFElectraMainLayer,
-            hf_tokenizer=ElectraTokenizerFast,
-            hf_config=ElectraConfig,
-            weights_replacement=[
-                ("tf_electra_for_masked_lm/electra", "model/featurizer/tf_electra_main_layer")
-            ]
-        )
+        pretrained_weights="google/electra-base-generator",
+        archive_map=TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
+        hf_featurizer=TFElectraMainLayer,
+        hf_tokenizer=ElectraTokenizerFast,
+        hf_config=ElectraConfig,
+        weights_replacement=[
+            ("tf_electra_for_masked_lm/electra", "model/featurizer/tf_electra_main_layer")
+        ]
+    )
+    
+    HFBert = finetune_model_from_huggingface(
+        pretrained_weights="bert-base-uncased",
+        archive_map=TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+        hf_featurizer=TFBertMainLayer,
+        hf_tokenizer=BertTokenizerFast,
+        hf_config=BertConfig,
+        weights_replacement=[
+            ("tf_bert_for_pre_training_2/bert/", "model/featurizer/tf_bert_main_layer/"),
+            ("tf_bert_for_pre_training/bert/", "model/featurizer/tf_bert_main_layer/")
+        ]
+    )
 
     class TestSequenceHuggingfaceElectra(TestSequenceLabelerTCN):
-        base_model = HFElectra
+        base_model = HFElectra        
 
     class TestClassifierHuggingfaceElectra(TestClassifierTextCNN):
         base_model = HFElectra
+
+    class TestComparisonHuggingfaceElectra(TestComparisonTextCNN):
+        base_model = HFElectra
+
+    class TestSequenceHuggingfaceBERT(TestSequenceLabelerTCN):
+        base_model = HFBert
+
+        def test_low_memory_mode(self):
+            raw_docs = ["".join(text) for text in self.texts]
+            texts, annotations = finetune_to_indico_sequence(
+                raw_docs, self.texts, self.labels, none_value=self.model.config.pad_token
+            )
+            train_texts, test_texts, train_annotations, test_annotations = train_test_split(
+                texts, annotations, test_size=0.1
+            )
+            train_texts = [t * 10 for t in train_texts]
+            self.model.config.low_memory_mode = True
+            self.model.config.batch_size = 32
+
+            self.model.fit(train_texts * 10, train_annotations * 10)
 
 except ImportError:
     import warnings

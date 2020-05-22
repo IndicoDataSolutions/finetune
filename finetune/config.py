@@ -1,7 +1,6 @@
 import logging
 import os
 import os.path
-import subprocess
 import warnings
 from collections import namedtuple
 from functools import lru_cache
@@ -13,6 +12,7 @@ import finetune
 from finetune.errors import FinetuneError
 from finetune.base_models import RoBERTa
 
+import tensorflow as tf
 LOGGER = logging.getLogger("finetune")
 
 
@@ -22,73 +22,27 @@ def finetune_model_path(path):
     )
 
 
-def nvidia_device_ids():
-    sp = subprocess.Popen(
-        ["nvidia-smi", "-L"], stdout=subprocess.PIPE, stderr=subprocess.PIPE
-    )
-    response = sp.communicate()[0]
-    gpu_list = response.decode("utf-8").strip().split("\n")
-    device_ids = {}
-    for i, gpu in enumerate(gpu_list):
-        # May be worth logging GPU description
-        device_id_str, _, description = gpu.partition(":")
-        assert int(device_id_str.split(" ")[-1]) == i
-        device_ids[i] = description
-    return device_ids
-
-
 @lru_cache()
 def all_gpus(visible_gpus=None):
     """
     Get integer ids of all available GPUs.
-
-    Sample response from nvidia-smi -L:
-        GPU 0: GeForce GTX 980 (UUID: GPU-2d683060-957f-d5ad-123c-a5b49b0116d9)
-        GPU 1: GeForce GTX 980 (UUID: GPU-7b8496dc-3eaf-8db7-01e7-c4a884f66acf)
-        GPU 2: GeForce GTX TITAN X (UUID: GPU-9e01f108-e7de-becd-2589-966dcc1c778f)
     """
     if visible_gpus is not None:
         return [int(gpu) for gpu in visible_gpus]
-    try:
-        cuda_visible_devices = os.getenv("CUDA_VISIBLE_DEVICES")
-        device_ids = nvidia_device_ids()
-        mapping = None
-        # restricting GPUs based on env vars
-        if cuda_visible_devices is not None:
-            device_ids = {
-                device_id: description
-                for device_id, description in device_ids.items()
-                if str(device_id) in cuda_visible_devices.split(",")
-            }
-            mapping = {
-                dev_id: i for i, (dev_id, _) in enumerate(sorted(device_ids.items()))
-            }
-
-        LOGGER.info(
-            " Visible GPUs: {{{}}}".format(
-                ", ".join(
-                    [
-                        "{}:{}".format(device_id, description.split("(")[0]).strip()
-                        for device_id, description in device_ids.items()
-                    ]
-                )
+    devices = tf.config.experimental.list_physical_devices('GPU')
+    LOGGER.info(
+        " Visible GPUs: {{{}}}".format(
+            ", ".join(
+                [
+                    "{}:{}".format(device.device_type, device.name).strip()
+                    for device in devices
+                ]
             )
         )
-
-        if mapping is not None:
-            # Resolve these to internal tensorflow device ids.
-            # These are equivalent if no visible_devices masking is used
-            device_ids = {
-                mapping[device_id]: description
-                for device_id, description in device_ids.items()
-            }
-
-        device_ids = list(device_ids.keys())
-    except:
-        # Failed to parse out available GPUs properly
+    )
+    if not devices:
         warnings.warn("Failed to find available GPUS.  Falling back to CPU only mode.")
-        device_ids = []
-
+    device_ids = list(range(len(devices)))
     return device_ids
 
 
