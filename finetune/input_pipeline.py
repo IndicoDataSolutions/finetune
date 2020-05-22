@@ -28,12 +28,18 @@ LOGGER = logging.getLogger("finetune")
 class BasePipeline(metaclass=ABCMeta):
     def __init__(self, config):
         self.config = config
-        self.text_encoder = self.config.base_model.get_encoder(self.config)
+        self._text_encoder = None
         self.label_encoder = None
         self.target_dim = None
         self.pad_idx_ = None
         self.rebuild = False
         self._chunker = None
+
+    @property
+    def text_encoder(self):
+        if not hasattr(self, "_text_encoder") or self._text_encoder is None:
+            self._text_encoder = self.config.base_model.get_encoder(self.config)
+        return self._text_encoder
 
     @property
     def dataset_size(self):
@@ -383,3 +389,9 @@ class BasePipeline(metaclass=ABCMeta):
                     d[field] = field_value
 
             yield EncodedOutput(**d)
+    
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        del state["_text_encoder"]
+        return state
+        
