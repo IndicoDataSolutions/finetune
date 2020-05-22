@@ -91,9 +91,9 @@ if __name__ == "__main__":
     pretrained_weights = "transfo-xl-wt103"
     base_model = finetune_model_from_huggingface(
         weights_url=TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP[pretrained_weights],
-        hf_featurizer=TFTransfoXLMainLayer,
-        hf_tokenizer=TransfoXLTokenizerFast.from_pretrained(pretrained_weights),
-        hf_config=TransfoXLConfig.from_pretrained(pretrained_weights),
+        hf_featurizer_instance=TFTransfoXLMainLayer,
+        hf_tokenizer_instance=TransfoXLTokenizerFast.from_pretrained(pretrained_weights),
+        hf_config_instance=TransfoXLConfig.from_pretrained(pretrained_weights),
         weights_replacement=[
             ("tf_bert_for_pre_training_2/bert/", "model/featurizer/tf_bert_main_layer/"),
             ("tf_electra_for_masked_lm/electra", "model/featurizer/tf_electra_main_layer")

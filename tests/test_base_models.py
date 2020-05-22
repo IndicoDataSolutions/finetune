@@ -33,6 +33,8 @@ from finetune.util.metrics import (
     sequence_labeling_overlap_precision,
     sequence_labeling_overlap_recall,
 )
+from finetune.util.huggingface_interface import finetune_model_from_huggingface
+
 
 
 SST_FILENAME = "SST-binary.csv"
@@ -528,3 +530,28 @@ class TestSequenceLabelerOscar(TestSequenceLabelerTextCNN):
 class TestClassifierOscar(TestClassifierTextCNN):
     model_specific_config = {"n_epochs": 2, "lr": 1e-4}
     base_model = OSCAR
+
+try:
+    from transformers import *
+    from transformers.modeling_tf_electra import TFElectraMainLayer
+
+    HFElectra = finetune_model_from_huggingface(
+            pretrained_weights="google/electra-base-generator",
+            archive_map=TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
+            hf_featurizer=TFElectraMainLayer,
+            hf_tokenizer=ElectraTokenizerFast,
+            hf_config=ElectraConfig,
+            weights_replacement=[
+                ("tf_electra_for_masked_lm/electra", "model/featurizer/tf_electra_main_layer")
+            ]
+        )
+
+    class TestSequenceHuggingfaceElectra(TestSequenceLabelerTCN):
+        base_model = HFElectra
+
+    class TestClassifierHuggingfaceElectra(TestClassifierTextCNN):
+        base_model = HFElectra
+
+except ImportError:
+    import warnings
+    warnings.warn("Skipping tests for Hugging face base models as we cannot import the transformers library")

@@ -42,6 +42,7 @@ setup(
     extras_require={
         "tf": ["tensorflow==1.14.0"],
         "tf_gpu": ["tensorflow-gpu==1.14.0"],
+        "hf_transformers": ["transformers==2.9.1"]
     },
     include_package_data=False,
     zip_safe=False,
