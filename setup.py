@@ -47,9 +47,9 @@ setup(
     version="0.8.6",
     install_requires=REQUIREMENTS,
     extras_require={
-        "tf": ["tensorflow==1.14.0"],
-        "tf_gpu": ["tensorflow-gpu==1.14.0"],
-        "hf_transformers": ["transformers==2.9.1"],
+        "tf": ["tensorflow==2.2.0"],
+        "tf_gpu": ["tensorflow-gpu==2.2.0"],
+        "hf_transformers": ["transformers==2.9.1"]
     },
     include_package_data=False,
     zip_safe=False,

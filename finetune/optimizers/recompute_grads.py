@@ -146,7 +146,6 @@ def _recompute_grad(fn, args, use_entire_scope, train_vars=None):
 
     def grad_fn(inputs, variables, outputs, output_grads):
         """Recompute outputs for gradient computation."""
-        print("Grad Fn ====== " * 10)
         del outputs
         variables = [underlying_variable_ref(v) for v in variables]
         # Recompute outputs

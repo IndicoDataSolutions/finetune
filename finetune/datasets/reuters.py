@@ -70,35 +70,6 @@ class Reuters(Dataset):
 
 
 if __name__ == "__main__":
-
-    from transformers import *
-    from transformers.modeling_tf_electra import TFElectraMainLayer
-    from finetune.util.huggingface_interface import finetune_model_from_huggingface
-    
-    """
-    pretrained_weights = "google/electra-base-generator"
-    base_model = finetune_model_from_huggingface(
-        weights_url=TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP[pretrained_weights],
-        hf_featurizer=TFElectraMainLayer,
-        hf_tokenizer=ElectraTokenizerFast.from_pretrained(pretrained_weights),
-        hf_config=ElectraConfig.from_pretrained(pretrained_weights),
-        weights_replacement=[
-            ("tf_bert_for_pre_training_2/bert/", "model/featurizer/tf_bert_main_layer/"),
-            ("tf_electra_for_masked_lm/electra", "model/featurizer/tf_electra_main_layer")
-        ]
-    )
-    """
-    pretrained_weights = "transfo-xl-wt103"
-    base_model = finetune_model_from_huggingface(
-        weights_url=TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP[pretrained_weights],
-        hf_featurizer_instance=TFTransfoXLMainLayer,
-        hf_tokenizer_instance=TransfoXLTokenizerFast.from_pretrained(pretrained_weights),
-        hf_config_instance=TransfoXLConfig.from_pretrained(pretrained_weights),
-        weights_replacement=[
-            ("tf_bert_for_pre_training_2/bert/", "model/featurizer/tf_bert_main_layer/"),
-            ("tf_electra_for_masked_lm/electra", "model/featurizer/tf_electra_main_layer")
-        ]
-    )
     dataset = Reuters().dataframe
     dataset['annotations'] = [json.loads(annotation) for annotation in dataset['annotations']]
     trainX, testX, trainY, testY = train_test_split(
@@ -107,7 +78,7 @@ if __name__ == "__main__":
         test_size=0.2,
         random_state=42
     )
-    model = SequenceLabeler(base_model=base_model, n_epochs=3)
+    model = SequenceLabeler(batch_size=1, n_epochs=3, val_size=0.0, max_length=512, chunk_long_sequences=True, subtoken_predictions=False, crf_sequence_labeling=True, multi_label_sequences=False)
     model.fit(trainX, trainY)
     predictions = model.predict(testX)
     print(predictions)
