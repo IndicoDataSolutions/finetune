@@ -45,20 +45,6 @@ def finetune_model_from_huggingface(
     weights_url = archive_map[pretrained_weights]
     hf_tokenizer_instance = hf_tokenizer.from_pretrained(pretrained_weights)
     hf_config_instance = hf_config.from_pretrained(pretrained_weights)
-    weights_file = "{}_{}.jl".format(pretrained_weights.replace("/", "_"), hf_featurizer.__name__)
-
-    weights_path = os.path.join(
-        FINETUNE_BASE_FOLDER, "model", "huggingface", weights_file
-    )
-    raw_weights_path = os.path.join(
-        FINETUNE_BASE_FOLDER, "model", "huggingface", "raw_" + weights_file
-    )
-    if not os.path.exists(raw_weights_path):
-        tqdl.download(weights_url, raw_weights_path)
-    jl.dump(
-        load_weights_from_hdf5_group_by_name(raw_weights_path, weights_replacement),
-        weights_path,
-    )
 
     def finetune_featurizer(X, encoder, config, train=False, reuse=None, **kwargs):
         initial_shape = tf.shape(input=X)
@@ -86,7 +72,9 @@ def finetune_model_from_huggingface(
 
             if config.low_memory_mode and train:
                 for layer in hf_model.encoder.layer:
-                    layer.__call__ == recompute_grad(layer.__call__, train_vars=layer.trainable_weights)
+                    layer.__call__ == recompute_grad(
+                        layer.__call__, train_vars=layer.trainable_weights
+                    )
 
             kwargs = {
                 "attention_mask": mask,
@@ -171,6 +159,16 @@ def finetune_model_from_huggingface(
         def decode(self, ids):
             return NotImplemented
 
+    weights_file = "{}_{}.jl".format(
+        pretrained_weights.replace("/", "_"), hf_featurizer.__name__
+    )
+    raw_weights_path = os.path.join(
+        FINETUNE_BASE_FOLDER, "model", "huggingface", "raw_" + weights_file
+    )
+    weights_path = os.path.join(
+        FINETUNE_BASE_FOLDER, "model", "huggingface", weights_file
+    )
+
     class HuggingFaceModel(SourceModel):
         encoder = HuggingFaceEncoder
         featurizer = finetune_featurizer
@@ -180,7 +178,16 @@ def finetune_model_from_huggingface(
             "n_embed": hf_config_instance.hidden_size,
             "max_length": hf_config_instance.max_position_embeddings,
         }
-        required_files = []
+        required_files = [{"url": weights_url, "file": raw_weights_path}]
+
+        @classmethod
+        def process_base_model(cls):
+            jl.dump(
+                load_weights_from_hdf5_group_by_name(
+                    raw_weights_path, weights_replacement
+                ),
+                weights_path,
+            )
 
         def __reduce__(self):
             return (

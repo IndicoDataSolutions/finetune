@@ -41,6 +41,10 @@ class SourceModel(metaclass=ABCMeta):
     def get_featurizer(cls, X, encoder, config, train=False, reuse=None, **kwargs):
         return cls.featurizer(X, encoder, config, train=train, reuse=reuse, **kwargs)
 
+    @classmethod
+    def process_base_model(cls):
+        pass
+
 
 from finetune.base_models.gpt.model import GPTModel, GPTModelSmall
 from finetune.base_models.gpt2.model import GPT2Model, GPT2Model345, GPT2Model762, GPT2Model1558

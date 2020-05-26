@@ -22,3 +22,5 @@ def download_data_if_required(base_model):
             path.parent.mkdir(parents=True, exist_ok=True)
             print("Downloading: {}".format(path.name))
             tqdl.download(file_obj['url'], str(path))
+
+    base_model.process_base_model()
