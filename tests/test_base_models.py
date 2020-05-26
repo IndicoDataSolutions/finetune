@@ -33,7 +33,15 @@ from finetune.util.metrics import (
     sequence_labeling_overlap_precision,
     sequence_labeling_overlap_recall,
 )
-from finetune.util.huggingface_interface import finetune_model_from_huggingface
+try:
+    from finetune.base_models.huggingface.models import HFBert, HFElectraGen, HFElectraDiscrim
+    HUGGINGFACE_MODELS = True
+except ImportError:
+    HFBert = None
+    HFElectraGen = None
+    HFElectraDiscrim = None
+    
+    HUGGINGFACE_MODELS = False
 
 
 
@@ -533,59 +541,50 @@ class TestClassifierOscar(TestClassifierTextCNN):
     model_specific_config = {"n_epochs": 2, "lr": 1e-4}
     base_model = OSCAR
 
-try:
-    from transformers import *
-    from transformers.modeling_tf_electra import TFElectraMainLayer
 
-    HFElectra = finetune_model_from_huggingface(
-        pretrained_weights="google/electra-base-generator",
-        archive_map=TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
-        hf_featurizer=TFElectraMainLayer,
-        hf_tokenizer=ElectraTokenizerFast,
-        hf_config=ElectraConfig,
-        weights_replacement=[
-            ("tf_electra_for_masked_lm/electra", "model/featurizer/tf_electra_main_layer")
-        ]
-    )
-    
-    HFBert = finetune_model_from_huggingface(
-        pretrained_weights="bert-base-uncased",
-        archive_map=TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
-        hf_featurizer=TFBertMainLayer,
-        hf_tokenizer=BertTokenizerFast,
-        hf_config=BertConfig,
-        weights_replacement=[
-            ("tf_bert_for_pre_training_2/bert/", "model/featurizer/tf_bert_main_layer/"),
-            ("tf_bert_for_pre_training/bert/", "model/featurizer/tf_bert_main_layer/")
-        ]
-    )
+@unittest.skipIf(not HUGGINGFACE_MODELS, reason="Hugging face transformers could not be imported")
+class TestSequenceHuggingfaceElectraGen(TestSequenceLabelerTCN):
+    base_model = HFElectraGen        
 
-    class TestSequenceHuggingfaceElectra(TestSequenceLabelerTCN):
-        base_model = HFElectra        
 
-    class TestClassifierHuggingfaceElectra(TestClassifierTextCNN):
-        base_model = HFElectra
+@unittest.skipIf(not HUGGINGFACE_MODELS, reason="Hugging face transformers could not be imported")
+class TestClassifierHuggingfaceElectraGen(TestClassifierTextCNN):
+    base_model = HFElectraGen
 
-    class TestComparisonHuggingfaceElectra(TestComparisonTextCNN):
-        base_model = HFElectra
 
-    class TestSequenceHuggingfaceBERT(TestSequenceLabelerTCN):
-        base_model = HFBert
+@unittest.skipIf(not HUGGINGFACE_MODELS, reason="Hugging face transformers could not be imported")
+class TestComparisonHuggingfaceElectraGen(TestComparisonTextCNN):
+    base_model = HFElectraGen
 
-        def test_low_memory_mode(self):
-            raw_docs = ["".join(text) for text in self.texts]
-            texts, annotations = finetune_to_indico_sequence(
-                raw_docs, self.texts, self.labels, none_value=self.model.config.pad_token
-            )
-            train_texts, test_texts, train_annotations, test_annotations = train_test_split(
-                texts, annotations, test_size=0.1
-            )
-            train_texts = [t * 10 for t in train_texts]
-            self.model.config.low_memory_mode = True
-            self.model.config.batch_size = 32
+@unittest.skipIf(not HUGGINGFACE_MODELS, reason="Hugging face transformers could not be imported")
+class TestSequenceHuggingfaceElectraDiscrim(TestSequenceLabelerTCN):
+    base_model = HFElectraDiscrim        
 
-            self.model.fit(train_texts * 10, train_annotations * 10)
 
-except ImportError:
-    import warnings
-    warnings.warn("Skipping tests for Hugging face base models as we cannot import the transformers library")
+@unittest.skipIf(not HUGGINGFACE_MODELS, reason="Hugging face transformers could not be imported")
+class TestClassifierHuggingfaceElectraDiscrim(TestClassifierTextCNN):
+    base_model = HFElectraDiscrim
+
+
+@unittest.skipIf(not HUGGINGFACE_MODELS, reason="Hugging face transformers could not be imported")
+class TestComparisonHuggingfaceElectraDiscrim(TestComparisonTextCNN):
+    base_model = HFElectraDiscrim
+
+
+@unittest.skipIf(not HUGGINGFACE_MODELS, reason="Hugging face transformers could not be imported")
+class TestSequenceHuggingfaceBERT(TestSequenceLabelerTCN):
+    base_model = HFBert
+
+    def test_low_memory_mode(self):
+        raw_docs = ["".join(text) for text in self.texts]
+        texts, annotations = finetune_to_indico_sequence(
+            raw_docs, self.texts, self.labels, none_value=self.model.config.pad_token
+        )
+        train_texts, test_texts, train_annotations, test_annotations = train_test_split(
+            texts, annotations, test_size=0.1
+        )
+        train_texts = [t * 10 for t in train_texts]
+        self.model.config.low_memory_mode = True
+        self.model.config.batch_size = 32
+
+        self.model.fit(train_texts * 10, train_annotations * 10)
