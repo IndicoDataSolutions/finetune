@@ -24,15 +24,22 @@ REQUIREMENTS = [
     "regex>=2019.03.12",
     "lxml>=4.3.3",
     "sentencepiece>=0.1.83",
-    "tabulate>=0.8.6,<0.9.0", 
+    "tabulate>=0.8.6,<0.9.0",
 ]
 
 
 class OpsBuild(build_ext):
     def run(self):
-        script = os.path.join(os.path.dirname(__file__), "finetune", "custom_ops", "build.sh")
+        script = os.path.join(
+            os.path.dirname(__file__), "finetune", "custom_ops", "build.sh"
+        )
         if subprocess.run(["sh", script]).returncode != 0:
-            warnings.warn("Failed to build the finetune ops, most aspects of finetune should function anyway.")
+            warnings.warn(
+                "Failed to build the finetune memory management ops required for use of Scheduler. "
+                "If you don't intend to use Scheduler you can safely ignore this message. "
+                "To build the ops later execute {}".format(script)
+            )
+
 
 setup(
     name="finetune",
@@ -42,12 +49,10 @@ setup(
     extras_require={
         "tf": ["tensorflow==1.14.0"],
         "tf_gpu": ["tensorflow-gpu==1.14.0"],
-        "hf_transformers": ["transformers==2.9.1"]
+        "hf_transformers": ["transformers==2.9.1"],
     },
     include_package_data=False,
     zip_safe=False,
-    cmdclass={
-        'build_ext': OpsBuild,
-    },
-    package_data={"finetune": ["libindico_kernels.so"]}
+    cmdclass={"build_ext": OpsBuild,},
+    package_data={"finetune": ["libindico_kernels.so"]},
 )
