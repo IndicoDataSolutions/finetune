@@ -181,7 +181,7 @@ def finetune_model_from_huggingface(
         required_files = [{"url": weights_url, "file": raw_weights_path}]
 
         @classmethod
-        def process_base_model(cls):
+        def translate_base_model_format(cls):
             jl.dump(
                 load_weights_from_hdf5_group_by_name(
                     raw_weights_path, weights_replacement

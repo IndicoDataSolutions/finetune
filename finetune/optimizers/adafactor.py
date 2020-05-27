@@ -42,11 +42,7 @@ def cast_like(x, y):
     return cast_x
 
 
-<<<<<<< HEAD
 class AdafactorOptimizer(tf.keras.optimizers.Optimizer):
-=======
-class AdafactorOptimizer(tf.compat.v1.train.Optimizer):
->>>>>>> ADD: optimize loss port from contrib
     """Optimizer that implements the Adafactor algorithm.
 
     Adafactor is described in https://arxiv.org/abs/1804.04235.
