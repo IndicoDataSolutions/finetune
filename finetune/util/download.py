@@ -23,4 +23,4 @@ def download_data_if_required(base_model):
             print("Downloading: {}".format(path.name))
             tqdl.download(file_obj['url'], str(path))
 
-    base_model.process_base_model()
+    base_model.translate_base_model_format()

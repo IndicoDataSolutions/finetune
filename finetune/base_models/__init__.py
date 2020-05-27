@@ -42,7 +42,7 @@ class SourceModel(metaclass=ABCMeta):
         return cls.featurizer(X, encoder, config, train=train, reuse=reuse, **kwargs)
 
     @classmethod
-    def process_base_model(cls):
+    def translate_base_model_format(cls):
         pass
 
 
