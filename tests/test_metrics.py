@@ -532,3 +532,45 @@ class TestMetrics(unittest.TestCase):
                 expected=expected,
                 span_type=span_type,
             )
+
+
+    def test_whitespace(self):
+        x = "a and b"
+        y_true = [
+            {
+                "start": 0,
+                "end": 7,
+                "text": x,
+                "label": "class1"
+            }
+        ]
+        y_pred = [
+            {
+                "start": 0,
+                "end": 8,
+                "text": x + " ",
+                "label": "class1"
+            },
+        ]
+        expected = {
+            "class1": {
+                "false_positives": 0,
+                "false_negatives": 0,
+                "true_positives": 1,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1-score": 1.0,
+            },
+            "micro-f1": 1.0, 
+            "macro-f1": 1.0,
+            "weighted-f1": 1.0,
+
+        }
+        for span_type in ["superset", "overlap", "exact"]:
+            self.check_metrics(
+                [y_true],
+                [y_pred],
+                expected=expected,
+                span_type=span_type,
+            )
+

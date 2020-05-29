@@ -216,6 +216,17 @@ def sequence_f1(true, predicted, span_type="token", average=None):
     else:
         return f1s_by_class
 
+def strip_whitespace(y):
+    label_text = y["text"]
+    lstripped = label_text.lstrip()
+    new_start = y["start"] + (len(label_text) - len(lstripped))
+    stripped = label_text.strip()
+    return {
+        "text": label_text.strip(),
+        "start": new_start,
+        "end": new_start + len(stripped),
+        "label": y["label"]
+    }
 
 def sequence_labeling_token_precision(true, predicted):
     """
@@ -251,6 +262,8 @@ def sequence_exact_match(true_seq, pred_seq):
     """
     Boolean return value indicates whether or not seqs are exact match
     """
+    true_seq = strip_whitespace(true_seq)
+    pred_seq = strip_whitespace(pred_seq)
     return pred_seq["start"] == true_seq["start"] and pred_seq["end"] == true_seq["end"]
 
 
@@ -258,6 +271,8 @@ def sequence_superset(true_seq, pred_seq):
     """
     Boolean return value indicates whether or predicted seq is a superset of target
     """
+    true_seq = strip_whitespace(true_seq)
+    pred_seq = strip_whitespace(pred_seq)
     return pred_seq["start"] <= true_seq["start"] and pred_seq["end"] >= true_seq["end"]
 
 
@@ -281,25 +296,26 @@ def sequence_labeling_counts(true, predicted, equality_fn):
         for annotations in [true_annotations, predicted_annotations]:
             for annotation in annotations:
                 annotation['doc_idx'] = i
-        for true_annotation in true_annotations:
+
+        for true_annotation in true_annotations: # This loop covers all predictions which DO overlap.
+            matched = False
             for pred_annotation in predicted_annotations:
                 if equality_fn(true_annotation, pred_annotation):
                     if pred_annotation['label'] == true_annotation['label']:
-                        d[true_annotation['label']]['true_positives'].append(true_annotation)
+                        if not matched:
+                            matched = True
+                            d[true_annotation['label']]['true_positives'].append(true_annotation)
                     else:
-                        d[true_annotation['label']]['false_negatives'].append(true_annotation)
                         d[pred_annotation['label']]['false_positives'].append(pred_annotation)
-                    break
-            else:
+            if not matched:
                 d[true_annotation['label']]['false_negatives'].append(true_annotation)
 
-        for pred_annotation in predicted_annotations:
+        for pred_annotation in predicted_annotations: # This loop covers all predictions which DO NOT overlap.
             for true_annotation in true_annotations:
                 if (
                     equality_fn(
                         true_annotation, pred_annotation
                     )
-                    and true_annotation["label"] == pred_annotation["label"]
                 ):
                     break
             else:
