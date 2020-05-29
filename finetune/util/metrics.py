@@ -242,8 +242,8 @@ def sequences_overlap(true_seq, pred_seq):
     """
     Boolean return value indicates whether or not seqs overlap
     """
-    start_contained = (pred_seq['start'] < true_seq['end'] and pred_seq['start'] >= true_seq['start'])
-    end_contained = (pred_seq['end'] > true_seq['start'] and pred_seq['end'] <= true_seq['end'])
+    start_contained = (pred_seq['start'] <= true_seq['end'] and pred_seq['start'] >= true_seq['start'])
+    end_contained = (pred_seq['end'] >= true_seq['start'] and pred_seq['end'] <= true_seq['end'])
     return start_contained or end_contained
 
 
