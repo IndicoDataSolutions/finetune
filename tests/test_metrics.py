@@ -115,13 +115,13 @@ class TestMetrics(unittest.TestCase):
         macro_f1 = sequence_f1(Y, Y_pred, span_type=span_type, average="macro")
         for cls_ in counts:
             for metric in counts[cls_]:
-                self.assertEqual(len(counts[cls_][metric]), expected[cls_][metric])
-            self.assertAlmostEqual(recalls[cls_], expected[cls_]["recall"], places=3)
+                self.assertEqual(len(counts[cls_][metric]), expected[cls_][metric], msg=f"class={cls_}, metric={metric}")
+            self.assertAlmostEqual(recalls[cls_], expected[cls_]["recall"], places=3, msg=f"class={cls_}")
             self.assertAlmostEqual(
-                per_class_f1s[cls_]["f1-score"], expected[cls_]["f1-score"], places=3
+                per_class_f1s[cls_]["f1-score"], expected[cls_]["f1-score"], places=3, msg=f"class={cls_}"
             )
             self.assertAlmostEqual(
-                precisions[cls_], expected[cls_]["precision"], places=3
+                precisions[cls_], expected[cls_]["precision"], places=3, msg=f"class={cls_}"
             )
         self.assertAlmostEqual(micro_f1_score, expected["micro-f1"], places=3)
         self.assertAlmostEqual(weighted_f1, expected["weighted-f1"], places=3)
@@ -335,3 +335,203 @@ class TestMetrics(unittest.TestCase):
             expected=expected,
             span_type="superset",
         )
+
+
+    def test_overlapping_2_class(self):
+        x = "a and b"
+        y_true = [
+            {
+                "start": 0,
+                "end": 7,
+                "text": x,
+                "label": "class1"
+            }
+        ]
+        y_pred = [
+            {
+                "start": 0,
+                "end": 1,
+                "text": "a",
+                "label": "class2"
+            },
+            {
+                "start": 6,
+                "end": 7,
+                "text": "b",
+                "label": "class1"
+            }
+        ]
+        expected = {
+            "class1": {
+                "false_positives": 0,
+                "false_negatives": 0,
+                "true_positives": 1,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1-score": 1.0,
+            },
+            "class2": {
+                "false_positives": 1,
+                "false_negatives": 0,
+                "true_positives": 0,
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1-score": 0.0,
+            },
+            "micro-f1": 0.66666, # Calculated as the harmonic mean of Recall = 1, Precision = 0.5
+            "macro-f1": 0.5,
+            "weighted-f1": 1.0, # because there is no support for class2
+
+        }
+        for span_type in ["overlap", "superset"]:
+            self.check_metrics(
+                [y_true],
+                [y_pred],
+                expected=expected,
+                span_type=span_type,
+            )
+
+    def test_overlapping_2_class_swapped(self):
+        x = "a and b"
+        y_true = [
+            {
+                "start": 0,
+                "end": 7,
+                "text": x,
+                "label": "class1"
+            }
+        ]
+        y_pred = [
+            {
+                "start": 0,
+                "end": 1,
+                "text": "a",
+                "label": "class1"
+            },
+            {
+                "start": 6,
+                "end": 7,
+                "text": "b",
+                "label": "class2"
+            }
+        ]
+        expected = {
+            "class1": {
+                "false_positives": 0,
+                "false_negatives": 0,
+                "true_positives": 1,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1-score": 1.0,
+            },
+            "class2": {
+                "false_positives": 1,
+                "false_negatives": 0,
+                "true_positives": 0,
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1-score": 0.0,
+            },
+            "micro-f1": 0.66666, # Calculated as the harmonic mean of Recall = 1, Precision = 0.5
+            "macro-f1": 0.5,
+            "weighted-f1": 1.0, # because there is no support for class2
+        }
+        for span_type in ["overlap", "superset"]:
+            self.check_metrics(
+                [y_true],
+                [y_pred],
+                expected=expected,
+                span_type=span_type,
+            )
+
+
+    def test_overlapping_1_class(self):
+        x = "a and b"
+        y_true = [
+            {
+                "start": 0,
+                "end": 7,
+                "text": x,
+                "label": "class1"
+            }
+        ]
+        y_pred = [
+            {
+                "start": 0,
+                "end": 1,
+                "text": "a",
+                "label": "class1"
+            },
+            {
+                "start": 6,
+                "end": 7,
+                "text": "b",
+                "label": "class1"
+            }
+        ]
+        expected = {
+            "class1": {
+                "false_positives": 0,
+                "false_negatives": 0,
+                "true_positives": 1,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1-score": 1.0,
+            },
+            "micro-f1": 1.0,
+            "macro-f1": 1.0,
+            "weighted-f1": 1.0,
+        }
+        for span_type in ["overlap", "superset"]:
+            self.check_metrics(
+                [y_true],
+                [y_pred],
+                expected=expected,
+                span_type=span_type,
+            )
+
+
+    def test_2_class(self):
+        x = "a and b"
+        y_true = [
+            {
+                "start": 0,
+                "end": 1,
+                "text": "a",
+                "label": "class1"
+            },
+            {
+                "start": 6,
+                "end": 7,
+                "text": "b",
+                "label": "class1"
+            }
+        ]
+        y_pred = [
+            {
+                "start": 0,
+                "end": 7,
+                "text": x,
+                "label": "class1"
+            },
+        ]
+        expected = {
+            "class1": {
+                "false_positives": 0,
+                "false_negatives": 0,
+                "true_positives": 2,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1-score": 1.0,
+            },
+            "micro-f1": 1.0,
+            "macro-f1": 1.0,
+            "weighted-f1": 1.0,
+        }
+        for span_type in ["overlap", "superset"]:
+            self.check_metrics(
+                [y_true],
+                [y_pred],
+                expected=expected,
+                span_type=span_type,
+            )
