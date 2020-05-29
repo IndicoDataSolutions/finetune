@@ -383,13 +383,12 @@ class TestMetrics(unittest.TestCase):
             "weighted-f1": 1.0, # because there is no support for class2
 
         }
-        for span_type in ["overlap", "superset"]:
-            self.check_metrics(
-                [y_true],
-                [y_pred],
-                expected=expected,
-                span_type=span_type,
-            )
+        self.check_metrics(
+            [y_true],
+            [y_pred],
+            expected=expected,
+            span_type="overlap",
+        )
 
     def test_overlapping_2_class_swapped(self):
         x = "a and b"
@@ -436,13 +435,12 @@ class TestMetrics(unittest.TestCase):
             "macro-f1": 0.5,
             "weighted-f1": 1.0, # because there is no support for class2
         }
-        for span_type in ["overlap", "superset"]:
-            self.check_metrics(
-                [y_true],
-                [y_pred],
-                expected=expected,
-                span_type=span_type,
-            )
+        self.check_metrics(
+            [y_true],
+            [y_pred],
+            expected=expected,
+            span_type="overlap",
+        )
 
 
     def test_overlapping_1_class(self):
@@ -482,13 +480,12 @@ class TestMetrics(unittest.TestCase):
             "macro-f1": 1.0,
             "weighted-f1": 1.0,
         }
-        for span_type in ["overlap", "superset"]:
-            self.check_metrics(
-                [y_true],
-                [y_pred],
-                expected=expected,
-                span_type=span_type,
-            )
+        self.check_metrics(
+            [y_true],
+            [y_pred],
+            expected=expected,
+            span_type="overlap",
+        )
 
 
     def test_2_class(self):
