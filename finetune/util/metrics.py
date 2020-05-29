@@ -36,7 +36,7 @@ def _convert_to_token_list(annotations, doc_idx=None):
 
 def sequence_labeling_token_confusion(text, true, predicted):
     none_class = "<None>"
-    unique_classes = list(set([seq['label'] for seqs in true for seq in seqs]))
+    unique_classes = list(set([seq['label'] for seqs in true + predicted for seq in seqs]))
     unique_classes.append(none_class)
 
     true_per_token_all = []
@@ -79,7 +79,7 @@ def sequence_labeling_token_counts(true, predicted):
     Return FP, FN, and TP counts
     """
 
-    unique_classes = set([seq['label'] for seqs in true for seq in seqs])
+    unique_classes = set([seq['label'] for seqs in true + predicted for seq in seqs])
 
     d = {
         cls_: {
@@ -265,7 +265,7 @@ def sequence_labeling_counts(true, predicted, equality_fn):
     """
     Return FP, FN, and TP counts
     """
-    unique_classes = set([annotation['label'] for annotations in true for annotation in annotations])
+    unique_classes = set([annotation['label'] for annotations in true + predicted for annotation in annotations])
 
     d = {
         cls_: {
