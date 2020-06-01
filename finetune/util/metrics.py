@@ -297,25 +297,21 @@ def sequence_labeling_counts(true, predicted, equality_fn):
             for annotation in annotations:
                 annotation['doc_idx'] = i
 
-        for true_annotation in true_annotations: # This loop covers all predictions which DO overlap.
-            matched = False
+        for true_annotation in true_annotations: 
             for pred_annotation in predicted_annotations:
                 if equality_fn(true_annotation, pred_annotation):
                     if pred_annotation['label'] == true_annotation['label']:
-                        if not matched:
-                            matched = True
                             d[true_annotation['label']]['true_positives'].append(true_annotation)
-                    else:
-                        d[pred_annotation['label']]['false_positives'].append(pred_annotation)
-            if not matched:
+                            break
+            else:
                 d[true_annotation['label']]['false_negatives'].append(true_annotation)
 
-        for pred_annotation in predicted_annotations: # This loop covers all predictions which DO NOT overlap.
+        for pred_annotation in predicted_annotations: 
             for true_annotation in true_annotations:
                 if (
                     equality_fn(
                         true_annotation, pred_annotation
-                    )
+                    ) and true_annotation["label"] == pred_annotation["label"]
                 ):
                     break
             else:
