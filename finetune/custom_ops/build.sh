@@ -5,7 +5,7 @@ get_abs_filename() {
 }
 
 ROOT_DIR=`dirname $0`
-
+mkdir -p $ROOT_DIR/indico_tf_ops/build
 cd $ROOT_DIR/indico_tf_ops/build
 cmake ..
 make
