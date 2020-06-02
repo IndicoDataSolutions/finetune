@@ -11,7 +11,7 @@ from setuptools.command.build_ext import build_ext
 REQUIREMENTS = [
     "pandas>=0.23.1",
     "tqdm>=4.0.0",
-    "numpy>=1.13.0",
+    "numpy>=1.18.4",
     "scipy>=1.1.0",
     "scikit-learn>=0.20.2,<0.23",
     "ftfy>=4.4.0",
@@ -25,6 +25,8 @@ REQUIREMENTS = [
     "lxml>=4.3.3",
     "sentencepiece>=0.1.83",
     "tabulate>=0.8.6,<0.9.0",
+    "tensorflow-addons==0.10.0",
+    "tensorflow-estimator==2.2.0"
 ]
 
 
