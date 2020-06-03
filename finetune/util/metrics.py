@@ -15,6 +15,11 @@ from finetune.encoding.input_encoder import get_spacy
 
 _EVENT_FILE_GLOB_PATTERN = 'events.out.tfevents.*'
 
+def _get_unique_classes(true, predicted):
+    true_and_pred = list(true) + list(predicted)
+    return list(set(
+        [seq['label'] for seqs in true_and_pred for seq in seqs]
+    ))
 
 def _convert_to_token_list(annotations, doc_idx=None):
     nlp = get_spacy()
@@ -39,7 +44,7 @@ def _convert_to_token_list(annotations, doc_idx=None):
 def sequence_labeling_token_confusion(text, true, predicted):
     nlp = get_spacy()
     none_class = "<None>"
-    unique_classes = list(set([seq['label'] for seqs in true + predicted for seq in seqs]))
+    unique_classes = _get_unique_classes(true, predicted)
     unique_classes.append(none_class)
 
     true_per_token_all = []
@@ -82,7 +87,7 @@ def sequence_labeling_token_counts(true, predicted):
     Return FP, FN, and TP counts
     """
 
-    unique_classes = set([seq['label'] for seqs in true + predicted for seq in seqs])
+    unique_classes = _get_unique_classes(true, predicted)
 
     d = {
         cls_: {
@@ -283,7 +288,7 @@ def sequence_labeling_counts(true, predicted, equality_fn):
     """
     Return FP, FN, and TP counts
     """
-    unique_classes = set([annotation['label'] for annotations in true + predicted for annotation in annotations])
+    unique_classes = _get_unique_classes(true, predicted)
 
     d = {
         cls_: {
