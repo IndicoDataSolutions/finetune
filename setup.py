@@ -26,7 +26,7 @@ REQUIREMENTS = [
     "sentencepiece>=0.1.83",
     "tabulate>=0.8.6,<0.9.0",
     "tensorflow-addons==0.10.0",
-    "tensorflow-estimator==2.2.0"
+    "tensorflow-estimator==2.2.0",
     "tqdl==0.0.4"
 ]
 
@@ -54,8 +54,6 @@ setup(
         "tf_gpu": ["tensorflow-gpu==2.2.0"],
         "hf_transformers": ["transformers==2.9.1"]
     },
-    include_package_data=False,
     zip_safe=False,
     cmdclass={"build_ext": OpsBuild,},
-    package_data={"finetune": ["libindico_kernels.so"]},
 )

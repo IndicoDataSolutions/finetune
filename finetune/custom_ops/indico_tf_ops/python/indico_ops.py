@@ -5,6 +5,15 @@ import math
 import tensorflow as tf
 from tensorflow.python.framework import ops
 
+from finetune.errors import FinetuneError
+
+class DummyKernels:
+    def __getattribute__(self, name):
+        raise FinetuneError(
+            "Indico custom ops are not available."
+            " Try running `bash finetune/custom_ops/build.sh` to build these ops."
+        )
+
 try:
     kernels_module = tf.load_op_library(
         os.path.join(os.path.dirname(__file__),'../build/libindico_kernels.so')
@@ -13,6 +22,7 @@ try:
 except:
     if tf.test.is_built_with_cuda():
         warnings.warn("Cuda appears to be available but cannot load the kernels")
+    kernels_module = DummyKernels()
     BUILT = False
 
 def shape_list(x):
