@@ -56,4 +56,5 @@ setup(
     },
     zip_safe=False,
     cmdclass={"build_ext": OpsBuild,},
+    include_package_data=True
 )
