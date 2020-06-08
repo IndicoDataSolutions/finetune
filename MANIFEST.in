@@ -1,0 +1,4 @@
+include finetune/custom_ops/indico_tf_ops/ops/*/*
+include finetune/custom_ops/build.sh
+include finetune/custom_ops/indico_tf_ops/CMakeLists.txt
+include finetune/custom_ops/indico_tf_ops/build/libindico_kernels.so
