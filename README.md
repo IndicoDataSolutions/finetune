@@ -123,6 +123,6 @@ For CPU-only usage:
 ./docker/start_cpu_docker.sh
 ```
 
-# Documentation
+# Documentat
 Full documentation and an API Reference for `finetune` is available at [finetune.indico.io](https://finetune.indico.io).
 
