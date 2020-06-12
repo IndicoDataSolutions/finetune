@@ -504,11 +504,34 @@ class BaseModel(object, metaclass=ABCMeta):
         Base method to get raw token-level features out of the model.
         These features are the same features that are fed into the target_model.
         """
-        if self.config.chunk_long_sequences:
-            warnings.warn("`chunk_long_sequences` is currently not compatible with featurize_sequence")
-            
         zipped_data = self.input_pipeline.zip_list_to_dict(X=Xs, context=context)
         raw_preds = self._inference(zipped_data, predict_keys=[PredictMode.SEQUENCE], **kwargs)
+        print(np.asarray(raw_preds).shape)
+        arr_encoded = [self.input_pipeline._text_to_ids(d["X"])
+                       for d in zipped_data]
+        chunk_info = []
+        chunk_to_seq = []
+        for i,gen in enumerate(arr_encoded):
+            for chunk in gen:
+                chunk_info.append(chunk)
+                chunk_to_seq.append(i)
+        for c in chunk_info:
+            print(f"\t{len(c.token_ids)}")
+
+        if self.config.chunk_long_sequences:
+
+            merged_preds = [[] for _ in range(len(zipped_data))]
+            for i,pred in enumerate(raw_preds):
+                start = chunk_info[i].useful_start
+                end = chunk_info[i].useful_end
+                end_idxs = chunk_info[i].token_ends
+                print(f"Chunk len: {len(pred[start:end])}")
+                for token,end_idx in zip(pred[start:end], end_idxs):
+                    # if end_idx == -1:
+                    #     continue
+                    merged_preds[chunk_to_seq[i]].append(token)
+            return np.asarray(merged_preds)
+            
         return np.asarray(raw_preds)
 
     @classmethod
