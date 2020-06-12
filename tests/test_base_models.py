@@ -486,7 +486,7 @@ class TestSequenceLabelerTextCNN(TestModelBase):
         post_load_preds = model.predict(test_texts)
         self.assertEqual(post_load_preds, pre_save_preds)
 
-    def test_chunked_featurize_sequence(self):
+    def test_featurize_sequence(self):
         test_input = ["""Pirateipsum: Corsair bilge rat interloper. Nipperkin
                       aye chase. Brigantine yard weigh anchor.  Jolly boat
                       American Main spirits. Letter of Marque reef sails cable.
@@ -501,20 +501,21 @@ class TestSequenceLabelerTextCNN(TestModelBase):
         non_chunk_config["max_length"] = 256
         model = SequenceLabeler(**non_chunk_config)
         non_chunk_features = model.featurize_sequence(test_input)
-        # print(non_chunk_features[1])
 
-        chunk_config = self.default_config()
-        chunk_config["max_length"] = 32
-        model2 = SequenceLabeler(**chunk_config)
-        chunk_features = model2.featurize_sequence(test_input)
-        # print(chunk_features[1])
+        for max_len in [8, 16, 32, 64, 128, 256]:
+            chunk_config = self.default_config()
+            chunk_config["max_length"] = max_len
+            model2 = SequenceLabeler(**chunk_config)
+            chunk_features = model2.featurize_sequence(test_input)
 
-        print(non_chunk_features.shape)
-        print(chunk_features.shape)
-        print(np.asarray(chunk_features[0]).shape)
-        print(np.asarray(chunk_features[1]).shape)
-        print(non_chunk_features==chunk_features)
-        self.assertTrue((non_chunk_features==chunk_features).all())
+            for non_chunk,chunk,X in zip(non_chunk_features,
+                                         chunk_features,
+                                         test_input):
+                encoded = next(model.input_pipeline._text_to_ids(X))
+                # subtract 2 to account for the start and end tokens
+                encoded_len = len(encoded.token_ids) - 2
+                self.assertTrue(chunk.shape[0] == encoded_len)
+                self.assertTrue(non_chunk.shape == chunk.shape)
 
 
 class TestSequenceLabelerBert(TestSequenceLabelerTextCNN):
