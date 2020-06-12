@@ -507,7 +507,6 @@ class BaseModel(object, metaclass=ABCMeta):
         zipped_data = self.input_pipeline.zip_list_to_dict(X=Xs, context=context)
         raw_preds = self._inference(zipped_data, predict_keys=[PredictMode.SEQUENCE], **kwargs)
         chunk_gens = [self.input_pipeline._text_to_ids(d["X"]) for d in zipped_data]
-        print(np.asarray(raw_preds).shape)
 
         chunks = []
         chunk_to_seq = []
@@ -515,7 +514,6 @@ class BaseModel(object, metaclass=ABCMeta):
             for chunk in gen:
                 chunks.append(chunk)
                 chunk_to_seq.append(i)
-                print(f"\t{len(chunk.token_ids)}")
 
         processed_preds  = [[] for _ in range(len(zipped_data))]
         for i,pred in enumerate(raw_preds):
@@ -530,8 +528,6 @@ class BaseModel(object, metaclass=ABCMeta):
                 processed_preds[chunk_to_seq[i]].append(token)
 
         processed_preds = [np.asarray(pred) for pred in processed_preds]
-        for pred in processed_preds:
-            print(pred.shape)
         return processed_preds
 
     @classmethod
