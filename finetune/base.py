@@ -506,33 +506,33 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         zipped_data = self.input_pipeline.zip_list_to_dict(X=Xs, context=context)
         raw_preds = self._inference(zipped_data, predict_keys=[PredictMode.SEQUENCE], **kwargs)
+        chunk_gens = [self.input_pipeline._text_to_ids(d["X"]) for d in zipped_data]
         print(np.asarray(raw_preds).shape)
-        arr_encoded = [self.input_pipeline._text_to_ids(d["X"])
-                       for d in zipped_data]
-        chunk_info = []
+
+        chunks = []
         chunk_to_seq = []
-        for i,gen in enumerate(arr_encoded):
+        for i,gen in enumerate(chunk_gens):
             for chunk in gen:
-                chunk_info.append(chunk)
+                chunks.append(chunk)
                 chunk_to_seq.append(i)
-        for c in chunk_info:
-            print(f"\t{len(c.token_ids)}")
+                print(f"\t{len(chunk.token_ids)}")
 
-        if self.config.chunk_long_sequences:
+        processed_preds  = [[] for _ in range(len(zipped_data))]
+        for i,pred in enumerate(raw_preds):
+            if self.config.chunk_long_sequences:
+                start, end = chunks[i].useful_start, chunks[i].useful_end
+            else:
+                start, end = None, None
+            end_idxs = chunks[i].token_ends
+            for token,end_idx in zip(pred[start:end], end_idxs[start:end]):
+                if end_idx == -1:
+                    continue
+                processed_preds[chunk_to_seq[i]].append(token)
 
-            merged_preds = [[] for _ in range(len(zipped_data))]
-            for i,pred in enumerate(raw_preds):
-                start = chunk_info[i].useful_start
-                end = chunk_info[i].useful_end
-                end_idxs = chunk_info[i].token_ends
-                print(f"Chunk len: {len(pred[start:end])}")
-                for token,end_idx in zip(pred[start:end], end_idxs):
-                    # if end_idx == -1:
-                    #     continue
-                    merged_preds[chunk_to_seq[i]].append(token)
-            return np.asarray(merged_preds)
-            
-        return np.asarray(raw_preds)
+        processed_preds = [np.asarray(pred) for pred in processed_preds]
+        for pred in processed_preds:
+            print(pred.shape)
+        return processed_preds
 
     @classmethod
     def get_eval_fn(cls):
