@@ -64,6 +64,7 @@ class TestModelBase(unittest.TestCase):
         return defaults
 
 
+
 class TestClassifierTextCNN(TestModelBase):
     n_sample = 20
     dataset_path = os.path.join("Data", "Classify", "SST-binary.csv")
@@ -484,6 +485,36 @@ class TestSequenceLabelerTextCNN(TestModelBase):
         model = SequenceLabeler.load(self.save_file)
         post_load_preds = model.predict(test_texts)
         self.assertEqual(post_load_preds, pre_save_preds)
+
+    def test_chunked_featurize_sequence(self):
+        test_input = ["""Pirateipsum: Corsair bilge rat interloper. Nipperkin
+                      aye chase. Brigantine yard weigh anchor.  Jolly boat
+                      American Main spirits. Letter of Marque reef sails cable.
+                      Deadlights port nipper.  Fire ship gibbet American Main.
+                      Jack Ketch cable fore.  Tack black jack draught.""",
+                      """Nipperkin aye chase. Brigantine yard weigh anchor.
+                      Jolly boat American Main spirits. Letter of Marque reef
+                      sails cable.  Deadlights port nipper.  Fire ship gibbet
+                      American Main.  Jack Ketch cable fore."""]
+        non_chunk_config = self.default_config()
+        non_chunk_config["chunk_long_sequences"] = False
+        non_chunk_config["max_length"] = 256
+        model = SequenceLabeler(**non_chunk_config)
+        non_chunk_features = model.featurize_sequence(test_input)
+        # print(non_chunk_features[1])
+
+        chunk_config = self.default_config()
+        chunk_config["max_length"] = 32
+        model2 = SequenceLabeler(**chunk_config)
+        chunk_features = model2.featurize_sequence(test_input)
+        # print(chunk_features[1])
+
+        print(non_chunk_features.shape)
+        print(chunk_features.shape)
+        print(np.asarray(chunk_features[0]).shape)
+        print(np.asarray(chunk_features[1]).shape)
+        print(non_chunk_features==chunk_features)
+        self.assertTrue((non_chunk_features==chunk_features).all())
 
 
 class TestSequenceLabelerBert(TestSequenceLabelerTextCNN):
