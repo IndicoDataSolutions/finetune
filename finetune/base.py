@@ -518,14 +518,12 @@ class BaseModel(object, metaclass=ABCMeta):
         processed_preds  = [[] for _ in range(len(zipped_data))]
         for i,pred in enumerate(raw_preds):
             if self.config.chunk_long_sequences:
-                start, end = chunks[i].useful_start, chunks[i].useful_end
+                start, end = chunks[i].useful_start, chunks[i].useful_end 
             else:
-                start, end = None, None
-            end_idxs = chunks[i].token_ends
-            for token,end_idx in zip(pred[start:end], end_idxs[start:end]):
-                if end_idx == -1:
-                    continue
-                processed_preds[chunk_to_seq[i]].append(token)
+                start, end = 0, None
+            not_padding = chunks[i].token_ends[start:end] != -1
+            no_pad_pred = pred[start:start + len(not_padding)][not_padding]
+            processed_preds[chunk_to_seq[i]].extend(no_pad_pred)
 
         processed_preds = [np.asarray(pred) for pred in processed_preds]
         return processed_preds
