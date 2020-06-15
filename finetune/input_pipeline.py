@@ -372,6 +372,10 @@ class BasePipeline(metaclass=ABCMeta):
                             start_token, end_token = field_starts_and_ends[field]
                             if fv[0] != start_token:
                                 fv = np.concatenate(([start_token], fv))
+                                # Update start and end only once
+                                if field == EncodedOutput._fields[0]:
+                                    useful_start += 1
+                                    useful_end += 1
                             if fv[-1] != end_token:
                                 fv = np.concatenate((fv, [end_token]))
                         d[field] = fv
