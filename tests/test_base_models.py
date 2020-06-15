@@ -502,20 +502,23 @@ class TestSequenceLabelerTextCNN(TestModelBase):
         model = SequenceLabeler(**non_chunk_config)
         non_chunk_features = model.featurize_sequence(test_input)
 
-        for max_len in [8, 16, 32, 64, 128, 256]:
-            chunk_config = self.default_config()
-            chunk_config["max_length"] = max_len
-            model2 = SequenceLabeler(**chunk_config)
-            chunk_features = model2.featurize_sequence(test_input)
+        for max_len in [64, 128, 256]:
+            for add_tokens in [True, False]:
+                chunk_config = self.default_config()
+                chunk_config["max_length"] = max_len
+                model2 = SequenceLabeler(**chunk_config)
+                model2.input_pipeline.config.add_eos_bos_to_chunk = add_tokens
+                chunk_features = model2.featurize_sequence(test_input)
 
-            for non_chunk,chunk,X in zip(non_chunk_features,
-                                         chunk_features,
-                                         test_input):
-                encoded = next(model.input_pipeline._text_to_ids(X))
-                # subtract 2 to account for the start and end tokens
-                encoded_len = len(encoded.token_ids) - 2
-                self.assertTrue(chunk.shape[0] == encoded_len)
-                self.assertTrue(non_chunk.shape == chunk.shape)
+                for non_chunk,chunk,X in zip(non_chunk_features,
+                                             chunk_features,
+                                             test_input):
+                    encoded = next(model.input_pipeline._text_to_ids(X))
+                    # subtract 2 to account for the start and end tokens
+                    encoded_len = len(encoded.token_ids) - 2
+                    self.assertTrue(non_chunk.shape[0] == encoded_len)
+                    self.assertTrue(chunk.shape[0] == encoded_len)
+                    self.assertTrue(non_chunk.shape == chunk.shape)
 
 
 class TestSequenceLabelerBert(TestSequenceLabelerTextCNN):
