@@ -47,7 +47,7 @@ class SSLPipeline(BasePipeline):
     def __init__(self, config, multi_label):
         super(SequencePipeline, self).__init__(config)
 
-  def zip_list_to_dict(self, X, Y=None, context=None):
+    def zip_list_to_dict(self, X, Y=None, context=None):
         if Y is not None:
             Y = list(Y)
             if len(X) != len(Y):
@@ -56,17 +56,17 @@ class SSLPipeline(BasePipeline):
             context = list(context)
             if len(X) != len(context):
                 raise FinetuneError("the length of your context does not match the length of your text")
-        out = []
+        x_out = []
         for i, x in enumerate(X):
             sample = {"X": x}
             if Y is not None:
                 sample["Y"] = Y[i]
             if context is not None:
                 sample["context"] = context[i]
-            out.append(sample)
+            x_out.append(sample)
         return out
 
-def  text_to_tokens_mask(self, X, Y=None, context=None):
+    def  text_to_tokens_mask(self, X, Y=None, context=None):
         pad_token = [self.config.pad_token] if self.multi_label else self.config.pad_token
         out_gen = self._text_to_ids(X, pad_token=pad_token)
         for out in out_gen:
@@ -131,9 +131,10 @@ def  text_to_tokens_mask(self, X, Y=None, context=None):
             )
         return dataset_fn
 
-    def get_dataset_from_generator(self, generator_fn, input_mode, update_hook=None):
-        def chunked_and_tokenized_dataset():
-            for d in generator_fn():
+    def get_dataset_from_generator(self, generator_fn, input_mode,
+                                   update_hook=None, u_generator_fn=None):
+        def chunked_and_tokenized_dataset(gen):
+            for d in gen():
                 yield from self.text_to_tokens_mask(**d)
 
         types, shapes = self.feed_shape_type_def()
@@ -144,21 +145,28 @@ def  text_to_tokens_mask(self, X, Y=None, context=None):
             tqdm_mode = "train"
 
         if input_mode == InputMode.PREDICT or not has_targets(generator_fn):
-            types = types[0]
-            shapes = shapes[0]
-        
-        raw_dataset = self.make_dataset_fn(
-            data_fn=chunked_and_tokenized_dataset,
+            x_types, x_shapes = types[0], shapes[0]
+        else
+            x_types, x_shapes = types, shapes
+       
+        x_data_fn = lambda: chunked_and_tokenized_dataset(generator_fn)
+        x_raw_dataset = self.make_dataset_fn(
+            data_fn=x_data_fn,
             tqdm_mode=tqdm_mode,
             update_hook=update_hook,
-            types=types,
-            shapes=shapes,
+            types=x_types,
+            shapes=x_shapes,
             skip_val=input_mode == InputMode.TRAIN
         )
+
+        
         if input_mode == InputMode.PREDICT:
+            if u_generator_fn:
+                warnings.warn("""U is ignored in predict mode - pass all data
+                              as X for predictions""")
             return {
                 "predict_dataset": batch_dataset(
-		    raw_dataset,
+                    x_raw_dataset,
                     batch_size=self.config.predict_batch_size,
                     shapes=shapes,
                 )
@@ -184,7 +192,7 @@ def  text_to_tokens_mask(self, X, Y=None, context=None):
         self.config.dataset_size -= self.config.val_size
 
         val_dataset = (
-            lambda: raw_dataset()
+            lambda: x_raw_dataset()
             .shuffle(
                 self.config.shuffle_buffer_size,
                 seed=self.config.seed,
@@ -192,23 +200,54 @@ def  text_to_tokens_mask(self, X, Y=None, context=None):
             )
             .take(self.config.val_size)
         )
-        train_dataset = (
-            lambda: raw_dataset()
+        x_train_dataset = (
+            lambda: x_raw_dataset()
             .shuffle(
-	        self.config.shuffle_buffer_size,
+                self.config.shuffle_buffer_size,
                 seed=self.config.seed,
                 reshuffle_each_iteration=False,
             )
             .skip(self.config.val_size)
         )
-
-        return {
-            "train_dataset": batch_dataset(
+        x_batch_dataset = batch_dataset(
                 train_dataset,
                 batch_size=self.config.batch_size,
                 shapes=shapes,
                 n_epochs=self.config.n_epochs
-            ),
+        )
+
+        if u_generator_fn:
+            u_data_fn = lambda: chunked_and_tokenized_dataset(u_generator_fn)
+            u_types, u_shapes = types[0], shapes[0]
+            u_raw_dataset = self.make_dataset_fn(
+                data_fn=u_data_fn,
+                tqdm_mode=tqdm_mode,
+                update_hook=update_hook,
+                types=u_types,
+                shapes=u_shapes,
+                skip_val=input_mode == InputMode.TRAIN
+            )
+            u_train_dataset = (
+                lambda: u_raw_dataset()
+                .shuffle(
+                    self.config.shuffle_buffer_size,
+                    seed=self.config.seed,
+                    reshuffle_each_iteration=False,
+                )
+            )
+            u_batch_dataset = batch_dataset(
+                    train_dataset,
+                    batch_size=self.config.batch_size,
+                    shapes=shapes,
+                    n_epochs=self.config.n_epochs
+            )
+            train_gen = lambda: combine_datasets(x_batch_dataset,
+                                                 u_batch_dataset)
+        else:
+            train_gen = x_batch_dataset
+
+        return {
+            "train_dataset": train_gen,
             "val_dataset": batch_dataset(
                 val_dataset,
                 batch_size=self.config.batch_size,
@@ -217,24 +256,24 @@ def  text_to_tokens_mask(self, X, Y=None, context=None):
         }
 
 
-    def get_dataset_from_list(self, data_list, input_mode, update_hook=None):
+    def get_dataset_from_list(self, data_list, input_mode, update_hook=None, u_data_list=None):
         assert input_mode == InputMode.TRAIN, "use the generator path for prediction"
         
-        data_list = list(data_list)
-        self._post_data_initialization(data_list)
+        x_data_list = list(data_list)
+        self._post_data_initialization(x_data_list)
             
         self.config.val_size, self.config.val_interval = validation_settings(
-            dataset_size=len(data_list),
+            dataset_size=len(x_data_list),
             batch_size=self.config.batch_size,
             val_size=self.config.val_size,
             val_interval=self.config.val_interval,
             keep_best_model=self.config.keep_best_model
-	)
+        )
 
         if self.config.val_size > 0 and self.config.val_set is None:
-            train_split, val_split = train_test_split(data_list, test_size=self.config.val_size, random_state=self.config.seed)
+            train_split, val_split = train_test_split(x_data_list, test_size=self.config.val_size, random_state=self.config.seed)
         else:
-            train_split = dataset_shuffle(data_list, random_state=self.config.seed)
+            train_split = dataset_shuffle(x_data_list, random_state=self.config.seed)
             val_split = self.config.val_set or []
 
         tokenized_train_split = list(
@@ -260,15 +299,16 @@ def  text_to_tokens_mask(self, X, Y=None, context=None):
             
         types, shapes = self.feed_shape_type_def()
         if not has_targets(lambda: tokenized_train_split):
-            types = types[0]
-            shapes = shapes[0]
+            x_types, x_shapes = types[0], shapes[0]
+        else
+            x_types, x_shapes = types, shapes
 
-        train_dataset_unbatched = self.make_dataset_fn(
+        train_split_unbatched = self.make_dataset_fn(
             data_fn=lambda: tokenized_train_split,
             tqdm_mode="train",
             update_hook=update_hook,
-            types=types,
-            shapes=shapes
+            types=x_types,
+            shapes=x_shapes
         )
         val_dataset_unbatched = self.make_dataset_fn(
             data_fn=lambda: tokenized_val_split,
@@ -276,20 +316,59 @@ def  text_to_tokens_mask(self, X, Y=None, context=None):
             types=types,
             shapes=shapes
         )
-        
-        return {
-	    "train_dataset": batch_dataset(
-                train_dataset_unbatched,
-		batch_size=self.config.batch_size,
-                shapes=shapes,
+
+        train_split_batched = batch_dataset(
+            train_split_unbatched,
+            batch_size=self.config.batch_size,
+            shapes=x_shapes,
+            n_epochs=self.config.n_epochs
+        )
+
+        if u_data_list:
+            u_data_list = list(u_data_list)
+            u_train = dataset_shuffle(u_data_list, random_state=self.config.seed)
+            tokenized_u_train = list(
+                itertools.chain.from_iterable(
+                    self.text_to_tokens_mask(**d) for d in u_train
+                )
+            )
+            u_types, u_shapes = types[0], shapes[0]
+            u_train_unbatched = self.make_dataset_fn(
+                data_fn=lambda: tokenized_u_train,
+                tqdm_mode="train",
+                update_hook=update_hook,
+                types=u_types,
+                shapes=u_shapes
+            )
+            u_train_batched = batch_dataset(
+                u_train_unbatched,
+                batch_size=self.config.batch_size,
+                shapes=u_shapes,
                 n_epochs=self.config.n_epochs
-            ),
+            )
+            train_gen = lambda: combine_datasets(train_split_batched,
+                                                 u_train_batch)
+        else:
+            train_gen = train_split_batched
+
+        return {
+            "train_dataset": train_gen,
             "val_dataset": batch_dataset(
-		val_dataset_unbatched,
-	        batch_size=self.config.batch_size,
+                val_dataset_unbatched,
+                batch_size=self.config.batch_size,
                 shapes=shapes
             )
         }
+
+    def combine_datasets(x_dataset, u_dataset):
+        for X, U in zip(x_dataset, u_dataset):
+            combined = {
+                **X,
+                "u_tokens": U["tokens"]
+            }
+            if "context" in U:
+                combined["u_context"] = U["context"]
+            return combined
 
     def _target_encoder(self):
         return SequenceLabelingEncoder(pad_token=self.config.pad_token)
@@ -301,9 +380,7 @@ class SSLLabeler(BaseModel):
         super().__init__(**kwargs)
 
     def _get_input_pipeline(self):
-        return SequencePipeline(
-            config=self.config, multi_label=self.config.multi_label_sequences
-        )
+        return SSLPipeline(config=self.config)
 
     def _initialize(self):
         return super()._initialize()
@@ -359,15 +436,20 @@ class SSLLabeler(BaseModel):
             **kwargs
         )
 
-    def finetune(self, Xs, Y=None, context=None, update_hook=None):
+    def finetune(self, Xs, Us=None, Y=None, context=None, update_hook=None):
         if callable(Xs):
+            assert (not Us or callable(Us)), "If X is a generator, U must also be a generator"
             datasets = self.input_pipeline.get_dataset_from_generator(
-                Xs, input_mode=InputMode.TRAIN, update_hook=update_hook
+                Xs, input_mode=InputMode.TRAIN,
+                update_hook=update_hook, u_generator_fn=Us
             )
         else:
-            zipped_data_list = self.input_pipeline.zip_list_to_dict(X=Xs, Y=Y, context=context)
+            assert (not Us or not callable(Us)), "If X is a list, U must also be a list"
+            x_list = self.input_pipeline.zip_list_to_dict(X=Xs, Y=Y, context=context)
+            u_list = self.input_pipeline.zip_list_to_dict(X=Us, Y=Y, context=context)
             datasets = self.input_pipeline.get_dataset_from_list(
-                zipped_data_list, input_mode=InputMode.TRAIN, update_hook=update_hook
+                x_list, input_mode=InputMode.TRAIN,
+                update_hook=update_hook, u_data_list=u_list
             )
                 
         if self.config.keep_best_model:
