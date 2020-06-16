@@ -282,6 +282,38 @@ class TestClassifierTextCNN(TestModelBase):
         features = model.featurize(train_sample.Text)
         self.assertEqual(features.shape, (self.n_sample, model.config.n_embed))
 
+    def test_featurize_sequence(self):
+        test_input = ["""Pirateipsum: Corsair bilge rat interloper. Nipperkin
+                      aye chase. Brigantine yard weigh anchor.  Jolly boat
+                      American Main spirits. Letter of Marque reef sails cable.
+                      Deadlights port nipper.  Fire ship gibbet American Main.
+                      Jack Ketch cable fore.  Tack black jack draught.""",
+                      """Nipperkin aye chase. Brigantine yard weigh anchor.
+                      Jolly boat American Main spirits. Letter of Marque reef
+                      sails cable.  Deadlights port nipper.  Fire ship gibbet
+                      American Main.  Jack Ketch cable fore."""]
+        non_chunk_config = self.default_config()
+        non_chunk_config["chunk_long_sequences"] = False
+        non_chunk_config["max_length"] = 256
+        model = Classifier(**non_chunk_config)
+        non_chunk_features = model.featurize_sequence(test_input)
+
+        for max_len in [32, 64, 128, 256]:
+            chunk_config = self.default_config()
+            chunk_config["max_length"] = max_len
+            model2 = Classifier(**chunk_config)
+            chunk_features = model2.featurize_sequence(test_input)
+
+            for non_chunk,chunk,X in zip(non_chunk_features,
+                                         chunk_features,
+                                         test_input):
+                encoded = next(model.input_pipeline._text_to_ids(X))
+                # subtract 2 to account for the start and end tokens
+                encoded_len = len(encoded.token_ids) - 2
+                self.assertTrue(non_chunk.shape[0] == encoded_len)
+                self.assertTrue(chunk.shape[0] == encoded_len)
+                self.assertTrue(non_chunk.shape == chunk.shape)
+
     def test_validation(self):
         """
         Ensure validation settings do not result in an error
@@ -502,23 +534,21 @@ class TestSequenceLabelerTextCNN(TestModelBase):
         model = SequenceLabeler(**non_chunk_config)
         non_chunk_features = model.featurize_sequence(test_input)
 
-        for max_len in [64, 128, 256]:
-            for add_tokens in [True, False]:
-                chunk_config = self.default_config()
-                chunk_config["max_length"] = max_len
-                model2 = SequenceLabeler(**chunk_config)
-                model2.input_pipeline.config.add_eos_bos_to_chunk = add_tokens
-                chunk_features = model2.featurize_sequence(test_input)
+        for max_len in [32, 64, 128, 256]:
+            chunk_config = self.default_config()
+            chunk_config["max_length"] = max_len
+            model2 = SequenceLabeler(**chunk_config)
+            chunk_features = model2.featurize_sequence(test_input)
 
-                for non_chunk,chunk,X in zip(non_chunk_features,
-                                             chunk_features,
-                                             test_input):
-                    encoded = next(model.input_pipeline._text_to_ids(X))
-                    # subtract 2 to account for the start and end tokens
-                    encoded_len = len(encoded.token_ids) - 2
-                    self.assertTrue(non_chunk.shape[0] == encoded_len)
-                    self.assertTrue(chunk.shape[0] == encoded_len)
-                    self.assertTrue(non_chunk.shape == chunk.shape)
+            for non_chunk,chunk,X in zip(non_chunk_features,
+                                         chunk_features,
+                                         test_input):
+                encoded = next(model.input_pipeline._text_to_ids(X))
+                # subtract 2 to account for the start and end tokens
+                encoded_len = len(encoded.token_ids) - 2
+                self.assertTrue(non_chunk.shape[0] == encoded_len)
+                self.assertTrue(chunk.shape[0] == encoded_len)
+                self.assertTrue(non_chunk.shape == chunk.shape)
 
 
 class TestSequenceLabelerBert(TestSequenceLabelerTextCNN):
