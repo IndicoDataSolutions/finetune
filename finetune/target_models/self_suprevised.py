@@ -51,188 +51,30 @@ from finetune.encoding.sequence_encoder import (
     finetune_to_indico_sequence,
 )
 from finetune.encoding.input_encoder import get_spacy
-from finetune.input_pipeline import BasePipeline
 from finetune.encoding.input_encoder import tokenize_context
+from finetune.target_models.sequence_labeling import SequencePipeline
 
 LOGGER = logging.getLogger("finetune")
 
 
-class SSLPipeline(BasePipeline):
+class SSLPipeline(SequencePipeline):
     def __init__(self, config, multi_label):
-        super(SSLPipeline, self).__init__(config)
-        self.multi_label = multi_label
-
-    def zip_list_to_dict(self, X, Y=None, context=None):
-        if Y is not None:
-            Y = list(Y)
-            if len(X) != len(Y):
-                raise FinetuneError("the length of your labels does not match the length of your text")
-        if context is not None:
-            context = list(context)
-            if len(X) != len(context):
-                raise FinetuneError("the length of your context does not match the length of your text")
-        out = []
-        for i, x in enumerate(X):
-            sample = {"X": x}
-            if Y is not None:
-                sample["Y"] = Y[i]
-            if context is not None:
-                sample["context"] = context[i]
-            out.append(sample)
-        return out
-
-    def  text_to_tokens_mask(self, X, Y=None, context=None):
-        pad_token = [self.config.pad_token] if self.multi_label else self.config.pad_token
-        out_gen = self._text_to_ids(X, pad_token=pad_token)
-        for out in out_gen:
-            feats = {"tokens": out.token_ids}
-            if context is not None:
-                tokenized_context = tokenize_context(context, out, self.config)
-                feats['context'] = tokenized_context
-            if Y is None:
-                yield feats
-            if Y is not None:
-                min_starts = min(out.token_starts)
-                max_ends = max(out.token_ends)
-                filtered_labels = [
-                    lab for lab in Y if lab["end"] >= min_starts and lab["start"] <= max_ends
-                ]
-                if self.config.filter_empty_examples and len(filtered_labels) == 0:
-                    continue
-                yield feats, self.label_encoder.transform(out, filtered_labels)
-
-    def _compute_class_counts(self, encoded_dataset):
-        counter = Counter()
-        for doc, target_arr in encoded_dataset:
-            target_arr = np.asarray(target_arr)
-            decoded_targets = self.label_encoder.inverse_transform(target_arr)
-            if self.multi_label:
-                for label in decoded_targets:
-                    counter.update(label)
-            else:
-                counter.update(decoded_targets)
-        return counter
-
-    def feed_shape_type_def(self):
-        TS = tf.TensorShape
-        types = {"tokens": tf.int32}
-        shapes = {"tokens": TS([None])}
-        types, shapes = self._add_context_info_if_present(types, shapes)
-        target_shape = (
-            [None, self.label_encoder.target_dim]
-            if self.multi_label
-            else [None]
-        )
-        return (
-            (types, tf.float32,),
-            (shapes, TS(target_shape),),
-        )
-
-    def make_dataset_fn(self, data_fn, tqdm_mode, shapes, types, update_hook=None, skip_val=False):
-        def dataset_fn():
-            return Dataset.from_generator(
-                wrap_tqdm(
-                    gen=data_fn,
-                    mode=tqdm_mode,
-                    n_epochs=self.config.n_epochs,
-                    val_size=self.config.val_size,
-                    dataset_size=self.config.dataset_size,
-                    skip_val=skip_val,
-                    silent=self.config.debugging_logs,
-                    update_hook=update_hook
-                ),
-                types,
-                shapes
-            )
-        return dataset_fn
+        super(SSLPipeline, self).__init__(config, multi_label)
 
     def get_dataset_from_generator(self, generator_fn, input_mode,
                                    update_hook=None, u_generator_fn=None):
         def chunked_and_tokenized_dataset(gen):
             for d in gen():
                 yield from self.text_to_tokens_mask(**d)
-
-        types, shapes = self.feed_shape_type_def()
-        
+                
+        datasets = super().get_dataset_from_generator(generator_fn, input_mode,
+                                                      update_hook=update_hook)
         if input_mode == InputMode.PREDICT:
-            tqdm_mode = "predict"
-        else:
-            tqdm_mode = "train"
-
-        if input_mode == InputMode.PREDICT or not has_targets(generator_fn):
-            x_types, x_shapes = types[0], shapes[0]
-        else:
-            x_types, x_shapes = types, shapes
-       
-        x_data_fn = lambda: chunked_and_tokenized_dataset(generator_fn)
-        x_raw_dataset = self.make_dataset_fn(
-            data_fn=x_data_fn,
-            tqdm_mode=tqdm_mode,
-            update_hook=update_hook,
-            types=x_types,
-            shapes=x_shapes,
-            skip_val=input_mode == InputMode.TRAIN
-        )
-
-        
-        if input_mode == InputMode.PREDICT:
-            if u_generator_fn:
-                warnings.warn("""U is ignored in predict mode - pass all data
-                              as X for predictions""")
-            return {
-                "predict_dataset": batch_dataset(
-                    x_raw_dataset,
-                    batch_size=self.config.predict_batch_size,
-                    shapes=shapes,
-                )
-            }
-        
-        if self.config.chunk_long_sequences:
-            LOGGER.warning("The dataset size is not adjusted for chunk long sequences when training from a generator")
-
-        if self.config.dataset_size is None:
-            raise FinetuneError("If you are using a callable as input you must provide config.dataset_size")
-
-        if self.config.class_weights is not None or self.config.oversample:
-            raise FinetuneError("Cannot use class weights or resampling in generator mode")
-
-        self.config.val_size, self.config.val_interval = validation_settings(
-            dataset_size=self.config.dataset_size,
-            batch_size=self.config.batch_size,
-            val_size=self.config.val_size,
-            val_interval=self.config.val_interval,
-            keep_best_model=self.config.keep_best_model
-        )
-
-        self.config.dataset_size -= self.config.val_size
-
-        val_dataset = (
-            lambda: x_raw_dataset()
-            .shuffle(
-                self.config.shuffle_buffer_size,
-                seed=self.config.seed,
-                reshuffle_each_iteration=False,
-            )
-            .take(self.config.val_size)
-        )
-        x_train_dataset = (
-            lambda: x_raw_dataset()
-            .shuffle(
-                self.config.shuffle_buffer_size,
-                seed=self.config.seed,
-                reshuffle_each_iteration=False,
-            )
-            .skip(self.config.val_size)
-        )
-        x_batch_dataset = batch_dataset(
-                train_dataset,
-                batch_size=self.config.batch_size,
-                shapes=shapes,
-                n_epochs=self.config.n_epochs
-        )
+            return datasets
 
         if u_generator_fn:
             u_data_fn = lambda: chunked_and_tokenized_dataset(u_generator_fn)
+            types, shapes = self.feed_shape_type_def()
             u_types, u_shapes = types[0], shapes[0]
             u_raw_dataset = self.make_dataset_fn(
                 data_fn=u_data_fn,
@@ -251,94 +93,22 @@ class SSLPipeline(BasePipeline):
                 )
             )
             u_batch_dataset = batch_dataset(
-                    train_dataset,
+                    u_train_dataset,
                     batch_size=self.config.batch_size,
-                    shapes=shapes,
+                    shapes=u_shapes,
                     n_epochs=self.config.n_epochs
             )
-            train_gen = lambda: self.combine_datasets(x_batch_dataset,
-                                                      u_batch_dataset)
-        else:
-            train_gen = x_batch_dataset
-
-        return {
-            "train_dataset": train_gen,
-            "val_dataset": batch_dataset(
-                val_dataset,
-                batch_size=self.config.batch_size,
-                shapes=shapes
-            )
-        }
+            datasets["train_dataset"] = (lambda:
+                self.combine_datasets(datasets["train_dataset"],
+                                      u_batch_dataset))
+        return datasets
 
 
     def get_dataset_from_list(self, data_list, input_mode, update_hook=None, u_data_list=None):
         assert input_mode == InputMode.TRAIN, "use the generator path for prediction"
-        
-        x_data_list = list(data_list)
-        self._post_data_initialization(x_data_list)
-            
-        self.config.val_size, self.config.val_interval = validation_settings(
-            dataset_size=len(x_data_list),
-            batch_size=self.config.batch_size,
-            val_size=self.config.val_size,
-            val_interval=self.config.val_interval,
-            keep_best_model=self.config.keep_best_model
-        )
 
-        if self.config.val_size > 0 and self.config.val_set is None:
-            train_split, val_split = train_test_split(x_data_list, test_size=self.config.val_size, random_state=self.config.seed)
-        else:
-            train_split = dataset_shuffle(x_data_list, random_state=self.config.seed)
-            val_split = self.config.val_set or []
-
-        tokenized_train_split = list(
-            itertools.chain.from_iterable(
-                self.text_to_tokens_mask(**d) for d in train_split
-            )
-        )
-
-        self.config.dataset_size = len(tokenized_train_split)
-
-        tokenized_val_split = list(
-            itertools.chain.from_iterable(
-                self.text_to_tokens_mask(**d) for d in val_split
-            )
-        )
-        
-        if self.config.class_weights is not None:
-            class_counts = self._compute_class_counts(tokenized_train_split)
-            self.config.class_weights = self._compute_class_weights(
-                class_weights=self.config.class_weights,
-                class_counts=class_counts
-            )
-            
-        types, shapes = self.feed_shape_type_def()
-        if not has_targets(lambda: tokenized_train_split):
-            x_types, x_shapes = types[0], shapes[0]
-        else:
-            x_types, x_shapes = types, shapes
-
-        train_split_unbatched = self.make_dataset_fn(
-            data_fn=lambda: tokenized_train_split,
-            tqdm_mode="train",
-            update_hook=update_hook,
-            types=x_types,
-            shapes=x_shapes
-        )
-        val_dataset_unbatched = self.make_dataset_fn(
-            data_fn=lambda: tokenized_val_split,
-            tqdm_mode="evaluate",
-            types=types,
-            shapes=shapes
-        )
-
-        train_split_batched = batch_dataset(
-            train_split_unbatched,
-            batch_size=self.config.batch_size,
-            shapes=x_shapes,
-            n_epochs=self.config.n_epochs
-        )
-
+        datasets = super().get_dataset_from_list(data_list, input_mode,
+                                                 update_hook=update_hook)
         if u_data_list:
             u_data_list = list(u_data_list)
             u_train = dataset_shuffle(u_data_list, random_state=self.config.seed)
@@ -347,6 +117,7 @@ class SSLPipeline(BasePipeline):
                     self.text_to_tokens_mask(**d) for d in u_train
                 )
             )
+            types, shapes = self.feed_shape_type_def()
             u_types, u_shapes = types[0], shapes[0]
             u_train_unbatched = self.make_dataset_fn(
                 data_fn=lambda: tokenized_u_train,
@@ -361,32 +132,24 @@ class SSLPipeline(BasePipeline):
                 shapes=u_shapes,
                 n_epochs=self.config.n_epochs
             )
-            train_gen = lambda: self.combine_datasets(train_split_batched,
-                                                      u_train_batched)
-        else:
-            train_gen = train_split_batched
-
-        return {
-            "train_dataset": train_gen,
-            "val_dataset": batch_dataset(
-                val_dataset_unbatched,
-                batch_size=self.config.batch_size,
-                shapes=shapes
-            )
-        }
+            x_train = datasets["train_dataset"]
+            datasets["train_dataset"] = (lambda:
+                                         self.combine_datasets(x_train,
+                                                               u_train_batched))
+        return datasets
 
     def combine_datasets(self, x_dataset, u_dataset):
-        for X, U in zip(x_dataset(), u_dataset()):
+        def map_func(X, U):
             combined = {
                 **(X[0]),
                 "u_tokens": U["tokens"]
             }
             if "context" in U:
                 combined["u_context"] = U["context"]
-            yield combined, X[1]
-
-    def _target_encoder(self):
-        return SequenceLabelingEncoder(pad_token=self.config.pad_token)
+            return (combined, X[1])
+        zipped_dataset = tf.data.Dataset.zip((x_dataset(), u_dataset()))
+        combined_dataset = zipped_dataset.map(map_func)
+        return combined_dataset
 
 class SSLLabeler(BaseModel):
     defaults = dict()
