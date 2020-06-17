@@ -36,16 +36,31 @@ from finetune.util.in_memory_finetune import make_in_memory_finetune_hooks
 from finetune.util.indico_estimator import IndicoEstimator
 from finetune.util.gpu_info import gpu_info
 
-from finetune.base_models.bert.model import _BaseBert
-from finetune.base_models import GPTModel, GPTModelSmall
-from finetune.input_pipeline import InputMode
+from finetune.input_pipeline import BasePipeline, InputMode
+from sklearn.utils import shuffle as dataset_shuffle
+from finetune.util.input_utils import InputMode, validation_settings, wrap_tqdm, Chunker, has_targets, batch_dataset
+
+from finetune.base import BaseModel
+from finetune.encoding.target_encoders import (
+    SequenceLabelingEncoder,
+    SequenceMultiLabelingEncoder,
+)
+from finetune.nn.target_blocks import sequence_labeler
+from finetune.nn.crf import sequence_decode
+from finetune.encoding.sequence_encoder import (
+    finetune_to_indico_sequence,
+)
+from finetune.encoding.input_encoder import get_spacy
+from finetune.input_pipeline import BasePipeline
+from finetune.encoding.input_encoder import tokenize_context
 
 LOGGER = logging.getLogger("finetune")
 
 
 class SSLPipeline(BasePipeline):
     def __init__(self, config, multi_label):
-        super(SequencePipeline, self).__init__(config)
+        super(SSLPipeline, self).__init__(config)
+        self.multi_label = multi_label
 
     def zip_list_to_dict(self, X, Y=None, context=None):
         if Y is not None:
@@ -56,14 +71,14 @@ class SSLPipeline(BasePipeline):
             context = list(context)
             if len(X) != len(context):
                 raise FinetuneError("the length of your context does not match the length of your text")
-        x_out = []
+        out = []
         for i, x in enumerate(X):
             sample = {"X": x}
             if Y is not None:
                 sample["Y"] = Y[i]
             if context is not None:
                 sample["context"] = context[i]
-            x_out.append(sample)
+            out.append(sample)
         return out
 
     def  text_to_tokens_mask(self, X, Y=None, context=None):
@@ -146,7 +161,7 @@ class SSLPipeline(BasePipeline):
 
         if input_mode == InputMode.PREDICT or not has_targets(generator_fn):
             x_types, x_shapes = types[0], shapes[0]
-        else
+        else:
             x_types, x_shapes = types, shapes
        
         x_data_fn = lambda: chunked_and_tokenized_dataset(generator_fn)
@@ -241,8 +256,8 @@ class SSLPipeline(BasePipeline):
                     shapes=shapes,
                     n_epochs=self.config.n_epochs
             )
-            train_gen = lambda: combine_datasets(x_batch_dataset,
-                                                 u_batch_dataset)
+            train_gen = lambda: self.combine_datasets(x_batch_dataset,
+                                                      u_batch_dataset)
         else:
             train_gen = x_batch_dataset
 
@@ -300,7 +315,7 @@ class SSLPipeline(BasePipeline):
         types, shapes = self.feed_shape_type_def()
         if not has_targets(lambda: tokenized_train_split):
             x_types, x_shapes = types[0], shapes[0]
-        else
+        else:
             x_types, x_shapes = types, shapes
 
         train_split_unbatched = self.make_dataset_fn(
@@ -346,8 +361,8 @@ class SSLPipeline(BasePipeline):
                 shapes=u_shapes,
                 n_epochs=self.config.n_epochs
             )
-            train_gen = lambda: combine_datasets(train_split_batched,
-                                                 u_train_batch)
+            train_gen = lambda: self.combine_datasets(train_split_batched,
+                                                      u_train_batched)
         else:
             train_gen = train_split_batched
 
@@ -360,15 +375,15 @@ class SSLPipeline(BasePipeline):
             )
         }
 
-    def combine_datasets(x_dataset, u_dataset):
-        for X, U in zip(x_dataset, u_dataset):
+    def combine_datasets(self, x_dataset, u_dataset):
+        for X, U in zip(x_dataset(), u_dataset()):
             combined = {
-                **X,
+                **(X[0]),
                 "u_tokens": U["tokens"]
             }
             if "context" in U:
                 combined["u_context"] = U["context"]
-            return combined
+            yield combined, X[1]
 
     def _target_encoder(self):
         return SequenceLabelingEncoder(pad_token=self.config.pad_token)
@@ -380,7 +395,10 @@ class SSLLabeler(BaseModel):
         super().__init__(**kwargs)
 
     def _get_input_pipeline(self):
-        return SSLPipeline(config=self.config)
+        return SSLPipeline(
+            config=self.config,
+            multi_label=self.config.multi_label_sequences
+        )
 
     def _initialize(self):
         return super()._initialize()
@@ -446,7 +464,7 @@ class SSLLabeler(BaseModel):
         else:
             assert (not Us or not callable(Us)), "If X is a list, U must also be a list"
             x_list = self.input_pipeline.zip_list_to_dict(X=Xs, Y=Y, context=context)
-            u_list = self.input_pipeline.zip_list_to_dict(X=Us, Y=Y, context=context)
+            u_list = self.input_pipeline.zip_list_to_dict(X=Us, context=context)
             datasets = self.input_pipeline.get_dataset_from_list(
                 x_list, input_mode=InputMode.TRAIN,
                 update_hook=update_hook, u_data_list=u_list
