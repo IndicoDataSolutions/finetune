@@ -128,3 +128,9 @@ class TestSSLLabeler(unittest.TestCase):
                                                                   u_data_list=u_list)
         dataset = dataset["train_dataset"]()
         print(list(dataset.as_numpy_iterator())[:3])
+
+        dataset = self.model.input_pipeline.get_dataset_from_generator(lambda: iter(x_list),
+                                                                       input_mode=InputMode.TRAIN,
+                                                                       u_generator_fn=lambda: iter(u_list))
+        dataset = dataset["train_dataset"]()
+        print(list(dataset.as_numpy_iterator())[:3])
