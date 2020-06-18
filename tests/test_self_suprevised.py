@@ -127,6 +127,4 @@ class TestSSLLabeler(unittest.TestCase):
                                                                   input_mode=InputMode.TRAIN,
                                                                   u_data_list=u_list)
         dataset = dataset["train_dataset"]()
-        print(next(dataset))
-        print(next(dataset))
-        print(next(dataset))
+        print(list(dataset.as_numpy_iterator())[:3])
