@@ -22,7 +22,7 @@ import requests
 from bs4 import BeautifulSoup as bs
 from bs4.element import Tag
 
-from finetune.target_models.self_suprevised import SSLLabeler
+from finetune.target_models.semi_suprevised import SSLLabeler
 from finetune.base_models import GPT
 from finetune.config import get_config
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
