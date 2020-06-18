@@ -76,6 +76,12 @@ class SSLPipeline(SequencePipeline):
             u_data_fn = lambda: chunked_and_tokenized_dataset(u_generator_fn)
             types, shapes = self.feed_shape_type_def()
             u_types, u_shapes = types[0], shapes[0]
+            
+            if input_mode == InputMode.PREDICT:
+                tqdm_mode = "predict"
+            else:
+                tqdm_mode = "train"
+
             u_raw_dataset = self.make_dataset_fn(
                 data_fn=u_data_fn,
                 tqdm_mode=tqdm_mode,
@@ -98,9 +104,9 @@ class SSLPipeline(SequencePipeline):
                     shapes=u_shapes,
                     n_epochs=self.config.n_epochs
             )
-            datasets["train_dataset"] = (lambda:
-                self.combine_datasets(datasets["train_dataset"],
-                                      u_batch_dataset))
+            x_train = datasets["train_dataset"]
+            datasets["train_dataset"] = (lambda: self.combine_datasets(x_train,
+                                                                       u_batch_dataset))
         return datasets
 
 
@@ -153,6 +159,7 @@ class SSLPipeline(SequencePipeline):
 
     def combine_datasets(self, x_dataset, u_dataset):
         def map_func(X, U): 
+            print(X)
             tokens = self.pad_and_concat_batches(X[0]["tokens"], U["tokens"])
             combined = {"tokens": tokens}
             if "context" in U:
