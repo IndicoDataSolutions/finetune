@@ -517,6 +517,160 @@ def sequence_labeler(
             "predict_params": {"transition_matrix": transition_params, "sequence_length": lengths},
         }
 
+def ssl_sequence_labeler(
+    hidden,
+    targets,
+    n_targets,
+    config,
+    pad_id,
+    multilabel=False,
+    train=False,
+    reuse=None,
+    lengths=None,
+    use_crf=True,
+    **kwargs
+):
+    """
+    An Attention based sequence labeler model.
+
+    In the case of unidirectional base models such as GPT this model takes the output of the pre-trained model,
+    applies an additional randomly initialised multihead attention block, with residuals on top.
+    The extra attention is not future masked to allow the model to label sequences based on context in both directions.
+    The representations fed into this model are necessarily future masked because a language modelling loss is the
+    original objective of the featurizer.
+
+    For bidirectional base models we apply the crf model directly to the output of the base model.
+
+    :param hidden: The output of the featurizer. [batch_size, sequence_length, embed_dim]
+    :param targets: The placeholder representing the sequence labeling targets. [batch_size, sequence_length]
+    :param n_targets: A python int containing the number of classes that the model should be learning to predict over.
+    :param config: A config object, containing all parameters for the featurizer.
+    :param train: If this flag is true, dropout and losses are added to the graph.
+    :param reuse: Should reuse be set within this scope.
+    :param lengths: The number of non-padding tokens in the input.
+    :param kwargs: Spare arguments.
+    :return: dict containing:
+        "logits": The un-normalised log probabilities of each class being in each location. For usable predictions,
+            sampling from this distribution is not sufficient and a viterbi decoding method should be used.
+        "losses": The negative log likelihood for the sequence targets.
+        "predict_params": A dictionary of params to be fed to the viterbi decode function.
+    """
+    with tf.compat.v1.variable_scope("sequence-labeler", reuse=reuse):
+
+        if targets is not None:
+            targets = tf.cast(targets, dtype=tf.int32)
+
+        nx = config.n_embed
+
+        def seq_lab_internal(hidden):
+            if config.base_model.is_bidirectional:
+                n = hidden
+            else:
+                attn_fn = functools.partial(
+                    attn,
+                    scope="seq_label_attn",
+                    n_state=nx,
+                    n_head=config.seq_num_heads,
+                    resid_pdrop=config.resid_p_drop,
+                    attn_pdrop=config.attn_p_drop,
+                    train=train,
+                    scale=False,
+                    mask=False,
+                )
+                n = norm(attn_fn(hidden) + hidden, "seq_label_residual")
+            
+            flat_logits = tf.compat.v1.layers.dense(n, n_targets)
+            logits = tf.reshape(
+                flat_logits, tf.concat([tf.shape(input=hidden)[:2], [n_targets]], 0)
+            )
+            return logits
+
+        with tf.compat.v1.variable_scope("seq_lab_attn"):
+            if config.low_memory_mode and train:
+                seq_lab_internal = recompute_grad(
+                    seq_lab_internal, use_entire_scope=True
+                )
+            all_logits = seq_lab_internal(hidden)
+            all_logits = tf.cast(logits, tf.float32) # always run the crf in float32
+            logits = all_logits[:tf.shape(targets)[0]]
+
+        loss = 0.0
+
+        default_lengths = tf.shape(input=hidden)[1] * tf.ones(
+            tf.shape(input=hidden)[0], dtype=tf.int32
+        )
+        if lengths is None:
+            lengths = default_lengths
+            
+        class_weights = kwargs.get("class_weights")
+        
+        with tf.device("CPU:0" if train else logits.device):
+            if class_weights is not None and train:
+                class_weights = tf.reshape(class_weights, [1, 1, -1])
+                one_hot_class_weights = class_weights * tf.one_hot(targets, depth=n_targets)
+                per_token_weights = tf.reduce_sum(
+                    input_tensor=one_hot_class_weights, axis=-1, keepdims=True
+                )
+                logits = class_reweighting(per_token_weights)(logits)
+                                                                                                      
+            transition_params = tf.cast(
+                tf.compat.v1.get_variable(
+                    "Transition_matrix", shape=[n_targets, n_targets]
+                ),
+                tf.float32
+            )
+            if targets is not None:
+                if use_crf:
+                    log_likelihood, _ = crf_log_likelihood(
+                        logits, targets, lengths, transition_params=transition_params
+                    )
+                    loss = -log_likelihood
+                else:
+                    weights = tf.sequence_mask(
+                        lengths, maxlen=tf.shape(input=targets)[1], dtype=tf.float32
+                    ) / tf.expand_dims(tf.cast(lengths, tf.float32), -1)
+                    loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(
+                        targets,
+                        logits,
+                        weights=weights
+                    )
+    
+                    def get_adv_vector(probs, e=0.2, k=1):
+                        adv_vector = tf.random_uniform(shape=tf.shape(hidden),
+                                                       dtype=tf.float32)
+                        adv_vector = e * tf.nn.l2_normalize(adv_vector, dim=1)
+                        kl_div = tf.losses.KLDivergence()
+                        for _ in range(k):
+                            with tf.GradientTape as g:
+                                g.watch(adv_vector)
+                                preturbed_hidden = hidden + adv_vector
+                                adv_logits = seq_lab_internal(preturbed_hidden)
+                                adv_logits = tf.cast(adv_logits, tf.float32)
+                                adv_probs = tf.nn.softmax(adv_logits)
+                                loss = kl_div(probs, adv_probs)
+                            gradient = g.gradient(loss, adv_vector)
+                            adv_vector = e * tf.nn.l2_normalize(gradient, dim=1)
+                            adv_vector = tf.stop_gradient(adv_vector)
+                        return adv_vector
+
+                    probs = tf.stop_gradient(tf.nn.softmax(all_logits))
+                    adv_vector = tf.compat.v1.py_func(get_adv_vector, [probs],
+                                                     tf.float32)
+                    preturbed_hidden = hidden + adv_vector
+                    adv_logits = seq_lab_internal(preturbed_hidden)
+                    adv_logits = tf.cast(adv_logits, tf.float32)
+                    adv_probs = tf.nn.softmax(adv_logits)
+                    adv_loss = tf.compat.v1.keras.losses.KLDivergence(probs,
+                                                                      adv_probs)
+                    loss += adv_loss
+
+        return {
+            "logits": logits,
+            "losses": loss,
+            "predict_params": {"transition_matrix": transition_params, "sequence_length": lengths},
+        }
+
+
 
 def association(
     hidden, lengths, targets, n_targets, config, train=False, reuse=None, **kwargs
