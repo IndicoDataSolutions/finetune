@@ -104,3 +104,9 @@ class Scheduler:
         seq_features = model.featurize_sequence(x, *args, **kwargs)
         self._update_memory_limit(model)
         return seq_features
+
+    def close(self):
+        for model in self.loaded_models:
+            self.model_cache[name].close()
+            del self.model_cache[name]
+        self.loaded_models = []
