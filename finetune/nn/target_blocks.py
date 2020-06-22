@@ -555,7 +555,7 @@ def ssl_sequence_labeler(
         "losses": The negative log likelihood for the sequence targets.
         "predict_params": A dictionary of params to be fed to the viterbi decode function.
     """
-    with tf.compat.v1.variable_scope("sequence-labeler", reuse=reuse):
+    with tf.compat.v1.variable_scope("ssl-sequence-labeler", reuse=reuse):
 
         if targets is not None:
             targets = tf.cast(targets, dtype=tf.int32)
@@ -577,9 +577,8 @@ def ssl_sequence_labeler(
                     seq_lab_internal, use_entire_scope=True
                 )
             layer = tf.keras.layers.Dense(n_targets)
-            all_logits = layer(hidden)
-            all_logits = tf.cast(all_logits, tf.float32) # always run the crf in float32
-            logits = all_logits[:tf.shape(targets)[0]]
+            logits = layer(hidden)
+            logits = tf.cast(logits, tf.float32) # always run the crf in float32
 
         loss = 0.0
 
@@ -607,6 +606,8 @@ def ssl_sequence_labeler(
                 tf.float32
             )
             if targets is not None:
+                all_logits = logits
+                logits = all_logits[:tf.shape(targets)[0]]
                 if use_crf:
                     log_likelihood, _ = crf_log_likelihood(
                         logits, targets, lengths, transition_params=transition_params
