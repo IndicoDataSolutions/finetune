@@ -613,7 +613,6 @@ def ssl_sequence_labeler(
                     )
                     loss = -log_likelihood
                 else:
-                    print("=" * 100 + "FOUND TARGETS" + "=" * 100)
                     weights = tf.sequence_mask(
                         lengths, maxlen=tf.shape(input=targets)[1], dtype=tf.float32
                     ) / tf.expand_dims(tf.cast(lengths, tf.float32), -1)
@@ -650,9 +649,6 @@ def ssl_sequence_labeler(
                     adv_probs = tf.nn.softmax(adv_logits)
                     adv_loss = kl_div(probs, adv_probs)
                     adv_loss = tf.reduce_sum(adv_loss) / batch_size
-                    print("LOSS EXISTS!")
-                    print("=" * 100)
-                    print(adv_loss)
                     loss += adv_loss
 
         return {
