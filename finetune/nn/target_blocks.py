@@ -562,36 +562,23 @@ def ssl_sequence_labeler(
 
         nx = config.n_embed
 
-        def seq_lab_internal(hidden):
-            if config.base_model.is_bidirectional:
-                n = hidden
-            else:
-                attn_fn = functools.partial(
-                    attn,
-                    scope="seq_label_attn",
-                    n_state=nx,
-                    n_head=config.seq_num_heads,
-                    resid_pdrop=config.resid_p_drop,
-                    attn_pdrop=config.attn_p_drop,
-                    train=train,
-                    scale=False,
-                    mask=False,
-                )
-                n = norm(attn_fn(hidden) + hidden, "seq_label_residual")
-            
-            flat_logits = tf.compat.v1.layers.dense(n, n_targets)
-            logits = tf.reshape(
-                flat_logits, tf.concat([tf.shape(input=hidden)[:2], [n_targets]], 0)
-            )
-            return logits
+        
+        # def seq_lab_internal(hidden):
+        #     n = hidden
+        #     flat_logits = tf.compat.v1.layers.dense(n, n_targets)
+        #     logits = tf.reshape(
+        #         flat_logits, tf.concat([tf.shape(input=hidden)[:2], [n_targets]], 0)
+        #     )
+        #     return logits
 
         with tf.compat.v1.variable_scope("seq_lab_attn"):
             if config.low_memory_mode and train:
                 seq_lab_internal = recompute_grad(
                     seq_lab_internal, use_entire_scope=True
                 )
-            all_logits = seq_lab_internal(hidden)
-            all_logits = tf.cast(logits, tf.float32) # always run the crf in float32
+            layer = tf.keras.layers.Dense(n_targets)
+            all_logits = layer(hidden)
+            all_logits = tf.cast(all_logits, tf.float32) # always run the crf in float32
             logits = all_logits[:tf.shape(targets)[0]]
 
         loss = 0.0
@@ -626,6 +613,7 @@ def ssl_sequence_labeler(
                     )
                     loss = -log_likelihood
                 else:
+                    print("=" * 100 + "FOUND TARGETS" + "=" * 100)
                     weights = tf.sequence_mask(
                         lengths, maxlen=tf.shape(input=targets)[1], dtype=tf.float32
                     ) / tf.expand_dims(tf.cast(lengths, tf.float32), -1)
@@ -635,33 +623,36 @@ def ssl_sequence_labeler(
                         weights=weights
                     )
     
-                    def get_adv_vector(probs, e=0.2, k=1):
-                        adv_vector = tf.random_uniform(shape=tf.shape(hidden),
-                                                       dtype=tf.float32)
-                        adv_vector = e * tf.nn.l2_normalize(adv_vector, dim=1)
-                        kl_div = tf.losses.KLDivergence()
-                        for _ in range(k):
-                            with tf.GradientTape as g:
-                                g.watch(adv_vector)
-                                preturbed_hidden = hidden + adv_vector
-                                adv_logits = seq_lab_internal(preturbed_hidden)
-                                adv_logits = tf.cast(adv_logits, tf.float32)
-                                adv_probs = tf.nn.softmax(adv_logits)
-                                loss = kl_div(probs, adv_probs)
-                            gradient = g.gradient(loss, adv_vector)
-                            adv_vector = e * tf.nn.l2_normalize(gradient, dim=1)
-                            adv_vector = tf.stop_gradient(adv_vector)
-                        return adv_vector
 
+                    e = 0.2
+                    k = 1
                     probs = tf.stop_gradient(tf.nn.softmax(all_logits))
-                    adv_vector = tf.compat.v1.py_func(get_adv_vector, [probs],
-                                                     tf.float32)
+                    adv_vector = tf.random.uniform(shape=tf.shape(hidden),
+                                                   dtype=tf.float32)
+                    adv_vector = e * tf.nn.l2_normalize(adv_vector, axis=-1)
+                    batch_size = tf.cast(tf.shape(hidden)[0], tf.float32)
+                    kl_div = tf.losses.KLDivergence(reduction=tf.keras.losses.Reduction.NONE)
+                    for _ in range(k):
+                        preturbed_hidden = hidden + adv_vector
+                        adv_logits = layer(preturbed_hidden)
+                        adv_logits = tf.cast(adv_logits, tf.float32)
+                        adv_probs = tf.nn.softmax(adv_logits)
+                        loss = kl_div(probs, adv_probs)
+                        # Manually reduce loss becuase tf doesn't want to
+                        loss = tf.reduce_sum(loss) / batch_size
+                        gradient = tf.gradients(loss, adv_vector)
+                        adv_vector = e * tf.nn.l2_normalize(gradient, axis=-1)
+                        adv_vector = tf.stop_gradient(adv_vector)
+
                     preturbed_hidden = hidden + adv_vector
-                    adv_logits = seq_lab_internal(preturbed_hidden)
+                    adv_logits = layer(preturbed_hidden)
                     adv_logits = tf.cast(adv_logits, tf.float32)
                     adv_probs = tf.nn.softmax(adv_logits)
-                    adv_loss = tf.compat.v1.keras.losses.KLDivergence(probs,
-                                                                      adv_probs)
+                    adv_loss = kl_div(probs, adv_probs)
+                    adv_loss = tf.reduce_sum(adv_loss) / batch_size
+                    print("LOSS EXISTS!")
+                    print("=" * 100)
+                    print(adv_loss)
                     loss += adv_loss
 
         return {

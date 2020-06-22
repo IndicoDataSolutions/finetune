@@ -45,14 +45,14 @@ from finetune.encoding.target_encoders import (
     SequenceLabelingEncoder,
     SequenceMultiLabelingEncoder,
 )
-from finetune.nn.target_blocks import sequence_labeler
+from finetune.nn.target_blocks import ssl_sequence_labeler
 from finetune.nn.crf import sequence_decode
 from finetune.encoding.sequence_encoder import (
     finetune_to_indico_sequence,
 )
 from finetune.encoding.input_encoder import get_spacy
 from finetune.encoding.input_encoder import tokenize_context
-from finetune.target_models.sequence_labeling import SequencePipeline
+from finetune.target_models.sequence_labeling import SequenceLabeler, SequencePipeline
 
 LOGGER = logging.getLogger("finetune")
 
@@ -85,7 +85,7 @@ class SSLPipeline(SequencePipeline):
             u_raw_dataset = self.make_dataset_fn(
                 data_fn=u_data_fn,
                 tqdm_mode=tqdm_mode,
-                update_hook=update_hook,
+                update_hook=None,
                 types=u_types,
                 shapes=u_shapes,
                 skip_val=input_mode == InputMode.TRAIN
@@ -128,7 +128,7 @@ class SSLPipeline(SequencePipeline):
             u_train_unbatched = self.make_dataset_fn(
                 data_fn=lambda: tokenized_u_train,
                 tqdm_mode="train",
-                update_hook=update_hook,
+                update_hook=None,
                 types=u_types,
                 shapes=u_shapes
             )
@@ -139,9 +139,8 @@ class SSLPipeline(SequencePipeline):
                 n_epochs=self.config.n_epochs
             )
             x_train = datasets["train_dataset"]
-            datasets["train_dataset"] = (lambda:
-                                         self.combine_datasets(x_train,
-                                                               u_train_batched))
+            datasets["train_dataset"] = (lambda: self.combine_datasets(x_train,
+                                                                       u_train_batched))
         return datasets
 
     def pad_and_concat_batches(self, a, b):
@@ -170,7 +169,7 @@ class SSLPipeline(SequencePipeline):
         combined_dataset = zipped_dataset.map(map_func)
         return combined_dataset
 
-class SSLLabeler(BaseModel):
+class SSLLabeler(SequenceLabeler):
     defaults = dict()
 
     def __init__(self, **kwargs):
@@ -182,47 +181,10 @@ class SSLLabeler(BaseModel):
             multi_label=self.config.multi_label_sequences
         )
 
-    def _initialize(self):
-        return super()._initialize()
-
-    def predict(self, X, per_token=False, context=None, **kwargs):
-        """
-        Produces a list of most likely class labels as determined by the fine-tuned model.
-
-        :param X: A list / array of text, shape [batch]
-        :param per_token: If True, return raw probabilities and labels on a per token basis
-        :returns: list of class labels.
-        """
-        return super().predict(X, per_token=per_token, context=context, **kwargs)
-
-    def predict_proba(self, X, context=None, **kwargs):
-        """
-        Produces a list of most likely class labels as determined by the fine-tuned model.
-
-        :param X: A list / array of text, shape [batch]
-        :returns: list of class labels.
-        """
-        return self.predict(X, context=context, **kwargs)
-
-    def _predict_op(self, logits, **kwargs):
-        pass
-
-    def _predict_proba_op(self, logits, **kwargs):
-        pass
-
-    def featurize(self, X, **kwargs):
-        """
-        Embeds inputs in learned feature space. Can be called before or after calling :meth:`finetune`.
-
-        :param Xs: An iterable of lists or array of text, shape [batch, n_inputs, tokens]
-        :returns: np.array of features of shape (n_examples, embedding_size).
-        """
-        return super().featurize(X, **kwargs)
-
     def _target_model(
         self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
     ):
-        return sequence_labeler(
+        return ssl_sequence_labeler(
             hidden=featurizer_state["sequence_features"],
             targets=targets,
             n_targets=n_outputs,
@@ -232,7 +194,7 @@ class SSLLabeler(BaseModel):
             multilabel=config.multi_label_sequences,
             reuse=reuse,
             lengths=featurizer_state["lengths"],
-            use_crf=self.config.crf_sequence_labeling,
+            use_crf=False,
             **kwargs
         )
 
@@ -305,9 +267,3 @@ class SSLLabeler(BaseModel):
             estimator.train(train_input_fn_skipped, hooks=train_hooks, steps=num_steps)
         
         self._trained = True
-
-    def _predict(self, zipped_data, **kwargs):
-        raise NotImplemented()
-
-    def _predict_proba(self, zipped_data, **kwargs):
-        pass

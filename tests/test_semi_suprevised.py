@@ -23,7 +23,7 @@ from bs4 import BeautifulSoup as bs
 from bs4.element import Tag
 
 from finetune.target_models.semi_suprevised import SSLLabeler
-from finetune.base_models import GPT
+from finetune.base_models import GPT, RoBERTa
 from finetune.config import get_config
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
 from finetune.util.metrics import (
@@ -91,7 +91,7 @@ class TestSSLLabeler(unittest.TestCase):
 
     def default_config(self, **kwargs):
         d = dict(
-            base_model=GPT,
+            base_model=RoBERTa,
             batch_size=2,
             max_length=256,
             lm_loss_coef=0.0,
@@ -134,3 +134,14 @@ class TestSSLLabeler(unittest.TestCase):
                                                                        u_generator_fn=lambda: iter(u_list))
         dataset = dataset["train_dataset"]()
         print(list(dataset.as_numpy_iterator())[:3])
+
+    def test_target_block(self):
+        raw_docs = ["".join(text) for text in self.texts]
+        texts, annotations = finetune_to_indico_sequence(raw_docs, self.texts, self.labels,
+                                                         none_value=self.model.config.pad_token)
+        cut = len(texts) // 5
+        Xs = texts[:cut]
+        Ys = annotations[:cut]
+        Us = texts[cut:]
+        self.model.config.crf_sequence_modeling = False
+        self.model.finetune(Xs, Us=Us, Y=Ys)
