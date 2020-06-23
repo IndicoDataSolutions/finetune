@@ -88,3 +88,10 @@ class TestDocumentLabeler(unittest.TestCase):
         baseline_model_f1 = sequence_labeling_micro_token_f1(test_labels, baseline_model_preds)
         self.assertGreater(model_f1, baseline_model_f1)
         self.assertGreater(model_f1, 0.95)
+
+    def test_featurize_doc_with_empty_pages(self):
+        """ Test that context alignment with tokenization doesn't error out """
+        with open('tests/data/doc_with_empty_pages.json') as f:
+            doc = json.load(f)
+        model = DocumentLabeler(n_epochs=20, base_model=DocRep, crf_sequence_labeling=True)
+        model.featurize([doc])

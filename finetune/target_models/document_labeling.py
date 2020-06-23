@@ -1,5 +1,6 @@
 from finetune.target_models.sequence_labeling import SequenceLabeler, SequencePipeline
 from finetune.encoding.input_encoder import EncodedOutput
+from finetune.errors import FinetuneError
 
 def get_context(document, dpi_norm):
     """
@@ -38,9 +39,13 @@ def _single_convert_to_finetune(*, document, dpi_norm=True):
     texts = []
     offsets = []
     last_end = -1
-    for page in document:
+    num_pages = len(document)
+    for i, page in enumerate(document):
         page_obj = page["pages"][0]
-        texts.append(page_obj["text"] + "\n")
+        if i == num_pages - 1:
+            texts.append(page_obj["text"])
+        else:
+            texts.append(page_obj["text"] + "\n")
         offset = page_obj["doc_offset"]
         assert offset["start"] == last_end + 1, "If ever this ceases to hold then we have a problem"
         last_end = offset["end"]
