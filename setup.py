@@ -26,7 +26,8 @@ REQUIREMENTS = [
     "sentencepiece>=0.1.83",
     "tabulate>=0.8.6,<0.9.0",
     "tensorflow-addons==0.10.0",
-    "tensorflow-estimator==2.2.0"
+    "tensorflow-estimator==2.2.0",
+    "tqdl==0.0.4"
 ]
 
 
