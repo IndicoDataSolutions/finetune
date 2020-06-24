@@ -528,6 +528,8 @@ def ssl_sequence_labeler(
     reuse=None,
     lengths=None,
     use_crf=True,
+    embeddings=None,
+    featurizer_fn=None,
     **kwargs
 ):
     """
@@ -571,14 +573,14 @@ def ssl_sequence_labeler(
         #     )
         #     return logits
 
-        with tf.compat.v1.variable_scope("seq_lab_attn"):
-            if config.low_memory_mode and train:
-                seq_lab_internal = recompute_grad(
-                    seq_lab_internal, use_entire_scope=True
-                )
-            layer = tf.keras.layers.Dense(n_targets)
-            logits = layer(hidden)
-            logits = tf.cast(logits, tf.float32) # always run the crf in float32
+        layer = tf.keras.layers.Dense(n_targets)
+        logits = tf.cast(layer(hidden), tf.float32)
+
+        # with tf.compat.v1.variable_scope("seq_lab_attn"):
+        #     if config.low_memory_mode and train:
+        #         seq_lab_internal = recompute_grad(
+        #             seq_lab_internal, use_entire_scope=True
+        #         )
 
         loss = 0.0
 
@@ -606,8 +608,26 @@ def ssl_sequence_labeler(
                 tf.float32
             )
             if targets is not None:
+                # Better way to do this?
+                featurizer_fn = kwargs.get("featurizer_fn")
+
+                def after_embeddings(embeddings):
+                    featurizer_state = featurizer_fn(embeddings)
+                    hidden = featurizer_state["sequence_features"]
+                    logits = layer(hidden)
+                    return tf.cast(logits, tf.float32)
+                def after_transformer(hidden):
+                    logits = layer(hidden)
+                    return tf.cast(logits, tf.float32)
+                out_fn = after_embeddings if featurizer_fn else after_transformer
+                preturb_target = embeddings if featurizer_fn else hidden
+
+                target_shape = tf.shape(targets)
                 all_logits = logits
-                logits = all_logits[:tf.shape(targets)[0]]
+                all_lengths = lengths
+                logits = all_logits[:target_shape[0], :target_shape[1]]
+                lengths = all_lengths[:target_shape[0]]
+
                 if use_crf:
                     log_likelihood, _ = crf_log_likelihood(
                         logits, targets, lengths, transition_params=transition_params
@@ -622,35 +642,52 @@ def ssl_sequence_labeler(
                         logits,
                         weights=weights
                     )
-    
 
-                    e = 0.2
+                    e = 0.02
                     k = 1
                     probs = tf.stop_gradient(tf.nn.softmax(all_logits))
-                    adv_vector = tf.random.uniform(shape=tf.shape(hidden),
+                    adv_vector = tf.random.uniform(shape=tf.shape(preturb_target),
                                                    dtype=tf.float32)
                     adv_vector = e * tf.nn.l2_normalize(adv_vector, axis=-1)
-                    batch_size = tf.cast(tf.shape(hidden)[0], tf.float32)
+                    batch_size = tf.cast(tf.shape(preturb_target)[0], tf.float32)
                     kl_div = tf.losses.KLDivergence(reduction=tf.keras.losses.Reduction.NONE)
+                    mask = tf.sequence_mask(all_lengths,
+                                            maxlen=tf.math.reduce_max(all_lengths),
+                                            dtype=tf.float32)
                     for _ in range(k):
-                        preturbed_hidden = hidden + adv_vector
-                        adv_logits = layer(preturbed_hidden)
-                        adv_logits = tf.cast(adv_logits, tf.float32)
+                        preturbed_hidden = preturb_target + adv_vector
+                        adv_logits = out_fn(preturbed_hidden)
                         adv_probs = tf.nn.softmax(adv_logits)
-                        loss = kl_div(probs, adv_probs)
-                        # Manually reduce loss becuase tf doesn't want to
-                        loss = tf.reduce_sum(loss) / batch_size
-                        gradient = tf.gradients(loss, adv_vector)
+                        adv_loss = kl_div(probs, adv_probs, sample_weight=mask)
+                        adv_loss = tf.reduce_sum(adv_loss) / batch_size
+                        gradient = tf.gradients(adv_loss, adv_vector)
                         adv_vector = e * tf.nn.l2_normalize(gradient, axis=-1)
+                        adv_vector = tf.reshape(adv_vector,
+                                                tf.shape(adv_vector)[1:])
                         adv_vector = tf.stop_gradient(adv_vector)
+                        # adv_vector = tf.compat.v1.Print(adv_vector,
+                        #                                 [tf.shape(hidden),
+                        #                                  tf.shape(preturbed_hidden),
+                        #                                  tf.shape(adv_logits),
+                        #                                  tf.shape(adv_probs),
+                        #                                  tf.shape(adv_loss),
+                        #                                  tf.shape(gradient),
+                        #                                  tf.shape(adv_vector)],
+                        #                                summarize=100)
 
-                    preturbed_hidden = hidden + adv_vector
-                    adv_logits = layer(preturbed_hidden)
-                    adv_logits = tf.cast(adv_logits, tf.float32)
+                    preturbed_hidden = preturb_target + adv_vector
+                    adv_logits = out_fn(preturbed_hidden)
                     adv_probs = tf.nn.softmax(adv_logits)
-                    adv_loss = kl_div(probs, adv_probs)
+                    adv_loss = kl_div(probs, adv_probs, sample_weight=mask)
+                    # adv_loss = tf.compat.v1.Print(adv_loss,
+                    #                                 [tf.shape(preturbed_hidden),
+                    #                                  tf.shape(adv_logits),
+                    #                                  tf.shape(adv_probs),
+                    #                                  tf.shape(adv_loss),
+                    #                                  tf.shape(probs)],
+                    #                                 summarize=100)
                     adv_loss = tf.reduce_sum(adv_loss) / batch_size
-                    loss += adv_loss
+                    loss += 0.6 * adv_loss
 
         return {
             "logits": logits,

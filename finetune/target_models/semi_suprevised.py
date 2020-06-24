@@ -115,7 +115,6 @@ class SSLPipeline(SequencePipeline):
                                                                        u_batch_dataset))
         return datasets
 
-
     def get_dataset_from_list(self, data_list, input_mode, update_hook=None, u_data_list=None):
         assert input_mode == InputMode.TRAIN, "use the generator path for prediction"
 
@@ -164,6 +163,7 @@ class SSLPipeline(SequencePipeline):
         def map_func(X, U): 
             tokens = self.pad_and_concat_batches(X[0]["tokens"], U["tokens"])
             combined = {"tokens": tokens}
+            # combined = {"tokens": X[0]["tokens"]}
             if "context" in U:
                 combined["context"] = self.pad_and_concat_batches(X[0]["context"],
                                                                   U["context"])
@@ -197,7 +197,8 @@ class SSLLabeler(SequenceLabeler):
             multilabel=config.multi_label_sequences,
             reuse=reuse,
             lengths=featurizer_state["lengths"],
-            use_crf=False,
+            use_crf=self.config.crf_sequence_labeling,
+            embeddings=featurizer_state["embed_output"],
             **kwargs
         )
 

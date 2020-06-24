@@ -150,6 +150,7 @@ class BertModel(object):
             roberta=False,
             use_token_type=True,
             reading_order_decay_rate=None,
+            embeddings=None,
     ):
         """Constructor for BertModel.
 
@@ -181,36 +182,40 @@ class BertModel(object):
             input_mask = tf.ones(shape=[batch_size, seq_length], dtype=tf.int32)
 
         with tf.compat.v1.variable_scope(scope, default_name="bert"):
-            with tf.compat.v1.variable_scope("embeddings"):
-                # Perform embedding lookup on the word ids.
-                (self.embedding_output, self.embedding_table) = embedding_lookup(
-                    input_ids=input_ids,
-                    vocab_size=config.vocab_size,
-                    embedding_size=config.hidden_size,
-                    initializer_range=config.initializer_range,
-                    word_embedding_name="word_embeddings",
-                    use_one_hot_embeddings=use_one_hot_embeddings,
-                )
-                # Add positional embeddings and token type embeddings, then layer
-                # normalize and perform dropout.
-                self.embedding_output = embedding_postprocessor(
-                    input_tensor=self.embedding_output,
-                    input_context=input_context,
-                    use_token_type=use_token_type,
-                    token_type_ids=token_type_ids,
-                    token_type_vocab_size=config.type_vocab_size,
-                    token_type_embedding_name="token_type_embeddings",
-                    use_position_embeddings=not config.reading_order_removed,
-                    position_embedding_name="position_embeddings",
-                    initializer_range=config.initializer_range,
-                    max_position_embeddings=config.max_position_embeddings,
-                    dropout_prob=config.hidden_dropout_prob,
-                    roberta=roberta,
-                    pos_injection=config.pos_injection,
-                    positional_channels=config.positional_channels,
-                    reading_order_decay_rate=reading_order_decay_rate,
-                    anneal_reading_order=config.anneal_reading_order,
-                )
+            if embeddings:
+                self.embedding_output = embeddings
+                self.embedding_table = None
+            else:
+                with tf.compat.v1.variable_scope("embeddings"):
+                    # Perform embedding lookup on the word ids.
+                    (self.embedding_output, self.embedding_table) = embedding_lookup(
+                        input_ids=input_ids,
+                        vocab_size=config.vocab_size,
+                        embedding_size=config.hidden_size,
+                        initializer_range=config.initializer_range,
+                        word_embedding_name="word_embeddings",
+                        use_one_hot_embeddings=use_one_hot_embeddings,
+                    )
+                    # Add positional embeddings and token type embeddings, then layer
+                    # normalize and perform dropout.
+                    self.embedding_output = embedding_postprocessor(
+                        input_tensor=self.embedding_output,
+                        input_context=input_context,
+                        use_token_type=use_token_type,
+                        token_type_ids=token_type_ids,
+                        token_type_vocab_size=config.type_vocab_size,
+                        token_type_embedding_name="token_type_embeddings",
+                        use_position_embeddings=not config.reading_order_removed,
+                        position_embedding_name="position_embeddings",
+                        initializer_range=config.initializer_range,
+                        max_position_embeddings=config.max_position_embeddings,
+                        dropout_prob=config.hidden_dropout_prob,
+                        roberta=roberta,
+                        pos_injection=config.pos_injection,
+                        positional_channels=config.positional_channels,
+                        reading_order_decay_rate=reading_order_decay_rate,
+                        anneal_reading_order=config.anneal_reading_order,
+                    )
 
             with tf.compat.v1.variable_scope("encoder"):
                 # This converts a 2D mask of shape [batch_size, seq_length] to a 3D
@@ -286,6 +291,9 @@ class BertModel(object):
 
     def get_embedding_table(self):
         return self.embedding_table
+
+    def get_embedding_output(self):
+        return self.embedding_output
 
 
 def gelu(x):

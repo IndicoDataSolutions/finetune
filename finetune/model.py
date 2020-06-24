@@ -191,11 +191,25 @@ def get_model_fn(
                 ]
 
             if build_target_model:
+                # Probably refactor this at some point
+                def featurizer_fn(embeddings):
+                    return params.base_models.get_featurizer(
+                        X,
+                        encoder=encoder,
+                        config=params,
+                        train=train,
+                        explain=build_explain,
+                        context=context,
+                        total_num_steps=total_num_steps,
+                        reuse=True,
+                        embeddings=embeddings
+                    )
                 target_model_state = target_model_op(
                     featurizer_state=featurizer_state,
                     Y=Y,
                     params=params,
                     mode=mode,
+                    featurizer_fn=featurizer_fn
                 )
                 if (
                     mode == tf.estimator.ModeKeys.TRAIN
