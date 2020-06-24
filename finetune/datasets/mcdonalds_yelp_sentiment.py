@@ -40,9 +40,9 @@ class MCDonaldsSentiment(Dataset):
         path = Path(self.filename)
         path.parent.mkdir(parents=True, exist_ok=True)
         generic_download(
-            url="https://www.figure-eight.com/wp-content/uploads/2016/03/McDonalds-Yelp-Sentiment-DFE.csv",
-            text_column="review",
-            target_column="policies_violated",
+            url="https://s3.amazonaws.com/bendropbox/datasets/mcdonalds_yelp.csv",
+            text_column="Text",
+            target_column="Target",
             filename=SST_FILENAME,
             target_transformation=target_transform
         )
