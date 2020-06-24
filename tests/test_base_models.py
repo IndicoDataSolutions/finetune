@@ -298,21 +298,26 @@ class TestClassifierTextCNN(TestModelBase):
         model = Classifier(**non_chunk_config)
         non_chunk_features = model.featurize_sequence(test_input)
 
+        prev_features = np.array([None] * len(test_input))
         for max_len in [32, 64, 128, 256]:
             chunk_config = self.default_config()
             chunk_config["max_length"] = max_len
             model2 = Classifier(**chunk_config)
             chunk_features = model2.featurize_sequence(test_input)
 
-            for non_chunk,chunk,X in zip(non_chunk_features,
-                                         chunk_features,
-                                         test_input):
+            for non_chunk,chunk,prev,X in zip(non_chunk_features,
+                                              chunk_features,
+                                              prev_features,
+                                              test_input):
                 encoded = next(model.input_pipeline._text_to_ids(X))
                 # subtract 2 to account for the start and end tokens
                 encoded_len = len(encoded.token_ids) - 2
                 self.assertTrue(non_chunk.shape[0] == encoded_len)
                 self.assertTrue(chunk.shape[0] == encoded_len)
                 self.assertTrue(non_chunk.shape == chunk.shape)
+                if not (prev is None):
+                    self.assertTrue(prev.shape == chunk.shape)
+            prev_features = chunk_features
 
     def test_validation(self):
         """
@@ -534,22 +539,26 @@ class TestSequenceLabelerTextCNN(TestModelBase):
         model = SequenceLabeler(**non_chunk_config)
         non_chunk_features = model.featurize_sequence(test_input)
 
+        prev_features = [None] * len(test_input)
         for max_len in [32, 64, 128, 256]:
             chunk_config = self.default_config()
             chunk_config["max_length"] = max_len
             model2 = SequenceLabeler(**chunk_config)
             chunk_features = model2.featurize_sequence(test_input)
 
-            for non_chunk,chunk,X in zip(non_chunk_features,
-                                         chunk_features,
-                                         test_input):
+            for non_chunk,chunk,prev,X in zip(non_chunk_features,
+                                              chunk_features,
+                                              prev_features,
+                                              test_input):
                 encoded = next(model.input_pipeline._text_to_ids(X))
                 # subtract 2 to account for the start and end tokens
                 encoded_len = len(encoded.token_ids) - 2
                 self.assertTrue(non_chunk.shape[0] == encoded_len)
                 self.assertTrue(chunk.shape[0] == encoded_len)
                 self.assertTrue(non_chunk.shape == chunk.shape)
-
+                if not (prev is None):
+                    self.assertTrue(prev.shape == chunk.shape)
+            prev_features = chunk_features
 
 class TestSequenceLabelerBert(TestSequenceLabelerTextCNN):
     model_specific_config = {"n_epochs": 2, "lr": 1e-4}
