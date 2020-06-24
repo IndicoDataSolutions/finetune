@@ -44,8 +44,9 @@ def get_grad_accumulation_optimizer(optimizer_class, accum_steps):
 
                 grads_and_accumulated_vars.append((accum_grad, v))
 
-            global_step = global_step if global_step is not None else tf.compat.v1.train.get_or_create_global_step()
-
+            global_step_var = global_step if global_step is not None else tf.compat.v1.train.get_or_create_global_step()
+            if global_step is not None:
+                kwargs["global_step"] = global_step
             with tf.control_dependencies(add_gradients_ops):
                 def apply_grads():
                     with tf.control_dependencies([
@@ -57,9 +58,9 @@ def get_grad_accumulation_optimizer(optimizer_class, accum_steps):
                     return apply_grads_op
 
                 return tf.cond(
-                    pred=tf.equal(global_step % accum_steps, accum_steps - 1),
+                    pred=tf.equal(global_step_var % accum_steps, accum_steps - 1),
                     true_fn=apply_grads,
-                    false_fn=lambda: tf.no_op()
+                    false_fn=lambda: tf.no_op() if global_step is None else tf.group(global_step.assign_add(1))
                 )
 
     return GradAccumulationOptimizer
