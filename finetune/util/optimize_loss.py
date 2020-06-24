@@ -3,10 +3,11 @@ import functools
 import tensorflow as tf
 import tensorflow_addons as tfa
 
-from finetune.optimizers.adafactor import AdafactorWOptimizer, AdafactorOptimizer
+from finetune.optimizers.adafactor import AdafactorOptimizer
 
 from finetune.optimizers.gradient_accumulation import get_grad_accumulation_optimizer
 from finetune.optimizers.learning_rate_schedules import schedules
+from finetune.optimizers.weight_decay import AdamW
 
 OPTIMIZER_SUMMARIES = [
     "learning_rate",
@@ -17,8 +18,7 @@ OPTIMIZER_SUMMARIES = [
 ]
 
 OPTIMIZERS = {
-    "AdamW": tfa.optimizers.AdamW,
-    "AdafactorW": AdafactorWOptimizer,
+    "AdamW": AdamW,
     "Adafactor": AdafactorOptimizer,
 }
 
@@ -50,14 +50,11 @@ def get_optimizer(
 
     opt = Optimizer(
         learning_rate=learning_rate,
-        beta_1=b1,
-        beta_2=b2,
+        beta1=b1,
+        beta2=b2,
         epsilon=epsilon,
         weight_decay=l2_reg * learning_rate,
-    )
-
-    opt.apply_gradients = functools.partial(
-        opt.apply_gradients, decay_var_list=decay_var_list
+        decay_var_list=decay_var_list
     )
 
     if scale_loss:
@@ -147,6 +144,6 @@ def optimize_loss(
 
         # Create gradient updates.
         with tf.compat.v1.control_dependencies([global_step.assign_add(1)]):
-            grad_updates = opt.apply_gradients(gradients, name="train") #]  global_step=global_step
+            grad_updates = opt.apply_gradients(gradients, name="train")
 
     return grad_updates

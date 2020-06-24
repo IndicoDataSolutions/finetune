@@ -16,6 +16,7 @@ import finetune
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
 from finetune.optimizers.gradient_accumulation import get_grad_accumulation_optimizer
 from finetune.util.imbalance import compute_class_weights
+from finetune.util.optimize_loss import OPTIMIZERS
 from finetune.util.timing import ProgressBar
 from finetune.errors import FinetuneError
 from finetune import Classifier, SequenceLabeler
@@ -267,14 +268,17 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
 class TestGradientAccumulation(unittest.TestCase):
 
     @tf.function
-    def test_gradient_accumulating_optimizer(self):
+    def body_of_test_gradient_accumulating_optimizer(self, opt):
         with tf.Graph().as_default():
             loss = tf.compat.v1.get_variable("loss", shape=1)
             lr = 0.1
-            opt = get_grad_accumulation_optimizer(tf.keras.optimizers.SGD, 2)(lr)
+            opt = get_grad_accumulation_optimizer(opt, 2)(lr)
             global_step = tf.compat.v1.train.get_or_create_global_step()
-            with tf.control_dependencies([opt.minimize(lambda: tf.abs(loss), [loss])]):
-                train_op = global_step.assign_add(1)
+            if isinstance(opt, tf.keras.optimizers.Optimizer):
+                with tf.control_dependencies([opt.minimize(lambda: tf.abs(loss), [loss])]):
+                     train_op = global_step.assign_add(1)
+            else:
+                train_op = opt.minimize(tf.abs(loss), global_step=global_step)
 
             sess = tf.compat.v1.Session()
             sess.run(tf.compat.v1.global_variables_initializer())
@@ -288,10 +292,15 @@ class TestGradientAccumulation(unittest.TestCase):
                 sess.run(train_op)
 
                 val_after2 = sess.run(loss)
-
-                self.assertEqual(val_before - (grad_before + grad_after1) * lr, val_after2)
                 self.assertEqual(val_before, val_after1)  # first step should not actually do anything
+                self.assertEqual(val_before - (grad_before + grad_after1) * lr, val_after2)
+    
 
+    def test_gradient_accumulating_optimizer_keras(self):
+        self.body_of_test_gradient_accumulating_optimizer(tf.keras.optimizers.SGD)
+
+    def test_gradient_accumulating_optimizer_compat(self):
+        self.body_of_test_gradient_accumulating_optimizer(tf.compat.v1.train.GradientDescentOptimizer)
 
 class TestProgressBar(unittest.TestCase):
 
@@ -304,6 +313,29 @@ class TestProgressBar(unittest.TestCase):
 
         pbar = ProgressBar(range(1000), update_hook=update_state)
         assert state['hook_run']
+
+class TestOptimizers(unittest.TestCase):
+
+    @tf.function
+    def test_optimizers(self):
+        for opt_class in OPTIMIZERS.values():
+            with tf.Graph().as_default():
+                loss_var = tf.compat.v1.get_variable("loss", shape=1)
+                loss = tf.abs(loss_var)
+                lr = 0.1
+                opt = opt_class(lr, weight_decay=1e-10, decay_var_list=[loss_var])
+                if isinstance(opt, tf.keras.optimizers.Optimizer):
+                    train_op = opt.minimize(lambda: loss, [loss_var])
+                else:
+                    train_op = opt.minimize(loss)
+
+                sess = tf.compat.v1.Session()
+                sess.run(tf.compat.v1.global_variables_initializer())
+                original_loss = sess.run(loss)
+                for i in range(10):
+                    sess.run(train_op)
+            self.assertLess(sess.run(loss), original_loss)
+
 
 if __name__ == '__main__':
     unittest.main()

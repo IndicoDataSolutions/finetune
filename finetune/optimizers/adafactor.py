@@ -42,7 +42,7 @@ def cast_like(x, y):
     return cast_x
 
 
-class AdafactorOptimizer(tf.keras.optimizers.Optimizer):
+class AdafactorOptimizer(tf.compat.v1.train.Optimizer):
     """Optimizer that implements the Adafactor algorithm.
 
     Adafactor is described in https://arxiv.org/abs/1804.04235.
@@ -304,6 +304,3 @@ def step_num():
 
 def reduce_rms(x):
     return tf.sqrt(tf.reduce_mean(input_tensor=tf.square(x)))
-
-
-AdafactorWOptimizer = tfa.optimizers.extend_with_decoupled_weight_decay(AdafactorOptimizer)
