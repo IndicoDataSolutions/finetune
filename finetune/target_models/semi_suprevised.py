@@ -45,7 +45,7 @@ from finetune.encoding.target_encoders import (
     SequenceLabelingEncoder,
     SequenceMultiLabelingEncoder,
 )
-from finetune.nn.target_blocks import ssl_sequence_labeler
+from finetune.nn.target_blocks import vat_sequence_labeler
 from finetune.nn.crf import sequence_decode
 from finetune.encoding.sequence_encoder import (
     finetune_to_indico_sequence,
@@ -137,7 +137,7 @@ class SSLPipeline(SequencePipeline):
             )
             u_train_batched = batch_dataset(
                 u_train_unbatched,
-                batch_size=self.config.batch_size,
+                batch_size=self.config.batch_size * 4,
                 shapes=u_shapes,
                 n_epochs=self.config.n_epochs
             )
@@ -187,20 +187,7 @@ class SSLLabeler(SequenceLabeler):
     def _target_model(
         self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
     ):
-        return ssl_sequence_labeler(
-            hidden=featurizer_state["sequence_features"],
-            targets=targets,
-            n_targets=n_outputs,
-            pad_id=config.pad_idx,
-            config=config,
-            train=train,
-            multilabel=config.multi_label_sequences,
-            reuse=reuse,
-            lengths=featurizer_state["lengths"],
-            use_crf=self.config.crf_sequence_labeling,
-            embeddings=featurizer_state["embed_output"],
-            **kwargs
-        )
+        raise NotImplementedError
 
     def finetune(self, Xs, Us=None, Y=None, context=None, update_hook=None):
         if callable(Xs):
@@ -271,3 +258,23 @@ class SSLLabeler(SequenceLabeler):
             estimator.train(train_input_fn_skipped, hooks=train_hooks, steps=num_steps)
         
         self._trained = True
+
+class VATLabeler(SSLLabeler):
+    def _target_model(
+        self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
+    ):
+        return ssl_sequence_labeler(
+            hidden=featurizer_state["sequence_features"],
+            targets=targets,
+            n_targets=n_outputs,
+            pad_id=config.pad_idx,
+            config=config,
+            train=train,
+            multilabel=config.multi_label_sequences,
+            reuse=reuse,
+            lengths=featurizer_state["lengths"],
+            use_crf=self.config.crf_sequence_labeling,
+            embeddings=featurizer_state["embed_output"],
+            **kwargs
+        )
+

@@ -517,7 +517,7 @@ def sequence_labeler(
             "predict_params": {"transition_matrix": transition_params, "sequence_length": lengths},
         }
 
-def ssl_sequence_labeler(
+def vat_sequence_labeler(
     hidden,
     targets,
     n_targets,
@@ -557,7 +557,7 @@ def ssl_sequence_labeler(
         "losses": The negative log likelihood for the sequence targets.
         "predict_params": A dictionary of params to be fed to the viterbi decode function.
     """
-    with tf.compat.v1.variable_scope("ssl-sequence-labeler", reuse=reuse):
+    with tf.compat.v1.variable_scope("vat-sequence-labeler", reuse=reuse):
 
         if targets is not None:
             targets = tf.cast(targets, dtype=tf.int32)
@@ -610,7 +610,6 @@ def ssl_sequence_labeler(
             if targets is not None:
                 # Better way to do this?
                 featurizer_fn = kwargs.get("featurizer_fn")
-
                 def after_embeddings(embeddings):
                     featurizer_state = featurizer_fn(embeddings)
                     hidden = featurizer_state["sequence_features"]
@@ -643,8 +642,8 @@ def ssl_sequence_labeler(
                         weights=weights
                     )
 
-                    e = 0.02
-                    k = 1
+                    e = 0.0002
+                    k = 2
                     probs = tf.stop_gradient(tf.nn.softmax(all_logits))
                     adv_vector = tf.random.uniform(shape=tf.shape(preturb_target),
                                                    dtype=tf.float32)
@@ -665,29 +664,13 @@ def ssl_sequence_labeler(
                         adv_vector = tf.reshape(adv_vector,
                                                 tf.shape(adv_vector)[1:])
                         adv_vector = tf.stop_gradient(adv_vector)
-                        # adv_vector = tf.compat.v1.Print(adv_vector,
-                        #                                 [tf.shape(hidden),
-                        #                                  tf.shape(preturbed_hidden),
-                        #                                  tf.shape(adv_logits),
-                        #                                  tf.shape(adv_probs),
-                        #                                  tf.shape(adv_loss),
-                        #                                  tf.shape(gradient),
-                        #                                  tf.shape(adv_vector)],
-                        #                                summarize=100)
 
                     preturbed_hidden = preturb_target + adv_vector
                     adv_logits = out_fn(preturbed_hidden)
                     adv_probs = tf.nn.softmax(adv_logits)
                     adv_loss = kl_div(probs, adv_probs, sample_weight=mask)
-                    # adv_loss = tf.compat.v1.Print(adv_loss,
-                    #                                 [tf.shape(preturbed_hidden),
-                    #                                  tf.shape(adv_logits),
-                    #                                  tf.shape(adv_probs),
-                    #                                  tf.shape(adv_loss),
-                    #                                  tf.shape(probs)],
-                    #                                 summarize=100)
                     adv_loss = tf.reduce_sum(adv_loss) / batch_size
-                    loss += 0.6 * adv_loss
+                    loss += 1 * adv_loss
 
         return {
             "logits": logits,
