@@ -193,7 +193,7 @@ def get_model_fn(
             if build_target_model:
                 # Probably refactor this at some point
                 def featurizer_fn(embeddings):
-                    return params.base_models.get_featurizer(
+                    return params.base_model.get_featurizer(
                         X,
                         encoder=encoder,
                         config=params,

@@ -559,7 +559,6 @@ def vat(
         "predict_params": A dictionary of params to be fed to the viterbi decode function.
     """
     with tf.compat.v1.variable_scope("vat-sequence-labeler", reuse=reuse):
-
         if targets is not None:
             targets = tf.cast(targets, dtype=tf.int32)
 

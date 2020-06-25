@@ -182,7 +182,7 @@ class BertModel(object):
             input_mask = tf.ones(shape=[batch_size, seq_length], dtype=tf.int32)
 
         with tf.compat.v1.variable_scope(scope, default_name="bert"):
-            if embeddings:
+            if not (embeddings is None):
                 self.embedding_output = embeddings
                 self.embedding_table = None
             else:
