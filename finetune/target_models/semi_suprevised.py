@@ -45,7 +45,7 @@ from finetune.encoding.target_encoders import (
     SequenceLabelingEncoder,
     SequenceMultiLabelingEncoder,
 )
-from finetune.nn.target_blocks import vat_sequence_labeler
+from finetune.nn.target_blocks import vat
 from finetune.nn.crf import sequence_decode
 from finetune.encoding.sequence_encoder import (
     finetune_to_indico_sequence,
@@ -263,7 +263,7 @@ class VATLabeler(SSLLabeler):
     def _target_model(
         self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
     ):
-        return ssl_sequence_labeler(
+        return vat(
             hidden=featurizer_state["sequence_features"],
             targets=targets,
             n_targets=n_outputs,
