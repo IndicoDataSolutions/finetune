@@ -8,6 +8,8 @@ from finetune.optimizers.recompute_grads import recompute_grad
 from finetune.errors import FinetuneError
 from finetune.nn.activations import act_fns
 from finetune.nn.nn_utils import norm
+from finetune.nn.crf import sequence_decode
+
 
 def perceptron(x, ny, config, w_init=None, b_init=None):
     """
@@ -677,7 +679,7 @@ def vat(
             "predict_params": {"transition_matrix": transition_params, "sequence_length": lengths},
         }
 
-def psuedo_lable(
+def pseudo_lable(
     hidden,
     targets,
     n_targets,
@@ -688,7 +690,6 @@ def psuedo_lable(
     reuse=None,
     lengths=None,
     use_crf=True,
-    embeddings=None,
     **kwargs
 ):
     """
@@ -716,30 +717,15 @@ def psuedo_lable(
         "losses": The negative log likelihood for the sequence targets.
         "predict_params": A dictionary of params to be fed to the viterbi decode function.
     """
-    with tf.compat.v1.variable_scope("vat-sequence-labeler", reuse=reuse):
+    with tf.compat.v1.variable_scope("psuedo-lable", reuse=reuse):
 
         if targets is not None:
             targets = tf.cast(targets, dtype=tf.int32)
 
         nx = config.n_embed
 
-        
-        # def seq_lab_internal(hidden):
-        #     n = hidden
-        #     flat_logits = tf.compat.v1.layers.dense(n, n_targets)
-        #     logits = tf.reshape(
-        #         flat_logits, tf.concat([tf.shape(input=hidden)[:2], [n_targets]], 0)
-        #     )
-        #     return logits
-
         layer = tf.keras.layers.Dense(n_targets)
         logits = tf.cast(layer(hidden), tf.float32)
-
-        # with tf.compat.v1.variable_scope("seq_lab_attn"):
-        #     if config.low_memory_mode and train:
-        #         seq_lab_internal = recompute_grad(
-        #             seq_lab_internal, use_entire_scope=True
-        #         )
 
         loss = 0.0
 
@@ -767,31 +753,56 @@ def psuedo_lable(
                 tf.float32
             )
             if targets is not None:
-                # Better way to do this?
-                featurizer_fn = kwargs.get("featurizer_fn")
-                def after_embeddings(embeddings):
-                    featurizer_state = featurizer_fn(embeddings)
-                    hidden = featurizer_state["sequence_features"]
-                    logits = layer(hidden)
-                    return tf.cast(logits, tf.float32)
-                def after_transformer(hidden):
-                    logits = layer(hidden)
-                    return tf.cast(logits, tf.float32)
-                out_fn = after_embeddings if featurizer_fn else after_transformer
-                preturb_target = embeddings if featurizer_fn else hidden
-
+                # Seperate labled and unlabeled data
                 target_shape = tf.shape(targets)
-                all_logits = logits
-                all_lengths = lengths
-                logits = all_logits[:target_shape[0], :target_shape[1]]
-                lengths = all_lengths[:target_shape[0]]
+                u_logits = logits[target_shape[0]:]
+                u_lengths = lengths[target_shape[0]:]
+                logits = logits[:target_shape[0], :target_shape[1]]
+                lengths = lengths[:target_shape[0]]
 
+                u_targets, u_probs = sequence_decode(logits, transition_params,
+                                                     u_lengths, use_gpu=False,
+                                                     use_crf=use_crf)
+                # Get probability of most likely sequence
                 if use_crf:
+                    u_log_likelihood, _ = crf_log_likelihood(
+                        u_logits, u_targets, u_lengths, transition_params=transition_params
+                    )
+                    u_seq_probs = tf.exp(u_log_likelihood)
+                else:
+                    u_probs = tf.reduce_max(u_probs, axis=-1)
+                    u_seq_probs = tf.reduce_mean(u_probs, axis=-1)
+                
+                # Keep only sequences with prob above threshhold
+                thresh = 0.8
+                threshes = tf.ones_like(u_seq_probs) * thresh
+                mask = tf.greater(u_seq_probs, threshes)
+                u_targets = tf.boolean_mask(u_targets, mask)
+                u_lengths = tf.boolean_mask(u_lengths, mask)
+
+                #TODO: Pad labeled targets so that we can concatenate unlabeled
+                # and labeled together here and not double all the code
+                if use_crf:
+                    u_log_likelihood, _ = crf_log_likelihood(
+                        u_logits, u_targets, u_lengths, transition_params=transition_params
+                    )
+                    u_loss = -u_log_likelihood
+
                     log_likelihood, _ = crf_log_likelihood(
                         logits, targets, lengths, transition_params=transition_params
                     )
                     loss = -log_likelihood
                 else:
+
+                    u_weights = tf.sequence_mask(
+                        u_lengths, maxlen=tf.shape(input=u_targets)[1], dtype=tf.float32
+                    ) / tf.expand_dims(tf.cast(u_lengths, tf.float32), -1)
+                    u_loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(
+                        u_targets,
+                        u_logits,
+                        weights=u_weights
+                    )
+
                     weights = tf.sequence_mask(
                         lengths, maxlen=tf.shape(input=targets)[1], dtype=tf.float32
                     ) / tf.expand_dims(tf.cast(lengths, tf.float32), -1)
@@ -800,37 +811,7 @@ def psuedo_lable(
                         logits,
                         weights=weights
                     )
-
-                    e = 0.0002
-                    k = 2
-                    probs = tf.stop_gradient(tf.nn.softmax(all_logits))
-                    adv_vector = tf.random.uniform(shape=tf.shape(preturb_target),
-                                                   dtype=tf.float32)
-                    adv_vector = e * tf.nn.l2_normalize(adv_vector, axis=-1)
-                    batch_size = tf.cast(tf.shape(preturb_target)[0], tf.float32)
-                    kl_div = tf.losses.KLDivergence(reduction=tf.keras.losses.Reduction.NONE)
-                    mask = tf.sequence_mask(all_lengths,
-                                            maxlen=tf.math.reduce_max(all_lengths),
-                                            dtype=tf.float32)
-                    for _ in range(k):
-                        preturbed_hidden = preturb_target + adv_vector
-                        adv_logits = out_fn(preturbed_hidden)
-                        adv_probs = tf.nn.softmax(adv_logits)
-                        adv_loss = kl_div(probs, adv_probs, sample_weight=mask)
-                        adv_loss = tf.reduce_sum(adv_loss) / batch_size
-                        gradient = tf.gradients(adv_loss, adv_vector)
-                        adv_vector = e * tf.nn.l2_normalize(gradient, axis=-1)
-                        adv_vector = tf.reshape(adv_vector,
-                                                tf.shape(adv_vector)[1:])
-                        adv_vector = tf.stop_gradient(adv_vector)
-
-                    preturbed_hidden = preturb_target + adv_vector
-                    adv_logits = out_fn(preturbed_hidden)
-                    adv_probs = tf.nn.softmax(adv_logits)
-                    adv_loss = kl_div(probs, adv_probs, sample_weight=mask)
-                    adv_loss = tf.reduce_sum(adv_loss) / batch_size
-                    loss += 1 * adv_loss
-
+                loss += 1 * u_loss
         return {
             "logits": logits,
             "losses": loss,
