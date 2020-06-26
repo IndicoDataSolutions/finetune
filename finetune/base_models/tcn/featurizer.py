@@ -52,6 +52,7 @@ def tcn_featurizer(
     config,
     train=False,
     reuse=None,
+    perturbation=None,
     **kwargs
 ):
     """
@@ -76,6 +77,9 @@ def tcn_featurizer(
             shape=[encoder.vocab_size + config.max_length, config.n_embed_featurizer],
             initializer=tf.compat.v1.random_normal_initializer(stddev=config.weight_stddev),
         )
+        
+        if not (perturbation is None):
+            embed_weights = embed_weights + perturbation
 
         if config.train_embeddings:
             embed_weights = dropout(embed_weights, config.embed_p_drop, train)

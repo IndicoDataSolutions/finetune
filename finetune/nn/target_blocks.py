@@ -785,6 +785,7 @@ def pseudo_label(
                 u_logits = tf.boolean_mask(u_logits, mask)
                 u_targets = tf.boolean_mask(u_targets, mask)
                 u_lengths = tf.boolean_mask(u_lengths, mask)
+                u_targets = tf.cast(u_targets, tf.int32)
                 logits = tf.concat((logits, u_logits), axis=0)
                 targets = tf.concat((targets, u_targets), axis=0)
                 lengths = tf.concat((lengths, u_lengths), axis=0)
