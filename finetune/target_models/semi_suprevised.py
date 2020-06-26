@@ -45,7 +45,7 @@ from finetune.encoding.target_encoders import (
     SequenceLabelingEncoder,
     SequenceMultiLabelingEncoder,
 )
-from finetune.nn.target_blocks import vat, pseudo_lable
+from finetune.nn.target_blocks import vat, pseudo_label
 from finetune.nn.crf import sequence_decode
 from finetune.encoding.sequence_encoder import (
     finetune_to_indico_sequence,
@@ -137,7 +137,7 @@ class SSLPipeline(SequencePipeline):
             )
             u_train_batched = batch_dataset(
                 u_train_unbatched,
-                batch_size=self.config.batch_size * 2,
+                batch_size=self.config.batch_size * 4,
                 shapes=u_shapes,
                 n_epochs=self.config.n_epochs
             )
@@ -274,7 +274,7 @@ class VATLabeler(SSLLabeler):
             reuse=reuse,
             lengths=featurizer_state["lengths"],
             use_crf=self.config.crf_sequence_labeling,
-            embeddings=featurizer_state["embed_output"],
+            embedding_table=featurizer_state["embed_weights"],
             **kwargs
         )
 

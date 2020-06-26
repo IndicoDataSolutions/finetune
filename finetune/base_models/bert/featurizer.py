@@ -18,7 +18,7 @@ def bert_featurizer(
     reuse=None,
     context=None,
     total_num_steps=None,
-    embeddings=None,
+    perturbation=None,
     **kwargs
 ):
     """
@@ -114,12 +114,10 @@ def bert_featurizer(
             use_token_type=config.bert_use_type_embed,
             roberta=is_roberta,
             reading_order_decay_rate=reading_order_decay_rate,
-            embeddings=embeddings
+            perturbation=perturbation
         )
 
         embed_weights = bert.get_embedding_table()
-        # Could also save X and recalculate this?
-        embed_output = bert.get_embedding_output()
         features = tf.reshape(
             bert.get_pooled_output(),
             shape=tf.concat((initial_shape[:-1], [config.n_embed]), 0),
@@ -131,7 +129,6 @@ def bert_featurizer(
 
         output_state = {
             "embed_weights": embed_weights,
-            "embed_output": embed_output,
             "features": features,
             "sequence_features": sequence_features,
             "lengths": lengths,

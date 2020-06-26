@@ -530,7 +530,7 @@ def vat(
     reuse=None,
     lengths=None,
     use_crf=True,
-    embeddings=None,
+    embedding_table=None,
     **kwargs
 ):
     """
@@ -608,18 +608,24 @@ def vat(
                 tf.float32
             )
             if targets is not None:
-                # Better way to do this?
                 featurizer_fn = kwargs.get("featurizer_fn")
-                def after_embeddings(embeddings):
-                    featurizer_state = featurizer_fn(embeddings)
+                # featurizer_fn = None
+                def after_embeddings(perturbation):
+                    featurizer_state = featurizer_fn(perturbation)
                     hidden = featurizer_state["sequence_features"]
                     logits = layer(hidden)
                     return tf.cast(logits, tf.float32)
-                def after_transformer(hidden):
-                    logits = layer(hidden)
+                def after_transformer(perturbation):
+                    logits = layer(hidden + perturbation)
                     return tf.cast(logits, tf.float32)
-                out_fn = after_embeddings if featurizer_fn else after_transformer
-                preturb_target = embeddings if featurizer_fn else hidden
+                if featurizer_fn:
+                    out_fn = after_embeddings
+                    pert_shape = tf.concat((tf.shape(hidden)[:2],
+                                            tf.shape(embedding_table)[-1:]),
+                                           axis=0)
+                else:
+                    out_fn = after_transformer
+                    pert_shape = tf.shape(hidden)
 
                 target_shape = tf.shape(targets)
                 all_logits = logits
@@ -642,20 +648,19 @@ def vat(
                         weights=weights
                     )
 
-                    e = 0.0002
+                    e = 0.000001
                     k = 2
                     probs = tf.stop_gradient(tf.nn.softmax(all_logits))
-                    adv_vector = tf.random.uniform(shape=tf.shape(preturb_target),
+                    adv_vector = tf.random.uniform(shape=pert_shape,
                                                    dtype=tf.float32)
                     adv_vector = e * tf.nn.l2_normalize(adv_vector, axis=-1)
-                    batch_size = tf.cast(tf.shape(preturb_target)[0], tf.float32)
+                    batch_size = tf.cast(tf.shape(all_logits)[0], tf.float32)
                     kl_div = tf.losses.KLDivergence(reduction=tf.keras.losses.Reduction.NONE)
                     mask = tf.sequence_mask(all_lengths,
                                             maxlen=tf.math.reduce_max(all_lengths),
                                             dtype=tf.float32)
                     for _ in range(k):
-                        preturbed_hidden = preturb_target + adv_vector
-                        adv_logits = out_fn(preturbed_hidden)
+                        adv_logits = out_fn(adv_vector)
                         adv_probs = tf.nn.softmax(adv_logits)
                         adv_loss = kl_div(probs, adv_probs, sample_weight=mask)
                         adv_loss = tf.reduce_sum(adv_loss) / batch_size
@@ -665,8 +670,7 @@ def vat(
                                                 tf.shape(adv_vector)[1:])
                         adv_vector = tf.stop_gradient(adv_vector)
 
-                    preturbed_hidden = preturb_target + adv_vector
-                    adv_logits = out_fn(preturbed_hidden)
+                    adv_logits = out_fn(adv_vector)
                     adv_probs = tf.nn.softmax(adv_logits)
                     adv_loss = kl_div(probs, adv_probs, sample_weight=mask)
                     adv_loss = tf.reduce_sum(adv_loss) / batch_size
@@ -678,7 +682,7 @@ def vat(
             "predict_params": {"transition_matrix": transition_params, "sequence_length": lengths},
         }
 
-def pseudo_lable(
+def pseudo_label(
     hidden,
     targets,
     n_targets,
@@ -716,7 +720,7 @@ def pseudo_lable(
         "losses": The negative log likelihood for the sequence targets.
         "predict_params": A dictionary of params to be fed to the viterbi decode function.
     """
-    with tf.compat.v1.variable_scope("psuedo-lable", reuse=reuse):
+    with tf.compat.v1.variable_scope("psuedo-label", reuse=reuse):
 
         if targets is not None:
             targets = tf.cast(targets, dtype=tf.int32)
@@ -759,8 +763,10 @@ def pseudo_lable(
                 logits = logits[:target_shape[0], :target_shape[1]]
                 lengths = lengths[:target_shape[0]]
 
-                u_targets, u_probs = sequence_decode(logits, transition_params,
-                                                     u_lengths, use_gpu=False,
+                u_targets, u_probs = sequence_decode(u_logits,
+                                                     transition_params,
+                                                     u_lengths,
+                                                     use_gpu_op=False,
                                                      use_crf=use_crf)
                 # Get probability of most likely sequence
                 if use_crf:
@@ -776,8 +782,10 @@ def pseudo_lable(
                 thresh = 0.8
                 threshes = tf.ones_like(u_seq_probs) * thresh
                 mask = tf.greater(u_seq_probs, threshes)
+                u_logits = tf.boolean_mask(u_logits, mask)
                 u_targets = tf.boolean_mask(u_targets, mask)
                 u_lengths = tf.boolean_mask(u_lengths, mask)
+
 
                 #TODO: Pad labeled targets so that we can concatenate unlabeled
                 # and labeled together here and not double all the code
@@ -810,7 +818,13 @@ def pseudo_lable(
                         logits,
                         weights=weights
                     )
-                loss += 1 * u_loss
+                u_loss = tf.cond(tf.equal(tf.shape(u_loss)[0], 0),
+                                 lambda: tf.zeros_like(loss),
+                                 lambda: u_loss)
+                u_loss = tf.reduce_mean(u_loss)
+                loss = tf.reduce_mean(loss)
+                loss += 0.5 * u_loss
+
         return {
             "logits": logits,
             "losses": loss,
