@@ -630,7 +630,7 @@ def vat(
                 target_shape = tf.shape(targets)
                 all_logits = logits
                 all_lengths = lengths
-                logits = all_logits[:target_shape[0], :target_shape[1]]
+                logits = all_logits[:target_shape[0]]
                 lengths = all_lengths[:target_shape[0]]
 
                 if use_crf:
@@ -760,7 +760,7 @@ def pseudo_label(
                 target_shape = tf.shape(targets)
                 u_logits = logits[target_shape[0]:]
                 u_lengths = lengths[target_shape[0]:]
-                logits = logits[:target_shape[0], :target_shape[1]]
+                logits = logits[:target_shape[0]]
                 lengths = lengths[:target_shape[0]]
 
                 u_targets, u_probs = sequence_decode(u_logits,
@@ -785,31 +785,16 @@ def pseudo_label(
                 u_logits = tf.boolean_mask(u_logits, mask)
                 u_targets = tf.boolean_mask(u_targets, mask)
                 u_lengths = tf.boolean_mask(u_lengths, mask)
+                logits = tf.concat((logits, u_logits), axis=0)
+                targets = tf.concat((targets, u_targets), axis=0)
+                lengths = tf.concat((lengths, u_lengths), axis=0)
 
-
-                #TODO: Pad labeled targets so that we can concatenate unlabeled
-                # and labeled together here and not double all the code
                 if use_crf:
-                    u_log_likelihood, _ = crf_log_likelihood(
-                        u_logits, u_targets, u_lengths, transition_params=transition_params
-                    )
-                    u_loss = -u_log_likelihood
-
                     log_likelihood, _ = crf_log_likelihood(
                         logits, targets, lengths, transition_params=transition_params
                     )
                     loss = -log_likelihood
                 else:
-
-                    u_weights = tf.sequence_mask(
-                        u_lengths, maxlen=tf.shape(input=u_targets)[1], dtype=tf.float32
-                    ) / tf.expand_dims(tf.cast(u_lengths, tf.float32), -1)
-                    u_loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(
-                        u_targets,
-                        u_logits,
-                        weights=u_weights
-                    )
-
                     weights = tf.sequence_mask(
                         lengths, maxlen=tf.shape(input=targets)[1], dtype=tf.float32
                     ) / tf.expand_dims(tf.cast(lengths, tf.float32), -1)
@@ -818,12 +803,6 @@ def pseudo_label(
                         logits,
                         weights=weights
                     )
-                u_loss = tf.cond(tf.equal(tf.shape(u_loss)[0], 0),
-                                 lambda: tf.zeros_like(loss),
-                                 lambda: u_loss)
-                u_loss = tf.reduce_mean(u_loss)
-                loss = tf.reduce_mean(loss)
-                loss += 0.5 * u_loss
 
         return {
             "logits": logits,

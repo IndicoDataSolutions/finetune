@@ -146,7 +146,7 @@ class SSLPipeline(SequencePipeline):
                                                                        u_train_batched))
         return datasets
 
-    def pad_and_concat_batches(self, a, b):
+    def pad_and_concat_batches(self, a, b, targets):
         def pad_batch(batch, final_size):
             pad_size = final_size - tf.shape(batch)[1]
             padding = [[0, 0], [0, pad_size]]
@@ -154,20 +154,25 @@ class SSLPipeline(SequencePipeline):
         a_len, b_len = tf.shape(a)[1], tf.shape(b)[1]
         a_less = lambda: (pad_batch(a, b_len), b)
         b_less = lambda: (a, pad_batch(b, a_len))
-        a_tokens, b_tokens = tf.cond(tf.less(a_len, b_len),
-                                     true_fn=a_less,
-                                     false_fn=b_less)
-        return tf.concat((a_tokens, b_tokens), axis=0)
+        final_len = tf.cond(tf.less(a_len, b_len),
+                            true_fn=lambda: b_len,
+                            false_fn=lambda: a_len)
+        
+        a_tokens = pad_batch(a, final_len)
+        b_tokens = pad_batch(b, final_len)
+        padded_targets = pad_batch(targets, final_len)
+        return tf.concat((a_tokens, b_tokens), axis=0), padded_targets
 
     def combine_datasets(self, x_dataset, u_dataset):
         def map_func(X, U): 
-            tokens = self.pad_and_concat_batches(X[0]["tokens"], U["tokens"])
+            tokens, targets = self.pad_and_concat_batches(X[0]["tokens"],
+                                                          U["tokens"],
+                                                          X[1])
             combined = {"tokens": tokens}
-            # combined = {"tokens": X[0]["tokens"]}
             if "context" in U:
                 combined["context"] = self.pad_and_concat_batches(X[0]["context"],
                                                                   U["context"])
-            return (combined, X[1])
+            return (combined, targets)
         zipped_dataset = tf.data.Dataset.zip((x_dataset(), u_dataset()))
         combined_dataset = zipped_dataset.map(map_func)
         return combined_dataset
