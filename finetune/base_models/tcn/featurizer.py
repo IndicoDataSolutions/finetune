@@ -78,15 +78,16 @@ def tcn_featurizer(
             initializer=tf.compat.v1.random_normal_initializer(stddev=config.weight_stddev),
         )
         
-        if not (perturbation is None):
-            embed_weights = embed_weights + perturbation
-
         if config.train_embeddings:
             embed_weights = dropout(embed_weights, config.embed_p_drop, train)
         else:
             embed_weights = tf.stop_gradient(embed_weights)
             
         h = tf.gather(embed_weights, X)
+
+        if not (perturbation is None):
+            h = h + perturbation
+
 
         # keep track of the classify token
         clf_token = encoder["_classify_"]
