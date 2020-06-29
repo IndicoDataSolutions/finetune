@@ -111,6 +111,19 @@ def k_viterbi_decode(tag_sequence, transition_matrix, top_k=5):
         viterbi_paths.append(viterbi_path)
     return viterbi_paths, viterbi_scores
 
+def k_best_sequence_decode(logits, transition_matrix, k):
+    def _sequence_decode(logits, transition_matrix):
+        all_predictions = []
+        all_logits = []
+        for logit in logits:
+            viterbi_sequence, viterbi_logits = k_viterbi_decode(logit,
+                                                                transition_matrix,
+                                                                top_k=k)
+            all_predictions.append(viterbi_sequence)
+            all_logits.append(viterbi_logits)
+        return np.array(all_predictions, dtype=np.int32), np.array(all_logits, dtype=np.float32)
+    return tf.compat.v1.py_func(_sequence_decode, [logits, transition_matrix], [tf.int32, tf.float32])
+
 def sequence_decode(logits, transition_matrix, sequence_length, use_gpu_op, use_crf):
     """ A simple py_func wrapper around the Viterbi decode allowing it to be included in the tensorflow graph. """
     if not use_crf:
