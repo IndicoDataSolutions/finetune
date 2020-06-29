@@ -28,6 +28,7 @@ REQUIREMENTS = [
     "tensorflow-addons==0.10.0",
     "tensorflow-estimator==2.2.0",
     "tqdl==0.0.4"
+    "psutil==5.7.0"
 ]
 
 
