@@ -8,7 +8,7 @@ from finetune.optimizers.recompute_grads import recompute_grad
 from finetune.errors import FinetuneError
 from finetune.nn.activations import act_fns
 from finetune.nn.nn_utils import norm
-from finetune.nn.crf import sequence_decode
+from finetune.nn.crf import sequence_decode, k_best_sequence_decode
 
 
 def perceptron(x, ny, config, w_init=None, b_init=None):
@@ -608,8 +608,13 @@ def vat(
                 tf.float32
             )
             if targets is not None:
+                target_shape = tf.shape(targets)
+                all_logits = logits
+                all_lengths = lengths
+                logits = all_logits[:target_shape[0]]
+                lengths = all_lengths[:target_shape[0]]
+
                 featurizer_fn = kwargs.get("featurizer_fn")
-                # featurizer_fn = None
                 def after_embeddings(perturbation):
                     featurizer_state = featurizer_fn(perturbation)
                     hidden = featurizer_state["sequence_features"]
@@ -627,11 +632,57 @@ def vat(
                     out_fn = after_transformer
                     pert_shape = tf.shape(hidden)
 
-                target_shape = tf.shape(targets)
-                all_logits = logits
-                all_lengths = lengths
-                logits = all_logits[:target_shape[0]]
-                lengths = all_lengths[:target_shape[0]]
+                top_k = 3
+                def softmax_probs(logits):
+                    return tf.nn.softmax(logits)
+                def crf_probs(logits):
+                    # Shape of (batch_size, top_k, sequence length)
+                    top_k_seqs = k_best_sequence_decode(logits,
+                                                        transition_params
+                                                        top_k)
+                    # This seems sketchy, maybe better way to do all this
+                    all_probs = tf.zeros((batch_size, 0))
+                    for cur_k in range(top_k):
+                        k_seqs = top_k_seqs[:, cur_k, :]
+                        k_log_likelihood = crf_log_likelihood(all_logits,
+                                                              k_seqs,
+                                                              all_lengths,
+                                                              transition_params=transition_params)
+                        k_probs = tf.exp(k_log_likelihood)
+                        all_probs = tf.concat((all_probs, k_probs), axis=1)
+                    leftover_probs = tf.ones((batch_size,))
+                    leftover_probs = leftover_probs - \
+                        tf.reduce_sum(all_probs, axis=1)
+                    all_probs = tf.concat((all_probs, leftover_probs))
+                    # Should now be shape of (batch_size, top_k + 1)
+                    return all_probs
+                prob_fn = crf_probs if use_crf else softmax_probs
+
+                e = 0.02
+                k = 2
+                adv_vector = tf.random.uniform(shape=pert_shape,
+                                               dtype=tf.float32)
+                adv_vector = e * tf.nn.l2_normalize(adv_vector, axis=-1)
+                batch_size = tf.cast(tf.shape(all_logits)[0], tf.float32)
+                kl_div = tf.losses.KLDivergence(reduction=tf.keras.losses.Reduction.NONE)
+                mask = tf.sequence_mask(all_lengths,
+                                        maxlen=tf.math.reduce_max(all_lengths),
+                                        dtype=tf.float32)
+                probs = tf.stop_gradient(prob_fn(all_logits))
+                for _ in range(k):
+                    adv_logits = out_fn(adv_vector)
+                    adv_probs = prob_fn(adv_logits)
+                    adv_loss = kl_div(probs, adv_probs, sample_weight=mask)
+                    adv_loss = tf.reduce_sum(adv_loss) / batch_size
+                    gradient = tf.gradients(adv_loss, adv_vector)
+                    adv_vector = e * tf.nn.l2_normalize(gradient, axis=-1)
+                    adv_vector = tf.reshape(adv_vector,
+                                            tf.shape(adv_vector)[1:])
+                    adv_vector = tf.stop_gradient(adv_vector)
+                adv_logits = out_fn(adv_vector)
+                adv_probs = tf.nn.softmax(adv_logits)
+                adv_loss = kl_div(probs, adv_probs, sample_weight=mask)
+                adv_loss = tf.reduce_sum(adv_loss) / batch_size
 
                 if use_crf:
                     log_likelihood, _ = crf_log_likelihood(
@@ -647,34 +698,7 @@ def vat(
                         logits,
                         weights=weights
                     )
-
-                    e = 0.000001
-                    k = 2
-                    probs = tf.stop_gradient(tf.nn.softmax(all_logits))
-                    adv_vector = tf.random.uniform(shape=pert_shape,
-                                                   dtype=tf.float32)
-                    adv_vector = e * tf.nn.l2_normalize(adv_vector, axis=-1)
-                    batch_size = tf.cast(tf.shape(all_logits)[0], tf.float32)
-                    kl_div = tf.losses.KLDivergence(reduction=tf.keras.losses.Reduction.NONE)
-                    mask = tf.sequence_mask(all_lengths,
-                                            maxlen=tf.math.reduce_max(all_lengths),
-                                            dtype=tf.float32)
-                    for _ in range(k):
-                        adv_logits = out_fn(adv_vector)
-                        adv_probs = tf.nn.softmax(adv_logits)
-                        adv_loss = kl_div(probs, adv_probs, sample_weight=mask)
-                        adv_loss = tf.reduce_sum(adv_loss) / batch_size
-                        gradient = tf.gradients(adv_loss, adv_vector)
-                        adv_vector = e * tf.nn.l2_normalize(gradient, axis=-1)
-                        adv_vector = tf.reshape(adv_vector,
-                                                tf.shape(adv_vector)[1:])
-                        adv_vector = tf.stop_gradient(adv_vector)
-
-                    adv_logits = out_fn(adv_vector)
-                    adv_probs = tf.nn.softmax(adv_logits)
-                    adv_loss = kl_div(probs, adv_probs, sample_weight=mask)
-                    adv_loss = tf.reduce_sum(adv_loss) / batch_size
-                    loss += 1 * adv_loss
+                loss += 1 * adv_loss
 
         return {
             "logits": logits,
