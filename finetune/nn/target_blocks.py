@@ -592,7 +592,8 @@ def vat(
             
         class_weights = kwargs.get("class_weights")
         
-        with tf.device("CPU:0" if train else logits.device):
+        device = logits.device
+        with tf.device("CPU:0" if train else device):
             if class_weights is not None and train:
                 class_weights = tf.reshape(class_weights, [1, 1, -1])
                 one_hot_class_weights = class_weights * tf.one_hot(targets, depth=n_targets)
@@ -614,15 +615,19 @@ def vat(
                 logits = all_logits[:target_shape[0]]
                 lengths = all_lengths[:target_shape[0]]
 
+                # Perturbation -> logits functions
                 featurizer_fn = kwargs.get("featurizer_fn")
+                # featurizer_fn = None
                 def after_embeddings(perturbation):
-                    featurizer_state = featurizer_fn(perturbation)
-                    hidden = featurizer_state["sequence_features"]
-                    logits = layer(hidden)
-                    return tf.cast(logits, tf.float32)
+                    with tf.device(device):
+                        featurizer_state = featurizer_fn(perturbation)
+                        hidden = featurizer_state["sequence_features"]
+                        logits = layer(hidden)
+                        return tf.cast(logits, tf.float32)
                 def after_transformer(perturbation):
-                    logits = layer(hidden + perturbation)
-                    return tf.cast(logits, tf.float32)
+                    with tf.device(device):
+                        logits = layer(hidden + perturbation)
+                        return tf.cast(logits, tf.float32)
                 if featurizer_fn:
                     out_fn = after_embeddings
                     pert_shape = tf.concat((tf.shape(hidden)[:2],
@@ -632,33 +637,35 @@ def vat(
                     out_fn = after_transformer
                     pert_shape = tf.shape(hidden)
 
+                # Logits -> probability distribution functions
                 top_k = 3
                 def softmax_probs(logits):
                     return tf.nn.softmax(logits)
+                # Getting the targets here is pretty gross
+                if use_crf:
+                    crf_targets, _ = k_best_sequence_decode(logits, transition_params, top_k)
+                else:
+                    crf_targets = None
                 def crf_probs(logits):
-                    # Shape of (batch_size, top_k, sequence length)
-                    top_k_seqs = k_best_sequence_decode(logits,
-                                                        transition_params
-                                                        top_k)
-                    # This seems sketchy, maybe better way to do all this
-                    all_probs = tf.zeros((batch_size, 0))
+                    all_probs = []
                     for cur_k in range(top_k):
-                        k_seqs = top_k_seqs[:, cur_k, :]
-                        k_log_likelihood = crf_log_likelihood(all_logits,
+                        k_seqs = crf_targets[:, cur_k, :]
+                        # Target has shape of (batch_size, top_k, sequence length)
+                        k_log_likelihood, _ = crf_log_likelihood(logits,
                                                               k_seqs,
                                                               all_lengths,
                                                               transition_params=transition_params)
                         k_probs = tf.exp(k_log_likelihood)
-                        all_probs = tf.concat((all_probs, k_probs), axis=1)
-                    leftover_probs = tf.ones((batch_size,))
-                    leftover_probs = leftover_probs - \
+                        all_probs.append(k_probs)
+                    all_probs = tf.stack(all_probs, axis=1)
+                    leftover_probs = tf.ones((batch_size, 1)) - \
                         tf.reduce_sum(all_probs, axis=1)
-                    all_probs = tf.concat((all_probs, leftover_probs))
+                    all_probs = tf.concat((all_probs, leftover_probs), axis=1)
                     # Should now be shape of (batch_size, top_k + 1)
                     return all_probs
                 prob_fn = crf_probs if use_crf else softmax_probs
 
-                e = 0.02
+                e = 0.00002
                 k = 2
                 adv_vector = tf.random.uniform(shape=pert_shape,
                                                dtype=tf.float32)
@@ -672,18 +679,26 @@ def vat(
                 for _ in range(k):
                     adv_logits = out_fn(adv_vector)
                     adv_probs = prob_fn(adv_logits)
-                    adv_loss = kl_div(probs, adv_probs, sample_weight=mask)
-                    adv_loss = tf.reduce_sum(adv_loss) / batch_size
+                    # adv_loss = kl_div(probs, adv_probs, sample_weight=mask)
+                    adv_loss = tf.compat.v1.Print(adv_loss, [adv_probs,
+                                                             tf.shape(adv_probs),
+                                                             probs,
+                                                             tf.shape(probs),
+                                                             mask,
+                                                             tf.shape(mask)],
+                                                  summarize=1000)
+                    adv_loss = adv_probs
+                    adv_loss = tf.reduce_mean(adv_loss)
                     gradient = tf.gradients(adv_loss, adv_vector)
                     adv_vector = e * tf.nn.l2_normalize(gradient, axis=-1)
                     adv_vector = tf.reshape(adv_vector,
                                             tf.shape(adv_vector)[1:])
                     adv_vector = tf.stop_gradient(adv_vector)
                 adv_logits = out_fn(adv_vector)
-                adv_probs = tf.nn.softmax(adv_logits)
-                adv_loss = kl_div(probs, adv_probs, sample_weight=mask)
-                adv_loss = tf.reduce_sum(adv_loss) / batch_size
-
+                adv_probs = prob_fn(adv_logits)
+                # adv_loss = kl_div(probs, adv_probs, sample_weight=mask)
+                adv_loss = adv_probs
+                adv_loss = tf.reduce_mean(adv_loss)
                 if use_crf:
                     log_likelihood, _ = crf_log_likelihood(
                         logits, targets, lengths, transition_params=transition_params
@@ -698,7 +713,13 @@ def vat(
                         logits,
                         weights=weights
                     )
-                loss += 1 * adv_loss
+                loss = tf.compat.v1.Print(loss, [adv_loss, loss,
+                                                         tf.shape(adv_loss),
+                                                         tf.shape(loss)],
+                                              summarize=100)
+                loss = tf.reduce_mean(loss)
+                # loss += 0.3 * adv_loss
+                print("Built!")
 
         return {
             "logits": logits,
@@ -803,7 +824,7 @@ def pseudo_label(
                     u_seq_probs = tf.reduce_mean(u_probs, axis=-1)
                 
                 # Keep only sequences with prob above threshhold
-                thresh = 0.8
+                thresh = 0.99
                 threshes = tf.ones_like(u_seq_probs) * thresh
                 mask = tf.greater(u_seq_probs, threshes)
                 u_logits = tf.boolean_mask(u_logits, mask)
