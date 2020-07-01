@@ -66,7 +66,7 @@ def k_viterbi_decode(tag_sequence, transition_matrix, top_k=5):
     viterbi_score : float
         The score of the viterbi path.
     """
-    sequence_length, num_tags = list(tag_sequence.shape())
+    sequence_length, num_tags = list(tag_sequence.shape)
 
     path_scores = []
     path_indices = []
@@ -84,7 +84,7 @@ def k_viterbi_decode(tag_sequence, transition_matrix, top_k=5):
         summed_potentials = tf.reshape(summed_potentials, (-1, num_tags))
 
         # Best pairwise potential path score from the previous timestep. 
-        max_k = min(summed_potentials.shape()[0], top_k)
+        max_k = min(summed_potentials.shape[0], top_k)
         scores, paths = top_k_0_axis(summed_potentials, max_k)
         # assert scores.size() == (n_permutations, num_tags)
         # assert paths.size() == (n_permutations, num_tags)
@@ -92,11 +92,11 @@ def k_viterbi_decode(tag_sequence, transition_matrix, top_k=5):
         scores = tag_sequence[timestep, :] + scores
         # assert scores.size() == (n_permutations, num_tags)
         path_scores.append(scores)
-        path_indices.append(paths.squeeze())
+        path_indices.append(tf.squeeze(paths))
 
     # Construct the most likely sequence backwards.
     path_scores = tf.reshape(path_scores[-1], (-1,))
-    max_k = min(path_scores.shape()[0], top_k)
+    max_k = min(path_scores.shape[0], top_k)
 
     viterbi_scores, best_paths = top_k_0_axis(path_scores, max_k)
     viterbi_paths = []
