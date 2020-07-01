@@ -192,8 +192,6 @@ class BertModel(object):
                     word_embedding_name="word_embeddings",
                     use_one_hot_embeddings=use_one_hot_embeddings,
                 )
-                if not (perturbation is None):
-                    self.embedding_output += perturbation
                 # Add positional embeddings and token type embeddings, then layer
                 # normalize and perform dropout.
                 self.embedding_output = embedding_postprocessor(
@@ -214,6 +212,8 @@ class BertModel(object):
                     reading_order_decay_rate=reading_order_decay_rate,
                     anneal_reading_order=config.anneal_reading_order,
                 )
+                if not (perturbation is None):
+                    self.embedding_output += perturbation
 
             with tf.compat.v1.variable_scope("encoder"):
                 # This converts a 2D mask of shape [batch_size, seq_length] to a 3D
@@ -289,9 +289,6 @@ class BertModel(object):
 
     def get_embedding_table(self):
         return self.embedding_table
-
-    def get_embedding_output(self):
-        return self.embedding_output
 
 
 def gelu(x):
