@@ -559,6 +559,7 @@ def vat(
         "predict_params": A dictionary of params to be fed to the viterbi decode function.
     """
     with tf.compat.v1.variable_scope("vat-sequence-labeler", reuse=reuse):
+        tf.random.set_seed(config.seed)
         if targets is not None:
             targets = tf.cast(targets, dtype=tf.int32)
 
@@ -616,9 +617,8 @@ def vat(
                 lengths = all_lengths[:target_shape[0]]
 
                 # Perturbation -> logits functions
-                featurizer_fn = kwargs.get("featurizer_fn")
-                # featurizer_fn = None
                 def after_embeddings(perturbation):
+                    featurizer_fn = kwargs.get("featurizer_fn")
                     with tf.device(device):
                         featurizer_state = featurizer_fn(perturbation)
                         hidden = featurizer_state["sequence_features"]
@@ -628,7 +628,7 @@ def vat(
                     with tf.device(device):
                         logits = layer(hidden + perturbation)
                         return tf.cast(logits, tf.float32)
-                if featurizer_fn:
+                if config.vat_preturb_embed:
                     out_fn = after_embeddings
                     pert_shape = tf.concat((tf.shape(hidden)[:2],
                                             tf.shape(embedding_table)[-1:]),
@@ -638,17 +638,16 @@ def vat(
                     pert_shape = tf.shape(hidden)
 
                 # Logits -> probability distribution functions
-                top_k = 3
-                # Getting the targets here is pretty gross
-                if use_crf:
+                top_k_targets = None
+                if config.vat_top_k:
                     # Target has shape of (batch_size, top_k, sequence length)
-                    crf_targets, _ = k_best_sequence_decode(all_logits, transition_params, top_k)
-                else:
-                    crf_targets = None
+                    top_k_targets, _ = k_best_sequence_decode(all_logits,
+                                                            transition_params,
+                                                            config.vat_top_k)
                 def crf_probs(logits):
                     all_probs = []
-                    for cur_k in range(top_k):
-                        k_seqs = crf_targets[:, cur_k, :]
+                    for cur_k in range(config.vat_top_k):
+                        k_seqs = top_k_targets[:, cur_k, :]
                         k_log_likelihood, _ = crf_log_likelihood(logits,
                                                                  k_seqs,
                                                                  all_lengths,
@@ -664,33 +663,31 @@ def vat(
                     return all_probs
                 def softmax_probs(logits):
                     return tf.nn.softmax(logits)
-                prob_fn = crf_probs if use_crf else softmax_probs
+                prob_fn = crf_probs if config.vat_top_k else softmax_probs
 
-                e = 0.0002
-                k = 2
                 adv_vector = tf.random.uniform(shape=pert_shape,
                                                dtype=tf.float32)
-                adv_vector = e * tf.nn.l2_normalize(adv_vector, axis=-1)
+                adv_vector = config.vat_e * tf.nn.l2_normalize(adv_vector, axis=-1)
                 batch_size = tf.cast(tf.shape(all_logits)[0], tf.float32)
                 kl_div = tf.losses.KLDivergence(reduction=tf.keras.losses.Reduction.NONE)
                 mask = tf.sequence_mask(all_lengths,
                                         maxlen=tf.math.reduce_max(all_lengths),
                                         dtype=tf.float32)
                 probs = tf.stop_gradient(prob_fn(all_logits))
-                for _ in range(k):
+                for _ in range(config.vat_k):
                     adv_logits = out_fn(adv_vector)
                     adv_probs = prob_fn(adv_logits)
                     adv_loss = kl_div(probs, adv_probs)
                     adv_loss = tf.reduce_mean(adv_loss)
                     gradient = tf.gradients(adv_loss, adv_vector)
-                    adv_vector = e * tf.nn.l2_normalize(gradient, axis=-1)
-                    adv_vector = tf.reshape(adv_vector,
-                                            tf.shape(adv_vector)[1:])
+                    adv_vector = config.vat_e * tf.nn.l2_normalize(gradient, axis=-1)
+                    adv_vector = tf.reshape(adv_vector, tf.shape(adv_vector)[1:])
                     adv_vector = tf.stop_gradient(adv_vector)
                 adv_logits = out_fn(adv_vector)
                 adv_probs = prob_fn(adv_logits)
                 adv_loss = kl_div(probs, adv_probs)
                 adv_loss = tf.reduce_mean(adv_loss)
+
                 if use_crf:
                     log_likelihood, _ = crf_log_likelihood(
                         logits, targets, lengths, transition_params=transition_params
@@ -706,7 +703,7 @@ def vat(
                         weights=weights
                     )
                 loss = tf.reduce_mean(loss)
-                loss += 0.3 * adv_loss
+                loss += config.vat_loss_coef * adv_loss
                 print("Built!")
 
         return {
@@ -754,7 +751,7 @@ def pseudo_label(
         "predict_params": A dictionary of params to be fed to the viterbi decode function.
     """
     with tf.compat.v1.variable_scope("psuedo-label", reuse=reuse):
-
+        tf.random.set_seed(config.seed)
         if targets is not None:
             targets = tf.cast(targets, dtype=tf.int32)
 
@@ -812,8 +809,7 @@ def pseudo_label(
                     u_seq_probs = tf.reduce_mean(u_probs, axis=-1)
                 
                 # Keep only sequences with prob above threshhold
-                thresh = 0.99
-                threshes = tf.ones_like(u_seq_probs) * thresh
+                threshes = tf.ones_like(u_seq_probs) * config.pseudo_thresh
                 mask = tf.greater(u_seq_probs, threshes)
                 u_logits = tf.boolean_mask(u_logits, mask)
                 u_targets = tf.boolean_mask(u_targets, mask)

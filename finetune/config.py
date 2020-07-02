@@ -323,6 +323,14 @@ def get_default_config():
         anneal_reading_order=False,
         context_channels=None,
 
+        # SSL Hyperparameters
+        vat_preturb_embed = None,
+        vat_top_k = None,
+        vat_k = None,
+        vat_e = None,
+        vat_loss_coef = None,
+        pseudo_thresh = None,
+
         # Serialize finetune version with model
         version=VERSION,
     )

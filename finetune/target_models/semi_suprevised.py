@@ -265,6 +265,14 @@ class SSLLabeler(SequenceLabeler):
         self._trained = True
 
 class VATLabeler(SSLLabeler):
+    defaults = {
+        "vat_preturb_embed": True,
+        "vat_top_k": 3,
+        "vat_k": 1,
+        "vat_e": 0.0002,
+        "vat_loss_coef": 0.3
+    }
+
     def _target_model(
         self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
     ):
@@ -284,6 +292,10 @@ class VATLabeler(SSLLabeler):
         )
 
 class PseudoLabeler(SSLLabeler):
+    defaults = {
+        "pseudo_thresh": 0.99
+    }
+
     def _target_model(
         self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
     ):
