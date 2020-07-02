@@ -106,7 +106,7 @@ class SSLPipeline(SequencePipeline):
             )
             u_batch_dataset = batch_dataset(
                     u_train_dataset,
-                    batch_size=self.config.batch_size,
+                    batch_size=self.config.u_batch_size,
                     shapes=u_shapes,
                     n_epochs=self.config.n_epochs
             )
@@ -137,7 +137,7 @@ class SSLPipeline(SequencePipeline):
             )
             u_train_batched = batch_dataset(
                 u_train_unbatched,
-                batch_size=self.config.batch_size * 3,
+                batch_size=self.config.u_batch_size,
                 shapes=u_shapes,
                 n_epochs=self.config.n_epochs
             )

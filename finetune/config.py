@@ -324,6 +324,7 @@ def get_default_config():
         context_channels=None,
 
         # SSL Hyperparameters
+        u_batch_size = 4,
         vat_preturb_embed = None,
         vat_top_k = None,
         vat_k = None,
