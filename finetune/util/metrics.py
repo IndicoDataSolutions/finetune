@@ -389,7 +389,7 @@ def annotation_report(y_true, y_pred, labels=None, target_names=None, sample_wei
     report += u'\n'
     averages = [np.average(seq, weights=counts) for seq in seqs[:-1]] + [np.sum(seqs[-1])]
     report += row_fmt.format(last_line_heading, *averages, width=width, digits=digits)
-    return report
+    return report, averages
 
 
 def read_eval_metrics(eval_dir):
