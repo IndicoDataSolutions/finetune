@@ -3,10 +3,12 @@ import numpy as np
 import joblib as jl
 import os
 import tqdl
+import logging
 import tensorflow as tf
 from tensorflow.python.keras.saving.hdf5_format import load_attributes_from_hdf5_group
 from finetune.util.download import FINETUNE_BASE_FOLDER
 from finetune.util.shapes import lengths_from_eos_idx
+from finetune.util.tokenization import normalize_nfkc, WEIRD_SPM_CHAR
 from finetune.encoding.input_encoder import BaseEncoder
 from finetune.encoding.input_encoder import EncodedOutput
 from finetune.base_models import SourceModel
@@ -15,6 +17,8 @@ from finetune.optimizers.recompute_grads import recompute_grad
 from tensorflow.python.util import tf_inspect
 
 
+LOGGER = logging.getLogger("finetune")
+
 def load_weights_from_hdf5_group_by_name(filepath, weights_replacement):
     with h5py.File(filepath, "r") as f:
         if "layer_names" not in f.attrs and "model_weights" in f:
@@ -22,7 +26,6 @@ def load_weights_from_hdf5_group_by_name(filepath, weights_replacement):
 
         # New file format.
         layer_names = load_attributes_from_hdf5_group(f, "layer_names")
-
         weight_lookup = {}
         for name in layer_names:
             g = f[name]
@@ -127,7 +130,7 @@ def finetune_model_from_huggingface(
 
         @property
         def vocab_size(self):
-            self.tokenizer.vocab_size
+            return self.tokenizer.vocab_size
 
         def _encode(self, texts):
             batch_tokens = []
@@ -135,20 +138,47 @@ def finetune_model_from_huggingface(
             batch_char_ends = []
             batch_char_starts = []
             for i, text in enumerate(texts):
-                encoded = self.tokenizer._tokenizer.encode(
-                    text, add_special_tokens=False
-                )
-                batch_tokens.append(encoded.tokens)
-                batch_token_idxs.append(encoded.ids)
-                token_ends = []
-                token_starts = []
-                for start, end in encoded.offsets:
-                    token_starts.append(start)
-                    token_ends.append(end)
+                if self.tokenizer.is_fast:
+                    encoded = self.tokenizer._tokenizer.encode(
+                        text, add_special_tokens=False
+                    )
+                    batch_tokens.append(encoded.tokens)
+                    batch_token_idxs.append(encoded.ids)
+                    token_ends = []
+                    token_starts = []
+                    for start, end in encoded.offsets:
+                        token_starts.append(start)
+                        token_ends.append(end)
 
-                batch_char_ends.append(token_ends)
-                batch_char_starts.append(token_starts)
+                    batch_char_ends.append(token_ends)
+                    batch_char_starts.append(token_starts)
+                else:
+                    if not hasattr(self.tokenizer, 'sp_model'):
+                        LOGGER.warning("Tokenizer is not sentence-piece-based and is not guaranteed to port over correctly.")
+                    encoded_ids = self.tokenizer.encode(text, add_special_tokens=False)
+                    encoded_tokens = self.tokenizer.convert_ids_to_tokens(encoded_ids)
+                    # get token starts and ends
+                    alignment, normed_text = normalize_nfkc(text)
+                    token_start = 0
+                    token_end = 0
+                    tok_pos = []
+                    char_starts = []
+                    for token in encoded_tokens:
+                        raw_text = token.replace(WEIRD_SPM_CHAR, "")
+                        token_start_temp = normed_text.find(raw_text, token_end)
+                        if token_start_temp == -1:
+                            LOGGER.warning("SentencePiece produced a token {} not found in the original string {}".format(raw_text, text))
+                        else:
+                            token_start = token_start_temp
+                            token_end = token_start + len(raw_text)
+                        tok_pos.append(alignment[token_end])
+                        char_starts.append(max(alignment[token_start], tok_pos[-1]))
+                    batch_token_idxs.append(encoded_ids)
+                    batch_tokens.append(encoded_tokens)
+                    batch_char_ends.append(tok_pos)
+                    batch_char_starts.append(char_starts)
 
+            print(batch_tokens, batch_char_starts)
             return EncodedOutput(
                 token_ids=batch_token_idxs,
                 tokens=batch_tokens,
