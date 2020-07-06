@@ -6,11 +6,27 @@ from transformers import (
     TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     TFBertMainLayer,
     BertTokenizerFast,
-    BertConfig
+    BertConfig,
+
+    XLMRobertaTokenizer,
+    XLMRobertaConfig,
 )
 from transformers.modeling_tf_electra import TFElectraMainLayer
+from transformers.modeling_tf_roberta import TFRobertaMainLayer
 
 from finetune.util.huggingface_interface import finetune_model_from_huggingface
+
+
+HFXLMRoberta = finetune_model_from_huggingface(
+    pretrained_weights="xlm-roberta-base",
+    archive_map={'xlm-roberta-base': 'xlm-roberta-base'},
+    hf_featurizer=TFRobertaMainLayer,
+    hf_tokenizer=XLMRobertaTokenizer,
+    hf_config=XLMRobertaConfig,
+    weights_replacement=[
+        ("tf_roberta_for_pretraining/roberta", "model/featurizer/tf_roberta_main_layer")
+    ],
+)
 
 
 HFElectraGen = finetune_model_from_huggingface(
