@@ -127,7 +127,7 @@ def finetune_model_from_huggingface(
 
         @property
         def vocab_size(self):
-            self.tokenizer.vocab_size
+            return self.tokenizer.vocab_size
 
         def _encode(self, texts):
             batch_tokens = []
