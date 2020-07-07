@@ -7,7 +7,7 @@ from finetune.util.shapes import shape_list, merge_leading_dims
 from finetune.optimizers.recompute_grads import recompute_grad
 from finetune.errors import FinetuneError
 from finetune.nn.activations import act_fns
-from finetune.nn.nn_utils import norm
+from finetune.nn.nn_utils import norm, build_ema_getter
 from finetune.nn.crf import sequence_decode, k_best_sequence_decode
 
 
@@ -619,8 +619,12 @@ def vat(
                 # Perturbation -> logits functions
                 def after_embeddings(perturbation):
                     featurizer_fn = kwargs.get("featurizer_fn")
+                    scope = kwargs.get("scope")
                     with tf.device(device):
-                        featurizer_state = featurizer_fn(perturbation)
+                        # Revert scope to get featurizer weights
+                        with tf.compat.v1.variable_scope(scope):
+                            featurizer_state = featurizer_fn(perturbation,
+                                                             reuse=True)
                         hidden = featurizer_state["sequence_features"]
                         logits = layer(hidden)
                         return tf.cast(logits, tf.float32)
@@ -840,8 +844,120 @@ def pseudo_label(
             "predict_params": {"transition_matrix": transition_params, "sequence_length": lengths},
         }
 
+def mean_teacher(
+    hidden,
+    targets,
+    n_targets,
+    config,
+    pad_id,
+    multilabel=False,
+    train=False,
+    reuse=None,
+    lengths=None,
+    use_crf=True,
+    **kwargs
+):
+    """
+    An Attention based sequence labeler model.
 
+    In the case of unidirectional base models such as GPT this model takes the output of the pre-trained model,
+    applies an additional randomly initialised multihead attention block, with residuals on top.
+    The extra attention is not future masked to allow the model to label sequences based on context in both directions.
+    The representations fed into this model are necessarily future masked because a language modelling loss is the
+    original objective of the featurizer.
 
+    For bidirectional base models we apply the crf model directly to the output of the base model.
+
+    :param hidden: The output of the featurizer. [batch_size, sequence_length, embed_dim]
+    :param targets: The placeholder representing the sequence labeling targets. [batch_size, sequence_length]
+    :param n_targets: A python int containing the number of classes that the model should be learning to predict over.
+    :param config: A config object, containing all parameters for the featurizer.
+    :param train: If this flag is true, dropout and losses are added to the graph.
+    :param reuse: Should reuse be set within this scope.
+    :param lengths: The number of non-padding tokens in the input.
+    :param kwargs: Spare arguments.
+    :return: dict containing:
+        "logits": The un-normalised log probabilities of each class being in each location. For usable predictions,
+            sampling from this distribution is not sufficient and a viterbi decoding method should be used.
+        "losses": The negative log likelihood for the sequence targets.
+        "predict_params": A dictionary of params to be fed to the viterbi decode function.
+    """
+    with tf.compat.v1.variable_scope("mean_teacher", reuse=reuse):
+        tf.random.set_seed(config.seed)
+        if targets is not None:
+            targets = tf.cast(targets, dtype=tf.int32)
+
+        nx = config.n_embed
+
+        layer = tf.keras.layers.Dense(n_targets)
+        logits = tf.cast(layer(hidden), tf.float32)
+
+        loss = 0.0
+
+        default_lengths = tf.shape(input=hidden)[1] * tf.ones(
+            tf.shape(input=hidden)[0], dtype=tf.int32
+        )
+        if lengths is None:
+            lengths = default_lengths
+            
+        class_weights = kwargs.get("class_weights")
+        
+        with tf.device("CPU:0" if train else logits.device):
+            if class_weights is not None and train:
+                class_weights = tf.reshape(class_weights, [1, 1, -1])
+                one_hot_class_weights = class_weights * tf.one_hot(targets, depth=n_targets)
+                per_token_weights = tf.reduce_sum(
+                    input_tensor=one_hot_class_weights, axis=-1, keepdims=True
+                )
+                logits = class_reweighting(per_token_weights)(logits)
+                                                                                                      
+            transition_params = tf.cast(
+                tf.compat.v1.get_variable(
+                    "Transition_matrix", shape=[n_targets, n_targets]
+                ),
+                tf.float32
+            )
+            if targets is not None:
+                # Seperate labled and unlabeled data
+                target_shape = tf.shape(targets)
+                all_logits = logits
+                all_lengths = lengths
+                logits = logits[:target_shape[0]]
+                lengths = lengths[:target_shape[0]]
+
+                scope = kwargs.get("scope")
+                featurizer_fn = kwargs.get("featurizer_fn")
+                custom_getter = build_ema_getter("ema", decay=0.999)
+                with tf.compat.v1.variable_scope(scope,
+                                                 custom_getter=custom_getter):
+                    with tf.device(device):
+                        featurizer_state = featurizer_fn(None, None)
+                        hidden = featurizer_state["sequence_features"]
+                        ema_logits = layer(hidden)
+                u_loss = tf.keras.losses.MSE(all_logits, ema_logits)
+
+                if use_crf:
+                    log_likelihood, _ = crf_log_likelihood(
+                        logits, targets, lengths, transition_params=transition_params
+                    )
+                    loss = -log_likelihood
+                else:
+                    weights = tf.sequence_mask(
+                        lengths, maxlen=tf.shape(input=targets)[1], dtype=tf.float32
+                    ) / tf.expand_dims(tf.cast(lengths, tf.float32), -1)
+                    loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(
+                        targets,
+                        logits,
+                        weights=weights
+                    )
+                loss = tf.reduce_mean(loss)
+                loss = loss + 0.5 * u_loss
+
+        return {
+            "logits": logits,
+            "losses": loss,
+            "predict_params": {"transition_matrix": transition_params, "sequence_length": lengths},
+        }
 
 def association(
     hidden, lengths, targets, n_targets, config, train=False, reuse=None, **kwargs
