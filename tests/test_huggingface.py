@@ -2,6 +2,7 @@ import unittest
 import numpy as np
 from transformers import AutoTokenizer, TFAutoModel
 
+from finetune import Classifier
 from finetune.base_models.huggingface.models import HFBert, HFElectraGen, HFElectraDiscrim, HFXLMRoberta
 
 
@@ -18,22 +19,9 @@ class TestHuggingFace(unittest.TestCase):
         self.text = "The quick brown fox jumps over the lazy dog"
 
     def test_xlm_roberta(self):
-        finetune_model = Classifier(base_model=HFXLMRoberta)
+        finetune_model = Classifier(base_model=HFXLMRoberta, train_embeddings=False, n_epochs=1)
+        finetune_model.fit([self.text], ['class_a'])
         np.testing.assert_array_almost_equal(
-            finetune_model.featurize_sequence(self.text)
+            finetune_model.featurize_sequence(self.text),
             huggingface_embedding(self.text, "jplu/tf-xlm-roberta-base")
-        )
-
-    def test_electra_discriminator(self):
-        finetune_model = Classifier(base_model=HFElectraDiscrim)
-        np.testing.assert_array_almost_equal(
-            finetune_model.featurize_sequence(self.text)
-            huggingface_embedding(self.text, "google/electra-base-discriminator")
-        )
-
-    def test_electra_generator(self):
-        finetune_model = Classifier(base_model=HFElectraGen)
-        np.testing.assert_array_almost_equal(
-            finetune_model.featurize_sequence(self.text)
-            huggingface_embedding(self.text, "google/electra-base-generator")
         )
