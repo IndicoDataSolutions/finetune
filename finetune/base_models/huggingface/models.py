@@ -25,8 +25,8 @@ from finetune.util.huggingface_interface import finetune_model_from_huggingface
 class XLMRobertaTokenizerFast(XLMRobertaTokenizer, PreTrainedTokenizerFast):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    # pretrained_vocab_files_map['merges_file'] = {"xlm-roberta-base": "/path"}
-    # pretrained_init_configuration = {"xlm-roberta": {"merges_file": "/path1"}}
+    pretrained_vocab_files_map['merges_file'] = {"xlm-roberta-base": "/path"}
+    pretrained_init_configuration = {"xlm-roberta": {"merges_file": "/path1"}}
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["attention_mask"]
 
@@ -95,7 +95,7 @@ HFXLMRoberta = finetune_model_from_huggingface(
     hf_tokenizer=XLMRobertaTokenizerFast,
     hf_config=XLMRobertaConfig,
     weights_replacement=[
-        ("tf_roberta_for_pretraining/roberta", "model/featurizer/tf_roberta_main_layer")
+        ("tfxlm_roberta_for_masked_lm/roberta", "model/featurizer/tf_roberta_main_layer")
     ],
 )
 

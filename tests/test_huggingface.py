@@ -1,5 +1,6 @@
 import unittest
 import numpy as np
+import tensorflow as tf
 from transformers import AutoTokenizer, TFAutoModel
 
 from finetune import Classifier
@@ -31,4 +32,4 @@ class TestHuggingFace(unittest.TestCase):
         self.check_embeddings_equal(HFXLMRoberta, "jplu/tf-xlm-roberta-base")
 
     def test_bert(self):
-        self.check_embeddings_equal(HFBert, "base-base-uncased")
+        self.check_embeddings_equal(HFBert, "bert-base-uncased")
