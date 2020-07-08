@@ -135,19 +135,39 @@ def finetune_model_from_huggingface(
             batch_char_ends = []
             batch_char_starts = []
             for i, text in enumerate(texts):
-                encoded = self.tokenizer._tokenizer.encode(
-                    text, add_special_tokens=False
-                )
-                batch_tokens.append(encoded.tokens)
-                batch_token_idxs.append(encoded.ids)
-                token_ends = []
-                token_starts = []
-                for start, end in encoded.offsets:
-                    token_starts.append(start)
-                    token_ends.append(end)
+                if self.tokenizer.is_fast:
+                    encoded = self.tokenizer._tokenizer.encode(
+                        text, add_special_tokens=False
+                    )
+                    batch_tokens.append(encoded.tokens)
+                    batch_token_idxs.append(encoded.ids)
+                    token_ends = []
+                    token_starts = []
+                    for start, end in encoded.offsets:
+                        token_starts.append(start)
+                        token_ends.append(end)
 
-                batch_char_ends.append(token_ends)
-                batch_char_starts.append(token_starts)
+                    batch_char_ends.append(token_ends)
+                    batch_char_starts.append(token_starts)
+                else:
+                    encoded_ids = self.tokenizer.encode(text)
+                    batch_token_idxs.append(encoded_ids)
+                    batch_tokens.append(self.tokenizer.convert_ids_to_tokens(encoded_ids))
+                    # get token starts and ends
+                    alignment, normed_text = self.nfck_norm_aligned(text)
+                    token_start_temp = normed_text.find(raw_text, token_end)
+                    for token in encoded_tokens:
+                        raw_text = token.replace(WEIRD_SPM_CHAR, "")
+                        token_start_temp = normed_text.find(raw_text, token_end)
+                        if token_start_temp == -1:
+                            LOGGER.warning("SentencePiece produced a token {} not found in the original string {}".format(raw_text, text))
+                        else:
+                            token_start = token_start_temp
+                            token_end = token_start + len(raw_text)
+                        tok_pos.append(alignment[token_end])
+                        char_starts.append(max(alignment[token_start], tok_pos[-1]))
+                    batch_character_locs.append(tok_pos)
+                    batch_char_starts.append(char_starts)
 
             return EncodedOutput(
                 token_ids=batch_token_idxs,

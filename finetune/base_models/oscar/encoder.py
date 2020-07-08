@@ -8,6 +8,7 @@ import numpy as np
 
 import finetune
 from finetune.encoding.input_encoder import BaseEncoder, EncodedOutput, get_pairs
+from finetune.util.tokenization import normalize_nfkc
 import sentencepiece as spm
 import unicodedata
 
@@ -47,15 +48,7 @@ class GPCEncoder(BaseEncoder):
         self.initialized = True
 
     def nfck_norm_aligned(self, text):
-        chars = [unicodedata.normalize('NFKC', t) for t in text]
-        lookup = []
-        text_out = ""
-        for i, c in enumerate(text):
-            normed = unicodedata.normalize('NFKC', c)
-            lookup += [i for _ in normed]
-            text_out += normed
-        lookup.append(len(text))
-        return lookup, text_out
+        return normalize_nfck(text)
             
     def _encode(self, texts, stochastic=False):
         """
