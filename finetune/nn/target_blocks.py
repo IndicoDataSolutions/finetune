@@ -593,6 +593,7 @@ def vat(
             
         class_weights = kwargs.get("class_weights")
         
+        device = logits.device
         with tf.device("CPU:0" if train else device):
             if targets is not None:
                 target_shape = tf.shape(targets)
@@ -958,7 +959,7 @@ def mean_teacher(
                         weights=weights
                     )
                 loss = tf.reduce_mean(loss)
-                loss = loss + 10 * u_loss
+                loss = loss + 1 * u_loss
 
         return {
             "logits": logits,
