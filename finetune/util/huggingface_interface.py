@@ -3,10 +3,12 @@ import numpy as np
 import joblib as jl
 import os
 import tqdl
+import logging
 import tensorflow as tf
 from tensorflow.python.keras.saving.hdf5_format import load_attributes_from_hdf5_group
 from finetune.util.download import FINETUNE_BASE_FOLDER
 from finetune.util.shapes import lengths_from_eos_idx
+from finetune.util.tokenization import normalize_nfkc, WEIRD_SPM_CHAR
 from finetune.encoding.input_encoder import BaseEncoder
 from finetune.encoding.input_encoder import EncodedOutput
 from finetune.base_models import SourceModel
@@ -15,6 +17,8 @@ from finetune.optimizers.recompute_grads import recompute_grad
 from tensorflow.python.util import tf_inspect
 
 
+LOGGER = logging.getLogger("finetune")
+
 def load_weights_from_hdf5_group_by_name(filepath, weights_replacement):
     with h5py.File(filepath, "r") as f:
         if "layer_names" not in f.attrs and "model_weights" in f:
@@ -22,7 +26,6 @@ def load_weights_from_hdf5_group_by_name(filepath, weights_replacement):
 
         # New file format.
         layer_names = load_attributes_from_hdf5_group(f, "layer_names")
-
         weight_lookup = {}
         for name in layer_names:
             g = f[name]
@@ -150,12 +153,14 @@ def finetune_model_from_huggingface(
                     batch_char_ends.append(token_ends)
                     batch_char_starts.append(token_starts)
                 else:
-                    encoded_ids = self.tokenizer.encode(text)
-                    batch_token_idxs.append(encoded_ids)
-                    batch_tokens.append(self.tokenizer.convert_ids_to_tokens(encoded_ids))
+                    encoded_ids = self.tokenizer.encode(text, add_special_tokens=False)
+                    encoded_tokens = self.tokenizer.convert_ids_to_tokens(encoded_ids)
                     # get token starts and ends
-                    alignment, normed_text = self.nfck_norm_aligned(text)
-                    token_start_temp = normed_text.find(raw_text, token_end)
+                    alignment, normed_text = normalize_nfkc(text)
+                    token_start = 0
+                    token_end = 0
+                    tok_pos = []
+                    char_starts = []
                     for token in encoded_tokens:
                         raw_text = token.replace(WEIRD_SPM_CHAR, "")
                         token_start_temp = normed_text.find(raw_text, token_end)
@@ -166,9 +171,12 @@ def finetune_model_from_huggingface(
                             token_end = token_start + len(raw_text)
                         tok_pos.append(alignment[token_end])
                         char_starts.append(max(alignment[token_start], tok_pos[-1]))
-                    batch_character_locs.append(tok_pos)
+                    batch_token_idxs.append(encoded_ids)
+                    batch_tokens.append(encoded_tokens)
+                    batch_char_ends.append(tok_pos)
                     batch_char_starts.append(char_starts)
 
+            print(batch_tokens, batch_char_starts)
             return EncodedOutput(
                 token_ids=batch_token_idxs,
                 tokens=batch_tokens,

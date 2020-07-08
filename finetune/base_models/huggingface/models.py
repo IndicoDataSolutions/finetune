@@ -90,7 +90,7 @@ class XLMRobertaTokenizerFast(XLMRobertaTokenizer, PreTrainedTokenizerFast):
 
 HFXLMRoberta = finetune_model_from_huggingface(
     pretrained_weights="jplu/tf-xlm-roberta-base",
-    archive_map={'jplu/tf-xlm-roberta-base': "https://s3.amazonaws.com/models.huggingface.co/bert/jplu/tf-xlm-roberta-large/tf_model.h5"},
+    archive_map={'jplu/tf-xlm-roberta-base': "https://s3.amazonaws.com/models.huggingface.co/bert/jplu/tf-xlm-roberta-base/tf_model.h5"},
     hf_featurizer=TFRobertaMainLayer,
     # hf_tokenizer=XLMRobertaTokenizerFast,
     hf_tokenizer=XLMRobertaTokenizer,

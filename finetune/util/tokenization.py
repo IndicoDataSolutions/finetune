@@ -1,6 +1,9 @@
 import unicodedata
 
-def normalize_nfkc(text)
+
+WEIRD_SPM_CHAR = "▁"
+
+def normalize_nfkc(text):
     chars = [unicodedata.normalize('NFKC', t) for t in text]
     lookup = []
     text_out = ""

@@ -8,13 +8,12 @@ import numpy as np
 
 import finetune
 from finetune.encoding.input_encoder import BaseEncoder, EncodedOutput, get_pairs
-from finetune.util.tokenization import normalize_nfkc
+from finetune.util.tokenization import normalize_nfkc, WEIRD_SPM_CHAR
 import sentencepiece as spm
 import unicodedata
 
 FINETUNE_FOLDER = os.path.dirname(finetune.__file__)
 ENCODER_PATH = os.path.join(FINETUNE_FOLDER, 'model', 'oscar', 'encoder')
-WEIRD_SPM_CHAR = "▁"
 
 LOGGER = logging.getLogger("finetune")
 
