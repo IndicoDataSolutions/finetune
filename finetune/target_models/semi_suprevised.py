@@ -315,7 +315,6 @@ class PseudoLabeler(SSLLabeler):
 
 class MeanTeacherLabeler(SSLLabeler):
     defaults = {
-        "permit_uninitialized": ".*ExponentialMovingAverage"
     }
 
     def _target_model(

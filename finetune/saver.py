@@ -253,10 +253,22 @@ class Saver:
                         saved_var = func(name, saved_var)
                     var_loader.add(var, saved_var)
                 else:
-                    if name.startswith("model/featurizer"):
+                    if len(re.findall("/ExponentialMovingAverage", name)) == 1:
+                        original_name = re.sub("/ExponentialMovingAverage", "", name)
+                        # Repeated code ): Maybe nested function to fix?
+                        if original_name in variables_sv.keys():
+                            saved_var = variables_sv[original_name]
+                        elif original_name in self.fallback.keys():
+                            saved_var = self.fallback[original_name]
+                        if saved_var is not None:
+                            for func in self.variable_transforms:
+                                saved_var = func(original_name, saved_var)
+                            var_loader.add(var, saved_var)
+                    elif name.startswith("model/featurizer"):
                         permitted = self.permit_uninitialized is not None and re.findall(self.permit_uninitialized, name)
                         if not permitted:
                             raise ValueError("Uninitialized featurizer variable {}".format(name))
+                        
                     
             var_loader.run(session)
         return init_fn

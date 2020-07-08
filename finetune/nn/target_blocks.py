@@ -942,12 +942,6 @@ def mean_teacher(
                             hidden = featurizer_state["sequence_features"]
                             ema_logits = tf.stop_gradient(layer(hidden))
                 u_loss = tf.keras.losses.MSE(all_logits, ema_logits)
-                # w1 = [var for var in tf.compat.v1.global_variables() if var.op.name=="model/featurizer/bert/encoder/layer_1/attention/output/dense/bias"][0]
-                # w2 = [var for var in tf.compat.v1.global_variables() if var.op.name=="model/featurizer/bert/encoder/layer_1/attention/output/dense/bias/ExponentialMovingAverage"][0]
-                # vs = [var.op.name for var in tf.compat.v1.global_variables()]
-                # u_loss = tf.compat.v1.Print(u_loss,
-                #                             [w1, w2],
-                #                             summarize=2)
 
                 if use_crf:
                     log_likelihood, _ = crf_log_likelihood(
@@ -964,7 +958,7 @@ def mean_teacher(
                         weights=weights
                     )
                 loss = tf.reduce_mean(loss)
-                loss = loss + 0.5 * u_loss
+                loss = loss + 10 * u_loss
 
         return {
             "logits": logits,
