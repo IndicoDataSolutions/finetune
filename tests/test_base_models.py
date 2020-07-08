@@ -525,7 +525,7 @@ def _test_featurize_sequence(self, model_fn):
             self.assertTrue(non_chunk.shape[0] == encoded_len)
             self.assertTrue(chunk.shape[0] == encoded_len)
             self.assertTrue(non_chunk.shape == chunk.shape)
-            if not (prev is None):
+            if prev is not None:
                 self.assertTrue(prev.shape == chunk.shape)
         prev_features = chunk_features
 
