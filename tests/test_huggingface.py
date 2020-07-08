@@ -18,10 +18,17 @@ class TestHuggingFace(unittest.TestCase):
     def setUp(self):
         self.text = "The quick brown fox jumps over the lazy dog"
 
-    def test_xlm_roberta(self):
-        finetune_model = Classifier(base_model=HFXLMRoberta, train_embeddings=False, n_epochs=1)
+    def check_embeddings_equal(self, finetune_base_model, hf_model_path):
+        finetune_model = Classifier(
+            base_model=finetune_base_model, train_embeddings=False, n_epochs=1)
         finetune_model.fit([self.text], ['class_a'])
         np.testing.assert_array_almost_equal(
             finetune_model.featurize_sequence(self.text),
-            huggingface_embedding(self.text, "jplu/tf-xlm-roberta-base")
+            huggingface_embedding(self.text, hf_model_path)
         )
+
+    def test_xlm_roberta(self):
+        self.check_embeddings_equal(HFXLMRoberta, "jplu/tf-xlm-roberta-base")
+
+    def test_bert(self):
+        self.check_embeddings_equal(HFBert, "base-base-uncased")
