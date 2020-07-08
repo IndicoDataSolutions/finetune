@@ -16,6 +16,7 @@ from transformers.modeling_tf_roberta import TFRobertaMainLayer
 from transformers.tokenization_xlm_roberta import (
     VOCAB_FILES_NAMES, PRETRAINED_VOCAB_FILES_MAP, PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 )
+from transformers.tokenization_utils import PreTrainedTokenizerFast
 from tokenizers import SentencePieceBPETokenizer
 
 from finetune.util.huggingface_interface import finetune_model_from_huggingface
@@ -24,8 +25,10 @@ from finetune.util.huggingface_interface import finetune_model_from_huggingface
 class XLMRobertaTokenizerFast(XLMRobertaTokenizer, PreTrainedTokenizerFast):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
+    # pretrained_vocab_files_map['merges_file'] = {"xlm-roberta-base": "/path"}
+    # pretrained_init_configuration = {"xlm-roberta": {"merges_file": "/path1"}}
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    model_input_names = ["attention_mask"]
 
     def __init__(
         self,
@@ -40,13 +43,10 @@ class XLMRobertaTokenizerFast(XLMRobertaTokenizer, PreTrainedTokenizerFast):
         **kwargs
     ):
         PreTrainedTokenizerFast.__init__(
+            self,
             SentencePieceBPETokenizer(
                 vocab_file=vocab_file,
-                merges_file=merges_file,
                 unk_token=unk_token,
-                replacement=replacement,
-                add_prefix_space=add_prefix_space,
-                dropout=dropout
             ),
             bos_token=bos_token,
             eos_token=eos_token,
