@@ -4,7 +4,7 @@ LABEL Author="Ben Townsend, Madison May"
 # tensorboard
 EXPOSE 6006
 
-RUN apt-get update && apt-get install node.js && apt-get install npm && mkdir /Finetune
+RUN apt-get update && mkdir /Finetune
 ADD requirements.txt /Finetune/requirements.txt
 RUN pip3 install -r /Finetune/requirements.txt && \
     python3 -m spacy download en
