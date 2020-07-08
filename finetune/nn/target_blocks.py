@@ -593,8 +593,14 @@ def vat(
             
         class_weights = kwargs.get("class_weights")
         
-        device = logits.device
         with tf.device("CPU:0" if train else device):
+            if targets is not None:
+                target_shape = tf.shape(targets)
+                all_logits = logits
+                all_lengths = lengths
+                logits = all_logits[:target_shape[0]]
+                lengths = all_lengths[:target_shape[0]]
+
             if class_weights is not None and train:
                 class_weights = tf.reshape(class_weights, [1, 1, -1])
                 one_hot_class_weights = class_weights * tf.one_hot(targets, depth=n_targets)
@@ -609,19 +615,14 @@ def vat(
                 ),
                 tf.float32
             )
-            if targets is not None:
-                target_shape = tf.shape(targets)
-                all_logits = logits
-                all_lengths = lengths
-                logits = all_logits[:target_shape[0]]
-                lengths = all_lengths[:target_shape[0]]
 
+            if targets is not None:
                 # Perturbation -> logits functions
                 def after_embeddings(perturbation):
                     featurizer_fn = kwargs.get("featurizer_fn")
                     scope = kwargs.get("scope")
                     with tf.device(device):
-                        # Revert scope to get featurizer weights
+                        # Revert scope to reuse featurizer weights
                         with tf.compat.v1.variable_scope(scope):
                             featurizer_state = featurizer_fn(perturbation,
                                                              reuse=True)
@@ -775,20 +776,13 @@ def pseudo_label(
         class_weights = kwargs.get("class_weights")
         
         with tf.device("CPU:0" if train else logits.device):
-            if class_weights is not None and train:
-                class_weights = tf.reshape(class_weights, [1, 1, -1])
-                one_hot_class_weights = class_weights * tf.one_hot(targets, depth=n_targets)
-                per_token_weights = tf.reduce_sum(
-                    input_tensor=one_hot_class_weights, axis=-1, keepdims=True
-                )
-                logits = class_reweighting(per_token_weights)(logits)
-                                                                                                      
             transition_params = tf.cast(
                 tf.compat.v1.get_variable(
                     "Transition_matrix", shape=[n_targets, n_targets]
                 ),
                 tf.float32
             )
+
             if targets is not None:
                 # Seperate labled and unlabeled data
                 target_shape = tf.shape(targets)
@@ -823,6 +817,15 @@ def pseudo_label(
                 targets = tf.concat((targets, u_targets), axis=0)
                 lengths = tf.concat((lengths, u_lengths), axis=0)
 
+            if class_weights is not None and train:
+                class_weights = tf.reshape(class_weights, [1, 1, -1])
+                one_hot_class_weights = class_weights * tf.one_hot(targets, depth=n_targets)
+                per_token_weights = tf.reduce_sum(
+                    input_tensor=one_hot_class_weights, axis=-1, keepdims=True
+                )
+                logits = class_reweighting(per_token_weights)(logits)
+
+            if targets is not None:
                 if use_crf:
                     log_likelihood, _ = crf_log_likelihood(
                         logits, targets, lengths, transition_params=transition_params
@@ -902,7 +905,16 @@ def mean_teacher(
             
         class_weights = kwargs.get("class_weights")
         
-        with tf.device("CPU:0" if train else logits.device):
+        device = logits.device
+        with tf.device("CPU:0" if train else device):
+            if targets is not None:
+                # Seperate labled and unlabeled data
+                target_shape = tf.shape(targets)
+                all_logits = logits
+                all_lengths = lengths
+                logits = logits[:target_shape[0]]
+                lengths = lengths[:target_shape[0]]
+
             if class_weights is not None and train:
                 class_weights = tf.reshape(class_weights, [1, 1, -1])
                 one_hot_class_weights = class_weights * tf.one_hot(targets, depth=n_targets)
@@ -918,23 +930,24 @@ def mean_teacher(
                 tf.float32
             )
             if targets is not None:
-                # Seperate labled and unlabeled data
-                target_shape = tf.shape(targets)
-                all_logits = logits
-                all_lengths = lengths
-                logits = logits[:target_shape[0]]
-                lengths = lengths[:target_shape[0]]
-
                 scope = kwargs.get("scope")
                 featurizer_fn = kwargs.get("featurizer_fn")
-                custom_getter = build_ema_getter("ema", decay=0.999)
-                with tf.compat.v1.variable_scope(scope,
-                                                 custom_getter=custom_getter):
-                    with tf.device(device):
-                        featurizer_state = featurizer_fn(None, None)
-                        hidden = featurizer_state["sequence_features"]
-                        ema_logits = layer(hidden)
+                with tf.compat.v1.variable_scope(scope):
+                    custom_getter = build_ema_getter("ema", decay=0.999)
+                update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
+                with tf.control_dependencies(update_ops):
+                    with tf.compat.v1.variable_scope(scope, custom_getter=custom_getter):
+                        with tf.device(device):
+                            featurizer_state = featurizer_fn(None, reuse=None)
+                            hidden = featurizer_state["sequence_features"]
+                            ema_logits = tf.stop_gradient(layer(hidden))
                 u_loss = tf.keras.losses.MSE(all_logits, ema_logits)
+                # w1 = [var for var in tf.compat.v1.global_variables() if var.op.name=="model/featurizer/bert/encoder/layer_1/attention/output/dense/bias"][0]
+                # w2 = [var for var in tf.compat.v1.global_variables() if var.op.name=="model/featurizer/bert/encoder/layer_1/attention/output/dense/bias/ExponentialMovingAverage"][0]
+                # vs = [var.op.name for var in tf.compat.v1.global_variables()]
+                # u_loss = tf.compat.v1.Print(u_loss,
+                #                             [w1, w2],
+                #                             summarize=2)
 
                 if use_crf:
                     log_likelihood, _ = crf_log_likelihood(

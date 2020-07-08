@@ -25,14 +25,17 @@ def build_ema_getter(name_scope_name, decay=0.999):
         original_trainable_vars = {
             tensor.op.name: tensor
             for tensor
-            in tf.compat.v1.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
+            in
+            tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.TRAINABLE_VARIABLES)
         }
         ema = tf.train.ExponentialMovingAverage(decay)
         update_op = ema.apply(original_trainable_vars.values())
-        tf.compat.v1.add_to_collection(tf.GraphKeys.UPDATE_OPS, update_op)
+        tf.compat.v1.add_to_collection(tf.compat.v1.GraphKeys.UPDATE_OPS, update_op)
 
     def use_ema_variables(getter, name, *args, **kwargs):
         assert name in original_trainable_vars, "Unknown variable {}.".format(name)
-        return ema.average(original_trainable_vars[name])
+        ret = ema.average(original_trainable_vars[name])
+        # ret = tf.compat.v1.Print(ret, [name, ret, ret.op.name], summarize=3)
+        return ret
 
     return use_ema_variables
