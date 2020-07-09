@@ -45,7 +45,7 @@ from finetune.encoding.target_encoders import (
     SequenceLabelingEncoder,
     SequenceMultiLabelingEncoder,
 )
-from finetune.nn.target_blocks import vat, pseudo_label, mean_teacher
+from finetune.nn.target_blocks import vat, pseudo_label, mean_teacher, ict
 from finetune.nn.crf import sequence_decode
 from finetune.encoding.sequence_encoder import (
     finetune_to_indico_sequence,
@@ -287,7 +287,7 @@ class VATLabeler(SSLLabeler):
             reuse=reuse,
             lengths=featurizer_state["lengths"],
             use_crf=self.config.crf_sequence_labeling,
-            embedding_table=featurizer_state["embed_weights"],
+            embedding_out=featurizer_state["embed_out"],
             **kwargs
         )
 
@@ -331,5 +331,29 @@ class MeanTeacherLabeler(SSLLabeler):
             reuse=reuse,
             lengths=featurizer_state["lengths"],
             use_crf=self.config.crf_sequence_labeling,
+            embedding_out=featurizer_state["embed_out"],
+            **kwargs
+        )
+
+
+class ICTLabeler(SSLLabeler):
+    defaults = {
+    }
+
+    def _target_model(
+        self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
+    ):
+        return ict(
+            hidden=featurizer_state["sequence_features"],
+            targets=targets,
+            n_targets=n_outputs,
+            pad_id=config.pad_idx,
+            config=config,
+            train=train,
+            multilabel=config.multi_label_sequences,
+            reuse=reuse,
+            lengths=featurizer_state["lengths"],
+            use_crf=self.config.crf_sequence_labeling,
+            embedding_out=featurizer_state["embed_out"],
             **kwargs
         )

@@ -530,7 +530,7 @@ def vat(
     reuse=None,
     lengths=None,
     use_crf=True,
-    embedding_table=None,
+    embedding_out=None,
     **kwargs
 ):
     """
@@ -625,7 +625,8 @@ def vat(
                     with tf.device(device):
                         # Revert scope to reuse featurizer weights
                         with tf.compat.v1.variable_scope(scope):
-                            featurizer_state = featurizer_fn(perturbation,
+                            preturb_embedding = perturbation + embedding_out
+                            featurizer_state = featurizer_fn(preturb_embedding,
                                                              reuse=True)
                         hidden = featurizer_state["sequence_features"]
                         logits = layer(hidden)
@@ -636,9 +637,7 @@ def vat(
                         return tf.cast(logits, tf.float32)
                 if config.vat_preturb_embed:
                     out_fn = after_embeddings
-                    pert_shape = tf.concat((tf.shape(hidden)[:2],
-                                            tf.shape(embedding_table)[-1:]),
-                                           axis=0)
+                    pert_shape = tf.shape(embedding_out)
                 else:
                     out_fn = after_transformer
                     pert_shape = tf.shape(hidden)
@@ -848,6 +847,151 @@ def pseudo_label(
             "predict_params": {"transition_matrix": transition_params, "sequence_length": lengths},
         }
 
+def ict(
+    hidden,
+    targets,
+    n_targets,
+    config,
+    pad_id,
+    multilabel=False,
+    train=False,
+    reuse=None,
+    lengths=None,
+    use_crf=True,
+    embedding_out=None,
+    **kwargs
+):
+    """
+    An Attention based sequence labeler model.
+
+    In the case of unidirectional base models such as GPT this model takes the output of the pre-trained model,
+    applies an additional randomly initialised multihead attention block, with residuals on top.
+    The extra attention is not future masked to allow the model to label sequences based on context in both directions.
+    The representations fed into this model are necessarily future masked because a language modelling loss is the
+    original objective of the featurizer.
+
+    For bidirectional base models we apply the crf model directly to the output of the base model.
+
+    :param hidden: The output of the featurizer. [batch_size, sequence_length, embed_dim]
+    :param targets: The placeholder representing the sequence labeling targets. [batch_size, sequence_length]
+    :param n_targets: A python int containing the number of classes that the model should be learning to predict over.
+    :param config: A config object, containing all parameters for the featurizer.
+    :param train: If this flag is true, dropout and losses are added to the graph.
+    :param reuse: Should reuse be set within this scope.
+    :param lengths: The number of non-padding tokens in the input.
+    :param kwargs: Spare arguments.
+    :return: dict containing:
+        "logits": The un-normalised log probabilities of each class being in each location. For usable predictions,
+            sampling from this distribution is not sufficient and a viterbi decoding method should be used.
+        "losses": The negative log likelihood for the sequence targets.
+        "predict_params": A dictionary of params to be fed to the viterbi decode function.
+    """
+    with tf.compat.v1.variable_scope("mean_teacher", reuse=reuse):
+        tf.random.set_seed(config.seed)
+        if targets is not None:
+            targets = tf.cast(targets, dtype=tf.int32)
+
+        nx = config.n_embed
+
+        layer = tf.keras.layers.Dense(n_targets)
+        logits = tf.cast(layer(hidden), tf.float32)
+
+        loss = 0.0
+
+        default_lengths = tf.shape(input=hidden)[1] * tf.ones(
+            tf.shape(input=hidden)[0], dtype=tf.int32
+        )
+        if lengths is None:
+            lengths = default_lengths
+            
+        class_weights = kwargs.get("class_weights")
+        
+        device = logits.device
+        with tf.device("CPU:0" if train else device):
+            if targets is not None:
+                # Seperate labled and unlabeled data
+                all_logits = logits
+                all_lengths = lengths
+                target_shape = tf.shape(targets)
+                all_batch_size = tf.shape(all_logits)[0]
+                logits = logits[:target_shape[0]]
+                lengths = lengths[:target_shape[0]]
+
+            if class_weights is not None and train:
+                class_weights = tf.reshape(class_weights, [1, 1, -1])
+                one_hot_class_weights = class_weights * tf.one_hot(targets, depth=n_targets)
+                per_token_weights = tf.reduce_sum(
+                    input_tensor=one_hot_class_weights, axis=-1, keepdims=True
+                )
+                logits = class_reweighting(per_token_weights)(logits)
+                                                                                                      
+            transition_params = tf.cast(
+                tf.compat.v1.get_variable(
+                    "Transition_matrix", shape=[n_targets, n_targets]
+                ),
+                tf.float32
+            )
+            if targets is not None:
+                scope = kwargs.get("scope")
+                featurizer_fn = kwargs.get("featurizer_fn")
+                shuffle_indicies = tf.random.shuffle(tf.range(all_batch_size))
+                alpha = 0.2
+                loss_coef = 10
+                beta_dist = tf.compat.v1.distributions.Beta(alpha, alpha)
+                
+                # Create prediction on mixed inputs
+                lam = beta_dist.sample((all_batch_size, 1, 1))
+                shuffle_input = tf.gather(embedding_out, shuffle_indicies, axis=0)
+                mix_input = lam * embedding_out + (1 - lam) * shuffle_input
+                with tf.device(device):
+                    # Revert scope to reuse featurizer weights
+                    with tf.compat.v1.variable_scope(scope):
+                        featurizer_state = featurizer_fn(mix_input,
+                                                         reuse=True)
+                    hidden = featurizer_state["sequence_features"]
+                    mix_logits = layer(hidden)
+
+                # Create mixed prediction on normal inputs
+                with tf.compat.v1.variable_scope(scope):
+                    custom_getter = build_ema_getter("ema", decay=0.999)
+                update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
+                with tf.control_dependencies(update_ops):
+                    with tf.compat.v1.variable_scope(scope, custom_getter=custom_getter):
+                        with tf.device(device):
+                            featurizer_state = featurizer_fn(embedding_out, reuse=None)
+                            hidden = featurizer_state["sequence_features"]
+                            ema_logits = layer(hidden)
+                lam = beta_dist.sample((all_batch_size, 1, 1))
+                ema_shuffle_logits = tf.gather(ema_logits, shuffle_indicies, axis=0)
+                ema_mix_logits = lam * ema_logits + (1 - lam) * ema_shuffle_logits
+                ema_mix_logits = tf.stop_gradient(ema_mix_logits)
+
+                u_loss = tf.keras.losses.MSE(mix_logits, ema_mix_logits)
+
+                if use_crf:
+                    log_likelihood, _ = crf_log_likelihood(
+                        logits, targets, lengths, transition_params=transition_params
+                    )
+                    loss = -log_likelihood
+                else:
+                    weights = tf.sequence_mask(
+                        lengths, maxlen=tf.shape(input=targets)[1], dtype=tf.float32
+                    ) / tf.expand_dims(tf.cast(lengths, tf.float32), -1)
+                    loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(
+                        targets,
+                        logits,
+                        weights=weights
+                    )
+                loss = tf.reduce_mean(loss)
+                loss = loss + loss_coef * u_loss
+
+        return {
+            "logits": logits,
+            "losses": loss,
+            "predict_params": {"transition_matrix": transition_params, "sequence_length": lengths},
+        }
+
+
 def mean_teacher(
     hidden,
     targets,
@@ -859,6 +1003,7 @@ def mean_teacher(
     reuse=None,
     lengths=None,
     use_crf=True,
+    embedding_out=None,
     **kwargs
 ):
     """
@@ -939,7 +1084,7 @@ def mean_teacher(
                 with tf.control_dependencies(update_ops):
                     with tf.compat.v1.variable_scope(scope, custom_getter=custom_getter):
                         with tf.device(device):
-                            featurizer_state = featurizer_fn(None, reuse=None)
+                            featurizer_state = featurizer_fn(embedding_out, reuse=None)
                             hidden = featurizer_state["sequence_features"]
                             ema_logits = tf.stop_gradient(layer(hidden))
                 u_loss = tf.keras.losses.MSE(all_logits, ema_logits)

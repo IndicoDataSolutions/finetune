@@ -193,7 +193,7 @@ def get_model_fn(
             if build_target_model:
                 # Probably refactor this at some point
                 saved_scope = tf.compat.v1.get_variable_scope()
-                def featurizer_fn(perturbation, reuse):
+                def featurizer_fn(embedding, reuse):
                     featurizer_state = params.base_model.get_featurizer(
                         X,
                         encoder=encoder,
@@ -203,7 +203,7 @@ def get_model_fn(
                         context=context,
                         total_num_steps=total_num_steps,
                         reuse=reuse,
-                        perturbation=perturbation
+                        embedding=embedding
                     )
                     return featurizer_state
                 target_model_state = target_model_op(

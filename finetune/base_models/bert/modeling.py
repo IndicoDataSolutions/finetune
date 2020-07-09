@@ -150,7 +150,7 @@ class BertModel(object):
             roberta=False,
             use_token_type=True,
             reading_order_decay_rate=None,
-            perturbation=None,
+            embedding=None,
     ):
         """Constructor for BertModel.
 
@@ -212,8 +212,8 @@ class BertModel(object):
                     reading_order_decay_rate=reading_order_decay_rate,
                     anneal_reading_order=config.anneal_reading_order,
                 )
-                if not (perturbation is None):
-                    self.embedding_output += perturbation
+                if embedding is not None:
+                    self.embedding_output = embedding
 
             with tf.compat.v1.variable_scope("encoder"):
                 # This converts a 2D mask of shape [batch_size, seq_length] to a 3D
