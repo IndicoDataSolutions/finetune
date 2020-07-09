@@ -16,7 +16,6 @@ from transformers.modeling_tf_roberta import TFRobertaMainLayer
 from transformers.tokenization_xlm_roberta import (
     VOCAB_FILES_NAMES, PRETRAINED_VOCAB_FILES_MAP, PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 )
-from transformers.tokenization_utils import PreTrainedTokenizerFast
 
 from finetune.util.huggingface_interface import finetune_model_from_huggingface
 

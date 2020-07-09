@@ -4,15 +4,13 @@ import tensorflow as tf
 from transformers import AutoTokenizer, TFAutoModel
 
 from finetune import SequenceLabeler
+from fientune.util.tokenization import WEIRD_TEXT
 from finetune.base_models.huggingface.models import HFBert, HFElectraGen, HFElectraDiscrim, HFXLMRoberta
 
 
 class TestHuggingFace(unittest.TestCase):
     def setUp(self):
-        self.text = """
-        The quick brown fox jumps over the lazy dog. Il ne faut pas se fier aux apparences.
-        Año nuevo, vida nueva. Das ist mir Wurst.
-        """
+        self.text = WEIRD_TEXT
 
     def check_embeddings_equal(self, finetune_base_model, hf_model_path):
         finetune_model = SequenceLabeler(

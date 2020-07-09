@@ -153,6 +153,8 @@ def finetune_model_from_huggingface(
                     batch_char_ends.append(token_ends)
                     batch_char_starts.append(token_starts)
                 else:
+                    if not hasattr(self.tokenizer, 'sp_model'):
+                        LOGGER.warning("Tokenizer is not sentence-piece-based and is not guaranteed to port over correctly.")
                     encoded_ids = self.tokenizer.encode(text, add_special_tokens=False)
                     encoded_tokens = self.tokenizer.convert_ids_to_tokens(encoded_ids)
                     # get token starts and ends
