@@ -370,6 +370,7 @@ def sequence_labeler(
     reuse=None,
     lengths=None,
     use_crf=True,
+    context=None,
     **kwargs
 ):
     """
@@ -420,7 +421,14 @@ def sequence_labeler(
                     mask=False,
                 )
                 n = norm(attn_fn(hidden) + hidden, "seq_label_residual")
-            
+            if config.multi_dimensional_smoothing:
+                context = {
+                    k: v for k, v in zip(
+                        config.context_keys, tf.split(context, num_or_size_split=len(config.context_keys), axis=-1)
+                    )
+                }
+                #TODO: insert smoothing fn here.
+                context
             flat_logits = tf.compat.v1.layers.dense(n, n_targets)
             logits = tf.reshape(
                 flat_logits, tf.concat([tf.shape(input=hidden)[:2], [n_targets]], 0)
