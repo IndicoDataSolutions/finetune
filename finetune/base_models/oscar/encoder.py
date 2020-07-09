@@ -47,7 +47,7 @@ class GPCEncoder(BaseEncoder):
         self.initialized = True
 
     def nfck_norm_aligned(self, text):
-        return normalize_nfck(text)
+        return normalize_nfkc(text)
             
     def _encode(self, texts, stochastic=False):
         """
