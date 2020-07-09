@@ -177,7 +177,7 @@ class BaseEncoder(metaclass=SingletonMeta):
             num_over = [max(overflow, 0) for overflow in overflows].count(0)
             if num_over == 0:
                 cut_len = allocated_max_len
-            else:
+            else:resolve_con
                 cut_len = allocated_max_len + (empty_tokens // num_over)
 
         joined = [start]
@@ -224,11 +224,8 @@ class BaseEncoder(metaclass=SingletonMeta):
 
 def tokenize_context(context, encoded_output, config):
     """ Tokenize the context corresponding to a single sequence of text """
-    # in the edge case where the chunk is just a single end token, we don't need to alter our context chunk
-#    if len(encoded_output.token_ends) > 1:
-#        context = get_relevant_context_for_chunk(context, encoded_output)
     seq_len = len(encoded_output.token_ids)
-    context_keys = list(k for k in sorted(context[0].keys()) if k not in INFO_KEYS)
+    context_keys = config.context_keys
     context_by_char_loc = sorted([(c['end'], [c[k] for k in context_keys], c["text"]) for c in context], key=lambda c: c[0])
     # default context is set by user in config
     default_context = [config.default_context[k] for k in context_keys]
@@ -254,4 +251,4 @@ def tokenize_context(context, encoded_output, config):
     # padded value doesn't matter since it will be masked out
     expanded_context = np.pad(tokenized_context, ((0, seq_len - len(tokenized_context)), (0, 0)), 'constant')
     assert len(expanded_context) == len(encoded_output.token_ids)
-    return expanded_context
+    return expanded_context, context_keys

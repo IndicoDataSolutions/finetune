@@ -131,6 +131,7 @@ def bert_featurizer(
             "sequence_features": sequence_features,
             "lengths": lengths,
             "eos_idx": eos_idx,
+            "context": context,
         }
         if config.num_layers_trained == 0:
             output_state = {k: tf.stop_gradient(v) for k, v in output_state.items()}
