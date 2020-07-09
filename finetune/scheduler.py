@@ -36,7 +36,7 @@ def scheduled(fn):
             except Exception as e:
                 raise FinetuneSchedulerError(
                     "Original Error: {}, Retry Error: {}".format(
-                        str(orig_exception), str(e)
+                        str(orig_except), str(e)
                     )
                 )
         self._update_memory_limit(model)
