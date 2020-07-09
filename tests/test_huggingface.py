@@ -10,7 +10,7 @@ from finetune.base_models.huggingface.models import HFBert, HFElectraGen, HFElec
 
 class TestHuggingFace(unittest.TestCase):
     def setUp(self):
-        self.text = WEIRD_TEXT
+        self.text = WEIRD_TEXT[:1000]
 
     def check_embeddings_equal(self, finetune_base_model, hf_model_path):
         finetune_model = SequenceLabeler(
