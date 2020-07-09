@@ -4,7 +4,7 @@ import tensorflow as tf
 from transformers import AutoTokenizer, TFAutoModel
 
 from finetune import SequenceLabeler
-from fientune.util.tokenization import WEIRD_TEXT
+from finetune.util.tokenization import WEIRD_TEXT
 from finetune.base_models.huggingface.models import HFBert, HFElectraGen, HFElectraDiscrim, HFXLMRoberta
 
 
