@@ -266,11 +266,10 @@ class SSLLabeler(SequenceLabeler):
 
 class VATLabeler(SSLLabeler):
     defaults = {
-        "vat_preturb_embed": True,
-        "vat_top_k": 3,
+        # "vat_preturb_embed": True,
+        # "vat_top_k": 3,
         "vat_k": 1,
         "vat_e": 0.0002,
-        "vat_loss_coef": 0.3
     }
 
     def _target_model(
@@ -338,6 +337,7 @@ class MeanTeacherLabeler(SSLLabeler):
 
 class ICTLabeler(SSLLabeler):
     defaults = {
+        "ict_alpha": 0.2
     }
 
     def _target_model(

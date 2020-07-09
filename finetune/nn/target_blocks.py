@@ -9,6 +9,7 @@ from finetune.errors import FinetuneError
 from finetune.nn.activations import act_fns
 from finetune.nn.nn_utils import norm, build_ema_getter
 from finetune.nn.crf import sequence_decode, k_best_sequence_decode
+from finetune.optimizers.learning_rate_schedules import warmup_constant
 
 
 def perceptron(x, ny, config, w_init=None, b_init=None):
@@ -708,8 +709,7 @@ def vat(
                         weights=weights
                     )
                 loss = tf.reduce_mean(loss)
-                loss += config.vat_loss_coef * adv_loss
-                print("Built!")
+                loss += config.ssl_loss_coef * adv_loss
 
         return {
             "logits": logits,
@@ -935,9 +935,17 @@ def ict(
                 scope = kwargs.get("scope")
                 featurizer_fn = kwargs.get("featurizer_fn")
                 shuffle_indicies = tf.random.shuffle(tf.range(all_batch_size))
-                alpha = 0.2
-                loss_coef = 10
-                beta_dist = tf.compat.v1.distributions.Beta(alpha, alpha)
+                # Create distribution to sample from
+                beta_dist = tf.compat.v1.distributions.Beta(config.ict_alpha,
+                                                            config.ict_alpha)
+
+                # Get current SSL loss coeficient
+                total_steps = kwargs.get("total_num_steps")
+                global_step = tf.compat.v1.train.get_or_create_global_step()
+                training_fraction = tf.cast(global_step, dtype=tf.float32) / total_steps
+                coef_fraction = warmup_constant(training_fraction, warmup=0.25)
+                loss_coef = tf.maximum(0.0, config.ssl_loss_coef * coef_fraction)
+                tf.compat.v1.summary.scalar("SSL Loss Coef",  loss_coef)
                 
                 # Create prediction on mixed inputs
                 lam = beta_dist.sample((all_batch_size, 1, 1))
@@ -953,7 +961,7 @@ def ict(
 
                 # Create mixed prediction on normal inputs
                 with tf.compat.v1.variable_scope(scope):
-                    custom_getter = build_ema_getter("ema", decay=0.999)
+                    custom_getter = build_ema_getter("ema", decay=config.ema_decay)
                 update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
                 with tf.control_dependencies(update_ops):
                     with tf.compat.v1.variable_scope(scope, custom_getter=custom_getter):
@@ -1079,7 +1087,7 @@ def mean_teacher(
                 scope = kwargs.get("scope")
                 featurizer_fn = kwargs.get("featurizer_fn")
                 with tf.compat.v1.variable_scope(scope):
-                    custom_getter = build_ema_getter("ema", decay=0.999)
+                    custom_getter = build_ema_getter("ema", decay=config.ema_decay)
                 update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
                 with tf.control_dependencies(update_ops):
                     with tf.compat.v1.variable_scope(scope, custom_getter=custom_getter):
@@ -1104,7 +1112,7 @@ def mean_teacher(
                         weights=weights
                     )
                 loss = tf.reduce_mean(loss)
-                loss = loss + 1 * u_loss
+                loss = loss + config.ssl_loss_coef * u_loss
 
         return {
             "logits": logits,

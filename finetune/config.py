@@ -324,13 +324,15 @@ def get_default_config():
         context_channels=None,
 
         # SSL Hyperparameters
+        ssl_loss_coef = 1,
         u_batch_size = 4,
         vat_preturb_embed = None,
         vat_top_k = None,
         vat_k = None,
         vat_e = None,
-        vat_loss_coef = None,
         pseudo_thresh = None,
+        ict_alpha = None,
+        ema_decay = 0.999,
 
         # Serialize finetune version with model
         version=VERSION,

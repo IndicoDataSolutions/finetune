@@ -212,7 +212,8 @@ def get_model_fn(
                     params=params,
                     mode=mode,
                     featurizer_fn=featurizer_fn,
-                    scope=saved_scope
+                    scope=saved_scope,
+                    total_num_steps=total_num_steps
                 )
                 if (
                     mode == tf.estimator.ModeKeys.TRAIN
