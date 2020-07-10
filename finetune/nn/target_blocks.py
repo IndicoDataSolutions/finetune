@@ -535,15 +535,14 @@ def vat(
     **kwargs
 ):
     """
-    An Attention based sequence labeler model.
+    Virtual Adversarial Training SSL model.
 
-    In the case of unidirectional base models such as GPT this model takes the output of the pre-trained model,
-    applies an additional randomly initialised multihead attention block, with residuals on top.
-    The extra attention is not future masked to allow the model to label sequences based on context in both directions.
-    The representations fed into this model are necessarily future masked because a language modelling loss is the
-    original objective of the featurizer.
-
-    For bidirectional base models we apply the crf model directly to the output of the base model.
+    First, iteratively creates an adversarial perturbation vector. Starts with
+    a random vector, then, given the divergence between the perturbed output
+    and the normal output, calculates the gradient with respect to the vector.
+    The gradient is used to update the vector, and the process is repeated K
+    times. Using the adversarial vector, consistency loss is enforced between
+    the preturbed output and the normal output.
 
     :param hidden: The output of the featurizer. [batch_size, sequence_length, embed_dim]
     :param targets: The placeholder representing the sequence labeling targets. [batch_size, sequence_length]
@@ -552,6 +551,7 @@ def vat(
     :param train: If this flag is true, dropout and losses are added to the graph.
     :param reuse: Should reuse be set within this scope.
     :param lengths: The number of non-padding tokens in the input.
+    :param embedding_out: Embedded input fed into the featurizer.
     :param kwargs: Spare arguments.
     :return: dict containing:
         "logits": The un-normalised log probabilities of each class being in each location. For usable predictions,
@@ -564,25 +564,8 @@ def vat(
         if targets is not None:
             targets = tf.cast(targets, dtype=tf.int32)
 
-        nx = config.n_embed
-
-        
-        # def seq_lab_internal(hidden):
-        #     n = hidden
-        #     flat_logits = tf.compat.v1.layers.dense(n, n_targets)
-        #     logits = tf.reshape(
-        #         flat_logits, tf.concat([tf.shape(input=hidden)[:2], [n_targets]], 0)
-        #     )
-        #     return logits
-
         layer = tf.keras.layers.Dense(n_targets)
         logits = tf.cast(layer(hidden), tf.float32)
-
-        # with tf.compat.v1.variable_scope("seq_lab_attn"):
-        #     if config.low_memory_mode and train:
-        #         seq_lab_internal = recompute_grad(
-        #             seq_lab_internal, use_entire_scope=True
-        #         )
 
         loss = 0.0
 
@@ -592,124 +575,127 @@ def vat(
         if lengths is None:
             lengths = default_lengths
             
+        if targets is not None:
+            # Seperate labled and unlabeled data
+            target_shape = tf.shape(targets)
+            all_logits = logits
+            all_lengths = lengths
+            logits = all_logits[:target_shape[0]]
+            lengths = all_lengths[:target_shape[0]]
+
         class_weights = kwargs.get("class_weights")
-        
-        device = logits.device
-        with tf.device("CPU:0" if train else device):
-            if targets is not None:
-                target_shape = tf.shape(targets)
-                all_logits = logits
-                all_lengths = lengths
-                logits = all_logits[:target_shape[0]]
-                lengths = all_lengths[:target_shape[0]]
-
-            if class_weights is not None and train:
-                class_weights = tf.reshape(class_weights, [1, 1, -1])
-                one_hot_class_weights = class_weights * tf.one_hot(targets, depth=n_targets)
-                per_token_weights = tf.reduce_sum(
-                    input_tensor=one_hot_class_weights, axis=-1, keepdims=True
-                )
-                logits = class_reweighting(per_token_weights)(logits)
-                                                                                                      
-            transition_params = tf.cast(
-                tf.compat.v1.get_variable(
-                    "Transition_matrix", shape=[n_targets, n_targets]
-                ),
-                tf.float32
+        if class_weights is not None and train:
+            class_weights = tf.reshape(class_weights, [1, 1, -1])
+            one_hot_class_weights = class_weights * tf.one_hot(targets, depth=n_targets)
+            per_token_weights = tf.reduce_sum(
+                input_tensor=one_hot_class_weights, axis=-1, keepdims=True
             )
+            logits = class_reweighting(per_token_weights)(logits)
+                                                                                                  
+        transition_params = tf.cast(
+            tf.compat.v1.get_variable(
+                "Transition_matrix", shape=[n_targets, n_targets]
+            ),
+            tf.float32
+        )
 
-            if targets is not None:
-                # Perturbation -> logits functions
-                def after_embeddings(perturbation):
-                    featurizer_fn = kwargs.get("featurizer_fn")
-                    scope = kwargs.get("scope")
-                    with tf.device(device):
-                        # Revert scope to reuse featurizer weights
-                        with tf.compat.v1.variable_scope(scope):
-                            preturb_embedding = perturbation + embedding_out
-                            featurizer_state = featurizer_fn(preturb_embedding,
-                                                             reuse=True)
-                        hidden = featurizer_state["sequence_features"]
-                        logits = layer(hidden)
-                        return tf.cast(logits, tf.float32)
-                def after_transformer(perturbation):
-                    with tf.device(device):
-                        logits = layer(hidden + perturbation)
-                        return tf.cast(logits, tf.float32)
-                if config.vat_preturb_embed:
-                    out_fn = after_embeddings
-                    pert_shape = tf.shape(embedding_out)
-                else:
-                    out_fn = after_transformer
-                    pert_shape = tf.shape(hidden)
+        if targets is not None:
+            # Perturbation -> logits functions
+            def after_embeddings(perturbation):
+                featurizer_fn = kwargs.get("featurizer_fn")
+                scope = kwargs.get("scope")
+                # Revert scope to reuse featurizer weights
+                with tf.compat.v1.variable_scope(scope):
+                    preturbed_embedding = perturbation + embedding_out
+                    featurizer_state = featurizer_fn(preturbed_embedding,
+                                                     reuse=True)
+                hidden = featurizer_state["sequence_features"]
+                logits = layer(hidden)
+                return tf.cast(logits, tf.float32)
+            def after_transformer(perturbation):
+                logits = layer(hidden + perturbation)
+                return tf.cast(logits, tf.float32)
+            # Apply perturbation to embeddings or transformer features
+            if config.vat_preturb_embed:
+                out_fn = after_embeddings
+                pert_shape = tf.shape(embedding_out)
+            else:
+                out_fn = after_transformer
+                pert_shape = tf.shape(hidden)
 
-                # Logits -> probability distribution functions
-                top_k_targets = None
-                if config.vat_top_k:
-                    # Target has shape of (batch_size, top_k, sequence length)
-                    top_k_targets, _ = k_best_sequence_decode(all_logits,
-                                                            transition_params,
-                                                            config.vat_top_k)
-                def crf_probs(logits):
-                    all_probs = []
-                    for cur_k in range(config.vat_top_k):
-                        k_seqs = top_k_targets[:, cur_k, :]
-                        k_log_likelihood, _ = crf_log_likelihood(logits,
-                                                                 k_seqs,
-                                                                 all_lengths,
-                                                                 transition_params=transition_params)
-                        k_probs = tf.exp(k_log_likelihood)
-                        all_probs.append(k_probs)
-                    _all_probs = tf.stack(all_probs, axis=1)
-                    leftover_probs = tf.ones((batch_size,)) - \
-                        tf.reduce_sum(_all_probs, axis=1)
-                    all_probs.append(leftover_probs)
-                    all_probs = tf.stack(all_probs, axis=1)
-                    # Should now be shape of (batch_size, top_k + 1)
-                    return all_probs
-                def softmax_probs(logits):
-                    return tf.nn.softmax(logits)
-                prob_fn = crf_probs if config.vat_top_k else softmax_probs
+            # Logits -> probability distribution functions
+            top_k_targets = None
+            if config.vat_top_k:
+                # Get targets outside of functions because adversarial and normal
+                # should calculate distributions using the same targets
+                # Target has shape of (batch_size, top_k, sequence length)
+                top_k_targets, _ = k_best_sequence_decode(all_logits,
+                                                        transition_params,
+                                                        config.vat_top_k)
+            def crf_probs(logits):
+                all_probs = []
+                # Get probability of each best sequence
+                for cur_k in range(config.vat_top_k):
+                    k_seqs = top_k_targets[:, cur_k, :]
+                    k_log_likelihood, _ = crf_log_likelihood(logits,
+                                                             k_seqs,
+                                                             all_lengths,
+                                                             transition_params=transition_params)
+                    k_probs = tf.exp(k_log_likelihood)
+                    all_probs.append(k_probs)
 
-                adv_vector = tf.random.uniform(shape=pert_shape,
-                                               dtype=tf.float32)
-                adv_vector = config.vat_e * tf.nn.l2_normalize(adv_vector, axis=-1)
-                batch_size = tf.cast(tf.shape(all_logits)[0], tf.float32)
-                kl_div = tf.losses.KLDivergence(reduction=tf.keras.losses.Reduction.NONE)
-                mask = tf.sequence_mask(all_lengths,
-                                        maxlen=tf.math.reduce_max(all_lengths),
-                                        dtype=tf.float32)
-                probs = tf.stop_gradient(prob_fn(all_logits))
-                for _ in range(config.vat_k):
-                    adv_logits = out_fn(adv_vector)
-                    adv_probs = prob_fn(adv_logits)
-                    adv_loss = kl_div(probs, adv_probs)
-                    adv_loss = tf.reduce_mean(adv_loss)
-                    gradient = tf.gradients(adv_loss, adv_vector)
-                    adv_vector = config.vat_e * tf.nn.l2_normalize(gradient, axis=-1)
-                    adv_vector = tf.reshape(adv_vector, tf.shape(adv_vector)[1:])
-                    adv_vector = tf.stop_gradient(adv_vector)
+                # Get probability of not best sequence
+                _all_probs = tf.stack(all_probs, axis=1)
+                leftover_probs = tf.ones((batch_size,)) - \
+                    tf.reduce_sum(_all_probs, axis=1)
+                all_probs.append(leftover_probs)
+                all_probs = tf.stack(all_probs, axis=1)
+                # Should now be shape of (batch_size, top_k + 1)
+                return all_probs
+            def softmax_probs(logits):
+                return tf.nn.softmax(logits)
+            # K-best viterbi trick or softmax over logits
+            prob_fn = crf_probs if config.vat_top_k else softmax_probs
+
+            adv_vector = tf.random.uniform(shape=pert_shape, dtype=tf.float32)
+            adv_vector = config.vat_e * tf.nn.l2_normalize(adv_vector, axis=-1)
+            kl_div = tf.losses.KLDivergence(reduction=tf.keras.losses.Reduction.NONE)
+            mask = tf.sequence_mask(all_lengths,
+                                    maxlen=tf.math.reduce_max(all_lengths),
+                                    dtype=tf.float32)
+            # Gradient should only propegate thorugh the adversarial prediction
+            probs = tf.stop_gradient(prob_fn(all_logits))
+            for _ in range(config.vat_k):
                 adv_logits = out_fn(adv_vector)
                 adv_probs = prob_fn(adv_logits)
-                adv_loss = kl_div(probs, adv_probs)
+                adv_loss = kl_div(probs, adv_probs, sample_weight=mask)
                 adv_loss = tf.reduce_mean(adv_loss)
+                gradient = tf.gradients(adv_loss, adv_vector)
+                adv_vector = config.vat_e * tf.nn.l2_normalize(gradient, axis=-1)
+                adv_vector = tf.reshape(adv_vector, tf.shape(adv_vector)[1:])
+                adv_vector = tf.stop_gradient(adv_vector)
+            adv_logits = out_fn(adv_vector)
+            adv_probs = prob_fn(adv_logits)
+            adv_loss = kl_div(probs, adv_probs, sample_weight=mask)
+            adv_loss = tf.reduce_mean(adv_loss)
 
-                if use_crf:
+            if use_crf:
+                with tf.device("CPU:0" if train else logits.device):
                     log_likelihood, _ = crf_log_likelihood(
                         logits, targets, lengths, transition_params=transition_params
                     )
                     loss = -log_likelihood
-                else:
-                    weights = tf.sequence_mask(
-                        lengths, maxlen=tf.shape(input=targets)[1], dtype=tf.float32
-                    ) / tf.expand_dims(tf.cast(lengths, tf.float32), -1)
-                    loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(
-                        targets,
-                        logits,
-                        weights=weights
-                    )
-                loss = tf.reduce_mean(loss)
-                loss += config.ssl_loss_coef * adv_loss
+            else:
+                weights = tf.sequence_mask(
+                    lengths, maxlen=tf.shape(input=targets)[1], dtype=tf.float32
+                ) / tf.expand_dims(tf.cast(lengths, tf.float32), -1)
+                loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(
+                    targets,
+                    logits,
+                    weights=weights
+                )
+            loss = tf.reduce_mean(loss)
+            loss += config.ssl_loss_coef * adv_loss
 
         return {
             "logits": logits,
@@ -731,15 +717,10 @@ def pseudo_label(
     **kwargs
 ):
     """
-    An Attention based sequence labeler model.
+    Pseudo Label SSL model.
 
-    In the case of unidirectional base models such as GPT this model takes the output of the pre-trained model,
-    applies an additional randomly initialised multihead attention block, with residuals on top.
-    The extra attention is not future masked to allow the model to label sequences based on context in both directions.
-    The representations fed into this model are necessarily future masked because a language modelling loss is the
-    original objective of the featurizer.
-
-    For bidirectional base models we apply the crf model directly to the output of the base model.
+    Calculates likelihood of unlabeled examples, and adds them to the batch of
+    labeled examples if the likelihood is above a threshhold.
 
     :param hidden: The output of the featurizer. [batch_size, sequence_length, embed_dim]
     :param targets: The placeholder representing the sequence labeling targets. [batch_size, sequence_length]
@@ -760,8 +741,6 @@ def pseudo_label(
         if targets is not None:
             targets = tf.cast(targets, dtype=tf.int32)
 
-        nx = config.n_embed
-
         layer = tf.keras.layers.Dense(n_targets)
         logits = tf.cast(layer(hidden), tf.float32)
 
@@ -773,73 +752,73 @@ def pseudo_label(
         if lengths is None:
             lengths = default_lengths
             
-        class_weights = kwargs.get("class_weights")
         
-        with tf.device("CPU:0" if train else logits.device):
-            transition_params = tf.cast(
-                tf.compat.v1.get_variable(
-                    "Transition_matrix", shape=[n_targets, n_targets]
-                ),
-                tf.float32
-            )
+        transition_params = tf.cast(
+            tf.compat.v1.get_variable(
+                "Transition_matrix", shape=[n_targets, n_targets]
+            ),
+            tf.float32
+        )
 
-            if targets is not None:
-                # Seperate labled and unlabeled data
-                target_shape = tf.shape(targets)
-                u_logits = logits[target_shape[0]:]
-                u_lengths = lengths[target_shape[0]:]
-                logits = logits[:target_shape[0]]
-                lengths = lengths[:target_shape[0]]
+        if targets is not None:
+            # Seperate labled and unlabeled data
+            target_shape = tf.shape(targets)
+            u_logits = logits[target_shape[0]:]
+            u_lengths = lengths[target_shape[0]:]
+            logits = logits[:target_shape[0]]
+            lengths = lengths[:target_shape[0]]
 
-                u_targets, u_probs = sequence_decode(u_logits,
-                                                     transition_params,
-                                                     u_lengths,
-                                                     use_gpu_op=False,
-                                                     use_crf=use_crf)
-                # Get probability of most likely sequence
-                if use_crf:
-                    u_log_likelihood, _ = crf_log_likelihood(
-                        u_logits, u_targets, u_lengths, transition_params=transition_params
-                    )
-                    u_seq_probs = tf.exp(u_log_likelihood)
-                else:
-                    u_probs = tf.reduce_max(u_probs, axis=-1)
-                    u_seq_probs = tf.reduce_mean(u_probs, axis=-1)
-                
-                # Keep only sequences with prob above threshhold
-                threshes = tf.ones_like(u_seq_probs) * config.pseudo_thresh
-                mask = tf.greater(u_seq_probs, threshes)
-                u_logits = tf.boolean_mask(u_logits, mask)
-                u_targets = tf.boolean_mask(u_targets, mask)
-                u_lengths = tf.boolean_mask(u_lengths, mask)
-                u_targets = tf.cast(u_targets, tf.int32)
-                logits = tf.concat((logits, u_logits), axis=0)
-                targets = tf.concat((targets, u_targets), axis=0)
-                lengths = tf.concat((lengths, u_lengths), axis=0)
-
-            if class_weights is not None and train:
-                class_weights = tf.reshape(class_weights, [1, 1, -1])
-                one_hot_class_weights = class_weights * tf.one_hot(targets, depth=n_targets)
-                per_token_weights = tf.reduce_sum(
-                    input_tensor=one_hot_class_weights, axis=-1, keepdims=True
+            u_targets, u_probs = sequence_decode(u_logits,
+                                                 transition_params,
+                                                 u_lengths,
+                                                 use_gpu_op=False,
+                                                 use_crf=use_crf)
+            # Get probability of most likely sequence
+            if use_crf:
+                u_log_likelihood, _ = crf_log_likelihood(
+                    u_logits, u_targets, u_lengths, transition_params=transition_params
                 )
-                logits = class_reweighting(per_token_weights)(logits)
+                u_seq_probs = tf.exp(u_log_likelihood)
+            else:
+                u_probs = tf.reduce_max(u_probs, axis=-1)
+                u_seq_probs = tf.reduce_mean(u_probs, axis=-1)
+            
+            # Keep only sequences with prob above threshhold
+            threshes = tf.ones_like(u_seq_probs) * config.pseudo_thresh
+            mask = tf.greater(u_seq_probs, threshes)
+            u_logits = tf.boolean_mask(u_logits, mask)
+            u_lengths = tf.boolean_mask(u_lengths, mask)
+            u_targets = tf.boolean_mask(u_targets, mask)
+            u_targets = tf.cast(u_targets, tf.int32)
+            logits = tf.concat((logits, u_logits), axis=0)
+            lengths = tf.concat((lengths, u_lengths), axis=0)
+            targets = tf.concat((targets, u_targets), axis=0)
 
-            if targets is not None:
-                if use_crf:
+        class_weights = kwargs.get("class_weights")
+        if class_weights is not None and train:
+            class_weights = tf.reshape(class_weights, [1, 1, -1])
+            one_hot_class_weights = class_weights * tf.one_hot(targets, depth=n_targets)
+            per_token_weights = tf.reduce_sum(
+                input_tensor=one_hot_class_weights, axis=-1, keepdims=True
+            )
+            logits = class_reweighting(per_token_weights)(logits)
+
+        if targets is not None:
+            if use_crf:
+                with tf.device("CPU:0" if train else logits.device):
                     log_likelihood, _ = crf_log_likelihood(
                         logits, targets, lengths, transition_params=transition_params
                     )
                     loss = -log_likelihood
-                else:
-                    weights = tf.sequence_mask(
-                        lengths, maxlen=tf.shape(input=targets)[1], dtype=tf.float32
-                    ) / tf.expand_dims(tf.cast(lengths, tf.float32), -1)
-                    loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(
-                        targets,
-                        logits,
-                        weights=weights
-                    )
+            else:
+                weights = tf.sequence_mask(
+                    lengths, maxlen=tf.shape(input=targets)[1], dtype=tf.float32
+                ) / tf.expand_dims(tf.cast(lengths, tf.float32), -1)
+                loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(
+                    targets,
+                    logits,
+                    weights=weights
+                )
 
         return {
             "logits": logits,
@@ -862,16 +841,14 @@ def ict(
     **kwargs
 ):
     """
-    An Attention based sequence labeler model.
+    Interopolated Consistency Training SSL model.
 
-    In the case of unidirectional base models such as GPT this model takes the output of the pre-trained model,
-    applies an additional randomly initialised multihead attention block, with residuals on top.
-    The extra attention is not future masked to allow the model to label sequences based on context in both directions.
-    The representations fed into this model are necessarily future masked because a language modelling loss is the
-    original objective of the featurizer.
-
-    For bidirectional base models we apply the crf model directly to the output of the base model.
-
+    Enforces consistency loss through interpolation of the data. Given two
+    points, one prediction is the output of the model on the interpolation of
+    the inputs, and the other prediction is the interpolation of the mean
+    teacher prediction on each of the inputs. Loss is calculated as MSE between
+    the two predictions.
+        
     :param hidden: The output of the featurizer. [batch_size, sequence_length, embed_dim]
     :param targets: The placeholder representing the sequence labeling targets. [batch_size, sequence_length]
     :param n_targets: A python int containing the number of classes that the model should be learning to predict over.
@@ -879,6 +856,7 @@ def ict(
     :param train: If this flag is true, dropout and losses are added to the graph.
     :param reuse: Should reuse be set within this scope.
     :param lengths: The number of non-padding tokens in the input.
+    :param embedding_out: Embedded input fed into the featurizer.
     :param kwargs: Spare arguments.
     :return: dict containing:
         "logits": The un-normalised log probabilities of each class being in each location. For usable predictions,
@@ -886,12 +864,10 @@ def ict(
         "losses": The negative log likelihood for the sequence targets.
         "predict_params": A dictionary of params to be fed to the viterbi decode function.
     """
-    with tf.compat.v1.variable_scope("mean_teacher", reuse=reuse):
+    with tf.compat.v1.variable_scope("ict", reuse=reuse):
         tf.random.set_seed(config.seed)
         if targets is not None:
             targets = tf.cast(targets, dtype=tf.int32)
-
-        nx = config.n_embed
 
         layer = tf.keras.layers.Dense(n_targets)
         logits = tf.cast(layer(hidden), tf.float32)
@@ -904,94 +880,94 @@ def ict(
         if lengths is None:
             lengths = default_lengths
             
-        class_weights = kwargs.get("class_weights")
         
         device = logits.device
-        with tf.device("CPU:0" if train else device):
-            if targets is not None:
-                # Seperate labled and unlabeled data
-                all_logits = logits
-                all_lengths = lengths
-                target_shape = tf.shape(targets)
-                all_batch_size = tf.shape(all_logits)[0]
-                logits = logits[:target_shape[0]]
-                lengths = lengths[:target_shape[0]]
+        if targets is not None:
+            # Seperate labled and unlabeled data
+            all_logits = logits
+            all_lengths = lengths
+            target_shape = tf.shape(targets)
+            all_batch_size = tf.shape(all_logits)[0]
+            logits = logits[:target_shape[0]]
+            lengths = lengths[:target_shape[0]]
 
-            if class_weights is not None and train:
-                class_weights = tf.reshape(class_weights, [1, 1, -1])
-                one_hot_class_weights = class_weights * tf.one_hot(targets, depth=n_targets)
-                per_token_weights = tf.reduce_sum(
-                    input_tensor=one_hot_class_weights, axis=-1, keepdims=True
-                )
-                logits = class_reweighting(per_token_weights)(logits)
-                                                                                                      
-            transition_params = tf.cast(
-                tf.compat.v1.get_variable(
-                    "Transition_matrix", shape=[n_targets, n_targets]
-                ),
-                tf.float32
+        class_weights = kwargs.get("class_weights")
+        if class_weights is not None and train:
+            class_weights = tf.reshape(class_weights, [1, 1, -1])
+            one_hot_class_weights = class_weights * tf.one_hot(targets, depth=n_targets)
+            per_token_weights = tf.reduce_sum(
+                input_tensor=one_hot_class_weights, axis=-1, keepdims=True
             )
-            if targets is not None:
-                scope = kwargs.get("scope")
-                featurizer_fn = kwargs.get("featurizer_fn")
-                shuffle_indicies = tf.random.shuffle(tf.range(all_batch_size))
-                # Create distribution to sample from
-                beta_dist = tf.compat.v1.distributions.Beta(config.ict_alpha,
-                                                            config.ict_alpha)
+            logits = class_reweighting(per_token_weights)(logits)
+                                                                                                  
+        transition_params = tf.cast(
+            tf.compat.v1.get_variable(
+                "Transition_matrix", shape=[n_targets, n_targets]
+            ),
+            tf.float32
+        )
 
-                # Get current SSL loss coeficient
-                total_steps = kwargs.get("total_num_steps")
-                global_step = tf.compat.v1.train.get_or_create_global_step()
-                training_fraction = tf.cast(global_step, dtype=tf.float32) / total_steps
-                coef_fraction = warmup_constant(training_fraction, warmup=0.25)
-                loss_coef = tf.maximum(0.0, config.ssl_loss_coef * coef_fraction)
-                tf.compat.v1.summary.scalar("SSL Loss Coef",  loss_coef)
-                
-                # Create prediction on mixed inputs
-                lam = beta_dist.sample((all_batch_size, 1, 1))
-                shuffle_input = tf.gather(embedding_out, shuffle_indicies, axis=0)
-                mix_input = lam * embedding_out + (1 - lam) * shuffle_input
-                with tf.device(device):
-                    # Revert scope to reuse featurizer weights
-                    with tf.compat.v1.variable_scope(scope):
-                        featurizer_state = featurizer_fn(mix_input,
-                                                         reuse=True)
-                    hidden = featurizer_state["sequence_features"]
-                    mix_logits = layer(hidden)
+        if targets is not None:
+            scope = kwargs.get("scope")
+            featurizer_fn = kwargs.get("featurizer_fn")
+            # Get indicies for second batch to interpolate with
+            shuffle_indicies = tf.random.shuffle(tf.range(all_batch_size))
+            # Create beta distribution to sample from
+            beta_dist = tf.compat.v1.distributions.Beta(config.ict_alpha,
+                                                        config.ict_alpha)
 
-                # Create mixed prediction on normal inputs
+            # Get current SSL loss coeficient
+            total_steps = kwargs.get("total_num_steps")
+            global_step = tf.compat.v1.train.get_or_create_global_step()
+            training_fraction = tf.cast(global_step, dtype=tf.float32) / total_steps
+            coef_fraction = warmup_constant(training_fraction, warmup=0.25)
+            loss_coef = tf.maximum(0.0, config.ssl_loss_coef * coef_fraction)
+            tf.compat.v1.summary.scalar("SSL Loss Coef",  loss_coef)
+            
+            # Create prediction on mixed inputs
+            lam = beta_dist.sample((all_batch_size, 1, 1))
+            shuffle_input = tf.gather(embedding_out, shuffle_indicies, axis=0)
+            mix_input = lam * embedding_out + (1 - lam) * shuffle_input
+            with tf.device(device):
+                # Revert scope to reuse featurizer weights
                 with tf.compat.v1.variable_scope(scope):
-                    custom_getter = build_ema_getter("ema", decay=config.ema_decay)
-                update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
-                with tf.control_dependencies(update_ops):
-                    with tf.compat.v1.variable_scope(scope, custom_getter=custom_getter):
-                        with tf.device(device):
-                            featurizer_state = featurizer_fn(embedding_out, reuse=None)
-                            hidden = featurizer_state["sequence_features"]
-                            ema_logits = layer(hidden)
-                lam = beta_dist.sample((all_batch_size, 1, 1))
-                ema_shuffle_logits = tf.gather(ema_logits, shuffle_indicies, axis=0)
-                ema_mix_logits = lam * ema_logits + (1 - lam) * ema_shuffle_logits
-                ema_mix_logits = tf.stop_gradient(ema_mix_logits)
+                    featurizer_state = featurizer_fn(mix_input, reuse=True)
+                hidden = featurizer_state["sequence_features"]
+                mix_logits = layer(hidden)
 
-                u_loss = tf.keras.losses.MSE(mix_logits, ema_mix_logits)
+            # Create mixed prediction on normal inputs
+            with tf.compat.v1.variable_scope(scope):
+                custom_getter = build_ema_getter("ema", decay=config.ema_decay)
+            update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
+            with tf.control_dependencies(update_ops):
+                with tf.compat.v1.variable_scope(scope, custom_getter=custom_getter):
+                    featurizer_state = featurizer_fn(embedding_out, reuse=None)
+                hidden = featurizer_state["sequence_features"]
+                ema_logits = layer(hidden)
+            lam = beta_dist.sample((all_batch_size, 1, 1))
+            ema_shuffle_logits = tf.gather(ema_logits, shuffle_indicies, axis=0)
+            ema_mix_logits = lam * ema_logits + (1 - lam) * ema_shuffle_logits
+            ema_mix_logits = tf.stop_gradient(ema_mix_logits)
 
-                if use_crf:
+            u_loss = tf.keras.losses.MSE(mix_logits, ema_mix_logits)
+
+            if use_crf:
+                with tf.device("CPU:0" if train else device):
                     log_likelihood, _ = crf_log_likelihood(
                         logits, targets, lengths, transition_params=transition_params
                     )
                     loss = -log_likelihood
-                else:
-                    weights = tf.sequence_mask(
-                        lengths, maxlen=tf.shape(input=targets)[1], dtype=tf.float32
-                    ) / tf.expand_dims(tf.cast(lengths, tf.float32), -1)
-                    loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(
-                        targets,
-                        logits,
-                        weights=weights
-                    )
-                loss = tf.reduce_mean(loss)
-                loss = loss + loss_coef * u_loss
+            else:
+                weights = tf.sequence_mask(
+                    lengths, maxlen=tf.shape(input=targets)[1], dtype=tf.float32
+                ) / tf.expand_dims(tf.cast(lengths, tf.float32), -1)
+                loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(
+                    targets,
+                    logits,
+                    weights=weights
+                )
+            loss = tf.reduce_mean(loss)
+            loss += loss_coef * u_loss
 
         return {
             "logits": logits,
@@ -1015,15 +991,11 @@ def mean_teacher(
     **kwargs
 ):
     """
-    An Attention based sequence labeler model.
+    Mean Teacher SSL model.
 
-    In the case of unidirectional base models such as GPT this model takes the output of the pre-trained model,
-    applies an additional randomly initialised multihead attention block, with residuals on top.
-    The extra attention is not future masked to allow the model to label sequences based on context in both directions.
-    The representations fed into this model are necessarily future masked because a language modelling loss is the
-    original objective of the featurizer.
-
-    For bidirectional base models we apply the crf model directly to the output of the base model.
+    Tracks the exponential moving average of the model weights, and enforces
+    consistency loss between normal predictions and predictions produced by the
+    EMA model.
 
     :param hidden: The output of the featurizer. [batch_size, sequence_length, embed_dim]
     :param targets: The placeholder representing the sequence labeling targets. [batch_size, sequence_length]
@@ -1032,6 +1004,7 @@ def mean_teacher(
     :param train: If this flag is true, dropout and losses are added to the graph.
     :param reuse: Should reuse be set within this scope.
     :param lengths: The number of non-padding tokens in the input.
+    :param embedding_out: Embedded input fed into the featurizer.
     :param kwargs: Spare arguments.
     :return: dict containing:
         "logits": The un-normalised log probabilities of each class being in each location. For usable predictions,
@@ -1044,8 +1017,6 @@ def mean_teacher(
         if targets is not None:
             targets = tf.cast(targets, dtype=tf.int32)
 
-        nx = config.n_embed
-
         layer = tf.keras.layers.Dense(n_targets)
         logits = tf.cast(layer(hidden), tf.float32)
 
@@ -1056,63 +1027,63 @@ def mean_teacher(
         )
         if lengths is None:
             lengths = default_lengths
-            
-        class_weights = kwargs.get("class_weights")
         
-        device = logits.device
-        with tf.device("CPU:0" if train else device):
-            if targets is not None:
-                # Seperate labled and unlabeled data
-                target_shape = tf.shape(targets)
-                all_logits = logits
-                all_lengths = lengths
-                logits = logits[:target_shape[0]]
-                lengths = lengths[:target_shape[0]]
+        if targets is not None:
+            # Seperate labled and unlabeled data
+            target_shape = tf.shape(targets)
+            all_logits = logits
+            all_lengths = lengths
+            logits = logits[:target_shape[0]]
+            lengths = lengths[:target_shape[0]]
 
-            if class_weights is not None and train:
-                class_weights = tf.reshape(class_weights, [1, 1, -1])
-                one_hot_class_weights = class_weights * tf.one_hot(targets, depth=n_targets)
-                per_token_weights = tf.reduce_sum(
-                    input_tensor=one_hot_class_weights, axis=-1, keepdims=True
-                )
-                logits = class_reweighting(per_token_weights)(logits)
-                                                                                                      
-            transition_params = tf.cast(
-                tf.compat.v1.get_variable(
-                    "Transition_matrix", shape=[n_targets, n_targets]
-                ),
-                tf.float32
+        class_weights = kwargs.get("class_weights")
+        if class_weights is not None and train:
+            class_weights = tf.reshape(class_weights, [1, 1, -1])
+            one_hot_class_weights = class_weights * tf.one_hot(targets, depth=n_targets)
+            per_token_weights = tf.reduce_sum(
+                input_tensor=one_hot_class_weights, axis=-1, keepdims=True
             )
-            if targets is not None:
-                scope = kwargs.get("scope")
-                featurizer_fn = kwargs.get("featurizer_fn")
-                with tf.compat.v1.variable_scope(scope):
-                    custom_getter = build_ema_getter("ema", decay=config.ema_decay)
-                update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
-                with tf.control_dependencies(update_ops):
-                    with tf.compat.v1.variable_scope(scope, custom_getter=custom_getter):
-                        with tf.device(device):
-                            featurizer_state = featurizer_fn(embedding_out, reuse=None)
-                            hidden = featurizer_state["sequence_features"]
-                            ema_logits = tf.stop_gradient(layer(hidden))
-                u_loss = tf.keras.losses.MSE(all_logits, ema_logits)
+            logits = class_reweighting(per_token_weights)(logits)
+                                                                                                  
+        transition_params = tf.cast(
+            tf.compat.v1.get_variable(
+                "Transition_matrix", shape=[n_targets, n_targets]
+            ),
+            tf.float32
+        )
 
-                if use_crf:
+        if targets is not None:
+            # Make EMA prediction and get consistency loss
+            scope = kwargs.get("scope")
+            featurizer_fn = kwargs.get("featurizer_fn")
+            with tf.compat.v1.variable_scope(scope):
+                custom_getter = build_ema_getter("ema", decay=config.ema_decay)
+            update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
+            with tf.control_dependencies(update_ops):
+                with tf.compat.v1.variable_scope(scope, custom_getter=custom_getter):
+                    featurizer_state = featurizer_fn(embedding_out, reuse=None)
+                hidden = featurizer_state["sequence_features"]
+                ema_logits = tf.stop_gradient(layer(hidden))
+
+            u_loss = tf.keras.losses.MSE(all_logits, ema_logits)
+
+            if use_crf:
+                with tf.device("CPU:0" if train else device):
                     log_likelihood, _ = crf_log_likelihood(
                         logits, targets, lengths, transition_params=transition_params
                     )
                     loss = -log_likelihood
-                else:
-                    weights = tf.sequence_mask(
-                        lengths, maxlen=tf.shape(input=targets)[1], dtype=tf.float32
-                    ) / tf.expand_dims(tf.cast(lengths, tf.float32), -1)
-                    loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(
-                        targets,
-                        logits,
-                        weights=weights
-                    )
-                loss = tf.reduce_mean(loss)
-                loss = loss + config.ssl_loss_coef * u_loss
+            else:
+                weights = tf.sequence_mask(
+                    lengths, maxlen=tf.shape(input=targets)[1], dtype=tf.float32
+                ) / tf.expand_dims(tf.cast(lengths, tf.float32), -1)
+                loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(
+                    targets,
+                    logits,
+                    weights=weights
+                )
+            loss = tf.reduce_mean(loss)
+            loss += config.ssl_loss_coef * u_loss
 
         return {
             "logits": logits,
