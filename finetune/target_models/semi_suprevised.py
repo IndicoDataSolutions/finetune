@@ -61,15 +61,6 @@ class SSLPipeline(SequencePipeline):
     def __init__(self, config, multi_label):
         super(SSLPipeline, self).__init__(config, multi_label)
 
-    def make_dataset_fn_no_tqdm(self, data_fn, shapes, types):
-        def dataset_fn():
-            return Dataset.from_generator(
-                data_fn,
-                types,
-                shapes
-            )
-        return dataset_fn
-
     def get_dataset_from_generator(self, generator_fn, input_mode,
                                    update_hook=None, u_generator_fn=None):
         def chunked_and_tokenized_dataset(gen):
@@ -91,10 +82,12 @@ class SSLPipeline(SequencePipeline):
             else:
                 tqdm_mode = "train"
 
-            u_raw_dataset = self.make_dataset_fn_no_tqdm(
+            u_raw_dataset = self.make_dataset_fn(
                 data_fn=u_data_fn,
+                tqdm_mode="train",
                 types=u_types,
                 shapes=u_shapes,
+                tqdm=self.config.iterate_unlabeled
             )
             u_train_dataset = (
                 lambda: u_raw_dataset()
@@ -128,12 +121,16 @@ class SSLPipeline(SequencePipeline):
                     self.text_to_tokens_mask(**d) for d in u_train
                 )
             )
+            if self.config.iterate_unlabeled:
+                self.config.dataset_size = len(tokenized_u_train)
             types, shapes = self.feed_shape_type_def()
             u_types, u_shapes = types[0], shapes[0]
-            u_train_unbatched = self.make_dataset_fn_no_tqdm(
+            u_train_unbatched = self.make_dataset_fn(
                 data_fn=lambda: tokenized_u_train,
+                tqdm_mode="train",
                 types=u_types,
-                shapes=u_shapes
+                shapes=u_shapes,
+                tqdm=self.config.iterate_unlabeled
             )
             u_train_batched = batch_dataset(
                 u_train_unbatched,
@@ -173,7 +170,8 @@ class SSLPipeline(SequencePipeline):
                 combined["context"] = self.pad_and_concat_batches(X[0]["context"],
                                                                   U["context"])
             return (combined, targets)
-        zipped_dataset = tf.data.Dataset.zip((x_dataset(), u_dataset()))
+        x_dataset = x_dataset().repeat() if self.config.iterate_unlabeled else x_dataset()
+        zipped_dataset = tf.data.Dataset.zip((x_dataset, u_dataset()))
         combined_dataset = zipped_dataset.map(map_func)
         return combined_dataset
 
@@ -270,6 +268,7 @@ class VATLabeler(SSLLabeler):
         # "vat_top_k": 3,
         "vat_k": 1,
         "vat_e": 0.0002,
+        "iterate_unlabeled": True
     }
 
     def _target_model(
@@ -292,7 +291,8 @@ class VATLabeler(SSLLabeler):
 
 class PseudoLabeler(SSLLabeler):
     defaults = {
-        "pseudo_thresh": 0.99
+        "pseudo_thresh": 0.99,
+        "iterate_unlabeled": True
     }
 
     def _target_model(
@@ -314,6 +314,7 @@ class PseudoLabeler(SSLLabeler):
 
 class MeanTeacherLabeler(SSLLabeler):
     defaults = {
+        "iterate_unlabeled": True
     }
 
     def _target_model(
@@ -337,7 +338,8 @@ class MeanTeacherLabeler(SSLLabeler):
 
 class ICTLabeler(SSLLabeler):
     defaults = {
-        "ict_alpha": 0.2
+        "ict_alpha": 0.2,
+        "iterate_unlabeled": True
     }
 
     def _target_model(

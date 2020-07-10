@@ -143,10 +143,9 @@ class BasePipeline(metaclass=ABCMeta):
     def _compute_class_weights(self, class_weights, class_counts):
         return compute_class_weights(class_weights=class_weights, class_counts=class_counts)
 
-    def make_dataset_fn(self, data_fn, tqdm_mode, shapes, types, update_hook=None, skip_val=False):
+    def make_dataset_fn(self, data_fn, tqdm_mode, shapes, types, update_hook=None, skip_val=False, tqdm=True):
         def dataset_fn():
-            return Dataset.from_generator(
-                wrap_tqdm(
+            gen = wrap_tqdm(
                     gen=data_fn,
                     mode=tqdm_mode,
                     n_epochs=self.config.n_epochs,
@@ -155,7 +154,9 @@ class BasePipeline(metaclass=ABCMeta):
                     skip_val=skip_val,
                     silent=self.config.debugging_logs,
                     update_hook=update_hook
-                ),
+            ) if tqdm else data_fn
+            return Dataset.from_generator(
+                gen,
                 types,
                 shapes
             )
@@ -183,7 +184,8 @@ class BasePipeline(metaclass=ABCMeta):
             update_hook=update_hook,
             types=types,
             shapes=shapes,
-            skip_val=input_mode == InputMode.TRAIN
+            skip_val=input_mode == InputMode.TRAIN,
+            tqdm=(not self.config.iterate_unlabeled)
         )
         if input_mode == InputMode.PREDICT:
             return {
@@ -259,7 +261,7 @@ class BasePipeline(metaclass=ABCMeta):
             val_size=self.config.val_size,
             val_interval=self.config.val_interval,
             keep_best_model=self.config.keep_best_model
-	)
+        )
 
         if self.config.val_size > 0 and self.config.val_set is None:
             train_split, val_split = train_test_split(data_list, test_size=self.config.val_size, random_state=self.config.seed)
@@ -298,13 +300,14 @@ class BasePipeline(metaclass=ABCMeta):
             tqdm_mode="train",
             update_hook=update_hook,
             types=types,
-            shapes=shapes
+            shapes=shapes,
+            tqdm=(not self.config.iterate_unlabeled)
         )
         val_dataset_unbatched = self.make_dataset_fn(
             data_fn=lambda: tokenized_val_split,
             tqdm_mode="evaluate",
             types=types,
-            shapes=shapes
+            shapes=shapes,
         )
         
         return {
