@@ -64,6 +64,7 @@ class TestModelBase(unittest.TestCase):
         return defaults
 
 
+
 class TestClassifierTextCNN(TestModelBase):
     n_sample = 20
     dataset_path = os.path.join("Data", "Classify", "SST-binary.csv")
@@ -281,6 +282,9 @@ class TestClassifierTextCNN(TestModelBase):
         features = model.featurize(train_sample.Text)
         self.assertEqual(features.shape, (self.n_sample, model.config.n_embed))
 
+    def test_featurize_sequence(self):
+        _test_featurize_sequence(self, model_fn=Classifier)
+
     def test_validation(self):
         """
         Ensure validation settings do not result in an error
@@ -485,6 +489,45 @@ class TestSequenceLabelerTextCNN(TestModelBase):
         post_load_preds = model.predict(test_texts)
         self.assertEqual(post_load_preds, pre_save_preds)
 
+    def test_featurize_sequence(self):
+        _test_featurize_sequence(self, model_fn=SequenceLabeler)
+
+def _test_featurize_sequence(self, model_fn):
+    test_input = ["""Pirateipsum: Corsair bilge rat interloper. Nipperkin
+                  aye chase. Brigantine yard weigh anchor.  Jolly boat
+                  American Main spirits. Letter of Marque reef sails cable.
+                  Deadlights port nipper.  Fire ship gibbet American Main.
+                  Jack Ketch cable fore.  Tack black jack draught.""",
+                  """Nipperkin aye chase. Brigantine yard weigh anchor.
+                  Jolly boat American Main spirits. Letter of Marque reef
+                  sails cable.  Deadlights port nipper.  Fire ship gibbet
+                  American Main.  Jack Ketch cable fore."""]
+    non_chunk_config = self.default_config()
+    non_chunk_config["chunk_long_sequences"] = False
+    non_chunk_config["max_length"] = 256
+    model = model_fn(**non_chunk_config)
+    non_chunk_features = model.featurize_sequence(test_input)
+
+    prev_features = [None] * len(test_input)
+    for max_len in [32, 64, 128, 256]:
+        chunk_config = self.default_config()
+        chunk_config["max_length"] = max_len
+        model2 = model_fn(**chunk_config)
+        chunk_features = model2.featurize_sequence(test_input)
+
+        for non_chunk,chunk,prev,X in zip(non_chunk_features,
+                                          chunk_features,
+                                          prev_features,
+                                          test_input):
+            encoded = next(model.input_pipeline._text_to_ids(X))
+            # subtract 2 to account for the start and end tokens
+            encoded_len = len(encoded.token_ids) - 2
+            self.assertTrue(non_chunk.shape[0] == encoded_len)
+            self.assertTrue(chunk.shape[0] == encoded_len)
+            self.assertTrue(non_chunk.shape == chunk.shape)
+            if prev is not None:
+                self.assertTrue(prev.shape == chunk.shape)
+        prev_features = chunk_features
 
 class TestSequenceLabelerBert(TestSequenceLabelerTextCNN):
     model_specific_config = {"n_epochs": 2, "lr": 1e-4}

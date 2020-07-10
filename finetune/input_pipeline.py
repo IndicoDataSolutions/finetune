@@ -3,6 +3,7 @@ import logging
 import sys
 import math
 import os
+import warnings
 from collections.abc import Iterable
 from collections import Counter
 
@@ -362,6 +363,9 @@ class BasePipeline(metaclass=ABCMeta):
                 field_value = getattr(encoded, field)
                 if field_value is not None:
                     field_starts_and_ends[field] = (field_value[0], field_value[-1])
+            if self.config.chunk_context == 0 and self.config.add_eos_bos_to_chunk:
+                warnings.warn("""Chunk context of 0 will not capture the start
+                              and end tokens added by add_eos_bos_to_chunk""")
             for start, end, (useful_start, useful_end) in self.chunker.generate_chunks(length):
                 d = dict()
                 for field in EncodedOutput._fields:
@@ -372,6 +376,10 @@ class BasePipeline(metaclass=ABCMeta):
                             start_token, end_token = field_starts_and_ends[field]
                             if fv[0] != start_token:
                                 fv = np.concatenate(([start_token], fv))
+                                # Update start and end only once
+                                if field == EncodedOutput._fields[0]:
+                                    useful_start += 1
+                                    useful_end += 1
                             if fv[-1] != end_token:
                                 fv = np.concatenate((fv, [end_token]))
                         d[field] = fv

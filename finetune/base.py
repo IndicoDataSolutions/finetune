@@ -504,12 +504,29 @@ class BaseModel(object, metaclass=ABCMeta):
         Base method to get raw token-level features out of the model.
         These features are the same features that are fed into the target_model.
         """
-        if self.config.chunk_long_sequences:
-            warnings.warn("`chunk_long_sequences` is currently not compatible with featurize_sequence")
-            
         zipped_data = self.input_pipeline.zip_list_to_dict(X=Xs, context=context)
         raw_preds = self._inference(zipped_data, predict_keys=[PredictMode.SEQUENCE], **kwargs)
-        return np.asarray(raw_preds)
+        chunk_gens = [self.input_pipeline._text_to_ids(d["X"]) for d in zipped_data]
+
+        chunks = []
+        chunk_to_seq = []
+        for i,gen in enumerate(chunk_gens):
+            for chunk in gen:
+                chunks.append(chunk)
+                chunk_to_seq.append(i)
+
+        processed_preds  = [[] for _ in range(len(zipped_data))]
+        for i,pred in enumerate(raw_preds):
+            if self.config.chunk_long_sequences:
+                start, end = chunks[i].useful_start, chunks[i].useful_end 
+            else:
+                start, end = 0, None
+            not_padding = chunks[i].token_ends[start:end] != -1
+            no_pad_pred = pred[start:start + len(not_padding)][not_padding]
+            processed_preds[chunk_to_seq[i]].extend(no_pad_pred)
+
+        processed_preds = [np.asarray(pred) for pred in processed_preds]
+        return processed_preds
 
     @classmethod
     def get_eval_fn(cls):
