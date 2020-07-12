@@ -20,7 +20,14 @@ import finetune
 from finetune.errors import FinetuneError
 from finetune.encoding.input_encoder import EncodedOutput, tokenize_context
 from finetune.util.imbalance import compute_class_weights
-from finetune.util.input_utils import InputMode, validation_settings, wrap_tqdm, Chunker, has_targets, batch_dataset
+from finetune.util.input_utils import (
+    InputMode,
+    validation_settings,
+    wrap_tqdm,
+    Chunker,
+    has_targets,
+    batch_dataset,
+)
 
 LOGGER = logging.getLogger("finetune")
 
@@ -44,19 +51,22 @@ class BasePipeline(metaclass=ABCMeta):
     @property
     def dataset_size(self):
         return self.config.dataset_size
-    
+
     @abstractmethod
     def _target_encoder(self):
         # Overridden by subclass to produce the right target encoding for a given target model.
         raise NotImplementedError
-    
+
     @property
     def chunker(self):
-        if getattr(self, "_chunker", None) is None or self.config.max_length != self._chunker.max_length:
+        if (
+            getattr(self, "_chunker", None) is None
+            or self.config.max_length != self._chunker.max_length
+        ):
             self._chunker = Chunker(
                 max_length=self.config.max_length,
                 total_context_width=self.config.chunk_context,
-                justify=self.config.chunk_alignment
+                justify=self.config.chunk_alignment,
             )
         return self._chunker
 
@@ -69,9 +79,7 @@ class BasePipeline(metaclass=ABCMeta):
 
     def feed_shape_type_def(self):
         TS = tf.TensorShape
-        types = {
-            "tokens": tf.int32
-        }
+        types = {"tokens": tf.int32}
         shapes = {
             "tokens": TS([None]),
         }
@@ -85,11 +93,15 @@ class BasePipeline(metaclass=ABCMeta):
         if Y is not None:
             Y = list(Y)
             if len(X) != len(Y):
-                raise FinetuneError("the length of your labels does not match the length of your text")
+                raise FinetuneError(
+                    "the length of your labels does not match the length of your text"
+                )
         if context is not None:
             context = list(context)
             if len(X) != len(context):
-                raise FinetuneError("the length of your context does not match the length of your text")
+                raise FinetuneError(
+                    "the length of your context does not match the length of your text"
+                )
         out = []
         for i, x in enumerate(X):
             sample = {"X": x}
@@ -119,7 +131,7 @@ class BasePipeline(metaclass=ABCMeta):
             if self.label_encoder is None:
                 self.label_encoder = self._target_encoder()
                 self.label_encoder.fit(ys)
-            
+
             self.config.pad_idx = self.pad_idx
 
             target_dim = self.label_encoder.target_dim
@@ -141,9 +153,13 @@ class BasePipeline(metaclass=ABCMeta):
         return Counter(targets)
 
     def _compute_class_weights(self, class_weights, class_counts):
-        return compute_class_weights(class_weights=class_weights, class_counts=class_counts)
+        return compute_class_weights(
+            class_weights=class_weights, class_counts=class_counts
+        )
 
-    def make_dataset_fn(self, data_fn, tqdm_mode, shapes, types, update_hook=None, skip_val=False):
+    def make_dataset_fn(
+        self, data_fn, tqdm_mode, shapes, types, update_hook=None, skip_val=False
+    ):
         def dataset_fn():
             return Dataset.from_generator(
                 wrap_tqdm(
@@ -154,11 +170,12 @@ class BasePipeline(metaclass=ABCMeta):
                     dataset_size=self.config.dataset_size,
                     skip_val=skip_val,
                     silent=self.config.debugging_logs,
-                    update_hook=update_hook
+                    update_hook=update_hook,
                 ),
                 types,
-                shapes
+                shapes,
             )
+
         return dataset_fn
 
     def get_dataset_from_generator(self, generator_fn, input_mode, update_hook=None):
@@ -167,7 +184,7 @@ class BasePipeline(metaclass=ABCMeta):
                 yield from self.text_to_tokens_mask(**d)
 
         types, shapes = self.feed_shape_type_def()
-        
+
         if input_mode == InputMode.PREDICT:
             tqdm_mode = "predict"
         else:
@@ -176,39 +193,45 @@ class BasePipeline(metaclass=ABCMeta):
         if input_mode == InputMode.PREDICT or not has_targets(generator_fn):
             types = types[0]
             shapes = shapes[0]
-        
+
         raw_dataset = self.make_dataset_fn(
             data_fn=chunked_and_tokenized_dataset,
             tqdm_mode=tqdm_mode,
             update_hook=update_hook,
             types=types,
             shapes=shapes,
-            skip_val=input_mode == InputMode.TRAIN
+            skip_val=input_mode == InputMode.TRAIN,
         )
         if input_mode == InputMode.PREDICT:
             return {
                 "predict_dataset": batch_dataset(
-		    raw_dataset,
+                    raw_dataset,
                     batch_size=self.config.predict_batch_size,
                     shapes=shapes,
                 )
             }
-        
+
         if self.config.chunk_long_sequences:
-            LOGGER.warning("The dataset size is not adjusted for chunk long sequences when training from a generator")
+            LOGGER.warning(
+                "The dataset size is not adjusted for chunk long sequences when training from a generator"
+            )
 
         if self.config.dataset_size is None:
-            raise FinetuneError("If you are using a callable as input you must provide config.dataset_size")
+            raise FinetuneError(
+                "If you are using a callable as input you must provide config.dataset_size"
+            )
 
         if self.config.class_weights is not None or self.config.oversample:
-            raise FinetuneError("Cannot use class weights or resampling in generator mode")
+            raise FinetuneError(
+                "Cannot use class weights or resampling in generator mode"
+            )
 
         self.config.val_size, self.config.val_interval = validation_settings(
             dataset_size=self.config.dataset_size,
             batch_size=self.config.batch_size,
             val_size=self.config.val_size,
             val_interval=self.config.val_interval,
-            keep_best_model=self.config.keep_best_model
+            keep_best_model=self.config.keep_best_model,
         )
 
         self.config.dataset_size -= self.config.val_size
@@ -225,7 +248,7 @@ class BasePipeline(metaclass=ABCMeta):
         train_dataset = (
             lambda: raw_dataset()
             .shuffle(
-	        self.config.shuffle_buffer_size,
+                self.config.shuffle_buffer_size,
                 seed=self.config.seed,
                 reshuffle_each_iteration=False,
             )
@@ -237,32 +260,31 @@ class BasePipeline(metaclass=ABCMeta):
                 train_dataset,
                 batch_size=self.config.batch_size,
                 shapes=shapes,
-                n_epochs=self.config.n_epochs
+                n_epochs=self.config.n_epochs,
             ),
             "val_dataset": batch_dataset(
-                val_dataset,
-                batch_size=self.config.batch_size,
-                shapes=shapes
-            )
+                val_dataset, batch_size=self.config.batch_size, shapes=shapes
+            ),
         }
-
 
     def get_dataset_from_list(self, data_list, input_mode, update_hook=None):
         assert input_mode == InputMode.TRAIN, "use the generator path for prediction"
-        
+
         data_list = list(data_list)
         self._post_data_initialization(data_list)
-            
+
         self.config.val_size, self.config.val_interval = validation_settings(
             dataset_size=len(data_list),
             batch_size=self.config.batch_size,
             val_size=self.config.val_size,
             val_interval=self.config.val_interval,
-            keep_best_model=self.config.keep_best_model
-	)
+            keep_best_model=self.config.keep_best_model,
+        )
 
         if self.config.val_size > 0 and self.config.val_set is None:
-            train_split, val_split = train_test_split(data_list, test_size=self.config.val_size, random_state=self.config.seed)
+            train_split, val_split = train_test_split(
+                data_list, test_size=self.config.val_size, random_state=self.config.seed
+            )
         else:
             train_split = dataset_shuffle(data_list, random_state=self.config.seed)
             val_split = self.config.val_set or []
@@ -280,14 +302,13 @@ class BasePipeline(metaclass=ABCMeta):
                 self.text_to_tokens_mask(**d) for d in val_split
             )
         )
-        
+
         if self.config.class_weights is not None:
             class_counts = self._compute_class_counts(tokenized_train_split)
             self.config.class_weights = self._compute_class_weights(
-                class_weights=self.config.class_weights,
-                class_counts=class_counts
+                class_weights=self.config.class_weights, class_counts=class_counts
             )
-            
+
         types, shapes = self.feed_shape_type_def()
         if not has_targets(lambda: tokenized_train_split):
             types = types[0]
@@ -298,29 +319,27 @@ class BasePipeline(metaclass=ABCMeta):
             tqdm_mode="train",
             update_hook=update_hook,
             types=types,
-            shapes=shapes
+            shapes=shapes,
         )
         val_dataset_unbatched = self.make_dataset_fn(
             data_fn=lambda: tokenized_val_split,
             tqdm_mode="evaluate",
             types=types,
-            shapes=shapes
+            shapes=shapes,
         )
-        
+
         return {
-	    "train_dataset": batch_dataset(
+            "train_dataset": batch_dataset(
                 train_dataset_unbatched,
-		batch_size=self.config.batch_size,
+                batch_size=self.config.batch_size,
                 shapes=shapes,
-                n_epochs=self.config.n_epochs
+                n_epochs=self.config.n_epochs,
             ),
             "val_dataset": batch_dataset(
-		val_dataset_unbatched,
-	        batch_size=self.config.batch_size,
-                shapes=shapes
-            )
+                val_dataset_unbatched, batch_size=self.config.batch_size, shapes=shapes
+            ),
         }
-                
+
     def resampling(self, Xs, Y, context=None):
         return Xs, Y, context
 
@@ -362,7 +381,9 @@ class BasePipeline(metaclass=ABCMeta):
                 field_value = getattr(encoded, field)
                 if field_value is not None:
                     field_starts_and_ends[field] = (field_value[0], field_value[-1])
-            for start, end, (useful_start, useful_end) in self.chunker.generate_chunks(length):
+            for start, end, (useful_start, useful_end) in self.chunker.generate_chunks(
+                length
+            ):
                 d = dict()
                 for field in EncodedOutput._fields:
                     field_value = getattr(encoded, field)
@@ -375,11 +396,12 @@ class BasePipeline(metaclass=ABCMeta):
                             if fv[-1] != end_token:
                                 fv = np.concatenate((fv, [end_token]))
                         d[field] = fv
-                yield EncodedOutput(useful_start=useful_start, useful_end=useful_end, **d)
+                yield EncodedOutput(
+                    useful_start=useful_start, useful_end=useful_end, **d
+                )
         else:
             encoder_out = self.text_encoder.encode_multi_input(
-                Xs,
-                max_length=self.config.max_length,
+                Xs, max_length=self.config.max_length,
             )
 
             d = dict()
@@ -389,9 +411,9 @@ class BasePipeline(metaclass=ABCMeta):
                     d[field] = field_value
 
             yield EncodedOutput(**d)
-    
+
     def __getstate__(self):
         state = self.__dict__.copy()
         del state["_text_encoder"]
         return state
-        
+

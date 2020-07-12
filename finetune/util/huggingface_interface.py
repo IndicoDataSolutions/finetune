@@ -19,6 +19,7 @@ from tensorflow.python.util import tf_inspect
 
 LOGGER = logging.getLogger("finetune")
 
+
 def load_weights_from_hdf5_group_by_name(filepath, weights_replacement):
     with h5py.File(filepath, "r") as f:
         if "layer_names" not in f.attrs and "model_weights" in f:
@@ -34,6 +35,7 @@ def load_weights_from_hdf5_group_by_name(filepath, weights_replacement):
                 for fro, to in weights_replacement:
                     output_name = output_name.replace(fro, to)
                 weight_lookup[output_name] = np.asarray(g[name])
+                print(f"{name} --> {output_name}")
     return weight_lookup
 
 
@@ -88,16 +90,31 @@ def finetune_model_from_huggingface(
             call_args = tf_inspect.getargspec(hf_model).args
             kwargs = {k: v for k, v in kwargs.items() if k in call_args}
 
+            if hf_config_instance.is_encoder_decoder:
+                # Not the right decision universally -- more broadly may
+                # condition on some secondary text to nudge the model into producing
+                # the desired output
+                kwargs["decoder_input_ids"] = X
+
             model_out = hf_model(X, **kwargs)
             if isinstance(model_out, tuple) and len(model_out) > 1:
                 sequence_out, pooled_out, *_ = model_out
+                if hf_config_instance.is_encoder_decoder:
+                    # Need to decide on intended behavior here
+                    # Generation as classification doesn't fit cleanly into finetune's
+                    # existing assumptions
+                    pooled_out = sequence_out[:, 0, :]
             else:
                 sequence_out = model_out[0]
                 pooled_out = sequence_out[:, 0, :]
 
             n_embed = pooled_out.shape[-1]
 
-            embed_weights = hf_model.embeddings.word_embeddings
+            if hf_config_instance.is_encoder_decoder:
+                embed_weights = hf_model.shared
+            else:
+                embed_weights = hf_model.embeddings.word_embeddings
+
             features = tf.reshape(
                 pooled_out, shape=tf.concat((initial_shape[:-1], [n_embed]), 0),
             )
@@ -118,8 +135,11 @@ def finetune_model_from_huggingface(
     class HuggingFaceEncoder(BaseEncoder):
         def __init__(self):
             self.tokenizer = hf_tokenizer_instance
-
-            self.start_token = self.tokenizer.cls_token_id
+            self.hf_config = hf_config_instance
+            # Pad token ID is fallback for T5
+            self.start_token = (
+                self.tokenizer.cls_token_id or self.tokenizer.pad_token_id
+            )
             self.delimiter_token = (
                 self.tokenizer.sep_token_id or self.tokenizer.eos_token_id
             )
@@ -153,8 +173,16 @@ def finetune_model_from_huggingface(
                     batch_char_ends.append(token_ends)
                     batch_char_starts.append(token_starts)
                 else:
-                    if not hasattr(self.tokenizer, 'sp_model'):
-                        LOGGER.warning("Tokenizer is not sentence-piece-based and is not guaranteed to port over correctly.")
+                    if not hasattr(self.tokenizer, "sp_model"):
+                        LOGGER.warning(
+                            "Tokenizer is not sentence-piece-based and is not guaranteed to port over correctly."
+                        )
+                    # This may break some downstream finetune assumptions
+                    if (
+                        hasattr(self.tokenizer, "do_lower_case")
+                        and self.tokenizer.do_lower_case
+                    ):
+                        text = text.lower()
                     encoded_ids = self.tokenizer.encode(text, add_special_tokens=False)
                     encoded_tokens = self.tokenizer.convert_ids_to_tokens(encoded_ids)
                     # get token starts and ends
@@ -165,9 +193,14 @@ def finetune_model_from_huggingface(
                     char_starts = []
                     for token in encoded_tokens:
                         raw_text = token.replace(WEIRD_SPM_CHAR, "")
+
                         token_start_temp = normed_text.find(raw_text, token_end)
                         if token_start_temp == -1:
-                            LOGGER.warning("SentencePiece produced a token {} not found in the original string {}".format(raw_text, text))
+                            LOGGER.warning(
+                                "SentencePiece produced a token {} not found in the original string {}".format(
+                                    raw_text, text
+                                )
+                            )
                         else:
                             token_start = token_start_temp
                             token_end = token_start + len(raw_text)
@@ -178,13 +211,13 @@ def finetune_model_from_huggingface(
                     batch_char_ends.append(tok_pos)
                     batch_char_starts.append(char_starts)
 
-            print(batch_tokens, batch_char_starts)
-            return EncodedOutput(
+            output = EncodedOutput(
                 token_ids=batch_token_idxs,
                 tokens=batch_tokens,
                 token_ends=batch_char_ends,
                 token_starts=batch_char_starts,
             )
+            return output
 
         def decode(self, ids):
             return NotImplemented
