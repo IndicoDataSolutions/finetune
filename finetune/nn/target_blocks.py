@@ -353,6 +353,63 @@ def class_reweighting(class_weights):
 
     return custom_grad
 
+def sequences_overlap(true_seq, pred_seq):
+    start_contained = (pred_seq['start'] < true_seq['end'] and pred_seq['start'] >= true_seq['start'])
+    end_contained = (pred_seq['end'] > true_seq['start'] and pred_seq['end'] <= true_seq['end'])
+    return start_contained or end_contained
+
+def _overlaps(values, low_key, high_key):
+    low_values_x = tf.expand_dims(values[low_key], 1) # batch, 1, seq
+    high_values_x = tf.expand_dims(values[high_key], 1) # batch, 1 seq
+
+    low_values_y = tf.expand_dims(values[low_key], 2) # batch, seq, 1
+    high_values_y = tf.expand_dims(values[high_key], 2) # batch, seq, 1
+
+    start_contained = low_values_y <= low_values_x < high_values_y
+    end_contained = low_values_y < high_values_x <= high_values_y
+    return tf.cast(start_contained or end_contained, tf.float32)
+
+def overlaps(values):
+    return {
+        "x": _overlaps(values, "left", "right"),
+        "y": _overlaps(values, "top", "bottom")
+    }
+
+def _direction(values, low_key, high_key):
+    low_values_x = tf.expand_dims(values[low_key], 1) # batch, 1, seq
+    high_values_x = tf.expand_dims(values[high_key], 1) # batch, 1 seq
+
+    low_values_y = tf.expand_dims(values[low_key], 2) # batch, seq, 1
+    high_values_y = tf.expand_dims(values[high_key], 2) # batch, seq, 1
+    return {
+        "before": tf.cast(high_values_y < low_values_x, tf.float32), # for dims (batch, in, out) this says in is above out,
+        "after": tf.cast(low_values_y > high_values_x, tf.float32), # for dims (batch, in, out) this says in is above out,
+    }
+
+def directions(values):
+    above_below = _direction(values, "top", "bottom")
+    left_right = _direction(values, "left", "right")
+    return {
+        "above": above_below["before"],
+        "below": above_below["after"],
+        "left" : left_right["before"],
+        "right": left_right["after"]
+    }
+
+def graph_heads(values):
+    overlap_matrix = overlaps(values)
+    direction_matrix = directions(values)
+    identity = tf.eye(tf.shape(values)[1])
+    identity_mask = 1.0 - identity
+    return {
+        "above": direction_matrix["above"] * overlaps["x"] * identity_mask,
+        "below": direction_matrix["below"] * overlaps["x"] * identity_mask,
+        "left": direction_matrix["left"] * overlaps["y"] * identity_mask,
+        "right": direction_matrix["right"] * overlaps["y"] * identity_mask,
+    }
+
+
+
 
 def sequence_labeler(
     hidden,
