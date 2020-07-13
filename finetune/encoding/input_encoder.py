@@ -177,7 +177,7 @@ class BaseEncoder(metaclass=SingletonMeta):
             num_over = [max(overflow, 0) for overflow in overflows].count(0)
             if num_over == 0:
                 cut_len = allocated_max_len
-            else:resolve_con
+            else:
                 cut_len = allocated_max_len + (empty_tokens // num_over)
 
         joined = [start]
@@ -251,4 +251,4 @@ def tokenize_context(context, encoded_output, config):
     # padded value doesn't matter since it will be masked out
     expanded_context = np.pad(tokenized_context, ((0, seq_len - len(tokenized_context)), (0, 0)), 'constant')
     assert len(expanded_context) == len(encoded_output.token_ids)
-    return expanded_context, context_keys
+    return expanded_context

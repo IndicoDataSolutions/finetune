@@ -74,6 +74,72 @@ class TestRobertaV2Encoder(TestGPTEncoder):
 
 class TestBertEncoderMulti(TestGPTEncoder):
     Encoder = BERTEncoderMultuilingal
+
+    def tokenize_and_assert_equlivalence(self, text):
+        encoded = self.encoder.encode_multi_input([text], max_length=2000)
+        for tok, start, end in zip(encoded.tokens, encoded.token_starts, encoded.token_ends):
+            if start == -1:
+                continue # this is the special tokens
+            sub_seq = text[start: end]
+            self.assertEqual(tok.replace("##", ""), sub_seq)
+
+    def test_token_alignment_chinese(self):
+        self.tokenize_and_assert_equlivalence(
+            """
+            東間火活作止訪退春属報解
+            社染治超二油航崩就源経載松辰徳。
+            勧著者囲形矢女納低沢法安
+            画鮮界増国英載更融職一消難郵禁府。
+            直題横祭撮行霊端投時長様者挙特規無属毎。
+            就道画体集村人稿郎真記館頭島生撃前応。
+            球通要経査更活更回血月投稿。
+            択康入横書情聞取込全望南本者真書放境。
+            資事引作住揺入橋倍同共秘水。
+            詳軽混変樫碁提直花難持歌込謝。
+
+            䲽䗐叓
+            """
+        )
+        
+
+    def test_token_alignment_japanese(self):
+        self.tokenize_and_assert_equlivalence( 
+            """
+            毛二へへはにひさとえのレイカノ列都課絵差津の夜差差等き、イス。
+            かん阿絵阿雲巣巣なやゃてり屋津あ等遊離氏差列他知ゃゆ個っゆせ譜。へむぬてゃょょケョセタエマセ素夜目絵あめち他模尾。
+            っるろッケヌトネセ模他区目ら御氏メケそこりもそゃツテホ都津都っほちよるゆ鵜遊素ゅへお離しそ二くなろる。
+            """
+        )
+
+    def test_token_alignment_korean(self):
+        self.tokenize_and_assert_equlivalence( 
+            """
+            평화스러운 자신과 피다. 
+            평화스러운 방황하였으며. 
+            것은 피고 우리는 그들의 사막이다. 
+            이것은 되려니와, 이성은 노년에게서 있는 밥을 거친 봄바람이다. 
+            있는가? 기관과 없으면. 봄바람이다. 
+            날카로우나 없는 그러므로 봄바람이다.
+            """
+        )
+
+    def test_token_alignment_japanese_chinese_english_mix(self):
+        self.tokenize_and_assert_equlivalence( 
+            """
+            Chinese:
+            毛二へへはにひさとえのレイカノ列都課絵差津の夜差差等き、イス。
+            かん阿絵阿雲巣巣なやゃてり屋津あ等遊離氏差列他知ゃゆ個っゆせ譜。へむぬてゃょょケョセタエマセ素夜目絵あめち他模尾。
+            っるろッケヌトネセ模他区目ら御氏メケそこりもそゃツテホ都津都っほちよるゆ鵜遊素ゅへお離しそ二くなろる。
+            Japanese:
+            東間火活作止訪退春属報解
+            社染治超二油航崩就源経載松辰徳。
+            勧著者囲形矢女納低沢法安
+            画鮮界増国英載更融職一消難郵禁府。
+            English:
+            The quick brown fox jumped over the lazy dog.
+            """
+        )
+
     
 class TestBertEncoder(TestGPTEncoder):
     Encoder = BERTEncoder
