@@ -57,7 +57,7 @@ class TestDocumentLabeler(unittest.TestCase):
                 self.assertEqual(p, l)
 
     def test_fit_predict_doc_rep(self):
-        model = DocumentLabeler(n_epochs=20, base_model=DocRep, crf_sequence_labeling=True)
+        model = DocumentLabeler(n_epochs=20, base_model=DocRep)
         model.fit(self.documents, self.labels)
         preds = model.predict(self.documents)
         self.assertEqual(len(preds), len(self.documents))
@@ -77,7 +77,7 @@ class TestDocumentLabeler(unittest.TestCase):
 
         train_ocr, test_ocr, train_labels, test_labels = train_test_split(ocr, labels, random_state=42, test_size=0.2)
 
-        model = DocumentLabeler(base_model=DocRep)
+        model = DocumentLabeler(base_model=DocRep, multi_dimensional_smoothing=False)
         model.fit(train_ocr, train_labels)
         model_preds = model.predict(test_ocr)
         model_f1 = sequence_labeling_micro_token_f1(test_labels, model_preds)

@@ -106,8 +106,8 @@ class BaseModel(object, metaclass=ABCMeta):
                 raise ValueError("There is no auto setting for {}".format(ak))
             config[ak] = overrides[ak]
 
-        if config.config_keys is None and config.default_context is not None:
-            config.config_keys = list(sorted(config.default_context.keys()))
+        if config.context_keys is None and config.default_context is not None:
+            config.context_keys = list(sorted(config.default_context.keys()))
         return config 
 
     def validate_config(self):
