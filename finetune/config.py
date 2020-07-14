@@ -334,6 +334,7 @@ def get_default_config():
         ict_alpha = None,
         ema_decay = 0.999,
         iterate_unlabeled=False,
+        tsa_method=False,
 
         # Serialize finetune version with model
         version=VERSION,

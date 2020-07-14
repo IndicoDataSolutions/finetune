@@ -194,8 +194,8 @@ def get_model_fn(
                 # Probably refactor this at some point
                 saved_scope = tf.compat.v1.get_variable_scope()
                 def featurizer_fn(embedding, reuse):
-                    if reuse:
-                        params["low_memory_mode"] = False
+                    # if reuse:
+                    #     params["low_memory_mode"] = False
                     featurizer_state = params.base_model.get_featurizer(
                         X,
                         encoder=encoder,

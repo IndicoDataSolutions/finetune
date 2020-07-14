@@ -1,5 +1,6 @@
 import tensorflow as tf
 from finetune.util.shapes import shape_list
+from tensorflow_addons.text.crf import crf_log_likelihood
 
 
 def norm(x, scope, axis=[-1], e=1e-5):
@@ -21,6 +22,10 @@ def dropout(x, pdrop, train):
 
 
 def build_ema_getter(name_scope_name, decay=0.999):
+    """
+    Builds exponential moving average copies of all trainable variables, then
+    creates a custom getter that retrieves these variables
+    """
     with tf.compat.v1.name_scope(name_scope_name + "/ema_variables"):
         original_trainable_vars = {
             tensor.op.name: tensor
@@ -35,7 +40,35 @@ def build_ema_getter(name_scope_name, decay=0.999):
     def use_ema_variables(getter, name, *args, **kwargs):
         assert name in original_trainable_vars, "Unknown variable {}.".format(name)
         ret = ema.average(original_trainable_vars[name])
-        # ret = tf.compat.v1.Print(ret, [name, ret, ret.op.name], summarize=3)
         return ret
 
     return use_ema_variables
+
+def tsa_log_schedule(x, minimium=0.25):
+    """
+    Log training signal annealing
+    """
+    a = 1 - tf.exp(-x * 5)
+    return a * (1 - minimium) + minimium
+
+def tsa_filter(method, logits, targets, lengths, use_crf, transition_params, total_steps):
+    global_step = tf.compat.v1.train.get_or_create_global_step()
+    training_fraction = tf.cast(global_step, dtype=tf.float32) / total_steps
+    tsa_thresh = tsa_log_schedule(training_fraction, minimium=0.25)
+
+    if use_crf:
+        log_likelihood, _ = crf_log_likelihood(
+            logits, targets, lengths, transition_params=transition_params
+        )
+        seq_probs = tf.exp(log_likelihood)
+    else:
+        token_probs = tf.reduce_max(tf.nn.softmax(logits, axis=-1),
+                                    axis=-1)
+        seq_probs = tf.reduce_mean(token_probs, axis=-1)
+    # Keep only sequences with prob under threshhold
+    mask = tf.less(seq_probs, tsa_thresh)
+    logits = tf.boolean_mask(logits, mask)
+    lengths = tf.boolean_mask(lengths, mask)
+    targets = tf.boolean_mask(targets, mask)
+    targets = tf.cast(targets, tf.int32)
+    return logits, targets, lengths

@@ -7,7 +7,7 @@ from finetune.util.shapes import shape_list, merge_leading_dims
 from finetune.optimizers.recompute_grads import recompute_grad
 from finetune.errors import FinetuneError
 from finetune.nn.activations import act_fns
-from finetune.nn.nn_utils import norm, build_ema_getter
+from finetune.nn.nn_utils import norm, build_ema_getter, tsa_filter
 from finetune.nn.crf import sequence_decode, k_best_sequence_decode
 from finetune.optimizers.learning_rate_schedules import warmup_constant
 
@@ -679,8 +679,15 @@ def vat(
             adv_loss = kl_div(probs, adv_probs, sample_weight=mask)
             adv_loss = tf.reduce_mean(adv_loss)
 
+            # Get TSA threshhold and discard confident labeled examples
+            if config.tsa_method:
+                logits, targets, lengths = tsa_filter(config.tsa_method,
+                                                      logits, targets, lengths,
+                                                      use_crf,
+                                                      transition_params,
+                                                      kwargs.get("total_num_steps"))
             if use_crf:
-                with tf.device("CPU:0" if train else logits.device):
+                with tf.device("CPU:0" if train else device):
                     log_likelihood, _ = crf_log_likelihood(
                         logits, targets, lengths, transition_params=transition_params
                     )
@@ -694,6 +701,13 @@ def vat(
                     logits,
                     weights=weights
                 )
+
+            if config.tsa_method:
+                # Make loss 0 if there are no targets that are over the thresh
+                loss = tf.cond(tf.equal(tf.shape(targets)[0], 0),
+                               lambda: 0.0,
+                               lambda: loss)
+
             loss = tf.reduce_mean(loss)
             loss += config.ssl_loss_coef * adv_loss
 
@@ -879,15 +893,15 @@ def ict(
         )
         if lengths is None:
             lengths = default_lengths
-            
         
         device = logits.device
         if targets is not None:
             # Seperate labled and unlabeled data
-            all_logits = logits
-            all_lengths = lengths
             target_shape = tf.shape(targets)
-            all_batch_size = tf.shape(all_logits)[0]
+            u_logits = logits
+            u_lengths = lengths
+            u_embed = embedding_out
+            u_batch_size = tf.shape(u_embed)[0]
             logits = logits[:target_shape[0]]
             lengths = lengths[:target_shape[0]]
 
@@ -911,29 +925,20 @@ def ict(
             scope = kwargs.get("scope")
             featurizer_fn = kwargs.get("featurizer_fn")
             # Get indicies for second batch to interpolate with
-            shuffle_indicies = tf.random.shuffle(tf.range(all_batch_size))
+            shuffle_indicies = tf.random.shuffle(tf.range(u_batch_size))
             # Create beta distribution to sample from
             beta_dist = tf.compat.v1.distributions.Beta(config.ict_alpha,
                                                         config.ict_alpha)
-
-            # Get current SSL loss coeficient
-            total_steps = kwargs.get("total_num_steps")
-            global_step = tf.compat.v1.train.get_or_create_global_step()
-            training_fraction = tf.cast(global_step, dtype=tf.float32) / total_steps
-            coef_fraction = warmup_constant(training_fraction, warmup=0.25)
-            loss_coef = tf.maximum(0.0, config.ssl_loss_coef * coef_fraction)
-            tf.compat.v1.summary.scalar("SSL Loss Coef",  loss_coef)
             
             # Create prediction on mixed inputs
-            lam = beta_dist.sample((all_batch_size, 1, 1))
-            shuffle_input = tf.gather(embedding_out, shuffle_indicies, axis=0)
-            mix_input = lam * embedding_out + (1 - lam) * shuffle_input
-            with tf.device(device):
-                # Revert scope to reuse featurizer weights
-                with tf.compat.v1.variable_scope(scope):
-                    featurizer_state = featurizer_fn(mix_input, reuse=True)
-                hidden = featurizer_state["sequence_features"]
-                mix_logits = layer(hidden)
+            lam = beta_dist.sample((u_batch_size, 1, 1))
+            shuffle_input = tf.gather(u_embed, shuffle_indicies, axis=0)
+            mix_input = lam * u_embed + (1 - lam) * shuffle_input
+            # Revert scope to reuse featurizer weights
+            with tf.compat.v1.variable_scope(scope):
+                featurizer_state = featurizer_fn(mix_input, reuse=True)
+            hidden = featurizer_state["sequence_features"]
+            mix_logits = layer(hidden)
 
             # Create mixed prediction on normal inputs
             with tf.compat.v1.variable_scope(scope):
@@ -941,16 +946,35 @@ def ict(
             update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
             with tf.control_dependencies(update_ops):
                 with tf.compat.v1.variable_scope(scope, custom_getter=custom_getter):
-                    featurizer_state = featurizer_fn(embedding_out, reuse=None)
+                    featurizer_state = featurizer_fn(u_embed, reuse=None)
                 hidden = featurizer_state["sequence_features"]
                 ema_logits = layer(hidden)
-            lam = beta_dist.sample((all_batch_size, 1, 1))
+            lam = beta_dist.sample((u_batch_size, 1, 1))
             ema_shuffle_logits = tf.gather(ema_logits, shuffle_indicies, axis=0)
             ema_mix_logits = lam * ema_logits + (1 - lam) * ema_shuffle_logits
             ema_mix_logits = tf.stop_gradient(ema_mix_logits)
 
             u_loss = tf.keras.losses.MSE(mix_logits, ema_mix_logits)
+            u_loss = tf.compat.v1.Print(u_loss, [u_loss, tf.shape(u_loss),
+                                                 ema_mix_logits,
+                                                 tf.shape(ema_mix_logits),
+                                                 mix_logits,
+                                                 tf.shape(mix_logits),
+                                                 mix_input,
+                                                 tf.shape(mix_input),
+                                                 u_embed,
+                                                 tf.shape(u_embed),
+                                                 lam,
+                                                 tf.shape(lam)])
+            u_loss = tf.reduce_mean(u_loss)
 
+            # Get TSA threshhold and discard confident labeled examples
+            if config.tsa_method:
+                logits, targets, lengths = tsa_filter(config.tsa_method,
+                                                      logits, targets, lengths,
+                                                      use_crf,
+                                                      transition_params,
+                                                      kwargs.get("total_num_steps"))
             if use_crf:
                 with tf.device("CPU:0" if train else device):
                     log_likelihood, _ = crf_log_likelihood(
@@ -966,8 +990,24 @@ def ict(
                     logits,
                     weights=weights
                 )
-            loss = tf.reduce_mean(loss)
-            loss += loss_coef * u_loss
+
+            if config.tsa_method:
+                # Make loss 0 if there are no targets that are over the thresh
+                loss = tf.cond(tf.equal(tf.shape(targets)[0], 0),
+                               lambda: 0.0,
+                               lambda: loss)
+
+
+            # Get current SSL loss coeficient
+            total_steps = kwargs.get("total_num_steps")
+            global_step = tf.compat.v1.train.get_or_create_global_step()
+            training_fraction = tf.cast(global_step, dtype=tf.float32) / total_steps
+            coef_fraction = warmup_constant(training_fraction, warmup=0.25)
+            loss_coef = tf.maximum(0.0, config.ssl_loss_coef * coef_fraction)
+            tf.compat.v1.summary.scalar("SSL Loss Coef",  loss_coef)
+
+            loss = tf.reduce_mean(loss) + loss_coef * u_loss
+            loss = tf.compat.v1.Print(loss, [loss, tf.shape(loss)])
 
         return {
             "logits": logits,
@@ -1066,7 +1106,15 @@ def mean_teacher(
                 ema_logits = tf.stop_gradient(layer(hidden))
 
             u_loss = tf.keras.losses.MSE(all_logits, ema_logits)
+            u_loss = tf.reduce_mean(u_loss)
 
+            if config.tsa_method:
+                print("USING TSA")
+                logits, targets, lengths = tsa_filter(config.tsa_method,
+                                                      logits, targets, lengths,
+                                                      use_crf,
+                                                      transition_params,
+                                                      kwargs.get("total_num_steps"))
             if use_crf:
                 with tf.device("CPU:0" if train else device):
                     log_likelihood, _ = crf_log_likelihood(
@@ -1082,8 +1130,22 @@ def mean_teacher(
                     logits,
                     weights=weights
                 )
-            loss = tf.reduce_mean(loss)
-            loss += config.ssl_loss_coef * u_loss
+
+            if config.tsa_method:
+                # Make loss 0 if there are no targets that are over the thresh
+                loss = tf.cond(tf.equal(tf.shape(targets)[0], 0),
+                               lambda: 0.0,
+                               lambda: loss)
+
+            # Get current SSL loss coeficient
+            total_steps = kwargs.get("total_num_steps")
+            global_step = tf.compat.v1.train.get_or_create_global_step()
+            training_fraction = tf.cast(global_step, dtype=tf.float32) / total_steps
+            coef_fraction = warmup_constant(training_fraction, warmup=0.25)
+            loss_coef = tf.maximum(0.0, config.ssl_loss_coef * coef_fraction)
+            tf.compat.v1.summary.scalar("SSL Loss Coef",  loss_coef)
+
+            loss = tf.reduce_mean(loss) + config.ssl_loss_coef * u_loss
 
         return {
             "logits": logits,
