@@ -706,11 +706,10 @@ def vat(
             if config.tsa_method:
                 # Make loss 0 if there are no targets that are over the thresh
                 loss = tf.cond(tf.equal(tf.shape(targets)[0], 0),
-                               lambda: 0.0,
-                               lambda: loss)
-
-            loss = tf.reduce_mean(loss)
-            loss += config.ssl_loss_coef * adv_loss
+                               lambda: config.ssl_loss_coef * adv_loss,
+                               lambda: tf.reduce_mean(loss) + config.ssl_loss_coef * adv_loss)
+            else:
+                loss = tf.reduce_mean(loss) + config.ssl_loss_coef * adv_loss
 
         return {
             "logits": logits,
@@ -992,11 +991,6 @@ def ict(
                     weights=weights
                 )
 
-            if config.tsa_method:
-                # Make loss 0 if there are no targets that are over the thresh
-                loss = tf.cond(tf.equal(tf.shape(targets)[0], 0),
-                               lambda: 0.0,
-                               lambda: loss)
 
 
             # Get current SSL loss coeficient
@@ -1007,8 +1001,13 @@ def ict(
             loss_coef = tf.maximum(0.0, config.ssl_loss_coef * coef_fraction)
             tf.compat.v1.summary.scalar("SSL Loss Coef",  loss_coef)
 
-            loss = tf.reduce_mean(loss) + loss_coef * u_loss
-            loss = tf.compat.v1.Print(loss, [loss, tf.shape(loss)])
+            if config.tsa_method:
+                # Make loss 0 if there are no targets that are over the thresh
+                loss = tf.cond(tf.equal(tf.shape(targets)[0], 0),
+                               lambda: loss_coef * u_loss,
+                               lambda: tf.reduce_mean(loss) + loss_coef * u_loss)
+            else:
+                loss = tf.reduce_mean(loss) + loss_coef * u_loss
 
         return {
             "logits": logits,
@@ -1132,12 +1131,6 @@ def mean_teacher(
                     weights=weights
                 )
 
-            if config.tsa_method:
-                # Make loss 0 if there are no targets that are over the thresh
-                loss = tf.cond(tf.equal(tf.shape(targets)[0], 0),
-                               lambda: 0.0,
-                               lambda: loss)
-
             # Get current SSL loss coeficient
             total_steps = kwargs.get("total_num_steps")
             global_step = tf.compat.v1.train.get_or_create_global_step()
@@ -1146,7 +1139,13 @@ def mean_teacher(
             loss_coef = tf.maximum(0.0, config.ssl_loss_coef * coef_fraction)
             tf.compat.v1.summary.scalar("SSL Loss Coef",  loss_coef)
 
-            loss = tf.reduce_mean(loss) + config.ssl_loss_coef * u_loss
+            if config.tsa_method:
+                # Make loss 0 if there are no targets that are over the thresh
+                loss = tf.cond(tf.equal(tf.shape(targets)[0], 0),
+                               lambda: loss_coef * u_loss,
+                               lambda: tf.reduce_mean(loss) + loss_coef * u_loss)
+            else:
+                loss = tf.reduce_mean(loss) + loss_coef * u_loss
 
         return {
             "logits": logits,
