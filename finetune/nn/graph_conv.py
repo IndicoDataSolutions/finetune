@@ -50,6 +50,18 @@ def directions(values):
     }
 
 
+def _distance(values, low_key, high_key):
+    middle_values = (values[low_key] + values[high_key]) // 2
+    return tf.abs(tf.expand_dims(middle_values, 1) - tf.expand_dims(middle_values, 2))
+
+
+def similarity(values):
+    return {
+        "x": 1 / (1 + _distance(values, "left", "right")),
+        "y": 1 / (1 + _distance(values, "top", "bottom")),
+    }
+
+
 def graph_heads(values, sequence_lengths):
     overlap_matrix = overlaps(values)
     direction_matrix = directions(values)
@@ -62,11 +74,25 @@ def graph_heads(values, sequence_lengths):
         sequence_mask, -1
     )  # batch, seq, seq
     mask = identity_mask * sequence_mask
+
+    similarity_matrix = similarity(values)
     return {
-        "above": direction_matrix["above"] * overlap_matrix["x"] * mask,
-        "below": direction_matrix["below"] * overlap_matrix["x"] * mask,
-        "left": direction_matrix["left"] * overlap_matrix["y"] * mask,
-        "right": direction_matrix["right"] * overlap_matrix["y"] * mask,
+        "above": direction_matrix["above"]
+        * overlap_matrix["x"]
+        * similarity_matrix["y"]
+        * mask,
+        "below": direction_matrix["below"]
+        * overlap_matrix["x"]
+        * similarity_matrix["y"]
+        * mask,
+        "left": direction_matrix["left"]
+        * overlap_matrix["y"]
+        * similarity_matrix["x"]
+        * mask,
+        "right": direction_matrix["right"]
+        * overlap_matrix["y"]
+        * similarity_matrix["x"]
+        * mask,
     }
 
 
@@ -132,7 +158,11 @@ class GraphConvolution(tf.keras.layers.Layer):
         self.kernel = self.add_weight(
             "kernel", shape=[adjacency_heads, feature_dim, self.num_outputs]
         )
-        self.bias = self.add_weight("kernel", shape=[adjacency_heads, self.num_outputs, 1])
+        self.bias = self.add_weight("kernel", shape=[self.num_outputs])
+
+        self.identity_kernel = self.add_weight(
+            "kernel", shape=[feature_dim, self.num_outputs]
+        )
 
     def call(self, inputs):
         features, adjacency_mat = inputs
@@ -145,7 +175,11 @@ class GraphConvolution(tf.keras.layers.Layer):
         normed_adjacency_mat = tf.math.divide_no_nan(
             adjacency_mat, tf.reduce_sum(adjacency_mat, 2, keepdims=True)
         )
-        shared = (
-            tf.matmul(projected, normed_adjacency_mat, transpose_a=True) + self.bias
+        shared = tf.matmul(
+            projected, normed_adjacency_mat, transpose_a=True
         )  # batch, n_out, heads, seq
-        return tf.transpose(tf.reduce_mean(shared, 1), [0, 2, 1])  # batch, seq, n_out
+        identity_out = tf.matmul(features, self.identity_kernel)
+
+        return (tf.transpose(tf.reduce_sum(shared, 1), [0, 2, 1]) + identity_out) / tf.cast(
+            tf.shape(shared)[1] + 1, tf.float32
+        ) + self.bias  # batch, seq, n_out
