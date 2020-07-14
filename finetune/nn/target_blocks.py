@@ -578,6 +578,7 @@ def vat(
         if targets is not None:
             # Seperate labled and unlabeled data
             target_shape = tf.shape(targets)
+            batch_size = tf.shape(logits)[0]
             all_logits = logits
             all_lengths = lengths
             logits = all_logits[:target_shape[0]]
@@ -668,7 +669,7 @@ def vat(
             for _ in range(config.vat_k):
                 adv_logits = out_fn(adv_vector)
                 adv_probs = prob_fn(adv_logits)
-                adv_loss = kl_div(probs, adv_probs, sample_weight=mask)
+                adv_loss = kl_div(probs, adv_probs)
                 adv_loss = tf.reduce_mean(adv_loss)
                 gradient = tf.gradients(adv_loss, adv_vector)
                 adv_vector = config.vat_e * tf.nn.l2_normalize(gradient, axis=-1)
@@ -676,7 +677,7 @@ def vat(
                 adv_vector = tf.stop_gradient(adv_vector)
             adv_logits = out_fn(adv_vector)
             adv_probs = prob_fn(adv_logits)
-            adv_loss = kl_div(probs, adv_probs, sample_weight=mask)
+            adv_loss = kl_div(probs, adv_probs)
             adv_loss = tf.reduce_mean(adv_loss)
 
             # Get TSA threshhold and discard confident labeled examples
