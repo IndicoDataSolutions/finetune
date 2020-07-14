@@ -955,17 +955,6 @@ def ict(
             ema_mix_logits = tf.stop_gradient(ema_mix_logits)
 
             u_loss = tf.keras.losses.MSE(mix_logits, ema_mix_logits)
-            u_loss = tf.compat.v1.Print(u_loss, [u_loss, tf.shape(u_loss),
-                                                 ema_mix_logits,
-                                                 tf.shape(ema_mix_logits),
-                                                 mix_logits,
-                                                 tf.shape(mix_logits),
-                                                 mix_input,
-                                                 tf.shape(mix_input),
-                                                 u_embed,
-                                                 tf.shape(u_embed),
-                                                 lam,
-                                                 tf.shape(lam)])
             u_loss = tf.reduce_mean(u_loss)
 
             # Get TSA threshhold and discard confident labeled examples
