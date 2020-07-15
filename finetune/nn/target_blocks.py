@@ -680,12 +680,6 @@ def vat(
             adv_loss = kl_div(probs, adv_probs)
             adv_loss = tf.reduce_mean(adv_loss)
 
-            # Get TSA threshhold and discard confident labeled examples
-            if config.tsa_method:
-                logits, targets = tsa_filter(config.tsa_method,
-                                             logits, targets, lengths,
-                                             use_crf, transition_params,
-                                             kwargs.get("total_num_steps"))
             if use_crf:
                 with tf.device("CPU:0" if train else device):
                     log_likelihood, _ = crf_log_likelihood(
@@ -701,6 +695,11 @@ def vat(
                     logits,
                     weights=weights
                 )
+
+            # Get TSA threshhold and discard confident labeled examples
+            if config.tsa_method:
+                loss = tsa_filter(config.tsa_method, loss, logits, use_crf,
+                                  kwargs.get("total_num_steps"))
 
             loss = tf.reduce_mean(loss) + config.ssl_loss_coef * adv_loss
 
