@@ -35,7 +35,6 @@ def load_weights_from_hdf5_group_by_name(filepath, weights_replacement):
                 for fro, to in weights_replacement:
                     output_name = output_name.replace(fro, to)
                 weight_lookup[output_name] = np.asarray(g[name])
-                print(f"{name} --> {output_name}")
     return weight_lookup
 
 
