@@ -1,3 +1,7 @@
+import logging
+
+logging.getLogger("transformers").setLevel(logging.ERROR)
+
 from transformers import (
     ElectraTokenizerFast,
     ElectraConfig,
