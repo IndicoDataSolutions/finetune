@@ -67,8 +67,6 @@ def tsa_filter(method, logits, targets, lengths, use_crf, transition_params, tot
         seq_probs = tf.reduce_mean(token_probs, axis=-1)
     # Keep only sequences with prob under threshhold
     mask = tf.less(seq_probs, tsa_thresh)
-    logits = tf.boolean_mask(logits, mask)
-    lengths = tf.boolean_mask(lengths, mask)
-    targets = tf.boolean_mask(targets, mask)
-    targets = tf.cast(targets, tf.int32)
-    return logits, targets, lengths
+    logits = logits * tf.cast(mask, tf.int32)
+    targets = targets * tf.cast(mask, tf.int32)
+    return logits, targets

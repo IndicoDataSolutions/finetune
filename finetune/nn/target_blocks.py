@@ -682,11 +682,10 @@ def vat(
 
             # Get TSA threshhold and discard confident labeled examples
             if config.tsa_method:
-                logits, targets, lengths = tsa_filter(config.tsa_method,
-                                                      logits, targets, lengths,
-                                                      use_crf,
-                                                      transition_params,
-                                                      kwargs.get("total_num_steps"))
+                logits, targets = tsa_filter(config.tsa_method,
+                                             logits, targets, lengths,
+                                             use_crf, transition_params,
+                                             kwargs.get("total_num_steps"))
             if use_crf:
                 with tf.device("CPU:0" if train else device):
                     log_likelihood, _ = crf_log_likelihood(
@@ -703,13 +702,7 @@ def vat(
                     weights=weights
                 )
 
-            if config.tsa_method:
-                # Make loss 0 if there are no targets that are over the thresh
-                loss = tf.cond(tf.equal(tf.shape(targets)[0], 0),
-                               lambda: config.ssl_loss_coef * adv_loss,
-                               lambda: tf.reduce_mean(loss) + config.ssl_loss_coef * adv_loss)
-            else:
-                loss = tf.reduce_mean(loss) + config.ssl_loss_coef * adv_loss
+            loss = tf.reduce_mean(loss) + config.ssl_loss_coef * adv_loss
 
         return {
             "logits": logits,
@@ -959,11 +952,10 @@ def ict(
 
             # Get TSA threshhold and discard confident labeled examples
             if config.tsa_method:
-                logits, targets, lengths = tsa_filter(config.tsa_method,
-                                                      logits, targets, lengths,
-                                                      use_crf,
-                                                      transition_params,
-                                                      kwargs.get("total_num_steps"))
+                logits, targets = tsa_filter(config.tsa_method,
+                                             logits, targets, lengths,
+                                             use_crf, transition_params,
+                                             kwargs.get("total_num_steps"))
             if use_crf:
                 with tf.device("CPU:0" if train else device):
                     log_likelihood, _ = crf_log_likelihood(
@@ -980,8 +972,6 @@ def ict(
                     weights=weights
                 )
 
-
-
             # Get current SSL loss coeficient
             total_steps = kwargs.get("total_num_steps")
             global_step = tf.compat.v1.train.get_or_create_global_step()
@@ -990,13 +980,7 @@ def ict(
             loss_coef = tf.maximum(0.0, config.ssl_loss_coef * coef_fraction)
             tf.compat.v1.summary.scalar("SSL Loss Coef",  loss_coef)
 
-            if config.tsa_method:
-                # Make loss 0 if there are no targets that are over the thresh
-                loss = tf.cond(tf.equal(tf.shape(targets)[0], 0),
-                               lambda: loss_coef * u_loss,
-                               lambda: tf.reduce_mean(loss) + loss_coef * u_loss)
-            else:
-                loss = tf.reduce_mean(loss) + loss_coef * u_loss
+            loss = tf.reduce_mean(loss) + loss_coef * u_loss
 
         return {
             "logits": logits,
@@ -1098,12 +1082,10 @@ def mean_teacher(
             u_loss = tf.reduce_mean(u_loss)
 
             if config.tsa_method:
-                print("USING TSA")
-                logits, targets, lengths = tsa_filter(config.tsa_method,
-                                                      logits, targets, lengths,
-                                                      use_crf,
-                                                      transition_params,
-                                                      kwargs.get("total_num_steps"))
+                logits, targets = tsa_filter(config.tsa_method,
+                                             logits, targets, lengths,
+                                             use_crf, transition_params,
+                                             kwargs.get("total_num_steps"))
             if use_crf:
                 with tf.device("CPU:0" if train else device):
                     log_likelihood, _ = crf_log_likelihood(
@@ -1128,13 +1110,7 @@ def mean_teacher(
             loss_coef = tf.maximum(0.0, config.ssl_loss_coef * coef_fraction)
             tf.compat.v1.summary.scalar("SSL Loss Coef",  loss_coef)
 
-            if config.tsa_method:
-                # Make loss 0 if there are no targets that are over the thresh
-                loss = tf.cond(tf.equal(tf.shape(targets)[0], 0),
-                               lambda: loss_coef * u_loss,
-                               lambda: tf.reduce_mean(loss) + loss_coef * u_loss)
-            else:
-                loss = tf.reduce_mean(loss) + loss_coef * u_loss
+            loss = tf.reduce_mean(loss) + loss_coef * u_loss
 
         return {
             "logits": logits,
