@@ -701,6 +701,8 @@ def vat(
                 loss = tsa_filter(config.tsa_method, loss, logits, use_crf,
                                   kwargs.get("total_num_steps"))
 
+            tf.compat.v1.summary.scalar("Unlabeled Loss",  adv_loss)
+            tf.compat.v1.summary.scalar("Labeled Loss",  tf.reduce_mean(loss))
             loss = tf.reduce_mean(loss) + config.ssl_loss_coef * adv_loss
 
         return {
@@ -978,6 +980,8 @@ def ict(
             coef_fraction = warmup_constant(training_fraction, warmup=0.25)
             loss_coef = tf.maximum(0.0, config.ssl_loss_coef * coef_fraction)
             tf.compat.v1.summary.scalar("SSL Loss Coef",  loss_coef)
+            tf.compat.v1.summary.scalar("Unlabeled Loss",  u_loss)
+            tf.compat.v1.summary.scalar("Labeled Loss",  tf.reduce_mean(loss))
 
             loss = tf.reduce_mean(loss) + loss_coef * u_loss
 
@@ -1108,6 +1112,8 @@ def mean_teacher(
             coef_fraction = warmup_constant(training_fraction, warmup=0.25)
             loss_coef = tf.maximum(0.0, config.ssl_loss_coef * coef_fraction)
             tf.compat.v1.summary.scalar("SSL Loss Coef",  loss_coef)
+            tf.compat.v1.summary.scalar("Unlabeled Loss",  u_loss)
+            tf.compat.v1.summary.scalar("Labeled Loss",  tf.reduce_mean(loss))
 
             loss = tf.reduce_mean(loss) + loss_coef * u_loss
 
