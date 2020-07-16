@@ -698,16 +698,22 @@ def vat(
 
             # Get TSA threshhold and discard confident labeled examples
             if config.tsa_method:
-                loss = tsa_filter(config.tsa_method, loss, logits, use_crf,
-                                  kwargs.get("total_num_steps"))
+                loss, tsa_thresh = tsa_filter(config.tsa_method, loss, logits,
+                                              use_crf,
+                                              kwargs.get("total_num_steps"))
+            loss = tf.reduce_mean(loss)
+            total_loss = loss + config.ssl_loss_coef * adv_loss
 
-            tf.compat.v1.summary.scalar("Unlabeled Loss",  adv_loss)
-            tf.compat.v1.summary.scalar("Labeled Loss",  tf.reduce_mean(loss))
-            loss = tf.reduce_mean(loss) + config.ssl_loss_coef * adv_loss
+        with tf.compat.v1.variable_scope("Summary"):
+            tf.compat.v1.summary.scalar("Unlabeled Loss",  u_loss)
+            tf.compat.v1.summary.scalar("Labeled Loss",  loss)
+            tf.compat.v1.summary.scalar("Total Loss",  total_loss)
+            if config.tsa_method:
+                tf.compat.v1.summary.scalar("TSA Threshold", tsa_thresh)
 
         return {
             "logits": logits,
-            "losses": loss,
+            "losses": total_loss,
             "predict_params": {"transition_matrix": transition_params, "sequence_length": lengths},
         }
 
@@ -979,15 +985,25 @@ def ict(
             training_fraction = tf.cast(global_step, dtype=tf.float32) / total_steps
             coef_fraction = warmup_constant(training_fraction, warmup=0.25)
             loss_coef = tf.maximum(0.0, config.ssl_loss_coef * coef_fraction)
+
+            # Get TSA threshhold and discard confident labeled examples
+            if config.tsa_method:
+                loss, tsa_thresh = tsa_filter(config.tsa_method, loss, logits,
+                                              use_crf,
+                                              kwargs.get("total_num_steps"))
+            loss = tf.reduce_mean(loss)
+            total_loss = loss + loss_coef * u_loss
+
+        with tf.compat.v1.variable_scope("Summary"):
             tf.compat.v1.summary.scalar("SSL Loss Coef",  loss_coef)
             tf.compat.v1.summary.scalar("Unlabeled Loss",  u_loss)
-            tf.compat.v1.summary.scalar("Labeled Loss",  tf.reduce_mean(loss))
-
-            loss = tf.reduce_mean(loss) + loss_coef * u_loss
-
+            tf.compat.v1.summary.scalar("Labeled Loss",  loss)
+            tf.compat.v1.summary.scalar("Total Loss",  total_loss)
+            if config.tsa_method:
+                tf.compat.v1.summary.scalar("TSA Threshold", tsa_thresh)
         return {
             "logits": logits,
-            "losses": loss,
+            "losses": total_loss,
             "predict_params": {"transition_matrix": transition_params, "sequence_length": lengths},
         }
 
@@ -1115,8 +1131,21 @@ def mean_teacher(
             tf.compat.v1.summary.scalar("Unlabeled Loss",  u_loss)
             tf.compat.v1.summary.scalar("Labeled Loss",  tf.reduce_mean(loss))
 
-            loss = tf.reduce_mean(loss) + loss_coef * u_loss
+            # Get TSA threshhold and discard confident labeled examples
+            if config.tsa_method:
+                loss, tsa_thresh = tsa_filter(config.tsa_method, loss, logits,
+                                              use_crf,
+                                              kwargs.get("total_num_steps"))
+            loss = tf.reduce_mean(loss)
+            total_loss = loss + loss_coef * u_loss
 
+        with tf.compat.v1.variable_scope("Summary"):
+            tf.compat.v1.summary.scalar("SSL Loss Coef",  loss_coef)
+            tf.compat.v1.summary.scalar("Unlabeled Loss",  u_loss)
+            tf.compat.v1.summary.scalar("Labeled Loss",  loss)
+            tf.compat.v1.summary.scalar("Total Loss",  total_loss)
+            if config.tsa_method:
+                tf.compat.v1.summary.scalar("TSA Threshold", tsa_thresh)
         return {
             "logits": logits,
             "losses": loss,

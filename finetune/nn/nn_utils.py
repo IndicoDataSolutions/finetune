@@ -67,4 +67,4 @@ def tsa_filter(method, loss, logits, use_crf, total_steps):
     # Keep only sequences with prob under threshhold
     mask = tf.less(seq_probs, tsa_thresh)
     mask = tf.compat.v1.Print(mask, [mask, tsa_thresh, seq_probs, loss])
-    return loss * tf.cast(mask, tf.float32)
+    return loss * tf.stop_gradient(tf.cast(mask, tf.float32)), tsa_thresh
