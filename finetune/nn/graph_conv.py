@@ -156,12 +156,20 @@ class GraphConvolution(tf.keras.layers.Layer):
         feature_dim = int(feature_shape[-1])
         adjacency_heads = int(adjacency_mat_shape[1])
         self.kernel = self.add_weight(
-            "kernel", shape=[adjacency_heads, feature_dim, self.num_outputs]
+            "kernel",
+            shape=[adjacency_heads, feature_dim, self.num_outputs],
+            initializer=tf.keras.initializers.TruncatedNormal(stddev=0.01),
         )
-        self.bias = self.add_weight("kernel", shape=[self.num_outputs])
+        self.bias = self.add_weight(
+            "kernel",
+            shape=[self.num_outputs],
+            initializer=tf.keras.initializers.Zeros(),
+        )
 
         self.identity_kernel = self.add_weight(
-            "kernel", shape=[feature_dim, self.num_outputs]
+            "kernel",
+            shape=[feature_dim, self.num_outputs],
+            initializer=tf.keras.initializers.TruncatedNormal(stddev=0.05),
         )
 
     def call(self, inputs):
@@ -172,14 +180,18 @@ class GraphConvolution(tf.keras.layers.Layer):
         # projected = batch, heads, seq, n_out
         # adjacency_mat = batch, heads, seq, seq
         adjacency_mat = tf.nn.relu(adjacency_mat)  # remove any spurious negative values
-        normed_adjacency_mat = tf.math.divide_no_nan(
-            adjacency_mat, tf.reduce_sum(adjacency_mat, 2, keepdims=True)
+        norm_factor = tf.reduce_sum(adjacency_mat, 2, keepdims=True)
+        a = tf.math.divide_no_nan(1.0, tf.sqrt(norm_factor)) * tf.eye(
+            tf.shape(adjacency_mat)[-1], dtype=tf.float32
         )
+        normed_adjacency_mat = tf.matmul(a, tf.matmul(adjacency_mat, a))
         shared = tf.matmul(
             projected, normed_adjacency_mat, transpose_a=True
-        )  # batch, n_out, heads, seq
+        )  # batch, heads, n_out, seq
         identity_out = tf.matmul(features, self.identity_kernel)
 
-        return (tf.transpose(tf.reduce_sum(shared, 1), [0, 2, 1]) + identity_out) / tf.cast(
-            tf.shape(shared)[1] + 1, tf.float32
-        ) + self.bias  # batch, seq, n_out
+        return (
+            (tf.transpose(tf.reduce_sum(shared, 1), [0, 2, 1]) + identity_out)
+            / tf.cast(tf.shape(shared)[1] + 1, tf.float32)
+            + self.bias
+        )  # batch, seq, n_out
