@@ -54,8 +54,7 @@ def tsa_log_schedule(x, minimium=0.25):
 def tsa_filter(method, loss, logits, use_crf, total_steps):
     global_step = tf.compat.v1.train.get_or_create_global_step()
     training_fraction = tf.cast(global_step, dtype=tf.float32) / total_steps
-    tsa_thresh = tsa_log_schedule(training_fraction, minimium=0.000001)
-    tsa_thresh = 0
+    tsa_thresh = tsa_log_schedule(training_fraction, minimium=0.25)
     if use_crf:
         # Loss for CRF is -log_likelihood, so we can use it to get the
         # probability of the sequences
@@ -66,5 +65,5 @@ def tsa_filter(method, loss, logits, use_crf, total_steps):
         seq_probs = tf.reduce_mean(token_probs, axis=-1)
     # Keep only sequences with prob under threshhold
     mask = tf.less(seq_probs, tsa_thresh)
-    mask = tf.compat.v1.Print(mask, [mask, tsa_thresh, seq_probs, loss])
+    # mask = tf.compat.v1.Print(mask, [mask, tsa_thresh, seq_probs, loss])
     return loss * tf.stop_gradient(tf.cast(mask, tf.float32)), tsa_thresh
