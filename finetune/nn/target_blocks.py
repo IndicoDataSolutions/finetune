@@ -350,6 +350,8 @@ def class_reweighting(class_weights):
         def grad(g):
             new_g = g * class_weights
             ratio = tf.norm(tensor=g) / tf.norm(tensor=new_g)
+            ratio = tf.math.divide_no_nan(tf.norm(tensor=g),
+                                          tf.norn(tensor=new_g))
             return new_g * ratio
 
         return tf.identity(logits), grad
