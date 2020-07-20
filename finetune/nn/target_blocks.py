@@ -568,7 +568,7 @@ def vat(
         layer = tf.keras.layers.Dense(n_targets)
         logits = tf.cast(layer(hidden), tf.float32)
 
-        loss = 0.0
+        total_loss = 0.0
 
         default_lengths = tf.shape(input=hidden)[1] * tf.ones(
             tf.shape(input=hidden)[0], dtype=tf.int32
@@ -705,11 +705,11 @@ def vat(
             loss = tf.reduce_mean(loss)
             total_loss = loss + config.ssl_loss_coef * adv_loss
 
-        with tf.compat.v1.variable_scope("Summary"):
-            tf.compat.v1.summary.scalar("Unlabeled Loss",  adv_loss)
-            tf.compat.v1.summary.scalar("Labeled Loss",  loss)
-            if config.tsa_method:
-                tf.compat.v1.summary.scalar("TSA Threshold", tsa_thresh)
+            with tf.compat.v1.variable_scope("Summary"):
+                tf.compat.v1.summary.scalar("Unlabeled Loss",  adv_loss)
+                tf.compat.v1.summary.scalar("Labeled Loss",  loss)
+                if config.tsa_method:
+                    tf.compat.v1.summary.scalar("TSA Threshold", tsa_thresh)
 
         return {
             "logits": logits,
@@ -886,7 +886,7 @@ def ict(
         layer = tf.keras.layers.Dense(n_targets)
         logits = tf.cast(layer(hidden), tf.float32)
 
-        loss = 0.0
+        total_loss = 0.0
 
         default_lengths = tf.shape(input=hidden)[1] * tf.ones(
             tf.shape(input=hidden)[0], dtype=tf.int32
@@ -994,12 +994,12 @@ def ict(
             loss = tf.reduce_mean(loss)
             total_loss = loss + loss_coef * u_loss
 
-        with tf.compat.v1.variable_scope("Summary"):
-            tf.compat.v1.summary.scalar("SSL Loss Coef",  loss_coef)
-            tf.compat.v1.summary.scalar("Unlabeled Loss",  u_loss)
-            tf.compat.v1.summary.scalar("Labeled Loss",  loss)
-            if config.tsa_method:
-                tf.compat.v1.summary.scalar("TSA Threshold", tsa_thresh)
+            with tf.compat.v1.variable_scope("Summary"):
+                tf.compat.v1.summary.scalar("SSL Loss Coef",  loss_coef)
+                tf.compat.v1.summary.scalar("Unlabeled Loss",  u_loss)
+                tf.compat.v1.summary.scalar("Labeled Loss",  loss)
+                if config.tsa_method:
+                    tf.compat.v1.summary.scalar("TSA Threshold", tsa_thresh)
         return {
             "logits": logits,
             "losses": total_loss,
@@ -1051,7 +1051,7 @@ def mean_teacher(
         layer = tf.keras.layers.Dense(n_targets)
         logits = tf.cast(layer(hidden), tf.float32)
 
-        loss = 0.0
+        total_loss = 0.0
 
         default_lengths = tf.shape(input=hidden)[1] * tf.ones(
             tf.shape(input=hidden)[0], dtype=tf.int32
@@ -1135,12 +1135,12 @@ def mean_teacher(
             loss = tf.reduce_mean(loss)
             total_loss = loss + loss_coef * u_loss
 
-        with tf.compat.v1.variable_scope("Summary"):
-            tf.compat.v1.summary.scalar("SSL Loss Coef",  loss_coef)
-            tf.compat.v1.summary.scalar("Unlabeled Loss",  u_loss)
-            tf.compat.v1.summary.scalar("Labeled Loss",  loss)
-            if config.tsa_method:
-                tf.compat.v1.summary.scalar("TSA Threshold", tsa_thresh)
+            with tf.compat.v1.variable_scope("Summary"):
+                tf.compat.v1.summary.scalar("SSL Loss Coef",  loss_coef)
+                tf.compat.v1.summary.scalar("Unlabeled Loss",  u_loss)
+                tf.compat.v1.summary.scalar("Labeled Loss",  loss)
+                if config.tsa_method:
+                    tf.compat.v1.summary.scalar("TSA Threshold", tsa_thresh)
         return {
             "logits": logits,
             "losses": loss,
