@@ -349,9 +349,8 @@ def class_reweighting(class_weights):
     def custom_grad(logits):
         def grad(g):
             new_g = g * class_weights
-            ratio = tf.norm(tensor=g) / tf.norm(tensor=new_g)
             ratio = tf.math.divide_no_nan(tf.norm(tensor=g),
-                                          tf.norn(tensor=new_g))
+                                          tf.norm(tensor=new_g))
             return new_g * ratio
 
         return tf.identity(logits), grad
@@ -707,9 +706,8 @@ def vat(
             total_loss = loss + config.ssl_loss_coef * adv_loss
 
         with tf.compat.v1.variable_scope("Summary"):
-            tf.compat.v1.summary.scalar("Unlabeled Loss",  u_loss)
+            tf.compat.v1.summary.scalar("Unlabeled Loss",  adv_loss)
             tf.compat.v1.summary.scalar("Labeled Loss",  loss)
-            tf.compat.v1.summary.scalar("Total Loss",  total_loss)
             if config.tsa_method:
                 tf.compat.v1.summary.scalar("TSA Threshold", tsa_thresh)
 
@@ -1000,7 +998,6 @@ def ict(
             tf.compat.v1.summary.scalar("SSL Loss Coef",  loss_coef)
             tf.compat.v1.summary.scalar("Unlabeled Loss",  u_loss)
             tf.compat.v1.summary.scalar("Labeled Loss",  loss)
-            tf.compat.v1.summary.scalar("Total Loss",  total_loss)
             if config.tsa_method:
                 tf.compat.v1.summary.scalar("TSA Threshold", tsa_thresh)
         return {
@@ -1129,9 +1126,6 @@ def mean_teacher(
             training_fraction = tf.cast(global_step, dtype=tf.float32) / total_steps
             coef_fraction = warmup_constant(training_fraction, warmup=0.25)
             loss_coef = tf.maximum(0.0, config.ssl_loss_coef * coef_fraction)
-            tf.compat.v1.summary.scalar("SSL Loss Coef",  loss_coef)
-            tf.compat.v1.summary.scalar("Unlabeled Loss",  u_loss)
-            tf.compat.v1.summary.scalar("Labeled Loss",  tf.reduce_mean(loss))
 
             # Get TSA threshhold and discard confident labeled examples
             if config.tsa_method:
@@ -1145,7 +1139,6 @@ def mean_teacher(
             tf.compat.v1.summary.scalar("SSL Loss Coef",  loss_coef)
             tf.compat.v1.summary.scalar("Unlabeled Loss",  u_loss)
             tf.compat.v1.summary.scalar("Labeled Loss",  loss)
-            tf.compat.v1.summary.scalar("Total Loss",  total_loss)
             if config.tsa_method:
                 tf.compat.v1.summary.scalar("TSA Threshold", tsa_thresh)
         return {
