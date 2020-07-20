@@ -181,10 +181,11 @@ class GraphConvolution(tf.keras.layers.Layer):
         # adjacency_mat = batch, heads, seq, seq
         adjacency_mat = tf.nn.relu(adjacency_mat)  # remove any spurious negative values
         norm_factor = tf.reduce_sum(adjacency_mat, 2, keepdims=True)
-        a = tf.math.divide_no_nan(1.0, tf.sqrt(norm_factor)) * tf.eye(
-            tf.shape(adjacency_mat)[-1], dtype=tf.float32
-        )
-        normed_adjacency_mat = tf.matmul(a, tf.matmul(adjacency_mat, a))
+        #a = tf.math.divide_no_nan(1.0, tf.sqrt(norm_factor)) * tf.eye(
+        #    tf.shape(adjacency_mat)[-1], dtype=tf.float32
+        #)
+        #normed_adjacency_mat = tf.matmul(a, tf.matmul(adjacency_mat, a))
+        normed_adjacency_mat = tf.math.divide_no_nan(adjacency_mat, norm_factor)
         shared = tf.matmul(
             projected, normed_adjacency_mat, transpose_a=True
         )  # batch, heads, n_out, seq
