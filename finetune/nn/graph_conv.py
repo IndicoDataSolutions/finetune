@@ -50,15 +50,22 @@ def directions(values):
     }
 
 
-def _distance(values, low_key, high_key):
+def l2_distance(values, low_key, high_key):
     middle_values = (values[low_key] + values[high_key]) // 2
-    return tf.abs(tf.expand_dims(middle_values, 1) - tf.expand_dims(middle_values, 2))
+
+    # Ideally handle normalization outside of the model
+    max_pixels = tf.stop_gradient(tf.reduce_max(middle_values, axis=-1, keepdims=True))
+    rescaled_values = middle_values / max_pixels
+
+    return (
+        tf.expand_dims(rescaled_values, 1) - tf.expand_dims(rescaled_values, 2)
+    ) ** 2
 
 
-def similarity(values):
+def similarity(values, sigmas):
     return {
-        "x": 1 / (1 + _distance(values, "left", "right")),
-        "y": 1 / (1 + _distance(values, "top", "bottom")),
+        "x": tf.exp(-1 * l2_distance(values, "left", "right") / sigmas[0]),
+        "y": tf.exp(-1 * l2_distance(values, "top", "bottom") / sigmas[1]),
     }
 
 
@@ -75,23 +82,30 @@ def graph_heads(values, sequence_lengths):
     )  # batch, seq, seq
     mask = identity_mask * sequence_mask
 
-    similarity_matrix = similarity(values)
+    # Std-dev is 30% the size of the page at init
+    smooth_sigmas = tf.Variable((0.3, 0.3), trainable=True)
+    smooth_distance_matrix = similarity(values, smooth_sigmas)
+
+    # Std-dev is 5% the size of the page at init
+    sharp_sigmas = tf.Variable((0.05, 0.05), trainable=True)
+    sharp_distance_matrix = similarity(values, sharp_sigmas)
+
     return {
         "above": direction_matrix["above"]
-        * overlap_matrix["x"]
-        * similarity_matrix["y"]
+        * sharp_distance_matrix["x"]
+        * smooth_distance_matrix["y"]
         * mask,
         "below": direction_matrix["below"]
-        * overlap_matrix["x"]
-        * similarity_matrix["y"]
+        * sharp_distance_matrix["x"]
+        * smooth_distance_matrix["y"]
         * mask,
         "left": direction_matrix["left"]
-        * overlap_matrix["y"]
-        * similarity_matrix["x"]
+        * sharp_distance_matrix["y"]
+        * smooth_distance_matrix["x"]
         * mask,
         "right": direction_matrix["right"]
-        * overlap_matrix["y"]
-        * similarity_matrix["x"]
+        * sharp_distance_matrix["y"]
+        * smooth_distance_matrix["x"]
         * mask,
     }
 
