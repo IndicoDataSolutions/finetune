@@ -13,6 +13,7 @@ from finetune.base_models.huggingface.models import (
     HFT5,
     HFAlbert,
 )
+from finetune.target_models.seq2seq import HFS2S
 
 
 class TestHuggingFace(unittest.TestCase):
@@ -39,11 +40,12 @@ class TestHuggingFace(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(model_path)
         model = TFAutoModel.from_pretrained(model_path)
         input_ids = tf.constant(tokenizer.encode(self.text))[None, :]  # Batch size 1
+        print(input_ids)
 
         if model.config.is_encoder_decoder:
             # Need to decide how to properly handle decoder input ids
             # This ain't it
-            outputs = model(input_ids, decoder_input_ids=input_ids)
+            outputs = model.encoder(input_ids)
         else:
             outputs = model(
                 input_ids,
@@ -57,8 +59,19 @@ class TestHuggingFace(unittest.TestCase):
     def test_bert(self):
         self.check_embeddings_equal(HFBert, "bert-base-uncased")
 
+    def test_t5_s2s(self):
+        text = "sequence test text"
+        finetune_model = HFS2S(
+            base_model=HFT5,
+            n_epochs=300,
+            batch_size=2,
+        )
+        finetune_model.fit([text] * 5, [text] * 5)
+        print(finetune_model.predict([text]))
+
     def test_t5(self):
         self.check_embeddings_equal(HFT5, "t5-base")
+
 
     def test_albert(self):
         self.check_embeddings_equal(HFAlbert, "albert-base-v2")

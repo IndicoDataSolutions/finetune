@@ -323,6 +323,14 @@ def get_default_config():
         anneal_reading_order=False,
         context_channels=None,
 
+        # T5
+        beam_size=1,
+        beam_search_alpha=0.2,
+        sample_temp=8.0,
+        decoder_sample_from=1,
+
+        include_bos_eos=True,
+
         # Serialize finetune version with model
         version=VERSION,
     )
