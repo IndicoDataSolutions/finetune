@@ -375,6 +375,7 @@ class BasePipeline(metaclass=ABCMeta):
                 Xs,
                 max_length=sys.maxsize,
                 remove_repeated_whitespace=self.config.collapse_whitespace,
+                include_bos_eos=self.config.include_bos_eos,
             )
             length = len(encoded.token_ids)
             field_starts_and_ends = dict()

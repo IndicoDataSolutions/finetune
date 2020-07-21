@@ -124,13 +124,8 @@ class Seq2SeqLabelEncoder(BaseEncoder):
     def transform(self, y):
         output = []
         for y_i in y:
-            out = self.encoder.encode_multi_input([[y_i]], max_length=self.max_len).token_ids
-            seq_length = len(out)
-            x = np.zeros((self.max_len, 2), dtype=np.int32)
-
-            x[:seq_length, 0] = out
-            x[:, 1] = np.arange(self.encoder.vocab_size, self.encoder.vocab_size + self.max_len)
-            output.append(x)
+            out = self.encoder.encode_multi_input([y_i], max_length=self.max_len, include_bos_eos=True).token_ids
+            output.append((out, len(out)))
         return output
 
     def inverse_transform(self, y):

@@ -50,11 +50,22 @@ def has_targets(generator):
     sample = next(iter(generator()))
     return isinstance(sample, tuple) and len(sample) == 2
 
-
+def add_length(x, y=None):
+    x["length"] = tf.shape(x["tokens"])[0]
+    if y is not None:
+        return x, y
+    return x
+    
 def batch_dataset(dataset, batch_size, shapes, n_epochs=1):
+    if isinstance(shapes, tuple):
+        shapes = ({**shapes[0], "length": tf.TensorShape([])}, shapes[1])
+    else:
+        shapes = {**shapes, "length": tf.TensorShape([])}
+
     def batched_dataset():
         return (
             dataset()
+            .map(add_length)
             .padded_batch(batch_size, padded_shapes=shapes, drop_remainder=False)
             .repeat(n_epochs)
             .prefetch(tf.data.experimental.AUTOTUNE)

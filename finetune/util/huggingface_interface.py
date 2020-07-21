@@ -45,12 +45,13 @@ def finetune_model_from_huggingface(
     hf_tokenizer,
     hf_config,
     weights_replacement,
+    include_bos_eos=True,
 ):
     weights_url = archive_map[pretrained_weights]
     hf_tokenizer_instance = hf_tokenizer.from_pretrained(pretrained_weights)
     hf_config_instance = hf_config.from_pretrained(pretrained_weights)
 
-    def finetune_featurizer(X, encoder, config, train=False, reuse=None, **kwargs):
+    def finetune_featurizer(X, encoder, config, train=False, reuse=None, targets=None, lengths=None, **kwargs):
         initial_shape = tf.shape(input=X)
         X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-1:]), 0))
         X.set_shape([None, None])
@@ -67,8 +68,6 @@ def finetune_model_from_huggingface(
             ),
             axis=1,
         )
-
-        lengths = lengths_from_eos_idx(eos_idx=eos_idx, max_length=seq_length)
         mask = tf.sequence_mask(lengths, maxlen=seq_length, dtype=tf.float32)
 
         with tf.compat.v1.variable_scope("model/featurizer", reuse=reuse):
@@ -80,6 +79,17 @@ def finetune_model_from_huggingface(
                         layer.__call__, train_vars=layer.trainable_weights
                     )
 
+            if hf_config_instance.is_encoder_decoder:
+                embed_weights = hf_model.shared
+            else:
+                embed_weights = hf_model.embeddings.word_embeddings
+
+            if hf_config_instance.is_encoder_decoder:
+                decoder = hf_model.decoder
+                hf_model = hf_model.encoder
+            else:
+                decoder = None
+
             kwargs = {
                 "attention_mask": mask,
                 "token_type_ids": token_type_ids,
@@ -88,31 +98,15 @@ def finetune_model_from_huggingface(
             }
             call_args = tf_inspect.getargspec(hf_model).args
             kwargs = {k: v for k, v in kwargs.items() if k in call_args}
-
-            if hf_config_instance.is_encoder_decoder:
-                # Not the right decision universally -- more broadly may
-                # condition on some secondary text to nudge the model into producing
-                # the desired output
-                kwargs["decoder_input_ids"] = X
-
             model_out = hf_model(X, **kwargs)
+        
             if isinstance(model_out, tuple) and len(model_out) > 1:
                 sequence_out, pooled_out, *_ = model_out
-                if hf_config_instance.is_encoder_decoder:
-                    # Need to decide on intended behavior here
-                    # Generation as classification doesn't fit cleanly into finetune's
-                    # existing assumptions
-                    pooled_out = sequence_out[:, 0, :]
             else:
                 sequence_out = model_out[0]
                 pooled_out = sequence_out[:, 0, :]
 
             n_embed = pooled_out.shape[-1]
-
-            if hf_config_instance.is_encoder_decoder:
-                embed_weights = hf_model.shared
-            else:
-                embed_weights = hf_model.embeddings.word_embeddings
 
             features = tf.reshape(
                 pooled_out, shape=tf.concat((initial_shape[:-1], [n_embed]), 0),
@@ -127,6 +121,7 @@ def finetune_model_from_huggingface(
                 "sequence_features": sequence_features,
                 "lengths": lengths,
                 "eos_idx": eos_idx,
+                "decoder": decoder,
             }
 
             return output_state
@@ -194,7 +189,7 @@ def finetune_model_from_huggingface(
                         raw_text = token.replace(WEIRD_SPM_CHAR, "")
 
                         token_start_temp = normed_text.find(raw_text, token_end)
-                        if token_start_temp == -1:
+                        if token_start_temp == -1 and raw_text != "<unk>":
                             LOGGER.warning(
                                 "SentencePiece produced a token {} not found in the original string {}".format(
                                     raw_text, text
@@ -219,7 +214,7 @@ def finetune_model_from_huggingface(
             return output
 
         def decode(self, ids):
-            return NotImplemented
+            return self.tokenizer.decode(ids, skip_special_tokens=True)
 
     weights_file = "{}_{}.jl".format(
         pretrained_weights.replace("/", "_"), hf_featurizer.__name__
@@ -239,6 +234,7 @@ def finetune_model_from_huggingface(
             "n_layer": 12,
             "n_embed": hf_config_instance.hidden_size,
             "max_length": hf_config_instance.max_position_embeddings,
+            "include_bos_eos": include_bos_eos,
         }
         required_files = [{"url": weights_url, "file": raw_weights_path}]
 

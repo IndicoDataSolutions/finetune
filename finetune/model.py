@@ -179,6 +179,8 @@ def get_model_fn(
                 explain=build_explain,
                 context=context,
                 total_num_steps=total_num_steps,
+                targets=Y,
+                lengths=features["length"]
             )
             predictions = {
                 PredictMode.FEATURIZE: featurizer_state["features"], 

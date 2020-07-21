@@ -96,8 +96,10 @@ HFT5 = finetune_model_from_huggingface(
     hf_config=T5Config,
     weights_replacement=[
         ("tf_t5with_lm_head_model/shared/", "model/featurizer/shared/shared/"),
-        ("tf_t5with_lm_head_model/", "model/featurizer/tf_t5model/"),
+        ("tf_t5with_lm_head_model/encoder", "model/featurizer/encoder"),
+        ("tf_t5with_lm_head_model/decoder", "model/target/decoder"),
     ],
+    include_bos_eos=False,
 )
 
 HFAlbert = finetune_model_from_huggingface(

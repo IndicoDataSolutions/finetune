@@ -21,7 +21,6 @@ LOGGER = logging.getLogger("finetune")
 def should_be_randomly_initialized(name):
     return "OptimizeLoss" in name or "global_step" in name
 
-
 class SaverHook(_StopOnPredicateHook):
     def __init__(
         self,
@@ -31,7 +30,7 @@ class SaverHook(_StopOnPredicateHook):
         early_stopping_steps,
         steps_per_epoch,
         eval_frequency,
-        cache_weights_to_file=False,
+        cache_weights_to_file=False
     ):
         super().__init__(
             self.stop_if_no_metric_improvement_fn,
@@ -64,7 +63,11 @@ class SaverHook(_StopOnPredicateHook):
             steps_diff > self.early_stopping_steps
             and most_recent_eval[0] > self.steps_per_epoch
         ):
-            LOGGER.info("Early stopping triggered.".format(steps_diff))
+            LOGGER.info(
+                "Early stopping triggered.".format(
+                    steps_diff
+                )
+            )
             return True
         return False
 
@@ -73,19 +76,15 @@ class SaverHook(_StopOnPredicateHook):
         self.included = tf.compat.v1.global_variables()
 
     def _get_weights(self, session):
-        if (
-            not self.keep_best_model
-            or self.saver.variables is None
-            or self.get_current_weights
-        ):
+        if not self.keep_best_model or self.saver.variables is None or self.get_current_weights:
             self.saver.variables = dict(
-                zip((var.name for var in self.included), session.run(self.included),)
+                zip(
+                    (var.name for var in self.included),
+                    session.run(self.included),
+                )
             )
             if self.cache_weights_to_file:
-                joblib.dump(
-                    self.saver.variables,
-                    os.path.join(self.estimator.eval_dir(), "..", "weights.jl"),
-                )
+                joblib.dump(self.saver.variables, os.path.join(self.estimator.eval_dir(), "..", "weights.jl"))
             self.get_current_weights = False
 
     def after_run(self, run_context, run_values):
@@ -95,11 +94,7 @@ class SaverHook(_StopOnPredicateHook):
 
     def end(self, session):
         self.stop_if_no_metric_improvement_fn()
-        if (
-            not self.keep_best_model
-            or self.saver.variables is None
-            or self.get_current_weights
-        ):
+        if not self.keep_best_model or self.saver.variables is None or self.get_current_weights:
             self._get_weights(session=session)
 
 
@@ -111,13 +106,11 @@ class InitializeHook(SessionRunHook):
     def after_create_session(self, session, coord):
         self.init_fn(None, session)
 
-
 class BatchedVarLoad:
     """
     Basic idea pulled from variable.load. Possible this will change in 2.X so worth tracking what
     that fn changes too and mirror it here.
     """
-
     def __init__(self):
         self.ops = []
         self.feed = dict()
@@ -128,11 +121,8 @@ class BatchedVarLoad:
         self.feed = dict()
 
     def add(self, var, val):
-        if (
-            var.name.endswith("we:0")
-            or "bert/embeddings/position_embedding" in var.name
-        ):  # for backwards comaptibility with pre-saved models
-            val = val[: var.shape[0]]
+        if var.name.endswith("we:0") or "bert/embeddings/position_embedding" in var.name: # for backwards comaptibility with pre-saved models
+            val = val[:var.shape[0]]
         if hasattr(var, "_values"):
             underlying_vars = var._values
         else:
@@ -165,11 +155,7 @@ class Saver:
     def set_fallback(self, fallback_filename):
         self.tpe = ThreadPoolExecutor()
         if not os.path.exists(fallback_filename):
-            raise FileNotFoundError(
-                "Error loading base model {} - file not found.".format(
-                    fallback_filename
-                )
-            )
+            raise FileNotFoundError("Error loading base model {} - file not found.".format(fallback_filename))
         self.fallback_filename = fallback_filename
         self.fallback_future = self.tpe.submit(joblib.load, fallback_filename)
         self.fallback_ = None
@@ -189,7 +175,7 @@ class Saver:
         steps_per_epoch,
         early_stopping_steps,
         eval_frequency,
-        cache_weights_to_file,
+        cache_weights_to_file
     ):
         return SaverHook(
             self,
@@ -198,7 +184,7 @@ class Saver:
             steps_per_epoch=steps_per_epoch,
             early_stopping_steps=early_stopping_steps,
             eval_frequency=eval_frequency,
-            cache_weights_to_file=cache_weights_to_file,
+            cache_weights_to_file=cache_weights_to_file
         )
 
     def get_initial_step(self):
@@ -234,11 +220,13 @@ class Saver:
     def load(self, path):
         self.variables, finetune_obj = joblib.load(path)
         finetune_obj.config = get_config(
-            error_on_invalid_keywords=False, **dict(finetune_obj.config)
+            error_on_invalid_keywords=False, 
+            **dict(finetune_obj.config)
         )
         return finetune_obj
 
     def get_scaffold_init_fn(self):
+
         def init_fn(scaffold, session):
             var_loader = BatchedVarLoad()
             self.var_val = []
@@ -248,14 +236,11 @@ class Saver:
             else:
                 variables_sv = dict()
             all_vars = tf.compat.v1.global_variables()
+
             global_step_var = tf.compat.v1.train.get_global_step()
 
             for var in all_vars:
-                if (
-                    self.restart_global_step
-                    and global_step_var is not None
-                    and global_step_var.name == var.name
-                ):
+                if self.restart_global_step and global_step_var is not None and global_step_var.name == var.name:
                     continue
                 name = var.name
                 saved_var = None
@@ -269,17 +254,11 @@ class Saver:
                     var_loader.add(var, saved_var)
                 else:
                     if name.startswith("model/featurizer"):
-                        permitted = (
-                            self.permit_uninitialized is not None
-                            and re.findall(self.permit_uninitialized, name)
-                        )
+                        permitted = self.permit_uninitialized is not None and re.findall(self.permit_uninitialized, name)
                         if not permitted:
-                            raise ValueError(
-                                "Uninitialized featurizer variable {}".format(name)
-                            )
-
+                            raise ValueError("Uninitialized featurizer variable {}".format(name))
+                    
             var_loader.run(session)
-
         return init_fn
 
     def remove_unchanged(self, variable_names, variable_values, fallback_vars):
