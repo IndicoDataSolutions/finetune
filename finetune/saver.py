@@ -257,6 +257,7 @@ class Saver:
                         permitted = self.permit_uninitialized is not None and re.findall(self.permit_uninitialized, name)
                         if not permitted:
                             raise ValueError("Uninitialized featurizer variable {}".format(name))
+
                     
             var_loader.run(session)
         return init_fn

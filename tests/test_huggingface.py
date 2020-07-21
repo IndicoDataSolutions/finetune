@@ -1,8 +1,11 @@
+import os
+import json
+
 import unittest
 import numpy as np
 import tensorflow as tf
-from transformers import AutoTokenizer, TFAutoModel
 
+from transformers import AutoTokenizer, TFAutoModel
 from finetune import SequenceLabeler
 from finetune.util.tokenization import WEIRD_TEXT
 from finetune.base_models.huggingface.models import (
@@ -14,6 +17,8 @@ from finetune.base_models.huggingface.models import (
     HFAlbert,
 )
 from finetune.target_models.seq2seq import HFS2S
+from sklearn.model_selection import train_test_split
+from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
 
 
 class TestHuggingFace(unittest.TestCase):
@@ -63,11 +68,33 @@ class TestHuggingFace(unittest.TestCase):
         text = "sequence test text"
         finetune_model = HFS2S(
             base_model=HFT5,
-            n_epochs=300,
+            n_epochs=30,
             batch_size=2,
         )
         finetune_model.fit([text] * 5, [text] * 5)
-        print(finetune_model.predict([text]))
+        self.assertEqual(finetune_model.predict([text]), [text])
+        self.assertEqual(len(finetune_model.predict([text, "Some other text"])), 2)
+
+    def test_t5_s2s_ner(self):
+        with open(os.path.join('Data', 'Sequence', 'reuters.json'), "rt") as fp:
+            texts, labels = json.load(fp)
+        raw_docs = ["".join(text) for text in texts]
+        texts, annotations = finetune_to_indico_sequence(raw_docs, texts, labels, none_value="<PAD>")
+        labels = [" | ".join(x["text"] for x in a) for a in annotations]
+        train_texts, test_texts, train_annotations, test_annotations = train_test_split(
+            texts, labels, test_size=0.1, random_state=42
+        )
+        finetune_model = HFS2S(
+            base_model=HFT5,
+            n_epochs=3,
+            batch_size=2,
+        )
+        finetune_model.fit(train_texts, train_annotations)
+        for t, p in zip(test_texts, finetune_model.predict(test_texts)):
+            print("TEXT", t)
+            print("PREDS", p)
+            print("==" * 20)
+
 
     def test_t5(self):
         self.check_embeddings_equal(HFT5, "t5-base")

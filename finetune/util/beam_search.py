@@ -334,8 +334,6 @@ def beam_search(symbols_to_logits_fn,
                 eos_id=EOS_ID,
                 stop_early=True,
                 use_top_k_with_unique=True,
-                temperature=1.0,
-                sample_from_top=1
 ):
     """Beam search with length penalties.
 
@@ -536,9 +534,7 @@ def beam_search(symbols_to_logits_fn,
         curr_scores = log_probs / length_penalty
         # Flatten out (beam_size, vocab_size) probs in to a list of possibilities
         flat_curr_scores = tf.reshape(curr_scores, [-1, beam_size * vocab_size])
-
-        topk_ids = soft_top_k(flat_curr_scores, temperature=temperature, sample_from=sample_from_top, k=beam_size * 2)
-#        _, topk_ids = tf.nn.top_k(flat_curr_scores, k=beam_size * 2)
+        _, topk_ids = tf.nn.top_k(flat_curr_scores, k=beam_size * 2)
         top_k_idxs = tf.stack([compute_batch_indices(batch_size, beam_size * 2), topk_ids], axis=2)
         topk_scores = tf.gather_nd(flat_curr_scores, top_k_idxs)
 

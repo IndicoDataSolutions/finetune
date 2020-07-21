@@ -72,6 +72,7 @@ class HFS2S(BaseModel):
             loss = tf.nn.sparse_softmax_cross_entropy_with_logits(
                 logits=logits, labels=targets[:, 1:], 
             )
+            padding_mask = tf.compat.v1.Print(padding_mask, [padding_mask], summarize=100)
             loss = loss * padding_mask
             loss = tf.reduce_sum(loss)
             return {
@@ -81,29 +82,30 @@ class HFS2S(BaseModel):
 
         else:
             def symbols_to_logits_fn(input_symbols, i, state): #[batch_size, decoded_ids] to [batch_size, vocab_size]
-                input_symbols = tf.compat.v1.Print(input_symbols, [input_symbols])
-                embeds = hf_decoder(
-                    (
-                        input_symbols, #decoder_input_ids,
-                        None, #decoder_attention_mask, # Seems like it does this automagically because these values are unpadded
-                        state["encoder_output"], #hidden_states,
-                        state["encoder_decoder_mask"], #encoder_attention_mask,
-                        None, #decoder_inputs_embeds,
-                        None, #head_mask,
-                        None, #decoder_past_key_value_states,
-                        False, #use_cache,
-                        None, #output_attentions,
-                        None, #output_hidden_states,
-                    ),
-                    training=False,
-                )[0]
-                logits = featurizer_state["embed_weights"](normalize_embeds(embeds[:, -1]), mode="linear")
-                logits_shape = tf.shape(logits)
-                #logits = tf.concat((tf.zeros(shape=[logits_shape[0], 1], dtype=tf.float32), logits[:, 1:]), 1)
-                logits = tf.compat.v1.Print(logits, [tf.argmax(logits, -1)])
-                return (logits, state)
+                with tf.compat.v1.variable_scope("model"):
+                    with tf.compat.v1.variable_scope("target"):
+                        input_symbols = tf.compat.v1.Print(input_symbols, [input_symbols])
+                        embeds = hf_decoder(
+                            (
+                                input_symbols, #decoder_input_ids,
+                                None, #decoder_attention_mask, # Seems like it does this automagically because these values are unpadded
+                                state["encoder_output"], #hidden_states,
+                                state["encoder_decoder_mask"], #encoder_attention_mask,
+                                None, #decoder_inputs_embeds,
+                                None, #head_mask,
+                                None, #decoder_past_key_value_states,
+                                False, #use_cache,
+                                None, #output_attentions,
+                                None, #output_hidden_states,
+                            ),
+                            training=False,
+                        )[0]
+                        logits = featurizer_state["embed_weights"](normalize_embeds(embeds[:, -1]), mode="linear")
+                        logits_shape = tf.shape(logits)
+                        #logits = tf.concat((tf.zeros(shape=[logits_shape[0], 1], dtype=tf.float32), logits[:, 1:]), 1)
+                        return (logits, state)
 
-            initial_ids = tf.tile(tf.constant([[text_encoder.start_token]], dtype=tf.int32), [tf.shape(featurizer_state["sequence_features"])[0], 1])
+            initial_ids = tf.tile(tf.constant([text_encoder.start_token], dtype=tf.int32), [tf.shape(featurizer_state["sequence_features"])[0]])
 
             beams, probs, _ = beam_search(
                 symbols_to_logits_fn=symbols_to_logits_fn,
@@ -116,8 +118,6 @@ class HFS2S(BaseModel):
                 eos_id=text_encoder.end_token,
                 stop_early=True,
                 use_top_k_with_unique=True,
-                temperature=config.sample_temp,
-                sample_from_top=config.decoder_sample_from
             )
 
             best_beams_i = tf.argmax(probs, -1, output_type=tf.int32)
@@ -135,4 +135,5 @@ class HFS2S(BaseModel):
 
     def _predict(self, zipped_data, **kwargs):
         preds = self._inference(zipped_data, predict_keys=[PredictMode.NORMAL],  **kwargs)
+        print(preds)
         return self.input_pipeline.label_encoder.inverse_transform(preds)
