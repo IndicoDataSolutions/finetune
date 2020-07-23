@@ -52,7 +52,7 @@ def tcn_featurizer(
     config,
     train=False,
     reuse=None,
-    perturbation=None,
+    embedding=None,
     **kwargs
 ):
     """
@@ -83,11 +83,14 @@ def tcn_featurizer(
         else:
             embed_weights = tf.stop_gradient(embed_weights)
             
+        if embedding is not None:
+            print(embed_weights)
+            print(embed_weights.shape)
+            print(embedding)
+            print(embedding.shape)
+            embed_weights = embedding
+
         h = tf.gather(embed_weights, X)
-
-        if not (perturbation is None):
-            h = h + perturbation
-
 
         # keep track of the classify token
         clf_token = encoder["_classify_"]
@@ -130,6 +133,7 @@ def tcn_featurizer(
 
         lengths = lengths_from_eos_idx(eos_idx=pool_idx, max_length=sequence_length)
         return {
+            "embed_out": embed_weights,
             "embed_weights": embed_weights,
             "features": clf_h,  # [batch_size, n_embed] for classify, [batch_size, 1, n_embed] for comparison, etc.
             "sequence_features": seq_feats,  # [batch_size, seq_len, n_embed]
