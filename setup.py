@@ -53,7 +53,7 @@ setup(
     extras_require={
         "tf": ["tensorflow==2.2.0"],
         "tf_gpu": ["tensorflow-gpu==2.2.0"],
-        "hf_transformers": ["transformers==2.9.1"]
+        "hf_transformers": ["transformers==3.0.2"]
     },
     zip_safe=False,
     cmdclass={"build_ext": OpsBuild,},

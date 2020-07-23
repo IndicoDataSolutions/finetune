@@ -80,9 +80,9 @@ def finetune_model_from_huggingface(
                     )
 
             if hf_config_instance.is_encoder_decoder:
-                embed_weights = hf_model.shared
+                embedding = hf_model.shared
             else:
-                embed_weights = hf_model.embeddings.word_embeddings
+                embedding = hf_model.embeddings
 
             if hf_config_instance.is_encoder_decoder:
                 decoder = hf_model.decoder
@@ -116,13 +116,15 @@ def finetune_model_from_huggingface(
             )
 
             output_state = {
-                "embed_weights": embed_weights,
+                "embedding": embedding,
                 "features": features,
                 "sequence_features": sequence_features,
                 "lengths": lengths,
                 "eos_idx": eos_idx,
                 "decoder": decoder,
             }
+            if not hf_config_instance.is_encoder_decoder:
+                output_state["embed_weights"] = embedding.word_embeddings
 
             return output_state
 
@@ -256,6 +258,7 @@ def finetune_model_from_huggingface(
                     hf_tokenizer,
                     hf_config,
                     weights_replacement,
+                    include_bos_eos,
                 ),
             )
 

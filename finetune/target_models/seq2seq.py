@@ -66,7 +66,7 @@ class HFS2S(BaseModel):
                 ),
                 training=train,
             )[0]
-            logits = featurizer_state["embed_weights"](normalize_embeds(embeds), mode="linear")
+            logits = featurizer_state["embedding"](normalize_embeds(embeds), mode="linear")
             loss = tf.nn.sparse_softmax_cross_entropy_with_logits(
                 logits=logits, labels=targets[:, 1:], 
             )
@@ -96,7 +96,7 @@ class HFS2S(BaseModel):
                             ),
                             training=False,
                         )[0]
-                        logits = featurizer_state["embed_weights"](normalize_embeds(embeds[:, -1]), mode="linear")
+                        logits = featurizer_state["embedding"](normalize_embeds(embeds[:, -1]), mode="linear")
                         logits_shape = tf.shape(logits)
                         return (logits, state)
 
@@ -107,7 +107,7 @@ class HFS2S(BaseModel):
                 initial_ids=initial_ids,
                 beam_size=config.beam_size,
                 decode_length=config.max_length,
-                vocab_size=featurizer_state["embed_weights"].vocab_size,
+                vocab_size=featurizer_state["embedding"].vocab_size,
                 alpha=config.beam_search_alpha,
                 states={"encoder_output": featurizer_state["sequence_features"], "encoder_decoder_mask": encoder_decoder_mask}, # TODO: Use states to enable cache in t5
                 eos_id=text_encoder.end_token,
