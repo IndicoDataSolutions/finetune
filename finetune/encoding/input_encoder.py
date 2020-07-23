@@ -215,7 +215,6 @@ class BaseEncoder(metaclass=SingletonMeta):
         tokens = self._cut_and_concat(encoded=encoded.tokens, max_length=max_length, include_bos_eos=include_bos_eos)
         token_ends = self._cut_and_concat(encoded=encoded.token_ends, max_length=max_length, special_tokens=-1, include_bos_eos=include_bos_eos)
         token_starts = self._cut_and_concat(encoded=encoded.token_starts, max_length=max_length, special_tokens=-1, include_bos_eos=include_bos_eos)
-        print("Finetune", token_ids)
         return EncodedOutput(
             token_ids=np.asarray(token_ids),
             tokens=np.array(tokens),

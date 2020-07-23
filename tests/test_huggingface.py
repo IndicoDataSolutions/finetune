@@ -7,7 +7,6 @@ import tensorflow as tf
 
 from transformers import AutoTokenizer, TFAutoModel
 from finetune import SequenceLabeler
-from finetune.util.tokenization import WEIRD_TEXT
 from finetune.base_models.huggingface.models import (
     HFBert,
     HFElectraGen,
@@ -45,7 +44,6 @@ class TestHuggingFace(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(model_path)
         model = TFAutoModel.from_pretrained(model_path)
         input_ids = tf.constant(tokenizer.encode(self.text))[None, :]  # Batch size 1
-        print(input_ids)
 
         if model.config.is_encoder_decoder:
             # Need to decide how to properly handle decoder input ids

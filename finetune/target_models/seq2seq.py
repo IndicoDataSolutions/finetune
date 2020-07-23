@@ -4,8 +4,6 @@ import tensorflow as tf
 from finetune.base import BaseModel
 from finetune.encoding.target_encoders import Seq2SeqLabelEncoder
 from finetune.input_pipeline import BasePipeline
-from finetune.util.shapes import shape_list
-from finetune.nn.target_blocks import language_model
 from finetune.model import PredictMode
 from finetune.util.beam_search import beam_search
 
@@ -72,7 +70,6 @@ class HFS2S(BaseModel):
             loss = tf.nn.sparse_softmax_cross_entropy_with_logits(
                 logits=logits, labels=targets[:, 1:], 
             )
-            padding_mask = tf.compat.v1.Print(padding_mask, [padding_mask], summarize=100)
             loss = loss * padding_mask
             loss = tf.reduce_sum(loss)
             return {
@@ -84,7 +81,6 @@ class HFS2S(BaseModel):
             def symbols_to_logits_fn(input_symbols, i, state): #[batch_size, decoded_ids] to [batch_size, vocab_size]
                 with tf.compat.v1.variable_scope("model"):
                     with tf.compat.v1.variable_scope("target"):
-                        input_symbols = tf.compat.v1.Print(input_symbols, [input_symbols])
                         embeds = hf_decoder(
                             (
                                 input_symbols, #decoder_input_ids,
@@ -102,7 +98,6 @@ class HFS2S(BaseModel):
                         )[0]
                         logits = featurizer_state["embed_weights"](normalize_embeds(embeds[:, -1]), mode="linear")
                         logits_shape = tf.shape(logits)
-                        #logits = tf.concat((tf.zeros(shape=[logits_shape[0], 1], dtype=tf.float32), logits[:, 1:]), 1)
                         return (logits, state)
 
             initial_ids = tf.tile(tf.constant([text_encoder.start_token], dtype=tf.int32), [tf.shape(featurizer_state["sequence_features"])[0]])
@@ -135,5 +130,4 @@ class HFS2S(BaseModel):
 
     def _predict(self, zipped_data, **kwargs):
         preds = self._inference(zipped_data, predict_keys=[PredictMode.NORMAL],  **kwargs)
-        print(preds)
         return self.input_pipeline.label_encoder.inverse_transform(preds)
