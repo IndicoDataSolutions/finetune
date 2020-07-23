@@ -51,7 +51,7 @@ def finetune_model_from_huggingface(
     hf_tokenizer_instance = hf_tokenizer.from_pretrained(pretrained_weights)
     hf_config_instance = hf_config.from_pretrained(pretrained_weights)
 
-    def finetune_featurizer(X, encoder, config, train=False, reuse=None, targets=None, lengths=None, **kwargs):
+    def finetune_featurizer(X, encoder, config, train=False, reuse=None, lengths=None, **kwargs):
         initial_shape = tf.shape(input=X)
         X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-1:]), 0))
         X.set_shape([None, None])
@@ -205,13 +205,12 @@ def finetune_model_from_huggingface(
                     batch_char_ends.append(tok_pos)
                     batch_char_starts.append(char_starts)
 
-            output = EncodedOutput(
+            return EncodedOutput(
                 token_ids=batch_token_idxs,
                 tokens=batch_tokens,
                 token_ends=batch_char_ends,
                 token_starts=batch_char_starts,
             )
-            return output
 
         def decode(self, ids):
             return self.tokenizer.decode(ids, skip_special_tokens=True)
