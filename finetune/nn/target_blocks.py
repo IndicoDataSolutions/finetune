@@ -949,7 +949,6 @@ def ict(
                     featurizer_state = featurizer_fn(u_embed, reuse=None)
                 hidden = featurizer_state["sequence_features"]
                 ema_logits = layer(hidden)
-            lam = beta_dist.sample((u_batch_size, 1, 1))
             ema_shuffle_logits = tf.gather(ema_logits, shuffle_indicies, axis=0)
             ema_mix_logits = lam * ema_logits + (1 - lam) * ema_shuffle_logits
             ema_mix_logits = tf.stop_gradient(ema_mix_logits)
