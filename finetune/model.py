@@ -167,7 +167,10 @@ def get_model_fn(
         if estimator_mode == tf.estimator.ModeKeys.PREDICT:
             total_num_steps = None
         else:
-            total_num_steps = params.n_epochs * params.dataset_size // (params.batch_size * n_replicas)
+            batch_size = params.batch_size
+            if params.iterate_unlabeled:
+                batch_size = params.u_batch_size
+            total_num_steps = params.n_epochs * params.dataset_size // (batch_size * n_replicas)
             
         with tf.compat.v1.variable_scope(tf.compat.v1.get_variable_scope(), custom_getter=var_getter):
             train_loss = 0.0

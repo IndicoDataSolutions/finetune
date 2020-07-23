@@ -219,10 +219,12 @@ class SSLLabeler(SequenceLabeler):
         force_build_lm = Y is None
         estimator, hooks = self.get_estimator(force_build_lm=force_build_lm)
         train_hooks = hooks.copy()
-
+        
+        batch_size = (self.config.u_batch_size if self.config.iterate_unlabeled
+                      else self.config.batch_size)
         steps_per_epoch = self._n_steps(
             n_examples=self.input_pipeline.dataset_size,
-            batch_size=self.config.batch_size,
+            batch_size=batch_size,
             n_gpus=max(1, len(self.resolved_gpus)),
         )
         num_steps = steps_per_epoch * self.config.n_epochs
