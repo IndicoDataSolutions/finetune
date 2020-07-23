@@ -8,6 +8,7 @@ from finetune.optimizers.recompute_grads import recompute_grad
 from finetune.errors import FinetuneError
 from finetune.nn.activations import act_fns
 from finetune.nn.nn_utils import norm
+from tensorflow.python.framework import function
 
 def perceptron(x, ny, config, w_init=None, b_init=None):
     """
@@ -341,17 +342,21 @@ def ordinal_regressor(
         return {"logits": outputs, "losses": loss}
 
 
-def class_reweighting(class_weights):
-    @tf.custom_gradient
-    def custom_grad(logits):
-        def grad(g):
-            new_g = g * class_weights
-            ratio = tf.norm(g) / tf.norm(new_g)
-            return new_g * ratio
+def class_reweighted_grad(logits, class_weights):
+    def custom_grad_fn(op, g):
+        new_g = g * class_weights
+        ratio = tf.norm(g) / tf.norm(new_g)
+        return [new_g * ratio]
 
-        return tf.identity(logits), grad
-
-    return custom_grad
+    @function.Defun(
+        logits.dtype,
+        func_name="class_reweight_grad",
+        python_grad_func=custom_grad_fn,
+        shape_func=lambda _: [logits.get_shape()] 
+    )
+    def identity(l):
+        return tf.identity(l)
+    return identity(logits)
 
 
 def sequence_labeler(
@@ -460,7 +465,7 @@ def sequence_labeler(
                         if class_weights is not None:
                             is_pos_cls = tf.cast(targets_individual[i], dtype=tf.float32)
                             class_weight = tf.expand_dims(class_weights[i] * is_pos_cls + class_weights[pad_id] * (1.0 - is_pos_cls), -1)
-                            logits_i = class_reweighting(class_weight)(logits[-1])
+                            logits_i = class_reweighted_grad(logits[-1], class_weight)
                         else:
                             logits_i = logits[i]
                         if use_crf:
@@ -487,7 +492,7 @@ def sequence_labeler(
                     per_token_weights = tf.reduce_sum(
                         one_hot_class_weights, axis=-1, keep_dims=True
                     )
-                    logits = class_reweighting(per_token_weights)(logits)
+                    logits = class_reweighted_grad(logits, per_token_weights)
                                                                                                           
                 transition_params = tf.cast(
                     tf.get_variable(
