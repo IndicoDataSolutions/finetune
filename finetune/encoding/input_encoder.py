@@ -192,7 +192,6 @@ class BaseEncoder(metaclass=SingletonMeta):
         
         if include_bos_eos:
             joined += [clf_token]
-
         return joined
 
     def _token_length(self, token):
