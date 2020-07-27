@@ -84,10 +84,6 @@ def tcn_featurizer(
             embed_weights = tf.stop_gradient(embed_weights)
             
         if embedding is not None:
-            print(embed_weights)
-            print(embed_weights.shape)
-            print(embedding)
-            print(embedding.shape)
             embed_weights = embedding
 
         h = tf.gather(embed_weights, X)
