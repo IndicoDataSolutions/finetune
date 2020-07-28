@@ -73,15 +73,18 @@ class TestRobertaV2Encoder(TestGPTEncoder):
     Encoder = RoBERTaEncoderV2
 
 class TestBertEncoderMulti(TestGPTEncoder):
+    special_token = "##"
     Encoder = BERTEncoderMultuilingal
 
     def tokenize_and_assert_equlivalence(self, text):
         encoded = self.encoder.encode_multi_input([text], max_length=2000)
         for tok, start, end in zip(encoded.tokens, encoded.token_starts, encoded.token_ends):
+            if tok == "<unk>":
+                continue
             if start == -1:
                 continue # this is the special tokens
             sub_seq = text[start: end]
-            self.assertEqual(tok.replace("##", ""), sub_seq)
+            self.assertEqual(tok.replace(self.special_token, ""), sub_seq)
 
     def test_token_alignment_chinese(self):
         self.tokenize_and_assert_equlivalence(

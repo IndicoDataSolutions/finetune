@@ -84,14 +84,12 @@ class GPCEncoder(BaseEncoder):
                 else:
                     token_start = token_start_temp
                     token_end = token_start + len(raw_text)
-                real_end = alignment[token_end]
-                real_start = alignment[token_start]
                 subtokens.append(token)
-                
+                token_start = alignment[token_start]
+                if tok_pos:
+                    token_start = max(token_start, tok_pos[-1])
                 tok_pos.append(alignment[token_end])
-                # start after the end of the last token.
-                # This causes chars that become multiple tokens to get reasonable char idxs
-                char_starts.append(max(alignment[token_start], tok_pos[-1]))
+                char_starts.append(token_start)
 
             batch_tokens.append(subtokens)
             batch_token_idxs.append(subtoken_idxs)

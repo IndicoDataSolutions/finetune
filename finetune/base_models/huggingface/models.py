@@ -1,9 +1,7 @@
 from transformers import (
-    TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
     ElectraTokenizerFast,
     ElectraConfig,
 
-    TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     TFBertMainLayer,
     BertTokenizerFast,
     BertConfig,
@@ -31,10 +29,11 @@ HFXLMRoberta = finetune_model_from_huggingface(
     ],
 )
 
-
 HFElectraGen = finetune_model_from_huggingface(
     pretrained_weights="google/electra-base-generator",
-    archive_map=TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
+    archive_map={
+        "google/electra-base-generator": "https://cdn.huggingface.co/google/electra-base-generator/tf_model.h5"
+    },
     hf_featurizer=TFElectraMainLayer,
     hf_tokenizer=ElectraTokenizerFast,
     hf_config=ElectraConfig,
@@ -45,7 +44,9 @@ HFElectraGen = finetune_model_from_huggingface(
 
 HFElectraDiscrim = finetune_model_from_huggingface(
     pretrained_weights="google/electra-base-discriminator",
-    archive_map=TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
+    archive_map={
+        "google/electra-base-discriminator": "https://cdn.huggingface.co/google/electra-base-discriminator/tf_model.h5"
+    },
     hf_featurizer=TFElectraMainLayer,
     hf_tokenizer=ElectraTokenizerFast,
     hf_config=ElectraConfig,
@@ -56,7 +57,9 @@ HFElectraDiscrim = finetune_model_from_huggingface(
 
 HFBert = finetune_model_from_huggingface(
     pretrained_weights="bert-base-uncased",
-    archive_map=TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+    archive_map={
+        "bert-base-uncased": "https://cdn.huggingface.co/bert-base-uncased-tf_model.h5"
+    },
     hf_featurizer=TFBertMainLayer,
     hf_tokenizer=BertTokenizerFast,
     hf_config=BertConfig,
