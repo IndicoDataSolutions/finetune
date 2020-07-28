@@ -5,7 +5,7 @@ from transformers import AutoTokenizer, TFAutoModel
 
 from finetune import SequenceLabeler
 from finetune.base_models.huggingface.models import HFBert, HFElectraGen, HFElectraDiscrim, HFXLMRoberta
-
+from tests.test_utils import TestBertEncoderMulti
 
 class TestHuggingFace(unittest.TestCase):
     def setUp(self):
@@ -36,3 +36,6 @@ class TestHuggingFace(unittest.TestCase):
 
     def test_bert(self):
         self.check_embeddings_equal(HFBert, "bert-base-uncased")
+
+class TestXLMRobertaTokenizer(TestBertEncoderMulti):
+    Encoder = HFXLMRoberta.encoder

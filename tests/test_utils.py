@@ -126,11 +126,11 @@ class TestBertEncoderMulti(TestGPTEncoder):
     def test_token_alignment_japanese_chinese_english_mix(self):
         self.tokenize_and_assert_equlivalence( 
             """
-            Chinese:
+            Japanese:
             毛二へへはにひさとえのレイカノ列都課絵差津の夜差差等き、イス。
             かん阿絵阿雲巣巣なやゃてり屋津あ等遊離氏差列他知ゃゆ個っゆせ譜。へむぬてゃょょケョセタエマセ素夜目絵あめち他模尾。
             っるろッケヌトネセ模他区目ら御氏メケそこりもそゃツテホ都津都っほちよるゆ鵜遊素ゅへお離しそ二くなろる。
-            Japanese:
+            Chinese:
             東間火活作止訪退春属報解
             社染治超二油航崩就源経載松辰徳。
             勧著者囲形矢女納低沢法安
