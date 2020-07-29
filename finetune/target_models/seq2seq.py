@@ -32,7 +32,7 @@ class S2SPipeline(BasePipeline):
         )
 
     def _target_encoder(self):
-        return Seq2SeqLabelEncoder(self.text_encoder, self.config.max_length)
+        return Seq2SeqLabelEncoder(self, self.config.max_length)
 
 def normalize_embeds(embeds):
     return embeds * (tf.cast(tf.shape(embeds)[-1], dtype=tf.float32) ** -0.5)

@@ -72,8 +72,11 @@ class TestHuggingFace(unittest.TestCase):
             batch_size=2,
         )
         finetune_model.fit([text] * 5, [text] * 5)
+        finetune_model.save("test.jl")
         self.assertEqual(finetune_model.predict([text]), [text])
         self.assertEqual(len(finetune_model.predict([text, "Some other text"])), 2)
+        loaded_model = HFS2S.load("test.jl")
+        self.assertEqual(loaded_model.predict([text]), [text])
 
     def test_t5_s2s_ner(self):
         with open(os.path.join('Data', 'Sequence', 'reuters.json'), "rt") as fp:

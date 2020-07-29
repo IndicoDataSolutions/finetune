@@ -106,13 +106,17 @@ class NoisyLabelEncoder(LabelEncoder, BaseEncoder):
 
 
 class Seq2SeqLabelEncoder(BaseEncoder):
-    def __init__(self, encoder, max_len, *args, **kwargs):
+    def __init__(self, input_pipeline, max_len, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.encoder = encoder
+        self.input_pipeline = input_pipeline
         self.max_len = max_len
 
     def fit(self, y):
         return
+
+    @property
+    def encoder(self):
+        return self.input_pipeline.text_encoder
 
     @property
     def target_dim(self):
