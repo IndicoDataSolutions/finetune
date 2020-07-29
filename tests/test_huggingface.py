@@ -41,7 +41,3 @@ class TestHuggingFace(unittest.TestCase):
 class TestXLMRobertaTokenizer(TestBertEncoderMulti):
     special_token = "▁"
     Encoder = HFXLMRoberta.encoder
-
-    @pytest.mark.skip("Test is failing but due to an oversight in the test where parts of 2 chars get joined into a token.")
-    def test_no_whitespace_in_idxs(self):
-        super().test_no_whitespace_in_idxs()

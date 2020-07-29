@@ -163,6 +163,7 @@ def finetune_model_from_huggingface(
                     token_end = 0
                     tok_pos = []
                     char_starts = []
+                    encoded_denormed_tokens = []
                     for token in encoded_tokens:
                         raw_text = token.replace(WEIRD_SPM_CHAR, "")
                         token_start_temp = normed_text.find(raw_text, token_end)
@@ -178,10 +179,11 @@ def finetune_model_from_huggingface(
                             if tok_pos:
                                 token_start = max(token_start, tok_pos[-1])
                             token_end = alignment[token_end]
+                        encoded_denormed_tokens.append(text[token_start: token_end])
                         tok_pos.append(token_end)
                         char_starts.append(token_start)
                     batch_token_idxs.append(encoded_ids)
-                    batch_tokens.append(encoded_tokens)
+                    batch_tokens.append(encoded_denormed_tokens)
                     batch_char_ends.append(tok_pos)
                     batch_char_starts.append(char_starts)
 
