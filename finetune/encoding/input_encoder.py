@@ -225,7 +225,7 @@ class BaseEncoder(metaclass=SingletonMeta):
         self.__init__()
 
     def __getstate__(self):
-        return {"Encoder": None}
+        raise ValueError("We do not want to be serializing text encoders. Please use getters from input_pipeline.")
 
 
 def tokenize_context(context, encoded_output, config):
