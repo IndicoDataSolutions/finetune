@@ -46,9 +46,23 @@ def finetune_model_from_huggingface(
     hf_config,
     weights_replacement,
     include_bos_eos=True,
+    add_tokens=None,
+    # add_tokens=["<newline>", "{", "}", "<entity_sep>", "<entity_text>"],
 ):
     weights_url = archive_map[pretrained_weights]
     hf_tokenizer_instance = hf_tokenizer.from_pretrained(pretrained_weights)
+
+    if add_tokens:
+        # Load expanded vocab sentencepiece tokenizer
+        import sentencepiece as spm
+        sp_model = spm.SentencePieceProcessor()
+        sp_path = os.path.join(
+            FINETUNE_BASE_FOLDER, "model", "huggingface", "expanded_vocab.model"
+        )
+        sp_model.load(sp_path)
+        hf_tokenizer_instance.sp_model = sp_model
+        hf_tokenizer_instance.add_tokens(add_tokens)
+
     hf_config_instance = hf_config.from_pretrained(pretrained_weights)
 
     def finetune_featurizer(X, encoder, config, train=False, reuse=None, lengths=None, **kwargs):
@@ -72,6 +86,7 @@ def finetune_model_from_huggingface(
 
         with tf.compat.v1.variable_scope("model/featurizer", reuse=reuse):
             hf_model = hf_featurizer(hf_config_instance)
+            _hf_model = hf_model
 
             if config.low_memory_mode and train:
                 for layer in hf_model.encoder.layer:
@@ -114,6 +129,20 @@ def finetune_model_from_huggingface(
             sequence_features = tf.reshape(
                 sequence_out, shape=tf.concat((initial_shape, [n_embed]), 0),
             )
+
+            # Resize embeddings to account for newly added tokens
+            if add_tokens:
+                embed_dim = embedding.hidden_size
+                old_size = embedding.weight.shape[0]
+                new_size = old_size + len(add_tokens)
+                new_weight = embedding.add_weight(
+                    "expanded_weight",
+                    shape=[new_size, embed_dim],
+                    dtype=tf.float32
+                )
+                _hf_model.set_input_embeddings(new_weight)
+                _hf_model.config.vocab_size = new_size
+                _hf_model.vocab_size = new_size
 
             output_state = {
                 "embedding": embedding,
