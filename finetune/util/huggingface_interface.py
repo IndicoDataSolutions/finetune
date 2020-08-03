@@ -46,21 +46,21 @@ def finetune_model_from_huggingface(
     hf_config,
     weights_replacement,
     include_bos_eos=True,
-    add_tokens=None,
-    # add_tokens=["<newline>", "{", "}", "<entity_sep>", "<entity_text>"],
+    add_tokens=["<newline>", "{", "}", "<entity_sep>", "<entity_text>"],
+    # add_tokens=None,
 ):
     weights_url = archive_map[pretrained_weights]
     hf_tokenizer_instance = hf_tokenizer.from_pretrained(pretrained_weights)
 
     if add_tokens:
-        # Load expanded vocab sentencepiece tokenizer
-        import sentencepiece as spm
-        sp_model = spm.SentencePieceProcessor()
-        sp_path = os.path.join(
-            FINETUNE_BASE_FOLDER, "model", "huggingface", "expanded_vocab.model"
-        )
-        sp_model.load(sp_path)
-        hf_tokenizer_instance.sp_model = sp_model
+        # # Load expanded vocab sentencepiece tokenizer
+        # import sentencepiece as spm
+        # sp_model = spm.SentencePieceProcessor()
+        # sp_path = os.path.join(
+        #     FINETUNE_BASE_FOLDER, "model", "huggingface", "expanded_vocab.model"
+        # )
+        # sp_model.load(sp_path)
+        # hf_tokenizer_instance.sp_model = sp_model
         hf_tokenizer_instance.add_tokens(add_tokens)
 
     hf_config_instance = hf_config.from_pretrained(pretrained_weights)

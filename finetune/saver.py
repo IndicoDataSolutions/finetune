@@ -256,7 +256,7 @@ class Saver:
                         if expanded_weight:
                             expanded_weight = expanded_weight[0]
                             num_rows = expanded_weight.shape[0] - var.shape[0]
-                            new_rows = np.zeros((num_rows, saved_var.shape[1]))
+                            new_rows = np.random.uniform(size=(num_rows, saved_var.shape[1]))
                             saved_var = np.concatenate((saved_var, new_rows), axis=0)
                             var = expanded_weight
                     for func in self.variable_transforms:
