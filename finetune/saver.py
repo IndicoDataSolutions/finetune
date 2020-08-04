@@ -142,6 +142,7 @@ class Saver:
         save_dtype=None,
         restart_global_step=True,
         permit_uninitialized=None,
+        add_tokens=None,
     ):
         self.variable_transforms = variable_transforms or []
         self.exclude_matches = exclude_matches
@@ -151,6 +152,7 @@ class Saver:
             self.set_fallback(fallback_filename)
         self.restart_global_step = restart_global_step
         self.permit_uninitialized = permit_uninitialized
+        self.add_tokens = add_tokens
 
     def set_fallback(self, fallback_filename):
         self.tpe = ThreadPoolExecutor()
@@ -249,16 +251,17 @@ class Saver:
                 elif name in self.fallback.keys():
                     saved_var = self.fallback[name]
                 if saved_var is not None:
-                    if name == "model/featurizer/shared/shared/weight:0":
-                        expanded_weight = [v for v in all_vars
-                                           if v.name ==
-                                           "model/featurizer/expanded_weight:0"]
-                        if expanded_weight:
-                            expanded_weight = expanded_weight[0]
-                            num_rows = expanded_weight.shape[0] - var.shape[0]
-                            new_rows = np.random.uniform(size=(num_rows, saved_var.shape[1]))
-                            saved_var = np.concatenate((saved_var, new_rows), axis=0)
-                            var = expanded_weight
+                    if self.add_tokens:
+                        if name == "model/featurizer/shared/shared/weight:0":
+                            expanded_weight = [v for v in all_vars
+                                               if v.name ==
+                                               "model/featurizer/expanded_weight:0"]
+                            if expanded_weight:
+                                expanded_weight = expanded_weight[0]
+                                num_rows = expanded_weight.shape[0] - var.shape[0]
+                                new_rows = np.random.uniform(size=(num_rows, saved_var.shape[1]))
+                                saved_var = np.concatenate((saved_var, new_rows), axis=0)
+                                var = expanded_weight
                     for func in self.variable_transforms:
                         saved_var = func(name, saved_var)
                     var_loader.add(var, saved_var)
