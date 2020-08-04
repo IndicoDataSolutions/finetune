@@ -5,7 +5,8 @@ from finetune.base import BaseModel
 from finetune.encoding.target_encoders import Seq2SeqLabelEncoder
 from finetune.input_pipeline import BasePipeline
 from finetune.model import PredictMode
-from finetune.util.beam_search import beam_search
+from finetune.util.beam_search import beam_search, get_state_shape_invariants
+from tensorflow.python.util import nest
 
 
 class S2SPipeline(BasePipeline):
@@ -81,27 +82,50 @@ class HFS2S(BaseModel):
             def symbols_to_logits_fn(input_symbols, i, state): #[batch_size, decoded_ids] to [batch_size, vocab_size]
                 with tf.compat.v1.variable_scope("model"):
                     with tf.compat.v1.variable_scope("target"):
-                        embeds = hf_decoder(
+                        embeds, present_state = hf_decoder(
                             (
-                                input_symbols, #decoder_input_ids,
+                                input_symbols[:, -1][:, None], #decoder_input_ids,
                                 None, #decoder_attention_mask, # Seems like it does this automagically because these values are unpadded
                                 state["encoder_output"], #hidden_states,
                                 state["encoder_decoder_mask"], #encoder_attention_mask,
                                 None, #decoder_inputs_embeds,
                                 None, #head_mask,
-                                None, #decoder_past_key_value_states,
-                                False, #use_cache,
+                                state["past_states"], #decoder_past_key_value_states,
+                                True, #use_cache,
                                 None, #output_attentions,
                                 None, #output_hidden_states,
                             ),
                             training=False,
-                        )[0]
+                        )
                         logits = featurizer_state["embedding"](normalize_embeds(embeds[:, -1]), mode="linear")
                         logits_shape = tf.shape(logits)
+                        new_states = []
+                        for layer_past, layer_present in zip(state["past_states"], present_state):
+                            new_values = []
+                            for value_present, value_past in zip(layer_present, layer_past):
+                                new_values.append(tf.concat((value_past, value_present), axis=2))
+                            new_states.append(tuple(new_values))
+                        state["past_states"] = tuple(new_states) 
+                        state_struc = nest.map_structure(get_state_shape_invariants, state)
+
                         return (logits, state)
 
             initial_ids = tf.tile(tf.constant([text_encoder.start_token], dtype=tf.int32), [tf.shape(featurizer_state["sequence_features"])[0]])
+            batch_size = tf.shape(initial_ids)[0]
+            past_states = tuple(
+                (
+                    tf.zeros((batch_size, hf_decoder.config.num_heads, 0, hf_decoder.config.d_kv)),
+                    tf.zeros((batch_size, hf_decoder.config.num_heads, 0, hf_decoder.config.d_kv)),
+                    tf.zeros((batch_size, hf_decoder.config.num_heads, 0, hf_decoder.config.d_kv)),
+                    tf.zeros((batch_size, hf_decoder.config.num_heads, 0, hf_decoder.config.d_kv)),
+                )
+            for _ in range(len(hf_decoder.block)))
 
+            states = {
+                "encoder_output": featurizer_state["sequence_features"],
+                "encoder_decoder_mask": encoder_decoder_mask,
+                "past_states": past_states,
+            }
             beams, probs, _ = beam_search(
                 symbols_to_logits_fn=symbols_to_logits_fn,
                 initial_ids=initial_ids,
@@ -109,7 +133,7 @@ class HFS2S(BaseModel):
                 decode_length=config.max_length,
                 vocab_size=featurizer_state["embedding"].vocab_size,
                 alpha=config.beam_search_alpha,
-                states={"encoder_output": featurizer_state["sequence_features"], "encoder_decoder_mask": encoder_decoder_mask}, # TODO: Use states to enable cache in t5
+                states=states,
                 eos_id=text_encoder.end_token,
                 stop_early=True,
                 use_top_k_with_unique=True,
