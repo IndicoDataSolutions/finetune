@@ -7,6 +7,7 @@ from finetune.input_pipeline import BasePipeline
 from finetune.model import PredictMode
 from finetune.util.beam_search import beam_search, get_state_shape_invariants
 from tensorflow.python.util import nest
+import sys
 
 
 class S2SPipeline(BasePipeline):
@@ -79,9 +80,13 @@ class HFS2S(BaseModel):
             }
 
         else:
-            def symbols_to_logits_fn(input_symbols, i, state): #[batch_size, decoded_ids] to [batch_size, vocab_size]
+            def symbols_to_logits_fn(input_symbols, i, state, first=False): #[batch_size, decoded_ids] to [batch_size, vocab_size]
+                print(f"First? {first}")
                 with tf.compat.v1.variable_scope("model"):
                     with tf.compat.v1.variable_scope("target"):
+                        # _p = tf.compat.v1.Print(i, [i, tf.shape(state["past_states"][0][0])],
+                        #                         summarize = 100000)
+                        # with tf.control_dependencies([_p]):
                         embeds, present_state = hf_decoder(
                             (
                                 input_symbols[:, -1][:, None], #decoder_input_ids,
@@ -90,28 +95,29 @@ class HFS2S(BaseModel):
                                 state["encoder_decoder_mask"], #encoder_attention_mask,
                                 None, #decoder_inputs_embeds,
                                 None, #head_mask,
-                                state["past_states"], #decoder_past_key_value_states,
+                                None if first else state["past_states"], #decoder_past_key_value_states,
                                 True, #use_cache,
                                 None, #output_attentions,
                                 None, #output_hidden_states,
                             ),
                             training=False,
                         )
-                        logits = featurizer_state["embedding"](normalize_embeds(embeds[:, -1]), mode="linear")
+                        _p = tf.print("I:", i,
+                                      "\nInput Symbols:", tf.shape(input_symbols),
+                                      "\nPast States:", tf.shape(state["past_states"][0][0]),
+                                      "\nEncoder Output:", tf.shape(state["encoder_output"]),
+                                      "\nEncoder Mask:", tf.shape(state["encoder_decoder_mask"]),
+                                      output_stream=sys.stdout)
+                        with tf.control_dependencies([_p]):
+                            logits = featurizer_state["embedding"](normalize_embeds(embeds[:, -1]), mode="linear")
                         logits_shape = tf.shape(logits)
-                        new_states = []
-                        for layer_past, layer_present in zip(state["past_states"], present_state):
-                            new_values = []
-                            for value_present, value_past in zip(layer_present, layer_past):
-                                new_values.append(tf.concat((value_past, value_present), axis=2))
-                            new_states.append(tuple(new_values))
-                        state["past_states"] = tuple(new_states) 
-                        state_struc = nest.map_structure(get_state_shape_invariants, state)
+                        state["past_states"] = present_state
 
                         return (logits, state)
 
             initial_ids = tf.tile(tf.constant([text_encoder.start_token], dtype=tf.int32), [tf.shape(featurizer_state["sequence_features"])[0]])
             batch_size = tf.shape(initial_ids)[0]
+            print(f"HEAD SIZE: {hf_decoder.config.d_kv}")
             past_states = tuple(
                 (
                     tf.zeros((batch_size, hf_decoder.config.num_heads, 0, hf_decoder.config.d_kv)),
