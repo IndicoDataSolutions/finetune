@@ -81,12 +81,6 @@ class HFS2S(BaseModel):
 
         else:
             def symbols_to_logits_fn(input_symbols, i, state, first=False): #[batch_size, decoded_ids] to [batch_size, vocab_size]
-                print(f"First? {first}")
-                #with tf.compat.v1.variable_scope("model"):
-                    #with tf.compat.v1.variable_scope("target"):
-                    # _p = tf.compat.v1.Print(i, [i, tf.shape(state["past_states"][0][0])],
-                    #                         summarize = 100000)
-                    # with tf.control_dependencies([_p]):
                 embeds, present_state = hf_decoder(
                     (
                         input_symbols[:, -1][:, None], #decoder_input_ids,
@@ -102,14 +96,7 @@ class HFS2S(BaseModel):
                     ),
                     training=False,
                 )
-                _p = tf.print("I:", i,
-                                "\nInput Symbols:", tf.shape(input_symbols),
-                                "\nPast States:", tf.shape(state["past_states"][0][0]),
-                                "\nEncoder Output:", tf.shape(state["encoder_output"]),
-                                "\nEncoder Mask:", tf.shape(state["encoder_decoder_mask"]),
-                                output_stream=sys.stdout)
-                with tf.control_dependencies([_p]):
-                    logits = featurizer_state["embedding"](normalize_embeds(embeds[:, -1]), mode="linear")
+                logits = featurizer_state["embedding"](normalize_embeds(embeds[:, -1]), mode="linear")
                 logits_shape = tf.shape(logits)
                 state["past_states"] = present_state
 
@@ -117,7 +104,6 @@ class HFS2S(BaseModel):
 
             initial_ids = tf.tile(tf.constant([text_encoder.start_token], dtype=tf.int32), [tf.shape(featurizer_state["sequence_features"])[0]])
             batch_size = tf.shape(initial_ids)[0]
-            print(f"HEAD SIZE: {hf_decoder.config.d_kv}")
             past_states = tuple(
                 (
                     tf.zeros((batch_size, hf_decoder.config.num_heads, 0, hf_decoder.config.d_kv)),
