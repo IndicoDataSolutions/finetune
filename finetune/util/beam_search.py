@@ -512,13 +512,14 @@ def beam_search(symbols_to_logits_fn,
         flat_ids = tf.reshape(alive_seq, [batch_size * beam_size, -1])
 
         # (batch_size * beam_size, decoded_length)
-        if states:
-            flat_states = nest.map_structure(_merge_beam_dim, states)
-            flat_logits, flat_states = symbols_to_logits_fn(flat_ids, i, flat_states, first=first)
-            states = nest.map_structure(
-                lambda t: _unmerge_beam_dim(t, batch_size, beam_size), flat_states)
-        else:
-            flat_logits = symbols_to_logits_fn(flat_ids, i, None)
+        with tf.compat.v1.variable_scope(tf.compat.v1.VariableScope(tf.compat.v1.AUTO_REUSE), reuse=tf.compat.v1.AUTO_REUSE):
+          if states:
+              flat_states = nest.map_structure(_merge_beam_dim, states)
+              flat_logits, flat_states = symbols_to_logits_fn(flat_ids, i, flat_states, first=first)
+              states = nest.map_structure(
+                  lambda t: _unmerge_beam_dim(t, batch_size, beam_size), flat_states)
+          else:
+              flat_logits = symbols_to_logits_fn(flat_ids, i, None)
 
         logits = tf.reshape(flat_logits, [batch_size, beam_size, -1])
 
@@ -681,6 +682,7 @@ def beam_search(symbols_to_logits_fn,
 
     # Run first step outside of loop
     i = i_offset
+    
     topk_seq, topk_log_probs, topk_scores, topk_finished, states = grow_topk(
         i, alive_seq, alive_log_probs, states, first=True)
     alive_seq, alive_log_probs, _, states = grow_alive(
