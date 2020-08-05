@@ -46,8 +46,8 @@ def finetune_model_from_huggingface(
     hf_config,
     weights_replacement,
     include_bos_eos=True,
-    add_tokens=["<newline>", "{", "}", "<entity_sep>", "<entity_text>"],
-    # add_tokens=None,
+    add_tokens=None,
+    # add_tokens=["<newline>", "{", "}", "<entity_sep>", "<entity_text>"],
 ):
     weights_url = archive_map[pretrained_weights]
     hf_tokenizer_instance = hf_tokenizer.from_pretrained(pretrained_weights)
