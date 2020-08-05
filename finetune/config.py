@@ -260,7 +260,7 @@ def get_default_config():
 
         # Sequence Labeling
         seq_num_heads=16,
-        pad_token="<PAD>",
+        pad_token="<NO_LABEL>",
         pad_idx=None,
         subtoken_predictions=False,
         multi_label_sequences=False,
