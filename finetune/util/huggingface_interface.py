@@ -46,11 +46,15 @@ def finetune_model_from_huggingface(
     hf_config,
     weights_replacement,
     include_bos_eos=True,
-    add_tokens=None,
-    # add_tokens=["<newline>", "{", "}", "<entity_sep>", "<entity_text>"],
+    add_tokens=["{", "}"],
+    # add_tokens=None,
 ):
     weights_url = archive_map[pretrained_weights]
     hf_tokenizer_instance = hf_tokenizer.from_pretrained(pretrained_weights)
+    vocab = hf_tokenizer_instance.get_vocab()
+    # print(f'[ = {vocab["["]}')
+    # print(f'] = {vocab["]"]}')
+    # input()
 
     if add_tokens:
         # # Load expanded vocab sentencepiece tokenizer
@@ -89,10 +93,14 @@ def finetune_model_from_huggingface(
             _hf_model = hf_model
 
             if config.low_memory_mode and train:
-                for layer in hf_model.encoder.layer:
-                    layer.__call__ == recompute_grad(
-                        layer.__call__, train_vars=layer.trainable_weights
-                    )
+                # hf_model.__call__ == recompute_grad(
+                #     hf_model.__call__, train_vars=hf_model.trainable_weights
+                # )
+                for _model in [hf_model.encoder, hf_model.decoder]:
+                    for layer in _model.block:
+                        layer.__call__ == recompute_grad(
+                            layer.__call__, train_vars=layer.trainable_weights
+                        )
 
             if hf_config_instance.is_encoder_decoder:
                 embedding = hf_model.shared
