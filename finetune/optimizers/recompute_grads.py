@@ -21,16 +21,16 @@ def fn_with_custom_grad(grad_fn, use_global_vars=False, use_entire_scope=False, 
 
     def dec(fn):
         @functools.wraps(fn)
-        def wrapped(*args, **kwargs):
+        def wrapped(*args):
             return _fn_with_custom_grad(
-                fn, args, kwargs, grad_fn, use_global_vars=use_global_vars, use_entire_scope=use_entire_scope, train_vars=None)
+                fn, args, grad_fn, use_global_vars=use_global_vars, use_entire_scope=use_entire_scope, train_vars=None)
 
         return wrapped
 
     return dec
 
 
-def _fn_with_custom_grad(fn, inputs, kwargs, grad_fn, use_global_vars=False, use_entire_scope=False, train_vars=None):
+def _fn_with_custom_grad(fn, inputs, grad_fn, use_global_vars=False, use_entire_scope=False, train_vars=None):
     """Create a subgraph with a custom gradient.
     Args:
       fn: function that takes inputs as arguments and produces 1 or more Tensors.
@@ -50,13 +50,12 @@ def _fn_with_custom_grad(fn, inputs, kwargs, grad_fn, use_global_vars=False, use
     get_vars_fn = (vs.global_variables if use_global_vars else vs.trainable_variables)
     len_before_vars = len(get_vars_fn())
     inputs = list(inputs)
-    outputs = fn(*inputs, **kwargs)
-    if use_entire_scope:
-        train_vars = train_vars + get_vars_fn()
-    else:
-        train_vars = train_vars + get_vars_fn()[len_before_vars:]
-
-    print(train_vars)
+    outputs = fn(*inputs)
+    if not train_vars:
+        if use_entire_scope:
+            train_vars = get_vars_fn()
+        else:
+            train_vars = get_vars_fn()[len_before_vars:]
 
     if grad_fn is None:
         return outputs
@@ -115,8 +114,8 @@ def recompute_grad(fn, use_entire_scope=False, train_vars=None):
     """
 
     @functools.wraps(fn)
-    def wrapped(*args, **kwargs):
-        return _recompute_grad(fn, args, kwargs, use_entire_scope=use_entire_scope, train_vars=train_vars)
+    def wrapped(*args):
+        return _recompute_grad(fn, args, use_entire_scope=use_entire_scope, train_vars=train_vars)
 
     return wrapped
 
@@ -140,7 +139,7 @@ def underlying_variable_ref(t):
         return None
 
 
-def _recompute_grad(fn, args, kwargs, use_entire_scope, train_vars=None):
+def _recompute_grad(fn, args, use_entire_scope, train_vars=None):
     """See recompute_grad."""
 
     cached_vs = []
@@ -165,8 +164,8 @@ def _recompute_grad(fn, args, kwargs, use_entire_scope, train_vars=None):
         return grad_inputs, grad_vars
 
     @fn_with_custom_grad(grad_fn, use_entire_scope=use_entire_scope, train_vars=train_vars)
-    def fn_with_recompute(*args, **kwargs):
+    def fn_with_recompute(*args):
         cached_vs.append(tf.compat.v1.get_variable_scope())
-        return fn(*args, **kwargs)
+        return fn(*args)
 
-    return fn_with_recompute(*args, **kwargs)
+    return fn_with_recompute(*args)
