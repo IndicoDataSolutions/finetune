@@ -47,7 +47,6 @@ def finetune_model_from_huggingface(
     weights_replacement,
     include_bos_eos=True,
     add_tokens=None,
-    # add_tokens=["<newline>", "{", "}", "<entity_sep>", "<entity_text>"],
 ):
     weights_url = archive_map[pretrained_weights]
     hf_tokenizer_instance = hf_tokenizer.from_pretrained(pretrained_weights)
@@ -270,6 +269,7 @@ def finetune_model_from_huggingface(
             "include_bos_eos": include_bos_eos,
         }
         required_files = [{"url": weights_url, "file": raw_weights_path}]
+        _add_tokens = add_tokens
 
         @classmethod
         def translate_base_model_format(cls):
@@ -291,6 +291,7 @@ def finetune_model_from_huggingface(
                     hf_config,
                     weights_replacement,
                     include_bos_eos,
+                    add_tokens,
                 ),
             )
 
