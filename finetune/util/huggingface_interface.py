@@ -52,14 +52,6 @@ def finetune_model_from_huggingface(
     hf_tokenizer_instance = hf_tokenizer.from_pretrained(pretrained_weights)
 
     if add_tokens:
-        # # Load expanded vocab sentencepiece tokenizer
-        # import sentencepiece as spm
-        # sp_model = spm.SentencePieceProcessor()
-        # sp_path = os.path.join(
-        #     FINETUNE_BASE_FOLDER, "model", "huggingface", "expanded_vocab.model"
-        # )
-        # sp_model.load(sp_path)
-        # hf_tokenizer_instance.sp_model = sp_model
         hf_tokenizer_instance.add_tokens(add_tokens)
 
     hf_config_instance = hf_config.from_pretrained(pretrained_weights)
@@ -88,15 +80,9 @@ def finetune_model_from_huggingface(
 
             # Resize embeddings to account for newly added tokens
             if add_tokens:
-                embed_dim = embedding.hidden_size
-                old_size = embedding.weight.shape[0]
-                new_size = old_size + len(add_tokens)
-                new_weight = embedding.add_weight(
-                    "expanded_weight",
-                    shape=[new_size, embed_dim],
-                    dtype=tf.float32
-                )
-                hf_model.set_input_embeddings(new_weight)
+                embedding = hf_model.get_input_embeddings()
+                new_size = embedding.vocab_size + len(add_tokens)
+                embedding.vocab_size = new_size
                 hf_model.config.vocab_size = new_size
                 hf_model.vocab_size = new_size
             
@@ -104,7 +90,6 @@ def finetune_model_from_huggingface(
                 if hf_config_instance.is_encoder_decoder:
                     for _model in [hf_model.encoder, hf_model.decoder]:
                         for layer in _model.block:
-                            print("BEFORE, ", layer.trainable_weights)
                             layer.call = recompute_grad(
                                 layer.call, train_vars=layer.trainable_weights
                             )
