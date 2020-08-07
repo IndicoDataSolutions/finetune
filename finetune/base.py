@@ -147,6 +147,7 @@ class BaseModel(object, metaclass=ABCMeta):
             exclude_matches=None if self.config.save_adam_vars else "Adam",
             save_dtype=self.config.save_dtype,
             permit_uninitialized=self.config.permit_uninitialized,
+            add_tokens=getattr(self.config.base_model, "_add_tokens", None)
         )
 
     def init_from_checkpoint(self, checkpoint_path):
