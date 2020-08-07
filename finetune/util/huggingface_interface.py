@@ -46,15 +46,11 @@ def finetune_model_from_huggingface(
     hf_config,
     weights_replacement,
     include_bos_eos=True,
-    add_tokens=["{", "}"],
-    # add_tokens=None,
+    add_tokens=None,
+    # add_tokens=["<newline>", "{", "}", "<entity_sep>", "<entity_text>"],
 ):
     weights_url = archive_map[pretrained_weights]
     hf_tokenizer_instance = hf_tokenizer.from_pretrained(pretrained_weights)
-    vocab = hf_tokenizer_instance.get_vocab()
-    # print(f'[ = {vocab["["]}')
-    # print(f'] = {vocab["]"]}')
-    # input()
 
     if add_tokens:
         # # Load expanded vocab sentencepiece tokenizer
@@ -90,16 +86,33 @@ def finetune_model_from_huggingface(
 
         with tf.compat.v1.variable_scope("model/featurizer", reuse=reuse):
             hf_model = hf_featurizer(hf_config_instance)
-            _hf_model = hf_model
 
+            # Resize embeddings to account for newly added tokens
+            if add_tokens:
+                embed_dim = embedding.hidden_size
+                old_size = embedding.weight.shape[0]
+                new_size = old_size + len(add_tokens)
+                new_weight = embedding.add_weight(
+                    "expanded_weight",
+                    shape=[new_size, embed_dim],
+                    dtype=tf.float32
+                )
+                hf_model.set_input_embeddings(new_weight)
+                hf_model.config.vocab_size = new_size
+                hf_model.vocab_size = new_size
+            
             if config.low_memory_mode and train:
-                # hf_model.__call__ == recompute_grad(
-                #     hf_model.__call__, train_vars=hf_model.trainable_weights
-                # )
-                for _model in [hf_model.encoder, hf_model.decoder]:
-                    for layer in _model.block:
-                        layer.__call__ == recompute_grad(
-                            layer.__call__, train_vars=layer.trainable_weights
+                if hf_config_instance.is_encoder_decoder:
+                    for _model in [hf_model.encoder, hf_model.decoder]:
+                        for layer in _model.block:
+                            print("BEFORE, ", layer.trainable_weights)
+                            layer.call = recompute_grad(
+                                layer.call, train_vars=layer.trainable_weights
+                            )
+                else:
+                    for layer in hf_model.encoder.layer:
+                        layer.call = recompute_grad(
+                            layer.call, train_vars=layer.trainable_weights
                         )
 
             if hf_config_instance.is_encoder_decoder:
@@ -138,19 +151,6 @@ def finetune_model_from_huggingface(
                 sequence_out, shape=tf.concat((initial_shape, [n_embed]), 0),
             )
 
-            # Resize embeddings to account for newly added tokens
-            if add_tokens:
-                embed_dim = embedding.hidden_size
-                old_size = embedding.weight.shape[0]
-                new_size = old_size + len(add_tokens)
-                new_weight = embedding.add_weight(
-                    "expanded_weight",
-                    shape=[new_size, embed_dim],
-                    dtype=tf.float32
-                )
-                _hf_model.set_input_embeddings(new_weight)
-                _hf_model.config.vocab_size = new_size
-                _hf_model.vocab_size = new_size
 
             output_state = {
                 "embedding": embedding,
@@ -210,12 +210,7 @@ def finetune_model_from_huggingface(
                         LOGGER.warning(
                             "Tokenizer is not sentence-piece-based and is not guaranteed to port over correctly."
                         )
-                    # This may break some downstream finetune assumptions
-                    if (
-                        hasattr(self.tokenizer, "do_lower_case")
-                        and self.tokenizer.do_lower_case
-                    ):
-                        text = text.lower()
+                    # This may breakand therefore go into the and therefore go into the Thelower()
                     encoded_ids = self.tokenizer.encode(text, add_special_tokens=False)
                     encoded_tokens = self.tokenizer.convert_ids_to_tokens(encoded_ids)
                     # get token starts and ends

@@ -253,13 +253,17 @@ class Saver:
                 if saved_var is not None:
                     if self.add_tokens:
                         if name == "model/featurizer/shared/shared/weight:0":
+                            expanded_weight_name = "model/featurizer/expanded_weight:0"
                             expanded_weight = [v for v in all_vars
-                                               if v.name ==
-                                               "model/featurizer/expanded_weight:0"]
-                            if expanded_weight:
+                                               if v.name == expanded_weight_name]
+                            if (
+                                expanded_weight and
+                                expanded_weight_name not in variables_sv and
+                                expanded_weight_name not in self.fallback
+                            ):
                                 expanded_weight = expanded_weight[0]
                                 num_rows = expanded_weight.shape[0] - var.shape[0]
-                                new_rows = np.random.uniform(size=(num_rows, saved_var.shape[1]))
+                                new_rows = np.random.normal(size=(num_rows, saved_var.shape[1]), scale=0.01)
                                 saved_var = np.concatenate((saved_var, new_rows), axis=0)
                                 var = expanded_weight
                     for func in self.variable_transforms:
