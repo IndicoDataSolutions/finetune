@@ -63,7 +63,7 @@ class TestHuggingFace(unittest.TestCase):
         self.check_embeddings_equal(HFBert, "bert-base-uncased")
 
     def test_t5_s2s(self):
-        text = "sequence test text"
+        text = "sequence test { text }"
         finetune_model = HFS2S(
             base_model=HFT5,
             n_epochs=30,
@@ -88,7 +88,8 @@ class TestHuggingFace(unittest.TestCase):
         finetune_model = HFS2S(
             base_model=HFT5,
             n_epochs=3,
-            batch_size=2,
+            batch_size=16,
+            low_memory_mode=True, 
         )
         finetune_model.fit(train_texts, train_annotations)
         seps_included = False
