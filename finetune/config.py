@@ -330,6 +330,8 @@ def get_default_config():
         # T5
         beam_size=1,
         beam_search_alpha=0.2,
+        delim_tokens="",
+
         include_bos_eos=True,
         # Serialize finetune version with model
         version=VERSION,

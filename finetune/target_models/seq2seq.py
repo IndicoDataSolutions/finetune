@@ -7,6 +7,7 @@ from finetune.input_pipeline import BasePipeline
 from finetune.model import PredictMode
 from finetune.util.beam_search import beam_search, get_state_shape_invariants
 from tensorflow.python.util import nest
+import itertools
 import sys
 
 
@@ -80,6 +81,15 @@ class HFS2S(BaseModel):
             }
 
         else:
+            encoded_delim = [text_encoder._encode(delim)[0]
+                             for delim in config.delim_tokens]
+            encoded_delim = flatten(encoded_delim)
+            # Copy encoded delims to be shape [batch_size, num delim]
+            encoded_delim = tf.constant(encoded_delim)[None, :]
+            encoded_delim = tf.tile(encoded_delim,
+                                    (tf.shape(featurizer_state["inputs"])[0], 1))
+            constraint = tf.concat((featurizer_state["inputs"], encoded_delim), axis=-1)
+
             def symbols_to_logits_fn(input_symbols, i, state, first=False): #[batch_size, decoded_ids] to [batch_size, vocab_size]
                 embeds, present_state = hf_decoder(
                     (
@@ -98,9 +108,28 @@ class HFS2S(BaseModel):
                 )
                 logits = featurizer_state["embedding"](normalize_embeds(embeds[:, -1]), mode="linear")
                 logits_shape = tf.shape(logits)
-                state["past_states"] = present_state
 
-                return (logits, state)
+                batch_indices = tf.range(tf.shape(state["constraint"])[0])[:, None] + \
+                        tf.zeros_like(state["constraint"])
+                full_indices = tf.reshape(tf.stack([batch_indices, state["constraint"]], axis=2), [-1,2])
+                # mesh = tf.meshgrid(tf.range(state["constraint"].shape[1]),
+                #                    tf.range(state["constraint"].shape[0]))[1]
+                # full_indices = tf.reshape(tf.stack([mesh, state["constraint"]], axis=2), [-1,2])
+                mask = tf.scatter_nd(full_indices,
+                                     tf.ones((tf.shape(full_indices)[0],)),
+                                     shape=tf.shape(logits))
+                # Normalize for the way scatter_nd handles duplicates
+                mask = tf.math.divide_no_nan(mask, mask)
+                mask = tf.cast(mask, tf.float32)
+                # _p = tf.print("Constraint: ", state["constraint"],
+                #               "\nBatch Indices: ", batch_indices,
+                #               "\nFull Indices: ", full_indices,
+                #               summarize=-1)
+                # with tf.control_dependencies([_p]):
+                #     logits = logits * 1
+                
+                state["past_states"] = present_state
+                return (logits * mask, state)
 
             initial_ids = tf.tile(tf.constant([text_encoder.start_token], dtype=tf.int32), [tf.shape(featurizer_state["sequence_features"])[0]])
             batch_size = tf.shape(initial_ids)[0]
@@ -117,6 +146,7 @@ class HFS2S(BaseModel):
                 "encoder_output": featurizer_state["sequence_features"],
                 "encoder_decoder_mask": encoder_decoder_mask,
                 "past_states": past_states,
+                "constraint": constraint,
             }
             beams, probs, _ = beam_search(
                 symbols_to_logits_fn=symbols_to_logits_fn,
@@ -147,3 +177,10 @@ class HFS2S(BaseModel):
     def _predict(self, zipped_data, **kwargs):
         preds = self._inference(zipped_data, predict_keys=[PredictMode.NORMAL],  **kwargs)
         return self.input_pipeline.label_encoder.inverse_transform(preds)
+
+def flatten(items, seqtypes=(list, tuple)):
+    # https://stackoverflow.com/a/10824086
+    for i, x in enumerate(items):
+        while i < len(items) and isinstance(items[i], seqtypes):
+            items[i:i+1] = items[i]
+    return items

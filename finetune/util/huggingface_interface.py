@@ -143,6 +143,7 @@ def finetune_model_from_huggingface(
                 "lengths": lengths,
                 "eos_idx": eos_idx,
                 "decoder": decoder,
+                "inputs": X,
             }
             if not hf_config_instance.is_encoder_decoder:
                 output_state["embed_weights"] = embedding.word_embeddings
