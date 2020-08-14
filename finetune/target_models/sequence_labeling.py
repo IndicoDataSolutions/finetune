@@ -44,7 +44,7 @@ class SequencePipeline(BasePipeline):
                     lab for lab in Y if lab["end"] >= min_starts and lab["start"] <= max_ends
                 ]
                 if len(filtered_labels) == 0:
-                    if self.config.filter_empty_examples and num_non_empty_chunks < num_empty_chunks:
+                    if self.config.filter_empty_examples and (num_non_empty_chunks * 2) < num_empty_chunks:
                         continue
                     num_empty_chunks += 1
                 else:
