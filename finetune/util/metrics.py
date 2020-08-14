@@ -375,7 +375,7 @@ def annotation_report(y_true, y_pred, labels=None, target_names=None, sample_wei
     seqs = [token_precision, token_recall, overlap_precision, overlap_recall, dict(count_dict)]
     labels = set(token_precision.keys()) | set(token_recall.keys())
     target_names = [u'%s' % l for l in labels]
-    counts = [count_dict.get(target_name) for target_name in target_names]
+    counts = [count_dict.get(target_name, 0) for target_name in target_names]
 
     last_line_heading = 'Weighted Summary'
     headers = ["token_precision", "token_recall", "overlap_precision", "overlap_recall", "support"]
@@ -384,7 +384,7 @@ def annotation_report(y_true, y_pred, labels=None, target_names=None, sample_wei
     report += u'\n\n'
     row_fmt = u'{:>{width}s} ' + u' {:>{width}.{digits}f}' * 4 + u' {:>{width}}' '\n'
     seqs = [
-        [seq.get(target_name) for target_name in target_names]
+        [seq.get(target_name, 0.0) for target_name in target_names]
         for seq in seqs
     ]
     rows = zip(target_names, *seqs)

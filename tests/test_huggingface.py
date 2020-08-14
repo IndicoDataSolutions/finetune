@@ -91,11 +91,14 @@ class TestHuggingFace(unittest.TestCase):
             batch_size=2,
         )
         finetune_model.fit(train_texts, train_annotations)
-        for t, p in zip(test_texts, finetune_model.predict(test_texts)):
-            print("TEXT", t)
-            print("PREDS", p)
-            print("==" * 20)
+        seps_included = False
+        pred_correct = False
+        for t, p, l in zip(test_texts, finetune_model.predict(test_texts), test_annotations):
+            seps_included = seps_included or " | " in p # check it predicts separators
+            pred_correct = pred_correct or any(li in p for li in l.split(" | ")) # at least one extraction is predicted correctly.
 
+        self.assertTrue(seps_included)
+        self.assertTrue(pred_correct)
 
     def test_t5(self):
         self.check_embeddings_equal(HFT5, "t5-base")
