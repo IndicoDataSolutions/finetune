@@ -293,7 +293,7 @@ def tokenize_context(context, encoded_output, config):
     seq_len = len(encoded_output.token_ids)
     context_keys = list(k for k in sorted(context[0].keys()) if k not in INFO_KEYS)
     context_by_char_loc = sorted(
-        [(c["end"], [c[k] for k in context_keys], c["text"]) for c in context],
+        [(c["end"], [c[k] for k in context_keys], c.get("text")) for c in context],
         key=lambda c: c[0],
     )
     # default context is set by user in config
@@ -318,7 +318,10 @@ def tokenize_context(context, encoded_output, config):
                             token
                         )
                     )
-            if token.strip() not in context_by_char_loc[current_char_loc][2]:
+            if (
+                context_by_char_loc[current_char_loc][2]
+                and token.strip() not in context_by_char_loc[current_char_loc][2]
+            ):
                 warnings.warn(
                     "subtoken: {} has matched up with the context for token: {}".format(
                         repr(token), repr(context_by_char_loc[current_char_loc][2])
