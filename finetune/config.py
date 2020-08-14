@@ -13,6 +13,7 @@ from finetune.errors import FinetuneError
 from finetune.base_models import RoBERTa
 
 import tensorflow as tf
+
 LOGGER = logging.getLogger("finetune")
 
 
@@ -29,7 +30,7 @@ def all_gpus(visible_gpus=None):
     """
     if visible_gpus is not None:
         return [int(gpu) for gpu in visible_gpus]
-    devices = tf.config.experimental.list_physical_devices('GPU')
+    devices = tf.config.experimental.list_physical_devices("GPU")
     LOGGER.info(
         " Visible GPUs: {{{}}}".format(
             ", ".join(
@@ -181,7 +182,7 @@ def get_default_config():
     """
     # lazy import to avoid circular dependency
     from finetune import VERSION
-    
+
     settings = Settings(
         # General Settings
         low_memory_mode=False,
@@ -201,11 +202,10 @@ def get_default_config():
         per_process_gpu_memory_fraction=None,
         distribution_strategy="central_storage",
         xla=False,
-        optimize_for="accuracy", 
+        optimize_for="accuracy",
         sort_by_length=True,
         collapse_whitespace=False,
         permit_uninitialized=None,
-
         # Regularization
         embed_p_drop=0.1,
         attn_p_drop=0.1,
@@ -213,15 +213,13 @@ def get_default_config():
         clf_p_drop=0.1,
         l2_reg=GridSearchable(0.01, [0.0, 0.1, 0.01, 0.001]),
         vector_l2=False,
-        
         # Early Stopping and Validation
         keep_best_model=False,
         early_stopping_steps=None,
         eval_acc=False,
-        val_size=0.,
+        val_size=0.0,
         val_interval=None,
         in_memory_finetune=None,
-
         # Debugging
         log_device_placement=False,
         soft_device_placement=True,
@@ -229,15 +227,12 @@ def get_default_config():
         summarize_grads=False,
         debugging_logs=False,
         cache_weights_to_file=False,
-
         # Partial Fitting
         num_layers_trained=12,
         train_embeddings=True,
-
         # Class Imbalance
         class_weights=None,
         oversample=False,
-
         # Optimization Params
         optimizer="AdamW",
         b1=0.9,
@@ -248,16 +243,13 @@ def get_default_config():
         lr_warmup=0.002,
         max_grad_norm=1.0,
         accum_steps=1,
-
         # Language Model Settings
         lm_loss_coef=0.0,
         lm_temp=0.6,
-        lm_type='lm',
+        lm_type="lm",
         mask_proba=0.15,
-
         # Masked Language Model Settings
         max_masked_tokens=128,
-
         # Sequence Labeling
         seq_num_heads=16,
         pad_token="<PAD>",
@@ -267,68 +259,56 @@ def get_default_config():
         multi_label_threshold=0.5,
         chunk_long_sequences=True,
         chunk_context="auto",
-        chunk_alignment="center", 
+        chunk_alignment="center",
         add_eos_bos_to_chunk=True,
         filter_empty_examples=False,
         crf_sequence_labeling=True,
         use_gpu_crf_predict="auto",
-
+        max_empty_chunk_ratio=2.0,
         # Regression Params
         regression_loss="L2",
-
         # Association Params
         viable_edges=None,
         association_types=None,
         assocation_loss_weight=100.0,
-
         # Oscar only
         oscar_use_fp16=False,
         scale_loss=False,
         oscar_use_timing=True,
         oscar_feat_mode="final_state",
         oscar_use_fused_kernel=False,
-
         # Location of model weights
         base_model=RoBERTa,
         base_model_path=None,
-
         # Possible `SourceModel` specific settings
         n_heads=None,
         n_layer=None,
         act_fn=None,
         n_embed=None,
-
         # for TCN SourceModel only
         n_filter=None,
         kernel_size=None,
-
         # for TextCNN SourceModel only
         kernel_sizes=None,
         num_filters_per_size=None,
         n_embed_featurizer=None,  # needed because the dimensions CNN output are different from the embedding dimensions
-
         # BERT only
         bert_intermediate_size=None,
         bert_use_pooler=True,
         bert_use_type_embed=True,
-
         # Auxiliary Information
         use_auxiliary_info=False,
         default_context=None,
         context_dim=None,  # number of context dimensions to be inserted
-
         # Document Representation
         context_injection=False,
         reading_order_removed=False,
         anneal_reading_order=False,
         context_channels=None,
-
         # T5
         beam_size=1,
         beam_search_alpha=0.2,
-
         include_bos_eos=True,
-
         # Serialize finetune version with model
         version=VERSION,
     )
