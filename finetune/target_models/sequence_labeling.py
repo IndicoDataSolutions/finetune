@@ -28,6 +28,8 @@ class SequencePipeline(BasePipeline):
     def text_to_tokens_mask(self, X, Y=None, context=None):
         pad_token = [self.config.pad_token] if self.multi_label else self.config.pad_token
         out_gen = self._text_to_ids(X, pad_token=pad_token)
+        num_non_empty_chunks = 0
+        num_empty_chunks = 0
         for out in out_gen:
             feats = {"tokens": out.token_ids}
             if context is not None:
@@ -41,8 +43,12 @@ class SequencePipeline(BasePipeline):
                 filtered_labels = [
                     lab for lab in Y if lab["end"] >= min_starts and lab["start"] <= max_ends
                 ]
-                if self.config.filter_empty_examples and len(filtered_labels) == 0:
-                    continue
+                if len(filtered_labels) == 0:
+                    if self.config.filter_empty_examples and num_non_empty_chunks < num_empty_chunks:
+                        continue
+                    num_empty_chunks += 1
+                else:
+                    num_non_empty_chunks += 1
                 yield feats, self.label_encoder.transform(out, filtered_labels)
 
     def _compute_class_counts(self, encoded_dataset):
