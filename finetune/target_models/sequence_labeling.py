@@ -12,9 +12,7 @@ from finetune.encoding.target_encoders import (
 )
 from finetune.nn.target_blocks import sequence_labeler
 from finetune.nn.crf import sequence_decode
-from finetune.encoding.sequence_encoder import (
-    finetune_to_indico_sequence,
-)
+from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
 from finetune.encoding.input_encoder import get_spacy
 from finetune.input_pipeline import BasePipeline
 from finetune.encoding.input_encoder import tokenize_context
@@ -24,24 +22,47 @@ class SequencePipeline(BasePipeline):
     def __init__(self, config, multi_label):
         super(SequencePipeline, self).__init__(config)
         self.multi_label = multi_label
+        self.empty_counts = {"empty": 0, "labeled": 0}
+
+    def _update_empty_ratio(self, empty):
+        if empty:
+            self.empty_counts["empty"] += 1
+        else:
+            self.empty_counts["labeled"] += 1
+        return self.empty_counts
+
+    @property
+    def empty_ratio(self):
+        # Smoothed to prevent zero division
+        return self.empty_counts["empty"] / (self.empty_counts["labeled"] + 1)
 
     def text_to_tokens_mask(self, X, Y=None, context=None):
-        pad_token = [self.config.pad_token] if self.multi_label else self.config.pad_token
+        pad_token = (
+            [self.config.pad_token] if self.multi_label else self.config.pad_token
+        )
         out_gen = self._text_to_ids(X, pad_token=pad_token)
+
         for out in out_gen:
             feats = {"tokens": out.token_ids}
             if context is not None:
                 tokenized_context = tokenize_context(context, out, self.config)
-                feats['context'] = tokenized_context
+                feats["context"] = tokenized_context
             if Y is None:
                 yield feats
             if Y is not None:
                 min_starts = min(out.token_starts)
                 max_ends = max(out.token_ends)
                 filtered_labels = [
-                    lab for lab in Y if lab["end"] >= min_starts and lab["start"] <= max_ends
+                    lab
+                    for lab in Y
+                    if lab["end"] >= min_starts and lab["start"] <= max_ends
                 ]
-                if self.config.filter_empty_examples and len(filtered_labels) == 0:
+                empty = len(filtered_labels) == 0
+                self._update_empty_ratio(empty)
+                if (
+                    self.config.filter_empty_examples
+                    or self.empty_ratio > self.config.max_empty_chunk_ratio
+                ) and empty:
                     continue
                 yield feats, self.label_encoder.transform(out, filtered_labels)
 
@@ -63,9 +84,7 @@ class SequencePipeline(BasePipeline):
         shapes = {"tokens": TS([None])}
         types, shapes = self._add_context_info_if_present(types, shapes)
         target_shape = (
-            [None, self.label_encoder.target_dim]
-            if self.multi_label
-            else [None]
+            [None, self.label_encoder.target_dim] if self.multi_label else [None]
         )
         return (
             (types, tf.float32,),
@@ -155,8 +174,8 @@ class SequenceLabeler(BaseModel):
         for key, value in d.items():
             if key in kwargs:
                 continue
-            elif key == 'n_epochs':
-                value = max(self.defaults['n_epochs'], self.config.n_epochs)
+            elif key == "n_epochs":
+                value = max(self.defaults["n_epochs"], self.config.n_epochs)
             setattr(self.config, key, value)
 
     def _get_input_pipeline(self):
@@ -192,7 +211,16 @@ class SequenceLabeler(BaseModel):
         all_positions = []
         doc_idx = -1
         raw_text = [data.get("raw_text", data["X"]) for data in zipped_data]
-        for token_start_idx, token_end_idx, start_of_doc, end_of_doc, label_seq, proba_seq, start, end in self.process_long_sequence(zipped_data, **kwargs):
+        for (
+            token_start_idx,
+            token_end_idx,
+            start_of_doc,
+            end_of_doc,
+            label_seq,
+            proba_seq,
+            start,
+            end,
+        ) in self.process_long_sequence(zipped_data, **kwargs):
             if start_of_doc:
                 # if this is the first chunk in a document, start accumulating from scratch
                 doc_subseqs = []
@@ -208,29 +236,36 @@ class SequenceLabeler(BaseModel):
             start_of_token_seq = token_start_idx[start:end]
             proba_seq = proba_seq[start:end]
 
-            for label, start_idx, end_idx, proba in zip(label_seq, start_of_token_seq, end_of_token_seq, proba_seq):
+            for label, start_idx, end_idx, proba in zip(
+                label_seq, start_of_token_seq, end_of_token_seq, proba_seq
+            ):
                 if end_idx == -1:
                     # indicates padding / special tokens
                     continue
-                
-                assert start_idx >= last_end, "Start idx: {}, last_end: {}".format(start_idx, last_end)
-                last_end = end_idx
 
+                assert start_idx >= last_end, "Start idx: {}, last_end: {}".format(
+                    start_idx, last_end
+                )
+                last_end = end_idx
 
                 # if there are no current subsequences
                 # or the current subsequence has the wrong label
                 if not doc_subseqs or label != doc_labels[-1] or per_token:
-                    assert start_idx <= end_idx, "Start: {}, End: {}".format(start_idx, end_idx)
+                    assert start_idx <= end_idx, "Start: {}, End: {}".format(
+                        start_idx, end_idx
+                    )
                     # start new subsequence
-                    doc_subseqs.append(raw_text[doc_idx][start_idx: end_idx])
+                    doc_subseqs.append(raw_text[doc_idx][start_idx:end_idx])
                     doc_labels.append(label)
                     doc_probs.append([proba])
                     doc_positions.append((start_idx, end_idx))
                     doc_starts.append(start_idx)
                 else:
                     # continue appending to current subsequence
-                    assert doc_starts[-1] <= end_idx, "Start: {}, End: {}".format(doc_starts[-1], end_idx)
-                    doc_subseqs[-1] = raw_text[doc_idx][doc_starts[-1]: end_idx]
+                    assert doc_starts[-1] <= end_idx, "Start: {}, End: {}".format(
+                        doc_starts[-1], end_idx
+                    )
+                    doc_subseqs[-1] = raw_text[doc_idx][doc_starts[-1] : end_idx]
                     doc_probs[-1].append(proba)
 
             if end_of_doc:
@@ -301,7 +336,15 @@ class SequenceLabeler(BaseModel):
         return self.predict(X, context=context, **kwargs)
 
     def _target_model(
-        self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
+        self,
+        *,
+        config,
+        featurizer_state,
+        targets,
+        n_outputs,
+        train=False,
+        reuse=None,
+        **kwargs
     ):
         return sequence_labeler(
             hidden=featurizer_state["sequence_features"],
@@ -331,7 +374,11 @@ class SequenceLabeler(BaseModel):
             label_probas = []
             for logits_i, trans_mat_i in zip(logits, trans_mats):
                 idx, prob = sequence_decode(
-                    logits_i, trans_mat_i, sequence_length, use_gpu_op=True, use_crf=self.config.crf_sequence_labeling
+                    logits_i,
+                    trans_mat_i,
+                    sequence_length,
+                    use_gpu_op=True,
+                    use_crf=self.config.crf_sequence_labeling,
                 )
                 label_idxs.append(idx)
                 label_probas.append(prob[:, :, 1:])
@@ -339,7 +386,11 @@ class SequenceLabeler(BaseModel):
             label_probas = tf.stack(label_probas, axis=-1)
         else:
             label_idxs, label_probas = sequence_decode(
-                logits, trans_mats, sequence_length, use_gpu_op=False, use_crf=self.config.crf_sequence_labeling
+                logits,
+                trans_mats,
+                sequence_length,
+                use_gpu_op=False,
+                use_crf=self.config.crf_sequence_labeling,
             )
         return label_idxs, label_probas
 
