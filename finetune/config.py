@@ -333,6 +333,7 @@ def get_default_config():
         delim_tokens="",
 
         include_bos_eos=True,
+
         # Serialize finetune version with model
         version=VERSION,
     )

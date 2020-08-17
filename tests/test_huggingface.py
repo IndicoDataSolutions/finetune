@@ -48,6 +48,8 @@ class TestHuggingFace(unittest.TestCase):
         input_ids = tf.constant(tokenizer.encode(self.text))[None, :]  # Batch size 1
 
         if model.config.is_encoder_decoder:
+            # Need to decide how to properly handle decoder input ids
+            # This ain't it
             outputs = model.encoder(input_ids)
         else:
             outputs = model(
