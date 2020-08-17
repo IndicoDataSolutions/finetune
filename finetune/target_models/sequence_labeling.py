@@ -58,12 +58,12 @@ class SequencePipeline(BasePipeline):
                     if lab["end"] >= min_starts and lab["start"] <= max_ends
                 ]
                 empty = len(filtered_labels) == 0
-                self._update_empty_ratio(empty)
                 if (
                     self.config.filter_empty_examples
                     or self.empty_ratio > self.config.max_empty_chunk_ratio
                 ) and empty:
                     continue
+                self._update_empty_ratio(empty)
                 yield feats, self.label_encoder.transform(out, filtered_labels)
 
     def _compute_class_counts(self, encoded_dataset):
