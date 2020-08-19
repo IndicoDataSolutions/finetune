@@ -242,9 +242,9 @@ class LayoutlmForTokenClassification(BertPreTrainedModel):
 
 
 HFLayoutLM = finetune_model_from_huggingface(
-    pretrained_weights="finetune/model/layoutlm",
+    pretrained_weights="finetune/model/layoutlm-base-uncased",
     archive_map={
-        "finetune/model/layoutlm": "https://cdn.huggingface.co/albert-base-v2-tf_model.h5"  # TODO: add to S3 and change link
+        "finetune/model/layoutlm-base-uncased": "https://cdn.huggingface.co/albert-base-v2-tf_model.h5"  # TODO: add to S3 and change link
     },
     hf_featurizer=LayoutlmModel,
     hf_tokenizer=BertTokenizer,

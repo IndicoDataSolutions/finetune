@@ -117,4 +117,4 @@ class TestHuggingFace(unittest.TestCase):
     @unittest.skipIf(not TORCH_SUPPORT, reason="Pytorch not installed")
     def test_layoutlm(self):
         self.check_embeddings_equal(
-            HFLayoutLM, "finetune/model/layoutlm", hf_tokenizer=BertTokenizer, hf_model=LayoutlmModel)
+            HFLayoutLM, "finetune/model/layoutlm-base-uncased", hf_tokenizer=BertTokenizer, hf_model=LayoutlmModel)
