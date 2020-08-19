@@ -53,7 +53,7 @@ setup(
     extras_require={
         "tf": ["tensorflow==2.2.0"],
         "tf_gpu": ["tensorflow-gpu==2.2.0"],
-        "hf_transformers": ["transformers==3.0.2"]
+        "hf_transformers": ["transformers==3.0.2"],
         "torch": ["torch==1.4.0"]
     },
     zip_safe=False,
