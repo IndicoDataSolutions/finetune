@@ -283,6 +283,17 @@ class TestSequenceLabeler(unittest.TestCase):
         model.predict(test_texts)
 
 
+    def test_pred_alignment(self):
+        model = SequenceLabeler(subtoken_predictions=True)
+        text = "John J Johnson"
+        labels = [{"start": 5, "end": 6, "text": "J", "label": "middle_name"}]
+        model.fit([text] * 30, [labels] * 30)
+        preds = model.predict([text])[0]
+        self.assertEqual(len(preds), 1)
+        del preds[0]["confidence"]
+        self.assertEquals(preds, labels)
+
+
 class TestSequenceLabelerNoCRF(TestSequenceLabeler):
     def default_config(self, **kwargs):
         d = dict(

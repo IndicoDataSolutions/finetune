@@ -211,7 +211,6 @@ class GPT2Encoder(BaseEncoder):
             batch_token_idxs.append(subtoken_idxs)
             batch_char_ends.append(char_ends)
             batch_char_starts.append(char_starts)
-
         return EncodedOutput(
             token_ids=batch_token_idxs,
             tokens=batch_tokens,
