@@ -248,7 +248,7 @@ def tokenize_context(context, encoded_output, config):
         if char_loc == -1:
             tokenized_context.append(default_context)
         else:
-            while char_loc > context_by_char_loc[current_char_loc][0]:
+            while token.strip() and char_loc > context_by_char_loc[current_char_loc][0]:
                 current_char_loc += 1
                 if current_char_loc >= len(context_by_char_loc):
                     raise ValueError("Context cannot be fully matched as it appears to not cover the end of the sequence for token {}".format(token))
