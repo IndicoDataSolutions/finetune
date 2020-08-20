@@ -54,7 +54,7 @@ setup(
         "tf": ["tensorflow==2.2.0"],
         "tf_gpu": ["tensorflow-gpu==2.2.0"],
         "hf_transformers": ["transformers==3.0.2"],
-        "torch": ["torch==1.4.0"]
+        "torch": ["torch==1.4.0", "wandb==0.9.5"]
     },
     zip_safe=False,
     cmdclass={"build_ext": OpsBuild,},
