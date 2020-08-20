@@ -240,17 +240,3 @@ class LayoutlmForTokenClassification(BertPreTrainedModel):
             outputs = (loss,) + outputs
 
         return outputs  # (loss), scores, (hidden_states), (attentions)
-
-
-HFLayoutLM = finetune_model_from_huggingface(
-    pretrained_weights="finetune/model/layoutlm-base-uncased",
-    archive_map={
-        "finetune/model/layoutlm-base-uncased": "https://cdn.huggingface.co/albert-base-v2-tf_model.h5"  # TODO: add to S3 and change link
-    },
-    hf_featurizer=LayoutlmModel,
-    hf_tokenizer=BertTokenizer,
-    hf_config=LayoutlmConfig,
-    weights_replacement=[
-        ("tf_albert_for_masked_lm_1/albert/", "model/featurizer/tf_albert_main_layer/")  # TODO
-    ],
-)
