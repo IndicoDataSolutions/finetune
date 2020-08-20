@@ -6,6 +6,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 from transformers import BertConfig, BertModel, BertPreTrainedModel, BertTokenizer
 from transformers.modeling_bert import BertLayerNorm
+from finetune.util.huggingface_interface import finetune_model_from_huggingface
 
 logger = logging.getLogger(__name__)
 
