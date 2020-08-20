@@ -10,6 +10,7 @@ from finetune.nn.activations import act_fns
 from finetune.nn.nn_utils import norm
 from tensorflow.python.framework import function
 
+
 def perceptron(x, ny, config, w_init=None, b_init=None):
     """
     A very standard linear Perceptron model.
@@ -20,72 +21,84 @@ def perceptron(x, ny, config, w_init=None, b_init=None):
     :param b_init: Bias initializer.
     :return: The output of the perceptron model.
     """
-    w_init = w_init or tf.compat.v1.random_normal_initializer(stddev=config.weight_stddev)
+    w_init = w_init or tf.compat.v1.random_normal_initializer(
+        stddev=config.weight_stddev
+    )
     b_init = b_init or tf.compat.v1.constant_initializer(0)
 
-    with tf.compat.v1.variable_scope('perceptron'):
+    with tf.compat.v1.variable_scope("perceptron"):
         nx = config.n_embed
         w = tf.compat.v1.get_variable("w", [nx, ny], initializer=w_init)
         b = tf.compat.v1.get_variable("b", [ny], initializer=b_init)
         return tf.matmul(x, w) + b
 
 
-def masked_language_model(*, X, mlm_weights, mlm_ids, mlm_positions, embed_weights, hidden, config, reuse=None, train=False):
-    
-    with tf.compat.v1.variable_scope('model/masked-language-model'):
+def masked_language_model(
+    *,
+    X,
+    mlm_weights,
+    mlm_ids,
+    mlm_positions,
+    embed_weights,
+    hidden,
+    config,
+    reuse=None,
+    train=False
+):
+
+    with tf.compat.v1.variable_scope("model/masked-language-model"):
         batch, seq, feats = shape_list(hidden)
-        flat_offsets = tf.reshape(
-            tf.range(0, batch, dtype=tf.int32) * seq, [-1, 1]
-        )
+        flat_offsets = tf.reshape(tf.range(0, batch, dtype=tf.int32) * seq, [-1, 1])
 
         not_padding = tf.reshape(mlm_weights, [-1]) > 1e-9
-        flat_positions = tf.boolean_mask(tensor=tf.reshape(mlm_positions + flat_offsets, [-1]), mask=not_padding) # take off the padding entirely
-        gathered_hidden = tf.gather(tf.reshape(hidden, [batch * seq, feats]), flat_positions)
+        flat_positions = tf.boolean_mask(
+            tensor=tf.reshape(mlm_positions + flat_offsets, [-1]), mask=not_padding
+        )  # take off the padding entirely
+        gathered_hidden = tf.gather(
+            tf.reshape(hidden, [batch * seq, feats]), flat_positions
+        )
         mlm_ids = tf.boolean_mask(tensor=tf.reshape(mlm_ids, [-1]), mask=not_padding)
-        
+
         final_proj_w = tf.compat.v1.get_variable(
-            'dense/kernel',
+            "dense/kernel",
             [config.n_embed, config.n_embed],
-            initializer=tf.compat.v1.random_normal_initializer(stddev=config.weight_stddev)
+            initializer=tf.compat.v1.random_normal_initializer(
+                stddev=config.weight_stddev
+            ),
         )
         final_proj_b = tf.compat.v1.get_variable(
-            'dense/bias',
-            [config.n_embed],
-            initializer=tf.compat.v1.zeros_initializer
+            "dense/bias", [config.n_embed], initializer=tf.compat.v1.zeros_initializer
         )
         final_proj = act_fns[config.act_fn](
             tf.matmul(gathered_hidden, final_proj_w, transpose_b=True) + final_proj_b
         )
 
-        normed_proj = norm(final_proj, 'LayerNorm')
+        normed_proj = norm(final_proj, "LayerNorm")
         n_vocab = shape_list(embed_weights)[0]
         output_bias = tf.compat.v1.get_variable(
-            "output_bias",
-            shape=[n_vocab],
-            initializer=tf.compat.v1.zeros_initializer()
+            "output_bias", shape=[n_vocab], initializer=tf.compat.v1.zeros_initializer()
         )
-        
+
         logits = tf.matmul(normed_proj, embed_weights, transpose_b=True)
         logits = tf.nn.bias_add(logits, output_bias)
-        
-        mlm_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(            
-            logits=logits,
-            labels=mlm_ids,
-        ) # No weights needed as there is no padding.
+
+        mlm_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(
+            logits=logits, labels=mlm_ids,
+        )  # No weights needed as there is no padding.
 
         logits = tf.scatter_nd(
-            indices=flat_positions,
-            updates=logits,
-            shape=[batch * seq, n_vocab]
+            indices=flat_positions, updates=logits, shape=[batch * seq, n_vocab]
         )
-                
+
         return {
             "logits": logits,
             "losses": mlm_loss,
         }
 
 
-def language_model(*, X, sequence_lengths, embed_weights, hidden, config, reuse=None, train=False):
+def language_model(
+    *, X, sequence_lengths, embed_weights, hidden, config, reuse=None, train=False
+):
     """
     A language model output and loss for the language modelling objective described in the original finetune paper.
     This language model uses weights that are tied to the input embedding.
@@ -107,22 +120,29 @@ def language_model(*, X, sequence_lengths, embed_weights, hidden, config, reuse=
     batch, seq = shape_list(X)
     vocab_size, hidden_dim = shape_list(embed_weights)
 
-    with tf.compat.v1.variable_scope('model/language-model', reuse=reuse):
+    with tf.compat.v1.variable_scope("model/language-model", reuse=reuse):
         # language model ignores last hidden state because we don't have a target
-        lm_h = tf.reshape(hidden, [-1, config.n_embed])  # [batch, seq_len, embed] --> [batch * seq_len, embed]
+        lm_h = tf.reshape(
+            hidden, [-1, config.n_embed]
+        )  # [batch, seq_len, embed] --> [batch * seq_len, embed]
         lm_logits = tf.matmul(lm_h, embed_weights, transpose_b=True)  # tied weights
         lm_logits = tf.cast(lm_logits, tf.float32)
         hidden_shape = tf.shape(input=hidden)
-        logits = tf.reshape(lm_logits, shape=tf.concat([hidden_shape[:-1], [vocab_size]], axis=0))
+        logits = tf.reshape(
+            lm_logits, shape=tf.concat([hidden_shape[:-1], [vocab_size]], axis=0)
+        )
         lm_logits_offset = tf.reshape(logits[:, :-1], [-1, vocab_size])
-        
+
         lm_losses = tf.compat.v1.losses.sparse_softmax_cross_entropy(
             logits=lm_logits_offset,
             labels=tf.reshape(X[:, 1:], [-1]),
-            weights=tf.reshape(M[:, 1:], [-1])
+            weights=tf.reshape(M[:, 1:], [-1]),
         )
 
-        perplexity = tf.reduce_sum(input_tensor=tf.exp(lm_losses) * M[:, 1:], axis=1) / tf.reduce_sum(input_tensor=M[:, 1:], axis=1)
+        perplexity = tf.math.divide_no_nan(
+            tf.reduce_sum(input_tensor=tf.exp(lm_losses) * M[:, 1:], axis=1),
+            tf.reduce_sum(input_tensor=M[:, 1:], axis=1),
+        )
 
         return {
             "logits": logits,
@@ -134,11 +154,14 @@ def language_model(*, X, sequence_lengths, embed_weights, hidden, config, reuse=
 def _apply_class_weight(losses, targets, class_weights=None):
     if class_weights is not None:
         # loss multiplier applied based on true class
-        weights = (
-            tf.reduce_sum(input_tensor=class_weights * tf.cast(targets, dtype=tf.float32), axis=1)
+        weights = tf.reduce_sum(
+            input_tensor=class_weights * tf.cast(targets, dtype=tf.float32), axis=1
         )
-        weights *= tf.cast(tf.reduce_prod(input_tensor=tf.shape(input=weights)), dtype=tf.float32) / tf.reduce_sum(
-            input_tensor=weights
+        weights *= tf.math.divide_no_nan(
+            tf.cast(
+                tf.reduce_prod(input_tensor=tf.shape(input=weights)), dtype=tf.float32
+            ),
+            tf.reduce_sum(input_tensor=weights),
         )
         losses *= tf.expand_dims(weights, 1)
     return losses
@@ -149,12 +172,16 @@ def _apply_multilabel_class_weight(losses, targets, class_weights=None):
         # loss multiplier applied based on true class
         weights = (
             # contribution of positive class
-            class_weights * tf.cast(targets, dtype=tf.float32) + 
+            class_weights * tf.cast(targets, dtype=tf.float32)
+            +
             # contribution of negative class
             tf.ones_like(class_weights) * (1 - tf.cast(targets, dtype=tf.float32))
         )
-        weights *= tf.cast(tf.reduce_prod(input_tensor=tf.shape(input=weights)), dtype=tf.float32) / tf.reduce_sum(
-            input_tensor=weights
+        weights *= tf.math.divide_no_nan(
+            tf.cast(
+                tf.reduce_prod(input_tensor=tf.shape(input=weights)), dtype=tf.float32
+            ),
+            tf.reduce_sum(input_tensor=weights),
         )
         losses *= weights
     return losses
@@ -194,13 +221,7 @@ def classifier(hidden, targets, n_targets, config, train=False, reuse=None, **kw
 
 
 def multi_choice_question(
-    hidden, 
-    targets, 
-    n_targets, 
-    config, 
-    train=False, 
-    reuse=None, 
-    **kwargs
+    hidden, targets, n_targets, config, train=False, reuse=None, **kwargs
 ):
     with tf.compat.v1.variable_scope("model", reuse=reuse):
         if targets is not None:
@@ -352,10 +373,11 @@ def class_reweighted_grad(logits, class_weights):
         logits.dtype,
         func_name="class_reweight_grad",
         python_grad_func=custom_grad_fn,
-        shape_func=lambda _: [logits.get_shape()] 
+        shape_func=lambda _: [logits.get_shape()],
     )
     def identity(l):
         return tf.identity(l)
+
     return identity(logits)
 
 
@@ -420,7 +442,7 @@ def sequence_labeler(
                     mask=False,
                 )
                 n = norm(attn_fn(hidden) + hidden, "seq_label_residual")
-            
+
             flat_logits = tf.compat.v1.layers.dense(n, n_targets)
             logits = tf.reshape(
                 flat_logits, tf.concat([tf.shape(input=hidden)[:2], [n_targets]], 0)
@@ -433,7 +455,7 @@ def sequence_labeler(
                     seq_lab_internal, use_entire_scope=True
                 )
             logits = seq_lab_internal(hidden)
-            logits = tf.cast(logits, tf.float32) # always run the crf in float32
+            logits = tf.cast(logits, tf.float32)  # always run the crf in float32
 
         loss = 0.0
 
@@ -442,9 +464,9 @@ def sequence_labeler(
         )
         if lengths is None:
             lengths = default_lengths
-            
+
         class_weights = kwargs.get("class_weights")
-        
+
         with tf.device("CPU:0" if train else logits.device):
             if multilabel:
                 transition_params = []
@@ -454,7 +476,12 @@ def sequence_labeler(
                 logits = []
                 for i in range(n_targets):
                     transition_params.append(
-                        tf.cast(tf.compat.v1.get_variable("Transition_matrix_{}".format(i), shape=[2, 2]), tf.float32)
+                        tf.cast(
+                            tf.compat.v1.get_variable(
+                                "Transition_matrix_{}".format(i), shape=[2, 2]
+                            ),
+                            tf.float32,
+                        )
                     )
                     logits.append(
                         tf.stack(
@@ -463,8 +490,14 @@ def sequence_labeler(
                     )
                     if targets is not None and i != pad_id:
                         if class_weights is not None:
-                            is_pos_cls = tf.cast(targets_individual[i], dtype=tf.float32)
-                            class_weight = tf.expand_dims(class_weights[i] * is_pos_cls + class_weights[pad_id] * (1.0 - is_pos_cls), -1)
+                            is_pos_cls = tf.cast(
+                                targets_individual[i], dtype=tf.float32
+                            )
+                            class_weight = tf.expand_dims(
+                                class_weights[i] * is_pos_cls
+                                + class_weights[pad_id] * (1.0 - is_pos_cls),
+                                -1,
+                            )
                             logits_i = class_reweighted_grad(logits[-1], class_weight)
                         else:
                             logits_i = logits[i]
@@ -476,50 +509,64 @@ def sequence_labeler(
                                 transition_params=transition_params[-1],
                             )[0]
                         else:
-                            weights = tf.sequence_mask(
-                                lengths, maxlen=tf.shape(input=targets_individual[i])[1], dtype=tf.float32
-                            ) / tf.expand_dims(tf.cast(lengths, tf.float32), -1)
+                            weights = tf.math.divide_no_nan(
+                                tf.sequence_mask(
+                                    lengths,
+                                    maxlen=tf.shape(input=targets_individual[i])[1],
+                                    dtype=tf.float32,
+                                ),
+                                tf.expand_dims(tf.cast(lengths, tf.float32), -1),
+                            )
                             loss += tf.compat.v1.losses.sparse_softmax_cross_entropy(
-                                targets_individual[i],
-                                logits_i,
-                                weights=weights
+                                targets_individual[i], logits_i, weights=weights
                             )
                 logits = tf.stack(logits, axis=-1)
             else:
                 if class_weights is not None and train:
                     class_weights = tf.reshape(class_weights, [1, 1, -1])
-                    one_hot_class_weights = class_weights * tf.one_hot(targets, depth=n_targets)
+                    one_hot_class_weights = class_weights * tf.one_hot(
+                        targets, depth=n_targets
+                    )
                     per_token_weights = tf.reduce_sum(
                         input_tensor=one_hot_class_weights, axis=-1, keepdims=True
                     )
                     logits = class_reweighted_grad(logits, per_token_weights)
-                                                                                                          
+
                 transition_params = tf.cast(
                     tf.compat.v1.get_variable(
                         "Transition_matrix", shape=[n_targets, n_targets]
                     ),
-                    tf.float32
+                    tf.float32,
                 )
                 if targets is not None:
                     if use_crf:
                         log_likelihood, _ = crf_log_likelihood(
-                            logits, targets, lengths, transition_params=transition_params
+                            logits,
+                            targets,
+                            lengths,
+                            transition_params=transition_params,
                         )
                         loss = -log_likelihood
                     else:
-                        weights = tf.sequence_mask(
-                            lengths, maxlen=tf.shape(input=targets)[1], dtype=tf.float32
-                        ) / tf.expand_dims(tf.cast(lengths, tf.float32), -1)
+                        weights = tf.math.divide_no_nan(
+                            tf.sequence_mask(
+                                lengths,
+                                maxlen=tf.shape(input=targets)[1],
+                                dtype=tf.float32,
+                            ),
+                            tf.expand_dims(tf.cast(lengths, tf.float32), -1),
+                        )
                         loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(
-                            targets,
-                            logits,
-                            weights=weights
+                            targets, logits, weights=weights
                         )
 
         return {
             "logits": logits,
             "losses": loss,
-            "predict_params": {"transition_matrix": transition_params, "sequence_length": lengths},
+            "predict_params": {
+                "transition_matrix": transition_params,
+                "sequence_length": lengths,
+            },
         }
 
 
@@ -617,12 +664,11 @@ def association(
             log_likelihood, _ = crf_log_likelihood(
                 logits,
                 targets["labels"],
-                kwargs.get("max_length") * tf.ones(tf.shape(input=targets["labels"])[0]),
+                kwargs.get("max_length")
+                * tf.ones(tf.shape(input=targets["labels"])[0]),
                 transition_params=transition_params,
             )
-            sequence_mask = tf.sequence_mask(
-                lengths, maxlen=length, dtype=tf.float32
-            )
+            sequence_mask = tf.sequence_mask(lengths, maxlen=length, dtype=tf.float32)
             mask = tf.expand_dims(sequence_mask, 1) * tf.expand_dims(sequence_mask, 2)
 
             association_loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(
