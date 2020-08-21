@@ -1,4 +1,5 @@
 import os
+import functools
 
 import tensorflow as tf
 from finetune.util.shapes import lengths_from_eos_idx
@@ -140,4 +141,4 @@ def bert_featurizer(
         return output_state
 
 
-layoutlm_featurizer = partial(bert_featurizer, underlying_model=LayoutLM)
+layoutlm_featurizer = functools.partial(bert_featurizer, underlying_model=LayoutLM)

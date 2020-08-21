@@ -1167,4 +1167,4 @@ class BertModel(_BertModel):
 
 
 class LayoutLMModel(_BertModel):
-    embedding_postprocessor = partial(embedding_postprocessor, pos2d_embedding_fn=layoutlm_pos_embed)
+    embedding_postprocessor = functools.partial(embedding_postprocessor, pos2d_embedding_fn=layoutlm_pos_embed)
