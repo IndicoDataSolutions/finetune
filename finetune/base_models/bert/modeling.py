@@ -193,7 +193,7 @@ class _BertModel(object):
                 )
                 # Add positional embeddings and token type embeddings, then layer
                 # normalize and perform dropout.
-                self.embedding_output = cls.embedding_postprocessor(
+                self.embedding_output = self.embedding_postprocessor(
                     input_tensor=self.embedding_output,
                     input_context=input_context,
                     use_token_type=use_token_type,
@@ -1163,8 +1163,10 @@ def assert_rank(tensor, expected_rank, name=None):
 
 
 class BertModel(_BertModel):
-    embedding_postprocessor = embedding_postprocessor
+    def embedding_postprocessor(self): 
+        return embedding_postprocessor
 
 
 class LayoutLMModel(_BertModel):
-    embedding_postprocessor = functools.partial(embedding_postprocessor, pos2d_embedding_fn=layoutlm_pos_embed)
+    def embedding_postprocessor(self): 
+        return functools.partial(embedding_postprocessor, pos2d_embedding_fn=layoutlm_pos_embed)
