@@ -119,6 +119,7 @@ HFAlbert = finetune_model_from_huggingface(
 
 
 try:
+    from finetune.base_models.hf_layoutlm import LayoutlmModel, LayoutlmConfig
     HFLayoutLM = finetune_model_from_huggingface(
         pretrained_weights="finetune/model/layoutlm-base-uncased",
         archive_map={
@@ -128,7 +129,7 @@ try:
         hf_tokenizer=BertTokenizer,
         hf_config=LayoutlmConfig,
         weights_replacement=[
-            ("tf_albert_for_masked_lm_1/albert/", "model/featurizer/tf_albert_main_layer/")  # TODO
+            ("bert/", "model/featurizer/layoutlm/")
         ],
     )
 except ImportError:

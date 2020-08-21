@@ -111,8 +111,17 @@ class BertConfig(object):
         """Serializes this instance to a JSON string."""
         return json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n"
 
+class BertModel(_BertModel):
+    embedding_postprocessor = embedding_postprocessor
+    create_attention_mask_from_input_mask = bert_create_attention_mask_from_input_mask
 
-class BertModel(object):
+
+class LayoutLMModel(_BertModel):
+    embedding_postprocessor = partial(embedding_postprocessor, pos2d_embedding_fn=layoutlm_pos_embed)
+    create_attention_mask_from_input_mask = layoutlm_create_attention_mask_from_input_mask
+
+
+class _BertModel(object):
     """BERT model ("Bidirectional Encoder Representations from Transformers").
 
         Example usage:
@@ -193,7 +202,7 @@ class BertModel(object):
                 )
                 # Add positional embeddings and token type embeddings, then layer
                 # normalize and perform dropout.
-                self.embedding_output = embedding_postprocessor(
+                self.embedding_output = cls.embedding_postprocessor(
                     input_tensor=self.embedding_output,
                     input_context=input_context,
                     use_token_type=use_token_type,
@@ -216,7 +225,7 @@ class BertModel(object):
                 # This converts a 2D mask of shape [batch_size, seq_length] to a 3D
                 # mask of shape [batch_size, seq_length, seq_length] which is used
                 # for the attention scores.
-                attention_mask = create_attention_mask_from_input_mask(
+                attention_mask = cls.create_attention_mask_from_input_mask(
                     input_ids, input_mask
                 )
 
@@ -463,7 +472,7 @@ def embedding_lookup(
     return output, embedding_table
 
 
-def embedding_postprocessor(
+def bert_embedding_postprocessor(
         input_tensor,
         input_context=None,
         use_token_type=False,
@@ -480,6 +489,7 @@ def embedding_postprocessor(
         positional_channels=None,
         reading_order_decay_rate=None,
         anneal_reading_order=False,
+        pos2d_embedding_fn=docrep_pos_embed,
 ):
     """Performs various post-processing on a word embedding tensor.
 
@@ -585,15 +595,67 @@ def embedding_postprocessor(
             output += position_embeddings
             
     if pos_injection:
-        init = tf.compat.v1.variance_scaling_initializer(scale=0.02, mode="fan_avg", distribution="truncated_normal")
-        embedded_input_context = embed_position(input_context, positional_channels, batch_size, seq_length)
-        output += tf.compat.v1.layers.dense(embedded_input_context, width, use_bias=False, kernel_initializer=init)
+        output += pos2d_embedding_fn()
 
     output = layer_norm_and_dropout(output, dropout_prob)
     return output
 
 
-def create_attention_mask_from_input_mask(from_tensor, to_mask):
+def docrep_pos_embed(input_context, positional_channels, batch_size, seq_length, width):
+    """ Embed 2D position DocRep-style, i.e. separate sinusoidal embeddings for each dim """
+    init = tf.compat.v1.variance_scaling_initializer(scale=0.02, mode="fan_avg", distribution="truncated_normal")
+    embedded_input_context = embed_position(input_context, positional_channels, batch_size, seq_length)
+    return tf.compat.v1.layers.dense(embedded_input_context, width, use_bias=False, kernel_initializer=init)
+
+
+def layoutlm_pos_embed(input_context, positional_channels, batch_size, seq_length, width):
+    """ Embed 2D position LayoutLM-style, i.e. separate sinusoidal embeddings for each dim """
+    # max 2d positional embeddings is 1024 even though max positional embeddings is 512
+    max_2d_positional_embeddings = 1024
+    x_position_embeddings = tf.compat.v1.get_variable(
+        name="x_position_embeddings",
+        shape=[max_2d_positional_embeddings, width],
+        initializer=tf.compat.v1.standard_normal_initializer(),
+    )
+    y_position_embeddings = tf.compat.v1.get_variable(
+        name="y_position_embeddings",
+        shape=[max_2d_positional_embeddings, width],
+        initializer=tf.compat.v1.standard_normal_initializer(),
+    )
+    h_position_embeddings = tf.compat.v1.get_variable(
+        name="h_position_embeddings",
+        shape=[max_2d_positional_embeddings, width],
+        initializer=tf.compat.v1.standard_normal_initializer(),
+    )
+    w_position_embeddings = tf.compat.v1.get_variable(
+        name="w_position_embeddings",
+        shape=[max_2d_positional_embeddings, width],
+        initializer=tf.compat.v1.standard_normal_initializer(),
+    )
+    # context is in alphabetical order, so bottom, left, right, top
+    output = tf.gather(embedding_table, flat_input_ids)
+    bottom_pos = input_context[:, :, 0]
+    left_pos = input_context[:, :, 1]
+    right_pos = input_context[:, :, 2]
+    top_pos = input_context[:, :, 3]
+    left_position_embeddings = tf.gather(x_position_embeddings, left_pos)
+    upper_position_embeddings = tf.gather(y_position_embeddings, top_pos)
+    right_position_embeddings = tf.gather(x_position_embeddings, right_pos)
+    lower_position_embeddings = tf.gather(y_position_embeddings, bottom_pos)
+    h_position_embeddings = tf.gather(h_position_embeddings, bottom_pos - top_pos)
+    w_position_embeddings = tf.gather(w_position_embeddings, right_pos - left_pos)
+    all_2d_pos_embeddings = [
+        left_position_embeddings,
+        upper_position_embeddings,
+        right_position_embeddings,
+        lower_position_embeddings,
+        h_position_embeddings,
+        w_position_embeddings
+    ]
+    return tf.math.addn(all_2d_pos_embeddings)
+
+
+def bert_create_attention_mask_from_input_mask(from_tensor, to_mask):
     """Create 3D attention mask from a 2D tensor mask.
 
     Args:

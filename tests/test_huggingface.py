@@ -19,7 +19,8 @@ from finetune.target_models.seq2seq import HFS2S
 from sklearn.model_selection import train_test_split
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
 try:
-    from finetune.base_models.huggingface.hf_layoutlm import HFLayoutLM, LayoutlmModel
+    from finetune.base_models.huggingface.hf_layoutlm import LayoutlmModel
+    from finetune.base_models.huggingface.models import HFLayoutLM
     TORCH_SUPPORT = True
 except ImportError:
     HFLayoutLM = None

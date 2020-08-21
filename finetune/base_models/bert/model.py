@@ -6,11 +6,12 @@ from finetune.base_models.bert.encoder import (
     BERTEncoder,
     BERTEncoderMultuilingal,
     BERTEncoderLarge,
-    DistilBERTEncoder
+    DistilBERTEncoder,
+    LayoutLMEncoder
 )
 
 from finetune.base_models.bert.roberta_encoder import RoBERTaEncoder, RoBERTaEncoderV2
-from finetune.base_models.bert.featurizer import bert_featurizer
+from finetune.base_models.bert.featurizer import bert_featurizer, layoutlm_featurizer
 from finetune.util.download import BERT_BASE_URL, GPT2_BASE_URL, ROBERTA_BASE_URL, FINETUNE_BASE_FOLDER
 
 BERT_BASE_PARAMS = {
@@ -322,4 +323,29 @@ class DistilRoBERTa(_BaseBert):
             "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "gpt2", "encoder.json"),
             "url": urljoin(GPT2_BASE_URL, "encoder.json"),
         }
+    ]
+
+
+class LayoutLM(_BaseBert):
+    encoder = LayoutLMEncoder
+    featurizer = layoutlm_featurizer
+    settings = DocRep.copy()
+    settings.update(
+        {
+        "reading_order_removed": False,
+        "context_channels": None,
+        "crf_sequence_labeling": True,
+        "use_auxiliary_info": True,
+        "base_model_path": os.path.join("bert", "layoutlm-base-uncased.jl"),
+    }
+    )
+    required_files = [
+        {
+            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "layoutlm-base-uncased.jl"),
+            "url": urljoin(BERT_BASE_URL, "layoutlm-base-uncased.jl"),
+        },
+        {
+            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "layoutlm_vocab.txt"),
+            "url": urljoin(ROBERTA_BASE_URL, "layoutlm_vocab.txt"),
+        },
     ]
