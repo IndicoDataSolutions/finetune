@@ -329,7 +329,7 @@ class DistilRoBERTa(_BaseBert):
 class LayoutLM(_BaseBert):
     encoder = LayoutLMEncoder
     featurizer = layoutlm_featurizer
-    settings = DocRep.copy()
+    settings = dict(DocRep.settings)
     settings.update(
         {
         "reading_order_removed": False,
