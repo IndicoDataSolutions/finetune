@@ -477,22 +477,22 @@ def layoutlm_pos_embed(input_context, positional_channels, batch_size, seq_lengt
     x_position_embeddings = tf.compat.v1.get_variable(
         name="x_position_embeddings",
         shape=[max_2d_positional_embeddings, width],
-        initializer=tf.compat.v1.standard_normal_initializer(),
+        initializer=tf.compat.v1.random_normal_initializer(),
     )
     y_position_embeddings = tf.compat.v1.get_variable(
         name="y_position_embeddings",
         shape=[max_2d_positional_embeddings, width],
-        initializer=tf.compat.v1.standard_normal_initializer(),
+        initializer=tf.compat.v1.random_normal_initializer(),
     )
     h_position_embeddings = tf.compat.v1.get_variable(
         name="h_position_embeddings",
         shape=[max_2d_positional_embeddings, width],
-        initializer=tf.compat.v1.standard_normal_initializer(),
+        initializer=tf.compat.v1.random_normal_initializer(),
     )
     w_position_embeddings = tf.compat.v1.get_variable(
         name="w_position_embeddings",
         shape=[max_2d_positional_embeddings, width],
-        initializer=tf.compat.v1.standard_normal_initializer(),
+        initializer=tf.compat.v1.random_normal_initializer(),
     )
     # context is in alphabetical order, so bottom, left, right, top
     output = tf.gather(embedding_table, flat_input_ids)
