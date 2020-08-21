@@ -471,7 +471,7 @@ def embedding_lookup(
     return output, embedding_table
 
 
-def bert_embedding_postprocessor(
+def embedding_postprocessor(
         input_tensor,
         input_context=None,
         use_token_type=False,
