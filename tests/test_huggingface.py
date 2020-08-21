@@ -7,6 +7,7 @@ import tensorflow as tf
 
 from transformers import AutoTokenizer, TFAutoModel, BertTokenizer
 from finetune import SequenceLabeler
+from finetune.base_models import LayoutLM
 from finetune.base_models.huggingface.models import (
     HFBert,
     HFElectraGen,
@@ -20,7 +21,6 @@ from sklearn.model_selection import train_test_split
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
 try:
     from finetune.base_models.huggingface.hf_layoutlm import LayoutlmModel
-    from finetune.base_models.huggingface.models import HFLayoutLM
     TORCH_SUPPORT = True
 except ImportError:
     HFLayoutLM = None
@@ -118,4 +118,4 @@ class TestHuggingFace(unittest.TestCase):
     @unittest.skipIf(not TORCH_SUPPORT, reason="Pytorch not installed")
     def test_layoutlm(self):
         self.check_embeddings_equal(
-            HFLayoutLM, "finetune/model/layoutlm-base-uncased", hf_tokenizer=BertTokenizer, hf_model=LayoutlmModel)
+            LayoutLM, "finetune/model/layoutlm-base-uncased", hf_tokenizer=BertTokenizer, hf_model=LayoutlmModel)
