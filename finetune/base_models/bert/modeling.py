@@ -113,12 +113,10 @@ class BertConfig(object):
 
 class BertModel(_BertModel):
     embedding_postprocessor = embedding_postprocessor
-    create_attention_mask_from_input_mask = bert_create_attention_mask_from_input_mask
 
 
 class LayoutLMModel(_BertModel):
     embedding_postprocessor = partial(embedding_postprocessor, pos2d_embedding_fn=layoutlm_pos_embed)
-    create_attention_mask_from_input_mask = layoutlm_create_attention_mask_from_input_mask
 
 
 class _BertModel(object):
@@ -225,7 +223,7 @@ class _BertModel(object):
                 # This converts a 2D mask of shape [batch_size, seq_length] to a 3D
                 # mask of shape [batch_size, seq_length, seq_length] which is used
                 # for the attention scores.
-                attention_mask = cls.create_attention_mask_from_input_mask(
+                attention_mask = create_attention_mask_from_input_mask(
                     input_ids, input_mask
                 )
 
@@ -655,7 +653,7 @@ def layoutlm_pos_embed(input_context, positional_channels, batch_size, seq_lengt
     return tf.math.addn(all_2d_pos_embeddings)
 
 
-def bert_create_attention_mask_from_input_mask(from_tensor, to_mask):
+def create_attention_mask_from_input_mask(from_tensor, to_mask):
     """Create 3D attention mask from a 2D tensor mask.
 
     Args:
