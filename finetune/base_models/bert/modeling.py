@@ -193,7 +193,7 @@ class _BertModel(object):
                 )
                 # Add positional embeddings and token type embeddings, then layer
                 # normalize and perform dropout.
-                self.embedding_output = self.embedding_postprocessor(
+                self.embedding_output = self.process_embedding(
                     input_tensor=self.embedding_output,
                     input_context=input_context,
                     use_token_type=use_token_type,
@@ -517,7 +517,7 @@ def layoutlm_pos_embed(input_context, positional_channels, batch_size, seq_lengt
     return tf.math.addn(all_2d_pos_embeddings)
 
 
-def embedding_postprocessor(
+def process_embedding(
         input_tensor,
         input_context=None,
         use_token_type=False,
@@ -1163,10 +1163,10 @@ def assert_rank(tensor, expected_rank, name=None):
 
 
 class BertModel(_BertModel):
-    def embedding_postprocessor(self): 
+    def process_embedding(self):
         return embedding_postprocessor
 
 
 class LayoutLMModel(_BertModel):
-    def embedding_postprocessor(self): 
+    def process_embedding(self):
         return functools.partial(embedding_postprocessor, pos2d_embedding_fn=layoutlm_pos_embed)
