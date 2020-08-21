@@ -288,14 +288,6 @@ class _BertModel(object):
         return self.embedding_table
 
 
-class BertModel(_BertModel):
-    embedding_postprocessor = embedding_postprocessor
-
-
-class LayoutLMModel(_BertModel):
-    embedding_postprocessor = partial(embedding_postprocessor, pos2d_embedding_fn=layoutlm_pos_embed)
-
-
 def gelu(x):
     """Gaussian Error Linear Unit.
 
@@ -1168,3 +1160,11 @@ def assert_rank(tensor, expected_rank, name=None):
             "`%d` (shape = %s) is not equal to the expected rank `%s`"
             % (name, scope_name, actual_rank, str(tensor.shape), str(expected_rank))
         )
+
+
+class BertModel(_BertModel):
+    embedding_postprocessor = embedding_postprocessor
+
+
+class LayoutLMModel(_BertModel):
+    embedding_postprocessor = partial(embedding_postprocessor, pos2d_embedding_fn=layoutlm_pos_embed)
