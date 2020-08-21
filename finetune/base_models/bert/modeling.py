@@ -111,13 +111,6 @@ class BertConfig(object):
         """Serializes this instance to a JSON string."""
         return json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n"
 
-class BertModel(_BertModel):
-    embedding_postprocessor = embedding_postprocessor
-
-
-class LayoutLMModel(_BertModel):
-    embedding_postprocessor = partial(embedding_postprocessor, pos2d_embedding_fn=layoutlm_pos_embed)
-
 
 class _BertModel(object):
     """BERT model ("Bidirectional Encoder Representations from Transformers").
@@ -293,6 +286,14 @@ class _BertModel(object):
 
     def get_embedding_table(self):
         return self.embedding_table
+
+
+class BertModel(_BertModel):
+    embedding_postprocessor = embedding_postprocessor
+
+
+class LayoutLMModel(_BertModel):
+    embedding_postprocessor = partial(embedding_postprocessor, pos2d_embedding_fn=layoutlm_pos_embed)
 
 
 def gelu(x):
