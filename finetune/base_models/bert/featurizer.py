@@ -18,6 +18,7 @@ def bert_featurizer(
     reuse=None,
     context=None,
     total_num_steps=None,
+    underlying_model=BertModel,
     **kwargs
 ):
     """
@@ -35,6 +36,7 @@ def bert_featurizer(
     """
 
     is_roberta = issubclass(config.base_model.encoder, RoBERTaEncoder)
+    is_roberta = issubclass(config.base_model, LayoutLM)
     model_filename = config.base_model_path.rpartition('/')[-1]
     is_roberta_v1 = is_roberta and model_filename in ("roberta-model-sm.jl", "roberta-model-lg.jl")
 
@@ -100,7 +102,7 @@ def bert_featurizer(
         reading_order_decay_rate = None
 
     with tf.compat.v1.variable_scope("model/featurizer", reuse=reuse):
-        bert = BertModel(
+        bert = underlying_model(
             config=bert_config,
             is_training=train,
             input_ids=X,
@@ -111,7 +113,7 @@ def bert_featurizer(
             scope=None,
             use_pooler=config.bert_use_pooler,
             use_token_type=config.bert_use_type_embed,
-            roberta=is_roberta,
+            roberta=is_robertbeLayoutLM,
             reading_order_decay_rate=reading_order_decay_rate,
         )
 
@@ -136,3 +138,6 @@ def bert_featurizer(
             output_state = {k: tf.stop_gradient(v) for k, v in output_state.items()}
 
         return output_state
+
+
+layoutlm_featurizer = partial(bert_featurizer, underlying_model=LayoutLM)
