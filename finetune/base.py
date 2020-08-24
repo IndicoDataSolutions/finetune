@@ -521,7 +521,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 start, end = chunks[i].useful_start, chunks[i].useful_end 
             else:
                 start, end = 0, None
-            not_padding = chunks[i].token_ends[start:end] != -1
+            not_padding = np.array(chunks[i].token_ends[start:end]) != -1
             no_pad_pred = pred[start:start + len(not_padding)][not_padding]
             processed_preds[chunk_to_seq[i]].extend(no_pad_pred)
 
