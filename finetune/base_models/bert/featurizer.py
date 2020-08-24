@@ -37,7 +37,6 @@ def bert_featurizer(
     """
 
     is_roberta = issubclass(config.base_model.encoder, RoBERTaEncoder)
-    is_roberta = issubclass(config.base_model, LayoutLM)
     model_filename = config.base_model_path.rpartition('/')[-1]
     is_roberta_v1 = is_roberta and model_filename in ("roberta-model-sm.jl", "roberta-model-lg.jl")
 
