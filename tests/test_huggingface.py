@@ -118,33 +118,28 @@ class TestHuggingFace(unittest.TestCase):
 
     @unittest.skipIf(not TORCH_SUPPORT, reason="Pytorch not installed")
     def test_layoutlm(self):
-        def format_ondoc_for_hf(documents, tokenizer):
+        def format_ondoc_for_hf(document, tokenizer):
             input_dict = {
                 "input_ids": [],
                 "bbox": []
             }
-            for doc in documents:
-                tokens = []
-                token_boxes = []
-                for page in doc:
-                    for token in page["tokens"]:
-                        word_tokens = tokenizer.tokenize(token["text"])
-                        tokens.extend(word_tokens)
-                        box = [
-                            int(token["position"]["left"] / page["pages"][0]["size"]["width"] * 1000),
-                            int(token["position"]["top"] / page["pages"][0]["size"]["height"] * 1000),
-                            int(token["position"]["right"] / page["pages"][0]["size"]["width"] * 1000),
-                            int(token["position"]["bottom"] / page["pages"][0]["size"]["height"] * 1000),
-                        ]
-                        token_boxes.extend([box] * len(word_tokens))
-                input_ids = tokenizer.convert_tokens_to_ids(tokens)
-                print(len(input_ids))
-                pad_len = 512 - len(input_ids)
-                input_dict["input_ids"].append(np.pad(input_ids, (0, pad_len)))
-                input_dict["bbox"].append(token_boxes + [[0,0,0,0]] * (pad_len))
-            import ipdb; ipdb.set_trace()
-            input_dict["input_ids"] = torch.LongTensor(input_dict["input_ids"])
-            input_dict["bbox"] = torch.LongTensor(input_dict["bbox"])
+            tokens = []
+            token_boxes = []
+            for page in doc:
+                for token in page["tokens"]:
+                    word_tokens = tokenizer.tokenize(token["text"])
+                    tokens.extend(word_tokens)
+                    box = [
+                        int(token["position"]["left"] / page["pages"][0]["size"]["width"] * 1000),
+                        int(token["position"]["top"] / page["pages"][0]["size"]["height"] * 1000),
+                        int(token["position"]["right"] / page["pages"][0]["size"]["width"] * 1000),
+                        int(token["position"]["bottom"] / page["pages"][0]["size"]["height"] * 1000),
+                    ]
+                    token_boxes.extend([box] * len(word_tokens))
+            input_ids = tokenizer.convert_tokens_to_ids(tokens)
+            print(len(input_ids))
+            input_dict["input_ids"] = torch.LongTensor(input_ids).unsqueeze(0)
+            input_dict["bbox"] = torch.LongTensor(token_boxes).unsqueeze(0)
             return input_dict
 
         def subset_doc(doc):
@@ -161,12 +156,15 @@ class TestHuggingFace(unittest.TestCase):
         documents = [subset_doc(doc) for doc in documents]
         tokenizer = BertTokenizer.from_pretrained("finetune/model/layoutlm-base-uncased/")
         model = LayoutlmModel.from_pretrained("finetune/model/layoutlm-base-uncased/")
-        input_dict = format_ondoc_for_hf(documents, tokenizer)
-        outputs = model(**input_dict)
-        hf_seq_features = outputs[0].detach().numpy()
-
         finetune_model = DocumentLabeler(base_model=LayoutLM)
-        finetune_seq_features = finetune_model.featurize_sequence(documents)[0]
-        np.testing.assert_array_almost_equal(
-            finetune_seq_features, hf_seq_features, decimal=5,
-        )
+        # we run a single doc at a time so the output shapes match
+        # and we avoid having to write padding and pad removal code for HF
+        for doc in documents:
+            input_dict = format_ondoc_for_hf(doc, tokenizer)
+            outputs = model(**input_dict)
+            hf_seq_features = outputs[0].detach().numpy()
+
+            finetune_seq_features = finetune_model.featurize_sequence(doc)[0]
+            np.testing.assert_array_almost_equal(
+                finetune_seq_features, hf_seq_features, decimal=5,
+            )
