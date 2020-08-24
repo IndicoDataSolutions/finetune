@@ -1,12 +1,43 @@
+import warnings
+
 from finetune.target_models.sequence_labeling import SequenceLabeler, SequencePipeline
 from finetune.encoding.input_encoder import EncodedOutput
 from finetune.errors import FinetuneError
+from finetune.base_models import DocRep, LayoutLM
 
-def get_context(document, dpi_norm):
+def get_context(document, dpi_norm, base_model):
     """
     Gets the context as formatted for the DocRep base model from 
     the output of indico's PDFExtraction api.
     """
+    if base_model == DocRep:
+        return get_context_doc_rep(document, dpi_norm)
+    elif base_model == LayoutLM:
+        return get_context_layoutlm(document)
+    else:
+        warnings.warn("Running DocumentLabeler with a base model that doesn't utilize position info.")
+        return get_context_doc_rep(document, dpi_norm)
+
+def get_context_layoutlm(document):
+    context = []
+    for page in document:
+        for token in page["tokens"]:
+            pos = token["position"]
+            offset = token["doc_offset"]
+            context.append(
+                {
+                    'top': int(pos["top"] / page["size"]["width"] * 1000),
+                    'bottom': int(pos["bottom"] / page["size"]["width"] * 1000),
+                    'left': int(pos["left"] / page["size"]["width"] * 1000),
+                    'right': int(pos["right"] / page["size"]["width"] * 1000),
+                    'start': offset["start"],
+                    'end': offset["end"],
+                    'text': token["text"],
+                }
+            )
+    return context
+
+def get_context_doc_rep(document, dpi_norm):
     context = []
     for page in document:
         # This norm factor is 
@@ -31,11 +62,11 @@ def get_context(document, dpi_norm):
                     'end': offset["end"],
                     'text': token["text"],
                 }
-	    )
+	        )
     return context
 
-def _single_convert_to_finetune(*, document, dpi_norm=True):
-    context = get_context(document, dpi_norm)
+def _single_convert_to_finetune(*, document, dpi_norm=True, config={}):
+    context = get_context(document, dpi_norm, base_model=config.get('base_model', DocRep))
     texts = []
     offsets = []
     last_end = -1
@@ -55,6 +86,7 @@ def _single_convert_to_finetune(*, document, dpi_norm=True):
 class DocumentPipeline(SequencePipeline):
     def __init__(self, config, multi_label):
         super().__init__(config, multi_label)
+        self.config = config
 
     def text_to_tokens_mask(self, raw_text=None, **kwargs):
         return super().text_to_tokens_mask(**kwargs)
@@ -69,7 +101,7 @@ class DocumentPipeline(SequencePipeline):
         out = []
         for i, x in enumerate(X):
             text, context = _single_convert_to_finetune(
-                document=x,
+                document=x, config=self.config
             )
             joined_text = "".join(text)
             sample = {
