@@ -366,7 +366,7 @@ def ordinal_regressor(
 def class_reweighted_grad(logits, class_weights):
     def custom_grad_fn(op, g):
         new_g = g * class_weights
-        ratio = tf.norm(g) / tf.norm(new_g)
+        ratio = tf.math.divide_no_nan(tf.norm(g), tf.norm(new_g))
         return [new_g * ratio]
 
     @function.Defun(
