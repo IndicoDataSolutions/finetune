@@ -165,7 +165,7 @@ class TestHuggingFace(unittest.TestCase):
             outputs = model(**input_dict)
             hf_seq_features = outputs[0].detach().numpy()
 
-            finetune_seq_features = finetune_model.featurize_sequence(doc)[0]
+            finetune_seq_features = finetune_model.featurize_sequence([doc])
             np.testing.assert_array_almost_equal(
                 finetune_seq_features, hf_seq_features, decimal=5,
             )
