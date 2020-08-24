@@ -143,8 +143,18 @@ class TestHuggingFace(unittest.TestCase):
             input_dict["bbox"] = torch.Tensor(input_dict["bbox"])
             return input_dict
 
+        def subset_doc(doc):
+            for page in doc:
+                page["tokens"] = page["tokens"][:300]
+                page_idx_end = page["tokens"][300]["page_offset"]["start"]
+                page["pages"]["text"] = page["pages"]["text"][:page_idx_end]
+                page["pages"]["doc_offset"]["end"] = page["pages"]["doc_offset"]["start"] + page_idx_end
+            return doc
+
         with open("tests/data/test_ocr_documents.json", "rt") as fp:
             documents = json.load(fp)
+        # hack so we don't have to do chunking for the HF model
+        documents = [subset_doc(doc) for doc in documents]
         tokenizer = BertTokenizer.from_pretrained("finetune/model/layoutlm-base-uncased/")
         model = LayoutlmModel.from_pretrained("finetune/model/layoutlm-base-uncased/")
         input_dict = format_ondoc_for_hf(documents, tokenizer)
