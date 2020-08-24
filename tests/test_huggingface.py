@@ -20,6 +20,7 @@ from finetune.target_models.seq2seq import HFS2S
 from sklearn.model_selection import train_test_split
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
 try:
+    import torch
     from finetune.base_models.huggingface.hf_layoutlm import LayoutlmModel
     TORCH_SUPPORT = True
 except ImportError:
@@ -117,7 +118,7 @@ class TestHuggingFace(unittest.TestCase):
 
     @unittest.skipIf(not TORCH_SUPPORT, reason="Pytorch not installed")
     def test_layoutlm(self):
-        def format_ondoc_for_hf(documents):
+        def format_ondoc_for_hf(documents, tokenizer):
             input_dict = {
                 "input_ids": [],
                 "bbox": []
@@ -136,15 +137,17 @@ class TestHuggingFace(unittest.TestCase):
                             token["position"]["bottom"],
                         ]
                         token_boxes.extend([box] * len(word_tokens))
-                input_dict["input_ids"].append(tokens)
+                input_dict["input_ids"].append(tokenizer.convert_tokens_to_ids(tokens))
                 input_dict["bbox"].append(token_boxes)
+            input_dict["input_ids"] = torch.Tensor(input_dict["input_ids"])
+            input_dict["bbox"] = torch.Tensor(input_dict["bbox"])
             return input_dict
 
         with open("tests/data/test_ocr_documents.json", "rt") as fp:
             documents = json.load(fp)
-        tokenizer = BertTokenizer.from_pretrained(model_path)
-        model = LayoutlmModel.from_pretrained(model_path)
-        input_dict = format_ondoc_for_hf(documents)
+        tokenizer = BertTokenizer.from_pretrained("finetune/model/layoutlm-base-uncased/")
+        model = LayoutlmModel.from_pretrained("finetune/model/layoutlm-base-uncased/")
+        input_dict = format_ondoc_for_hf(documents, tokenizer)
         outputs = model(**input_dict)
         hf_seq_features = outputs[0].numpy()
 
