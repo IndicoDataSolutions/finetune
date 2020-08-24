@@ -6,7 +6,7 @@ import numpy as np
 import tensorflow as tf
 
 from transformers import AutoTokenizer, TFAutoModel, BertTokenizer
-from finetune import SequenceLabeler
+from finetune import SequenceLabeler, DocumentLabeler
 from finetune.base_models import LayoutLM
 from finetune.base_models.huggingface.models import (
     HFBert,
@@ -142,18 +142,19 @@ class TestHuggingFace(unittest.TestCase):
                 pad_len = 512 - len(input_ids)
                 input_dict["input_ids"].append(np.pad(input_ids, (0, pad_len)))
                 input_dict["bbox"].append(token_boxes + [[0,0,0,0]] * (pad_len))
-            import ipdb; ipdb.set_trace()
+            # import ipdb; ipdb.set_trace()
             input_dict["input_ids"] = torch.LongTensor(input_dict["input_ids"])
             input_dict["bbox"] = torch.LongTensor(input_dict["bbox"])
             return input_dict
 
         def subset_doc(doc):
+            """ Take approximately the first 512 tokens from just the first page """
             for page in doc:
                 page["tokens"] = page["tokens"][:60]
                 page_idx_end = page["tokens"][-1]["page_offset"]["end"]
                 page["pages"][0]["text"] = page["pages"][0]["text"][:page_idx_end]
                 page["pages"][0]["doc_offset"]["end"] = page["pages"][0]["doc_offset"]["start"] + page_idx_end
-            return doc
+                return [page]
 
         with open("tests/data/test_ocr_documents.json", "rt") as fp:
             documents = json.load(fp)
