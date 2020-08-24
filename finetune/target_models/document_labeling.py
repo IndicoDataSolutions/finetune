@@ -24,12 +24,14 @@ def get_context_layoutlm(document):
         for token in page["tokens"]:
             pos = token["position"]
             offset = token["doc_offset"]
+            width = page["pages"][0]["size"]["width"]
+            height = page["pages"][0]["size"]["height"]
             context.append(
                 {
-                    'top': int(pos["top"] / page["pages"][0]["size"]["width"] * 1000),
-                    'bottom': int(pos["bottom"] / page["pages"][0]["size"]["width"] * 1000),
-                    'left': int(pos["left"] / page["pages"][0]["size"]["width"] * 1000),
-                    'right': int(pos["right"] / page["pages"][0]["size"]["width"] * 1000),
+                    'top': int(pos["top"] / height * 1000),
+                    'bottom': int(pos["bottom"] / height * 1000),
+                    'left': int(pos["left"] / width * 1000),
+                    'right': int(pos["right"] / width * 1000),
                     'start': offset["start"],
                     'end': offset["end"],
                     'text': token["text"],
