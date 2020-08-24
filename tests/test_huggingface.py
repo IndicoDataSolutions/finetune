@@ -50,9 +50,9 @@ class TestHuggingFace(unittest.TestCase):
         )
         finetune_model.fit([self.text], [[{"start": 0, "end": 4, "label": "class_a"}]])
 
-    def huggingface_embedding(self, text, model_path, hf_tokenizer=AutoTokenizer, hf_model=TFAutoModel):
-        tokenizer = hf_tokenizer.from_pretrained(model_path)
-        model = hf_model.from_pretrained(model_path)
+    def huggingface_embedding(self, text, model_path):
+        tokenizer = AutoTokenizer.from_pretrained(model_path)
+        model = TFAutoModel.from_pretrained(model_path)
         input_ids = tf.constant(tokenizer.encode(self.text))[None, :]  # Batch size 1
 
         if model.config.is_encoder_decoder:
@@ -117,5 +117,39 @@ class TestHuggingFace(unittest.TestCase):
 
     @unittest.skipIf(not TORCH_SUPPORT, reason="Pytorch not installed")
     def test_layoutlm(self):
-        self.check_embeddings_equal(
-            LayoutLM, "finetune/model/layoutlm-base-uncased", hf_tokenizer=BertTokenizer, hf_model=LayoutlmModel)
+        def format_ondoc_for_hf(documents):
+            input_dict = {
+                "input_ids": [],
+                "bbox": []
+            }
+            for doc in documents:
+                tokens = []
+                token_boxes = []
+                for page in doc:
+                    for token in page["tokens"]:
+                        word_tokens = tokenizer.tokenize(token["text"])
+                        tokens.extend(word_tokens)
+                        box = [
+                            token["position"]["left"],
+                            token["position"]["top"],
+                            token["position"]["right"],
+                            token["position"]["bottom"],
+                        ]
+                        token_boxes.extend([box] * len(word_tokens))
+                input_dict["input_ids"].append(tokens)
+                input_dict["bbox"].append(token_boxes)
+            return input_dict
+
+        with open("tests/data/test_ocr_documents.json", "rt") as fp:
+            documents = json.load(fp)
+        tokenizer = BertTokenizer.from_pretrained(model_path)
+        model = LayoutlmModel.from_pretrained(model_path)
+        input_dict = format_ondoc_for_hf(documents)
+        outputs = model(**input_dict)
+        hf_seq_features = outputs[0].numpy()
+
+        finetune_model = DocumentLabeler(base_model=LayoutLM)
+        finetune_seq_features = finetune_model.featurize_sequence(documents)[0]
+        np.testing.assert_array_almost_equal(
+            finetune_seq_features, hf_seq_features, decimal=5,
+        )
