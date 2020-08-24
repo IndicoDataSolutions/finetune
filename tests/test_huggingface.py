@@ -163,7 +163,7 @@ class TestHuggingFace(unittest.TestCase):
         model = LayoutlmModel.from_pretrained("finetune/model/layoutlm-base-uncased/")
         input_dict = format_ondoc_for_hf(documents, tokenizer)
         outputs = model(**input_dict)
-        hf_seq_features = outputs[0].numpy()
+        hf_seq_features = outputs[0].detach().numpy()
 
         finetune_model = DocumentLabeler(base_model=LayoutLM)
         finetune_seq_features = finetune_model.featurize_sequence(documents)[0]
