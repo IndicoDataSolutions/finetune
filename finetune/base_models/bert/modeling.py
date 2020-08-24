@@ -495,10 +495,10 @@ def layoutlm_pos_embed(input_context, positional_channels, batch_size, seq_lengt
         initializer=tf.compat.v1.random_normal_initializer(),
     )
     # context is in alphabetical order, so bottom, left, right, top
-    bottom_pos = input_context[:, :, 0]
-    left_pos = input_context[:, :, 1]
-    right_pos = input_context[:, :, 2]
-    top_pos = input_context[:, :, 3]
+    bottom_pos = tf.cast(input_context[:, :, 0], dtype='int32')
+    left_pos = tf.cast(input_context[:, :, 1], dtype='int32')
+    right_pos = tf.cast(input_context[:, :, 2], dtype='int32')
+    top_pos = tf.cast(input_context[:, :, 3], dtype='int32')
     left_position_embeddings = tf.gather(x_position_embeddings, left_pos)
     upper_position_embeddings = tf.gather(y_position_embeddings, top_pos)
     right_position_embeddings = tf.gather(x_position_embeddings, right_pos)
@@ -513,7 +513,7 @@ def layoutlm_pos_embed(input_context, positional_channels, batch_size, seq_lengt
         h_position_embeddings,
         w_position_embeddings
     ]
-    return tf.math.addn(all_2d_pos_embeddings)
+    return tf.math.add_n(all_2d_pos_embeddings)
 
 
 def embedding_postprocessor(
