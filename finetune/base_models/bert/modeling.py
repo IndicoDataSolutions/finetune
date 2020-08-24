@@ -474,22 +474,22 @@ def layoutlm_pos_embed(input_context, positional_channels, batch_size, seq_lengt
     """ Embed 2D position LayoutLM-style, i.e. separate sinusoidal embeddings for each dim """
     # max 2d positional embeddings is 1024 even though max positional embeddings is 512
     max_2d_positional_embeddings = 1024
-    x_position_embeddings = tf.compat.v1.get_variable(
+    x_position_embedding_table = tf.compat.v1.get_variable(
         name="x_position_embeddings",
         shape=[max_2d_positional_embeddings, width],
         initializer=tf.compat.v1.random_normal_initializer(),
     )
-    y_position_embeddings = tf.compat.v1.get_variable(
+    y_position_embedding_table = tf.compat.v1.get_variable(
         name="y_position_embeddings",
         shape=[max_2d_positional_embeddings, width],
         initializer=tf.compat.v1.random_normal_initializer(),
     )
-    h_position_embeddings = tf.compat.v1.get_variable(
+    h_position_embedding_table = tf.compat.v1.get_variable(
         name="h_position_embeddings",
         shape=[max_2d_positional_embeddings, width],
         initializer=tf.compat.v1.random_normal_initializer(),
     )
-    w_position_embeddings = tf.compat.v1.get_variable(
+    w_position_embedding_table = tf.compat.v1.get_variable(
         name="w_position_embeddings",
         shape=[max_2d_positional_embeddings, width],
         initializer=tf.compat.v1.random_normal_initializer(),
@@ -499,12 +499,12 @@ def layoutlm_pos_embed(input_context, positional_channels, batch_size, seq_lengt
     left_pos = tf.cast(input_context[:, :, 1], dtype='int32')
     right_pos = tf.cast(input_context[:, :, 2], dtype='int32')
     top_pos = tf.cast(input_context[:, :, 3], dtype='int32')
-    left_position_embeddings = tf.gather(x_position_embeddings, left_pos)
-    upper_position_embeddings = tf.gather(y_position_embeddings, top_pos)
-    right_position_embeddings = tf.gather(x_position_embeddings, right_pos)
-    lower_position_embeddings = tf.gather(y_position_embeddings, bottom_pos)
-    h_position_embeddings = tf.gather(h_position_embeddings, bottom_pos - top_pos)
-    w_position_embeddings = tf.gather(w_position_embeddings, right_pos - left_pos)
+    left_position_embeddings = tf.gather(x_position_embedding_table, left_pos)
+    upper_position_embeddings = tf.gather(y_position_embedding_table, top_pos)
+    right_position_embeddings = tf.gather(x_position_embedding_table, right_pos)
+    lower_position_embeddings = tf.gather(y_position_embedding_table, bottom_pos)
+    h_position_embeddings = tf.gather(h_position_embedding_table, bottom_pos - top_pos)
+    w_position_embeddings = tf.gather(w_position_embedding_table, right_pos - left_pos)
     all_2d_pos_embeddings = [
         left_position_embeddings,
         upper_position_embeddings,
