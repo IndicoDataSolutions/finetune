@@ -131,10 +131,10 @@ class TestHuggingFace(unittest.TestCase):
                         word_tokens = tokenizer.tokenize(token["text"])
                         tokens.extend(word_tokens)
                         box = [
-                            token["position"]["left"],
-                            token["position"]["top"],
-                            token["position"]["right"],
-                            token["position"]["bottom"],
+                            int(token["position"]["left"] / page["pages"][0]["size"]["width"] * 1000),
+                            int(token["position"]["top"] / page["pages"][0]["size"]["height"] * 1000),
+                            int(token["position"]["right"] / page["pages"][0]["size"]["width"] * 1000),
+                            int(token["position"]["bottom"] / page["pages"][0]["size"]["height"] * 1000),
                         ]
                         token_boxes.extend([box] * len(word_tokens))
                 input_ids = tokenizer.convert_tokens_to_ids(tokens)
