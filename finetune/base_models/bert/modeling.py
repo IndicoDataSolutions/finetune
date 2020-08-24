@@ -495,7 +495,6 @@ def layoutlm_pos_embed(input_context, positional_channels, batch_size, seq_lengt
         initializer=tf.compat.v1.random_normal_initializer(),
     )
     # context is in alphabetical order, so bottom, left, right, top
-    output = tf.gather(embedding_table, flat_input_ids)
     bottom_pos = input_context[:, :, 0]
     left_pos = input_context[:, :, 1]
     right_pos = input_context[:, :, 2]
