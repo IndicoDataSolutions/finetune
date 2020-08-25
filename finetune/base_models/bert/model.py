@@ -12,7 +12,13 @@ from finetune.base_models.bert.encoder import (
 
 from finetune.base_models.bert.roberta_encoder import RoBERTaEncoder, RoBERTaEncoderV2
 from finetune.base_models.bert.featurizer import bert_featurizer, layoutlm_featurizer
-from finetune.util.download import BERT_BASE_URL, GPT2_BASE_URL, ROBERTA_BASE_URL, FINETUNE_BASE_FOLDER
+from finetune.util.download import (
+    BERT_BASE_URL,
+    GPT2_BASE_URL,
+    ROBERTA_BASE_URL,
+    LAYOUTLM_BASE_URL,
+    FINETUNE_BASE_FOLDER
+)
 
 BERT_BASE_PARAMS = {
     "lm_type": "mlm",
@@ -343,10 +349,10 @@ class LayoutLM(_BaseBert):
     required_files = [
         {
             "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "layoutlm-base-uncased.jl"),
-            "url": urljoin(BERT_BASE_URL, "layoutlm-base-uncased.jl"),
+            "url": urljoin(LAYOUTLM_BASE_URL, "layoutlm-base-uncased.jl"),
         },
         {
             "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "layoutlm_vocab.txt"),
-            "url": urljoin(ROBERTA_BASE_URL, "layoutlm_vocab.txt"),
+            "url": urljoin(LAYOUTLM_BASE_URL, "layoutlm_vocab.txt"),
         },
     ]
