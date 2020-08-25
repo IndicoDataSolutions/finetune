@@ -137,6 +137,9 @@ class TestHuggingFace(unittest.TestCase):
                     ]
                     token_boxes.extend([box] * len(word_tokens))
             input_ids = tokenizer.convert_tokens_to_ids(tokens)
+            pad_len = len(input_ids)
+            input_ids = np.pad(input_ids, (0, pad_len))
+            token_boxes = token_boxes + [[0, 0, 0, 0]] * pad_len
             print(len(input_ids))
             input_dict["input_ids"] = torch.LongTensor(input_ids).unsqueeze(0)
             input_dict["bbox"] = torch.LongTensor(token_boxes).unsqueeze(0)
@@ -170,6 +173,7 @@ class TestHuggingFace(unittest.TestCase):
             hf_seq_features = outputs[0].detach().numpy()
 
             finetune_seq_features = finetune_model.featurize_sequence([doc])
+            seq_len = finetune_seq_features.shape[1]
             np.testing.assert_array_almost_equal(
-                finetune_seq_features, hf_seq_features, decimal=5,
+                finetune_seq_features, hf_seq_features[:, :seq_len, :], decimal=5,
             )
