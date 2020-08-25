@@ -159,9 +159,9 @@ class TestHuggingFace(unittest.TestCase):
         model = LayoutlmModel.from_pretrained("finetune/model/layoutlm-base-uncased/")
         # turn off dropout
         model.eval()
-        finetune_model = DocumentLabeler(base_model=LayoutLM, config=dict(
+        finetune_model = DocumentLabeler(base_model=LayoutLM,
             embed_p_drop=0.0, attn_p_drop=0.0, resid_p_drop=0.0, clf_p_drop=0.0
-        ))
+        )
         # we run a single doc at a time so the output shapes match
         # and we avoid having to write padding and pad removal code for HF
         for doc in documents:
