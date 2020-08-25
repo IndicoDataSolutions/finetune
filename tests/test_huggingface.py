@@ -157,7 +157,11 @@ class TestHuggingFace(unittest.TestCase):
         documents = [subset_doc(doc) for doc in documents]
         tokenizer = BertTokenizer.from_pretrained("finetune/model/layoutlm-base-uncased/")
         model = LayoutlmModel.from_pretrained("finetune/model/layoutlm-base-uncased/")
-        finetune_model = DocumentLabeler(base_model=LayoutLM)
+        # turn off dropout
+        model.eval()
+        finetune_model = DocumentLabeler(base_model=LayoutLM, config=dict(
+            embed_p_drop=0.0, attn_p_drop=0.0, resid_p_drop=0.0, clf_p_drop=0.0
+        ))
         # we run a single doc at a time so the output shapes match
         # and we avoid having to write padding and pad removal code for HF
         for doc in documents:

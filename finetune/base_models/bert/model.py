@@ -337,6 +337,7 @@ class LayoutLM(_BaseBert):
         "crf_sequence_labeling": True,
         "use_auxiliary_info": True,
         "base_model_path": os.path.join("bert", "layoutlm-base-uncased.jl"),
+        "include_bos_eos": False
     }
     )
     required_files = [
