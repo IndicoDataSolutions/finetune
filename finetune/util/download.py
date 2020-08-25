@@ -12,6 +12,7 @@ GPT2_BASE_URL    = "https://s3.amazonaws.com/bendropbox/gpt2/"
 BERT_BASE_URL    = "https://s3.amazonaws.com/bendropbox/bert/"
 ROBERTA_BASE_URL = "https://s3.amazonaws.com/bendropbox/roberta/"
 OSCAR_BASE_URL   = "https://s3.amazonaws.com/bendropbox/oscar/"
+OSCAR_BASE_URL   = "https://s3.amazonaws.com/bendropbox/layoutlm/"
 
 def download_data_if_required(base_model):
     """ Pulls the pre-trained model weights from Github if required. """
