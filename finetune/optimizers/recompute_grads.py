@@ -63,6 +63,8 @@ def _fn_with_custom_grad(fn, inputs, grad_fn, use_global_vars=False, use_entire_
     if not isinstance(outputs, (tuple, list)):
         outputs = [outputs]
     outputs = list(outputs)
+    raw_outputs = outputs
+    outputs = [o for o in outputs if isinstance(o, tf.Tensor)]
 
     defun_inputs = [inputs, train_vars, outputs]
 
@@ -97,8 +99,19 @@ def _fn_with_custom_grad(fn, inputs, grad_fn, use_global_vars=False, use_entire_
 
     flat_inputs = tf.nest.flatten(defun_inputs)
     id_out = identity(*flat_inputs)
-
-    return id_out
+    if isinstance(id_out, tuple):
+        id_out = list(id_out)
+    else:
+        id_out = [id_out]
+    combined_out = []
+    for o in raw_outputs:
+        if isinstance(o, tf.Tensor):
+            combined_out.append(id_out.pop(0))
+        else:
+            combined_out.append(o)
+    assert len(id_out) == 0
+    
+    return tuple(combined_out)
 
 
 def recompute_grad(fn, use_entire_scope=False, train_vars=None):
@@ -155,7 +168,7 @@ def _recompute_grad(fn, args, use_entire_scope, train_vars=None):
 
         if not isinstance(outputs, (list, tuple)):
             outputs = [outputs]
-        outputs = list(outputs)
+        outputs = [o for o in outputs if isinstance(o, tf.Tensor)]
         input_vars = inputs + variables
         grads = tf.gradients(ys=outputs, xs=input_vars, grad_ys=output_grads)
 
@@ -169,3 +182,16 @@ def _recompute_grad(fn, args, use_entire_scope, train_vars=None):
         return fn(*args)
 
     return fn_with_recompute(*args)
+
+
+def recompute_grads_w_kwargs(fn, use_entire_scope=False, train_vars=None, name=None):
+    def inner_recompute_grads_w_kwargs(*args, **kwargs):
+        # Force an activation cache just before it enters the function, meaning output of 1 never == input of the other.
+        args = [tf.identity(a) if isinstance(a, tf.Tensor) else a for a in args]
+        kwargs = {k: tf.identity(v) if isinstance(v, tf.Tensor) else v for k, v in kwargs.items()}
+        def remapped_fn(*_):
+            print("Calling remapped fn {}".format(name))
+            return fn(*args, **kwargs)
+        tensor_args_kwargs = [a for a in list(args) + list(kwargs.values()) if isinstance(a, tf.Tensor)]
+        return _recompute_grad(remapped_fn, tensor_args_kwargs, use_entire_scope=use_entire_scope, train_vars=train_vars)
+    return inner_recompute_grads_w_kwargs

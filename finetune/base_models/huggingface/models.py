@@ -100,7 +100,7 @@ HFT5 = finetune_model_from_huggingface(
         ("tf_t5with_lm_head_model/decoder", "model/target/decoder"),
     ],
     include_bos_eos=False,
-    add_tokens=["{", "}", "<"],
+    add_tokens=["{", "}", "<"]# "[", "]"],
 )
 
 HFAlbert = finetune_model_from_huggingface(

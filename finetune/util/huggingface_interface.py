@@ -12,7 +12,7 @@ from finetune.util.tokenization import normalize_nfkc, WEIRD_SPM_CHAR
 from finetune.encoding.input_encoder import BaseEncoder
 from finetune.encoding.input_encoder import EncodedOutput
 from finetune.base_models import SourceModel
-from finetune.optimizers.recompute_grads import recompute_grad
+from finetune.optimizers.recompute_grads import recompute_grads_w_kwargs
 
 from tensorflow.python.util import tf_inspect
 
@@ -88,14 +88,13 @@ def finetune_model_from_huggingface(
             
             if config.low_memory_mode and train:
                 if hf_config_instance.is_encoder_decoder:
-                    for _model in [hf_model.encoder, hf_model.decoder]:
-                        for layer in _model.block:
-                            layer.call = recompute_grad(
-                                layer.call, train_vars=layer.trainable_weights
-                            )
+                    for layer in hf_model.decoder.block + hf_model.encoder.block:
+                        layer.call = recompute_grads_w_kwargs(
+                            layer.call, train_vars=layer.trainable_weights, name=layer.name
+	                )
                 else:
                     for layer in hf_model.encoder.layer:
-                        layer.call = recompute_grad(
+                        layer.call = recompute_grads_w_kwargs(
                             layer.call, train_vars=layer.trainable_weights
                         )
 
@@ -224,15 +223,17 @@ def finetune_model_from_huggingface(
                     batch_char_ends.append(tok_pos)
                     batch_char_starts.append(char_starts)
 
-            return EncodedOutput(
+            output = EncodedOutput(
                 token_ids=batch_token_idxs,
                 tokens=batch_tokens,
                 token_ends=batch_char_ends,
                 token_starts=batch_char_starts,
             )
+            return output
 
         def decode(self, ids):
-            return self.tokenizer.decode(ids, skip_special_tokens=True)
+            output = self.tokenizer.decode(ids, skip_special_tokens=True)
+            return output
 
     weights_file = "{}_{}.jl".format(
         pretrained_weights.replace("/", "_"), hf_featurizer.__name__
