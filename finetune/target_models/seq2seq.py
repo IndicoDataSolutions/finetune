@@ -22,11 +22,8 @@ def py_bracket_constraint(history, bracket_idx_pairs, eos_token, vocab_size):
         if tok in opening_brackets:
             stack.append(opening_brackets.index(tok)) # idx in bracket_idx_pairs
         if tok in closing_brackets:
-            if stack:
-                stack.pop()
-            else:
-                print("Cannor enforce for: ", history)
-#            assert closing_brackets.index(tok) == 
+            print("Cannor enforce for: ", history)
+            assert closing_brackets.index(tok) == stack.pop()
     if stack:
         stack_head = stack[-1]
         vocab_mask[eos_token] = 0 # do not allow the sequence to end here.
