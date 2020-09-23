@@ -87,8 +87,14 @@ class SequencePipeline(BasePipeline):
             [None, self.label_encoder.target_dim] if self.multi_label else [None]
         )
         return (
-            (types, tf.float32,),
-            (shapes, TS(target_shape),),
+            (
+                types,
+                tf.float32,
+            ),
+            (
+                shapes,
+                TS(target_shape),
+            ),
         )
 
     def _target_encoder(self):
@@ -187,7 +193,9 @@ class SequenceLabeler(BaseModel):
         self.multi_label = self.config.multi_label_sequences
         return super()._initialize()
 
-    def predict(self, X, per_token=False, context=None, **kwargs):
+    def predict(
+        self, X, per_token=False, context=None, return_doc_level_probas=False, **kwargs
+    ):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
@@ -195,9 +203,17 @@ class SequenceLabeler(BaseModel):
         :param per_token: If True, return raw probabilities and labels on a per token basis
         :returns: list of class labels.
         """
-        return super().predict(X, per_token=per_token, context=context, **kwargs)
+        return super().predict(
+            X,
+            per_token=per_token,
+            context=context,
+            return_doc_level_probas=return_doc_level_probas,
+            **kwargs
+        )
 
-    def _predict(self, zipped_data, per_token=False, **kwargs):
+    def _predict(
+        self, zipped_data, per_token=False, return_doc_level_probas=False, **kwargs
+    ):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
@@ -210,6 +226,7 @@ class SequenceLabeler(BaseModel):
         all_probs = []
         all_positions = []
         doc_idx = -1
+        all_doc_level_probas = []
         raw_text = [data.get("raw_text", data["X"]) for data in zipped_data]
         for (
             token_start_idx,
@@ -230,11 +247,18 @@ class SequenceLabeler(BaseModel):
                 doc_starts = []
                 doc_idx += 1
                 last_end = 0
+                doc_level_probas = []
 
             label_seq = label_seq[start:end]
             end_of_token_seq = token_end_idx[start:end]
             start_of_token_seq = token_start_idx[start:end]
             proba_seq = proba_seq[start:end]
+
+            proba_seq_masked = proba_seq.copy()
+            for il, label in enumerate(label_seq):
+                label_idx = self.input_pipeline.label_encoder.classes_.index(label)
+                proba_seq_masked[il:, label_idx] = 0.0
+            doc_level_probas.append(np.max(proba_seq_masked, axis=0))
 
             for label, start_idx, end_idx, proba in zip(
                 label_seq, start_of_token_seq, end_of_token_seq, proba_seq
@@ -261,6 +285,9 @@ class SequenceLabeler(BaseModel):
                     doc_positions.append((start_idx, end_idx))
                     doc_starts.append(start_idx)
                 else:
+                    assert start_idx <= end_idx, "Start: {}, End: {}".format(
+                        start_idx, end_idx
+                    )
                     # continue appending to current subsequence
                     assert doc_starts[-1] <= end_idx, "Start: {}, End: {}".format(
                         doc_starts[-1], end_idx
@@ -284,6 +311,7 @@ class SequenceLabeler(BaseModel):
                 all_labels.append(doc_labels)
                 all_probs.append(prob_dicts)
                 all_positions.append(doc_positions)
+                all_doc_level_probas.append(np.max(doc_level_probas, axis=0))
 
         _, doc_annotations = finetune_to_indico_sequence(
             raw_texts=raw_text,
@@ -314,6 +342,14 @@ class SequenceLabeler(BaseModel):
                     doc_annotations,
                 )
             ]
+        elif return_doc_level_probas:
+            classes = self.input_pipeline.label_encoder.classes_
+            return list(
+                zip(
+                    doc_annotations,
+                    [dict(zip(classes, probs)) for probs in all_doc_level_probas],
+                )
+            )
         else:
             return doc_annotations
 
@@ -326,14 +362,19 @@ class SequenceLabeler(BaseModel):
         """
         return super().featurize(X, **kwargs)
 
-    def predict_proba(self, X, context=None, **kwargs):
+    def predict_proba(self, X, context=None, return_doc_level_probas=False, **kwargs):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
         :param X: A list / array of text, shape [batch]
         :returns: list of class labels.
         """
-        return self.predict(X, context=context, **kwargs)
+        return self.predict(
+            X,
+            context=context,
+            return_doc_level_probas=return_doc_level_probas,
+            **kwargs
+        )
 
     def _target_model(
         self,
