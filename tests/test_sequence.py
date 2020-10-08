@@ -163,7 +163,12 @@ class TestSequenceLabeler(unittest.TestCase):
         self.model.fit(train_texts, train_annotations)
         predictions = self.model.predict(test_texts)
         per_token_predictions = self.model.predict(test_texts, per_token=True)
+        with_doc_probas = self.model.predict(test_texts, return_negative_probabilities=True)
         probas = self.model.predict_proba(test_texts)
+
+        for pred, pred_with_prob in zip(predictions, with_doc_probas):
+            self.assertEqual(pred, pred_with_prob["prediction"])
+            self.assertIsInstance(pred_with_prob["negative_probs"], dict)
 
         self.assertIsInstance(probas, list)
         self.assertIsInstance(probas[0], list)
@@ -183,6 +188,7 @@ class TestSequenceLabeler(unittest.TestCase):
         self.model.save(self.save_file)
 
         self.assertGreater(reweighted_token_recall['Named Entity'], token_recall['Named Entity'])
+
 
     def test_cached_predict(self):
         """

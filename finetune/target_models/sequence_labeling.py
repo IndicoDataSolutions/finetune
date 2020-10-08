@@ -194,7 +194,7 @@ class SequenceLabeler(BaseModel):
         return super()._initialize()
 
     def predict(
-        self, X, per_token=False, context=None, return_doc_level_probas=False, **kwargs
+        self, X, per_token=False, context=None, return_negative_probs=False, **kwargs
     ):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
@@ -207,12 +207,12 @@ class SequenceLabeler(BaseModel):
             X,
             per_token=per_token,
             context=context,
-            return_doc_level_probas=return_doc_level_probas,
+            return_negative_probs=return_negative_probs,
             **kwargs
         )
 
     def _predict(
-        self, zipped_data, per_token=False, return_doc_level_probas=False, **kwargs
+        self, zipped_data, per_token=False, return_negative_probs=False, **kwargs
     ):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
@@ -221,6 +221,7 @@ class SequenceLabeler(BaseModel):
         :param per_token: If True, return raw probabilities and labels on a per token basis
         :returns: list of class labels.
         """
+        classes = self.input_pipeline.label_encoder.classes_
         all_subseqs = []
         all_labels = []
         all_probs = []
@@ -255,9 +256,12 @@ class SequenceLabeler(BaseModel):
             proba_seq = proba_seq[start:end]
 
             proba_seq_masked = proba_seq.copy()
+            
             for il, label in enumerate(label_seq):
-                label_idx = self.input_pipeline.label_encoder.classes_.index(label)
-                proba_seq_masked[il:, label_idx] = 0.0
+                # covers the multilabel case where pad is not a distinct class.
+                if label in classes:
+                    label_idx = classes.index(label)
+                    proba_seq_masked[il:, label_idx] = 0.0
             doc_level_probas.append(np.max(proba_seq_masked, axis=0))
 
             for label, start_idx, end_idx, proba in zip(
@@ -342,14 +346,17 @@ class SequenceLabeler(BaseModel):
                     doc_annotations,
                 )
             ]
-        elif return_doc_level_probas:
+        elif return_negative_probs:
             classes = self.input_pipeline.label_encoder.classes_
-            return list(
-                zip(
-                    doc_annotations,
-                    [dict(zip(classes, probs)) for probs in all_doc_level_probas],
+            output = []
+            for anno, probas in zip(doc_annotations, all_doc_level_probas):
+                output.append(
+                    {
+                        "prediction": anno,
+                        "negative_probs": dict(zip(classes, probs))
+                    }
                 )
-            )
+            return output
         else:
             return doc_annotations
 
@@ -362,7 +369,7 @@ class SequenceLabeler(BaseModel):
         """
         return super().featurize(X, **kwargs)
 
-    def predict_proba(self, X, context=None, return_doc_level_probas=False, **kwargs):
+    def predict_proba(self, X, context=None, return_negative_probs=False, **kwargs):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
@@ -372,7 +379,7 @@ class SequenceLabeler(BaseModel):
         return self.predict(
             X,
             context=context,
-            return_doc_level_probas=return_doc_level_probas,
+            return_negative_probs=return_negative_probs,
             **kwargs
         )
 
