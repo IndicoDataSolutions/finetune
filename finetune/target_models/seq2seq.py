@@ -18,11 +18,9 @@ def py_bracket_constraint(history, bracket_idx_pairs, eos_token, vocab_size):
     opening_brackets = [b[0] for b in bracket_idx_pairs]
     closing_brackets = [b[1] for b in bracket_idx_pairs]
     for tok in history.tolist():
-        print(stack, tok, opening_brackets, closing_brackets)
         if tok in opening_brackets:
             stack.append(opening_brackets.index(tok)) # idx in bracket_idx_pairs
         if tok in closing_brackets:
-            print("Cannor enforce for: ", history)
             assert closing_brackets.index(tok) == stack.pop()
     if stack:
         stack_head = stack[-1]
@@ -211,7 +209,7 @@ class HFS2S(BaseModel):
                 symbols_to_logits_fn=symbols_to_logits_fn,
                 initial_ids=initial_ids,
                 beam_size=config.beam_size,
-                decode_length=config.s2s_decoder_max_length,
+                decode_length=config.s2s_decoder_max_length * 2,
                 vocab_size=featurizer_state["embedding"].vocab_size,
                 alpha=config.beam_search_alpha,
                 states=states,

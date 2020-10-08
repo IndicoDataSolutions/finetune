@@ -144,6 +144,7 @@ class BaseEncoder(metaclass=SingletonMeta):
         delimiter=None,
         end=None,
         include_bos_eos=True,
+        eos_on_cut=True,
     ):
         """
         Takes some tokenized text and arranges it into a format that maximises the amount of kept text from each
@@ -189,15 +190,15 @@ class BaseEncoder(metaclass=SingletonMeta):
         for d in encoded:
             joined += d[:cut_len] + [delimiter]
         joined = joined[:-1]
-        
         if include_bos_eos:
-            joined += [clf_token]
+            if eos_on_cut or cut_len is None:
+                joined += [clf_token]
         return joined
 
     def _token_length(self, token):
         return len(token)
 
-    def encode_multi_input(self, Xs, max_length=None, remove_repeated_whitespace=False, include_bos_eos=True):
+    def encode_multi_input(self, Xs, max_length=None, remove_repeated_whitespace=False, include_bos_eos=True, eos_on_cut=True):
         """
         Encodes the text for passing to the model, also tracks the location of each token to allow reconstruction.
         It can also, optionally, construct a per-token labels as required for training.
@@ -210,10 +211,10 @@ class BaseEncoder(metaclass=SingletonMeta):
         if remove_repeated_whitespace:
             encoded = _remove_repeated_whitespace(encoded)
         # merge fields + truncate if necessary
-        token_ids = self._cut_and_concat(encoded=encoded.token_ids, max_length=max_length, include_bos_eos=include_bos_eos)
-        tokens = self._cut_and_concat(encoded=encoded.tokens, max_length=max_length, include_bos_eos=include_bos_eos)
-        token_ends = self._cut_and_concat(encoded=encoded.token_ends, max_length=max_length, special_tokens=-1, include_bos_eos=include_bos_eos)
-        token_starts = self._cut_and_concat(encoded=encoded.token_starts, max_length=max_length, special_tokens=-1, include_bos_eos=include_bos_eos)
+        token_ids = self._cut_and_concat(encoded=encoded.token_ids, max_length=max_length, include_bos_eos=include_bos_eos, eos_on_cut=eos_on_cut)
+        tokens = self._cut_and_concat(encoded=encoded.tokens, max_length=max_length, include_bos_eos=include_bos_eos, eos_on_cut=eos_on_cut)
+        token_ends = self._cut_and_concat(encoded=encoded.token_ends, max_length=max_length, special_tokens=-1, include_bos_eos=include_bos_eos, eos_on_cut=eos_on_cut)
+        token_starts = self._cut_and_concat(encoded=encoded.token_starts, max_length=max_length, special_tokens=-1, include_bos_eos=include_bos_eos, eos_on_cut=eos_on_cut)
         return EncodedOutput(
             token_ids=np.asarray(token_ids),
             tokens=np.array(tokens),
@@ -231,8 +232,7 @@ class BaseEncoder(metaclass=SingletonMeta):
 def tokenize_context(context, encoded_output, config):
     """ Tokenize the context corresponding to a single sequence of text """
     # in the edge case where the chunk is just a single end token, we don't need to alter our context chunk
-#    if len(encoded_output.token_ends) > 1:
-#        context = get_relevant_context_for_chunk(context, encoded_output)
+
     seq_len = len(encoded_output.token_ids)
     context_keys = list(k for k in sorted(context[0].keys()) if k not in INFO_KEYS)
     context_by_char_loc = sorted([(c['end'], [c[k] for k in context_keys], c["text"]) for c in context], key=lambda c: c[0])
@@ -248,7 +248,7 @@ def tokenize_context(context, encoded_output, config):
         if char_loc == -1:
             tokenized_context.append(default_context)
         else:
-            while char_loc > context_by_char_loc[current_char_loc][0]:
+            while token.strip() and char_loc > context_by_char_loc[current_char_loc][0]:
                 current_char_loc += 1
                 if current_char_loc >= len(context_by_char_loc):
                     raise ValueError("Context cannot be fully matched as it appears to not cover the end of the sequence for token {}".format(token))

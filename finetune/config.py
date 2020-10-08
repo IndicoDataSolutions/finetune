@@ -328,7 +328,7 @@ def get_default_config():
         context_channels=None,
         #
         # T5
-        beam_size=2,
+        beam_size=1,
         beam_search_alpha=0.2,
         delim_tokens="",
         s2s_decoder_max_length=512,
