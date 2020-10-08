@@ -80,10 +80,7 @@ if __name__ == "__main__":
     )
     model = SequenceLabeler(batch_size=1, n_epochs=3, val_size=0.0, max_length=512, chunk_long_sequences=True, subtoken_predictions=False, crf_sequence_labeling=True, multi_label_sequences=False)
     model.fit(trainX, trainY)
-    predictions = model.predict(testX, return_doc_level_probas=True)
-    for (p, probs), tx in zip(predictions, testY):
-        print("number of preds ", len(p), "number of labels ", len(tx), "probs ", probs)
-        input()
+    predictions = model.predict(testX)
     print(predictions)
     print(annotation_report(testY, predictions))
     sequence_labeling_token_confusion(testX, testY, predictions)
