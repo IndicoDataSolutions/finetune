@@ -194,7 +194,7 @@ class SequenceLabeler(BaseModel):
         return super()._initialize()
 
     def predict(
-        self, X, per_token=False, context=None, return_negative_probs=False, **kwargs
+        self, X, per_token=False, context=None, return_negative_confidence=False, **kwargs
     ):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
@@ -207,12 +207,12 @@ class SequenceLabeler(BaseModel):
             X,
             per_token=per_token,
             context=context,
-            return_negative_probs=return_negative_probs,
+            return_negative_confidence=return_negative_confidence,
             **kwargs
         )
 
     def _predict(
-        self, zipped_data, per_token=False, return_negative_probs=False, **kwargs
+        self, zipped_data, per_token=False, return_negative_confidence=False, **kwargs
     ):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
@@ -346,14 +346,13 @@ class SequenceLabeler(BaseModel):
                     doc_annotations,
                 )
             ]
-        elif return_negative_probs:
-            classes = self.input_pipeline.label_encoder.classes_
+        elif return_negative_confidence:
             output = []
             for anno, probas in zip(doc_annotations, all_doc_level_probas):
                 output.append(
                     {
                         "prediction": anno,
-                        "negative_probs": dict(zip(classes, probs))
+                        "negative_confidence": dict(zip(classes, probs))
                     }
                 )
             return output
@@ -369,7 +368,7 @@ class SequenceLabeler(BaseModel):
         """
         return super().featurize(X, **kwargs)
 
-    def predict_proba(self, X, context=None, return_negative_probs=False, **kwargs):
+    def predict_proba(self, X, context=None, return_negative_confidence=False, **kwargs):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
@@ -379,7 +378,7 @@ class SequenceLabeler(BaseModel):
         return self.predict(
             X,
             context=context,
-            return_negative_probs=return_negative_probs,
+            return_negative_confidence=return_negative_confidence,
             **kwargs
         )
 
