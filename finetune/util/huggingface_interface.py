@@ -13,6 +13,8 @@ from finetune.encoding.input_encoder import BaseEncoder
 from finetune.encoding.input_encoder import EncodedOutput
 from finetune.base_models import SourceModel
 from finetune.optimizers.recompute_grads import recompute_grads_w_kwargs
+from finetune.util.featurizer_fusion import fused_featurizer
+
 
 from tensorflow.python.util import tf_inspect
 
@@ -55,8 +57,11 @@ def finetune_model_from_huggingface(
         hf_tokenizer_instance.add_tokens(add_tokens)
 
     hf_config_instance = hf_config.from_pretrained(pretrained_weights)
+    hf_model_original = None
 
+    @fused_featurizer
     def finetune_featurizer(X, encoder, config, train=False, reuse=None, lengths=None, **kwargs):
+        nonlocal hf_model_original
         initial_shape = tf.shape(input=X)
         X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-1:]), 0))
         X.set_shape([None, None])
@@ -76,27 +81,30 @@ def finetune_model_from_huggingface(
         mask = tf.sequence_mask(lengths, maxlen=seq_length, dtype=tf.float32)
 
         with tf.compat.v1.variable_scope("model/featurizer", reuse=reuse):
-            hf_model = hf_featurizer(hf_config_instance)
+            if hf_model_original is None or not reuse:
+                hf_model_original = hf_featurizer(hf_config_instance)
 
-            # Resize embeddings to account for newly added tokens
-            if add_tokens:
-                embedding = hf_model.get_input_embeddings()
-                new_size = embedding.vocab_size + len(add_tokens)
-                embedding.vocab_size = new_size
-                hf_model.config.vocab_size = new_size
-                hf_model.vocab_size = new_size
-            
-            if config.low_memory_mode and train:
-                if hf_config_instance.is_encoder_decoder:
-                    for layer in hf_model.decoder.block + hf_model.encoder.block:
-                        layer.call = recompute_grads_w_kwargs(
-                            layer.call, train_vars=layer.trainable_weights, name=layer.name
-	                )
-                else:
-                    for layer in hf_model.encoder.layer:
-                        layer.call = recompute_grads_w_kwargs(
-                            layer.call, train_vars=layer.trainable_weights
+                # Resize embeddings to account for newly added tokens
+                if add_tokens:
+                    embedding = hf_model_original.get_input_embeddings()
+                    new_size = embedding.vocab_size + len(add_tokens)
+                    embedding.vocab_size = new_size
+                    hf_model_original.config.vocab_size = new_size
+                    hf_model_original.vocab_size = new_size
+                
+                if config.low_memory_mode and train:
+                    if hf_config_instance.is_encoder_decoder:
+                        for layer in hf_model_original.decoder.block + hf_model_original.encoder.block:
+                            layer.call = recompute_grads_w_kwargs(
+                                layer.call, train_vars=layer.trainable_weights, name=layer.name
                         )
+                    else:
+                        for layer in hf_model_original.encoder.layer:
+                            layer.call = recompute_grads_w_kwargs(
+                                layer.call, train_vars=layer.trainable_weights
+                            )
+
+            hf_model = hf_model_original
 
             if hf_config_instance.is_encoder_decoder:
                 embedding = hf_model.shared

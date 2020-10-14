@@ -95,7 +95,7 @@ def _fn_with_custom_grad(fn, inputs, grad_fn, use_global_vars=False, use_entire_
         shape_func=lambda _: [t.get_shape() for t in outputs])
     def identity(*args):
         _, _, outs = tf.nest.pack_sequence_as(defun_inputs, args)
-        return tuple([tf.identity(t) for t in outs])
+        return tuple([tf.identity(t) if isinstance(t, tf.Tensor) else t for t in outs])
 
     flat_inputs = tf.nest.flatten(defun_inputs)
     id_out = identity(*flat_inputs)
@@ -109,7 +109,7 @@ def _fn_with_custom_grad(fn, inputs, grad_fn, use_global_vars=False, use_entire_
             combined_out.append(id_out.pop(0))
         else:
             combined_out.append(o)
-    assert len(id_out) == 0
+    assert len(id_out) == 0, str(id_out)
     
     return tuple(combined_out)
 
@@ -162,7 +162,7 @@ def _recompute_grad(fn, args, use_entire_scope, train_vars=None):
         del outputs
         variables = [underlying_variable_ref(v) for v in variables]
         # Recompute outputs
-        with tf.control_dependencies(output_grads):
+        with tf.control_dependencies([o for o in output_grads if o is not None]):
             with tf.compat.v1.variable_scope(cached_vs[0], reuse=True):
                 outputs = fn(*inputs)
 
@@ -189,9 +189,26 @@ def recompute_grads_w_kwargs(fn, use_entire_scope=False, train_vars=None, name=N
         # Force an activation cache just before it enters the function, meaning output of 1 never == input of the other.
         args = [tf.identity(a) if isinstance(a, tf.Tensor) else a for a in args]
         kwargs = {k: tf.identity(v) if isinstance(v, tf.Tensor) else v for k, v in kwargs.items()}
+        output_keywords = None
+        output_local = None
         def remapped_fn(*_):
+            nonlocal output_keywords
+            nonlocal output_local
             print("Calling remapped fn {}".format(name))
-            return fn(*args, **kwargs)
+            out = fn(*args, **kwargs)
+            if isinstance(out, dict):
+                output_keywords = []
+                output_local = dict()
+                for k, v in out.items():
+                    if isinstance(v, tf.Tensor):
+                        output_keywords.append(k)
+                    else:
+                        output_local[k] = v
+                return [out[k] for k in output_keywords]
+            return out
         tensor_args_kwargs = [a for a in list(args) + list(kwargs.values()) if isinstance(a, tf.Tensor)]
-        return _recompute_grad(remapped_fn, tensor_args_kwargs, use_entire_scope=use_entire_scope, train_vars=train_vars)
+        out = _recompute_grad(remapped_fn, tensor_args_kwargs, use_entire_scope=use_entire_scope, train_vars=train_vars)
+        if output_keywords is not None:
+            return {**{k: v for k, v in zip(output_keywords, out)}, **output_local}
+        return out
     return inner_recompute_grads_w_kwargs
