@@ -96,16 +96,19 @@ class Scheduler:
         ) < self.gpu_memory_limit
 
     def _close_oldest_model(self):
-        name = self.loaded_models.pop(0)
-        self.model_cache[name].close()
-        del self.model_cache[name]
-        gc.collect()
+        if len(self.loaded_models):
+            name = self.loaded_models.pop(0)
+            self.model_cache[name].close()
+            del self.model_cache[name]
+            gc.collect()
 
     def _rotate_in_model(self, model):
         if model not in self.loaded_models:
             if (
-                self.max_models is not None
-                and len(self.loaded_models) + 1 > self.max_models
+                (
+                    self.max_models is not None
+                    and len(self.loaded_models) + 1 > self.max_models
+                )
                 or not self._memory_for_one_more()
             ):
                 self._close_oldest_model()
