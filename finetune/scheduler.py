@@ -63,6 +63,7 @@ class Scheduler:
     def _memory_for_one_more(self):
         if self.gpu_memory_limit is None:
             return True # first run
+
         in_use = BytesInUse()
         peak = MaxBytesInUse()
         if self.max_above_resting is None or (peak - in_use) > self.max_above_resting:
@@ -101,6 +102,8 @@ class Scheduler:
             self.model_cache[name].close()
             del self.model_cache[name]
             gc.collect()
+        else:
+            LOGGER.info("No models cached -- cannot remove oldest model.")
 
     def _rotate_in_model(self, model):
         if model not in self.loaded_models:
