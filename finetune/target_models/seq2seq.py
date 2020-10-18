@@ -88,14 +88,13 @@ def normalize_embeds(embeds):
 
 def label_smooth(targets, pad_mask, smoothing, smooth_mean_targets):
     # targets: (batch, seq, n_vocab)
-    targets *= pad_mask
     if smooth_mean_targets:
         # Only allocate extra proba mass to token ids in output seq
-        targets = targets * (1. - smoothing) + smoothing / targets.shape[-1]
+        sum_over_seq = tf.reduce_sum(targets * tf.expand_dims(pad_mask, axis=-1), axis=1, keepdims=True)
+        targets = targets * (1. - smoothing) + sum_over_seq / tf.reduce_sum(sum_over_seq, axis=-1, keepdims=True) 
     else:
         # Allocate extra proba mass over all tokens
-        sum_over_seq = tf.reduce_sum(targets, axis=1)
-        targets = targets * (1. - smoothing) + sum_over_seq / tf.reduce_sum(sum_over_seq, axis=-1) 
+        targets = targets * (1. - smoothing) + smoothing / targets.shape[-1]
 
     return targets
 
@@ -135,8 +134,8 @@ class HFS2S(BaseModel):
                 final_targets = label_smooth(
                     targets=final_targets, 
                     pad_mask=padding_mask, 
-                    smoothing=config.s2s_labeling_smoothing, 
-                    smooth_mean_targets=config.s2s_smooth_mean_targets
+                    smoothing=config.s2s_label_smoothing, 
+                    smooth_mean_targets=config.s2s_smoothing_mean_targets
                 )
 
             loss = tf.nn.softmax_cross_entropy_with_logits(

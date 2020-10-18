@@ -100,7 +100,7 @@ class TestHuggingFace(unittest.TestCase):
             seps_included = seps_included or " | " in p # check it predicts separators
             pred_correct = pred_correct or any(li in p for li in l.split(" | ")) # at least one extraction is predicted correctly.
 
-        self.assertTrue(seps_included)2
+        self.assertTrue(seps_included)
         self.assertTrue(pred_correct)
     
     def test_t5_s2s_ner_label_smoothing(self):
@@ -115,10 +115,9 @@ class TestHuggingFace(unittest.TestCase):
             base_model=HFT5,
             n_epochs=3,
             batch_size=16,
-            # s2s_label_smoothing=0.1,
-            # s2s_smoothing_mean_targets=False
+            s2s_label_smoothing=0.1,
+            s2s_smoothing_mean_targets=True
         )
-        print(train_texts, train_annotations)
         finetune_model.fit(train_texts, train_annotations)
         seps_included = False
         pred_correct = False
