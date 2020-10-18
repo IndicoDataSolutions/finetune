@@ -18,7 +18,7 @@ from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
 from finetune.util.metrics import annotation_report, sequence_labeling_token_confusion
 
 XML_PATH = os.path.join("Data", "Sequence", "reuters.xml")
-DATA_PATH = os.path.join("Data", "Sequence", "reuters.json")
+DATA_PATH = os.path.join("Data", "Sequence", "reuters.csv")
 CHECKSUM = "a79cab99ed30b7932d46711ef8d662e0"
 
 class Reuters(Dataset):

@@ -85,6 +85,20 @@ class S2SPipeline(BasePipeline):
 def normalize_embeds(embeds):
     return embeds * (tf.cast(tf.shape(embeds)[-1], dtype=tf.float32) ** -0.5)
 
+
+def label_smooth(targets, pad_mask, smoothing, smooth_mean_targets):
+    # targets: (batch, seq, n_vocab)
+    targets *= pad_mask
+    if smooth_mean_targets:
+        # Only allocate extra proba mass to token ids in output seq
+        targets = targets * (1. - smoothing) + smoothing / targets.shape[-1]
+    else:
+        # Allocate extra proba mass over all tokens
+        sum_over_seq = tf.reduce_sum(targets, axis=1)
+        targets = targets * (1. - smoothing) + sum_over_seq / tf.reduce_sum(sum_over_seq, axis=-1) 
+
+    return targets
+
 class HFS2S(BaseModel):
 
     def _get_input_pipeline(self):
@@ -115,8 +129,18 @@ class HFS2S(BaseModel):
                 training=train,
             )[0]
             logits = featurizer_state["embedding"](normalize_embeds(embeds), mode="linear")
-            loss = tf.nn.sparse_softmax_cross_entropy_with_logits(
-                logits=logits, labels=targets[:, 1:], 
+            final_targets = tf.one_hot(targets[:, 1:], depth=logits.shape[-1])
+
+            if config.s2s_label_smoothing:
+                final_targets = label_smooth(
+                    targets=final_targets, 
+                    pad_mask=padding_mask, 
+                    smoothing=config.s2s_labeling_smoothing, 
+                    smooth_mean_targets=config.s2s_smooth_mean_targets
+                )
+
+            loss = tf.nn.softmax_cross_entropy_with_logits(
+                logits=logits, labels=final_targets
             )
             loss = loss * padding_mask
             loss = tf.reduce_sum(loss)

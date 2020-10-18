@@ -338,6 +338,10 @@ def get_default_config():
 
         # Serialize finetune version with model
         version=VERSION,
+
+        # Label smoothing
+        s2s_label_smoothing=0.,
+        s2s_smoothing_mean_targets=False
     )
     return settings
 

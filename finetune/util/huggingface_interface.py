@@ -117,6 +117,9 @@ def finetune_model_from_huggingface(
             }
             call_args = tf_inspect.getargspec(hf_model).args
             kwargs = {k: v for k, v in kwargs.items() if k in call_args}
+            print(hf_model)
+            print(X)
+            print(kwargs)
             model_out = hf_model(X, **kwargs)
         
             if isinstance(model_out, tuple) and len(model_out) > 1:

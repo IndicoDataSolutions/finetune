@@ -15,6 +15,7 @@ from finetune.base_models.huggingface.models import (
     HFT5,
     HFAlbert,
 )
+from finetune.datasets.reuters import Reuters
 from finetune.target_models.seq2seq import HFS2S
 from sklearn.model_selection import train_test_split
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
@@ -79,11 +80,10 @@ class TestHuggingFace(unittest.TestCase):
         self.assertEqual(loaded_model.predict([text]), [text])
 
     def test_t5_s2s_ner(self):
-        with open(os.path.join('Data', 'Sequence', 'reuters.json'), "rt") as fp:
-            texts, labels = json.load(fp)
-        raw_docs = ["".join(text) for text in texts]
-        texts, annotations = finetune_to_indico_sequence(raw_docs, texts, labels, none_value="<PAD>")
-        labels = [" | ".join(x["text"] for x in a) for a in annotations]
+        df = Reuters().dataframe
+        texts = df.texts.values
+        labels = [json.loads(entry) for entry in df.annotations]
+        labels = [" | ".join(x["text"] for x in a) for a in labels]
         train_texts, test_texts, train_annotations, test_annotations = train_test_split(
             texts, labels, test_size=0.1, random_state=42
         )
@@ -93,6 +93,32 @@ class TestHuggingFace(unittest.TestCase):
             batch_size=16,
             low_memory_mode=True, 
         )
+        finetune_model.fit(train_texts, train_annotations)
+        seps_included = False
+        pred_correct = False
+        for t, p, l in zip(test_texts, finetune_model.predict(test_texts), test_annotations):
+            seps_included = seps_included or " | " in p # check it predicts separators
+            pred_correct = pred_correct or any(li in p for li in l.split(" | ")) # at least one extraction is predicted correctly.
+
+        self.assertTrue(seps_included)2
+        self.assertTrue(pred_correct)
+    
+    def test_t5_s2s_ner_label_smoothing(self):
+        df = Reuters().dataframe
+        texts = df.texts.values
+        labels = [json.loads(entry) for entry in df.annotations]
+        labels = [" | ".join(x["text"] for x in a) for a in labels]
+        train_texts, test_texts, train_annotations, test_annotations = train_test_split(
+            texts, labels, test_size=0.1, random_state=42
+        )
+        finetune_model = HFS2S(
+            base_model=HFT5,
+            n_epochs=3,
+            batch_size=16,
+            # s2s_label_smoothing=0.1,
+            # s2s_smoothing_mean_targets=False
+        )
+        print(train_texts, train_annotations)
         finetune_model.fit(train_texts, train_annotations)
         seps_included = False
         pred_correct = False
