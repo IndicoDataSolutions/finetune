@@ -209,7 +209,7 @@ class HFS2S(BaseModel):
                 symbols_to_logits_fn=symbols_to_logits_fn,
                 initial_ids=initial_ids,
                 beam_size=config.beam_size,
-                decode_length=config.s2s_decoder_max_length * 2,
+                decode_length=config.s2s_decoder_max_length,
                 vocab_size=featurizer_state["embedding"].vocab_size,
                 alpha=config.beam_search_alpha,
                 states=states,

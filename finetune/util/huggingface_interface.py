@@ -70,14 +70,6 @@ def finetune_model_from_huggingface(
         token_type_ids = tf.cumsum(delimiters, exclusive=True, axis=1)
 
         seq_length = tf.shape(input=delimiters)[1]
-
-        eos_idx = tf.argmax(
-            input=tf.cast(delimiters, tf.float32)
-            * tf.expand_dims(
-                tf.range(tf.cast(seq_length, tf.float32), dtype=tf.float32), 0
-            ),
-            axis=1,
-        )
         mask = tf.sequence_mask(lengths, maxlen=seq_length, dtype=tf.float32)
 
         with tf.compat.v1.variable_scope("model/featurizer", reuse=reuse):
@@ -131,8 +123,13 @@ def finetune_model_from_huggingface(
                 sequence_out, pooled_out, *_ = model_out
             else:
                 sequence_out = model_out[0]
-                pooled_out = sequence_out[:, 0, :]
-
+                sequence_shape = tf.shape(sequence_out)
+                pooled_out = tf.cond(
+                    tf.greater(sequence_shape[1], 0),
+                    true_fn=lambda: sequence_out[:, 0, :],
+                    false_fn=lambda: tf.zeros([sequence_shape[0], sequence_shape[-1]], dtype=sequence_out.dtype)
+                )
+                pooled_out.set_shape([None, config.n_embed])
             n_embed = pooled_out.shape[-1]
 
             features = tf.reshape(
@@ -142,13 +139,11 @@ def finetune_model_from_huggingface(
                 sequence_out, shape=tf.concat((initial_shape, [n_embed]), 0),
             )
 
-
             output_state = {
                 "embedding": embedding,
                 "features": features,
                 "sequence_features": sequence_features,
                 "lengths": lengths,
-                "eos_idx": eos_idx,
                 "decoder": decoder,
                 "inputs": X,
             }
