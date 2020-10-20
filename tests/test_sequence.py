@@ -7,6 +7,8 @@ import codecs
 import json
 import random
 import time
+import weakref
+import gc
 
 # required for tensorflow logging control
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -298,6 +300,58 @@ class TestSequenceLabeler(unittest.TestCase):
         self.assertEqual(len(preds), 1)
         del preds[0]["confidence"]
         self.assertEquals(preds, labels)
+
+
+class TestSequenceMemoryLeak(unittest.TestCase):
+
+    @staticmethod
+    def is_wr(val):
+        return val is not None and not isinstance(val, (int, float, str))
+
+    @staticmethod
+    def get_weakrefs(dictionary):
+        weakrefs = []
+        for v in dictionary.values():
+            if hasattr(v, "__dict__"):
+                weakrefs += TestSequenceMemoryLeak.get_weakrefs(v.__dict__)
+            if isinstance(v, dict):
+                weakrefs += TestSequenceMemoryLeak.get_weakrefs(v)
+            elif isinstance(v, list):
+                for vi in v:
+                    if isinstance(vi, dict):
+                        weakrefs += TestSequenceMemoryLeak.get_weakrefs(vi)
+                    elif TestSequenceMemoryLeak.is_wr(vi):
+                        try:
+                            weakrefs.append(weakref.ref(vi))
+                        except Exception as e:
+                            print(e)
+            else:
+                if TestSequenceMemoryLeak.is_wr(v):
+                    try:
+                        weakrefs.append(weakref.ref(v))
+                    except Exception as e:
+                        print(e)
+        return weakrefs
+
+
+    def test_leaking_objects(self):
+        previous_model_wrs = None
+        for _ in range(10):
+            model = SequenceLabeler(n_epochs=1)
+            model.fit(["some text"], [[]])
+            wrs = self.get_weakrefs(model.__dict__)
+            del model
+            tf.compat.v1.reset_default_graph()
+            gc.collect()
+            if previous_model_wrs is None:
+                previous_model_wrs = [w for w in wrs if w() is not None]
+            else:
+                new_refs = [w() for w in wrs if w() is not None]
+                prevous_refs = [w() for w in previous_model_wrs]
+                for new in new_refs:
+                    # Assert that no new objects are introduced that cannot be cleaned up.
+                    print(new)
+                    self.assertTrue(any(new is old for old in prevous_refs))
 
 
 class TestSequenceLabelerNoCRF(TestSequenceLabeler):

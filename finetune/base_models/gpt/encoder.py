@@ -68,7 +68,6 @@ class GPTEncoder(BaseEncoder):
             self.encoder[token] = len(self.encoder)
 
         self.decoder = {v: k for k, v in self.encoder.items()}
-        self.cache = {}
         self.start_token = self.encoder["_start_"]
         self.delimiter_token = self.encoder["_delimiter_"]
         self.end_token = self.encoder["_classify_"]
