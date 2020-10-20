@@ -1,4 +1,4 @@
-FROM tensorflow/tensorflow:2.2.0
+FROM tensorflow/tensorflow:2.3.0
 LABEL Author="Ben Townsend, Madison May"
 
 # tensorboard
