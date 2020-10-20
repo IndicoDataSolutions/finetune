@@ -80,7 +80,7 @@ def _remove_repeated_whitespace(encoded):
 
 
 class CacheDict(OrderedDict):
-    def __init__(self, *args, cache_len: int = 1, **kwargs):
+    def __init__(self, *args, cache_len: int = 50000, **kwargs):
         """
         Simple Cache dictionary
         modified from https://gist.github.com/davesteele/44793cd0348f59f8fadd49d7799bd306
