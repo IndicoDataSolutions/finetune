@@ -42,6 +42,8 @@ class BasePipeline(metaclass=ABCMeta):
         self.pad_idx_ = None
         self.rebuild = False
         self._chunker = None
+        self.current_epoch_offset = 0
+        self.total_epoch_offset = 0
 
     @property
     def text_encoder(self):
@@ -172,6 +174,8 @@ class BasePipeline(metaclass=ABCMeta):
                     skip_val=skip_val,
                     silent=self.config.debugging_logs,
                     update_hook=update_hook,
+                    current_epoch_offset=self.current_epoch_offset if tqdm_mode == "train" else 0,
+                    total_epoch_offset=self.total_epoch_offset if tqdm_mode == "train" else 0,
                 ),
                 types,
                 shapes,
