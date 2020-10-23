@@ -15,6 +15,7 @@ from finetune.nn.crf import sequence_decode
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
 from finetune.encoding.input_encoder import get_spacy
 from finetune.input_pipeline import BasePipeline
+from finetune.util.metrics import sequences_overlap
 from finetune.encoding.input_encoder import tokenize_context
 
 
@@ -152,6 +153,17 @@ def _spacy_token_predictions(raw_text, tokens, probas, positions):
 
     return spacy_results
 
+def negative_samples(preds, labels, pad="<PAD>"):
+    modified_labels = []
+    for p, l in zip(preds, labels):
+        new_labels = []
+        for pi in p:
+            if not any(sequences_overlap(pi, li) for li in l):
+                pi["label"] = pad
+                new_labels.append(pi)
+        modified_labels.append(l + new_labels)
+    return modified_labels
+
 
 class SequenceLabeler(BaseModel):
     """
@@ -192,6 +204,25 @@ class SequenceLabeler(BaseModel):
     def _initialize(self):
         self.multi_label = self.config.multi_label_sequences
         return super()._initialize()
+
+    def finetune(self, Xs, Y=None, context=None, update_hook=None):
+        if self.config.auto_negative_sampling and Y is not None:
+            model_copy = copy.deepcopy(self)
+            model_copy._initialize()
+            model_copy.input_pipeline.total_epoch_offset = self.config.n_epochs
+            self.input_pipeline.current_epoch_offset = self.config.n_epochs
+            self.input_pipeline.total_epoch_offset = self.config.n_epochs
+
+            model_copy.config.max_empty_chunk_ratio = 0.0
+            model_copy.config.auto_negative_sampling = False
+            # TODO: fix update hooks progress
+            model_copy.finetune(Xs, Y=Y, context=context, update_hook=update_hook)
+            initial_run_preds = model_copy.predict(Xs)
+            del model_copy
+            Y_with_neg_samples = negative_samples(initial_run_preds, Y, pad=self.config.pad_token)
+            self.config.max_empty_chunk_ratio *= sum(len(yi) for yi in Y) / sum(len(yi) for yi in Y_with_neg_samples)
+            Y = Y_with_neg_samples
+        return super().finetune(Xs, Y=Y, context=context, update_hook=update_hook)
 
     def predict(
         self, X, per_token=False, context=None, return_negative_confidence=False, **kwargs
