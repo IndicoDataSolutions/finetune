@@ -90,8 +90,9 @@ def label_smooth(targets, pad_mask, smoothing, smooth_mean_targets):
     # targets: (batch, seq, n_vocab)
     if smooth_mean_targets:
         # Only allocate extra proba mass to token ids in output seq
-        sum_over_seq = tf.reduce_sum(targets * tf.expand_dims(pad_mask, axis=-1), axis=1, keepdims=True)
-        targets = targets * (1. - smoothing) + sum_over_seq / tf.reduce_sum(sum_over_seq, axis=-1, keepdims=True) 
+        token_count = tf.reduce_sum(targets * tf.expand_dims(pad_mask, axis=-1), axis=1, keepdims=True)
+        seq_len = tf.reduce_sum(token_count, axis=-1, keepdims=True) 
+        targets = targets * (1. - smoothing) + smoothing * token_count / seq_len
     else:
         # Allocate extra proba mass over all tokens
         targets = targets * (1. - smoothing) + smoothing / targets.shape[-1]
