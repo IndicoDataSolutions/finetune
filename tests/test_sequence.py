@@ -316,7 +316,7 @@ class TestSequenceMemoryLeak(unittest.TestCase):
                 weakrefs += TestSequenceMemoryLeak.get_weakrefs(v.__dict__)
             if isinstance(v, dict):
                 weakrefs += TestSequenceMemoryLeak.get_weakrefs(v)
-            elif isinstance(v, list):
+            elif isinstance(v, (list, tuple)):
                 for vi in v:
                     if isinstance(vi, dict):
                         weakrefs += TestSequenceMemoryLeak.get_weakrefs(vi)
@@ -325,12 +325,11 @@ class TestSequenceMemoryLeak(unittest.TestCase):
                             weakrefs.append(weakref.ref(vi))
                         except Exception as e:
                             print(e)
-            else:
-                if TestSequenceMemoryLeak.is_wr(v):
-                    try:
-                        weakrefs.append(weakref.ref(v))
-                    except Exception as e:
-                        print(e)
+            elif TestSequenceMemoryLeak.is_wr(v):
+                try:
+                    weakrefs.append(weakref.ref(v))
+                except Exception as e:
+                    print(e)
         return weakrefs
 
 
