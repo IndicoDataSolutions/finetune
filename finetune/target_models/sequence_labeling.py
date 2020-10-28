@@ -220,6 +220,7 @@ class SequenceLabeler(BaseModel):
             initial_run_preds = model_copy.predict(Xs)
             del model_copy
             Y_with_neg_samples = negative_samples(initial_run_preds, Y, pad=self.config.pad_token)
+            # this means we get the same absolute number of randomly sampled empty chunks with or without this option.
             self.config.max_empty_chunk_ratio *= sum(len(yi) for yi in Y) / sum(len(yi) for yi in Y_with_neg_samples)
             Y = Y_with_neg_samples
         return super().finetune(Xs, Y=Y, context=context, update_hook=update_hook)
