@@ -222,7 +222,7 @@ class SequenceLabelingEncoder(BaseEncoder):
         labels_out = [pad_idx for _ in out.tokens]
         for label in labels:
             for i, (start, end, text) in enumerate(zip(out.token_starts, out.token_ends, out.tokens)):
-                if end > label["end"]:
+                if start > label["end"]:
                     break
                 overlap, agree = self.overlaps(label, start, end, text)
                 if overlap:
