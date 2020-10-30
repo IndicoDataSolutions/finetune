@@ -4,6 +4,7 @@ import json
 import unittest
 import numpy as np
 import tensorflow as tf
+import joblib as jl
 
 from transformers import AutoTokenizer, TFAutoModel, BertTokenizer
 from finetune import SequenceLabeler, DocumentLabeler
@@ -116,28 +117,8 @@ class TestHuggingFace(unittest.TestCase):
     def test_albert(self):
         self.check_embeddings_equal(HFAlbert, "albert-base-v2")
 
-    @unittest.skipIf(not TORCH_SUPPORT, reason="Pytorch not installed")
     def test_layoutlm(self):
-        def format_ondoc_for_hf(document, tokenizer):
-            input_dict = {}
-            tokens = []
-            token_boxes = []
-            for page in doc:
-                for token in page["tokens"]:
-                    word_tokens = tokenizer.tokenize(token["text"])
-                    tokens.extend(word_tokens)
-                    box = [
-                        int(token["position"]["left"] / page["pages"][0]["size"]["width"] * 1000),
-                        int(token["position"]["top"] / page["pages"][0]["size"]["height"] * 1000),
-                        int(token["position"]["right"] / page["pages"][0]["size"]["width"] * 1000),
-                        int(token["position"]["bottom"] / page["pages"][0]["size"]["height"] * 1000),
-                    ]
-                    token_boxes.extend([box] * len(word_tokens))
-            input_ids = tokenizer.convert_tokens_to_ids(tokens)
-            input_dict["input_ids"] = torch.LongTensor(input_ids).unsqueeze(0)
-            input_dict["bbox"] = torch.LongTensor(token_boxes).unsqueeze(0)
-            return input_dict
-
+        activations_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "data", "test-layoutlm-activations.jl")
         def subset_doc(doc):
             """ Take approximately the first 512 tokens from just the first page """
             for page in doc:
@@ -149,22 +130,11 @@ class TestHuggingFace(unittest.TestCase):
 
         with open("tests/data/test_ocr_documents.json", "rt") as fp:
             documents = json.load(fp)
-        # hack so we don't have to do chunking for the HF model
         documents = [subset_doc(doc) for doc in documents]
-        tokenizer = BertTokenizer.from_pretrained("tests/model/layoutlm-base-uncased/")
-        model = LayoutlmModel.from_pretrained("tests/model/layoutlm-base-uncased/")
-        # turn off dropout
-        model.eval()
-        finetune_model = DocumentLabeler(base_model=LayoutLM, embed_p_drop=0.0, attn_p_drop=0.0, resid_p_drop=0.0, clf_p_drop=0.0
-        ))
-        # we run a single doc at a time so the output shapes match
-        # and we avoid having to write padding and pad removal code for HF
-        for doc in documents:
-            input_dict = format_ondoc_for_hf(doc, tokenizer)
-            outputs = model(**input_dict)
-            hf_seq_features = outputs[0].detach().numpy()
-
+        finetune_model = DocumentLabeler(base_model=LayoutLM)
+        expected_all = jl.load(activations_path)
+        for doc, expected in zip(documents, expected_all):
             finetune_seq_features = finetune_model.featurize_sequence([doc])
             np.testing.assert_array_almost_equal(
-                finetune_seq_features, hf_seq_features, decimal=1,
+                finetune_seq_features, expected, decimal=1,
             )
