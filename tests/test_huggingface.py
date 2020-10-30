@@ -20,15 +20,6 @@ from finetune.base_models.huggingface.models import (
 from finetune.target_models.seq2seq import HFS2S
 from sklearn.model_selection import train_test_split
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
-try:
-    import torch
-    from finetune.base_models.huggingface.hf_layoutlm import LayoutlmModel
-    TORCH_SUPPORT = True
-except ImportError:
-    HFLayoutLM = None
-    LayoutlmModel = None
-    TORCH_SUPPORT = False
-
 
 class TestHuggingFace(unittest.TestCase):
     def setUp(self):
