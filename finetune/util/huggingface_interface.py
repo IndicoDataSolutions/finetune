@@ -263,12 +263,13 @@ def finetune_model_from_huggingface(
 
         @classmethod
         def translate_base_model_format(cls):
-            jl.dump(
-                load_weights_from_hdf5_group_by_name(
-                    raw_weights_path, weights_replacement
-                ),
-                weights_path,
-            )
+            if not os.path.exists(weights_path):
+                jl.dump(
+                    load_weights_from_hdf5_group_by_name(
+                        raw_weights_path, weights_replacement
+                    ),
+                    weights_path,
+                )
 
         def __reduce__(self):
             return (
