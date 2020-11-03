@@ -471,7 +471,7 @@ def docrep_pos_embed(input_context, positional_channels, batch_size, seq_length,
 
 
 def layoutlm_pos_embed(input_context, positional_channels, batch_size, seq_length, width):
-    """ Embed 2D position LayoutLM-style, i.e. separate sinusoidal embeddings for each dim """
+    """ Embed 2D position LayoutLM-style, i.e. separate learned embeddings for each dim """
     # max 2d positional embeddings is 1024 even though max positional embeddings is 512
     max_2d_positional_embeddings = 1024
     x_position_embedding_table = tf.compat.v1.get_variable(
@@ -639,7 +639,13 @@ def embedding_postprocessor(
             output += position_embeddings
             
     if pos_injection:
-        output += pos2d_embedding_fn(input_context, positional_channels, batch_size, seq_length, width)
+        output += pos2d_embedding_fn(
+            input_context=input_context,
+            positional_channels=positional_channels,
+            batch_size=batch_size,
+            seq_length=seq_length,
+            width=width
+        )
 
     output = layer_norm_and_dropout(output, dropout_prob)
     return output
