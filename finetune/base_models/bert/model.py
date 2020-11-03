@@ -335,17 +335,24 @@ class DistilRoBERTa(_BaseBert):
 class LayoutLM(_BaseBert):
     encoder = LayoutLMEncoder
     featurizer = layoutlm_featurizer
-    settings = dict(DocRep.settings)
-    settings.update(
-        {
-        "reading_order_removed": False,
-        "context_channels": None,
-        "crf_sequence_labeling": True,
+    settings = {
+        **BERT_BASE_PARAMS,
+        "epsilon": 1e-8,
+        "lr": 1e-4,
+        "context_injection": True,
+        "crf_sequence_labeling": False,
+        "context_dim": 4,
+        "default_context":{
+            'left': 0,
+            'right': 0,
+            'top': 0,
+            'bottom': 0,
+        },
         "use_auxiliary_info": True,
+        "low_memory_mode": True,
         "base_model_path": os.path.join("bert", "layoutlm-base-uncased.jl"),
         "include_bos_eos": False
     }
-    )
     required_files = [
         {
             "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "layoutlm-base-uncased.jl"),
