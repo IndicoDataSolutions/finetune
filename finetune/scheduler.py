@@ -28,8 +28,11 @@ def scheduled(fn):
                     orig_except
                 )
             )
+            # Close everything to make sure we have available memory
             self.close_all()
             try:
+                # Reload in preparation for prediction
+                model = self._rotate_in_model(model_file)
                 preds = fn(
                     self, model_file=model_file, x=x, *args, model=model, **kwargs
                 )
