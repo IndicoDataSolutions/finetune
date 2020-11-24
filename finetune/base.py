@@ -471,7 +471,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         formatted_predictions = []
         for probas in raw_probas:
-            formatted_predictions.append(dict(zip(classes, probas)))
+            formatted_predictions.append(dict(zip(classes, probas.tolist())))
         start_sort = time.time()
         if self.config.sort_by_length:
             formatted_predictions = [formatted_predictions[i] for i in invert_idxs]
