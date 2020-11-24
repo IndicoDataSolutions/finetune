@@ -128,7 +128,10 @@ def recompute_grad(fn, use_entire_scope=False, train_vars=None):
 
     @functools.wraps(fn)
     def wrapped(*args):
-        return _recompute_grad(fn, args, use_entire_scope=use_entire_scope, train_vars=train_vars)
+        out = _recompute_grad(fn, args, use_entire_scope=use_entire_scope, train_vars=train_vars)
+        if isinstance(out, tuple) and len(out) == 1:
+            return out[0]
+        return out
 
     return wrapped
 
