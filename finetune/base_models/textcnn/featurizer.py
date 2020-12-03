@@ -82,6 +82,15 @@ def textcnn_featurizer(
 
         # Concatenate the univariate vectors as features for classification
         clf_h = tf.concat(pool_layers, axis=1)
+        if config.n_layer > 1:
+            for i in range(config.n_layer - 1):
+                clf_h = tf.compat.v1.layers.dense(
+                    inputs=clf_h,
+                    units=config.n_embed,
+                    activation=tf.nn.relu,
+                    name="hidden_{}".format(i),
+                    kernel_initializer=tf.compat.v1.initializers.glorot_normal,
+                )
         clf_h = tf.reshape(
             clf_h, shape=tf.concat((initial_shape[:-1], [config.n_embed]), 0)
         )

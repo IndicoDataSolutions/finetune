@@ -157,12 +157,12 @@ def _apply_class_weight(losses, targets, class_weights=None):
         weights = tf.reduce_sum(
             input_tensor=class_weights * tf.cast(targets, dtype=tf.float32), axis=1
         )
-        weights *= tf.math.divide_no_nan(
-            tf.cast(
-                tf.reduce_prod(input_tensor=tf.shape(input=weights)), dtype=tf.float32
-            ),
-            tf.reduce_sum(input_tensor=weights),
-        )
+#        weights *= tf.math.divide_no_nan(
+#            tf.cast(
+#                tf.reduce_prod(input_tensor=tf.shape(input=weights)), dtype=tf.float32
+#            ),
+#            tf.reduce_sum(input_tensor=weights),
+#        )
         losses *= tf.expand_dims(weights, 1)
     return losses
 
