@@ -333,7 +333,7 @@ def get_default_config():
         delim_tokens="",
         s2s_decoder_max_length=512,
         bracket_constraints=None,
-        num_fusion_shards=8,
+        num_fusion_shards=None,
 
         include_bos_eos=True,
 
