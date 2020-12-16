@@ -67,8 +67,8 @@ class TestHuggingFace(unittest.TestCase):
         text = "sequence test { text }"
         finetune_model = HFS2S(
             base_model=HFT5,
-            n_epochs=30,
-            batch_size=2,
+            n_epochs=100,
+            batch_size=1,
         )
         finetune_model.fit([text] * 5, [text] * 5)
         finetune_model.save("test.jl")

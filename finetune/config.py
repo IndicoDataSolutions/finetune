@@ -334,6 +334,7 @@ def get_default_config():
         s2s_decoder_max_length=512,
         bracket_constraints=None,
         num_fusion_shards=None,
+        chunk_pos_embed=None, 
 
         include_bos_eos=True,
 

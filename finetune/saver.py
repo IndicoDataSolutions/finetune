@@ -245,7 +245,6 @@ class Saver:
                 if self.restart_global_step and global_step_var is not None and global_step_var.name == var.name:
                     continue
                 name = var.name
-                print(name)
                 saved_var = None
                 if name in variables_sv.keys():
                     saved_var = variables_sv[name]
@@ -265,8 +264,6 @@ class Saver:
                         permitted = self.permit_uninitialized is not None and re.findall(self.permit_uninitialized, name)
                         if not permitted:
                             raise ValueError("Uninitialized featurizer variable {}".format(name))
-                    # else:
-                        # print("Uninitialized: ", name)
                     
             var_loader.run(session)
         return init_fn

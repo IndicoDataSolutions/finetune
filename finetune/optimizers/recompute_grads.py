@@ -110,7 +110,6 @@ def _fn_with_custom_grad(fn, inputs, grad_fn, use_global_vars=False, use_entire_
         else:
             combined_out.append(o)
     assert len(id_out) == 0, str(id_out)
-    
     return tuple(combined_out)
 
 
@@ -197,7 +196,6 @@ def recompute_grads_w_kwargs(fn, use_entire_scope=False, train_vars=None, name=N
         def remapped_fn(*_):
             nonlocal output_keywords
             nonlocal output_local
-            print("Calling remapped fn {}".format(name))
             out = fn(*args, **kwargs)
             if isinstance(out, dict):
                 output_keywords = []
