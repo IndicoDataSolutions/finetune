@@ -81,13 +81,13 @@ class TestActivationParity(unittest.TestCase):
     def test_roberta_featurize(self):
         model = Classifier(base_model=RoBERTa)
         np.testing.assert_allclose(
-            model.featurize_sequence(self.TEST_DATA)[:,:6,:], 
+            model.featurize_sequence(self.TEST_DATA), 
             np.load(
                 os.path.join(
                     DIRECTORY, 
                     'data/test-roberta-activations.npy'
                 )
-            ),
+            )[:, 1:-1],
             atol=1e-1
         )
 
@@ -107,13 +107,13 @@ class TestActivationParity(unittest.TestCase):
     def test_roberta_featurize_fp16(self):
         model = Classifier(base_model=RoBERTa, float_16_predict=True)
         np.testing.assert_allclose(
-            model.featurize_sequence(self.TEST_DATA)[:,:6,:],
+            model.featurize_sequence(self.TEST_DATA),
             np.load(
                 os.path.join(
                     DIRECTORY,
                     'data/test-roberta-activations.npy'
                 )
-            ),
+            )[:, 1:-1],
             atol=1e-1
         )
                                          
