@@ -128,7 +128,7 @@ class Seq2SeqLabelEncoder(BaseEncoder):
     def transform(self, y):
         output = []
         for y_i in y:
-            out = self.encoder.encode_multi_input([y_i], max_length=self.max_len, include_bos_eos=True, eos_on_cut=False).token_ids
+            out = self.encoder.encode_multi_input([y_i], max_length=self.max_len, include_bos_eos=True).token_ids
             # out = self.encoder.encode_multi_input([y_i], max_length=1e10, include_bos_eos=True).token_ids
             output.append((out, len(out)))
         return output

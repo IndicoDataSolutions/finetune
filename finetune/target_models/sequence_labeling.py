@@ -253,7 +253,7 @@ class SequenceLabeler(BaseModel):
         :param per_token: If True, return raw probabilities and labels on a per token basis
         :returns: list of class labels.
         """
-        classes = self.input_pipeline.label_encoder.classes_
+        classes = list(self.input_pipeline.label_encoder.classes_)
         all_subseqs = []
         all_labels = []
         all_probs = []
