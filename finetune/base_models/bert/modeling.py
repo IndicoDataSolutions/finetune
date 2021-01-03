@@ -112,7 +112,7 @@ class BertConfig(object):
         return json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n"
 
 
-class BertModel(object):
+class _BertModel(object):
     """BERT model ("Bidirectional Encoder Representations from Transformers").
 
         Example usage:
@@ -193,7 +193,7 @@ class BertModel(object):
                 )
                 # Add positional embeddings and token type embeddings, then layer
                 # normalize and perform dropout.
-                self.embedding_output = embedding_postprocessor(
+                self.embedding_output = self.embedding_postprocessor(
                     input_tensor=self.embedding_output,
                     input_context=input_context,
                     use_token_type=use_token_type,
@@ -463,6 +463,59 @@ def embedding_lookup(
     return output, embedding_table
 
 
+def docrep_pos_embed(input_context, positional_channels, batch_size, seq_length, width):
+    """ Embed 2D position DocRep-style, i.e. separate sinusoidal embeddings for each dim """
+    init = tf.compat.v1.variance_scaling_initializer(scale=0.02, mode="fan_avg", distribution="truncated_normal")
+    embedded_input_context = embed_position(input_context, positional_channels, batch_size, seq_length)
+    return tf.compat.v1.layers.dense(embedded_input_context, width, use_bias=False, kernel_initializer=init)
+
+
+def layoutlm_pos_embed(input_context, positional_channels, batch_size, seq_length, width):
+    """ Embed 2D position LayoutLM-style, i.e. separate learned embeddings for each dim """
+    # max 2d positional embeddings is 1024 even though max positional embeddings is 512
+    max_2d_positional_embeddings = 1024
+    x_position_embedding_table = tf.compat.v1.get_variable(
+        name="x_position_embeddings",
+        shape=[max_2d_positional_embeddings, width],
+        initializer=tf.compat.v1.random_normal_initializer(),
+    )
+    y_position_embedding_table = tf.compat.v1.get_variable(
+        name="y_position_embeddings",
+        shape=[max_2d_positional_embeddings, width],
+        initializer=tf.compat.v1.random_normal_initializer(),
+    )
+    h_position_embedding_table = tf.compat.v1.get_variable(
+        name="h_position_embeddings",
+        shape=[max_2d_positional_embeddings, width],
+        initializer=tf.compat.v1.random_normal_initializer(),
+    )
+    w_position_embedding_table = tf.compat.v1.get_variable(
+        name="w_position_embeddings",
+        shape=[max_2d_positional_embeddings, width],
+        initializer=tf.compat.v1.random_normal_initializer(),
+    )
+    # context is in alphabetical order, so bottom, left, right, top
+    bottom_pos = tf.cast(input_context[:, :, 0], dtype='int32')
+    left_pos = tf.cast(input_context[:, :, 1], dtype='int32')
+    right_pos = tf.cast(input_context[:, :, 2], dtype='int32')
+    top_pos = tf.cast(input_context[:, :, 3], dtype='int32')
+    left_position_embeddings = tf.gather(x_position_embedding_table, left_pos)
+    upper_position_embeddings = tf.gather(y_position_embedding_table, top_pos)
+    right_position_embeddings = tf.gather(x_position_embedding_table, right_pos)
+    lower_position_embeddings = tf.gather(y_position_embedding_table, bottom_pos)
+    h_position_embeddings = tf.gather(h_position_embedding_table, bottom_pos - top_pos)
+    w_position_embeddings = tf.gather(w_position_embedding_table, right_pos - left_pos)
+    all_2d_pos_embeddings = [
+        left_position_embeddings,
+        upper_position_embeddings,
+        right_position_embeddings,
+        lower_position_embeddings,
+        h_position_embeddings,
+        w_position_embeddings
+    ]
+    return tf.math.add_n(all_2d_pos_embeddings)
+
+
 def embedding_postprocessor(
         input_tensor,
         input_context=None,
@@ -480,6 +533,7 @@ def embedding_postprocessor(
         positional_channels=None,
         reading_order_decay_rate=None,
         anneal_reading_order=False,
+        pos2d_embedding_fn=docrep_pos_embed,
 ):
     """Performs various post-processing on a word embedding tensor.
 
@@ -585,9 +639,13 @@ def embedding_postprocessor(
             output += position_embeddings
             
     if pos_injection:
-        init = tf.compat.v1.variance_scaling_initializer(scale=0.02, mode="fan_avg", distribution="truncated_normal")
-        embedded_input_context = embed_position(input_context, positional_channels, batch_size, seq_length)
-        output += tf.compat.v1.layers.dense(embedded_input_context, width, use_bias=False, kernel_initializer=init)
+        output += pos2d_embedding_fn(
+            input_context=input_context,
+            positional_channels=positional_channels,
+            batch_size=batch_size,
+            seq_length=seq_length,
+            width=width
+        )
 
     output = layer_norm_and_dropout(output, dropout_prob)
     return output
@@ -1107,3 +1165,13 @@ def assert_rank(tensor, expected_rank, name=None):
             "`%d` (shape = %s) is not equal to the expected rank `%s`"
             % (name, scope_name, actual_rank, str(tensor.shape), str(expected_rank))
         )
+
+
+class BertModel(_BertModel):
+    def embedding_postprocessor(self, *args, **kwargs):
+        return embedding_postprocessor(*args, pos2d_embedding_fn=docrep_pos_embed, **kwargs)
+
+
+class LayoutLMModel(_BertModel):
+    def embedding_postprocessor(self, *args, **kwargs):
+        return embedding_postprocessor(*args, pos2d_embedding_fn=layoutlm_pos_embed, **kwargs)

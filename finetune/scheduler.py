@@ -28,8 +28,11 @@ def scheduled(fn):
                     orig_except
                 )
             )
+            # Close everything to make sure we have available memory
             self.close_all()
             try:
+                # Reload in preparation for prediction
+                model = self._rotate_in_model(model_file)
                 preds = fn(
                     self, model_file=model_file, x=x, *args, model=model, **kwargs
                 )
@@ -63,6 +66,7 @@ class Scheduler:
     def _memory_for_one_more(self):
         if self.gpu_memory_limit is None:
             return True # first run
+
         in_use = BytesInUse()
         peak = MaxBytesInUse()
         if self.max_above_resting is None or (peak - in_use) > self.max_above_resting:
@@ -96,16 +100,21 @@ class Scheduler:
         ) < self.gpu_memory_limit
 
     def _close_oldest_model(self):
-        name = self.loaded_models.pop(0)
-        self.model_cache[name].close()
-        del self.model_cache[name]
-        gc.collect()
+        if len(self.loaded_models):
+            name = self.loaded_models.pop(0)
+            self.model_cache[name].close()
+            del self.model_cache[name]
+            gc.collect()
+        else:
+            LOGGER.info("No models cached -- cannot remove oldest model.")
 
     def _rotate_in_model(self, model):
         if model not in self.loaded_models:
             if (
-                self.max_models is not None
-                and len(self.loaded_models) + 1 > self.max_models
+                (
+                    self.max_models is not None
+                    and len(self.loaded_models) + 1 > self.max_models
+                )
                 or not self._memory_for_one_more()
             ):
                 self._close_oldest_model()

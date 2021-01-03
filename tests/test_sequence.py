@@ -7,6 +7,8 @@ import codecs
 import json
 import random
 import time
+import weakref
+import gc
 
 # required for tensorflow logging control
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -163,7 +165,12 @@ class TestSequenceLabeler(unittest.TestCase):
         self.model.fit(train_texts, train_annotations)
         predictions = self.model.predict(test_texts)
         per_token_predictions = self.model.predict(test_texts, per_token=True)
+        with_doc_probas = self.model.predict(test_texts, return_negative_confidence=True)
         probas = self.model.predict_proba(test_texts)
+
+        for pred, pred_with_prob in zip(predictions, with_doc_probas):
+            self.assertEqual(pred, pred_with_prob["prediction"])
+            self.assertIsInstance(pred_with_prob["negative_confidence"], dict)
 
         self.assertIsInstance(probas, list)
         self.assertIsInstance(probas[0], list)
@@ -183,6 +190,7 @@ class TestSequenceLabeler(unittest.TestCase):
         self.model.save(self.save_file)
 
         self.assertGreater(reweighted_token_recall['Named Entity'], token_recall['Named Entity'])
+
 
     def test_cached_predict(self):
         """
@@ -282,6 +290,87 @@ class TestSequenceLabeler(unittest.TestCase):
         model = SequenceLabeler.load(self.save_file)
         model.predict(test_texts)
 
+
+    def test_pred_alignment(self):
+        model = SequenceLabeler(subtoken_predictions=True)
+        text = "John J Johnson"
+        labels = [{"start": 5, "end": 6, "text": "J", "label": "middle_name"}]
+        model.fit([text] * 30, [labels] * 30)
+        preds = model.predict([text])[0]
+        self.assertEqual(len(preds), 1)
+        del preds[0]["confidence"]
+        self.assertEquals(preds, labels)
+
+
+class TestSequenceMemoryLeak(unittest.TestCase):
+
+    @staticmethod
+    def is_wr(val):
+        return val is not None and not isinstance(val, (int, float, str))
+
+    @staticmethod
+    def get_weakrefs(dictionary):
+        weakrefs = []
+        for v in dictionary.values():
+            if hasattr(v, "__dict__"):
+                weakrefs += TestSequenceMemoryLeak.get_weakrefs(v.__dict__)
+            if isinstance(v, dict):
+                weakrefs += TestSequenceMemoryLeak.get_weakrefs(v)
+            elif isinstance(v, (list, tuple)):
+                for vi in v:
+                    if isinstance(vi, dict):
+                        weakrefs += TestSequenceMemoryLeak.get_weakrefs(vi)
+                    elif TestSequenceMemoryLeak.is_wr(vi):
+                        try:
+                            weakrefs.append(weakref.ref(vi))
+                        except Exception as e:
+                            print(e)
+            elif TestSequenceMemoryLeak.is_wr(v):
+                try:
+                    weakrefs.append(weakref.ref(v))
+                except Exception as e:
+                    print(e)
+        return weakrefs
+
+
+    def test_leaking_objects(self):
+        previous_model_wrs = None
+        for _ in range(10):
+            model = SequenceLabeler(n_epochs=1)
+            model.fit(["some text"], [[]])
+            wrs = self.get_weakrefs(model.__dict__)
+            del model
+            tf.compat.v1.reset_default_graph()
+            gc.collect()
+            if previous_model_wrs is None:
+                previous_model_wrs = [w for w in wrs if w() is not None]
+            else:
+                new_refs = [w() for w in wrs if w() is not None]
+                prevous_refs = [w() for w in previous_model_wrs]
+                for new in new_refs:
+                    # Assert that no new objects are introduced that cannot be cleaned up.
+                    print(new)
+                    self.assertTrue(any(new is old for old in prevous_refs))
+
+    def test_auto_negative_chunks(self):
+        raw_docs = ["".join(text) for text in self.texts]
+        texts, annotations = finetune_to_indico_sequence(raw_docs, self.texts, self.labels,
+                                                         none_value=self.model.config.pad_token)
+        train_texts, test_texts, train_annotations, test_annotations = train_test_split(
+            texts, annotations, test_size=0.1, random_state=42
+        )
+
+        ans_model = SequenceLabeler(max_length=5, chunk_context=0, auto_negative_sampling=True, n_epochs=1)
+        ans_model.fit(train_texts, train_annotations)
+        ans_predictions = ans_model.predict(test_texts)
+        ans_token_precision = sequence_labeling_token_precision(test_annotations, ans_predictions)
+
+        baseline_model = SequenceLabeler(max_length=5, chunk_context=0, auto_negative_sampling=False, n_epochs=1)
+        baseline_model.fit(train_texts, train_annotations)
+        baseline_predictions = baseline_model.predict(test_texts)
+        baseline_token_precision = sequence_labeling_token_precision(test_annotations, baseline_predictions)
+
+        assert ans_token_precision['Named Entity'] > baseline_token_precision['Named Entity']
 
 class TestSequenceLabelerNoCRF(TestSequenceLabeler):
     def default_config(self, **kwargs):

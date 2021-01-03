@@ -1,4 +1,5 @@
 import logging
+import warnings
 
 logging.getLogger("transformers").setLevel(logging.ERROR)
 
@@ -14,6 +15,7 @@ from transformers import (
     T5Config,
     AlbertTokenizer,
     AlbertConfig,
+    BertTokenizer
 )
 from transformers.modeling_tf_t5 import TFT5Model
 from transformers.modeling_tf_electra import TFElectraMainLayer

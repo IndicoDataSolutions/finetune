@@ -31,7 +31,7 @@ def textcnn_featurizer(
     with tf.compat.v1.variable_scope("model/featurizer", reuse=reuse):
         embed_weights = tf.compat.v1.get_variable(
             name="we",
-            shape=[encoder.vocab_size + config.max_length, config.n_embed_featurizer],
+            shape=[encoder.vocab_size, config.n_embed_featurizer],
             initializer=tf.compat.v1.random_normal_initializer(stddev=config.weight_stddev),
         )
 

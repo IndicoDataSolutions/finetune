@@ -193,7 +193,7 @@ class SequenceLabelingEncoder(BaseEncoder):
         self.lookup = None
 
     def fit(self, labels):
-        self.classes_ = list(set(lab_i["label"] for lab in labels for lab_i in lab) | {self.pad_token})
+        self.classes_ = sorted(list(set(lab_i["label"] for lab in labels for lab_i in lab) | {self.pad_token}))
         self.lookup = {c: i for i, c in enumerate(self.classes_)}
 
     def pre_process_label(self, out, labels):
@@ -223,7 +223,8 @@ class SequenceLabelingEncoder(BaseEncoder):
         labels_out = [pad_idx for _ in out.tokens]
         for label in labels:
             for i, (start, end, text) in enumerate(zip(out.token_starts, out.token_ends, out.tokens)):
-                if end > label["end"]:
+                # Label extends less than halfway through token
+                if label["end"] < (start + end + 1) // 2:
                     break
                 overlap, agree = self.overlaps(label, start, end, text)
                 if overlap:

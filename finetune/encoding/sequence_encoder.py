@@ -96,6 +96,7 @@ def finetune_to_indico_sequence(
         spacy_token_ends = np.asarray([token.idx + len(token.text) for token in spacy_tokens])
         doc_annotations = []
         annotation_ranges = set()
+        raw_annotation_end = 0
         raw_annotation_start = 0
         subtoken_to_label_idx = []
         for i, (sub_str, raw_label, confidences) in enumerate(
@@ -111,13 +112,13 @@ def finetune_to_indico_sequence(
 
             for label_idx, label in enumerate(label_list):
                 stripped_text = sub_str.strip()
-
+                start_of_search = raw_annotation_start if label_idx != 0 else raw_annotation_end 
                 if subtoken_predictions:
-                    raw_annotation_start = raw_text.find(sub_str, raw_annotation_start)
+                    raw_annotation_start = raw_text.find(sub_str, start_of_search)
                     raw_annotation_end = raw_annotation_start + len(sub_str)
                 else:
                     raw_annotation_start = raw_text.find(
-                        stripped_text, raw_annotation_start
+                        stripped_text, start_of_search
                     )
                     raw_annotation_end = raw_annotation_start + len(stripped_text)
 

@@ -276,6 +276,7 @@ def get_default_config():
         crf_sequence_labeling=True,
         use_gpu_crf_predict="auto",
         max_empty_chunk_ratio=1.0,
+        auto_negative_sampling=False,
         #
         # Regression Params
         regression_loss="L2",

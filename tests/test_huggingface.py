@@ -4,9 +4,11 @@ import json
 import unittest
 import numpy as np
 import tensorflow as tf
+import joblib as jl
 
-from transformers import AutoTokenizer, TFAutoModel
-from finetune import SequenceLabeler
+from transformers import AutoTokenizer, TFAutoModel, BertTokenizer
+from finetune import SequenceLabeler, DocumentLabeler
+from finetune.base_models import LayoutLM
 from finetune.base_models.huggingface.models import (
     HFBert,
     HFElectraGen,
@@ -19,7 +21,6 @@ from finetune.target_models.seq2seq import HFS2S
 from sklearn.model_selection import train_test_split
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
 
-
 class TestHuggingFace(unittest.TestCase):
     def setUp(self):
         with open('tests/data/weird_text.txt') as f:
@@ -27,7 +28,7 @@ class TestHuggingFace(unittest.TestCase):
         # This token is added to our t5 model, causes differences if it appears in the text
         self.text = weird_text[:1000].replace("<", "")
 
-    def check_embeddings_equal(self, finetune_base_model, hf_model_path):
+    def check_embeddings_equal(self, finetune_base_model, hf_model_path, **kwargs):
         finetune_model = SequenceLabeler(
             base_model=finetune_base_model,
             train_embeddings=False,
@@ -35,7 +36,7 @@ class TestHuggingFace(unittest.TestCase):
             batch_size=1,
         )
         finetune_seq_features = finetune_model.featurize_sequence([self.text])[0]
-        hf_seq_features = self.huggingface_embedding(self.text, hf_model_path)[0]
+        hf_seq_features = self.huggingface_embedding(self.text, hf_model_path, **kwargs)[0]
         if len(finetune_seq_features) + 2 == len(hf_seq_features):
             hf_seq_features = hf_seq_features[1:-1]
         np.testing.assert_array_almost_equal(
@@ -108,3 +109,25 @@ class TestHuggingFace(unittest.TestCase):
 
     def test_albert(self):
         self.check_embeddings_equal(HFAlbert, "albert-base-v2")
+
+    def test_layoutlm(self):
+        activations_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "data", "test-layoutlm-activations.jl")
+        def subset_doc(doc):
+            """ Take approximately the first 512 tokens from just the first page """
+            for page in doc:
+                page["tokens"] = page["tokens"][:60]
+                page_idx_end = page["tokens"][-1]["page_offset"]["end"]
+                page["pages"][0]["text"] = page["pages"][0]["text"][:page_idx_end]
+                page["pages"][0]["doc_offset"]["end"] = page["pages"][0]["doc_offset"]["start"] + page_idx_end
+                return [page]
+
+        with open("tests/data/test_ocr_documents.json", "rt") as fp:
+            documents = json.load(fp)
+        documents = [subset_doc(doc) for doc in documents]
+        finetune_model = DocumentLabeler(base_model=LayoutLM)
+        expected_all = jl.load(activations_path)
+        for doc, expected in zip(documents, expected_all):
+            finetune_seq_features = finetune_model.featurize_sequence([doc])
+            np.testing.assert_array_almost_equal(
+                finetune_seq_features, expected, decimal=1,
+            )

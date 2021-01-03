@@ -1,9 +1,10 @@
 import os
+import functools
 
 import tensorflow as tf
 from finetune.util.shapes import lengths_from_eos_idx
 from finetune.base_models.bert.roberta_encoder import RoBERTaEncoder
-from finetune.base_models.bert.modeling import BertConfig, BertModel
+from finetune.base_models.bert.modeling import BertConfig, BertModel, LayoutLMModel
 
 def get_decay_for_half(total_num_steps):
     decay = tf.minimum(tf.cast(tf.compat.v1.train.get_global_step(), tf.float32) / (total_num_steps / 2), 1.0)
@@ -18,6 +19,7 @@ def bert_featurizer(
     reuse=None,
     context=None,
     total_num_steps=None,
+    underlying_model=BertModel,
     **kwargs
 ):
     """
@@ -100,7 +102,7 @@ def bert_featurizer(
         reading_order_decay_rate = None
 
     with tf.compat.v1.variable_scope("model/featurizer", reuse=reuse):
-        bert = BertModel(
+        bert = underlying_model(
             config=bert_config,
             is_training=train,
             input_ids=X,
@@ -136,3 +138,6 @@ def bert_featurizer(
             output_state = {k: tf.stop_gradient(v) for k, v in output_state.items()}
 
         return output_state
+
+
+layoutlm_featurizer = functools.partial(bert_featurizer, underlying_model=LayoutLMModel)

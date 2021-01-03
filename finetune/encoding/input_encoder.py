@@ -3,18 +3,21 @@ Convert plain text to format accepted by model (token idxs + special tokens).
 """
 import warnings
 import functools
-from collections import namedtuple, Counter
+from collections import namedtuple, Counter, OrderedDict
 
 import spacy
 import numpy as np
 
 NLP = None
 
+
 def get_spacy():
     global NLP
     if NLP is None:
         NLP = spacy.load("en", disable=["parser", "tagger", "ner", "textcat"])
-        NLP.max_length = 8000000 # approximately one volume of the encyclopedia britannica.
+        NLP.max_length = (
+            8000000  # approximately one volume of the encyclopedia britannica.
+        )
     return NLP
 
 
@@ -32,7 +35,7 @@ EncodedOutput = namedtuple(
 EncodedOutput.__new__.__defaults__ = (None,) * len(EncodedOutput._fields)
 
 SUBS = {"—": "-", "–": "-", "―": "-", "…": "...", "´": "'"}
-INFO_KEYS = ['text', 'start', 'end', 'first_col', 'first_row', 'last_col', 'last_row']
+INFO_KEYS = ["text", "start", "end", "first_col", "first_row", "last_col", "last_row"]
 
 
 def get_pairs(word):
@@ -58,27 +61,54 @@ def _remove_repeated_whitespace(encoded):
     batch_char_ends = []
     batch_char_starts = []
     for token_ids, tokens, token_ends, token_starts in zip(
-            encoded.token_ids,
-            encoded.tokens,
-            encoded.token_ends,
-            encoded.token_starts
+        encoded.token_ids, encoded.tokens, encoded.token_ends, encoded.token_starts
     ):
-        mask = [i != 0 and token == tokens[i - 1] == " " for i, token in enumerate(tokens)]
+        mask = [
+            i != 0 and token == tokens[i - 1] == " " for i, token in enumerate(tokens)
+        ]
         batch_token_idxs.append([x for x, c in zip(token_ids, mask) if not c])
         batch_tokens.append([x for x, c in zip(tokens, mask) if not c])
         batch_char_ends.append([x for x, c in zip(token_ends, mask) if not c])
         batch_char_starts.append([x for x, c in zip(token_starts, mask) if not c])
-    
+
     return EncodedOutput(
-	token_ids=batch_token_idxs,
+        token_ids=batch_token_idxs,
         tokens=batch_tokens,
         token_ends=batch_char_ends,
         token_starts=batch_char_starts,
     )
 
 
+class CacheDict(OrderedDict):
+    def __init__(self, *args, cache_len: int = 50000, **kwargs):
+        """
+        Simple Cache dictionary
+        modified from https://gist.github.com/davesteele/44793cd0348f59f8fadd49d7799bd306
+        """
+        if cache_len < 1:
+            raise ValueError(
+                "cache_len must be greater than 1 got cache_len={}".format(cache_len)
+            )
+        self.cache_len = cache_len
+        super().__init__(*args, **kwargs)
+
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        super().move_to_end(key)
+
+        if len(self) > self.cache_len:
+            oldkey = next(iter(self))
+            super().__delitem__(oldkey)
+
+    def __getitem__(self, key):
+        val = super().__getitem__(key)
+        super().move_to_end(key)
+        return val
+
+
 class SingletonMeta(type):
     _instances = {}
+
     def __call__(cls, *args, **kwargs):
         if cls not in cls._instances:
             cls._instances[cls] = super(SingletonMeta, cls).__call__(*args, **kwargs)
@@ -106,6 +136,7 @@ class BaseEncoder(metaclass=SingletonMeta):
         self.end_token = None
         self.encoder = None
         self.decoder = None
+        self.cache = CacheDict()
 
     def _lazy_init(self):
         pass
@@ -190,6 +221,7 @@ class BaseEncoder(metaclass=SingletonMeta):
         for d in encoded:
             joined += d[:cut_len] + [delimiter]
         joined = joined[:-1]
+
         if include_bos_eos:
             if eos_on_cut or cut_len is None:
                 joined += [clf_token]
@@ -198,7 +230,13 @@ class BaseEncoder(metaclass=SingletonMeta):
     def _token_length(self, token):
         return len(token)
 
-    def encode_multi_input(self, Xs, max_length=None, remove_repeated_whitespace=False, include_bos_eos=True, eos_on_cut=True):
+    def encode_multi_input(
+        self,
+        Xs,
+        max_length=None,
+        remove_repeated_whitespace=False,
+        include_bos_eos=True,
+    ):
         """
         Encodes the text for passing to the model, also tracks the location of each token to allow reconstruction.
         It can also, optionally, construct a per-token labels as required for training.
@@ -211,10 +249,28 @@ class BaseEncoder(metaclass=SingletonMeta):
         if remove_repeated_whitespace:
             encoded = _remove_repeated_whitespace(encoded)
         # merge fields + truncate if necessary
-        token_ids = self._cut_and_concat(encoded=encoded.token_ids, max_length=max_length, include_bos_eos=include_bos_eos, eos_on_cut=eos_on_cut)
-        tokens = self._cut_and_concat(encoded=encoded.tokens, max_length=max_length, include_bos_eos=include_bos_eos, eos_on_cut=eos_on_cut)
-        token_ends = self._cut_and_concat(encoded=encoded.token_ends, max_length=max_length, special_tokens=-1, include_bos_eos=include_bos_eos, eos_on_cut=eos_on_cut)
-        token_starts = self._cut_and_concat(encoded=encoded.token_starts, max_length=max_length, special_tokens=-1, include_bos_eos=include_bos_eos, eos_on_cut=eos_on_cut)
+        token_ids = self._cut_and_concat(
+            encoded=encoded.token_ids,
+            max_length=max_length,
+            include_bos_eos=include_bos_eos,
+        )
+        tokens = self._cut_and_concat(
+            encoded=encoded.tokens,
+            max_length=max_length,
+            include_bos_eos=include_bos_eos,
+        )
+        token_ends = self._cut_and_concat(
+            encoded=encoded.token_ends,
+            max_length=max_length,
+            special_tokens=-1,
+            include_bos_eos=include_bos_eos,
+        )
+        token_starts = self._cut_and_concat(
+            encoded=encoded.token_starts,
+            max_length=max_length,
+            special_tokens=-1,
+            include_bos_eos=include_bos_eos,
+        )
         return EncodedOutput(
             token_ids=np.asarray(token_ids),
             tokens=np.array(tokens),
@@ -226,23 +282,29 @@ class BaseEncoder(metaclass=SingletonMeta):
         self.__init__()
 
     def __getstate__(self):
-        raise ValueError("We do not want to be serializing text encoders. Please use getters from input_pipeline.")
+        raise ValueError(
+            "We do not want to be serializing text encoders. Please use getters from input_pipeline."
+        )
 
 
 def tokenize_context(context, encoded_output, config):
     """ Tokenize the context corresponding to a single sequence of text """
     # in the edge case where the chunk is just a single end token, we don't need to alter our context chunk
-
     seq_len = len(encoded_output.token_ids)
     context_keys = list(k for k in sorted(context[0].keys()) if k not in INFO_KEYS)
-    context_by_char_loc = sorted([(c['end'], [c[k] for k in context_keys], c["text"]) for c in context], key=lambda c: c[0])
+    context_by_char_loc = sorted(
+        [(c["end"], [c[k] for k in context_keys], c.get("text")) for c in context],
+        key=lambda c: c[0],
+    )
     # default context is set by user in config
     default_context = [config.default_context[k] for k in context_keys]
     current_char_loc = 0
     tokenized_context = []
     assert len(encoded_output.tokens) == len(encoded_output.token_ends)
     assert encoded_output.token_starts[1] <= encoded_output.token_ends[-2]
-    for i, (token, char_loc) in enumerate(zip(encoded_output.tokens, encoded_output.token_ends)):
+    for i, (token, char_loc) in enumerate(
+        zip(encoded_output.tokens, encoded_output.token_ends)
+    ):
         # Note: this assumes that the tokenization will never lump multiple tokens into one
         # (this would not be the case if multiple context spans make up the same token)
         if char_loc == -1:
@@ -251,13 +313,26 @@ def tokenize_context(context, encoded_output, config):
             while token.strip() and char_loc > context_by_char_loc[current_char_loc][0]:
                 current_char_loc += 1
                 if current_char_loc >= len(context_by_char_loc):
-                    raise ValueError("Context cannot be fully matched as it appears to not cover the end of the sequence for token {}".format(token))
-            if token.strip() not in context_by_char_loc[current_char_loc][2]:
-                warnings.warn("subtoken: {} has matched up with the context for token: {}".format(repr(token), repr(context_by_char_loc[current_char_loc][2])))
+                    raise ValueError(
+                        "Context cannot be fully matched as it appears to not cover the end of the sequence for token {}".format(
+                            token
+                        )
+                    )
+            if (
+                context_by_char_loc[current_char_loc][2]
+                and token.strip() not in context_by_char_loc[current_char_loc][2]
+            ):
+                warnings.warn(
+                    "subtoken: {} has matched up with the context for token: {}".format(
+                        repr(token), repr(context_by_char_loc[current_char_loc][2])
+                    )
+                )
             tokenized_context.append(context_by_char_loc[current_char_loc][1])
 
     assert len(tokenized_context) == len(encoded_output.token_ends)
     # padded value doesn't matter since it will be masked out
-    expanded_context = np.pad(tokenized_context, ((0, seq_len - len(tokenized_context)), (0, 0)), 'constant')
+    expanded_context = np.pad(
+        tokenized_context, ((0, seq_len - len(tokenized_context)), (0, 0)), "constant"
+    )
     assert len(expanded_context) == len(encoded_output.token_ids)
     return expanded_context
