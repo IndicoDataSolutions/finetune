@@ -144,7 +144,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         self.saver = Saver(
             fallback_filename=self.config.base_model_path,
-            exclude_matches=None if self.config.save_adam_vars else "Adam",
+            exclude_matches=None if self.config.save_adam_vars else "OptimizeLoss",
             save_dtype=self.config.save_dtype,
             permit_uninitialized=self.config.permit_uninitialized,
         )
@@ -154,7 +154,7 @@ class BaseModel(object, metaclass=ABCMeta):
             raise FinetuneError("Cannot reinitialize trained model from checkpoint")
         self.saver = Saver(
             fallback_filename=checkpoint_path,
-            exclude_matches=None if self.config.save_adam_vars else "Adam",
+            exclude_matches=None if self.config.save_adam_vars else "OptimizeLoss",
             save_dtype=self.config.save_dtype,
             restart_global_step=False,
         )

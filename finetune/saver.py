@@ -74,6 +74,8 @@ class SaverHook(_StopOnPredicateHook):
     def begin(self):
         super().begin()
         self.included = tf.compat.v1.global_variables()
+        if self.saver.exclude_matches and not self.cache_weights_to_file:
+            self.included = [w for w in self.included if self.saver.exclude_matches not in w.name]
 
     def _get_weights(self, session):
         if not self.keep_best_model or self.saver.variables is None or self.get_current_weights:

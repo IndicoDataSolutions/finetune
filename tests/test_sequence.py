@@ -302,6 +302,26 @@ class TestSequenceLabeler(unittest.TestCase):
         self.assertEquals(preds, labels)
 
 
+    def test_auto_negative_chunks(self):
+        raw_docs = ["".join(text) for text in self.texts]
+        texts, annotations = finetune_to_indico_sequence(raw_docs, self.texts, self.labels,
+                                                         none_value=self.model.config.pad_token)
+        train_texts, test_texts, train_annotations, test_annotations = train_test_split(
+            texts, annotations, test_size=0.1, random_state=42
+        )
+        ans_model = SequenceLabeler(max_length=5, chunk_context=0, auto_negative_sampling=True, n_epochs=1)
+        ans_model.fit(train_texts, train_annotations)
+        ans_predictions = ans_model.predict(test_texts)
+        ans_token_precision = sequence_labeling_token_precision(test_annotations, ans_predictions)
+
+        baseline_model = SequenceLabeler(max_length=5, chunk_context=0, auto_negative_sampling=False, n_epochs=1)
+        baseline_model.fit(train_texts, train_annotations)
+        baseline_predictions = baseline_model.predict(test_texts)
+        baseline_token_precision = sequence_labeling_token_precision(test_annotations, baseline_predictions)
+
+        assert ans_token_precision['Named Entity'] > baseline_token_precision['Named Entity']
+
+
 class TestSequenceMemoryLeak(unittest.TestCase):
 
     @staticmethod
@@ -352,25 +372,6 @@ class TestSequenceMemoryLeak(unittest.TestCase):
                     print(new)
                     self.assertTrue(any(new is old for old in prevous_refs))
 
-    def test_auto_negative_chunks(self):
-        raw_docs = ["".join(text) for text in self.texts]
-        texts, annotations = finetune_to_indico_sequence(raw_docs, self.texts, self.labels,
-                                                         none_value=self.model.config.pad_token)
-        train_texts, test_texts, train_annotations, test_annotations = train_test_split(
-            texts, annotations, test_size=0.1, random_state=42
-        )
-
-        ans_model = SequenceLabeler(max_length=5, chunk_context=0, auto_negative_sampling=True, n_epochs=1)
-        ans_model.fit(train_texts, train_annotations)
-        ans_predictions = ans_model.predict(test_texts)
-        ans_token_precision = sequence_labeling_token_precision(test_annotations, ans_predictions)
-
-        baseline_model = SequenceLabeler(max_length=5, chunk_context=0, auto_negative_sampling=False, n_epochs=1)
-        baseline_model.fit(train_texts, train_annotations)
-        baseline_predictions = baseline_model.predict(test_texts)
-        baseline_token_precision = sequence_labeling_token_precision(test_annotations, baseline_predictions)
-
-        assert ans_token_precision['Named Entity'] > baseline_token_precision['Named Entity']
 
 class TestSequenceLabelerNoCRF(TestSequenceLabeler):
     def default_config(self, **kwargs):
