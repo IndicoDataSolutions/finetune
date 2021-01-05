@@ -207,22 +207,31 @@ class SequenceLabeler(BaseModel):
 
     def finetune(self, Xs, Y=None, context=None, update_hook=None):
         if self.config.auto_negative_sampling and Y is not None:
+            # clear the saver to save memory.
+            self.saver.fallback # retrieve the fallback future.
+            self.saver = None
             model_copy = copy.deepcopy(self)
             model_copy._initialize()
+
             model_copy.input_pipeline.total_epoch_offset = self.config.n_epochs
             self.input_pipeline.current_epoch_offset = self.config.n_epochs
             self.input_pipeline.total_epoch_offset = self.config.n_epochs
 
             model_copy.config.max_empty_chunk_ratio = 0.0
             model_copy.config.auto_negative_sampling = False
-            # TODO: fix update hooks progress
             model_copy.finetune(Xs, Y=Y, context=context, update_hook=update_hook)
-            initial_run_preds = model_copy.predict(Xs)
+            initial_run_preds = []
+            outer_batch_size = self.config.predict_batch_size
+            for b_start in range(0, len(Xs), outer_batch_size):
+                initial_run_preds += model_copy.predict(Xs[b_start: b_start + outer_batch_size])
             del model_copy
             Y_with_neg_samples = negative_samples(initial_run_preds, Y, pad=self.config.pad_token)
             # this means we get the same absolute number of randomly sampled empty chunks with or without this option.
             self.config.max_empty_chunk_ratio *= sum(len(yi) for yi in Y) / sum(len(yi) for yi in Y_with_neg_samples)
             Y = Y_with_neg_samples
+
+            # Reinitialize the model including rebuilding the saver.
+            self._initialize()
         return super().finetune(Xs, Y=Y, context=context, update_hook=update_hook)
 
     def predict(
