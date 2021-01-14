@@ -30,6 +30,7 @@ EncodedOutput = namedtuple(
         "token_starts",  # list of list of character starts (locs are character ends) (ints)
         "useful_start",
         "useful_end",
+        "input_text",
     ],
 )
 EncodedOutput.__new__.__defaults__ = (None,) * len(EncodedOutput._fields)

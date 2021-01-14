@@ -1,6 +1,6 @@
 import functools
 import tensorflow as tf
-from tensorflow_addons.text.crf import crf_log_likelihood
+from finetune.util.crf import crf_log_likelihood
 
 from finetune.base_models.gpt.featurizer import attn, dropout, norm
 from finetune.util.shapes import shape_list, merge_leading_dims
@@ -562,7 +562,7 @@ def sequence_labeler(
 
         return {
             "logits": logits,
-            "losses": loss,
+            "losses": tf.nn.relu(loss),
             "predict_params": {
                 "transition_matrix": transition_params,
                 "sequence_length": lengths,

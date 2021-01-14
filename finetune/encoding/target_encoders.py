@@ -200,7 +200,7 @@ class SequenceLabelingEncoder(BaseEncoder):
         return labels, pad_idx
 
     @staticmethod
-    def overlaps(label, tok_start, tok_end, tok_text):
+    def overlaps(label, tok_start, tok_end, tok_text, input_text):
         does_overlap = (
             label["start"] < tok_end <= label["end"] or
             tok_start < label["end"] <= tok_end
@@ -210,8 +210,7 @@ class SequenceLabelingEncoder(BaseEncoder):
 
         # Don't run check if text wasn't provided
         if 'text' in label:
-            sub_text = label["text"][tok_start - label["start"]: tok_end - label["start"]]
-            strings_agree = sub_text.lower() in tok_text.lower()
+            strings_agree = input_text[label["start"]: label["end"]] == label["text"]
         else:
             strings_agree = True
 
@@ -225,7 +224,7 @@ class SequenceLabelingEncoder(BaseEncoder):
                 # Label extends less than halfway through token
                 if label["end"] < (start + end + 1) // 2:
                     break
-                overlap, agree = self.overlaps(label, start, end, text)
+                overlap, agree = self.overlaps(label, start, end, text, out.input_text[0])
                 if overlap:
                     if not agree:
                         raise ValueError("Tokens and labels do not align")
