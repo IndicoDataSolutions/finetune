@@ -1,0 +1,18 @@
+wandb_version: 1
+
+batch_size:
+  value: 32
+data:
+  value: data/ablations/number_norm.jl
+data_prop:
+  value: 1
+epochs:
+  value: 8
+low_memory:
+  value: 'false'
+predict_filename:
+  value: data/predictions/ablations/
+save:
+  value: models/ablations/
+seed:
+  value: 1

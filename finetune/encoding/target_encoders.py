@@ -7,10 +7,11 @@ from sklearn.preprocessing import LabelEncoder, MultiLabelBinarizer, OrdinalEnco
 
 LOGGER = logging.getLogger("finetune")
 
+
 class BaseEncoder(metaclass=ABCMeta):
     @property
     def target_labels(self):
-        return getattr(self, 'classes_', None)
+        return getattr(self, "classes_", None)
 
     @property
     def target_dim(self):
@@ -32,7 +33,11 @@ class RegressionEncoder(BaseEncoder):
             return np.expand_dims(output, 1)  # for single output value regression.
         if rank == 2:
             return output
-        raise ValueError("Unresolvable shape: {}. Must be able to fit a format [batch, n_outputs]".format(output.shape))
+        raise ValueError(
+            "Unresolvable shape: {}. Must be able to fit a format [batch, n_outputs]".format(
+                output.shape
+            )
+        )
 
     def fit_transform(self, x):
         output = self.transform(x)
@@ -56,7 +61,6 @@ class RegressionEncoder(BaseEncoder):
 
 
 class OneHotLabelEncoder(LabelEncoder, BaseEncoder):
-
     def _make_one_hot(self, labels):
         output = np.zeros([len(labels), len(self.classes_)], dtype=np.float)
         output[np.arange(len(labels)), labels] = 1
@@ -94,7 +98,7 @@ class NoisyLabelEncoder(LabelEncoder, BaseEncoder):
     def transform(self, y):
         return pd.DataFrame(y, columns=self.classes_, dtype=np.float).values
 
-    #TODO: Make output dataframe consistent with self.target_labels
+    # TODO: Make output dataframe consistent with self.target_labels
     # and self.classes_
     def fit_transform(self, labels):
         self.fit(labels)
@@ -128,7 +132,9 @@ class Seq2SeqLabelEncoder(BaseEncoder):
     def transform(self, y):
         output = []
         for y_i in y:
-            out = self.encoder.encode_multi_input([y_i], max_length=self.max_len, include_bos_eos=True).token_ids
+            out = self.encoder.encode_multi_input(
+                [y_i], max_length=self.max_len, include_bos_eos=True
+            ).token_ids
             output.append((out, len(out)))
         return output
 
@@ -137,7 +143,6 @@ class Seq2SeqLabelEncoder(BaseEncoder):
 
 
 class OrdinalRegressionEncoder(OrdinalEncoder, BaseEncoder):
-
     def __init__(self):
         self.num_outputs = None
         super().__init__()
@@ -185,14 +190,18 @@ class OrdinalRegressionEncoder(OrdinalEncoder, BaseEncoder):
 
 
 class SequenceLabelingEncoder(BaseEncoder):
-
     def __init__(self, pad_token):
         self.classes_ = None
         self.pad_token = pad_token
         self.lookup = None
 
     def fit(self, labels):
-        self.classes_ = sorted(list(set(lab_i["label"] for lab in labels for lab_i in lab) | {self.pad_token}))
+        self.classes_ = sorted(
+            list(
+                set(lab_i["label"] for lab in labels for lab_i in lab)
+                | {self.pad_token}
+            )
+        )
         self.lookup = {c: i for i, c in enumerate(self.classes_)}
 
     def pre_process_label(self, out, labels):
@@ -202,15 +211,17 @@ class SequenceLabelingEncoder(BaseEncoder):
     @staticmethod
     def overlaps(label, tok_start, tok_end, tok_text):
         does_overlap = (
-            label["start"] < tok_end <= label["end"] or
-            tok_start < label["end"] <= tok_end
+            label["start"] < tok_end <= label["end"]
+            or tok_start < label["end"] <= tok_end
         )
         if not does_overlap:
             return False, False
 
         # Don't run check if text wasn't provided
-        if 'text' in label:
-            sub_text = label["text"][tok_start - label["start"]: tok_end - label["start"]]
+        if "text" in label:
+            sub_text = label["text"][
+                tok_start - label["start"] : tok_end - label["start"]
+            ]
             strings_agree = sub_text.lower() in tok_text.lower()
         else:
             strings_agree = True
@@ -221,7 +232,9 @@ class SequenceLabelingEncoder(BaseEncoder):
         labels, pad_idx = self.pre_process_label(out, labels)
         labels_out = [pad_idx for _ in out.tokens]
         for label in labels:
-            for i, (start, end, text) in enumerate(zip(out.token_starts, out.token_ends, out.tokens)):
+            for i, (start, end, text) in enumerate(
+                zip(out.token_starts, out.token_ends, out.tokens)
+            ):
                 # Label extends less than halfway through token
                 if label["end"] < (start + end + 1) // 2:
                     break
@@ -229,12 +242,19 @@ class SequenceLabelingEncoder(BaseEncoder):
                 if overlap:
                     if not agree:
                         raise ValueError("Tokens and labels do not align")
-                    if labels_out[i] != pad_idx and self.lookup[label["label"]] != labels_out[i]:
-                        LOGGER.warning("Overlapping labels were found, consider multilabel_sequence=True")
+                    if (
+                        labels_out[i] != pad_idx
+                        and self.lookup[label["label"]] != labels_out[i]
+                    ):
+                        LOGGER.warning(
+                            "Overlapping labels were found, consider multilabel_sequence=True"
+                        )
                     if label["label"] not in self.lookup:
                         LOGGER.warning(
                             "Attempting to encode unknown labels : {}, ignoring for now but this will likely not "
-                            "result in desirable behaviour. Available labels are {}".format(label["label"], self.lookup.keys())
+                            "result in desirable behaviour. Available labels are {}".format(
+                                label["label"], self.lookup.keys()
+                            )
                         )
                     else:
                         labels_out[i] = self.lookup[label["label"]]
@@ -251,7 +271,10 @@ class SequenceMultiLabelingEncoder(SequenceLabelingEncoder):
         labels_out = [[0 for _ in self.classes_] for _ in out.tokens]
         for i, (start, end) in enumerate(zip(out.token_starts, out.token_ends)):
             for label in labels:
-                if label["start"] <= start < label["end"] or label["start"] < end <= label["end"]:
+                if (
+                    label["start"] <= start < label["end"]
+                    or label["start"] < end <= label["end"]
+                ):
                     if label["label"] not in self.lookup:
                         LOGGER.warning(
                             "Attempting to encode unknown labels, ignoring for now but this will likely not "
@@ -271,7 +294,6 @@ class MultilabelClassificationEncoder(MultiLabelBinarizer, BaseEncoder):
 
 
 class IDEncoder(BaseEncoder):
-
     def __init__(self):
         self.classes_ = [0]
 

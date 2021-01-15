@@ -13,9 +13,9 @@ from transformers import (
     XLMRobertaConfig,
     T5Tokenizer,
     T5Config,
-    AlbertTokenizer,
+    AlbertTokenizerFast,
     AlbertConfig,
-    BertTokenizer
+    BertTokenizer,
 )
 from transformers.modeling_tf_t5 import TFT5Model
 from transformers.modeling_tf_electra import TFElectraMainLayer
@@ -110,7 +110,7 @@ HFAlbert = finetune_model_from_huggingface(
         "albert-base-v2": "https://cdn.huggingface.co/albert-base-v2-tf_model.h5"
     },
     hf_featurizer=TFAlbertMainLayer,
-    hf_tokenizer=AlbertTokenizer,
+    hf_tokenizer=AlbertTokenizerFast,
     hf_config=AlbertConfig,
     weights_replacement=[
         ("tf_albert_for_masked_lm_1/albert/", "model/featurizer/tf_albert_main_layer/")

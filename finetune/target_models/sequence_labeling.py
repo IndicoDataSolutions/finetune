@@ -4,6 +4,7 @@ from collections import Counter
 
 import tensorflow as tf
 import numpy as np
+import logging
 
 from finetune.base import BaseModel
 from finetune.encoding.target_encoders import (
@@ -17,6 +18,9 @@ from finetune.encoding.input_encoder import get_spacy
 from finetune.input_pipeline import BasePipeline
 from finetune.util.metrics import sequences_overlap
 from finetune.encoding.input_encoder import tokenize_context
+
+
+logger = logging.getLogger()
 
 
 class SequencePipeline(BasePipeline):
@@ -88,14 +92,8 @@ class SequencePipeline(BasePipeline):
             [None, self.label_encoder.target_dim] if self.multi_label else [None]
         )
         return (
-            (
-                types,
-                tf.float32,
-            ),
-            (
-                shapes,
-                TS(target_shape),
-            ),
+            (types, tf.float32,),
+            (shapes, TS(target_shape),),
         )
 
     def _target_encoder(self):
@@ -153,6 +151,7 @@ def _spacy_token_predictions(raw_text, tokens, probas, positions):
 
     return spacy_results
 
+
 def negative_samples(preds, labels, pad="<PAD>"):
     modified_labels = []
     for p, l in zip(preds, labels):
@@ -208,7 +207,7 @@ class SequenceLabeler(BaseModel):
     def finetune(self, Xs, Y=None, context=None, update_hook=None):
         if self.config.auto_negative_sampling and Y is not None:
             # clear the saver to save memory.
-            self.saver.fallback # retrieve the fallback future.
+            self.saver.fallback  # retrieve the fallback future.
             self.saver = None
             model_copy = copy.deepcopy(self)
             model_copy._initialize()
@@ -223,11 +222,17 @@ class SequenceLabeler(BaseModel):
             initial_run_preds = []
             outer_batch_size = self.config.predict_batch_size
             for b_start in range(0, len(Xs), outer_batch_size):
-                initial_run_preds += model_copy.predict(Xs[b_start: b_start + outer_batch_size])
+                initial_run_preds += model_copy.predict(
+                    Xs[b_start : b_start + outer_batch_size]
+                )
             del model_copy
-            Y_with_neg_samples = negative_samples(initial_run_preds, Y, pad=self.config.pad_token)
+            Y_with_neg_samples = negative_samples(
+                initial_run_preds, Y, pad=self.config.pad_token
+            )
             # this means we get the same absolute number of randomly sampled empty chunks with or without this option.
-            self.config.max_empty_chunk_ratio *= sum(len(yi) for yi in Y) / sum(len(yi) for yi in Y_with_neg_samples)
+            self.config.max_empty_chunk_ratio *= sum(len(yi) for yi in Y) / sum(
+                len(yi) for yi in Y_with_neg_samples
+            )
             Y = Y_with_neg_samples
 
             # Reinitialize the model including rebuilding the saver.
@@ -235,7 +240,12 @@ class SequenceLabeler(BaseModel):
         return super().finetune(Xs, Y=Y, context=context, update_hook=update_hook)
 
     def predict(
-        self, X, per_token=False, context=None, return_negative_confidence=False, **kwargs
+        self,
+        X,
+        per_token=False,
+        context=None,
+        return_negative_confidence=False,
+        **kwargs
     ):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
@@ -297,7 +307,7 @@ class SequenceLabeler(BaseModel):
             proba_seq = proba_seq[start:end]
 
             proba_seq_masked = proba_seq.copy()
-            
+
             for il, label in enumerate(label_seq):
                 # covers the multilabel case where pad is not a distinct class.
                 if label in classes:
@@ -312,9 +322,10 @@ class SequenceLabeler(BaseModel):
                     # indicates padding / special tokens
                     continue
 
-                assert start_idx >= last_end, "Start idx: {}, last_end: {}".format(
-                    start_idx, last_end
-                )
+                if start_idx >= last_end:
+                    logger.warning(
+                        "Start idx: {}, last_end: {}".format(start_idx, last_end)
+                    )
                 last_end = end_idx
 
                 # if there are no current subsequences
@@ -393,7 +404,7 @@ class SequenceLabeler(BaseModel):
                 output.append(
                     {
                         "prediction": anno,
-                        "negative_confidence": dict(zip(classes, probs))
+                        "negative_confidence": dict(zip(classes, probs)),
                     }
                 )
             return output
@@ -409,7 +420,9 @@ class SequenceLabeler(BaseModel):
         """
         return super().featurize(X, **kwargs)
 
-    def predict_proba(self, X, context=None, return_negative_confidence=False, **kwargs):
+    def predict_proba(
+        self, X, context=None, return_negative_confidence=False, **kwargs
+    ):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
