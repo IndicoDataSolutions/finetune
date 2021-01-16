@@ -191,17 +191,21 @@ def finetune_model_from_huggingface(
                         raw_text = token.replace(WEIRD_SPM_CHAR, "")
 
                         token_start_temp = normed_text.find(raw_text, token_end)
-                        if token_start_temp == -1 and raw_text != "<unk>":
-                            LOGGER.warning(
-                                "SentencePiece produced a token {} not found in the original string {}".format(
-                                    raw_text, text
+                        if token_start_temp == -1:
+                            if raw_text != "<unk>":
+                                LOGGER.warning(
+                                    "SentencePiece produced a token {} not found in the original string {}".format(
+                                        raw_text, text
+                                    )
                                 )
-                            )
                         else:
                             token_start = token_start_temp
                             token_end = token_start + len(raw_text)
+                        char_start = alignment[token_start]
+                        if tok_pos:
+                            char_start = max(char_start, tok_pos[-1])
+                        char_starts.append(char_start)
                         tok_pos.append(alignment[token_end])
-                        char_starts.append(max(alignment[token_start], tok_pos[-1]))
                     batch_token_idxs.append(encoded_ids)
                     batch_tokens.append(encoded_tokens)
                     batch_char_ends.append(tok_pos)
