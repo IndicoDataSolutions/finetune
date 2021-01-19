@@ -115,4 +115,5 @@ HFAlbert = finetune_model_from_huggingface(
     weights_replacement=[
         ("tf_albert_for_masked_lm_1/albert/", "model/featurizer/tf_albert_main_layer/")
     ],
+    config_overrides={"n_embed": 756, "n_epochs": 8, "lr": 2e-5, "batch_size": 8}
 )
