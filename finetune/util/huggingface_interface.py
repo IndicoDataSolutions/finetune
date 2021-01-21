@@ -51,6 +51,7 @@ def load_weights_from_hdf5_group_by_name(filepath, weights_replacement):
                 for fro, to in weights_replacement:
                     output_name = output_name.replace(fro, to)
                 weight_lookup[output_name] = np.asarray(g[name])
+    print(weight_lookup.keys())
     return weight_lookup
 
 def finetune_model_from_huggingface(
@@ -191,6 +192,7 @@ def finetune_model_from_huggingface(
                             "Tokenizer is not sentence-piece-based and is not guaranteed to port over correctly."
                         )
                     # This may break some downstream finetune assumptions
+
                     if (
                         hasattr(self.tokenizer, "do_lower_case")
                         and self.tokenizer.do_lower_case

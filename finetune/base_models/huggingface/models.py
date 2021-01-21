@@ -117,3 +117,18 @@ HFAlbert = finetune_model_from_huggingface(
     ],
     config_overrides={"n_embed": 756, "n_epochs": 8, "lr": 2e-5, "batch_size": 8}
 )
+
+
+HFAlbertXLarge = finetune_model_from_huggingface(
+    pretrained_weights="albert-xlarge-v2",
+    archive_map={
+        "albert-xlarge-v2": "https://cdn.huggingface.co/albert-xlarge-v2-tf_model.h5"
+    },
+    hf_featurizer=TFAlbertMainLayer,
+    hf_tokenizer=AlbertTokenizer,
+    hf_config=AlbertConfig,
+    weights_replacement=[
+        ("tf_albert_for_masked_lm_5/albert/", "model/featurizer/tf_albert_main_layer/")
+    ],
+    config_overrides={"n_embed": 2048, "n_epochs": 8, "lr": 1e-5, "batch_size": 2}
+)

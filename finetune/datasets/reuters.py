@@ -14,6 +14,7 @@ from sklearn.model_selection import train_test_split
 from finetune import SequenceLabeler
 from finetune.datasets import Dataset
 from finetune.base_models import GPT, GPT2, TCN, RoBERTa
+from finetune.base_models.huggingface.models import HFAlbert, HFAlbertXLarge
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
 from finetune.util.metrics import annotation_report, sequence_labeling_token_confusion
 
@@ -75,11 +76,10 @@ if __name__ == "__main__":
     trainX, testX, trainY, testY = train_test_split(
         dataset.texts.values,
         dataset.annotations.values,
-        test_size=0.2,
+        test_size=0.1,
         random_state=42
     )
-    trainY[0][0]["text"] = "Not included in the document"
-    model = SequenceLabeler(batch_size=1, n_epochs=100, val_size=0.0, max_length=512, chunk_long_sequences=True, subtoken_predictions=False, crf_sequence_labeling=True, multi_label_sequences=False, debugging_logs=True)
+    model = SequenceLabeler(base_model=HFAlbertXLarge, lr=1e-5, batch_size=2, n_epochs=8, max_length=512, chunk_long_sequences=True, subtoken_predictions=False, crf_sequence_labeling=True, multi_label_sequences=False, debugging_logs=True)
     model.fit(trainX, trainY)
     predictions = model.predict(testX)
     print(predictions)
