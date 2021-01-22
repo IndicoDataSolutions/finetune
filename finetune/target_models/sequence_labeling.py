@@ -153,6 +153,7 @@ def _spacy_token_predictions(raw_text, tokens, probas, positions):
 
     return spacy_results
 
+
 def negative_samples(preds, labels, pad="<PAD>"):
     modified_labels = []
     for p, l in zip(preds, labels):
@@ -225,9 +226,13 @@ class SequenceLabeler(BaseModel):
             for b_start in range(0, len(Xs), outer_batch_size):
                 initial_run_preds += model_copy.predict(Xs[b_start: b_start + outer_batch_size])
             del model_copy
-            Y_with_neg_samples = negative_samples(initial_run_preds, Y, pad=self.config.pad_token)
+            Y_with_neg_samples = negative_samples(
+                initial_run_preds, Y, pad=self.config.pad_token
+            )
             # this means we get the same absolute number of randomly sampled empty chunks with or without this option.
-            self.config.max_empty_chunk_ratio *= sum(len(yi) for yi in Y) / sum(len(yi) for yi in Y_with_neg_samples)
+            self.config.max_empty_chunk_ratio *= sum(len(yi) for yi in Y) / sum(
+                len(yi) for yi in Y_with_neg_samples
+            )
             Y = Y_with_neg_samples
 
             # Reinitialize the model including rebuilding the saver.
@@ -235,7 +240,12 @@ class SequenceLabeler(BaseModel):
         return super().finetune(Xs, Y=Y, context=context, update_hook=update_hook)
 
     def predict(
-        self, X, per_token=False, context=None, return_negative_confidence=False, **kwargs
+        self,
+        X,
+        per_token=False,
+        context=None,
+        return_negative_confidence=False,
+        **kwargs
     ):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
@@ -262,13 +272,9 @@ class SequenceLabeler(BaseModel):
         :param per_token: If True, return raw probabilities and labels on a per token basis
         :returns: list of class labels.
         """
-        classes = self.input_pipeline.label_encoder.classes_
-        all_subseqs = []
-        all_labels = []
-        all_probs = []
-        all_positions = []
+        classes = list(self.input_pipeline.label_encoder.classes_)
         doc_idx = -1
-        all_doc_level_probas = []
+        doc_annotations = []
         raw_text = [data.get("raw_text", data["X"]) for data in zipped_data]
         for (
             token_start_idx,
@@ -297,7 +303,7 @@ class SequenceLabeler(BaseModel):
             proba_seq = proba_seq[start:end]
 
             proba_seq_masked = proba_seq.copy()
-            
+
             for il, label in enumerate(label_seq):
                 # covers the multilabel case where pad is not a distinct class.
                 if label in classes:
@@ -352,53 +358,39 @@ class SequenceLabeler(BaseModel):
                     if self.multi_label:
                         del prob_dicts[-1][self.config.pad_token]
 
-                all_subseqs.append(doc_subseqs)
-                all_labels.append(doc_labels)
-                all_probs.append(prob_dicts)
-                all_positions.append(doc_positions)
-                all_doc_level_probas.append(np.max(doc_level_probas, axis=0))
-
-        _, doc_annotations = finetune_to_indico_sequence(
-            raw_texts=raw_text,
-            subseqs=all_subseqs,
-            labels=all_labels,
-            probs=all_probs,
-            none_value=self.config.pad_token,
-            subtoken_predictions=self.config.subtoken_predictions,
-        )
-
-        if per_token:
-            return [
-                {
-                    "tokens": _spacy_token_predictions(
-                        raw_text=text,
-                        tokens=tokens,
-                        probas=probas,
-                        positions=positions,
-                    ),
-                    "prediction": predictions,
-                }
-                for text, tokens, labels, probas, positions, predictions in zip(
-                    raw_text,
-                    all_subseqs,
-                    all_labels,
-                    all_probs,
-                    all_positions,
-                    doc_annotations,
+                _, doc_annotations_sample = finetune_to_indico_sequence(
+                    raw_texts=[raw_text[doc_idx]],
+                    subseqs=[doc_subseqs],
+                    labels=[doc_labels],
+                    probs=[prob_dicts],
+                    none_value=self.config.pad_token,
+                    subtoken_predictions=self.config.subtoken_predictions,
                 )
-            ]
-        elif return_negative_confidence:
-            output = []
-            for anno, probas in zip(doc_annotations, all_doc_level_probas):
-                output.append(
-                    {
-                        "prediction": anno,
-                        "negative_confidence": dict(zip(classes, probs))
-                    }
-                )
-            return output
-        else:
-            return doc_annotations
+                if per_token:
+                    doc_annotations.append(
+                        {
+                            "tokens": _spacy_token_predictions(
+                                raw_text=raw_text[doc_idx],
+                                tokens=doc_subseqs,
+                                probas=prob_dicts,
+                                positions=doc_positions,
+                            ),
+                            "prediction": doc_annotations_sample[0],
+                        }
+                    )
+                elif return_negative_confidence:
+                    doc_annotations.append(
+                        {
+                            "prediction": doc_annotations_sample[0],
+                            "negative_confidence": dict(
+                                zip(classes, np.max(doc_level_probas, axis=0))
+                            ),
+                        }
+                    )
+
+                else:
+                    doc_annotations.append(doc_annotations_sample[0])
+        return doc_annotations
 
     def featurize(self, X, **kwargs):
         """
@@ -409,7 +401,9 @@ class SequenceLabeler(BaseModel):
         """
         return super().featurize(X, **kwargs)
 
-    def predict_proba(self, X, context=None, return_negative_confidence=False, **kwargs):
+    def predict_proba(
+        self, X, context=None, return_negative_confidence=False, **kwargs
+    ):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 

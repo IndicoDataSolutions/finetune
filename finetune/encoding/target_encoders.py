@@ -211,10 +211,6 @@ class SequenceLabelingEncoder(BaseEncoder):
         # Don't run check if text wasn't provided
         if 'text' in label:
             strings_agree = input_text[label["start"]: label["end"]] == label["text"]
-            if not strings_agree:
-                print(input_text[4:19])
-                print(label["text"])
-                print("Text: ", input_text[label["start"]: label["end"]], "label text: ", label["text"], label["start"], label["end"])
         else:
             strings_agree = True
 

@@ -89,11 +89,15 @@ def finetune_to_indico_sequence(
     :return: Texts, annoatations both in the 'indico' format.
     """
     annotations = []
-    spacy_docs = get_spacy().pipe(raw_texts)
+    if not subtoken_predictions:
+        spacy_docs = get_spacy().pipe(raw_texts)
+    else:
+        spacy_docs = [None] * len(raw_texts)
     loop_vals = zip(raw_texts, spacy_docs, subseqs, labels, probs or [None] * len(raw_texts))
     for doc_idx, (raw_text, spacy_tokens, doc_seq, label_seq, prob_seq) in enumerate(loop_vals):
-        spacy_token_starts = np.asarray([token.idx for token in spacy_tokens])
-        spacy_token_ends = np.asarray([token.idx + len(token.text) for token in spacy_tokens])
+        if not subtoken_predictions:
+            spacy_token_starts = np.asarray([token.idx for token in spacy_tokens])
+            spacy_token_ends = np.asarray([token.idx + len(token.text) for token in spacy_tokens])
         doc_annotations = []
         annotation_ranges = set()
         raw_annotation_end = 0

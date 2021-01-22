@@ -33,7 +33,7 @@ from finetune.util.download import download_data_if_required
 from finetune.util.shapes import shape_list
 from finetune.util.timing import ProgressBar
 from finetune.util.in_memory_finetune import make_in_memory_finetune_hooks
-from finetune.util.indico_estimator import IndicoEstimator
+from finetune.util.indico_estimator import IndicoEstimator, ThreadGen
 from finetune.util.gpu_info import gpu_info
 
 from finetune.base_models.bert.model import _BaseBert
@@ -43,10 +43,24 @@ from finetune.input_pipeline import InputMode
 LOGGER = logging.getLogger("finetune")
 
 
+def start_end_gen(gen):
+    """
+    yields from generator along with booleans for start and end.
+    """
+    start = True
+    previous = next(gen)
+    for g in gen:
+        yield previous, start, False
+        previous = g
+        start = False
+    yield previous, start, True
+
+
 class BaseModel(object, metaclass=ABCMeta):
     """
     A sklearn-style task agnostic base class for finetuning a Transformer language model.
     """
+
     defaults = dict()
 
     def __init__(self, **kwargs):
@@ -98,14 +112,14 @@ class BaseModel(object, metaclass=ABCMeta):
         if not issubclass(config.base_model, _BaseBert) and config.float_16_predict:
             LOGGER.warning("float_16_predict only supported by bert based models")
             config.float_16_predict = False
-                                            
+
         for ak in auto_keys:
             if ak in ["val_size", "use_gpu_crf_predict"]:
                 continue  # this auto is resolved after data is provided.
             if ak not in overrides:
                 raise ValueError("There is no auto setting for {}".format(ak))
             config[ak] = overrides[ak]
-        return config 
+        return config
 
     def validate_config(self):
         if (
@@ -195,11 +209,13 @@ class BaseModel(object, metaclass=ABCMeta):
                 Xs, input_mode=InputMode.TRAIN, update_hook=update_hook
             )
         else:
-            zipped_data_list = self.input_pipeline.zip_list_to_dict(X=Xs, Y=Y, context=context)
+            zipped_data_list = self.input_pipeline.zip_list_to_dict(
+                X=Xs, Y=Y, context=context
+            )
             datasets = self.input_pipeline.get_dataset_from_list(
                 zipped_data_list, input_mode=InputMode.TRAIN, update_hook=update_hook
             )
-                
+
         if self.config.keep_best_model:
             if self.config.val_size <= 10:
                 tf.compat.v1.logging.warning(
@@ -240,7 +256,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 steps_per_epoch=steps_per_epoch,
                 early_stopping_steps=self.config.early_stopping_steps,
                 eval_frequency=early_stopping_interval,
-                cache_weights_to_file=self.config.cache_weights_to_file
+                cache_weights_to_file=self.config.cache_weights_to_file,
             )
         )
 
@@ -249,9 +265,11 @@ class BaseModel(object, metaclass=ABCMeta):
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            train_input_fn_skipped = lambda: datasets["train_dataset"]().skip(self.saver.get_initial_step() * max(len(self.resolved_gpus), 1))
+            train_input_fn_skipped = lambda: datasets["train_dataset"]().skip(
+                self.saver.get_initial_step() * max(len(self.resolved_gpus), 1)
+            )
             estimator.train(train_input_fn_skipped, hooks=train_hooks, steps=num_steps)
-        
+
         self._trained = True
 
     def _distribute_strategy(self, visible_gpus):
@@ -260,26 +278,36 @@ class BaseModel(object, metaclass=ABCMeta):
 
         Side effect: sets self.resolved_gpus for future use in computing steps per epoch
         """
-        
+
         if isinstance(visible_gpus, (list, tuple)):
             resolved_gpus = all_gpus(visible_gpus=tuple(visible_gpus))
         else:
             resolved_gpus = all_gpus()
 
-        resolved_gpus_string = ['/gpu:{}'.format(gpu) for gpu in resolved_gpus]
+        resolved_gpus_string = ["/gpu:{}".format(gpu) for gpu in resolved_gpus]
         if len(resolved_gpus_string) == 1:
-            distribute_strategy = tf.distribute.OneDeviceStrategy(resolved_gpus_string[0])
+            distribute_strategy = tf.distribute.OneDeviceStrategy(
+                resolved_gpus_string[0]
+            )
         else:
             if self.config.per_process_gpu_memory_fraction is not None:
-                warnings.warn("Setting `per_process_gpu_memory_fraction` is currently unsupported in multi-gpu environments.")
+                warnings.warn(
+                    "Setting `per_process_gpu_memory_fraction` is currently unsupported in multi-gpu environments."
+                )
 
             if isinstance(self.config.distribution_strategy, str):
                 if self.config.distribution_strategy.lower() == "mirrored":
                     distribute_strategy = tf.distribute.MirroredStrategy()
                 elif self.config.distribution_strategy.lower() == "central_storage":
-                    distribute_strategy = tf.distribute.experimental.CentralStorageStrategy(resolved_gpus_string or None)
+                    distribute_strategy = (
+                        tf.distribute.experimental.CentralStorageStrategy(
+                            resolved_gpus_string or None
+                        )
+                    )
                 else:
-                    raise FinetuneError("Distribute strategy {} is not supported, please try \"mirrored\" or \"central_storage\" or an instance of tf.distribute.Strategy")
+                    raise FinetuneError(
+                        'Distribute strategy {} is not supported, please try "mirrored" or "central_storage" or an instance of tf.distribute.Strategy'
+                    )
             elif isinstance(self.config.distribution_strategy, tf.distribute.Strategy):
                 distribute_strategy = self.config.distribution_strategy
 
@@ -296,8 +324,8 @@ class BaseModel(object, metaclass=ABCMeta):
                 self.config.per_process_gpu_memory_fraction
             )
         optimizer_options = conf.graph_options.optimizer_options
-        if self.config.xla:                                                     
-            optimizer_options.global_jit_level = tf.compat.v1.OptimizerOptions.ON_1 
+        if self.config.xla:
+            optimizer_options.global_jit_level = tf.compat.v1.OptimizerOptions.ON_1
 
         distribute_strategy = self._distribute_strategy(self.config.visible_gpus)
         config = tf.estimator.RunConfig(
@@ -320,7 +348,7 @@ class BaseModel(object, metaclass=ABCMeta):
         else:
             build_lm = force_build_lm or self.config.lm_loss_coef > 0.0
             config = self._get_estimator_config()
-            
+
             fp16_predict = self.config.float_16_predict
             if fp16_predict:
                 if not gpu_info(config.session_config)["fp16_inference"]:
@@ -328,7 +356,7 @@ class BaseModel(object, metaclass=ABCMeta):
                         "config.float_16_predict is true but the GPU does not support float16, it is being turned off"
                     )
                     fp16_predict = False
-            
+
             model_fn = get_model_fn(
                 target_model_fn=self._target_model,
                 pre_target_model_hook=self._pre_target_model_hook,
@@ -362,7 +390,7 @@ class BaseModel(object, metaclass=ABCMeta):
             self._cached_estimator.close_predict()
             self._cached_estimator = None
             gc.collect()
-        
+
     @contextmanager
     def cached_predict(self):
         """
@@ -384,24 +412,38 @@ class BaseModel(object, metaclass=ABCMeta):
         invert_idxs[sorted_idxs] = np.arange(sorted_idxs.shape[0])
         return sorted_Xs, invert_idxs
 
-    def _inference(self, zipped_data, predict_keys=None, context=None, update_hook=None, chunked_length=None):
+    def _inference(
+        self,
+        zipped_data,
+        predict_keys=None,
+        context=None,
+        update_hook=None,
+        chunked_length=None,
+        list_output=True
+    ):
         def get_zipped_data():
             return iter(zipped_data)
-        
+
         input_fn = self.input_pipeline.get_dataset_from_generator(
             get_zipped_data, input_mode=InputMode.PREDICT, update_hook=update_hook
         )["predict_dataset"]
 
         estimator, hooks = self.get_estimator(
-            build_explain=PredictMode.EXPLAIN in predict_keys, cache=self._cached_predict
+            build_explain=PredictMode.EXPLAIN in predict_keys,
+            cache=self._cached_predict,
         )
         length = chunked_length if chunked_length is not None else len(zipped_data)
 
         if self._cached_predict:
             # Add commonly used (cheap) predict keys to the graph to prevent having to rebuild
             required_predict_keys = list(
-                {PredictMode.FEATURIZE, PredictMode.SEQUENCE, PredictMode.NORMAL, PredictMode.PROBAS} |
-                set(predict_keys or {})
+                {
+                    PredictMode.FEATURIZE,
+                    PredictMode.SEQUENCE,
+                    PredictMode.NORMAL,
+                    PredictMode.PROBAS,
+                }
+                | set(predict_keys or {})
             )
             prediction_iterator = estimator.cached_predict(
                 input_fn=input_fn, predict_keys=required_predict_keys, hooks=hooks
@@ -410,18 +452,17 @@ class BaseModel(object, metaclass=ABCMeta):
             prediction_iterator = estimator.predict(
                 input_fn=input_fn, predict_keys=predict_keys, hooks=hooks
             )
-        
+
         predictions = ProgressBar(
-            prediction_iterator, 
-            total=length, 
-            desc="Inference", 
-            update_hook=update_hook
+            prediction_iterator, total=length, desc="Inference", update_hook=update_hook
         )
         try:
-            outputs = [
+            outputs = (
                 pred[predict_keys[0]] if len(predict_keys) == 1 else pred
                 for pred in predictions
-            ]
+            )
+            if list_output:
+                return list(outputs)
             return outputs
 
         except ValueError:
@@ -438,10 +479,10 @@ class BaseModel(object, metaclass=ABCMeta):
 
     def predict(self, Xs, context=None, **kwargs):
         zipped_data = self.input_pipeline.zip_list_to_dict(X=Xs, context=context)
-        
+
         if self.config.sort_by_length:
             zipped_data, invert_idxs = self._sort_by_length(zipped_data)
-            
+
         outputs = self._predict(zipped_data, **kwargs)
 
         if self.config.sort_by_length:
@@ -486,7 +527,7 @@ class BaseModel(object, metaclass=ABCMeta):
             )
         zipped_data = self.input_pipeline.zip_list_to_dict(X=Xs, context=context)
         raw_preds = self._inference(zipped_data, predict_keys=[PredictMode.ATTENTION])
-        return raw_preds    
+        return raw_preds
 
     def featurize(self, Xs, context=None, **kwargs):
         """
@@ -494,9 +535,13 @@ class BaseModel(object, metaclass=ABCMeta):
         These features are the same features that are fed into the target_model.
         """
         if self.config.chunk_long_sequences:
-            warnings.warn("`chunk_long_sequences` is currently not compatible with featurize_sequence")
+            warnings.warn(
+                "`chunk_long_sequences` is currently not compatible with featurize_sequence"
+            )
         zipped_data = self.input_pipeline.zip_list_to_dict(X=Xs, context=context)
-        raw_preds = self._inference(zipped_data, predict_keys=[PredictMode.FEATURIZE], **kwargs)
+        raw_preds = self._inference(
+            zipped_data, predict_keys=[PredictMode.FEATURIZE], **kwargs
+        )
         return np.asarray(raw_preds)
 
     def featurize_sequence(self, Xs, context=None, **kwargs):
@@ -505,24 +550,26 @@ class BaseModel(object, metaclass=ABCMeta):
         These features are the same features that are fed into the target_model.
         """
         zipped_data = self.input_pipeline.zip_list_to_dict(X=Xs, context=context)
-        raw_preds = self._inference(zipped_data, predict_keys=[PredictMode.SEQUENCE], **kwargs)
+        raw_preds = self._inference(
+            zipped_data, predict_keys=[PredictMode.SEQUENCE], **kwargs
+        )
         chunk_gens = [self.input_pipeline._text_to_ids(d["X"]) for d in zipped_data]
 
         chunks = []
         chunk_to_seq = []
-        for i,gen in enumerate(chunk_gens):
+        for i, gen in enumerate(chunk_gens):
             for chunk in gen:
                 chunks.append(chunk)
                 chunk_to_seq.append(i)
 
-        processed_preds  = [[] for _ in range(len(zipped_data))]
-        for i,pred in enumerate(raw_preds):
+        processed_preds = [[] for _ in range(len(zipped_data))]
+        for i, pred in enumerate(raw_preds):
             if self.config.chunk_long_sequences:
-                start, end = chunks[i].useful_start, chunks[i].useful_end 
+                start, end = chunks[i].useful_start, chunks[i].useful_end
             else:
                 start, end = 0, None
             not_padding = np.array(chunks[i].token_ends[start:end]) != -1
-            no_pad_pred = pred[start:start + len(not_padding)][not_padding]
+            no_pad_pred = pred[start : start + len(not_padding)][not_padding]
             processed_preds[chunk_to_seq[i]].extend(no_pad_pred)
 
         processed_preds = [np.asarray(pred) for pred in processed_preds]
@@ -549,7 +596,7 @@ class BaseModel(object, metaclass=ABCMeta):
     @property
     def classes(self):
         return [
-            class_name 
+            class_name
             for class_name in finetune_model.input_pipeline.label_encoder.target_labels
             if class_name != self.config.pad_token
         ]
@@ -557,7 +604,7 @@ class BaseModel(object, metaclass=ABCMeta):
     @property
     def classes(self):
         return [
-            class_name 
+            class_name
             for class_name in finetune_model.input_pipeline.label_encoder.target_labels
             if class_name != self.config.pad_token
         ]
@@ -572,7 +619,7 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         if use_extra_toks is None:
             use_extra_toks = self._trained
- 
+
         def dataset_encoded():
             while not dataset_encoded.finished:
                 yield {"tokens": encoded.token_ids}
@@ -642,7 +689,7 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         if path is None:
             return
-        
+
         if isinstance(path, str):
             path = os.path.abspath(path)
         self.saver.save(self, path)
@@ -704,13 +751,15 @@ class BaseModel(object, metaclass=ABCMeta):
                     model.config.add_eos_bos_to_chunk = False
                 else:
                     model.config.update({setting: default})
-        
+
         model.config.update(kwargs)
         for setting in list(model.config.keys()):
             if setting not in default_config:
-                LOGGER.warning("The config value {} is no longer supported".format(setting))
+                LOGGER.warning(
+                    "The config value {} is no longer supported".format(setting)
+                )
                 del model.config[setting]
-                
+
         model.config = model.resolve_config(**model.config)
         model.input_pipeline.config = model.config
         download_data_if_required(model.config.base_model)
@@ -719,7 +768,6 @@ class BaseModel(object, metaclass=ABCMeta):
         model.saver.variables = saver.variables
         model._trained = True
         return model
-
 
     @classmethod
     def finetune_grid_search(
@@ -837,42 +885,39 @@ class BaseModel(object, metaclass=ABCMeta):
         return max(aggregated_results, key=lambda x: x[1])[0]
 
     def process_long_sequence(self, zipped_data):
-        arr_encoded = [
-            self.input_pipeline._text_to_ids(d["X"]) for d in zipped_data
-        ]
-
-        flat_array_encoded = []
-        sequence_id = []
-        for i, ae in enumerate(arr_encoded):
-            for sample in ae:
-                flat_array_encoded.append(sample)
-                sequence_id.append(i)
-
         labels, batch_probas = [], []
-        for pred in self._inference(
-                zipped_data,
-                predict_keys=[PredictMode.PROBAS, PredictMode.NORMAL],
-                chunked_length=len(flat_array_encoded),
+        for chunk_idx, (
+            pred,
+            (sequence_id, arr_enc, start_of_doc, end_of_doc),
+        ) in enumerate(
+            zip(
+                self._inference(
+                    zipped_data,
+                    predict_keys=[PredictMode.PROBAS, PredictMode.NORMAL],
+                    chunked_length=0,
+                    list_output=False,
+                ),
+                (
+                    (i, sample, is_start, is_end)
+                    for i, ae in enumerate(
+                        (
+                            self.input_pipeline._text_to_ids(d["X"])
+                            for d in zipped_data
+                        )
+                    )
+                    for sample, is_start, is_end in start_end_gen(ae)
+                ),
+            )
         ):
             normal_pred = pred[PredictMode.NORMAL]
-            if not hasattr(self, 'multi_label'):
+            if not hasattr(self, "multi_label"):
                 normal_pred = np.expand_dims(normal_pred, 0)
-            labels.append(self.input_pipeline.label_encoder.inverse_transform(normal_pred))
-            batch_probas.append(pred[PredictMode.PROBAS])
-
-        if not batch_probas:
-            batch_probas = [None]*len(labels)
-
-        for chunk_idx, (label_seq, proba_seq) in enumerate(zip(labels, batch_probas)):
-            token_end_idx = flat_array_encoded[chunk_idx].token_ends
-            token_start_idx = flat_array_encoded[chunk_idx].token_starts
-            start_of_doc = chunk_idx == 0 or sequence_id[chunk_idx - 1] != sequence_id[chunk_idx]
-            end_of_doc = (
-                chunk_idx + 1 == len(flat_array_encoded) or
-                sequence_id[chunk_idx] != sequence_id[chunk_idx + 1]
-            )
-            useful_start = flat_array_encoded[chunk_idx].useful_start
-            useful_end = flat_array_encoded[chunk_idx].useful_end
+            label_seq = self.input_pipeline.label_encoder.inverse_transform(normal_pred)
+            proba_seq = pred[PredictMode.PROBAS]
+            token_end_idx = arr_enc.token_ends
+            token_start_idx = arr_enc.token_starts
+            useful_start = arr_enc.useful_start
+            useful_end = arr_enc.useful_end
             yield token_start_idx, token_end_idx, start_of_doc, end_of_doc, label_seq, proba_seq, useful_start, useful_end
 
     def __del__(self):

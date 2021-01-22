@@ -1,5 +1,8 @@
 import numpy as np
 import tensorflow as tf
+from threading import Thread
+from queue import Queue
+
 
 def placeholder_like(tensor):
     return tf.compat.v1.placeholder(tensor.dtype, shape=tensor.shape)
@@ -10,6 +13,27 @@ def parse_input_fn_result(result):
     init = iterator.initializer
     result = iterator.get_next()
     return result, init
+
+
+class ThreadGen:
+    def __init__(self, generator, maxsize=0):
+        self.sentinel = None
+        self.generator = generator
+        self.queue = Queue(maxsize=maxsize)
+        self.thread = Thread(name="ThreadGen", target=self._run)
+
+    def _run(self):
+        try:
+            for value in self.generator:
+                self.queue.put(value)
+        except:
+            self.queue.put(self.sentinel)
+
+    def __iter__(self):
+        self.thread.start()
+        for x in iter(self.queue.get, self.sentinel):
+            yield x
+        self.thread.join()
 
 
 class IndicoEstimator(tf.estimator.Estimator):
@@ -40,7 +64,7 @@ class IndicoEstimator(tf.estimator.Estimator):
             return output, features
 
     def close_predict(self):
-        #tf.reset_default_graph()
+        # tf.reset_default_graph()
         self.estimator_spec = None
         self.features_real = None
         self.placeholder_feats = None
@@ -50,12 +74,14 @@ class IndicoEstimator(tf.estimator.Estimator):
             self.mon_sess.close()
         self.mon_sess = None
 
-    def cached_predict(self,
-                input_fn,
-                predict_keys=None,
-                hooks=None,
-                checkpoint_path=None,
-                yield_single_examples=True):
+    def cached_predict(
+        self,
+        input_fn,
+        predict_keys=None,
+        hooks=None,
+        checkpoint_path=None,
+        yield_single_examples=True,
+    ):
         # Check that model has been trained.
         self.g = self.g or tf.Graph()
         tf.compat.v1.set_random_seed(self._config.tf_random_seed)
@@ -66,17 +92,26 @@ class IndicoEstimator(tf.estimator.Estimator):
                 if not checkpoint_path:
                     checkpoint_path = tf.train.latest_checkpoint(self._model_dir)
                 if not checkpoint_path:
-                    tf.compat.v1.logging.info('Could not find trained model in model_dir: {}, running '
-                                    'initialization to predict.'.format(self._model_dir))
+                    tf.compat.v1.logging.info(
+                        "Could not find trained model in model_dir: {}, running "
+                        "initialization to predict.".format(self._model_dir)
+                    )
 
-                self.placeholder_feats = tf.nest.map_structure(placeholder_like, features)
+                self.placeholder_feats = tf.nest.map_structure(
+                    placeholder_like, features
+                )
                 self.estimator_spec = self._call_model_fn(
-                    self.placeholder_feats, None, tf.estimator.ModeKeys.PREDICT, self.config)
+                    self.placeholder_feats,
+                    None,
+                    tf.estimator.ModeKeys.PREDICT,
+                    self.config,
+                )
                 # Call to warm_start has to be after model_fn is called.
                 self._maybe_warm_start(checkpoint_path)
 
                 self.predictions = self._extract_keys(
-                    self.estimator_spec.predictions, predict_keys)
+                    self.estimator_spec.predictions, predict_keys
+                )
                 all_hooks = hooks or []
                 all_hooks.extend(list(self.estimator_spec.prediction_hooks or []))
 
@@ -85,12 +120,16 @@ class IndicoEstimator(tf.estimator.Estimator):
                         checkpoint_filename_with_path=checkpoint_path,
                         master=self._config.master,
                         scaffold=self.estimator_spec.scaffold,
-                        config=self._session_config),
-                    hooks=all_hooks)
+                        config=self._session_config,
+                    ),
+                    hooks=all_hooks,
+                )
 
             for feats in features_real:
                 feed_dict = {self.placeholder_feats[k]: v for k, v in feats.items()}
-                preds_evaluated = self.mon_sess.run(self.predictions, feed_dict=feed_dict)
+                preds_evaluated = self.mon_sess.run(
+                    self.predictions, feed_dict=feed_dict
+                )
                 if not yield_single_examples:
                     yield preds_evaluated
                 elif not isinstance(self.predictions, dict):
@@ -98,8 +137,4 @@ class IndicoEstimator(tf.estimator.Estimator):
                         yield pred
                 else:
                     for i in range(self._extract_batch_length(preds_evaluated)):
-                        yield {
-                            key: value[i]
-                            for key, value in preds_evaluated.items()
-                        }
-        
+                        yield {key: value[i] for key, value in preds_evaluated.items()}
