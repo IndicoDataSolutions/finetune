@@ -1,6 +1,6 @@
 import functools
 import tensorflow as tf
-from finetune.util.crf import crf_log_likelihood
+from tensorflow_addons.text.crf import crf_log_likelihood
 
 from finetune.base_models.gpt.featurizer import attn, dropout, norm
 from finetune.util.shapes import shape_list, merge_leading_dims
