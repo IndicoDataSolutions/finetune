@@ -78,7 +78,7 @@ class _BaseBert(SourceModel):
                 "n_epochs": 5,
                 "batch_size": 4,
                 "chunk_context": 16,
-                "predict_batch_size": 48,
+                "predict_batch_size": 256 if config.float_16_predict else 48,
             }
 
         elif config.optimize_for.lower() == "accuracy":
@@ -96,7 +96,7 @@ class _BaseBert(SourceModel):
                 "n_epochs": base_n_epochs,
                 "batch_size": base_batch_size,
                 "chunk_context": 16,
-                "predict_batch_size": 48,
+                "predict_batch_size": 256 if config.float_16_predict else 48,
             }
         else:
             raise ValueError(
