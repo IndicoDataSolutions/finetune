@@ -562,7 +562,7 @@ def sequence_labeler(
 
         return {
             "logits": logits,
-            "losses": tf.nn.relu(loss),
+            "losses": loss,
             "predict_params": {
                 "transition_matrix": transition_params,
                 "sequence_length": lengths,
