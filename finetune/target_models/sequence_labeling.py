@@ -38,6 +38,13 @@ class SequencePipeline(BasePipeline):
         return self.empty_counts["empty"] / (self.empty_counts["labeled"] + 1)
 
     def text_to_tokens_mask(self, X, Y=None, context=None):
+        """
+        Given the text from a single document (X), and optionally the labels found
+        in that document (Y), tokenize the text, and yield chunks
+
+        If Y is provided, filter out chunks that do not contain any positive
+        examples (labels) at a ratio determined by self.config.max_empty_chunk_ratio
+        """
         pad_token = (
             [self.config.pad_token] if self.multi_label else self.config.pad_token
         )
@@ -153,7 +160,15 @@ def _spacy_token_predictions(raw_text, tokens, probas, positions):
 
     return spacy_results
 
+
 def negative_samples(preds, labels, pad="<PAD>"):
+    """
+    Used for auto negative sampling
+
+    Given model predictions and ground truth labels, identify any prediction labels
+    that do not exist (via sequence_overlap metric) in the ground truth, annotate
+    them with the PAD label, and add them to the label set
+    """
     modified_labels = []
     for p, l in zip(preds, labels):
         new_labels = []
@@ -205,7 +220,7 @@ class SequenceLabeler(BaseModel):
         self.multi_label = self.config.multi_label_sequences
         return super()._initialize()
 
-    def finetune(self, Xs, Y=None, context=None, update_hook=None):
+    def finetune(self, Xs, Y=None, context=None, update_hook=None, X_partial=None, Y_partial=None):
         if self.config.auto_negative_sampling and Y is not None:
             # clear the saver to save memory.
             self.saver.fallback # retrieve the fallback future.
@@ -217,21 +232,39 @@ class SequenceLabeler(BaseModel):
             self.input_pipeline.current_epoch_offset = self.config.n_epochs
             self.input_pipeline.total_epoch_offset = self.config.n_epochs
 
+            # Train model with only positive chunks
             model_copy.config.max_empty_chunk_ratio = 0.0
             model_copy.config.auto_negative_sampling = False
             model_copy.finetune(Xs, Y=Y, context=context, update_hook=update_hook)
+
+            # Predict on full dataset
             initial_run_preds = []
             outer_batch_size = self.config.predict_batch_size
             for b_start in range(0, len(Xs), outer_batch_size):
                 initial_run_preds += model_copy.predict(Xs[b_start: b_start + outer_batch_size])
             del model_copy
+
+            # Tag negative predictions with <PAD> label and add to label set
             Y_with_neg_samples = negative_samples(initial_run_preds, Y, pad=self.config.pad_token)
+
             # this means we get the same absolute number of randomly sampled empty chunks with or without this option.
             self.config.max_empty_chunk_ratio *= sum(len(yi) for yi in Y) / sum(len(yi) for yi in Y_with_neg_samples)
             Y = Y_with_neg_samples
 
             # Reinitialize the model including rebuilding the saver.
             self._initialize()
+
+            # If training with partial labels, combine output of auto negative sampling on
+            # gold data with partial labels data
+            if X_partial and Y_partial:
+                Xs = Xs.extend(X_partial)
+                Y = Y.extend(Y_partial)
+
+                # Set empty chunks ratio to 0 to remove empty chunks from partially labeled
+                # data, which will only have a sample of true labels
+                # TODO Determine if we need something more sophisticated for chunking
+                self.config.max_empty_chunk_ratio = 0.0
+
         return super().finetune(Xs, Y=Y, context=context, update_hook=update_hook)
 
     def predict(
@@ -449,6 +482,16 @@ class SequenceLabeler(BaseModel):
         )
 
     def _predict_op(self, logits, **kwargs):
+        """
+        Predict operation for estimator. Used in BaseModel.get_estimator()
+
+        Args:
+            logits:
+            **kwargs:
+
+        Returns:
+
+        """
         trans_mats = kwargs.get("transition_matrix")
         sequence_length = kwargs.get("sequence_length")
         if self.config.use_gpu_crf_predict.lower() == "auto":
