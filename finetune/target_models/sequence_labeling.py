@@ -257,8 +257,8 @@ class SequenceLabeler(BaseModel):
             # If training with partial labels, combine output of auto negative sampling on
             # gold data with partial labels data
             if X_partial and Y_partial:
-                Xs = Xs.extend(X_partial)
-                Y = Y.extend(Y_partial)
+                Xs = Xs + X_partial
+                Y = Y + Y_partial
 
                 # Set empty chunks ratio to 0 to remove empty chunks from partially labeled
                 # data, which will only have a sample of true labels
