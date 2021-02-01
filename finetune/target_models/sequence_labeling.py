@@ -1,6 +1,7 @@
 import itertools
 import copy
 from collections import Counter
+import json
 
 import tensorflow as tf
 import numpy as np
@@ -17,6 +18,23 @@ from finetune.encoding.input_encoder import get_spacy
 from finetune.input_pipeline import BasePipeline
 from finetune.util.metrics import sequences_overlap
 from finetune.encoding.input_encoder import tokenize_context
+
+
+class NpEncoder(json.JSONEncoder):
+    """
+    JSON does not recognize numpy data types, so this class can be used to
+    safely serializing numpy objects
+    """
+
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        else:
+            return super(NpEncoder, self).default(obj)
 
 
 class SequencePipeline(BasePipeline):
@@ -220,7 +238,8 @@ class SequenceLabeler(BaseModel):
         self.multi_label = self.config.multi_label_sequences
         return super()._initialize()
 
-    def finetune(self, Xs, Y=None, context=None, update_hook=None, X_partial=None, Y_partial=None):
+    def finetune(self, Xs, Y=None, context=None, update_hook=None, X_partial=None,
+                 Y_partial=None, neg_samples_path=None):
         if self.config.auto_negative_sampling and Y is not None:
             # clear the saver to save memory.
             self.saver.fallback # retrieve the fallback future.
@@ -246,6 +265,11 @@ class SequenceLabeler(BaseModel):
 
             # Tag negative predictions with <PAD> label and add to label set
             Y_with_neg_samples = negative_samples(initial_run_preds, Y, pad=self.config.pad_token)
+
+            # If neg_samples_path is provided, write Y_with_neg_samples to path
+            if neg_samples_path:
+                with open(neg_samples_path, "w") as handle:
+                    json.dump(Y_with_neg_samples, handle, cls=NpEncoder)
 
             # this means we get the same absolute number of randomly sampled empty chunks with or without this option.
             self.config.max_empty_chunk_ratio *= sum(len(yi) for yi in Y) / sum(len(yi) for yi in Y_with_neg_samples)
