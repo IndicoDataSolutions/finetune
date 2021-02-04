@@ -196,10 +196,7 @@ class SequenceLabelingEncoder(BaseEncoder):
     def fit(self, labels):
         self.classes_ = sorted(list(set(lab_i["label"] for lab in labels for lab_i in lab) | {self.pad_token}))
         if self.bio_tagging:
-            # <PAD> is duplicated here, removed in the set() call
-            self.classes_ = [pre + c if c != self.pad_token else c
-                             for c in self.classes_ for pre in ("B-", "I-")]
-            self.classes_ = sorted(list(set(self.classes_)))
+            self.classes_ = [pre + c for c in classes_ for pre in ("B-", "I-")]
         self.lookup = {c: i for i, c in enumerate(self.classes_)}
 
     def pre_process_label(self, out, labels):
@@ -243,12 +240,16 @@ class SequenceLabelingEncoder(BaseEncoder):
                 overlap, agree = self.overlaps(label, start, end, text, input_text, offset=offset)
                 if overlap:
                     if not agree:
+<<<<<<< HEAD
                         raise ValueError(
                             "Tokens and labels do not align. {} matches with {}".format(
                                 label,
                                 input_text[label["start"] - offset: label["end"] - offset]
                             )
                         )
+=======
+                        raise ValueError("Tokens and labels do not align")
+>>>>>>> ADD: Bio tagging logic to sequence labeling target encoder
                     if labels_out[i] != pad_idx and self.lookup[current_label] != labels_out[i]:
                         LOGGER.warning("Overlapping labels were found, consider multilabel_sequence=True")
                     if current_label not in self.lookup:
