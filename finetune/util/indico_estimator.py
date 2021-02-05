@@ -15,27 +15,6 @@ def parse_input_fn_result(result):
     return result, init
 
 
-class ThreadGen:
-    def __init__(self, generator, maxsize=0):
-        self.sentinel = None
-        self.generator = generator
-        self.queue = Queue(maxsize=maxsize)
-        self.thread = Thread(name="ThreadGen", target=self._run)
-
-    def _run(self):
-        try:
-            for value in self.generator:
-                self.queue.put(value)
-        except:
-            self.queue.put(self.sentinel)
-
-    def __iter__(self):
-        self.thread.start()
-        for x in iter(self.queue.get, self.sentinel):
-            yield x
-        self.thread.join()
-
-
 class IndicoEstimator(tf.estimator.Estimator):
     def __init__(self, *args, **kwargs):
         self.estimator_spec = None

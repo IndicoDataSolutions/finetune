@@ -27,7 +27,6 @@ class TestBackwardsCompatibility(unittest.TestCase):
         preds = model.predict(
             ["This is a test sequence about Microsoft Corp, Apple Inc and Indico Data Solutions. " * 10]
         )
-        print(preds)
         self.assertTrue(len(preds[0]) == 30)
         acceptable_preds = set(["Microsoft Corp", "Apple Inc", "Indico Data Solutions"])
         for pred in preds[0]:
