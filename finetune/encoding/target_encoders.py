@@ -243,16 +243,12 @@ class SequenceLabelingEncoder(BaseEncoder):
                 overlap, agree = self.overlaps(label, start, end, text, input_text, offset=offset)
                 if overlap:
                     if not agree:
-<<<<<<< HEAD
                         raise ValueError(
                             "Tokens and labels do not align. {} matches with {}".format(
                                 label,
                                 input_text[label["start"] - offset: label["end"] - offset]
                             )
                         )
-=======
-                        raise ValueError("Tokens and labels do not align")
->>>>>>> ADD: Bio tagging logic to sequence labeling target encoder
                     if labels_out[i] != pad_idx and self.lookup[current_label] != labels_out[i]:
                         LOGGER.warning("Overlapping labels were found, consider multilabel_sequence=True")
                     if current_label not in self.lookup:
