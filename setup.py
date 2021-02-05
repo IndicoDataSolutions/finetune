@@ -28,7 +28,8 @@ REQUIREMENTS = [
     "tensorflow-addons==0.11.2",
     "tensorflow-estimator==2.3.0",
     "tqdl==0.0.4",
-    "psutil==5.7.0"
+    "psutil==5.7.0",
+    "transformers==3.0.2",
 ]
 
 
@@ -53,7 +54,6 @@ setup(
     extras_require={
         "tf": ["tensorflow==2.3.0"],
         "tf_gpu": ["tensorflow-gpu==2.3.0"],
-        "hf_transformers": ["transformers==3.0.2"]
     },
     zip_safe=False,
     cmdclass={"build_ext": OpsBuild,},
