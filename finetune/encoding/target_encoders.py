@@ -196,7 +196,10 @@ class SequenceLabelingEncoder(BaseEncoder):
     def fit(self, labels):
         self.classes_ = sorted(list(set(lab_i["label"] for lab in labels for lab_i in lab) | {self.pad_token}))
         if self.bio_tagging:
-            self.classes_ = [pre + c for c in classes_ for pre in ("B-", "I-")]
+            # <PAD> is duplicated here, removed in the set() call
+            self.classes_ = [pre + c if c != self.pad_token else c
+                             for c in self.classes_ for pre in ("B-", "I-")]
+            self.classes_ = sorted(list(set(self.classes_)))
         self.lookup = {c: i for i, c in enumerate(self.classes_)}
 
     def pre_process_label(self, out, labels):
