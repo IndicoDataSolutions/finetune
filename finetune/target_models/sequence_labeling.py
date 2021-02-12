@@ -82,6 +82,7 @@ class SequencePipeline(BasePipeline):
                     lab
                     for lab in Y
                     if lab["end"] >= min_starts and lab["start"] <= max_ends
+                    # TODO Should <UNK> tokens be filtered here?
                 ]
                 empty = len(filtered_labels) == 0
                 if (
@@ -105,6 +106,7 @@ class SequencePipeline(BasePipeline):
         return counter
 
     def feed_shape_type_def(self):
+        # TODO Need additional input which is one hot vector for unknowns
         TS = tf.TensorShape
         types = {"tokens": tf.int32}
         shapes = {"tokens": TS([None])}
@@ -186,6 +188,8 @@ def negative_samples(preds, labels, pad="<PAD>"):
     Given model predictions and ground truth labels, identify any prediction labels
     that do not exist (via sequence_overlap metric) in the ground truth, annotate
     them with the PAD label, and add them to the label set
+
+    TODO With <UNK> labels, there will be significantly less negative samples generated
     """
     modified_labels = []
     for p, l in zip(preds, labels):
@@ -289,7 +293,12 @@ class SequenceLabeler(BaseModel):
                 # TODO Determine if we need something more sophisticated for chunking
                 self.config.max_empty_chunk_ratio = 0.0
 
-        return super().finetune(Xs, Y=Y, context=context, update_hook=update_hook)
+        super().finetune(Xs, Y=Y, context=context, update_hook=update_hook)
+
+        # This is hacky and there's probably a better way to do this
+        if self.config["unknown_labels"] and "<UNK>" in self.input_pipeline.label_encoder.target_labels:
+            self.input_pipeline.target_dim -= 1
+            self.input_pipeline.label_encoder.target_labels.remove("<UNK>")
 
     def predict(
         self, X, per_token=False, context=None, return_negative_confidence=False, **kwargs

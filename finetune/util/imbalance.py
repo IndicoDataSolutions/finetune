@@ -12,6 +12,9 @@ from finetune.errors import FinetuneError
 def compute_class_weights(class_weights, class_counts, n_total=None, multilabel=False):
     """
     Optionally compute class weights based on target distribution
+
+    class_weights must be one of the options or a dictionary from class
+    name to weights
     """
     if class_weights is None:
         return

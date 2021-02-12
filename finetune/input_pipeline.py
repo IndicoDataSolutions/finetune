@@ -46,7 +46,7 @@ class BasePipeline(metaclass=ABCMeta):
         self.total_epoch_offset = 0
 
     @property
-    def text_encoder(self):
+    def  text_encoder(self):
         if not hasattr(self, "_text_encoder") or self._text_encoder is None:
             self._text_encoder = self.config.base_model.get_encoder(self.config)
         return self._text_encoder
@@ -308,6 +308,7 @@ class BasePipeline(metaclass=ABCMeta):
             )
         )
 
+        # TODO Do I need to modify class weights to exclude <UNK>?
         if self.config.class_weights is not None:
             class_counts = self._compute_class_counts(tokenized_train_split)
             self.config.class_weights = self._compute_class_weights(
@@ -372,6 +373,18 @@ class BasePipeline(metaclass=ABCMeta):
         return [X]
 
     def _text_to_ids(self, Xs, pad_token=None):
+        """
+        Takes in string, returns tokenized output including token ids and
+        start and end indices. Appears to be in the format of the EncodedOutput
+        namedtuple in input_encoder.py
+
+        Args:
+            Xs:
+            pad_token:
+
+        Returns:
+
+        """
         Xs = self._format_for_encoding(Xs)
         if self.config.chunk_long_sequences and len(Xs) == 1:
             # can only chunk single sequence inputs

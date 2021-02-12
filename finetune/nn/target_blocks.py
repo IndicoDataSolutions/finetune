@@ -1,6 +1,7 @@
 import functools
 import tensorflow as tf
 from tensorflow_addons.text.crf import crf_log_likelihood
+import numpy as np
 
 from finetune.base_models.gpt.featurizer import attn, dropout, norm
 from finetune.util.shapes import shape_list, merge_leading_dims
@@ -363,9 +364,25 @@ def ordinal_regressor(
         return {"logits": outputs, "losses": loss}
 
 
-def class_reweighted_grad(logits, class_weights):
+def class_reweighted_grad(logits, class_weights, target_mask):
+    """
+    Used to reweight samples with the CRF using gradient manipulation. For rare
+    classes, you want to reweight the loss to make the direction of the gradients
+    larger for those samples.
+
+    Args:
+        logits [batch_size, sequence_length, n_targets]
+        class_weights [batch_size, sequence_length, n_targets]
+        target_mask [batch_size, sequence_length, 1]
+
+    Returns:
+
+    """
+    # Multiplying by target_mask to mask out (zero) gradients of logits
+    # where the label is <UNK>
     def custom_grad_fn(op, g):
-        new_g = g * class_weights
+        # new_g = g * class_weights
+        new_g = g * class_weights * target_mask
         ratio = tf.math.divide_no_nan(tf.norm(g), tf.norm(new_g))
         return [new_g * ratio]
 
@@ -420,9 +437,23 @@ def sequence_labeler(
         "predict_params": A dictionary of params to be fed to the viterbi decode function.
     """
     with tf.compat.v1.variable_scope("sequence-labeler", reuse=reuse):
-
+        unknown_labels = config["unknown_labels"]
+        # Targets shape is [batch_size, sequence_length], where the values are integers
+        # in range(0, n_targets). This will include the <UNK> token, which we'll need to
+        # remove when creating new_targets tensor
         if targets is not None:
+            targets = tf.compat.v1.Print(targets, ["targets", targets, tf.shape(targets)], summarize=-1)
             targets = tf.cast(targets, dtype=tf.int32)
+            if unknown_labels:
+                # Modify <UNK> to <PAD>
+                target_mask = tf.not_equal(targets, n_targets - 1)
+                target_mask = tf.cast(target_mask, dtype=tf.int32)
+                target_mask = tf.compat.v1.Print(target_mask, ["target_mask", target_mask, tf.shape(target_mask)], summarize=-1)
+                targets = targets * target_mask
+                targets = tf.compat.v1.Print(targets, ["new_targets", targets, tf.shape(targets)], summarize=-1)
+                n_targets -= 1
+            else:
+                target_mask = tf.ones_like(targets)
 
         nx = config.n_embed
 
@@ -454,6 +485,7 @@ def sequence_labeler(
                 seq_lab_internal = recompute_grad(
                     seq_lab_internal, use_entire_scope=True
                 )
+            # Logits is [batch_size, sequence_length, n_targets]
             logits = seq_lab_internal(hidden)
             logits = tf.cast(logits, tf.float32)  # always run the crf in float32
 
@@ -522,15 +554,43 @@ def sequence_labeler(
                             )
                 logits = tf.stack(logits, axis=-1)
             else:
+                # TODO If class weights is None, class_reweighted_grad isn't called
+                # May need to call it anyways in order to mask out gradients where
+                # the label in unknown
                 if class_weights is not None and train:
                     class_weights = tf.reshape(class_weights, [1, 1, -1])
+                    class_weights = tf.compat.v1.Print(class_weights,
+                        ["class_weights", class_weights, tf.shape(class_weights)], summarize=-1)
+                    if unknown_labels:
+                        # This is a total hack I shouldn't be using numpy
+                        # Creating a boolean mask the remove the unk_idx index from the class weights
+                        # TODO This is problematic because the <PAD> class effectively ends up being
+                        # "underweighted" when there is a lot of unknown labels, so we overpredict
+                        # other classes
+                        cw_mask = np.array([True] * (n_targets + 1))
+                        cw_mask[-1] = False
+                        cw_mask = cw_mask.reshape((1, 1, (n_targets + 1)))
+                        class_weights = tf.boolean_mask(class_weights, cw_mask)
+                        class_weights = tf.compat.v1.Print(class_weights,
+                                                           ["class_weights_v2", class_weights, tf.shape(class_weights)],
+                                                           summarize=-1)
+
                     one_hot_class_weights = class_weights * tf.one_hot(
                         targets, depth=n_targets
                     )
                     per_token_weights = tf.reduce_sum(
                         input_tensor=one_hot_class_weights, axis=-1, keepdims=True
                     )
-                    logits = class_reweighted_grad(logits, per_token_weights)
+                    per_token_weights = tf.compat.v1.Print(per_token_weights,
+                        ["per_token_weights", per_token_weights, tf.shape(per_token_weights)], summarize=-1)
+                    target_mask = tf.expand_dims(tf.cast(target_mask, dtype=tf.float32), -1)
+                    target_mask = tf.compat.v1.Print(target_mask,
+                        ["target_mask_v2", target_mask, tf.shape(target_mask)], summarize=-1)
+                    logits = class_reweighted_grad(logits, per_token_weights, target_mask)
+
+                logits = tf.compat.v1.Print(logits, ["logits", logits, tf.shape(logits)], summarize=-1)
+                if class_weights is None:
+                    print("Class weights is None")
 
                 transition_params = tf.cast(
                     tf.compat.v1.get_variable(
@@ -538,8 +598,15 @@ def sequence_labeler(
                     ),
                     tf.float32,
                 )
+
                 if targets is not None:
                     if use_crf:
+                        # Transition matrix is [n_targets x n_targets] and encodes likeliness
+                        # of class transitions between tokens
+                        # CRF is combination of unary scores and binary scores (which use transitions)
+                        # TODO (Next iteration) Will need to modify this function to mask out gradients on
+                        # binary scores for batches with any UNK token. Will need to modify CRF internals
+                        # First iteration just mask gradients on logits, which should get us 90% of the way there
                         log_likelihood, _ = crf_log_likelihood(
                             logits,
                             targets,

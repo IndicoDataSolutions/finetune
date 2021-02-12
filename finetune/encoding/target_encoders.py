@@ -193,6 +193,10 @@ class SequenceLabelingEncoder(BaseEncoder):
 
     def fit(self, labels):
         self.classes_ = sorted(list(set(lab_i["label"] for lab in labels for lab_i in lab) | {self.pad_token}))
+        # Put unknown token at the end. This is an awful hack
+        if "<UNK>" in self.classes_:
+            self.classes_.remove("<UNK>")
+            self.classes_.append("<UNK>")
         self.lookup = {c: i for i, c in enumerate(self.classes_)}
 
     def pre_process_label(self, out, labels):

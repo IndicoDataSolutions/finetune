@@ -27,6 +27,10 @@ def assign_associations(associations, none_value, idx_lookup):
 def _merge_confidences(annotation):
     """
     Collapse list of confidences down to a single mean confidence.
+
+    Confidences are calculated per token, so if an entity is composed of multiple
+    tokens, their confidence values need to be averaged to produce a confidence
+    for the full entity.
     """
     if not "confidence" in annotation or not len(annotation["confidence"]):
         return
