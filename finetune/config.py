@@ -63,7 +63,7 @@ class Settings(dict):
         (unless `chunk_long_sequences=True` for SequenceLabeler models). Defaults to `512`.
     :param weight_stddev: Standard deviation of initial weights.  Defaults to `0.02`.
     :param chunk_long_sequences: When True, use a sliding window approach to predict on
-        examples that are longer than max length.  The progress bar will display the number of chunks processed rather than the number of examples. Defaults to `True`.  
+        examples that are longer than max length.  The progress bar will display the number of chunks processed rather than the number of examples. Defaults to `True`.
     :param use_gpu_crf_predict: Use GPU op for crf predictions. Defaults to `auto`.
         examples that are longer than max length.  The progress bar will display the number of chunks processed rather than the number of examples. Defaults to `True`.
     :param chunk_context: How much context to include arround chunked text.
@@ -87,7 +87,7 @@ class Settings(dict):
     :param lr_warmup: Learning rate warmup (percentage of all batches to warmup for).  Defaults to `0.002`.
     :param max_grad_norm: Clip gradients larger than this norm. Defaults to `1.0`.
     :param shuffle_buffer_size: How many examples to load into a buffer before shuffling. Defaults to `100`.
-    :param dataset_size: Must be specified in order to calculate the learning rate schedule when the inputs provided are generators rather than static datasets.  
+    :param dataset_size: Must be specified in order to calculate the learning rate schedule when the inputs provided are generators rather than static datasets.
     :param accum_steps: Number of updates to accumulate before applying. This is used to simulate a higher batch size.
     :param lm_loss_coef: Language modeling loss coefficient -- a value between `0.0` - `1.0`
         that indicates how to trade off between language modeling loss
@@ -278,6 +278,7 @@ def get_default_config():
         max_empty_chunk_ratio=1.0,
         auto_negative_sampling=False,
         unknown_labels=False,
+        unknown_token="<UNK>",
         #
         # Regression Params
         regression_loss="L2",
@@ -344,7 +345,7 @@ def get_config(error_on_invalid_keywords=True, **kwargs):
     Gets a config object containing all the default parameters for each variant of the model.
 
     :param **kwargs: Keyword arguments to override default values.
-    :return: Config object.    """
+    :return: Config object."""
     if error_on_invalid_keywords:
         assert_valid_config(**kwargs)
     config = get_default_config()

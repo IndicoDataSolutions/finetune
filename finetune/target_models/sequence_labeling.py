@@ -103,6 +103,11 @@ class SequencePipeline(BasePipeline):
                     counter.update(label)
             else:
                 counter.update(decoded_targets)
+
+        # Remove unknown token class from counter before calculating class weights
+        if self.config["unknown_labels"] and self.config["unknown_token"] in counter:
+            counter.pop(self.config["unknown_token"])
+
         return counter
 
     def feed_shape_type_def(self):
@@ -242,11 +247,19 @@ class SequenceLabeler(BaseModel):
         self.multi_label = self.config.multi_label_sequences
         return super()._initialize()
 
-    def finetune(self, Xs, Y=None, context=None, update_hook=None, X_partial=None,
-                 Y_partial=None, neg_samples_path=None):
+    def finetune(
+        self,
+        Xs,
+        Y=None,
+        context=None,
+        update_hook=None,
+        X_partial=None,
+        Y_partial=None,
+        neg_samples_path=None,
+    ):
         if self.config.auto_negative_sampling and Y is not None:
             # clear the saver to save memory.
-            self.saver.fallback # retrieve the fallback future.
+            self.saver.fallback  # retrieve the fallback future.
             self.saver = None
             model_copy = copy.deepcopy(self)
             model_copy._initialize()
@@ -264,11 +277,15 @@ class SequenceLabeler(BaseModel):
             initial_run_preds = []
             outer_batch_size = self.config.predict_batch_size
             for b_start in range(0, len(Xs), outer_batch_size):
-                initial_run_preds += model_copy.predict(Xs[b_start: b_start + outer_batch_size])
+                initial_run_preds += model_copy.predict(
+                    Xs[b_start : b_start + outer_batch_size]
+                )
             del model_copy
 
             # Tag negative predictions with <PAD> label and add to label set
-            Y_with_neg_samples = negative_samples(initial_run_preds, Y, pad=self.config.pad_token)
+            Y_with_neg_samples = negative_samples(
+                initial_run_preds, Y, pad=self.config.pad_token
+            )
 
             # If neg_samples_path is provided, write Y_with_neg_samples to path
             if neg_samples_path:
@@ -276,7 +293,9 @@ class SequenceLabeler(BaseModel):
                     json.dump(Y_with_neg_samples, handle, cls=NpEncoder)
 
             # this means we get the same absolute number of randomly sampled empty chunks with or without this option.
-            self.config.max_empty_chunk_ratio *= sum(len(yi) for yi in Y) / sum(len(yi) for yi in Y_with_neg_samples)
+            self.config.max_empty_chunk_ratio *= sum(len(yi) for yi in Y) / sum(
+                len(yi) for yi in Y_with_neg_samples
+            )
             Y = Y_with_neg_samples
 
             # Reinitialize the model including rebuilding the saver.
@@ -296,12 +315,22 @@ class SequenceLabeler(BaseModel):
         super().finetune(Xs, Y=Y, context=context, update_hook=update_hook)
 
         # This is hacky and there's probably a better way to do this
-        if self.config["unknown_labels"] and "<UNK>" in self.input_pipeline.label_encoder.target_labels:
+        # This is required because otherwise the tensor shapes do not match during prediction
+        unknown_token = self.config["unknown_token"]
+        if (
+            self.config["unknown_labels"]
+            and unknown_token in self.input_pipeline.label_encoder.target_labels
+        ):
             self.input_pipeline.target_dim -= 1
-            self.input_pipeline.label_encoder.target_labels.remove("<UNK>")
+            self.input_pipeline.label_encoder.target_labels.remove(unknown_token)
 
     def predict(
-        self, X, per_token=False, context=None, return_negative_confidence=False, **kwargs
+        self,
+        X,
+        per_token=False,
+        context=None,
+        return_negative_confidence=False,
+        **kwargs
     ):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
@@ -363,7 +392,7 @@ class SequenceLabeler(BaseModel):
             proba_seq = proba_seq[start:end]
 
             proba_seq_masked = proba_seq.copy()
-            
+
             for il, label in enumerate(label_seq):
                 # covers the multilabel case where pad is not a distinct class.
                 if label in classes:
@@ -459,7 +488,7 @@ class SequenceLabeler(BaseModel):
                 output.append(
                     {
                         "prediction": anno,
-                        "negative_confidence": dict(zip(classes, probs))
+                        "negative_confidence": dict(zip(classes, probs)),
                     }
                 )
             return output
@@ -475,7 +504,9 @@ class SequenceLabeler(BaseModel):
         """
         return super().featurize(X, **kwargs)
 
-    def predict_proba(self, X, context=None, return_negative_confidence=False, **kwargs):
+    def predict_proba(
+        self, X, context=None, return_negative_confidence=False, **kwargs
+    ):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 

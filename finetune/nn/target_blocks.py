@@ -84,7 +84,8 @@ def masked_language_model(
         logits = tf.nn.bias_add(logits, output_bias)
 
         mlm_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(
-            logits=logits, labels=mlm_ids,
+            logits=logits,
+            labels=mlm_ids,
         )  # No weights needed as there is no padding.
 
         logits = tf.scatter_nd(
@@ -433,6 +434,7 @@ def sequence_labeler(
     :return: dict containing:
         "logits": The un-normalised log probabilities of each class being in each location. For usable predictions,
             sampling from this distribution is not sufficient and a viterbi decoding method should be used.
+            [batch_size, sequence_length, n_targets]
         "losses": The negative log likelihood for the sequence targets.
         "predict_params": A dictionary of params to be fed to the viterbi decode function.
     """
@@ -442,15 +444,24 @@ def sequence_labeler(
         # in range(0, n_targets). This will include the <UNK> token, which we'll need to
         # remove when creating new_targets tensor
         if targets is not None:
-            targets = tf.compat.v1.Print(targets, ["targets", targets, tf.shape(targets)], summarize=-1)
+            targets = tf.compat.v1.Print(
+                targets, ["targets", targets, tf.shape(targets)], summarize=-1
+            )
             targets = tf.cast(targets, dtype=tf.int32)
             if unknown_labels:
-                # Modify <UNK> to <PAD>
+                # Modify unknown token to pad. This relies on the assumption that the pad
+                # token is the first one (index 0), which is enforced via the input encoder
                 target_mask = tf.not_equal(targets, n_targets - 1)
                 target_mask = tf.cast(target_mask, dtype=tf.int32)
-                target_mask = tf.compat.v1.Print(target_mask, ["target_mask", target_mask, tf.shape(target_mask)], summarize=-1)
+                target_mask = tf.compat.v1.Print(
+                    target_mask,
+                    ["target_mask", target_mask, tf.shape(target_mask)],
+                    summarize=-1,
+                )
                 targets = targets * target_mask
-                targets = tf.compat.v1.Print(targets, ["new_targets", targets, tf.shape(targets)], summarize=-1)
+                targets = tf.compat.v1.Print(
+                    targets, ["new_targets", targets, tf.shape(targets)], summarize=-1
+                )
                 n_targets -= 1
             else:
                 target_mask = tf.ones_like(targets)
@@ -485,7 +496,6 @@ def sequence_labeler(
                 seq_lab_internal = recompute_grad(
                     seq_lab_internal, use_entire_scope=True
                 )
-            # Logits is [batch_size, sequence_length, n_targets]
             logits = seq_lab_internal(hidden)
             logits = tf.cast(logits, tf.float32)  # always run the crf in float32
 
@@ -554,44 +564,62 @@ def sequence_labeler(
                             )
                 logits = tf.stack(logits, axis=-1)
             else:
-                # TODO If class weights is None, class_reweighted_grad isn't called
-                # May need to call it anyways in order to mask out gradients where
-                # the label in unknown
-                if class_weights is not None and train:
-                    class_weights = tf.reshape(class_weights, [1, 1, -1])
-                    class_weights = tf.compat.v1.Print(class_weights,
-                        ["class_weights", class_weights, tf.shape(class_weights)], summarize=-1)
-                    if unknown_labels:
-                        # This is a total hack I shouldn't be using numpy
-                        # Creating a boolean mask the remove the unk_idx index from the class weights
-                        # TODO This is problematic because the <PAD> class effectively ends up being
-                        # "underweighted" when there is a lot of unknown labels, so we overpredict
-                        # other classes
-                        cw_mask = np.array([True] * (n_targets + 1))
-                        cw_mask[-1] = False
-                        cw_mask = cw_mask.reshape((1, 1, (n_targets + 1)))
-                        class_weights = tf.boolean_mask(class_weights, cw_mask)
-                        class_weights = tf.compat.v1.Print(class_weights,
-                                                           ["class_weights_v2", class_weights, tf.shape(class_weights)],
-                                                           summarize=-1)
-
-                    one_hot_class_weights = class_weights * tf.one_hot(
-                        targets, depth=n_targets
+                if train:
+                    target_mask = tf.expand_dims(
+                        tf.cast(target_mask, dtype=tf.float32), -1
                     )
-                    per_token_weights = tf.reduce_sum(
-                        input_tensor=one_hot_class_weights, axis=-1, keepdims=True
+                    target_mask = tf.compat.v1.Print(
+                        target_mask,
+                        ["target_mask_v2", target_mask, tf.shape(target_mask)],
+                        summarize=-1,
                     )
-                    per_token_weights = tf.compat.v1.Print(per_token_weights,
-                        ["per_token_weights", per_token_weights, tf.shape(per_token_weights)], summarize=-1)
-                    target_mask = tf.expand_dims(tf.cast(target_mask, dtype=tf.float32), -1)
-                    target_mask = tf.compat.v1.Print(target_mask,
-                        ["target_mask_v2", target_mask, tf.shape(target_mask)], summarize=-1)
-                    logits = class_reweighted_grad(logits, per_token_weights, target_mask)
+                    if class_weights is not None:
+                        class_weights = tf.reshape(class_weights, [1, 1, -1])
+                        class_weights = tf.compat.v1.Print(
+                            class_weights,
+                            ["class_weights", class_weights, tf.shape(class_weights)],
+                            summarize=-1,
+                        )
 
-                logits = tf.compat.v1.Print(logits, ["logits", logits, tf.shape(logits)], summarize=-1)
-                if class_weights is None:
-                    print("Class weights is None")
+                        one_hot_class_weights = class_weights * tf.one_hot(
+                            targets, depth=n_targets
+                        )
+                        one_hot_class_weights = tf.compat.v1.Print(
+                            one_hot_class_weights,
+                            [
+                                "one_hot_class_weights",
+                                one_hot_class_weights,
+                                tf.shape(one_hot_class_weights),
+                            ],
+                            summarize=-1,
+                        )
+                        per_token_weights = tf.reduce_sum(
+                            input_tensor=one_hot_class_weights, axis=-1, keepdims=True
+                        )
+                        per_token_weights = tf.compat.v1.Print(
+                            per_token_weights,
+                            [
+                                "per_token_weights",
+                                per_token_weights,
+                                tf.shape(per_token_weights),
+                            ],
+                            summarize=-1,
+                        )
+                        logits = class_reweighted_grad(
+                            logits, per_token_weights, target_mask
+                        )
 
+                    elif class_weights is None and unknown_labels:
+                        # Even if class_weights is None, if we have unknown labels, we need
+                        # to zero out the gradients of the logits where the target class is unknown
+                        per_token_weights = tf.ones_like(logits, dtype=tf.float32)
+                        logits = class_reweighted_grad(
+                            logits, per_token_weights, target_mask
+                        )
+
+                logits = tf.compat.v1.Print(
+                    logits, ["logits", logits, tf.shape(logits)], summarize=-1
+                )
                 transition_params = tf.cast(
                     tf.compat.v1.get_variable(
                         "Transition_matrix", shape=[n_targets, n_targets]

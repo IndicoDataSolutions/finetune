@@ -54,15 +54,25 @@ def _compute_ratios(counts, n_total, multilabel=False):
         else:
             ratio = ratio = max_count / count
         computed_ratios[class_name] = ratio
-    return computed_ratios 
+    return computed_ratios
 
 
-def class_weight_tensor(class_weights, target_dim, label_encoder):
+def class_weight_tensor(
+    class_weights, target_dim, label_encoder, unknown_token="<UNK>"
+):
     """
     Convert from dictionary of class weights to tf tensor
     """
+    # Remove <UNK> from target labels if present
+    target_labels = []
+    for cls in label_encoder.target_labels:
+        if cls == unknown_token:
+            target_dim -= 1
+        else:
+            target_labels.append(cls)
+
     class_weight_arr = np.ones(target_dim, dtype=np.float32)
-    for i, cls in enumerate(label_encoder.target_labels):
+    for i, cls in enumerate(target_labels):
         class_weight_arr[i] = class_weights.get(cls, 1.0)
 
     class_weight_tensor = tf.convert_to_tensor(value=class_weight_arr)
