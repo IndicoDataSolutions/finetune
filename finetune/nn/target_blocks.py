@@ -444,24 +444,24 @@ def sequence_labeler(
         # in range(0, n_targets). This will include the <UNK> token, which we'll need to
         # remove when creating new_targets tensor
         if targets is not None:
-            targets = tf.compat.v1.Print(
-                targets, ["targets", targets, tf.shape(targets)], summarize=-1
-            )
+            # targets = tf.compat.v1.Print(
+            #     targets, ["targets", targets, tf.shape(targets)], summarize=-1
+            # )
             targets = tf.cast(targets, dtype=tf.int32)
             if unknown_labels:
                 # Modify unknown token to pad. This relies on the assumption that the pad
                 # token is the first one (index 0), which is enforced via the input encoder
                 target_mask = tf.not_equal(targets, n_targets - 1)
                 target_mask = tf.cast(target_mask, dtype=tf.int32)
-                target_mask = tf.compat.v1.Print(
-                    target_mask,
-                    ["target_mask", target_mask, tf.shape(target_mask)],
-                    summarize=-1,
-                )
+                # target_mask = tf.compat.v1.Print(
+                #     target_mask,
+                #     ["target_mask", target_mask, tf.shape(target_mask)],
+                #     summarize=-1,
+                # )
                 targets = targets * target_mask
-                targets = tf.compat.v1.Print(
-                    targets, ["new_targets", targets, tf.shape(targets)], summarize=-1
-                )
+                # targets = tf.compat.v1.Print(
+                #     targets, ["new_targets", targets, tf.shape(targets)], summarize=-1
+                # )
                 n_targets -= 1
             else:
                 target_mask = tf.ones_like(targets)
@@ -568,43 +568,34 @@ def sequence_labeler(
                     target_mask = tf.expand_dims(
                         tf.cast(target_mask, dtype=tf.float32), -1
                     )
-                    target_mask = tf.compat.v1.Print(
-                        target_mask,
-                        ["target_mask_v2", target_mask, tf.shape(target_mask)],
-                        summarize=-1,
-                    )
+                    # target_mask = tf.compat.v1.Print(
+                    #     target_mask,
+                    #     ["target_mask_v2", target_mask, tf.shape(target_mask)],
+                    #     summarize=-1,
+                    # )
                     if class_weights is not None:
                         class_weights = tf.reshape(class_weights, [1, 1, -1])
-                        class_weights = tf.compat.v1.Print(
-                            class_weights,
-                            ["class_weights", class_weights, tf.shape(class_weights)],
-                            summarize=-1,
-                        )
+                        # class_weights = tf.compat.v1.Print(
+                        #     class_weights,
+                        #     ["class_weights", class_weights, tf.shape(class_weights)],
+                        #     summarize=-1,
+                        # )
 
                         one_hot_class_weights = class_weights * tf.one_hot(
                             targets, depth=n_targets
                         )
-                        one_hot_class_weights = tf.compat.v1.Print(
-                            one_hot_class_weights,
-                            [
-                                "one_hot_class_weights",
-                                one_hot_class_weights,
-                                tf.shape(one_hot_class_weights),
-                            ],
-                            summarize=-1,
-                        )
                         per_token_weights = tf.reduce_sum(
                             input_tensor=one_hot_class_weights, axis=-1, keepdims=True
                         )
-                        per_token_weights = tf.compat.v1.Print(
-                            per_token_weights,
-                            [
-                                "per_token_weights",
-                                per_token_weights,
-                                tf.shape(per_token_weights),
-                            ],
-                            summarize=-1,
-                        )
+                        # per_token_weights = tf.compat.v1.Print(
+                        #     per_token_weights,
+                        #     [
+                        #         "per_token_weights",
+                        #         per_token_weights,
+                        #         tf.shape(per_token_weights),
+                        #     ],
+                        #     summarize=-1,
+                        # )
                         logits = class_reweighted_grad(
                             logits, per_token_weights, target_mask
                         )
@@ -617,9 +608,9 @@ def sequence_labeler(
                             logits, per_token_weights, target_mask
                         )
 
-                logits = tf.compat.v1.Print(
-                    logits, ["logits", logits, tf.shape(logits)], summarize=-1
-                )
+                # logits = tf.compat.v1.Print(
+                #     logits, ["logits", logits, tf.shape(logits)], summarize=-1
+                # )
                 transition_params = tf.cast(
                     tf.compat.v1.get_variable(
                         "Transition_matrix", shape=[n_targets, n_targets]
