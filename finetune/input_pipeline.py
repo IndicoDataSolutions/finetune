@@ -46,7 +46,7 @@ class BasePipeline(metaclass=ABCMeta):
         self.total_epoch_offset = 0
 
     @property
-    def  text_encoder(self):
+    def text_encoder(self):
         if not hasattr(self, "_text_encoder") or self._text_encoder is None:
             self._text_encoder = self.config.base_model.get_encoder(self.config)
         return self._text_encoder
@@ -308,7 +308,6 @@ class BasePipeline(metaclass=ABCMeta):
             )
         )
 
-        # TODO Do I need to modify class weights to exclude <UNK>?
         if self.config.class_weights is not None:
             class_counts = self._compute_class_counts(tokenized_train_split)
             self.config.class_weights = self._compute_class_weights(
