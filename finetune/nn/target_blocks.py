@@ -442,7 +442,7 @@ def sequence_labeler(
         unknown_labels = config["unknown_labels"]
         # Targets shape is [batch_size, sequence_length], where the values are integers
         # in range(0, n_targets). This will include the <UNK> token, which we'll need to
-        # remove when creating new_targets tensor
+        # remove when creating new targets tensor
         if targets is not None:
             # targets = tf.compat.v1.Print(
             #     targets, ["targets", targets, tf.shape(targets)], summarize=-1

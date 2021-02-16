@@ -84,7 +84,14 @@ class SequencePipeline(BasePipeline):
                     if lab["end"] >= min_starts and lab["start"] <= max_ends
                     # TODO Should <UNK> tokens be filtered here?
                 ]
-                empty = len(filtered_labels) == 0
+
+                # TODO Need to see if this makes sense or not
+                # Filter out chunks that only have unknown labels
+                filtered_labels_unk = [
+                    lab for lab in filtered_labels if lab["label"] != self.config["unknown_token"]
+                ]
+                empty = len(filtered_labels_unk) == 0
+                # empty = len(filtered_labels) == 0
                 if (
                     self.config.filter_empty_examples
                     or self.empty_ratio > self.config.max_empty_chunk_ratio
@@ -272,6 +279,12 @@ class SequenceLabeler(BaseModel):
             model_copy.config.max_empty_chunk_ratio = 0.0
             model_copy.config.auto_negative_sampling = False
             model_copy.finetune(Xs, Y=Y, context=context, update_hook=update_hook)
+
+            # Modify dimension size for prediction, and remove unknown token from target labels if necessary
+            if self.config["unknown_labels"]:
+                model_copy.input_pipeline.target_dim -= 1
+                if self.config["unknown_token"] in model_copy.input_pipeline.label_encoder.target_labels:
+                    model_copy.input_pipeline.label_encoder.target_labels.remove(self.config["unknown_token"])
 
             # Predict on full dataset
             initial_run_preds = []
