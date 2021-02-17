@@ -14,6 +14,7 @@ import sys
 from contextlib import contextmanager
 import pathlib
 import logging
+from typing import Dict, List, Tuple
 
 import numpy as np
 import tensorflow as tf
@@ -373,16 +374,25 @@ class BaseModel(object, metaclass=ABCMeta):
         self._cached_predict = False
         self.close()
 
-    def _sort_by_length(self, Xs):
+    def _sort_by_length(self, zipped_text: List[Dict[str, str]]) -> Tuple[List[Dict[str, str]], np.ndarray]:
         """
-        Returns the sorted array and the idxs to invert the sort operation
+        Given a list of dictionaries from "X" to text of a document, sort the list
+        by the length of each element in the zipped_text
+
+        Args:
+            zipped_text: {"X": <text>} for each document in a dataset
+
+        Returns:
+            sorted_text: zipped_text sorted by length of each document
+            invert_idxs: indices from the original zipped_text so that we can invert
+                the list after prediction
         """
-        lengths = [len(X) for X in Xs]
+        lengths = [len(text["X"]) for text in zipped_text]
         sorted_idxs = np.argsort(lengths)
-        sorted_Xs = [Xs[i] for i in sorted_idxs]
+        sorted_text = [zipped_text[i] for i in sorted_idxs]
         invert_idxs = np.zeros(sorted_idxs.shape, dtype=int)
         invert_idxs[sorted_idxs] = np.arange(sorted_idxs.shape[0])
-        return sorted_Xs, invert_idxs
+        return sorted_text, invert_idxs
 
     def _inference(self, zipped_data, predict_keys=None, context=None, update_hook=None, chunked_length=None):
         def get_zipped_data():
