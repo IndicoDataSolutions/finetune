@@ -4,6 +4,7 @@ import tensorflow as tf
 import tensorflow_addons as tfa
 
 from finetune.optimizers.adafactor import AdafactorOptimizer
+from finetune.optimizers.adamax import AdamaxOptimizer
 
 from finetune.optimizers.gradient_accumulation import get_grad_accumulation_optimizer
 from finetune.optimizers.learning_rate_schedules import schedules
@@ -20,6 +21,7 @@ OPTIMIZER_SUMMARIES = [
 OPTIMIZERS = {
     "AdamW": AdamW,
     "Adafactor": AdafactorOptimizer,
+    "AdamaxW": AdamaxOptimizer
 }
 
 

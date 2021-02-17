@@ -449,9 +449,14 @@ def sequence_labeler(
             # )
             targets = tf.cast(targets, dtype=tf.int32)
             if unknown_labels:
+                # Total hack to deal with the fact that n_targets is not always the same
+                # size as the number of classes, in the case that unknown_labels=True, but
+                # there are no actual labels of the <UNK> class
+                n_targets = len(config["class_weights"])
+
                 # Modify unknown token to pad. This relies on the assumption that the pad
                 # token is the first one (index 0), which is enforced via the input encoder
-                target_mask = tf.not_equal(targets, n_targets - 1)
+                target_mask = tf.not_equal(targets, n_targets)
                 target_mask = tf.cast(target_mask, dtype=tf.int32)
                 # target_mask = tf.compat.v1.Print(
                 #     target_mask,
@@ -462,7 +467,6 @@ def sequence_labeler(
                 # targets = tf.compat.v1.Print(
                 #     targets, ["new_targets", targets, tf.shape(targets)], summarize=-1
                 # )
-                n_targets -= 1
             else:
                 target_mask = tf.ones_like(targets)
 
