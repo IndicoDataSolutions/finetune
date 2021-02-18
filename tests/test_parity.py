@@ -1,5 +1,6 @@
 import unittest
 import os.path
+import pytest
 
 import numpy as np
 from tensorflow.data import Dataset
@@ -35,6 +36,7 @@ class TestActivationParity(unittest.TestCase):
             atol=1e-1
         )
 
+    @pytest.mark.xfail
     def test_gpt2_featurize(self):
         model = Classifier(base_model=GPT2)
         np.testing.assert_allclose(

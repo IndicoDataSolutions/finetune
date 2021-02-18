@@ -568,6 +568,7 @@ class TestSequenceLabelerTCN(TestSequenceLabelerTextCNN):
 
 
 class TestClassifierDistilBERT(TestClassifierTextCNN):
+    model_specific_config = {"n_epochs": 2, "lr": 1e-2}
     base_model = DistilBERT
 
 

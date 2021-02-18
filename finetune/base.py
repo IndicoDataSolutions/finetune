@@ -622,12 +622,14 @@ class BaseModel(object, metaclass=ABCMeta):
 
         def dataset_encoded():
             while not dataset_encoded.finished:
-                yield {"tokens": encoded.token_ids}
+                yield {"tokens": encoded.token_ids, "length": len(encoded.token_ids)}
 
         dataset_encoded.finished = False
 
         def get_input_fn():
             types, shapes = self.input_pipeline.feed_shape_type_def()
+            types[0]["length"] = tf.int32
+            shapes[0]["length"] = tf.TensorShape([])
             tf_dataset = Dataset.from_generator(dataset_encoded, types[0], shapes[0])
             return tf_dataset.batch(1)
 

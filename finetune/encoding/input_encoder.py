@@ -31,6 +31,7 @@ EncodedOutput = namedtuple(
         "useful_start",
         "useful_end",
         "input_text",
+        "offset",
     ],
 )
 EncodedOutput.__new__.__defaults__ = (None,) * len(EncodedOutput._fields)
