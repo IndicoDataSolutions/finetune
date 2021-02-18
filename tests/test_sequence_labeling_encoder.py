@@ -5,7 +5,7 @@ from finetune.encoding.target_encoders import SequenceLabelingEncoder
 
 def test_sequence_label_encoder():
     encoder = SequenceLabelingEncoder(pad_token="<PAD>")
-    labels = [{'start': 13, 'end': 16, 'label': 'z', 'text': '(5%)'}]
+    labels = [{'start': 13, 'end': 17, 'label': 'z', 'text': '(5%)'}]
     encoder.fit([labels])
     out = EncodedOutput(
         token_ids=np.array([   0, 9583,  139,   40,  249, 8875,    2]), 
@@ -13,7 +13,8 @@ def test_sequence_label_encoder():
         token_ends=np.array([-1,  4, 12, 14, 15, 17, -1]), 
         token_starts=np.array([-1,  0,  5, 13, 14, 15, -1]), 
         useful_start=0, 
-        useful_end=512
+        useful_end=512,
+        input_text=["five percent (5%)"]
     )
     label_arr = encoder.transform(out, labels)
     assert label_arr == [0, 0, 0, 1, 1, 1, 0]
@@ -29,7 +30,8 @@ def test_sequence_label_encoder_does_not_exceed_half():
         token_ends=np.array([-1,  5, -1]), 
         token_starts=np.array([-1,  0, -1]), 
         useful_start=0, 
-        useful_end=512
+        useful_end=512,
+        input_text=["token"]
     )
     label_arr = encoder.transform(out, labels)
     assert label_arr == [0, 0, 0]
@@ -45,7 +47,9 @@ def test_sequence_label_encoder_exceeds_half():
         token_ends=np.array([-1,  5, -1]), 
         token_starts=np.array([-1,  0, -1]), 
         useful_start=0, 
-        useful_end=512
+        useful_end=512,
+        input_text=["token"]
+
     )
     label_arr = encoder.transform(out, labels)
     assert label_arr == [0, 1, 0]
@@ -61,7 +65,8 @@ def test_sequence_label_encoder_half():
         token_ends=np.array([-1,  6, -1]),
         token_starts=np.array([-1,  0, -1]), 
         useful_start=0,
-        useful_end=512
+        useful_end=512,
+        input_text=["stream"]
     )
     label_arr = encoder.transform(out, labels)
     assert label_arr == [0, 1, 0]

@@ -33,7 +33,7 @@ class TestGPTEncoder(unittest.TestCase):
     def setUp(self):
         self.encoder = self.Encoder()
         with open('tests/data/weird_text.txt') as f:
-            weird_text = ''.join(f.readlines())
+            weird_text = ''.join(f.readlines()).rstrip()
         self.text = weird_text
 
     def test_max_length(self):
@@ -61,7 +61,7 @@ class TestGPTEncoder(unittest.TestCase):
 
     def test_end_alignment(self):
         encoded = self.encoder.encode_multi_input([self.text], max_length=2000)
-        self.assertEqual(encoded.token_ends[-2], len(self.text.rstrip()))
+        self.assertEqual(encoded.token_ends[-2], len(self.text))
 
 class TestGPT2Encoder(TestGPTEncoder):
     Encoder = GPT2Encoder

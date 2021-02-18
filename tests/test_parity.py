@@ -37,25 +37,8 @@ class TestActivationParity(unittest.TestCase):
 
     def test_gpt2_featurize(self):
         model = Classifier(base_model=GPT2)
-        
-        def dataset_encoded():
-            yield {"tokens": arr_encoded.token_ids}
-
-        def get_input_fn():
-            types, shapes = model.input_pipeline.feed_shape_type_def()
-            tf_dataset = Dataset.from_generator(dataset_encoded, types[0], shapes[0])
-            return tf_dataset.batch(1)
-
-        encoded = model.input_pipeline.text_encoder._encode(self.TEST_DATA)
-        arr_encoded = EncodedOutput(token_ids=encoded.token_ids[0])
-        estimator, hooks = model.get_estimator(force_build_lm=False)
-        predict = estimator.predict(
-            input_fn=get_input_fn, predict_keys=[PredictMode.SEQUENCE], hooks=hooks
-        )
-        sequence_features = next(predict)[PredictMode.SEQUENCE]
-
         np.testing.assert_allclose(
-            sequence_features[:len(arr_encoded.token_ids),:],
+            model.featurize_sequence(self.TEST_DATA)[0],
             np.load(
                 os.path.join(
                     DIRECTORY, 
@@ -81,13 +64,13 @@ class TestActivationParity(unittest.TestCase):
     def test_roberta_featurize(self):
         model = Classifier(base_model=RoBERTa)
         np.testing.assert_allclose(
-            model.featurize_sequence(self.TEST_DATA)[:,:6,:], 
+            model.featurize_sequence(self.TEST_DATA)[0],
             np.load(
                 os.path.join(
                     DIRECTORY, 
                     'data/test-roberta-activations.npy'
                 )
-            ),
+            )[0, 1:-1],
             atol=1e-1
         )
 
@@ -107,13 +90,13 @@ class TestActivationParity(unittest.TestCase):
     def test_roberta_featurize_fp16(self):
         model = Classifier(base_model=RoBERTa, float_16_predict=True)
         np.testing.assert_allclose(
-            model.featurize_sequence(self.TEST_DATA)[:,:6,:],
+            model.featurize_sequence(self.TEST_DATA)[0],
             np.load(
                 os.path.join(
                     DIRECTORY,
                     'data/test-roberta-activations.npy'
                 )
-            ),
+            )[0, 1:-1],
             atol=1e-1
         )
                                          

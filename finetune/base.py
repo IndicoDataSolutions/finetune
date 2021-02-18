@@ -33,7 +33,7 @@ from finetune.util.download import download_data_if_required
 from finetune.util.shapes import shape_list
 from finetune.util.timing import ProgressBar
 from finetune.util.in_memory_finetune import make_in_memory_finetune_hooks
-from finetune.util.indico_estimator import IndicoEstimator, ThreadGen
+from finetune.util.indico_estimator import IndicoEstimator
 from finetune.util.gpu_info import gpu_info
 
 from finetune.base_models.bert.model import _BaseBert

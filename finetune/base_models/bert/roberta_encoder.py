@@ -80,9 +80,7 @@ class RoBERTaEncoderSlow(RoBERTaEncoder):
 class RoBERTaEncoderV2(BaseEncoder):
     offset = 4
 
-    def __init__(
-        self, encoder_path=ENCODER_PATH, vocab_path=VOCAB_PATH
-    ):
+    def __init__(self, encoder_path=ENCODER_PATH, vocab_path=VOCAB_PATH):
         self.tokenizer = RobertaTokenizerFast(
             merges_file=vocab_path, vocab_file=encoder_path
         )
@@ -90,7 +88,7 @@ class RoBERTaEncoderV2(BaseEncoder):
         self.delimiter_token = 2  # eos from roberta
         self.end_token = 2  # eos from roberta
         self.UNK_IDX = 3  # unk from roberta
-        self.mask_token = self.tokenizer.mask_token_id
+        self.mask_token = 50264
         self.mapping = {
             self.tokenizer.cls_token_id: 0,
             self.tokenizer.eos_token_id: 2,
@@ -110,7 +108,6 @@ class RoBERTaEncoderV2(BaseEncoder):
         batch_char_starts = []
         for i, text in enumerate(texts):
             encoded = self.tokenizer._tokenizer.encode(text, add_special_tokens=False)
-            batch_tokens.append(encoded.tokens)
             batch_token_idxs.append(
                 [
                     i + self.offset if i not in self.mapping else self.mapping[i]
@@ -119,14 +116,21 @@ class RoBERTaEncoderV2(BaseEncoder):
             )
             token_ends = []
             token_starts = []
-            for start, end in encoded.offsets:
+            tokens = []
+            for (start, end), t in zip(encoded.offsets, encoded.tokens):
+                if t.startswith("Ġ") or t.startswith("Ċ"):
+                    t = t[1:]
+                tokens.append(t.strip())
                 if token_ends:
                     # tokenizers outputs start and end tokens that duplcicate in the case of
                     #  a single char mapping to multiple tokens.
                     start = max(token_ends[-1], start)
+                if end - start > len(t):
+                    start = end - len(t)
                 token_starts.append(start)
                 token_ends.append(end)
 
+            batch_tokens.append(tokens)
             batch_char_ends.append(token_ends)
             batch_char_starts.append(token_starts)
         return EncodedOutput(

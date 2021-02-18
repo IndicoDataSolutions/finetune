@@ -36,9 +36,9 @@ def bert_featurizer(
         sequence_features: The output of the featurizer at each timestep.
     """
 
-    is_roberta = issubclass(config.base_model.encoder, RoBERTaEncoder)
+    is_roberta = config.base_model.is_roberta
     model_filename = config.base_model_path.rpartition('/')[-1]
-    is_roberta_v1 = is_roberta and model_filename in ("roberta-model-sm.jl", "roberta-model-lg.jl")
+    is_roberta_v1 = is_roberta and config.base_model.encoder == RoBERTaEncoder
 
     bert_config = BertConfig(
         vocab_size=encoder.vocab_size,

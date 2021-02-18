@@ -217,6 +217,8 @@ class SequenceLabelingEncoder(BaseEncoder):
         return does_overlap, strings_agree
 
     def transform(self, out, labels):
+        # This is basically input_text[0] in the normal case and joins pages for doclabeler
+        input_text = "".join(out.input_text)
         labels, pad_idx = self.pre_process_label(out, labels)
         labels_out = [pad_idx for _ in out.tokens]
         for label in labels:
@@ -224,10 +226,15 @@ class SequenceLabelingEncoder(BaseEncoder):
                 # Label extends less than halfway through token
                 if label["end"] < (start + end + 1) // 2:
                     break
-                overlap, agree = self.overlaps(label, start, end, text, out.input_text[0])
+                overlap, agree = self.overlaps(label, start, end, text, input_text)
                 if overlap:
                     if not agree:
-                        raise ValueError("Tokens and labels do not align")
+                        raise ValueError(
+                            "Tokens and labels do not align. {} matches with {}".format(
+                                label,
+                                input_text[label["start"]: label["end"]]
+                            )
+                        )
                     if labels_out[i] != pad_idx and self.lookup[label["label"]] != labels_out[i]:
                         LOGGER.warning("Overlapping labels were found, consider multilabel_sequence=True")
                     if label["label"] not in self.lookup:
