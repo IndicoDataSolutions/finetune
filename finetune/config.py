@@ -344,7 +344,10 @@ def get_default_config():
         chunk_pos_embed=None, 
 
         include_bos_eos=True,
-
+        #
+        # Line Items
+        pipeline_group_tagging=False,
+        nested_group_tagging=False,
         # Serialize finetune version with model
         version=VERSION,
     )
