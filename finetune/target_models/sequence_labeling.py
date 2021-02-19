@@ -1,6 +1,7 @@
 import itertools
 import copy
 from collections import Counter
+import math
 from typing import Dict, List, Tuple
 
 import tensorflow as tf
@@ -255,7 +256,7 @@ class SequenceLabeler(BaseModel):
         # Split documents into "sub documents" if any are too long
         for doc_idx, doc in enumerate(texts):
             if len(doc) > max_doc_len:
-                num_splits = int(len(doc) // max_doc_len) + 1
+                num_splits = math.ceil(len(doc) / max_doc_len)
                 for split_idx in range(num_splits):
                     new_texts.append(doc[split_idx * max_doc_len: (split_idx + 1) * max_doc_len])
                 split_indices.append(list(range(doc_idx + offset, doc_idx + offset + num_splits)))
