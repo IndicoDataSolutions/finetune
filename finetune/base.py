@@ -199,7 +199,7 @@ class BaseModel(object, metaclass=ABCMeta):
             datasets = self.input_pipeline.get_dataset_from_list(
                 zipped_data_list, input_mode=InputMode.TRAIN, update_hook=update_hook
             )
-                
+
         if self.config.keep_best_model:
             if self.config.val_size <= 10:
                 tf.compat.v1.logging.warning(

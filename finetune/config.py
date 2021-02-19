@@ -279,6 +279,8 @@ def get_default_config():
         auto_negative_sampling=False,
         unknown_labels=False,
         unknown_token="<UNK>",
+        filter_unknown_examples=True,
+        max_unknown_chunk_ratio=0.0,
         #
         # Regression Params
         regression_loss="L2",

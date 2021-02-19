@@ -41,11 +41,15 @@ class SequencePipeline(BasePipeline):
     def __init__(self, config, multi_label):
         super(SequencePipeline, self).__init__(config)
         self.multi_label = multi_label
-        self.empty_counts = {"empty": 0, "labeled": 0}
+        self.empty_counts = {"empty": 0, "unknown": 0, "labeled": 0}
 
-    def _update_empty_ratio(self, empty):
+    def _update_empty_ratio(self, empty, unknown=False):
         if empty:
             self.empty_counts["empty"] += 1
+        # Empty takes priority over unknown, but in practice empty and
+        # unknown should never both be True
+        elif unknown:
+            self.empty_counts["unknown"] += 1
         else:
             self.empty_counts["labeled"] += 1
         return self.empty_counts
@@ -54,6 +58,11 @@ class SequencePipeline(BasePipeline):
     def empty_ratio(self):
         # Smoothed to prevent zero division
         return self.empty_counts["empty"] / (self.empty_counts["labeled"] + 1)
+
+    @property
+    def unknown_ratio(self):
+        # Smoothed to prevent zero division
+        return self.empty_counts["unknown"] / (self.empty_counts["labeled"] + 1)
 
     def text_to_tokens_mask(self, X, Y=None, context=None):
         """
@@ -82,22 +91,30 @@ class SequencePipeline(BasePipeline):
                     lab
                     for lab in Y
                     if lab["end"] >= min_starts and lab["start"] <= max_ends
-                    # TODO Should <UNK> tokens be filtered here?
                 ]
-
-                # TODO Need to see if this makes sense or not
-                # Filter out chunks that only have unknown labels
-                filtered_labels_unk = [
-                    lab for lab in filtered_labels if lab["label"] != self.config["unknown_token"]
-                ]
-                empty = len(filtered_labels_unk) == 0
-                # empty = len(filtered_labels) == 0
+                # Filter sequences with no labels
+                empty = len(filtered_labels) == 0
                 if (
                     self.config.filter_empty_examples
                     or self.empty_ratio > self.config.max_empty_chunk_ratio
                 ) and empty:
                     continue
-                self._update_empty_ratio(empty)
+
+                # If a sequence is empty, we already know that it contains no unknown labels
+                unknown = False
+                if not empty and self.config.unknown_labels:
+                    # Identify (and if applicable, filter) sequences that are all <UNK>
+                    filtered_labels_unk = [
+                        lab for lab in filtered_labels if lab["label"] != self.config["unknown_token"]
+                    ]
+                    unknown = len(filtered_labels_unk) == 0
+                    if (
+                        self.config.filter_unknown_examples
+                        or self.unknown_ratio > self.config.max_unknown_chunk_ratio
+                    ) and unknown:
+                        continue
+
+                self._update_empty_ratio(empty, unknown)
                 yield feats, self.label_encoder.transform(out, filtered_labels)
 
     def _compute_class_counts(self, encoded_dataset):
@@ -118,7 +135,6 @@ class SequencePipeline(BasePipeline):
         return counter
 
     def feed_shape_type_def(self):
-        # TODO Need additional input which is one hot vector for unknowns
         TS = tf.TensorShape
         types = {"tokens": tf.int32}
         shapes = {"tokens": TS([None])}

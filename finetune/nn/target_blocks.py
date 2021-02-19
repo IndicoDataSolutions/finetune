@@ -444,9 +444,9 @@ def sequence_labeler(
         # in range(0, n_targets). This will include the <UNK> token, which we'll need to
         # remove when creating new targets tensor
         if targets is not None:
-            # targets = tf.compat.v1.Print(
-            #     targets, ["targets", targets, tf.shape(targets)], summarize=-1
-            # )
+            targets = tf.compat.v1.Print(
+                targets, ["targets", targets, tf.shape(targets)], summarize=-1
+            )
             targets = tf.cast(targets, dtype=tf.int32)
             if unknown_labels:
                 # Total hack to deal with the fact that n_targets is not always the same
@@ -458,17 +458,17 @@ def sequence_labeler(
                 # token is the first one (index 0), which is enforced via the input encoder
                 target_mask = tf.not_equal(targets, n_targets)
                 target_mask = tf.cast(target_mask, dtype=tf.int32)
-                # target_mask = tf.compat.v1.Print(
-                #     target_mask,
-                #     ["target_mask", target_mask, tf.shape(target_mask)],
-                #     summarize=-1,
-                # )
                 targets = targets * target_mask
-                # targets = tf.compat.v1.Print(
-                #     targets, ["new_targets", targets, tf.shape(targets)], summarize=-1
-                # )
+                targets = tf.compat.v1.Print(
+                    targets, ["new_targets", targets, tf.shape(targets)], summarize=-1
+                )
             else:
                 target_mask = tf.ones_like(targets)
+            target_mask = tf.compat.v1.Print(
+                target_mask,
+                ["target_mask", target_mask, tf.shape(target_mask)],
+                summarize=-1,
+            )
 
         nx = config.n_embed
 
@@ -579,11 +579,11 @@ def sequence_labeler(
                     # )
                     if class_weights is not None:
                         class_weights = tf.reshape(class_weights, [1, 1, -1])
-                        # class_weights = tf.compat.v1.Print(
-                        #     class_weights,
-                        #     ["class_weights", class_weights, tf.shape(class_weights)],
-                        #     summarize=-1,
-                        # )
+                        class_weights = tf.compat.v1.Print(
+                            class_weights,
+                            ["class_weights", class_weights, tf.shape(class_weights)],
+                            summarize=-1,
+                        )
 
                         one_hot_class_weights = class_weights * tf.one_hot(
                             targets, depth=n_targets
