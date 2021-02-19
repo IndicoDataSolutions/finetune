@@ -1,6 +1,8 @@
 import itertools
 import copy
 from collections import Counter
+import math
+from typing import Dict, List, Tuple
 
 import tensorflow as tf
 import numpy as np
@@ -234,6 +236,73 @@ class SequenceLabeler(BaseModel):
             self._initialize()
         return super().finetune(Xs, Y=Y, context=context, update_hook=update_hook)
 
+    def _pre_chunk_document(self, texts: List[str]) -> Tuple[List[str], List[List[int]]]:
+        """
+        If self.config.max_document_chars is set, "pre-chunk" any documents that
+        are longer than that into multiple "sub documents" to more easily process
+        large documents through prediction.
+
+        Args:
+            texts: Text of each document
+
+        Returns:
+            new_texts: Text of each document after pre chunking
+            split_indices: Indices of documents that were split by pre chunking
+        """
+        max_doc_len = self.config.max_document_chars
+        new_texts = []
+        split_indices = []
+        offset = 0
+        # Split documents into "sub documents" if any are too long
+        for doc_idx, doc in enumerate(texts):
+            if len(doc) > max_doc_len:
+                num_splits = math.ceil(len(doc) / max_doc_len)
+                for split_idx in range(num_splits):
+                    new_texts.append(doc[split_idx * max_doc_len: (split_idx + 1) * max_doc_len])
+                split_indices.append(list(range(doc_idx + offset, doc_idx + offset + num_splits)))
+                offset += num_splits - 1
+            else:
+                new_texts.append(doc)
+                split_indices.append([doc_idx + offset])
+
+        return new_texts, split_indices
+
+    def _merge_chunked_preds(self, preds: List[Dict], split_indices: List[List[int]]) -> List[Dict]:
+        """
+        If self.config.max_document_chars is set, text for long documents is split
+        into multiple "sub documents". Given model predictions, and the indices
+        specifying which documents have been split, join the labels for previously
+        split documents together.
+
+        Args:
+            preds: Model predictions
+            split_indices: Indices specifying how documents were split
+
+        Returns:
+            merged_preds: Model predictions after merging documents together
+        """
+        merged_preds = []
+        for pred_idxs in split_indices:
+            if len(pred_idxs) == 1:
+                merged_preds.append(preds[pred_idxs[0]])
+            else:
+                # len(pred_idxs) > 1 indicates that a document was split into multiple
+                # "sub documents", for which the labels need to be merged
+                doc_preds = []
+                for chunk_idx, pred_idx in enumerate(pred_idxs):
+                    offset = chunk_idx * self.config.max_document_chars
+                    chunk_preds = preds[pred_idx]
+                    # Add offset to label start/ends so that they index correctly
+                    # into the text after joining across pre chunks
+                    for i in range(len(chunk_preds)):
+                        chunk_preds[i]["start"] += offset
+                        chunk_preds[i]["end"] += offset
+                    doc_preds.extend(chunk_preds)
+
+                merged_preds.append(doc_preds)
+
+        return merged_preds
+
     def predict(
         self, X, per_token=False, context=None, return_negative_confidence=False, **kwargs
     ):
@@ -244,13 +313,24 @@ class SequenceLabeler(BaseModel):
         :param per_token: If True, return raw probabilities and labels on a per token basis
         :returns: list of class labels.
         """
-        return super().predict(
+        if self.config.max_document_chars:
+            # Split each document into N "pre chunks" or length self.config.max_document_chars
+            # before feeding them into the input pipeline. The split_indices will be used to
+            # rejoin the labels after prediction
+            X, split_indices = self._pre_chunk_document(X)
+
+        preds = super().predict(
             X,
             per_token=per_token,
             context=context,
             return_negative_confidence=return_negative_confidence,
             **kwargs
         )
+
+        if self.config.max_document_chars:
+            preds = self._merge_chunked_preds(preds, split_indices)
+
+        return preds
 
     def _predict(
         self, zipped_data, per_token=False, return_negative_confidence=False, **kwargs
