@@ -269,7 +269,7 @@ def get_default_config():
         seq_num_heads=16,
         pad_token="<PAD>",
         pad_idx=None,
-        subtoken_predictions=False,
+        subtoken_predictions=True,
         multi_label_sequences=False,
         multi_label_threshold=0.5,
         chunk_long_sequences=True,

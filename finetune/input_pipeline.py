@@ -408,7 +408,7 @@ class BasePipeline(metaclass=ABCMeta):
                                 fv = np.concatenate((fv, [end_token]))
                         d[field] = fv
                 yield EncodedOutput(
-                    useful_start=useful_start, useful_end=useful_end, **d
+                    useful_start=useful_start, useful_end=useful_end, input_text=Xs, **d
                 )
         else:
             encoder_out = self.text_encoder.encode_multi_input(
@@ -421,7 +421,7 @@ class BasePipeline(metaclass=ABCMeta):
                 if field_value is not None:
                     d[field] = field_value
 
-            yield EncodedOutput(**d)
+            yield EncodedOutput(input_text=Xs, **d)
 
     def __getstate__(self):
         state = self.__dict__.copy()

@@ -5,6 +5,9 @@ import os
 import tqdl
 import logging
 import tensorflow as tf
+import unicodedata
+import string
+
 from tensorflow.python.keras.saving.hdf5_format import load_attributes_from_hdf5_group
 from finetune.util.download import FINETUNE_BASE_FOLDER
 from finetune.util.shapes import lengths_from_eos_idx
@@ -15,6 +18,19 @@ from finetune.base_models import SourceModel
 from finetune.optimizers.recompute_grads import recompute_grad
 
 from tensorflow.python.util import tf_inspect
+
+def preprocess_for_alignment(text):
+    """
+    https://stackoverflow.com/questions/517923/what-is-the-best-way-to-remove-accents-normalize-in-a-python-unicode-string
+    """
+    try:
+        text = unicode(text, 'utf-8')
+    except (TypeError, NameError): # unicode is a default on python 3 
+        pass
+    text = unicodedata.normalize('NFD', text)
+    text = text.encode('ascii', 'ignore')
+    text = text.decode("utf-8")
+    return str(text)
 
 
 LOGGER = logging.getLogger("finetune")
@@ -37,7 +53,6 @@ def load_weights_from_hdf5_group_by_name(filepath, weights_replacement):
                 weight_lookup[output_name] = np.asarray(g[name])
     return weight_lookup
 
-
 def finetune_model_from_huggingface(
     pretrained_weights,
     archive_map,
@@ -46,6 +61,9 @@ def finetune_model_from_huggingface(
     hf_config,
     weights_replacement,
     include_bos_eos=True,
+    add_tokens=None,
+    config_overrides=None,
+    aggressive_token_alignment=True,
 ):
     weights_url = archive_map[pretrained_weights]
     hf_tokenizer_instance = hf_tokenizer.from_pretrained(pretrained_weights)
@@ -174,6 +192,7 @@ def finetune_model_from_huggingface(
                             "Tokenizer is not sentence-piece-based and is not guaranteed to port over correctly."
                         )
                     # This may break some downstream finetune assumptions
+
                     if (
                         hasattr(self.tokenizer, "do_lower_case")
                         and self.tokenizer.do_lower_case
@@ -183,25 +202,34 @@ def finetune_model_from_huggingface(
                     encoded_tokens = self.tokenizer.convert_ids_to_tokens(encoded_ids)
                     # get token starts and ends
                     alignment, normed_text = normalize_nfkc(text)
+                    if aggressive_token_alignment:
+                        normed_text = preprocess_for_alignment(normed_text)
                     token_start = 0
                     token_end = 0
                     tok_pos = []
                     char_starts = []
-                    for token in encoded_tokens:
+                    for i, token in enumerate(encoded_tokens):
                         raw_text = token.replace(WEIRD_SPM_CHAR, "")
-
+                        if aggressive_token_alignment:
+                            raw_text = preprocess_for_alignment(raw_text)
                         token_start_temp = normed_text.find(raw_text, token_end)
-                        if token_start_temp == -1 and raw_text != "<unk>":
-                            LOGGER.warning(
-                                "SentencePiece produced a token {} not found in the original string {}".format(
-                                    raw_text, text
+                        if token_start_temp == -1:
+                            if raw_text != "<unk>":
+                                LOGGER.warning(
+                                    "SentencePiece produced a token {} not found in the original string".format(
+                                        raw_text,
+                                    )
                                 )
-                            )
                         else:
                             token_start = token_start_temp
                             token_end = token_start + len(raw_text)
-                        tok_pos.append(alignment[token_end])
-                        char_starts.append(max(alignment[token_start], tok_pos[-1]))
+                        char_start = alignment[token_start]
+                        char_end = alignment[token_end]
+                        if tok_pos:
+                            char_start = max(char_start, tok_pos[-1])
+                            char_end = max(char_end, char_start) # cannot end before it starts
+                        char_starts.append(char_start)
+                        tok_pos.append(char_end)
                     batch_token_idxs.append(encoded_ids)
                     batch_tokens.append(encoded_tokens)
                     batch_char_ends.append(tok_pos)
@@ -237,6 +265,8 @@ def finetune_model_from_huggingface(
             "max_length": hf_config_instance.max_position_embeddings,
             "include_bos_eos": include_bos_eos,
         }
+        if config_overrides:
+            settings.update(config_overrides)
         required_files = [{"url": weights_url, "file": raw_weights_path}]
 
         @classmethod
@@ -259,6 +289,9 @@ def finetune_model_from_huggingface(
                     hf_config,
                     weights_replacement,
                     include_bos_eos,
+                    add_tokens,
+                    config_overrides,
+                    aggressive_token_alignment,
                 ),
             )
 

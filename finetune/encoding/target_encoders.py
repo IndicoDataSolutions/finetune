@@ -200,7 +200,7 @@ class SequenceLabelingEncoder(BaseEncoder):
         return labels, pad_idx
 
     @staticmethod
-    def overlaps(label, tok_start, tok_end, tok_text):
+    def overlaps(label, tok_start, tok_end, tok_text, input_text, offset=None):
         does_overlap = (
             label["start"] < tok_end <= label["end"] or
             tok_start < label["end"] <= tok_end
@@ -210,25 +210,35 @@ class SequenceLabelingEncoder(BaseEncoder):
 
         # Don't run check if text wasn't provided
         if 'text' in label:
-            sub_text = label["text"][tok_start - label["start"]: tok_end - label["start"]]
-            strings_agree = sub_text.lower() in tok_text.lower()
+            if offset is not None:
+                strings_agree = input_text[label["start"] - offset: label["end"] - offset] == label["text"]
+            else:
+                strings_agree = input_text[label["start"]: label["end"]] == label["text"]
         else:
             strings_agree = True
 
         return does_overlap, strings_agree
 
     def transform(self, out, labels):
+        # This is basically input_text[0] in the normal case and joins pages for doclabeler
+        input_text = "".join(out.input_text)
         labels, pad_idx = self.pre_process_label(out, labels)
         labels_out = [pad_idx for _ in out.tokens]
+        offset = out.offset or 0
         for label in labels:
             for i, (start, end, text) in enumerate(zip(out.token_starts, out.token_ends, out.tokens)):
                 # Label extends less than halfway through token
                 if label["end"] < (start + end + 1) // 2:
                     break
-                overlap, agree = self.overlaps(label, start, end, text)
+                overlap, agree = self.overlaps(label, start, end, text, input_text, offset=offset)
                 if overlap:
                     if not agree:
-                        raise ValueError("Tokens and labels do not align")
+                        raise ValueError(
+                            "Tokens and labels do not align. {} matches with {}".format(
+                                label,
+                                input_text[label["start"] - offset: label["end"] - offset]
+                            )
+                        )
                     if labels_out[i] != pad_idx and self.lookup[label["label"]] != labels_out[i]:
                         LOGGER.warning("Overlapping labels were found, consider multilabel_sequence=True")
                     if label["label"] not in self.lookup:
