@@ -913,7 +913,7 @@ class BaseModel(object, metaclass=ABCMeta):
         # By using iterators it means that we can handle prediction
         # and output processing doc by doc reducing the memory consumption
         # compared to having to hold the tokenized input and per-token
-        # probabilitiies for the whole dataset.
+        # probabilities for the whole dataset.
         for pred, (arr_enc, start_of_doc, end_of_doc) in zip(
             pred_iterator, chunk_alignment_iterator
         ):
