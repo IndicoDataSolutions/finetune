@@ -1,8 +1,5 @@
 import numpy as np
 import tensorflow as tf
-from threading import Thread
-from queue import Queue
-
 
 def placeholder_like(tensor):
     return tf.compat.v1.placeholder(tensor.dtype, shape=tensor.shape)
@@ -43,7 +40,6 @@ class IndicoEstimator(tf.estimator.Estimator):
             return output, features
 
     def close_predict(self):
-        # tf.reset_default_graph()
         self.estimator_spec = None
         self.features_real = None
         self.placeholder_feats = None

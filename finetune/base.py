@@ -419,7 +419,7 @@ class BaseModel(object, metaclass=ABCMeta):
         context=None,
         update_hook=None,
         chunked_length=None,
-        list_output=True
+        list_output=True,
     ):
         def get_zipped_data():
             return iter(zipped_data)
@@ -888,28 +888,34 @@ class BaseModel(object, metaclass=ABCMeta):
 
     def process_long_sequence(self, zipped_data):
         labels, batch_probas = [], []
-        for chunk_idx, (
-            pred,
-            (sequence_id, arr_enc, start_of_doc, end_of_doc),
-        ) in enumerate(
-            zip(
-                self._inference(
-                    zipped_data,
-                    predict_keys=[PredictMode.PROBAS, PredictMode.NORMAL],
-                    chunked_length=0,
-                    list_output=False,
-                ),
-                (
-                    (i, sample, is_start, is_end)
-                    for i, ae in enumerate(
-                        (
-                            self.input_pipeline._text_to_ids(d["X"])
-                            for d in zipped_data
-                        )
-                    )
-                    for sample, is_start, is_end in start_end_gen(ae)
-                ),
-            )
+
+        # outputs predictions for each chunk of each document.
+        pred_iterator = self._inference(
+            zipped_data,
+            predict_keys=[PredictMode.PROBAS, PredictMode.NORMAL],
+            chunked_length=0,
+            list_output=False,
+        )
+
+        # Outputs (probably chunked) Encoded outputs for each document
+        chunk_generator = (
+            self.input_pipeline._text_to_ids(d["X"]) for d in zipped_data
+        )
+
+        # outputs flattened chunk by chunk tokenized outputs
+        # along with booleans for the start and end of documents.
+        chunk_alignment_iterator = (
+            (sample, is_start, is_end)
+            for ae in chunk_generator
+            for sample, is_start, is_end in start_end_gen(ae)
+        )
+
+        # By using iterators it means that we can handle prediction
+        # and output processing doc by doc reducing the memory consumption
+        # compared to having to hold the tokenized input and per-token
+        # probabilitiies for the whole dataset.
+        for pred, (arr_enc, start_of_doc, end_of_doc) in zip(
+            pred_iterator, chunk_alignment_iterator
         ):
             normal_pred = pred[PredictMode.NORMAL]
             if not hasattr(self, "multi_label"):

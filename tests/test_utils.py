@@ -70,7 +70,7 @@ class TestGPT2Encoder(TestGPTEncoder):
 class TestRobertaEncoder(TestGPTEncoder):
     Encoder = RoBERTaEncoder
 
-class TestRobertaEncoder(TestGPTEncoder):
+class TestRobertaEncoderSlow(TestGPTEncoder):
     Encoder = RoBERTaEncoderSlow
 
 class TestRobertaV2Encoder(TestGPTEncoder):

@@ -122,7 +122,7 @@ class RoBERTaEncoderV2(BaseEncoder):
                     t = t[1:]
                 tokens.append(t.strip())
                 if token_ends:
-                    # tokenizers outputs start and end tokens that duplcicate in the case of
+                    # tokenizers outputs start and end tokens that duplicate in the case of
                     #  a single char mapping to multiple tokens.
                     start = max(token_ends[-1], start)
                 if end - start > len(t):

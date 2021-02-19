@@ -38,6 +38,8 @@ class TestActivationParity(unittest.TestCase):
 
     @pytest.mark.xfail
     def test_gpt2_featurize(self):
+        # I believe that the issue here is just that expected outputs 
+        # need re-generating with start and end tokens included.
         model = Classifier(base_model=GPT2)
         np.testing.assert_allclose(
             model.featurize_sequence(self.TEST_DATA)[0],

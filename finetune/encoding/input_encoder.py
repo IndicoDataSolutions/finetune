@@ -28,10 +28,10 @@ EncodedOutput = namedtuple(
         "tokens",  # list of list of subtokens (strs)
         "token_ends",  # list of list of character locations (ints)
         "token_starts",  # list of list of character starts (locs are character ends) (ints)
-        "useful_start",
-        "useful_end",
-        "input_text",
-        "offset",
+        "useful_start", # an int token idx - where to begin using the predictions when chunking
+        "useful_end", # an int token idx - where to stop using the predictions when chunking
+        "input_text", # The raw text - pre tokenization.
+        "offset", # Offset applied to the token_starts and ends - currently used only by DocumentLabeler
     ],
 )
 EncodedOutput.__new__.__defaults__ = (None,) * len(EncodedOutput._fields)

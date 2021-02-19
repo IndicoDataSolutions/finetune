@@ -19,7 +19,7 @@ from finetune.optimizers.recompute_grads import recompute_grad
 
 from tensorflow.python.util import tf_inspect
 
-def strip_accents(text):
+def preprocess_for_alignment(text):
     """
     https://stackoverflow.com/questions/517923/what-is-the-best-way-to-remove-accents-normalize-in-a-python-unicode-string
     """
@@ -51,7 +51,6 @@ def load_weights_from_hdf5_group_by_name(filepath, weights_replacement):
                 for fro, to in weights_replacement:
                     output_name = output_name.replace(fro, to)
                 weight_lookup[output_name] = np.asarray(g[name])
-    print(weight_lookup.keys())
     return weight_lookup
 
 def finetune_model_from_huggingface(
@@ -63,7 +62,8 @@ def finetune_model_from_huggingface(
     weights_replacement,
     include_bos_eos=True,
     add_tokens=None,
-    config_overrides=None
+    config_overrides=None,
+    aggressive_token_alignment=True,
 ):
     weights_url = archive_map[pretrained_weights]
     hf_tokenizer_instance = hf_tokenizer.from_pretrained(pretrained_weights)
@@ -202,14 +202,16 @@ def finetune_model_from_huggingface(
                     encoded_tokens = self.tokenizer.convert_ids_to_tokens(encoded_ids)
                     # get token starts and ends
                     alignment, normed_text = normalize_nfkc(text)
-                    normed_text = strip_accents(normed_text)
+                    if aggressive_token_alignment:
+                        normed_text = preprocess_for_alignment(normed_text)
                     token_start = 0
                     token_end = 0
                     tok_pos = []
                     char_starts = []
                     for i, token in enumerate(encoded_tokens):
                         raw_text = token.replace(WEIRD_SPM_CHAR, "")
-                        raw_text = strip_accents(raw_text)
+                        if aggressive_token_alignment:
+                            raw_text = preprocess_for_alignment(raw_text)
                         token_start_temp = normed_text.find(raw_text, token_end)
                         if token_start_temp == -1:
                             if raw_text != "<unk>":
@@ -289,6 +291,7 @@ def finetune_model_from_huggingface(
                     include_bos_eos,
                     add_tokens,
                     config_overrides,
+                    aggressive_token_alignment,
                 ),
             )
 
