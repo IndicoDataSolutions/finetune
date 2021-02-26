@@ -52,7 +52,7 @@ def _compute_ratios(counts, n_total, multilabel=False):
         if multilabel:
             ratio = (n_total - count) / count
         else:
-            ratio = ratio = max_count / count
+            ratio = max_count / count
         computed_ratios[class_name] = ratio
     return computed_ratios
 
