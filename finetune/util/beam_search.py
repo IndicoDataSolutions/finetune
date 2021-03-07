@@ -482,7 +482,7 @@ def beam_search(symbols_to_logits_fn,
                                            curr_finished, beam_size, batch_size,
                                            "grow_alive", states)
 
-    def grow_topk(i, alive_seq, alive_log_probs, states):
+    def grow_topk(i, alive_seq, alive_log_probs, states, first=False):
         r"""Inner beam search loop.
 
         This function takes the current alive sequences, and grows them to topk
@@ -512,13 +512,14 @@ def beam_search(symbols_to_logits_fn,
         flat_ids = tf.reshape(alive_seq, [batch_size * beam_size, -1])
 
         # (batch_size * beam_size, decoded_length)
-        if states:
-            flat_states = nest.map_structure(_merge_beam_dim, states)
-            flat_logits, flat_states = symbols_to_logits_fn(flat_ids, i, flat_states)
-            states = nest.map_structure(
-                lambda t: _unmerge_beam_dim(t, batch_size, beam_size), flat_states)
-        else:
-            flat_logits = symbols_to_logits_fn(flat_ids, i, None)
+        with tf.compat.v1.variable_scope(tf.compat.v1.VariableScope(tf.compat.v1.AUTO_REUSE), reuse=tf.compat.v1.AUTO_REUSE):
+          if states:
+              flat_states = nest.map_structure(_merge_beam_dim, states)
+              flat_logits, flat_states = symbols_to_logits_fn(flat_ids, i, flat_states, first=first)
+              states = nest.map_structure(
+                  lambda t: _unmerge_beam_dim(t, batch_size, beam_size), flat_states)
+          else:
+              flat_logits = symbols_to_logits_fn(flat_ids, i, None)
 
         logits = tf.reshape(flat_logits, [batch_size, beam_size, -1])
 
@@ -678,6 +679,18 @@ def beam_search(symbols_to_logits_fn,
 
         return tf.logical_and(
             tf.less(i, decode_length), tf.logical_not(bound_is_met))
+
+    # Run first step outside of loop
+    i = i_offset
+    
+    topk_seq, topk_log_probs, topk_scores, topk_finished, states = grow_topk(
+        i, alive_seq, alive_log_probs, states, first=True)
+    alive_seq, alive_log_probs, _, states = grow_alive(
+        topk_seq, topk_scores, topk_log_probs, topk_finished, states)
+    finished_seq, finished_scores, finished_flags, _ = grow_finished(
+        finished_seq, finished_scores, finished_flags, topk_seq, topk_scores,
+        topk_finished)
+    i_offset = i_offset + 1
 
     inner_shape = tf.TensorShape([None, None, None])
     state_struc = nest.map_structure(get_state_shape_invariants, states)

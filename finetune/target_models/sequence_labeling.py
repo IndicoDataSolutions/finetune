@@ -155,6 +155,17 @@ def _spacy_token_predictions(raw_text, tokens, probas, positions):
 
     return spacy_results
 
+def negative_samples(preds, labels, pad="<PAD>"):
+    modified_labels = []
+    for p, l in zip(preds, labels):
+        new_labels = []
+        for pi in p:
+            if not any(sequences_overlap(pi, li) for li in l):
+                pi["label"] = pad
+                new_labels.append(pi)
+        modified_labels.append(l + new_labels)
+    return modified_labels
+
 
 def negative_samples(preds, labels, pad="<PAD>"):
     modified_labels = []
@@ -215,7 +226,6 @@ class SequenceLabeler(BaseModel):
             self.saver = None
             model_copy = copy.deepcopy(self)
             model_copy._initialize()
-
             model_copy.input_pipeline.total_epoch_offset = self.config.n_epochs
             self.input_pipeline.current_epoch_offset = self.config.n_epochs
             self.input_pipeline.total_epoch_offset = self.config.n_epochs

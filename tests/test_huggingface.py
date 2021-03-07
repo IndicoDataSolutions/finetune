@@ -25,7 +25,8 @@ class TestHuggingFace(unittest.TestCase):
     def setUp(self):
         with open('tests/data/weird_text.txt') as f:
             weird_text = ''.join(f.readlines())
-        self.text = weird_text[:1000]
+        # This token is added to our t5 model, causes differences if it appears in the text
+        self.text = weird_text[:1000].replace("<", "")
 
     def check_embeddings_equal(self, finetune_base_model, hf_model_path, **kwargs):
         finetune_model = SequenceLabeler(
@@ -39,7 +40,7 @@ class TestHuggingFace(unittest.TestCase):
         if len(finetune_seq_features) + 2 == len(hf_seq_features):
             hf_seq_features = hf_seq_features[1:-1]
         np.testing.assert_array_almost_equal(
-            finetune_seq_features, hf_seq_features, decimal=5,
+            finetune_seq_features, hf_seq_features, decimal=2,
         )
         finetune_model.fit([self.text], [[{"start": 0, "end": 4, "label": "class_a"}]])
 
@@ -64,11 +65,11 @@ class TestHuggingFace(unittest.TestCase):
         self.check_embeddings_equal(HFBert, "bert-base-uncased")
 
     def test_t5_s2s(self):
-        text = "sequence test text"
+        text = "sequence test { text }"
         finetune_model = HFS2S(
             base_model=HFT5,
-            n_epochs=30,
-            batch_size=2,
+            n_epochs=100,
+            batch_size=1,
         )
         finetune_model.fit([text] * 5, [text] * 5)
         finetune_model.save("test.jl")
@@ -88,8 +89,6 @@ class TestHuggingFace(unittest.TestCase):
         )
         finetune_model = HFS2S(
             base_model=HFT5,
-            n_epochs=3,
-            batch_size=2,
         )
         finetune_model.fit(train_texts, train_annotations)
         seps_included = False

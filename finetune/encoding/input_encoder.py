@@ -177,6 +177,7 @@ class BaseEncoder(metaclass=SingletonMeta):
         delimiter=None,
         end=None,
         include_bos_eos=True,
+        eos_on_cut=True,
     ):
         """
         Takes some tokenized text and arranges it into a format that maximises the amount of kept text from each
@@ -224,7 +225,8 @@ class BaseEncoder(metaclass=SingletonMeta):
         joined = joined[:-1]
 
         if include_bos_eos:
-            joined += [clf_token]
+            if eos_on_cut or cut_len is None:
+                joined += [clf_token]
         return joined
 
     def _token_length(self, token):
@@ -290,8 +292,6 @@ class BaseEncoder(metaclass=SingletonMeta):
 def tokenize_context(context, encoded_output, config):
     """ Tokenize the context corresponding to a single sequence of text """
     # in the edge case where the chunk is just a single end token, we don't need to alter our context chunk
-    #    if len(encoded_output.token_ends) > 1:
-    #        context = get_relevant_context_for_chunk(context, encoded_output)
     seq_len = len(encoded_output.token_ids)
     context_keys = list(k for k in sorted(context[0].keys()) if k not in INFO_KEYS)
     context_by_char_loc = sorted(

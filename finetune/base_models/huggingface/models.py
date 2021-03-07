@@ -102,6 +102,22 @@ HFT5 = finetune_model_from_huggingface(
         ("tf_t5with_lm_head_model/decoder", "model/target/decoder"),
     ],
     include_bos_eos=False,
+    add_tokens=["{", "}", "<"]# "[", "]"],
+)
+
+HFT5Small = finetune_model_from_huggingface(
+    pretrained_weights="t5-small",
+    archive_map={"t5-small": "https://cdn.huggingface.co/t5-small-tf_model.h5"},
+    hf_featurizer=TFT5Model,
+    hf_tokenizer=T5Tokenizer,
+    hf_config=T5Config,
+    weights_replacement=[
+        ("tf_t5with_lm_head_model/shared/", "model/featurizer/shared/shared/"),
+        ("tf_t5with_lm_head_model/encoder", "model/featurizer/encoder"),
+        ("tf_t5with_lm_head_model/decoder", "model/target/decoder"),
+    ],
+    include_bos_eos=False,
+    add_tokens=["{", "}", "<"]# "[", "]"],
 )
 
 HFAlbert = finetune_model_from_huggingface(

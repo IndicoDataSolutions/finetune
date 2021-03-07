@@ -49,7 +49,6 @@ def test_sequence_label_encoder_exceeds_half():
         useful_start=0, 
         useful_end=512,
         input_text=["token"]
-
     )
     label_arr = encoder.transform(out, labels)
     assert label_arr == [0, 1, 0]
