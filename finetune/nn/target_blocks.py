@@ -3,6 +3,7 @@ import tensorflow as tf
 from tensorflow_addons.text.crf import crf_log_likelihood
 
 from finetune.base_models.gpt.featurizer import attn, dropout, norm
+from finetune.base_models.bert.modeling import layer_norm
 from finetune.util.shapes import shape_list, merge_leading_dims
 from finetune.optimizers.recompute_grads import recompute_grad
 from finetune.errors import FinetuneError
@@ -206,6 +207,118 @@ def classifier(hidden, targets, n_targets, config, train=False, reuse=None, **kw
     with tf.compat.v1.variable_scope("classifier", reuse=reuse):
         hidden = dropout(hidden, config.clf_p_drop, train)
         clf_logits = perceptron(hidden, n_targets, config)
+        if targets is None:
+            clf_losses = None
+        else:
+            clf_losses = tf.nn.softmax_cross_entropy_with_logits(
+                logits=clf_logits, labels=tf.stop_gradient(targets)
+            )
+
+            clf_losses = _apply_class_weight(
+                clf_losses, targets, kwargs.get("class_weights")
+            )
+
+        return {"logits": clf_logits, "losses": clf_losses}
+
+
+def long_doc_classifier(hidden, targets, n_targets, config, use_mlp=False, train=False, reuse=None, **kwargs):
+    """
+    A simple linear classifier.
+
+    :param hidden: The output of the featurizer on each chunk. [batch_size, n_chunks, hidden_size]
+    :param targets: One hot encoded target ids. [batch_size, n_classes]
+    :param n_targets: A python int containing the number of classes that the model should be learning to predict over.
+    :param config: A config object, containing all parameters for the featurizer.
+    :param use_mlp: Flag to use multilayer perceptron before output layer
+    :param train: If this flag is true, dropout and losses are added to the graph.
+    :param reuse: Should reuse be set within this scope.
+    :param kwargs: Spare arguments.
+    :return: dict containing:
+        logits: The unnormalised log probabilities of each class.
+        losses: The loss for the classifier.
+    """
+    def attn(hidden):
+        """
+        # TODO Sensibly initialize variables
+        # TODO Do I need to flatten down to 2 dims to make matrix multiplies work?
+        """
+        # Shapes
+        batch_size = tf.shape(input=hidden)[0]
+        n_chunks = tf.shape(input=hidden)[1]
+        hidden_size = tf.shape(input=hidden)[-1]
+
+        # Define learnable key and value projections
+        # Don't need batch size because same parameters are used for every
+        # element in the batch
+        # Typically only see batch sizes in activations
+        # Typically key_proj is hidden_size x hidden_size, and output
+        # is divided into the individual heads
+        key_proj = tf.compat.v1.get_variable(
+            name="key_proj",
+            # In future, I could try [hidden_size, hidden_size * num_attn_heads]
+            shape=[hidden_size, hidden_size],
+            dtype=tf.float32,
+            trainable=True,
+        )
+        value_proj = tf.compat.v1.get_variable(
+            name="value_proj",
+            shape=[hidden_size, hidden_size],
+            dtype=tf.float32,
+            trainable=True,
+        )
+
+        # Define learnable query vector
+        query = tf.compat.v1.get_variable(
+            name="query",
+            shape=[1, hidden_size],
+            dtype=tf.float32,
+            trainable=True,
+        )
+
+        # Compute keys and values
+        # TODO Do I need to reshape hidden to have dim 1 for num_attn_heads?
+        # TODO Do any of these matrix multiplies require transposing?
+        # For mat muls just thing about the last two axes. Everything else should be the same
+        # [batch_size x n_chunks x hidden_size] * [hidden_size x hidden_size]
+        # = [batch_size x n_chunks x hidden_size]
+        keys = tf.matmul(hidden, key_proj)
+        values = tf.matmul(hidden, value_proj)
+
+        # Compute attention matrix, and then take softmax
+        # [batch_size x n_chunks x hidden_size] * [hidden_size, 1] (transposed)
+        # = [batch_size x n_chunks x 1]
+        attn_matrix = tf.matmul(keys, query, transpose_b=True)
+        attn_matrix = tf.nn.softmax(attn_matrix, axis=1)
+
+        # Multiply values by attn_matrix to get output representation
+        # TODO I don't buy that these dimensions work
+        # [batch_size x hidden_size x n_chunks] (transposed) * [batch_size x n_chunks x 1]
+        # = [batch_size x hidden_size x 1]
+        output = tf.matmul(values, attn_matrix, transpose_a=True)
+        return output
+
+    def mlp(x, hidden_size: int = 768):
+        # TODO Could experiment with hidden size
+        # Makes sense to have first hidden layer have size 4 * bert_hidden_size
+        # and second layer of side bert_hidden_size
+        output = tf.compat.v1.layers.dense(x, hidden_size * 4, activation="relu")
+        output = tf.compat.v1.layers.dense(output, hidden_size)
+        output = x + output
+        # Makes output zero mean and unit variance, and learn beta and gamma
+        # normalization params. Might give smoother gradients?
+        output = layer_norm(output)
+        return output
+
+    with tf.compat.v1.variable_scope("long_doc_attn", reuse=reuse):
+        hidden = dropout(hidden, config.clf_p_drop, train)
+        output = attn(hidden)
+
+    with tf.compat.v1.variable_scope("classifier", reuse=reuse):
+        if use_mlp:
+            output = mlp(output)
+        # No softmax because already using softmax_cross_entropy_with_logits for loss
+        clf_logits = tf.compat.v1.layers.dense(output, n_targets)
+
         if targets is None:
             clf_losses = None
         else:
