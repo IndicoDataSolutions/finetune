@@ -9,7 +9,7 @@ import tensorflow as tf
 from tensorflow.compat.v1 import logging as tf_logging
 
 from finetune.target_models.multifield import MultiFieldClassifier, MultiFieldRegressor
-from finetune.target_models.classifier import Classifier
+from finetune.target_models.classifier import Classifier, LongDocClassifier
 from finetune.target_models.regressor import Regressor
 from finetune.target_models.sequence_labeling import SequenceLabeler
 from finetune.target_models.comparison import Comparison

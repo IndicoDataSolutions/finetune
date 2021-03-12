@@ -322,6 +322,9 @@ def get_default_config():
         bert_use_pooler=True,
         bert_use_type_embed=True,
         #
+        # LongDocBERT variants only. Must be set to an integer (not None)
+        max_num_chunks=512,
+        #
         # Auxiliary Information
         use_auxiliary_info=False,
         default_context=None,

@@ -57,7 +57,8 @@ from finetune.base_models.bert.model import (
     DistilBERT,
     DistilRoBERTa,
     DocRep,
-    LayoutLM
+    LayoutLM,
+    LongDocBERTModelCased,
 )
 from finetune.base_models.tcn.model import TCNModel
 from finetune.base_models.oscar.model import GPCModel
@@ -70,6 +71,7 @@ GPT2Large = GPT2Model762
 GPT2XL = GPT2Model1558
 TextCNN = TextCNNModel
 BERT = BERTModelCased
+LongDocBERT = LongDocBERTModelCased
 BERTLarge = BERTModelLargeCased
 ROBERTA = RoBERTa
 ROBERTALarge = RoBERTaLarge

@@ -11,7 +11,11 @@ from finetune.base_models.bert.encoder import (
 )
 
 from finetune.base_models.bert.roberta_encoder import RoBERTaEncoder, RoBERTaEncoderV2
-from finetune.base_models.bert.featurizer import bert_featurizer, layoutlm_featurizer
+from finetune.base_models.bert.featurizer import (
+    bert_featurizer,
+    layoutlm_featurizer,
+    long_doc_bert_featurizer,
+)
 from finetune.util.download import (
     BERT_BASE_URL,
     GPT2_BASE_URL,
@@ -111,6 +115,22 @@ class _BaseBert(SourceModel):
 class BERTModelCased(_BaseBert):
     encoder = BERTEncoder
     featurizer = bert_featurizer
+    settings = {
+        **BERT_BASE_PARAMS,
+        "base_model_path": os.path.join("bert", "bert_small_cased-v2.jl"),
+    }
+    required_files = [
+        {
+            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", filename),
+            "url": urljoin(BERT_BASE_URL, filename),
+        }
+        for filename in ["bert_small_cased-v2.jl", "vocab.txt"]
+    ]
+
+
+class LongDocBERTModelCased(_BaseBert):
+    encoder = BERTEncoder
+    featurizer = long_doc_bert_featurizer
     settings = {
         **BERT_BASE_PARAMS,
         "base_model_path": os.path.join("bert", "bert_small_cased-v2.jl"),
