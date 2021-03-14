@@ -65,7 +65,7 @@ def finetune_model_from_huggingface(
     include_bos_eos=True,
     add_tokens=None,
     config_overrides=None,
-    aggressive_token_alignment=False,
+    aggressive_token_alignment=True,
 ):
     weights_url = archive_map[pretrained_weights]
     hf_tokenizer_instance = hf_tokenizer.from_pretrained(pretrained_weights)

@@ -73,7 +73,7 @@ def batch_dataset(dataset, batch_size, shapes, n_epochs=1):
             .map(add_length)
             .padded_batch(batch_size, padded_shapes=shapes, drop_remainder=False)
             .repeat(n_epochs)
-            .prefetch(1)#tf.data.experimental.AUTOTUNE)
+            .prefetch(tf.data.experimental.AUTOTUNE)
         )
 
     return batched_dataset

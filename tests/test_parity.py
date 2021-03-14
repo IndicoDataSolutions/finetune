@@ -74,7 +74,7 @@ class TestActivationParity(unittest.TestCase):
                     DIRECTORY, 
                     'data/test-roberta-activations.npy'
                 )
-            )[:, 1:-1],
+            )[0, 1:-1],
             atol=1e-1
         )
 
