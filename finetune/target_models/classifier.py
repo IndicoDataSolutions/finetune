@@ -12,7 +12,9 @@ from finetune.encoding.target_encoders import OneHotLabelEncoder, NoisyLabelEnco
 from finetune.nn.target_blocks import classifier, long_doc_classifier
 from finetune.input_pipeline import BasePipeline
 from finetune.model import PredictMode
+from finetune.base_models import LongDocBERT
 from finetune.base_models.gpt.encoder import finetune_to_indico_explain
+from finetune.config import get_default_config
 
 
 class ClassificationPipeline(BasePipeline):
@@ -20,7 +22,9 @@ class ClassificationPipeline(BasePipeline):
         if context is not None:
             if self.config.oversample:
                 idxs, Ys, contexts = shuffle(
-                    *RandomOverSampler().fit_sample([[i] for i in range(len(Xs))], Y, context)
+                    *RandomOverSampler().fit_sample(
+                        [[i] for i in range(len(Xs))], Y, context
+                    )
                 )
                 return [Xs[i[0]] for i in idxs], Ys, contexts
             return Xs, Y, context
@@ -37,7 +41,6 @@ class ClassificationPipeline(BasePipeline):
 
 
 class NoisyClassificationPipeline(BasePipeline):
-
     def _target_encoder(self):
         return NoisyLabelEncoder()
 
@@ -78,7 +81,16 @@ class Classifier(BaseModel):
         all_labels = []
         all_probs = []
         doc_probs = []
-        for _,  _, start_of_doc, end_of_doc, _, proba, _, _ in self.process_long_sequence(zipped_data, **kwargs):
+        for (
+            _,
+            _,
+            start_of_doc,
+            end_of_doc,
+            _,
+            proba,
+            _,
+            _,
+        ) in self.process_long_sequence(zipped_data, **kwargs):
             start, end = 0, None
             doc_probs.append(proba)
 
@@ -125,10 +137,20 @@ class Classifier(BaseModel):
         )
 
     def _target_model(
-        self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
+        self,
+        *,
+        config,
+        featurizer_state,
+        targets,
+        n_outputs,
+        train=False,
+        reuse=None,
+        **kwargs,
     ):
         if "explain_out" in featurizer_state:
-            shape = tf.shape(input=featurizer_state["explain_out"])  # batch, seq, hidden
+            shape = tf.shape(
+                input=featurizer_state["explain_out"]
+            )  # batch, seq, hidden
             flat_explain = tf.reshape(
                 featurizer_state["explain_out"], [shape[0] * shape[1], shape[2]]
             )
@@ -143,7 +165,7 @@ class Classifier(BaseModel):
             config=config,
             train=train,
             reuse=reuse,
-            **kwargs
+            **kwargs,
         )
         if "explain_out" in featurizer_state:
             logits = clf_out["logits"]
@@ -222,10 +244,36 @@ class LongDocClassifier(Classifier, BaseModel):
     """
 
     def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+        # This is somewhat messy because we also get the default config in the base model init,
+        # but needed to set max_length properly based on max_chunk_length and max_num_chunks
+        default_conf = get_default_config()
+
+        # For now, the only supported base model is LongDocBERT
+        kwargs["base_model"] = LongDocBERT
+
+        # Does not make sense to chunk long sequences
+        kwargs["chunk_long_sequences"] = False
+
         # Modify max_length based on max_num_chunks
-        self.config.max_chunk_length = self.config.max_length
-        self.config.max_length = self.config.max_length * self.config.max_num_chunks
+        # Doing this before initializing anything to avoid shape mismatches with base model
+        # Forcibly setting max_chunk_length when set to auto is a hack
+        max_length = kwargs.get("max_length", default_conf["max_length"])
+        if max_length == "auto":
+            max_length = 128
+        kwargs["max_chunk_length"] = max_length
+        kwargs["max_length"] = max_length * kwargs.get("max_num_chunks", default_conf["max_num_chunks"])
+
+        super().__init__(**kwargs)
+        print(self.config)
+
+        # Make sure that the aggregation/pooling function across chunks is supported
+        # Concat is concatenation of mean and max
+        allowed_pool_fns = {"mean", "max", "attention", "lstm", "concat"}
+        if self.config.chunk_pool_fn not in allowed_pool_fns:
+            raise ValueError(
+                f"chunk_pool_fn={self.config.chunk_pool_fn} "
+                f"not in allowed_fns={allowed_pool_fns}"
+            )
 
     def featurize(self, X, **kwargs):
         """
@@ -233,8 +281,6 @@ class LongDocClassifier(Classifier, BaseModel):
         :param X: list or array of text to embed.
         :returns: np.array of features of shape (n_examples, embedding_size).
         """
-        # TODO Figure out sensible embedding_size
-        # TODO Individually featurize each chunk of fixed sequence length
         return super().featurize(X, **kwargs)
 
     def predict(self, X, context=None, **kwargs):
@@ -249,10 +295,23 @@ class LongDocClassifier(Classifier, BaseModel):
         return super().predict(X, context=context, **kwargs)
 
     def _predict(self, zipped_data, probas=False, **kwargs):
+        """
+        For now, directly copied from Classifier model. Not sure how this logic
+        to process long sequences works with the new long doc classifier
+        """
         all_labels = []
         all_probs = []
         doc_probs = []
-        for _,  _, start_of_doc, end_of_doc, _, proba, _, _ in self.process_long_sequence(zipped_data, **kwargs):
+        for (
+            _,
+            _,
+            start_of_doc,
+            end_of_doc,
+            _,
+            proba,
+            _,
+            _,
+        ) in self.process_long_sequence(zipped_data, **kwargs):
             start, end = 0, None
             doc_probs.append(proba)
 
@@ -301,18 +360,25 @@ class LongDocClassifier(Classifier, BaseModel):
         )
 
     def _target_model(
-        self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
+        self,
+        *,
+        config,
+        featurizer_state,
+        targets,
+        n_outputs,
+        train=False,
+        reuse=None,
+        **kwargs,
     ):
         hidden = featurizer_state["features"]
-        # clf_out = long_doc_classifier(
-        clf_out = classifier(
+        clf_out = long_doc_classifier(
             hidden=hidden,
             targets=targets,
             n_targets=n_outputs,
             config=config,
             train=train,
             reuse=reuse,
-            **kwargs
+            **kwargs,
         )
         return clf_out
 

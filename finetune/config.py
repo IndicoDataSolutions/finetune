@@ -322,8 +322,16 @@ def get_default_config():
         bert_use_pooler=True,
         bert_use_type_embed=True,
         #
-        # LongDocBERT variants only. Must be set to an integer (not None)
-        max_num_chunks=512,
+        # LongDocBERT variants only
+        max_num_chunks=512,     # Must be set to an integer (not None)
+        max_chunk_length=None,  # Will be set dynamically according to max_length and max_num_chunks
+        chunk_pool_fn="mean",   # aggregation function across chunks in LongDocBERT featurizer
+        batch_size_scaler=2,    # Scaling factor for batch size when passing chunks to BERT featurizer
+                                # to reduce memory usage by passing multiple chunks through featurizer
+                                # using the batch dimension.
+                                # This mean effective_batch_size = batch_size * batch_size_scaler.
+                                # TODO should probably be determined based on how much we can fit in memory
+        use_mlp=True,           # Flag for whether or not to use MLP as part of target model
         #
         # Auxiliary Information
         use_auxiliary_info=False,
