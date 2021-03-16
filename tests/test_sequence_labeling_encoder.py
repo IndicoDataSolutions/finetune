@@ -76,8 +76,8 @@ def test_sequence_label_bio_tagging():
     labels = [
         {'start': 0, 'end': 4, 'label': 'z', 'text': 'five'},
         {'start': 5, 'end': 12, 'label': 'z', 'text': 'percent'},
-        {'start': 13, 'end': 15, 'label': 'z', 'text': '(5%'},
-        {'start': 15, 'end': 16, 'label': 'z', 'text': ')'},
+        {'start': 13, 'end': 15, 'label': 'z', 'text': '(5'},
+        {'start': 15, 'end': 17, 'label': 'z', 'text': '%)'},
     ]
     encoder.fit([labels])
     assert len(encoder.classes_) == 3
@@ -88,7 +88,8 @@ def test_sequence_label_bio_tagging():
         token_ends=np.array([-1,  4, 8, 12, 14, 15, 17, -1]), 
         token_starts=np.array([-1,  0,  5, 8, 13, 14, 15, -1]), 
         useful_start=0, 
-        useful_end=512
+        useful_end=512,
+        input_text=["five percent (5%)"]
     )
     label_arr = encoder.transform(out, labels)
     assert label_arr == [0, 1, 1, 2, 1, 2, 1, 0]
