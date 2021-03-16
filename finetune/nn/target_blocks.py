@@ -222,55 +222,55 @@ def classifier(hidden, targets, n_targets, config, train=False, reuse=None, **kw
         return {"logits": clf_logits, "losses": clf_losses}
 
 
-def long_doc_classifier(
-    hidden, targets, n_targets, config, train=False, reuse=None, **kwargs
-):
-    """
-    An (optional) MLP + linear classifier for long documents
-
-    :param hidden: The output of the featurizer aggregated across chunks [batch_size, hidden_size]
-    :param targets: One hot encoded target ids. [batch_size, n_classes]
-    :param n_targets: A python int containing the number of classes that the model should be learning to predict over.
-    :param config: A config object, containing all parameters for the featurizer.
-    :param train: If this flag is true, dropout and losses are added to the graph.
-    :param reuse: Should reuse be set within this scope.
-    :param kwargs: Spare arguments.
-    :return: dict containing:
-        logits: The unnormalised log probabilities of each class.
-        losses: The loss for the classifier.
-    """
-    def mlp(x, hidden_size: int = 768):
-        # TODO Could experiment with hidden size
-        # Makes sense to have first hidden layer have size 4 * bert_hidden_size
-        # and second layer of side bert_hidden_size
-        output = tf.compat.v1.layers.dense(x, hidden_size * 4, activation="relu")
-        # FIXME Should I have a relu activation here as well?
-        output = tf.compat.v1.layers.dense(output, hidden_size)
-        output = x + output
-        # Makes output zero mean and unit variance, and learn beta and gamma
-        # normalization params. Might give smoother gradients?
-        output = layer_norm(output)
-        return output
-
-    with tf.compat.v1.variable_scope("classifier", reuse=reuse):
-        hidden = dropout(hidden, config.clf_p_drop, train)
-        if config.use_mlp:
-            hidden = mlp(hidden)
-        # No softmax because already using softmax_cross_entropy_with_logits for loss
-        clf_logits = tf.compat.v1.layers.dense(hidden, n_targets)
-
-        if targets is None:
-            clf_losses = None
-        else:
-            clf_losses = tf.nn.softmax_cross_entropy_with_logits(
-                logits=clf_logits, labels=tf.stop_gradient(targets)
-            )
-
-            clf_losses = _apply_class_weight(
-                clf_losses, targets, kwargs.get("class_weights")
-            )
-
-        return {"logits": clf_logits, "losses": clf_losses}
+# def long_doc_classifier(
+#     hidden, targets, n_targets, config, train=False, reuse=None, **kwargs
+# ):
+#     """
+#     An (optional) MLP + linear classifier for long documents
+#
+#     :param hidden: The output of the featurizer aggregated across chunks [batch_size, hidden_size]
+#     :param targets: One hot encoded target ids. [batch_size, n_classes]
+#     :param n_targets: A python int containing the number of classes that the model should be learning to predict over.
+#     :param config: A config object, containing all parameters for the featurizer.
+#     :param train: If this flag is true, dropout and losses are added to the graph.
+#     :param reuse: Should reuse be set within this scope.
+#     :param kwargs: Spare arguments.
+#     :return: dict containing:
+#         logits: The unnormalised log probabilities of each class.
+#         losses: The loss for the classifier.
+#     """
+#     def mlp(x, hidden_size: int = 768):
+#         # TODO Could experiment with hidden size
+#         # Makes sense to have first hidden layer have size 4 * bert_hidden_size
+#         # and second layer of side bert_hidden_size
+#         output = tf.compat.v1.layers.dense(x, hidden_size * 4, activation="relu")
+#         # FIXME Should I have a relu activation here as well?
+#         output = tf.compat.v1.layers.dense(output, hidden_size)
+#         output = x + output
+#         # Makes output zero mean and unit variance, and learn beta and gamma
+#         # normalization params. Might give smoother gradients?
+#         output = layer_norm(output)
+#         return output
+#
+#     with tf.compat.v1.variable_scope("classifier", reuse=reuse):
+#         hidden = dropout(hidden, config.clf_p_drop, train)
+#         if config.use_mlp:
+#             hidden = mlp(hidden)
+#         # No softmax because already using softmax_cross_entropy_with_logits for loss
+#         clf_logits = tf.compat.v1.layers.dense(hidden, n_targets)
+#
+#         if targets is None:
+#             clf_losses = None
+#         else:
+#             clf_losses = tf.nn.softmax_cross_entropy_with_logits(
+#                 logits=clf_logits, labels=tf.stop_gradient(targets)
+#             )
+#
+#             clf_losses = _apply_class_weight(
+#                 clf_losses, targets, kwargs.get("class_weights")
+#             )
+#
+#         return {"logits": clf_logits, "losses": clf_losses}
 
 
 def multi_choice_question(

@@ -20,8 +20,9 @@ import tensorflow as tf
 import pandas as pd
 import numpy as np
 from sklearn.metrics import accuracy_score, recall_score
+from sklearn.model_selection import train_test_split
 
-from finetune import Classifier, LongDocClassifier
+from finetune import Classifier
 from finetune.model import PredictMode
 from finetune.base_models import GPTModelSmall, GPT, LongDocBERT
 from finetune.datasets import generic_download
@@ -199,22 +200,19 @@ class TestClassifier(unittest.TestCase):
         Ensure model training does not error out
         Ensure model returns predictions
         """
-        model = LongDocClassifier(**self.default_config(
-            base_model=LongDocBERT,
-            max_length=64,
-            max_num_chunks=512,
-        ))
-        train_sample = self.dataset.sample(n=self.n_sample)
-        valid_sample = self.dataset.sample(n=self.n_sample)
-        model.fit(train_sample.Text.values, train_sample.Target.values)
+        model = Classifier(**self.default_config())
+        long_model = Classifier(**self.default_config(base_model=LongDocBERT))
+        train, test = train_test_split(self.dataset, test_size=0.2, random_state=42)
+        model.fit(train.Text.values, train.Target.values)
+        long_model.fit(train.Text.values, train.Target.values)
 
-        predictions = model.predict(valid_sample.Text.values)
-        for prediction in predictions:
-            self.assertIsInstance(prediction, (np.int, np.int64))
+        predictions = model.predict(test.Text.values)
+        valid_acc = accuracy_score(test.Target.values, predictions)
+        print(valid_acc)
 
-        train_acc = accuracy_score(train_sample.Target.values, model.predict(train_sample.Text.values))
-        valid_acc = accuracy_score(valid_sample.Target.values, predictions)
-        print(train_acc, valid_acc)
+        l_predictions = long_model.predict(test.Text.values)
+        l_valid_acc = accuracy_score(test.Target.values, l_predictions)
+        print(l_valid_acc)
 
     # def test_fit_predict_low_memory(self):
     #     """

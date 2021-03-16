@@ -134,6 +134,8 @@ class LongDocBERTModelCased(_BaseBert):
     settings = {
         **BERT_BASE_PARAMS,
         "base_model_path": os.path.join("bert", "bert_small_cased-v2.jl"),
+        # Does not make sense to chunk long sequences
+        "chunk_long_sequences": False,
     }
     required_files = [
         {
@@ -142,6 +144,15 @@ class LongDocBERTModelCased(_BaseBert):
         }
         for filename in ["bert_small_cased-v2.jl", "vocab.txt"]
     ]
+
+    @classmethod
+    def get_optimal_params(cls, config):
+        overrides = super(LongDocBERTModelCased).get_optimal_params(config)
+        overrides.update({
+            "max_length": 32768,
+            "chunk_size": 64,
+        })
+        return overrides
 
 
 class BERTModelLargeCased(_BaseBert):

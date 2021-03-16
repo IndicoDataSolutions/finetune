@@ -129,7 +129,8 @@ def optimize_loss(
         # Add histograms for variables, gradients and gradient norms.
         if summarize_grads:
             for gradient, variable in gradients:
-                if isinstance(gradient, ops.IndexedSlices):
+                # if isinstance(gradient, ops.IndexedSlices):
+                if isinstance(gradient, tf.IndexedSlices):
                     grad_values = gradient.values
                 else:
                     grad_values = gradient
