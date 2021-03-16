@@ -308,7 +308,7 @@ class TestSequenceLabeler(unittest.TestCase):
         self.assertEqual(len(preds), 3)
         for p in preds:
             del p["confidence"]
-        self.assertEquals(preds, labels)
+        self.assertEqual(preds, labels)
 
     def test_auto_negative_chunks(self):
         raw_docs = ["".join(text) for text in self.texts]
