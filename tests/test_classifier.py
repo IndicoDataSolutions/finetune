@@ -200,19 +200,23 @@ class TestClassifier(unittest.TestCase):
         Ensure model training does not error out
         Ensure model returns predictions
         """
-        model = Classifier(**self.default_config())
+        # model = Classifier(**self.default_config())
         long_model = Classifier(**self.default_config(base_model=LongDocBERT))
-        train, test = train_test_split(self.dataset, test_size=0.2, random_state=42)
-        model.fit(train.Text.values, train.Target.values)
-        long_model.fit(train.Text.values, train.Target.values)
+        long_model.fit(["apple apple", "banana banana"] * 50, ["apple", "banana"] * 50)
+        # train, test = train_test_split(self.dataset, test_size=0.2, random_state=42)
+        # model.fit(train.Text.values, train.Target.values)
+        # long_model.fit(train.Text.values, train.Target.values)
 
-        predictions = model.predict(test.Text.values)
-        valid_acc = accuracy_score(test.Target.values, predictions)
-        print(valid_acc)
+        # predictions = model.predict(test.Text.values)
+        # valid_acc = accuracy_score(test.Target.values, predictions)
+        # print(valid_acc)
 
-        l_predictions = long_model.predict(test.Text.values)
-        l_valid_acc = accuracy_score(test.Target.values, l_predictions)
-        print(l_valid_acc)
+        # l_predictions = long_model.predict(test.Text.values)
+        # l_valid_acc = accuracy_score(test.Target.values, l_predictions)
+        # print(l_valid_acc)
+
+        # apple is 12075
+        # banana is 21806
 
     # def test_fit_predict_low_memory(self):
     #     """

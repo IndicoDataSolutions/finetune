@@ -323,13 +323,14 @@ def get_default_config():
         bert_use_type_embed=True,
         #
         # LongDocBERT variants only
-        chunk_size="auto",      # Size of each chunk to separately featurize
+        chunk_size=64,      # Size of each chunk to separately featurize. If set to "auto", this
+                                # will be populated by the base model
         chunk_pool_fn="mean",   # aggregation function across chunks in LongDocBERT featurizer
                                 # must be in {"mean", "max", "attention", "lstm", "concat"}
         batch_size_scaler=2,    # Scaling factor for batch size when passing chunks to BERT featurizer
                                 # to reduce memory usage by passing multiple chunks through featurizer
                                 # using the batch dimension.
-                                # This mean effective_batch_size = batch_size * batch_size_scaler.
+                                # This means embedding_batch_size = batch_size * batch_size_scaler.
                                 # TODO should probably be determined based on how much we can fit in memory
         # use_mlp=True,         # Flag for whether or not to use MLP as part of target model
         #

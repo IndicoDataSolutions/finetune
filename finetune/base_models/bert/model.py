@@ -147,7 +147,7 @@ class LongDocBERTModelCased(_BaseBert):
 
     @classmethod
     def get_optimal_params(cls, config):
-        overrides = super(LongDocBERTModelCased).get_optimal_params(config)
+        overrides = super(LongDocBERTModelCased, cls).get_optimal_params(config)
         overrides.update({
             "max_length": 32768,
             "chunk_size": 64,
@@ -241,6 +241,7 @@ class RoBERTa(_BaseBert):
         else:
             return RoBERTaEncoder(**kwargs)
 
+
 class DocRep(_BaseBert):
     encoder = RoBERTaEncoderV2
     featurizer = bert_featurizer
@@ -287,7 +288,6 @@ class DocRep(_BaseBert):
     @classmethod
     def get_encoder(cls, config=None, **kwargs):
         return cls.encoder(**kwargs)
-
 
 
 class RoBERTaLarge(RoBERTa):

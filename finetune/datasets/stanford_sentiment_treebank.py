@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 from finetune import Classifier
 from finetune.datasets import Dataset, generic_download
+from finetune.base_models import LongDocBERT, BERT
 from finetune.base_models.gpt.model import GPTModel
 from finetune.base_models.oscar.model import GPCModel
 #logging.basicConfig(level=logging.DEBUG)
@@ -43,13 +44,26 @@ if __name__ == "__main__":
     # Train and evaluate on SST
     dataset = StanfordSentimentTreebank(nrows=1000).dataframe
     model = Classifier(
-        debugging_logs=True,
-        summarize_grads=True,
-#        val_interval=1000,
+        base_model=BERT,
+        chunk_long_sequences=False,
+        max_length=128,
+        visible_gpus=["0"],
+        # debugging_logs=True,
+        # summarize_grads=True,
+        # val_interval=1000,
     )
+    long_model = Classifier(
+        base_model=LongDocBERT,
+        visible_gpus=["0"],
+        max_length=128 * 16,
+        chunk_size=16,
+    )
+
     trainX, testX, trainY, testY = train_test_split(dataset.Text.values, dataset.Target.values, test_size=0.3, random_state=42)
     model.fit(trainX, trainY)
+    long_model.fit(trainX, trainY)
     preds = model.predict(testX)
-    print(preds, testY)
+    long_preds = long_model.predict(testX)
+    # print(preds, testY)
     print(classification_report(testY, preds))
-
+    print(classification_report(testY, long_preds))

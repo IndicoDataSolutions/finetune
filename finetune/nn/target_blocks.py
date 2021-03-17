@@ -208,12 +208,18 @@ def classifier(hidden, targets, n_targets, config, train=False, reuse=None, **kw
     with tf.compat.v1.variable_scope("classifier", reuse=reuse):
         hidden = dropout(hidden, config.clf_p_drop, train)
         clf_logits = perceptron(hidden, n_targets, config)
+        # clf_logits = tf.compat.v1.Print(
+        #     clf_logits, ["clf_logits", clf_logits, tf.shape(clf_logits)], summarize=-1
+        # )
         if targets is None:
             clf_losses = None
         else:
             clf_losses = tf.nn.softmax_cross_entropy_with_logits(
                 logits=clf_logits, labels=tf.stop_gradient(targets)
             )
+            # clf_losses = tf.compat.v1.Print(
+            #     clf_losses, ["clf_losses", clf_losses, tf.shape(clf_losses)], summarize=-1
+            # )
 
             clf_losses = _apply_class_weight(
                 clf_losses, targets, kwargs.get("class_weights")

@@ -4,7 +4,7 @@ import math
 import tensorflow as tf
 from finetune.util.shapes import lengths_from_eos_idx
 from finetune.base_models.bert.roberta_encoder import RoBERTaEncoder
-from finetune.base_models.bert.modeling import BertConfig, BertModel, LayoutLMModel
+from finetune.base_models.bert.modeling import BertConfig, BertModel, LayoutLMModel, create_initializer
 
 
 def get_decay_for_half(total_num_steps):
@@ -177,7 +177,7 @@ def long_doc_bert_featurizer(
         hidden_dropout_prob=config.resid_p_drop,
         attention_probs_dropout_prob=config.attn_p_drop,
         # max_position_embeddings=config.max_length,
-        max_position_embeddings=config.max_chunk_length,
+        max_position_embeddings=config.chunk_size,
         type_vocab_size=2,
         initializer_range=config.weight_stddev,
         low_memory_mode=config.low_memory_mode,
@@ -198,26 +198,26 @@ def long_doc_bert_featurizer(
     # [batch_size, sequence_length]
     X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-1:]), 0))
     X.set_shape([None, None])
-    # X = tf.compat.v1.Print(X, ["X", X, tf.shape(X)], summarize=-1)
+    X = tf.compat.v1.Print(X, ["X", X, tf.shape(X)], summarize=-1)
 
     # Add padding to X to later break out a separate chunk dimension
     """
     FIXME Remove comments with math. Those are with these assumptions for validating
     padding / chunking logic
-    * config.max_chunk_length = 64
+    * config.chunk_size = 64
     * config.batch_size_scaler = 4
     * sequence_len = 300
     """
     # Need to effectively "scale" chunk dim to account for division by batch_size_scaler so that
     # num_chunks is divisible by batch_size_scaler. In some cases this requires padding by a lot
     # of zeros
-    effective_chunk_dim = config.max_chunk_length * config.batch_size_scaler    # 64 * 4 = 256
+    effective_chunk_dim = config.chunk_size * config.batch_size_scaler    # 64 * 4 = 256
     pad_count = effective_chunk_dim - (sequence_len % effective_chunk_dim)  # 256 - (300 % 256) = 212
     new_seq_len = sequence_len + pad_count  # 300 + 212 = 512
-    num_chunks = new_seq_len / config.max_chunk_length  # 512 / 64 = 8
-    zero_paddings = tf.constant([[0, 0], [0, pad_count]])
+    num_chunks = new_seq_len / config.chunk_size  # 512 / 64 = 8
+    zero_paddings = tf.convert_to_tensor([[0, 0], [0, pad_count]], dtype=X.dtype)
     X = tf.pad(X, zero_paddings)
-    # X = tf.compat.v1.Print(X, ["X_pad", X, tf.shape(X)], summarize=-1)
+    X = tf.compat.v1.Print(X, ["X_pad", X, tf.shape(X)], summarize=-1)
 
     if config.num_layers_trained not in [config.n_layer, 0]:
         raise ValueError(
@@ -229,8 +229,13 @@ def long_doc_bert_featurizer(
     else:
         reading_order_decay_rate = None
 
+    # Reshape to [batch_size, num_chunks, chunk_size]
+    X = tf.reshape(X, [batch_size, tf.cast(num_chunks, dtype=tf.int32), config.chunk_size])
+    pad_mask = tf.cast(tf.expand_dims(tf.equal(tf.reduce_sum(X, axis=2), 0), axis=-1), dtype=X.dtype)
+    X = tf.compat.v1.Print(X, ["X_chunked", X, tf.shape(X), "pad_mask", pad_mask, tf.shape(pad_mask)], summarize=-1)
+
     # Reshape everything to
-    # [batch_size * batch_scaling, num_chunks / batch_scaling, max_chunk_len]
+    # [batch_size * batch_scaling, num_chunks / batch_scaling, chunk_size]
     # Purpose is to parallelize as much as we can through each pass to bert_wrapper function
     # during map_fn, without running OOM
     X = tf.reshape(
@@ -238,15 +243,15 @@ def long_doc_bert_featurizer(
         [
             batch_size * config.batch_size_scaler,
             tf.cast(num_chunks / config.batch_size_scaler, dtype=tf.int32),
-            config.max_chunk_length,
+            config.chunk_size,
         ],
     )
-    # X = tf.compat.v1.Print(X, ["X_bscale", X, tf.shape(X)], summarize=-1)
+    X = tf.compat.v1.Print(X, ["X_bscale", X, tf.shape(X)], summarize=-1)
 
     # Then transpose so that the chunk dim comes first since map_fn iterates over first dim
-    # [num_chunks / batch_scaling, batch_size * batch_scaling, max_chunk_len]
+    # [num_chunks / batch_scaling, batch_size * batch_scaling, chunk_size]
     X = tf.transpose(X, [1, 0, 2])
-    # X = tf.compat.v1.Print(X, ["X_tp", X, tf.shape(X)], summarize=-1)
+    X = tf.compat.v1.Print(X, ["X_tp", X, tf.shape(X)], summarize=-1)
 
     def bert_wrapper(X_sub):
         """
@@ -255,14 +260,20 @@ def long_doc_bert_featurizer(
 
         Return pooled output from BERT because that's all we need
         """
-        # X_sub = tf.compat.v1.Print(
-        #     X_sub, ["X_sub", X_sub, tf.shape(X_sub)], summarize=-1
-        # )
+        X_sub = tf.compat.v1.Print(
+            X_sub, ["X_sub", X_sub, tf.shape(X_sub)], summarize=-1
+        )
         # To fit the interface of finetune we are going to compute the mask and type id at runtime.
         delimiters = tf.cast(tf.equal(X_sub, encoder.delimiter_token), tf.int32)
+        # delimiters = tf.compat.v1.Print(
+        #     delimiters, ["delimiters", delimiters, tf.shape(delimiters)], summarize=-1
+        # )
         # Appears to be 0 where you have tokens and 1 where you have padding
         # [batch_size, sequence_length]
         token_type_ids = tf.cumsum(delimiters, exclusive=True, axis=1)
+        token_type_ids = tf.compat.v1.Print(
+            token_type_ids, ["token_type_ids", token_type_ids, tf.shape(token_type_ids)], summarize=-1
+        )
         seq_length = tf.shape(input=delimiters)[1]
         eos_idx = tf.argmax(
             input=tf.cast(delimiters, tf.float32)
@@ -272,9 +283,12 @@ def long_doc_bert_featurizer(
             axis=1,
         )
         lengths = lengths_from_eos_idx(eos_idx=eos_idx, max_length=seq_length)
+        lengths = tf.compat.v1.Print(lengths, ["lengths", lengths, tf.shape(lengths),
+                                               "seq_length", seq_length], summarize=-1)
         # Appears to be 1 where you have tokens and 0 where you have padding
         # [batch_size, sequence_length]
         mask = tf.sequence_mask(lengths, maxlen=seq_length, dtype=tf.float32)
+        mask = tf.compat.v1.Print(mask, ["mask", mask, tf.shape(mask)], summarize=-1)
         bert = underlying_model(
             config=bert_config,
             is_training=train,
@@ -288,38 +302,45 @@ def long_doc_bert_featurizer(
             use_token_type=config.bert_use_type_embed,
             reading_order_decay_rate=reading_order_decay_rate,
         )
-        return bert.get_pooled_output()
+        sub_pooled = bert.get_pooled_output()
+        sub_pooled = tf.compat.v1.Print(
+            sub_pooled, ["sub_pooled", tf.shape(sub_pooled), sub_pooled[:, :4]], summarize=-1
+        )
+        return sub_pooled
 
-    def chunk_aggregation(pooled_outputs):
+    def chunk_aggregation(pooled_outputs, pad_mask):
         """
         Function for aggregating/pooling the pooled outputs from the BERT featurizer
         across the chunk dimension
 
+        feature_size = hidden_size for mean, max, attention
+        feature_size = hidden_size * 2 for concat
+
         Args:
-            pooled_outputs: [batch_size, num_chunks, sequence_length]
+            pooled_outputs: [batch_size, num_chunks, hidden_size]
+            pad_mask: [batch_size, num_chunks, 1]
 
         Returns:
-            aggr_outputs: [batch_size, sequence_length, "concat_dim" (1 or 2)]
-
+            aggr_outputs: [batch_size, feature_size]
 
         TODO Implement LSTM
+
+        TODO Add sequence mask for chunks that are all 0 (pad)
         """
         if config.chunk_pool_fn == "mean":
-            aggr_outputs = tf.reduce_mean(pooled_outputs, axis=1, keep_dims=True)
-            # Move len 1 dim to end to have [batch_size, sequence_length, 1]
-            aggr_outputs = tf.transpose(aggr_outputs, [0, 2, 1])
+            # aggr_outputs = tf.reduce_mean(pooled_outputs, axis=1)
+            inv_pad_mask = tf.cast(1 - pad_mask, dtype=pooled_outputs.dtype)
+            denom = tf.reduce_sum(inv_pad_mask, axis=1)
+            aggr_outputs = tf.reduce_sum(pooled_outputs * inv_pad_mask, axis=1) / denom
         elif config.chunk_pool_fn == "attention":
-            aggr_outputs = attn(pooled_outputs)
+            aggr_outputs = attn(pooled_outputs, config.weight_stddev)
         elif config.chunk_pool_fn == "max":
-            aggr_outputs = tf.max(pooled_outputs, axis=1, keep_dims=True)
-            aggr_outputs = tf.transpose(aggr_outputs, [0, 2, 1])
+            aggr_outputs = tf.reduce_max(pooled_outputs, axis=1)
         elif config.chunk_pool_fn == "concat":
-            aggr_mean = tf.reduce_mean(pooled_outputs, axis=1, keep_dims=True)
-            aggr_max = tf.max(pooled_outputs, axis=1, keep_dims=True)
-            # Concat across 2nd dimension of 1 after aggregation ops above
+            aggr_mean = tf.reduce_mean(pooled_outputs, axis=1)
+            aggr_max = tf.max(pooled_outputs, axis=1)
+            # Concat across the hidden_size dim (axis=1) so feature_size dim is hidden_size * 2
             aggr_outputs = tf.concat([aggr_mean, aggr_max], axis=1)
-            # Move "concat" dim to end to have [batch_size, sequence_length, 2]
-            aggr_outputs = tf.transpose(aggr_outputs, [0, 2, 1])
         else:
             raise ValueError(f"chunk_pool_fn={config.chunk_pool_fn} is not supported")
 
@@ -332,9 +353,9 @@ def long_doc_bert_featurizer(
         pooled_output = tf.map_fn(bert_wrapper, X, dtype=tf.float32)
         # We want static embeddings from BERT, so not computing gradients
         pooled_output = tf.stop_gradient(pooled_output)
-        # pooled_output = tf.compat.v1.Print(
-        #     pooled_output, ["pooled_output", tf.shape(pooled_output)], summarize=-1
-        # )
+        pooled_output = tf.compat.v1.Print(
+            pooled_output, ["pooled_output", tf.shape(pooled_output), pooled_output[:, :, :4]], summarize=-1
+        )
 
         # Transpose back to [batch_size, num_chunks, hidden_size]
         pooled_output = tf.transpose(pooled_output, [1, 0, 2])
@@ -345,27 +366,27 @@ def long_doc_bert_featurizer(
         pooled_output = tf.reshape(
             pooled_output,
             [
-                pool_shape[0] * config.batch_size_scaler,
-                tf.cast(pool_shape[1] / config.batch_size_scaler, dtype=tf.int32),
+                pool_shape[0] / config.batch_size_scaler,
+                tf.cast(pool_shape[1] * config.batch_size_scaler, dtype=tf.int32),
                 pool_shape[2],
             ],
         )
-        # pooled_output = tf.compat.v1.Print(
-        #     pooled_output, ["pooled_rs", tf.shape(pooled_output)], summarize=-1
-        # )
+        pooled_output = tf.compat.v1.Print(
+            pooled_output, ["pooled_rs", tf.shape(pooled_output), pooled_output[:, :, :4]], summarize=-1
+        )
 
-        # Reduce across chunk dim with aggregation operation
-        features = chunk_aggregation(pooled_output)
-        # features = tf.compat.v1.Print(
-        #     features, ["features", tf.shape(features)], summarize=-1
-        # )
+        # Reduce across chunk dim with aggregation operation [batch_size, feature_size]
+        features = chunk_aggregation(pooled_output, pad_mask)
+        features = tf.compat.v1.Print(
+            features, ["features", tf.shape(features), features[:, :4]], summarize=-1
+        )
 
-        # FIXME In original featurizer, this reshape appears not to change dims [batch_size, hidden_size],
-        # but without it there are shape errors in the target model
-        # features = tf.reshape(
-        #     features,
-        #     shape=tf.concat((initial_shape[:-1], [config.n_embed]), 0),
-        # )
+        # Ensure that batch dim(s) are properly shaped. Required for target models
+        # with multiple batch dims
+        features = tf.reshape(
+            features,
+            shape=tf.concat((initial_shape[:-1], [tf.shape(features)[-1]]), 0),
+        )
 
         output_state = {
             "features": features,
@@ -383,19 +404,17 @@ def long_doc_bert_featurizer(
         return output_state
 
 
-def attn(hidden):
+def attn(hidden, initializer_range):
     """
     # TODO Sensibly initialize variables
     """
     # Shapes
-    batch_size = tf.shape(input=hidden)[0]
-    n_chunks = tf.shape(input=hidden)[1]
     hidden_size = tf.shape(input=hidden)[-1]
 
     # Define learnable key and value projections
     # Don't need batch size because same parameters are used for every
-    # element in the batch
-    # Typically only see batch sizes in activations
+    # element in the batch. Typically only see batch sizes in activations
+
     # Typically key_proj is hidden_size x hidden_size, and output
     # is divided into the individual heads
     key_proj = tf.compat.v1.get_variable(
@@ -404,6 +423,8 @@ def attn(hidden):
         shape=[hidden_size, hidden_size],
         dtype=tf.float32,
         trainable=True,
+        initializer=create_initializer()
+        # initializer=create_initializer(initializer_range)
     )
     value_proj = tf.compat.v1.get_variable(
         name="value_proj",
@@ -437,6 +458,9 @@ def attn(hidden):
     # [batch_size x hidden_size x n_chunks] (transposed) * [batch_size x n_chunks x 1]
     # = [batch_size x hidden_size x 1]
     output = tf.matmul(values, attn_matrix, transpose_a=True)
+
+    # Squeeze output to [batch_size x hidden_size]
+    output = tf.squeeze(output, axis=2)
     return output
 
 
