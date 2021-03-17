@@ -103,7 +103,8 @@ class SequencePipeline(BasePipeline):
     def _target_encoder(self):
         if self.multi_label:
             return SequenceMultiLabelingEncoder(pad_token=self.config.pad_token)
-        return SequenceLabelingEncoder(pad_token=self.config.pad_token)
+        return SequenceLabelingEncoder(pad_token=self.config.pad_token,
+                                       bio_tagging=self.config.bio_tagging)
 
 
 def _combine_and_format(subtokens, start, end, raw_text):
@@ -403,9 +404,16 @@ class SequenceLabeler(BaseModel):
                 )
                 last_end = end_idx
 
+                if self.config.bio_tagging:
+                    bio_prefix = None
+                    if label != self.config.pad_token:
+                        bio_prefix, label = label[:2], label[2:]
+
                 # if there are no current subsequences
                 # or the current subsequence has the wrong label
-                if not doc_subseqs or label != doc_labels[-1] or per_token:
+                # or bio tagging is on and we have a B- tag
+                if (not doc_subseqs or label != doc_labels[-1] or per_token or
+                    (self.config.bio_tagging and bio_prefix == "B-")):
                     assert start_idx <= end_idx, "Start: {}, End: {}".format(
                         start_idx, end_idx
                     )
@@ -445,6 +453,7 @@ class SequenceLabeler(BaseModel):
                     probs=[prob_dicts],
                     none_value=self.config.pad_token,
                     subtoken_predictions=self.config.subtoken_predictions,
+                    bio_tagging=self.config.bio_tagging,
                 )
                 if per_token:
                     doc_annotations.append(
