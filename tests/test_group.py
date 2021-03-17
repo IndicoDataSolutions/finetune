@@ -229,7 +229,7 @@ class TestGroupingLabelers(unittest.TestCase):
         self.assertEqual(preds, labels)
 
     def test_token_relation_tagging(self):
-        model = TokenRelationLabeler(n_epochs=16)
+        model = TokenRelationLabeler(n_epochs=24)
         text = ("five percent (5%) \n " +
                 "fifty percent (50%) \n " +
                 "two percent (2%) \n " +
