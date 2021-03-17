@@ -600,10 +600,13 @@ class TokenRelationLabeler(SequenceLabeler):
     def _predict_op(self, logits, **kwargs):
         # TODO: Move to config
         thresh = 0.8
-        idxs = kwargs.get("entity_mask")
 
-        probas = tf.sigmoid(logits) * mask
-        relations = tf.cast(probas > thresh, int32)
+        probas = tf.sigmoid(logits)
+
+        # Mask out diagnols
+        probas = tf.linalg.set_diag(probas, tf.zeros(tf.shape(probas)[:-1]))
+
+        relations = tf.cast(probas > thresh, tf.int32)
 
         return relations, probas
 
@@ -638,11 +641,16 @@ class TokenRelationLabeler(SequenceLabeler):
             # have access to this information
             if entities:
                 raise NotImplementedError
+
+            # Remove start and end tokens from relation matrix
+            relations = [row[1:-1] for row in label_seq[1:-1]]
+            token_start_idx = token_start_idx[1:-1]
+            token_end_idx = token_end_idx[1:-1]
             
             # Track total groups and which group each token belongs to
             group_idxs = []
-            token_groups = [None for _ in range(len(label_seq))]
-            for i, relation_row in enumerate(label_seq):
+            token_groups = [None for _ in range(len(relations))]
+            for i, relation_row in enumerate(relations):
                 if token_groups[i]:
                     current_group = token_groups[i]
                 else:
@@ -657,13 +665,14 @@ class TokenRelationLabeler(SequenceLabeler):
             # Convert token indicies into group spans
             doc_groups = []
             for idxs in group_idxs:
+                if not idxs: continue
                 group_spans = []
                 prev_idx = None
                 for idx in sorted(list(idxs)):
                     current_start_idx = token_start_idx[idx]
                     current_end_idx = token_end_idx[idx]
-                    if (prev_idx and prev_idx == (idx - 1)):
-                        prev = group_spans[-1]
+                    if (prev_idx is not None and prev_idx == (idx - 1)):
+                        prev_span = group_spans[-1]
                         prev_span["end"] = current_end_idx
                         prev_span["text"] = text[prev_span["start"]:prev_span["end"]]
                     else:
@@ -747,7 +756,7 @@ class JointTokenRelationLabeler(TokenRelationLabeler, SequenceLabeler):
                               end_of_doc, ner_labels, proba_seq, start, end)
 
 
-        group_predictions = BROSLabeler._predict_decode(
+        group_predictions = TokenRelationLabeler._predict_decode(
             self, zipped_data, group_predictions, **kwargs
         )
         ner_predictions = SequenceLabeler._predict_decode(

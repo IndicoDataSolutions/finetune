@@ -1097,25 +1097,25 @@ def token_relation_decoder(
         loss = 0.0
         with tf.device("CPU:0" if train else logits.device):
             if targets is not None:
-                targets, mask = targets[:, 0, :], targets[:, 1, :]
-                weights = tf.math.divide_no_nan(
-                    tf.sequence_mask(
-                        lengths,
-                        maxlen=tf.shape(input=targets)[1],
-                        dtype=tf.float32,
-                    ),
-                    tf.expand_dims(tf.cast(lengths, tf.float32), -1),
-                )
+                mask, targets = targets[:, 0, :], targets[:, 1, :]
+                # weights = tf.math.divide_no_nan(
+                #     tf.sequence_mask(
+                #         lengths,
+                #         maxlen=tf.shape(input=targets)[1],
+                #         dtype=tf.float32,
+                #     ),
+                #     tf.expand_dims(tf.cast(lengths, tf.float32), -1),
+                # )
                 targets *= mask
-                logits *= mask
-                bce = tf.keras.losses.BinaryCrossentropy()
-                loss = bce(targets, logits, sample_weight=weights)
+                logits *= tf.cast(mask, tf.float32)
+                loss = tf.reduce_mean(tf.keras.losses.binary_crossentropy(
+                    targets, logits, from_logits=True,
+                ))
 
         return {
             "logits": logits,
             "losses": loss,
             "predict_params": {
-                "entity_mask": mask,
                 "sequence_length": lengths,
             },
         }
