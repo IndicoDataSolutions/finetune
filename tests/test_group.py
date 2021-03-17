@@ -258,7 +258,7 @@ class TestGroupingLabelers(unittest.TestCase):
         self.assertEqual(preds, labels[1])
 
     def test_joint_token_relation_tagging(self):
-        model = JointTokenRelationLabeler(n_epochs=32)
+        model = JointTokenRelationLabeler(n_epochs=16)
         text = ("five percent (5%) \n " +
                 "fifty percent (50%) \n " +
                 "two percent (2%) \n " +

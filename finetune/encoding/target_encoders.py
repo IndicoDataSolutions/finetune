@@ -586,11 +586,17 @@ class JointTokenRelationEncoder(TokenRelationEncoder, SequenceLabelingEncoder):
         group_labels = TokenRelationEncoder.transform(self, out, (labels, groups))
         entity_mask, relation_matrix = group_labels
         ner_labels = SequenceLabelingEncoder.transform(self, out, labels)
+        
+        labels, pad_idx = self.pre_process_label(out, labels)
+        ner_matrix = [[pad_idx for _ in range(len(ner_labels))]
+                      for _ in range(len(ner_labels))]
+        ner_matrix[0] = ner_labels
 
-        return [ner_labels, entity_mask, relation_matrix]
+        return [ner_matrix, entity_mask, relation_matrix]
 
     def inverse_transform(self, y):
         tags, y = y
+        tags = tags[0]
         tags = SequenceLabelingEncoder.inverse_transform(self, tags)
         return (tags, y)
 

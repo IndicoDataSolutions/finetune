@@ -1111,7 +1111,7 @@ def token_relation_decoder(
                 loss = tf.reduce_mean(tf.keras.losses.binary_crossentropy(
                     targets, logits, from_logits=True,
                 ))
-
+ 
         return {
             "logits": logits,
             "losses": loss,
@@ -1132,10 +1132,11 @@ def joint_token_relation_decoder(
     use_crf=True,
     **kwargs
 ):
-    bros_targets, seq_targets = None, None
+    token_relation_targets, seq_targets = None, None
     if targets is not None:
-        token_relation_targets = targets[:, 1:, :]
-        seq_targets = targets[:, 0, :]
+        token_relation_targets = targets[:, 1:, :, :]
+        seq_targets = targets[:, 0, :, :]
+        seq_targets = seq_targets[:, 0, :]
         
     token_relation_dict = token_relation_decoder(
         hidden,
@@ -1167,11 +1168,10 @@ def joint_token_relation_decoder(
             "ner_logits": seq_dict["logits"],
             "group_logits": token_relation_dict["logits"],
         },
-        "losses": token_relation_dict["losses"] + seq_dict["losses"],
+        "losses": 100 * token_relation_dict["losses"] + seq_dict["losses"],
         "predict_params": {
             "sequence_length": lengths,
             "transition_matrix": seq_dict["predict_params"]["transition_matrix"],
-            "entity_mask": token_relation_dict["predict_params"]["entity_mask"],
         },
     }
 

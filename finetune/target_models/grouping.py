@@ -19,6 +19,7 @@ from finetune.encoding.target_encoders import (
     BROSEncoder,
     JointBROSEncoder,
     TokenRelationEncoder,
+    JointTokenRelationEncoder,
 )
 from finetune.nn.target_blocks import (
     multi_crf_group_labeler,
@@ -26,6 +27,7 @@ from finetune.nn.target_blocks import (
     bros_decoder,
     joint_bros_decoder,
     token_relation_decoder,
+    joint_token_relation_decoder,
 )
 
 class GroupingPipeline(SequencePipeline):
@@ -156,7 +158,7 @@ class JointTokenRelationPipeline(GroupingPipeline):
         types = {"tokens": tf.int32}
         shapes = {"tokens": TS([None])}
         types, shapes = self._add_context_info_if_present(types, shapes)
-        # TODO: Fix this
+        # TODO: Figure out how to do this in a non-horrifying way 
         target_shape = [3, None, None]
         return (
             (
@@ -728,12 +730,14 @@ class JointTokenRelationLabeler(TokenRelationLabeler, SequenceLabeler):
             self, logits["ner_logits"], **kwargs
         )
 
-        # Check why this is neccesary
-        group_idxs = tf.cast(group_idxs, tf.int32)
+        # Fit ner idxs into a matrix to feed predictions as a single tensor
+        group_shape = tf.shape(group_idxs)
+        middle_dim = tf.cast(group_shape[1] - 1, tf.int32)
+        matrix_shape = [group_shape[0], middle_dim, group_shape[2]]
+        ner_matrix = tf.zeros(matrix_shape, dtype=tf.int32)
+        ner_matrix = tf.concat((ner_idxs[:, None, :], ner_matrix), axis=1)
 
-        # Produces [batch_size, 3, seq_len]
-        # idxs = tf.stack([ner_idxs, start_token_idxs, next_token_idxs], axis=1)
-        # TODO: Figure out how to do this
+        idxs = tf.stack([ner_matrix, group_idxs], axis=1)
         probas = ner_probas
 
         return idxs, probas
