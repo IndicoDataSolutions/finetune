@@ -34,6 +34,7 @@ def test_nest_group_sequence_label():
         useful_end=512
     )
     label_arr = encoder.transform(out, label)
+    # Classes are [PAD, BG-PAD, IG-PAD, B-z, BG-B-z, IG-B-z, I-z, BG-I-z, IG-I-z]
     assert label_arr == [0, 3, 4, 8, 5, 8, 8, 0]
 
 def test_multi_crf_group_sequence_label():
@@ -60,11 +61,9 @@ def test_multi_crf_group_sequence_label():
         useful_start=0, 
         useful_end=512
     )
-    label_arr = encoder.transform(out, label)
-    # print(label_arr)
-    # print(encoder.classes_)
-    # print(encoder.group_classes_)
-    # input()
+    label_arr = encod
+    # First list is NER information ([PAD, B-z, I-z])
+    # Second list is group information ([Not in group, BG-, IG-])
     assert label_arr == [[0, 1, 1, 2, 1, 2, 2, 0], [0, 0, 1, 2, 2, 2, 2, 0]]
 
 def test_pipeline_group_sequence_label():
@@ -91,6 +90,7 @@ def test_pipeline_group_sequence_label():
         useful_end=512
     )
     label_arr = encoder.transform(out, label)
+    # Just group information ([Not in group, BG-, IG-])
     assert label_arr == [0, 0, 0, 0, 1, 2, 2, 0]
 
 def test_BROS_sequence_label():
@@ -121,9 +121,8 @@ def test_BROS_sequence_label():
         useful_end=512
     )
     label_arr = encoder.transform(out, label)
-    print(label_arr)
-    print(encoder.classes_)
-    input()
+    # First list is start token information (Binary indicator of group start)
+    # Second list is next token information (Index of next token in group)
     assert label_arr == [[0, 0, 1, 1, 0, 0, 0, 0], [0, 0, 4, 0, 5, 6, 0, 0]]
 
 def test_joint_BROS_sequence_label():
@@ -156,20 +155,20 @@ def test_joint_BROS_sequence_label():
         useful_end=512
     )
     label_arr = encoder.transform(out, label)
-    print(label_arr)
-    print(encoder.ner_classes_)
-    print(encoder.group_classes_)
-    input()
+    # First list is standard sequence labeling label ([PAD, B-z, I-z])
+    # Second list is start token information (Binary indicator of group start)
+    # Third list is next token information (Index of next token in group)
     assert label_arr == [
         [0, 1, 1, 2, 1, 2, 2, 0],
         [0, 0, 1, 1, 0, 0, 0, 0],
-        [0, 0, 4, 0, 5, 6, 0, 0]
+        [0, 0, 4, 0, 5, 6, 0, 0],
     ]
 
 def test_token_relation_sequence_label():
     encoder = TokenRelationEncoder(pad_token="<PAD>")
     labels = [
         {'start': 0, 'end': 4, 'label': 'z', 'text': 'five'},
+        {'start': 5, 'end': 8, 'label': 'z', 'text': 'per'},
         {'start': 13, 'end': 17, 'label': 'z', 'text': '(5%)'},
     ]
     groups = [
@@ -189,16 +188,18 @@ def test_token_relation_sequence_label():
         useful_end=512
     )
     label_arr = encoder.transform(out, label)
-    print(label_arr)
-    input()
+    # First matrix is an entity mask matrix - [i][j] should be 1 if token i and
+    # token j are both within entites, and i != j
+    # Second matrix is a token relation matrix - [i][j] should be 1 if token i
+    # and token j are within the same group, and i != j
     assert label_arr == [
         [[0, 0, 0, 0, 0, 0, 0, 0],
-         [0, 0, 0, 0, 1, 1, 1, 0],
+         [0, 0, 1, 0, 1, 1, 1, 0],
+         [0, 1, 0, 0, 1, 1, 1, 0],
          [0, 0, 0, 0, 0, 0, 0, 0],
-         [0, 0, 0, 0, 0, 0, 0, 0],
-         [0, 1, 0, 0, 0, 1, 1, 0],
-         [0, 1, 0, 0, 1, 0, 1, 0],
-         [0, 1, 0, 0, 1, 1, 0, 0],
+         [0, 1, 1, 0, 0, 1, 1, 0],
+         [0, 1, 1, 0, 1, 0, 1, 0],
+         [0, 1, 1, 0, 1, 1, 0, 0],
          [0, 0, 0, 0, 0, 0, 0, 0]],
         [[0, 0, 0, 0, 0, 0, 0, 0],
          [0, 0, 0, 0, 1, 1, 1, 0],
