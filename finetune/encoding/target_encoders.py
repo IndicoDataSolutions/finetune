@@ -287,14 +287,21 @@ def is_continuous(group):
     return len(group["tokens"]) == 1
 
 class GroupSequenceLabelingEncoder(SequenceLabelingEncoder):
+    """
+    Produces encoded labels for a BIO tagging based grouping formulation.
+    """
     def __init__(self, pad_token, bio_tagging=True):
         super().__init__(pad_token, bio_tagging=bio_tagging, group_tagging=True)
 
     def fit(self, labels):
         labels, groups = list(zip(*labels))
         super().fit(labels)
+        
+        # Add BG- and IG- version of labels
         n_classes = []
         for c in self.classes_:
+            # Retain original label for entities outside of groups
+            # (Equivalent to Outside (O) prefix)
             n_classes.append(c)
             n_classes.append("BG-" + c)
             n_classes.append("IG-" + c)
@@ -303,22 +310,31 @@ class GroupSequenceLabelingEncoder(SequenceLabelingEncoder):
         
     def transform(self, out, labels):
         labels, groups = labels
+
+        # Add a group_start value to every label for the sequence labeler
+        # None -> Not in group, True -> Start of group, False -> In group
+        # This could potentially be pulled out of the sequence labeler
         for label in labels:
             label["group_start"] = None
         for group in groups:
             if not is_continuous(group):
                 continue
+
+            # Gather entities inside group
+            # Note that we assume groups are made up of only entities
             group_start = min([t["start"] for t in group["tokens"]])
             group_end = max([t["end"] for t in group["tokens"]])
             group_labels = []
             for label in labels:
                 if label["start"] >= group_start and label["end"] <= group_end:
                     group_labels.append(label)
+            # Add group_start information
             if group_labels:
                 group_labels = sorted(group_labels, key=lambda x: x["start"])
                 group_labels[0]["group_start"] = True
                 for label in group_labels[1:]:
                     label["group_start"] = False
+
         ret = super().transform(out, labels)
         # Un-do the changes to the underlying data
         for label in labels:
@@ -326,6 +342,13 @@ class GroupSequenceLabelingEncoder(SequenceLabelingEncoder):
         return ret
 
 class MultiCRFGroupSequenceLabelingEncoder(SequenceLabelingEncoder):
+    """
+    Produces labels for a model with a seperate CRF for NER and group
+    information.
+
+    Outputs two label sequences, the first for the standard NER CRF and the
+    second for the group CRF.
+    """
     def __init__(self, pad_token, bio_tagging=True):
         super().__init__(pad_token, bio_tagging=bio_tagging, group_tagging=True)
 
@@ -341,6 +364,8 @@ class MultiCRFGroupSequenceLabelingEncoder(SequenceLabelingEncoder):
         
     def transform(self, out, labels):
         labels, groups = labels
+
+        # Create "fake" labels for groups
         group_labels = []
         for group in groups:
             if not is_continuous(group):
@@ -355,16 +380,21 @@ class MultiCRFGroupSequenceLabelingEncoder(SequenceLabelingEncoder):
                 "text": group_text,
                 "group_start": True,
             })
+
+        # Encode grouping labels
         self.classes_ = self.group_classes_
         self.lookup = self.group_lookup
         # Group tagging must be on and bio tagging must be off
+        # (We use group tagging here instead of bio tagging for convenience, as
+        # this way we don't have to convert back to group tags when decoding)
         self.group_tagging = True
         _bio, self.bio_tagging = self.bio_tagging, False
         encoded_group_labels =  super().transform(out, group_labels)
 
+        # Encode NER labels
         self.classes_ = self.label_classes_
         self.lookup = self.label_lookup
-        # Turn group tagging off for normal NER, and revert bio tagging
+        # Turn group tagging off and revert bio tagging
         self.group_tagging = False
         self.bio_tagging = _bio
         encoded_labels =  super().transform(out, labels)
@@ -374,8 +404,12 @@ class MultiCRFGroupSequenceLabelingEncoder(SequenceLabelingEncoder):
     def inverse_transform(self, y, only_labels=False):
         labels, group_labels = y
         labels = [self.label_classes_[l] for l in labels]
+
+        # Option to only return encoded labels for class weight calculations
+        # (The group CRF does not receive class weights, potential improvement)
         if only_labels:
             return labels
+
         group_labels = [self.group_classes_[l] for l in group_labels]
         # Replace pad tokens with empty prefixes
         group_labels = ["" if l == self.pad_token else l for l in group_labels]
@@ -383,11 +417,10 @@ class MultiCRFGroupSequenceLabelingEncoder(SequenceLabelingEncoder):
 
 class PipelineSequenceLabelingEncoder(SequenceLabelingEncoder):
     """
-    Processes targets for a pipeline approach.
+    Produces sequence labeling labels given group information.
 
     Parameters:
-        group: If true, the target encoder will utilize the group information
-        as labels.
+        group: When true, group information will be used for labels
     """
     def __init__(self, pad_token, group=True, bio_tagging=True):
         super().__init__(pad_token, bio_tagging=bio_tagging)
@@ -426,6 +459,13 @@ class PipelineSequenceLabelingEncoder(SequenceLabelingEncoder):
         return super().transform(out, labels)
 
 class BROSEncoder(BaseEncoder):
+    """
+    Produces labels for BROS.
+    
+    First set of labels is a binary value indicating whether a token is the
+    start of a group. Second set of labels is a index indicating what the next
+    token in the group is.
+    """
     def __init__(self, pad_token):
         self.classes_ = None
         self.pad_token = pad_token
@@ -451,10 +491,12 @@ class BROSEncoder(BaseEncoder):
         labels, groups = labels
         labels, pad_idx = self.pre_process_label(out, labels)
         start_token_labels = [pad_idx for _ in out.tokens]
+        # Note that the default next token is 0. This is safe, as 0 is the
+        # start token which no token should normally point to
         next_token_labels = [0 for _ in out.tokens]
 
         for group in groups:
-            # Change this is we ever want to do classification
+            # Placeholder, may be changed if we decide to use labels
             current_tag = "GROUP"
             prev_idx = None
             group_end = max([g["end"] for g in group["tokens"]])
@@ -485,18 +527,27 @@ class BROSEncoder(BaseEncoder):
         return [start_token_labels, next_token_labels]
 
     def inverse_transform(self, y):
+        # TODO: Fix this breaking class weights
         start_tokens, next_tokens = y
+        # Placeholder for is we ever add labels
         start_tokens = [self.classes_[l] for l in start_tokens]
         return (start_tokens, next_tokens)
 
 class TokenRelationEncoder(BROSEncoder):
+    """
+    Produces labels for a token relation model.
+    
+    First set of labels is a [seq_len, seq_len] entity mask. It is used to
+    restrict our loss to relations between entities. Second set of labels is a
+    [seq_len, seq_len] symetric relation matrix, where [i][j] = 1 means token
+    i and token j are within the same group.
+    """
     def transform(self, out, labels):
         labels, groups = labels
         labels, pad_idx = self.pre_process_label(out, labels)
-        encoded_labels = [[pad_idx for _ in out.tokens]
-                          for _ in out.tokens]
-        entity_mask = [[pad_idx for _ in out.tokens]
-                       for _ in out.tokens]
+
+        # Build relation matrix
+        encoded_labels = [[pad_idx for _ in out.tokens] for _ in out.tokens]
         for group in groups:
             group_idxs = []
             group_end = max([g["end"] for g in group["tokens"]])
@@ -513,7 +564,9 @@ class TokenRelationEncoder(BROSEncoder):
                     if i == j: continue
                     encoded_labels[i][j] = 1
 
+        # Build entity mask
         label_idxs = []
+        entity_mask = [[pad_idx for _ in out.tokens] for _ in out.tokens]
         for i, (start, end, text) in enumerate(zip(out.token_starts, out.token_ends, out.tokens)):
             for label in labels:
                 overlap, agree = SequenceLabelingEncoder.overlaps(label, start, end, text)
@@ -531,9 +584,17 @@ class TokenRelationEncoder(BROSEncoder):
         return [entity_mask, encoded_labels]
 
     def inverse_transform(self, y):
+        # TODO: Fix this breaking class weights
         return y
 
 class JointBROSEncoder(BROSEncoder, SequenceLabelingEncoder):
+    """
+    Produces labels for a joint BROS / Sequence Labeling model.
+    
+    First set of labels are standard NER sequence labeling models, second and
+    third set of labels are BROS start and next token labels.
+    """
+
     def __init__(self, pad_token, bio_tagging=False):
         # Can potentially replace these direct calls with super()s, but seems
         # like it'll be hard to maintain so leaving as is for now
@@ -572,6 +633,13 @@ class JointBROSEncoder(BROSEncoder, SequenceLabelingEncoder):
         return (tags, start_tokens, next_tokens)
 
 class JointTokenRelationEncoder(TokenRelationEncoder, SequenceLabelingEncoder):
+    """
+    Produces labels for a joint Token Relation / Sequence Labeling model.
+    
+    First set of labels are standard NER sequence labeling models, second and
+    third set of labels are token relation entity mask and relation matrix
+    labels.
+    """
     def __init__(self, pad_token, bio_tagging=False):
         SequenceLabelingEncoder.__init__(self, pad_token,
                                          bio_tagging=bio_tagging)
@@ -587,6 +655,8 @@ class JointTokenRelationEncoder(TokenRelationEncoder, SequenceLabelingEncoder):
         entity_mask, relation_matrix = group_labels
         ner_labels = SequenceLabelingEncoder.transform(self, out, labels)
         
+        # We have to pack the NER labels into a padded [seq_len, seq_len]
+        # matrix so we can pass the labels through Finetune as a single tensor
         labels, pad_idx = self.pre_process_label(out, labels)
         ner_matrix = [[pad_idx for _ in range(len(ner_labels))]
                       for _ in range(len(ner_labels))]
@@ -596,6 +666,7 @@ class JointTokenRelationEncoder(TokenRelationEncoder, SequenceLabelingEncoder):
 
     def inverse_transform(self, y):
         tags, y = y
+        # Extract the NER labels from the padding matrix
         tags = tags[0]
         tags = SequenceLabelingEncoder.inverse_transform(self, tags)
         return (tags, y)
