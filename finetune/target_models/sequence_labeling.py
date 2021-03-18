@@ -434,7 +434,8 @@ class SequenceLabeler(BaseModel):
                     if label != self.config.pad_token:
                         bio_prefix, label = label[:2], label[2:]
                 if self.config.group_bio_tagging:
-                    # Keep the group prefix for later decoding
+                    # Save the group prefix so the grouping target models can
+                    # extract grouping information down the line
                     label = group_prefix + label
 
                 def _get_label(label):
@@ -452,6 +453,10 @@ class SequenceLabeler(BaseModel):
                     (
                         label != doc_labels[-1] and
                         (
+                            # Merge spans if the labels are the same,
+                            # disregarding group BIO tags
+                            # This is safe as we already hard break on BG-, so
+                            # we will only be merging IG- tags
                             not self.config.group_bio_tagging or
                             _get_label(label) != _get_label(doc_labels[-1])
                         )
