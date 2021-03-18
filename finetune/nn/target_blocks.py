@@ -574,7 +574,6 @@ def multi_crf_group_labeler(
     targets,
     n_targets,
     config,
-    pad_id,
     train=False,
     reuse=None,
     lengths=None,
@@ -583,19 +582,19 @@ def multi_crf_group_labeler(
 ):
     """
     Multi CRF group tagging model. Takes two sets of targets - one for normal
-    tagging and one for group tagging. Learns a CRF for each set of targets
+    tagging and one for group tagging. Learns a CRF for each set of targets.
 
     :param hidden: The output of the featurizer. [batch_size, sequence_length, embed_dim]
-    :param targets: The placeholder representing the sequence labeling targets. [batch_size, 2, sequence_length]
-    :param n_targets: A python int containing the number of classes that the model should be learning to predict over.
+    :param targets: The placeholder representing the NER and group targets. [batch_size, 2, sequence_length]
+    :param n_targets: A python int containing the number of NER classes.
     :param config: A config object, containing all parameters for the featurizer.
     :param train: If this flag is true, dropout and losses are added to the graph.
     :param reuse: Should reuse be set within this scope.
     :param lengths: The number of non-padding tokens in the input.
     :param kwargs: Spare arguments.
     :return: dict containing:
-        "logits": The un-normalised log probabilities of each class being in each location. For usable predictions,
-            sampling from this distribution is not sufficient and a viterbi decoding method should be used.
+        "logits": Un-normalized log probabilties for NER and group predictions, has
+        shape of [2, batch_size, sequence_length]
         "losses": The negative log likelihood for the sequence targets.
         "predict_params": A dictionary of params to be fed to the viterbi decode function.
     """
@@ -693,7 +692,7 @@ def multi_crf_group_labeler(
                         tf.expand_dims(tf.cast(lengths, tf.float32), -1),
                     )
                     loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(
-                        targets[:, 2, :], logits, weights=weights
+                        targets[:, 0, :], logits, weights=weights
                     )
                     group_loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(
                         targets[:, 1, :], group_logits, weights=weights
@@ -715,7 +714,6 @@ def multi_logit_group_labeler (
     targets,
     n_targets,
     config,
-    pad_id,
     train=False,
     reuse=None,
     lengths=None,
@@ -723,12 +721,12 @@ def multi_logit_group_labeler (
     **kwargs
 ):
     """
-    Multi CRF group tagging model. Takes two sets of targets - one for normal
-    tagging and one for group tagging. Learns a CRF for each set of targets
+    Mult-logit CRF group tagging model. Produces a set of logits for NER tags
+    and group tags, then broadcasts them to create the final predictions.
 
     :param hidden: The output of the featurizer. [batch_size, sequence_length, embed_dim]
-    :param targets: The placeholder representing the sequence labeling targets. [batch_size, 2, sequence_length]
-    :param n_targets: A python int containing the number of classes that the model should be learning to predict over.
+    :param targets: The placeholder representing the sequence labeling targets. [batch_size, sequence_length]
+    :param n_targets: A python int containing the number of total number of classes (NER Classes * 3)
     :param config: A config object, containing all parameters for the featurizer.
     :param train: If this flag is true, dropout and losses are added to the graph.
     :param reuse: Should reuse be set within this scope.
@@ -756,6 +754,7 @@ def multi_logit_group_labeler (
             return logits
 
         def group_seq_lab_internal(hidden):
+            # Produce 3 outputs: start group, in group, outside of group
             flat_logits = tf.compat.v1.layers.dense(hidden, 3)
             logits = tf.reshape(
                 flat_logits, tf.concat([tf.shape(input=hidden)[:2], [3]], 0)
@@ -778,10 +777,11 @@ def multi_logit_group_labeler (
             group_logits = tf.cast(group_logits, tf.float32)
 
         # Broadcast probabilities to make [batch, seq_len, n_classes] matrix
-        final_shape = tf.concat((tf.shape(hidden)[:2], [n_targets]), 0)
+        # [batch, seq_len, n_classes / 3, 1] * [batch, seq_len, 1, 3] = 
         # [batch, seq_len, n_classes / 3, 3]
         logits = tf.expand_dims(ner_logits, 3) * tf.expand_dims(group_logits, 2)
-        # [batch, seq_len, n_classes]
+        # Reshape down to [batch, seq_len, n_classes]
+        final_shape = tf.concat((tf.shape(hidden)[:2], [n_targets]), 0)
         logits = tf.reshape(logits, final_shape)
         # Note, in order for loss to work correctly the targets must be in the
         # form [AA-TAG1, BB-TAG1, CC-TAG1, AA-TAG2, BB-TAG2, CC-TAG2, AA-TAG3 ...]
@@ -852,7 +852,6 @@ def bros_decoder(
     targets,
     n_targets,
     config,
-    pad_id,
     train=False,
     reuse=None,
     lengths=None,
@@ -862,7 +861,7 @@ def bros_decoder(
     A BROS decoder.
 
     :param hidden: The output of the featurizer. [batch_size, sequence_length, embed_dim]
-    :param targets: The placeholder representing the targets.  [batch_size, 2, sequence_length]
+    :param targets: The targets. Contains start token and next token labels. [batch_size, 2, sequence_length]
     :param n_targets: A python int containing the number of classes that the model should be learning to predict over.
     :param config: A config object, containing all parameters for the featurizer.
     :param train: If this flag is true, dropout and losses are added to the graph.
@@ -870,10 +869,8 @@ def bros_decoder(
     :param lengths: The number of non-padding tokens in the input.
     :param kwargs: Spare arguments.
     :return: dict containing:
-        "logits": The un-normalised log probabilities of each class being in each location. For usable predictions,
-            sampling from this distribution is not sufficient and a viterbi decoding method should be used.
-        "losses": The negative log likelihood for the sequence targets.
-        "predict_params": A dictionary of params to be fed to the viterbi decode function.
+        "logits": Dictionary containing "start_token_logits" and "next_token_logits"
+        "losses": Combined start token and next token loss
     """
     with tf.compat.v1.variable_scope("bros-decoder", reuse=reuse):
 
@@ -974,9 +971,6 @@ def bros_decoder(
                 "next_token_logits": next_token_logits,
             },
             "losses": loss,
-            "predict_params": {
-                "sequence_length": lengths,
-            },
         }
 
 def joint_bros_decoder(
@@ -991,6 +985,17 @@ def joint_bros_decoder(
     use_crf=True,
     **kwargs
 ):
+    """
+    A target block that calls both the sequence labeling target block and the
+    BROS decoder target block. See each respective function for further details
+
+    :param targets: The targets. The [:, 0, :] is assumed to contain the sequence labeling targets,
+    and the rest ([:, 1:, :]), is expected to contain the BROS labels. [batch_size, 3, sequence_length]
+    :return: dict containing:
+        "logits": Dictionary containing "ner_logits", "start_token_logits" and "next_token_logits"
+        "losses": Combined sequence labeling and bros loss
+    """
+    # Unpack the targets
     bros_targets, seq_targets = None, None
     if targets is not None:
         bros_targets = targets[:, 1:, :]
@@ -1001,7 +1006,6 @@ def joint_bros_decoder(
         bros_targets,
         n_targets,
         config,
-        pad_id,
         train=train,
         reuse=reuse,
         lengths=lengths,
@@ -1036,7 +1040,6 @@ def joint_bros_decoder(
 def token_relation_decoder(
     hidden,
     targets,
-    n_targets,
     config,
     pad_id,
     train=False,
@@ -1048,18 +1051,15 @@ def token_relation_decoder(
     A token level relation decoder.
 
     :param hidden: The output of the featurizer. [batch_size, sequence_length, embed_dim]
-    :param targets: The placeholder representing the targets.  [batch_size, 2, sequence_length]
-    :param n_targets: A python int containing the number of classes that the model should be learning to predict over.
+    :param targets: The targest. Contains an entity mask and a relation matrix. [batch_size, 2, sequence_length, sequence_length]
     :param config: A config object, containing all parameters for the featurizer.
     :param train: If this flag is true, dropout and losses are added to the graph.
     :param reuse: Should reuse be set within this scope.
     :param lengths: The number of non-padding tokens in the input.
     :param kwargs: Spare arguments.
     :return: dict containing:
-        "logits": The un-normalised log probabilities of each class being in each location. For usable predictions,
-            sampling from this distribution is not sufficient and a viterbi decoding method should be used.
-        "losses": The negative log likelihood for the sequence targets.
-        "predict_params": A dictionary of params to be fed to the viterbi decode function.
+        "logits": Un-normalized relation matrix logits. [batch_size, sequence_length, sequence_length]
+        "losses": Masked BCE loss.
     """
     with tf.compat.v1.variable_scope("token-relation-decoder", reuse=reuse):
 
@@ -1067,7 +1067,7 @@ def token_relation_decoder(
             targets = tf.cast(targets, dtype=tf.int32)
 
         nx = config.n_embed
-        hidden_size = 256
+        hidden_size = config.relation_hidden_size
 
         def get_out_hidden(hidden):
             flat_logits = tf.compat.v1.layers.dense(hidden, hidden_size)
@@ -1088,7 +1088,6 @@ def token_relation_decoder(
                 token_hidden,
                 transpose_b=True
             )
-
         if lengths is None:
             lengths = tf.shape(input=hidden)[1] * tf.ones(
                 tf.shape(input=hidden)[0], dtype=tf.int32
@@ -1102,8 +1101,7 @@ def token_relation_decoder(
                 #     tf.sequence_mask(
                 #         lengths,
                 #         maxlen=tf.shape(input=targets)[1],
-                #         dtype=tf.float32,
-                #     ),
+                #         dtype=tf.float32, #     ),
                 #     tf.expand_dims(tf.cast(lengths, tf.float32), -1),
                 # )
                 targets *= mask
@@ -1132,6 +1130,18 @@ def joint_token_relation_decoder(
     use_crf=True,
     **kwargs
 ):
+    """
+    A target block that calls both the sequence labeling target block and the
+    token relation decoder target block. See each respective function for further details
+
+    :param targets: The targets. The [:, 0, :, :] is assumed to contain a
+    padded matrix with the sequence labeling targets, and the rest ([:, 1:, :, :]),
+    is expected to contain the BROS labels. [batch_size, 3, sequence_length, sequence_length]
+    :return: dict containing:
+        "logits": Dictionary containing "ner_logits" [batch_size, seq_len]
+        and "group_logits" [batch_size, seq_len, seq_len]
+        "losses": Combined sequence labeling and token relation loss
+    """
     token_relation_targets, seq_targets = None, None
     if targets is not None:
         token_relation_targets = targets[:, 1:, :, :]
@@ -1143,7 +1153,6 @@ def joint_token_relation_decoder(
         token_relation_targets,
         n_targets,
         config,
-        pad_id,
         train=train,
         reuse=reuse,
         lengths=lengths,
@@ -1168,6 +1177,7 @@ def joint_token_relation_decoder(
             "ner_logits": seq_dict["logits"],
             "group_logits": token_relation_dict["logits"],
         },
+        # TODO: Make this a config option
         "losses": 100 * token_relation_dict["losses"] + seq_dict["losses"],
         "predict_params": {
             "sequence_length": lengths,
