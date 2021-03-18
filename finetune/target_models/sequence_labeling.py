@@ -160,6 +160,8 @@ def _spacy_token_predictions(raw_text, tokens, probas, positions):
 def negative_samples(preds, labels, pad="<PAD>"):
     modified_labels = []
     for p, l in zip(preds, labels):
+        if isinstance(l, np.ndarray):
+            l = l.tolist()
         new_labels = []
         for pi in p:
             if not any(sequences_overlap(pi, li) for li in l):
