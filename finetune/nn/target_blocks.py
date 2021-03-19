@@ -963,7 +963,8 @@ def bros_decoder(
                     targets[:, 1, :], next_token_logits, weights=weights
                 )
 
-                loss = start_token_loss + next_token_loss
+                loss = config.start_token_loss_weight * start_token_loss + \
+                    config.next_token_loss_weight * next_token_loss
 
         return {
             "logits": {
@@ -1030,7 +1031,8 @@ def joint_bros_decoder(
             "start_token_logits": bros_dict["logits"]["start_token_logits"],
             "next_token_logits": bros_dict["logits"]["next_token_logits"],
         },
-        "losses": bros_dict["losses"] + seq_dict["losses"],
+        "losses": config.group_loss_weight * bros_dict["losses"] + \
+            config.seq_loss_weight * seq_dict["losses"],
         "predict_params": {
             "sequence_length": lengths,
             "transition_matrix": seq_dict["predict_params"]["transition_matrix"],
@@ -1040,8 +1042,8 @@ def joint_bros_decoder(
 def token_relation_decoder(
     hidden,
     targets,
+    n_targets,
     config,
-    pad_id,
     train=False,
     reuse=None,
     lengths=None,
@@ -1178,7 +1180,8 @@ def joint_token_relation_decoder(
             "group_logits": token_relation_dict["logits"],
         },
         # TODO: Make this a config option
-        "losses": 100 * token_relation_dict["losses"] + seq_dict["losses"],
+        "losses": config.group_loss_weight * token_relation_dict["losses"] + \
+            config.seq_loss_weight * seq_dict["losses"],
         "predict_params": {
             "sequence_length": lengths,
             "transition_matrix": seq_dict["predict_params"]["transition_matrix"],
