@@ -176,8 +176,8 @@ def long_doc_bert_featurizer(
         hidden_act=config.act_fn,
         hidden_dropout_prob=config.resid_p_drop,
         attention_probs_dropout_prob=config.attn_p_drop,
-        # max_position_embeddings=config.max_length,
-        max_position_embeddings=config.chunk_size,
+        max_position_embeddings=config.max_length,
+        # max_position_embeddings=config.chunk_size,
         type_vocab_size=2,
         initializer_range=config.weight_stddev,
         low_memory_mode=config.low_memory_mode,
@@ -192,13 +192,18 @@ def long_doc_bert_featurizer(
     #     initial_shape, ["initial_shape", initial_shape], summarize=-1
     # )
 
-    batch_size = initial_shape[0]
-    sequence_len = initial_shape[1]
-
     # [batch_size, sequence_length]
     X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-1:]), 0))
     X.set_shape([None, None])
-    X = tf.compat.v1.Print(X, ["X", X, tf.shape(X)], summarize=-1)
+    if config.extra_print:
+        X = tf.compat.v1.Print(X, ["X", X, tf.shape(X)], summarize=-1)
+
+    # Remove start tokens from tensors, because they will be added back per chunk
+    batch_size = initial_shape[0]
+    sequence_len = initial_shape[-1] - 1
+    X = X[:, 1:]
+    if config.extra_print:
+        X = tf.compat.v1.Print(X, ["X_remove_start", X, tf.shape(X)], summarize=-1)
 
     # Add padding to X to later break out a separate chunk dimension
     """
@@ -206,18 +211,19 @@ def long_doc_bert_featurizer(
     padding / chunking logic
     * config.chunk_size = 64
     * config.batch_size_scaler = 4
-    * sequence_len = 300
+    * sequence_len = 300 - 1 = 299
     """
     # Need to effectively "scale" chunk dim to account for division by batch_size_scaler so that
     # num_chunks is divisible by batch_size_scaler. In some cases this requires padding by a lot
     # of zeros
     effective_chunk_dim = config.chunk_size * config.batch_size_scaler    # 64 * 4 = 256
-    pad_count = effective_chunk_dim - (sequence_len % effective_chunk_dim)  # 256 - (300 % 256) = 212
-    new_seq_len = sequence_len + pad_count  # 300 + 212 = 512
-    num_chunks = new_seq_len / config.chunk_size  # 512 / 64 = 8
+    pad_count = effective_chunk_dim - (sequence_len % effective_chunk_dim)  # 256 - (299 % 256) = 197
+    new_seq_len = sequence_len + pad_count  # 299 + 213 = 512
+    num_chunks = tf.cast(new_seq_len / config.chunk_size, dtype=tf.int32)  # 512 / 64 = 8
     zero_paddings = tf.convert_to_tensor([[0, 0], [0, pad_count]], dtype=X.dtype)
     X = tf.pad(X, zero_paddings)
-    X = tf.compat.v1.Print(X, ["X_pad", X, tf.shape(X)], summarize=-1)
+    if config.extra_print:
+        X = tf.compat.v1.Print(X, ["X_pad", X, tf.shape(X)], summarize=-1)
 
     if config.num_layers_trained not in [config.n_layer, 0]:
         raise ValueError(
@@ -230,9 +236,13 @@ def long_doc_bert_featurizer(
         reading_order_decay_rate = None
 
     # Reshape to [batch_size, num_chunks, chunk_size]
-    X = tf.reshape(X, [batch_size, tf.cast(num_chunks, dtype=tf.int32), config.chunk_size])
+    X = tf.reshape(X, [batch_size, num_chunks, config.chunk_size])
+
+    # Create pad_mask so that embeddings for chunks that are all padding are not
+    # considered during aggregation
     pad_mask = tf.cast(tf.expand_dims(tf.equal(tf.reduce_sum(X, axis=2), 0), axis=-1), dtype=X.dtype)
-    X = tf.compat.v1.Print(X, ["X_chunked", X, tf.shape(X), "pad_mask", pad_mask, tf.shape(pad_mask)], summarize=-1)
+    if config.extra_print:
+        X = tf.compat.v1.Print(X, ["X_chunked", X, tf.shape(X), "pad_mask", pad_mask, tf.shape(pad_mask)], summarize=-1)
 
     # Reshape everything to
     # [batch_size * batch_scaling, num_chunks / batch_scaling, chunk_size]
@@ -246,12 +256,23 @@ def long_doc_bert_featurizer(
             config.chunk_size,
         ],
     )
-    X = tf.compat.v1.Print(X, ["X_bscale", X, tf.shape(X)], summarize=-1)
+    if config.extra_print:
+        X = tf.compat.v1.Print(X, ["X_batch_scaler", X, tf.shape(X)], summarize=-1)
+
+    # Add start/end tokens to each chunk for BERT featurizer. This gets the shape to
+    # [batch_size * batch_scaling, num_chunks / batch_scaling, chunk_size + 2]
+    start_token_pad = tf.constant([[0, 0], [0, 0], [1, 0]])
+    end_token_pad = tf.constant([[0, 0], [0, 0], [0, 1]])
+    X = tf.pad(X, start_token_pad, constant_values=encoder.start_token)
+    X = tf.pad(X, end_token_pad, constant_values=encoder.end_token)
+    if config.extra_print:
+        X = tf.compat.v1.Print(X, ["X_start_end_pad", X, tf.shape(X)], summarize=-1)
 
     # Then transpose so that the chunk dim comes first since map_fn iterates over first dim
-    # [num_chunks / batch_scaling, batch_size * batch_scaling, chunk_size]
+    # [num_chunks / batch_scaling, batch_size * batch_scaling, chunk_size + 2]
     X = tf.transpose(X, [1, 0, 2])
-    X = tf.compat.v1.Print(X, ["X_tp", X, tf.shape(X)], summarize=-1)
+    if config.extra_print:
+        X = tf.compat.v1.Print(X, ["X_transpose", X, tf.shape(X)], summarize=-1)
 
     def bert_wrapper(X_sub):
         """
@@ -260,35 +281,45 @@ def long_doc_bert_featurizer(
 
         Return pooled output from BERT because that's all we need
         """
-        X_sub = tf.compat.v1.Print(
-            X_sub, ["X_sub", X_sub, tf.shape(X_sub)], summarize=-1
-        )
+        if config.extra_print:
+            X_sub = tf.compat.v1.Print(
+                X_sub, ["X_sub", X_sub, tf.shape(X_sub)], summarize=-1
+            )
         # To fit the interface of finetune we are going to compute the mask and type id at runtime.
-        delimiters = tf.cast(tf.equal(X_sub, encoder.delimiter_token), tf.int32)
-        # delimiters = tf.compat.v1.Print(
-        #     delimiters, ["delimiters", delimiters, tf.shape(delimiters)], summarize=-1
-        # )
+        delimiters = tf.cast(tf.equal(X_sub, encoder.delimiter_token), dtype=tf.int32)
+        if config.extra_print:
+            delimiters = tf.compat.v1.Print(
+                delimiters, ["delimiters", delimiters, tf.shape(delimiters)], summarize=-1
+            )
         # Appears to be 0 where you have tokens and 1 where you have padding
         # [batch_size, sequence_length]
         token_type_ids = tf.cumsum(delimiters, exclusive=True, axis=1)
-        token_type_ids = tf.compat.v1.Print(
-            token_type_ids, ["token_type_ids", token_type_ids, tf.shape(token_type_ids)], summarize=-1
-        )
+        if config.extra_print:
+            token_type_ids = tf.compat.v1.Print(
+                token_type_ids, ["token_type_ids", token_type_ids, tf.shape(token_type_ids)], summarize=-1
+            )
+
         seq_length = tf.shape(input=delimiters)[1]
-        eos_idx = tf.argmax(
-            input=tf.cast(delimiters, tf.float32)
-            * tf.expand_dims(
-                tf.range(tf.cast(seq_length, tf.float32), dtype=tf.float32), 0
-            ),
-            axis=1,
-        )
+        # We explicitly add start and end tokens to each chunk, so in some cases we will
+        # have duplicate end/delimiter tokens in a chunk. In that case, we want to select
+        # the first instance, because that actually indicates where the sequence ends and
+        # where padding starts. Note that this approach is problematic for multi input tasks
+        # tf.argmax chooses the smallest index in the case of ties
+        eos_idx = tf.argmax(input=delimiters, axis=1)
+        if config.extra_print:
+            eos_idx = tf.compat.v1.Print(eos_idx, ["eos_idx", eos_idx, tf.shape(eos_idx)], summarize=-1)
+
         lengths = lengths_from_eos_idx(eos_idx=eos_idx, max_length=seq_length)
-        lengths = tf.compat.v1.Print(lengths, ["lengths", lengths, tf.shape(lengths),
-                                               "seq_length", seq_length], summarize=-1)
+        if config.extra_print:
+            lengths = tf.compat.v1.Print(lengths, ["lengths", lengths, tf.shape(lengths),
+                                                   "seq_length", seq_length], summarize=-1)
+
         # Appears to be 1 where you have tokens and 0 where you have padding
         # [batch_size, sequence_length]
         mask = tf.sequence_mask(lengths, maxlen=seq_length, dtype=tf.float32)
-        mask = tf.compat.v1.Print(mask, ["mask", mask, tf.shape(mask)], summarize=-1)
+        if config.extra_print:
+            mask = tf.compat.v1.Print(mask, ["mask", mask, tf.shape(mask)], summarize=-1)
+
         bert = underlying_model(
             config=bert_config,
             is_training=train,
@@ -303,9 +334,10 @@ def long_doc_bert_featurizer(
             reading_order_decay_rate=reading_order_decay_rate,
         )
         sub_pooled = bert.get_pooled_output()
-        sub_pooled = tf.compat.v1.Print(
-            sub_pooled, ["sub_pooled", tf.shape(sub_pooled), sub_pooled[:, :4]], summarize=-1
-        )
+        if config.extra_print:
+            sub_pooled = tf.compat.v1.Print(
+                sub_pooled, ["sub_pooled", tf.shape(sub_pooled), sub_pooled[:, :4]], summarize=-1
+            )
         return sub_pooled
 
     def chunk_aggregation(pooled_outputs, pad_mask):
@@ -325,20 +357,21 @@ def long_doc_bert_featurizer(
 
         TODO Implement LSTM
 
-        TODO Add sequence mask for chunks that are all 0 (pad)
+        TODO Fix attention and add pad_mask
         """
+        inv_pad_mask = tf.cast(1 - pad_mask, dtype=pooled_outputs.dtype)
         if config.chunk_pool_fn == "mean":
             # aggr_outputs = tf.reduce_mean(pooled_outputs, axis=1)
-            inv_pad_mask = tf.cast(1 - pad_mask, dtype=pooled_outputs.dtype)
             denom = tf.reduce_sum(inv_pad_mask, axis=1)
             aggr_outputs = tf.reduce_sum(pooled_outputs * inv_pad_mask, axis=1) / denom
         elif config.chunk_pool_fn == "attention":
             aggr_outputs = attn(pooled_outputs, config.weight_stddev)
         elif config.chunk_pool_fn == "max":
-            aggr_outputs = tf.reduce_max(pooled_outputs, axis=1)
+            aggr_outputs = tf.reduce_max(pooled_outputs * inv_pad_mask, axis=1)
         elif config.chunk_pool_fn == "concat":
-            aggr_mean = tf.reduce_mean(pooled_outputs, axis=1)
-            aggr_max = tf.max(pooled_outputs, axis=1)
+            mean_denom = tf.reduce_sum(inv_pad_mask, axis=1)
+            aggr_mean = tf.reduce_sum(pooled_outputs * inv_pad_mask, axis=1) / mean_denom
+            aggr_max = tf.reduce_max(pooled_outputs * inv_pad_mask, axis=1)
             # Concat across the hidden_size dim (axis=1) so feature_size dim is hidden_size * 2
             aggr_outputs = tf.concat([aggr_mean, aggr_max], axis=1)
         else:
@@ -353,9 +386,10 @@ def long_doc_bert_featurizer(
         pooled_output = tf.map_fn(bert_wrapper, X, dtype=tf.float32)
         # We want static embeddings from BERT, so not computing gradients
         pooled_output = tf.stop_gradient(pooled_output)
-        pooled_output = tf.compat.v1.Print(
-            pooled_output, ["pooled_output", tf.shape(pooled_output), pooled_output[:, :, :4]], summarize=-1
-        )
+        if config.extra_print:
+            pooled_output = tf.compat.v1.Print(
+                pooled_output, ["pooled_output", tf.shape(pooled_output), pooled_output[:, :, :4]], summarize=-1
+            )
 
         # Transpose back to [batch_size, num_chunks, hidden_size]
         pooled_output = tf.transpose(pooled_output, [1, 0, 2])
@@ -366,20 +400,22 @@ def long_doc_bert_featurizer(
         pooled_output = tf.reshape(
             pooled_output,
             [
-                pool_shape[0] / config.batch_size_scaler,
-                tf.cast(pool_shape[1] * config.batch_size_scaler, dtype=tf.int32),
+                batch_size,
+                num_chunks,
                 pool_shape[2],
             ],
         )
-        pooled_output = tf.compat.v1.Print(
-            pooled_output, ["pooled_rs", tf.shape(pooled_output), pooled_output[:, :, :4]], summarize=-1
-        )
+        if config.extra_print:
+            pooled_output = tf.compat.v1.Print(
+                pooled_output, ["pooled_rs", tf.shape(pooled_output), pooled_output[:, :, :4]], summarize=-1
+            )
 
         # Reduce across chunk dim with aggregation operation [batch_size, feature_size]
         features = chunk_aggregation(pooled_output, pad_mask)
-        features = tf.compat.v1.Print(
-            features, ["features", tf.shape(features), features[:, :4]], summarize=-1
-        )
+        if config.extra_print:
+            features = tf.compat.v1.Print(
+                features, ["features", tf.shape(features), features[:, :4]], summarize=-1
+            )
 
         # Ensure that batch dim(s) are properly shaped. Required for target models
         # with multiple batch dims
