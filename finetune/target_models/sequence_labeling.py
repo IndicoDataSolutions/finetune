@@ -222,7 +222,7 @@ class SequenceLabeler(BaseModel):
         self.multi_label = self.config.multi_label_sequences
         return super()._initialize()
 
-    def finetune(self, Xs, Y=None, context=None, update_hook=None):
+    def finetune(self, Xs, Y=None, context=None, update_hook=None, log_hooks=None):
         if self.config.auto_negative_sampling and Y is not None:
             # clear the saver to save memory.
             self.saver.fallback # retrieve the fallback future.
@@ -252,7 +252,7 @@ class SequenceLabeler(BaseModel):
 
             # Reinitialize the model including rebuilding the saver.
             self._initialize()
-        return super().finetune(Xs, Y=Y, context=context, update_hook=update_hook)
+        return super().finetune(Xs, Y=Y, context=context, update_hook=update_hook, log_hooks=log_hooks)
 
     def _pre_chunk_document(self, texts: List[str]) -> Tuple[List[str], List[List[int]]]:
         """
