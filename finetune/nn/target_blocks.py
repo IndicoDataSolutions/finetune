@@ -683,7 +683,6 @@ def multi_crf_group_labeler(
                     )
                     ner_loss = tf.reduce_mean(ner_loss * -1)
                     group_loss = tf.reduce_mean(group_loss * -1)
-                    print("a" * 100)
                 else:
                     weights = tf.math.divide_no_nan(
                         tf.sequence_mask(
