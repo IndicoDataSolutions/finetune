@@ -4,7 +4,8 @@ import math
 import tensorflow as tf
 from finetune.util.shapes import lengths_from_eos_idx
 from finetune.base_models.bert.roberta_encoder import RoBERTaEncoder
-from finetune.base_models.bert.modeling import BertConfig, BertModel, LayoutLMModel, create_initializer
+from finetune.base_models.bert.modeling import BertConfig, BertModel, LayoutLMModel, \
+    create_initializer, get_shape_list
 
 
 def get_decay_for_half(total_num_steps):
@@ -365,7 +366,8 @@ def long_doc_bert_featurizer(
             denom = tf.reduce_sum(inv_pad_mask, axis=1)
             aggr_outputs = tf.reduce_sum(pooled_outputs * inv_pad_mask, axis=1) / denom
         elif config.chunk_pool_fn == "attention":
-            aggr_outputs = attn(pooled_outputs, config.weight_stddev)
+            # aggr_outputs = attn(pooled_outputs, config.weight_stddev)
+            aggr_outputs = attn(pooled_outputs, config)
         elif config.chunk_pool_fn == "max":
             aggr_outputs = tf.reduce_max(pooled_outputs * inv_pad_mask, axis=1)
         elif config.chunk_pool_fn == "concat":
@@ -440,12 +442,17 @@ def long_doc_bert_featurizer(
         return output_state
 
 
-def attn(hidden, initializer_range):
+def attn(hidden, config):
     """
+    hidden [batch_size, num_chunks, hidden_size]
     # TODO Sensibly initialize variables
     """
     # Shapes
-    hidden_size = tf.shape(input=hidden)[-1]
+    # FIXME Running into shape errors trying to use this
+    # TypeError: Dimension value must be integer or None or have an __index__ method, got value '<tf.Tensor...
+    hidden_shape = get_shape_list(hidden)
+    print(hidden_shape)
+    # hidden_size = hidden_shape[-1]
 
     # Define learnable key and value projections
     # Don't need batch size because same parameters are used for every
@@ -456,25 +463,26 @@ def attn(hidden, initializer_range):
     key_proj = tf.compat.v1.get_variable(
         name="key_proj",
         # In future, I could try [hidden_size, hidden_size * num_attn_heads]
-        shape=[hidden_size, hidden_size],
+        shape=[config.n_embed, config.n_embed],
         dtype=tf.float32,
         trainable=True,
-        initializer=create_initializer()
-        # initializer=create_initializer(initializer_range)
+        initializer=create_initializer(config.weight_stddev)
     )
     value_proj = tf.compat.v1.get_variable(
         name="value_proj",
-        shape=[hidden_size, hidden_size],
+        shape=[config.n_embed, config.n_embed],
         dtype=tf.float32,
         trainable=True,
+        initializer=create_initializer(config.weight_stddev)
     )
 
     # Define learnable query vector
     query = tf.compat.v1.get_variable(
         name="query",
-        shape=[1, hidden_size],
+        shape=[1, config.n_embed],
         dtype=tf.float32,
         trainable=True,
+        initializer=create_initializer(config.weight_stddev)
     )
 
     # Compute keys and values
