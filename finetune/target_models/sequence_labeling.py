@@ -494,7 +494,6 @@ class SequenceLabeler(BaseModel):
                     if self.multi_label:
                         del prob_dicts[-1][self.config.pad_token]
 
-<<<<<<< HEAD
                 _, doc_annotations_sample = finetune_to_indico_sequence(
                     raw_texts=[raw_text[doc_idx]],
                     subseqs=[doc_subseqs],
