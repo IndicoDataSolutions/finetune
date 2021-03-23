@@ -518,6 +518,10 @@ class BROSLabeler(SequenceLabeler):
                     if current_idx in group_idxs:
                         warnings.warn("Cylical group found!")
                         break
+                    if current_idx >= len(token_start_idx):
+                        # Happens when the end token is the next token
+                        warnings.warn("OOB Index found!")
+                        break
                     # No guarentee that tokens point in sequential order, so we
                     # check all existing spans for adjacency
                     # Continuous spans are required as part of the group format
