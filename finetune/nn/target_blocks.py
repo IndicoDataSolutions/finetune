@@ -669,19 +669,21 @@ def multi_crf_group_labeler(
             )
             if targets is not None:
                 if use_crf:
-                    log_likelihood, _ = crf_log_likelihood(
+                    ner_loss, _ = crf_log_likelihood(
                         logits,
                         targets[:, 0, :],
                         lengths,
                         transition_params=transition_params,
                     )
-                    group_log_likelihood, _ = crf_log_likelihood(
+                    group_loss, _ = crf_log_likelihood(
                         group_logits,
                         targets[:, 1, :],
                         lengths,
                         transition_params=group_transition_params,
                     )
-                    loss = -(log_likelihood + group_log_likelihood)
+                    ner_loss = tf.reduce_mean(ner_loss * -1)
+                    group_loss = tf.reduce_mean(group_loss * -1)
+                    print("a" * 100)
                 else:
                     weights = tf.math.divide_no_nan(
                         tf.sequence_mask(
@@ -691,13 +693,22 @@ def multi_crf_group_labeler(
                         ),
                         tf.expand_dims(tf.cast(lengths, tf.float32), -1),
                     )
-                    loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(
+                    ner_loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(
                         targets[:, 0, :], logits, weights=weights
                     )
+                    ner_loss = tf.reduce_mean(ner_loss)
                     group_loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(
                         targets[:, 1, :], group_logits, weights=weights
                     )
-                    loss += group_loss
+                    group_loss = tf.reduce_mean(group_loss)
+                scaled_ner_loss = config.crf_seq_loss_weight * ner_loss
+                scaled_group_loss = config.crf_group_loss_weight * group_loss
+                loss = scaled_ner_loss + scaled_group_loss
+
+                tf.compat.v1.summary.scalar("Sequence Loss", ner_loss)
+                tf.compat.v1.summary.scalar("Group Loss", group_loss)
+                tf.compat.v1.summary.scalar("Scaled Sequence Loss", scaled_ner_loss)
+                tf.compat.v1.summary.scalar("Scaled Group Loss", scaled_group_loss)
 
         return {
             "logits": [logits, group_logits],
@@ -836,7 +847,6 @@ def multi_logit_group_labeler (
                     loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(
                         targets, logits, weights=weights
                     )
-                    loss += group_loss
 
         return {
             "logits": logits,
@@ -920,6 +930,7 @@ def bros_decoder(
             no_next_hidden = tf.repeat(no_next_hidden, tf.shape(hidden)[0], axis=0)
             # [Batch Size, Sequence Length + 1, Hidden Size]
             # Note: The no relation embedding comes first
+
             next_token_hidden = tf.concat((no_next_hidden, next_token_hidden), axis=1)
         with tf.compat.v1.variable_scope("next_token_logits"):
             # [Batch Size, Sequence Length, Sequence Legth + 1]
@@ -962,9 +973,14 @@ def bros_decoder(
                 next_token_loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(
                     targets[:, 1, :], next_token_logits, weights=weights
                 )
+                scaled_start_token_loss = config.start_token_loss_weight * start_token_loss
+                scaled_next_token_loss = config.next_token_loss_weight * next_token_loss
+                loss = scaled_start_token_loss + scaled_next_token_loss
 
-                loss = config.start_token_loss_weight * start_token_loss + \
-                    config.next_token_loss_weight * next_token_loss
+                tf.compat.v1.summary.scalar("Start Token Loss", start_token_loss)
+                tf.compat.v1.summary.scalar("Next Token Loss", next_token_loss)
+                tf.compat.v1.summary.scalar("Scaled Start Token Loss", scaled_start_token_loss)
+                tf.compat.v1.summary.scalar("Scaled Next Token Loss", scaled_next_token_loss)
 
         return {
             "logits": {
@@ -1025,14 +1041,22 @@ def joint_bros_decoder(
         use_crf=use_crf,
         **kwargs
     )
+
+    seq_loss = tf.reduce_mean(seq_dict["losses"])
+    scaled_seq_loss = config.seq_loss_weight * seq_loss
+    scaled_group_loss = config.group_loss_weight * bros_dict["losses"]
+    tf.compat.v1.summary.scalar("Sequence Loss", seq_loss)
+    tf.compat.v1.summary.scalar("Group Loss", bros_dict["losses"])
+    tf.compat.v1.summary.scalar("Scaled Sequence Loss", scaled_seq_loss)
+    tf.compat.v1.summary.scalar("Scaled Group Loss", scaled_group_loss)
+
     return {
         "logits": {
             "ner_logits": seq_dict["logits"],
             "start_token_logits": bros_dict["logits"]["start_token_logits"],
             "next_token_logits": bros_dict["logits"]["next_token_logits"],
         },
-        "losses": config.group_loss_weight * bros_dict["losses"] + \
-            config.seq_loss_weight * seq_dict["losses"],
+        "losses": scaled_seq_loss + scaled_group_loss,
         "predict_params": {
             "sequence_length": lengths,
             "transition_matrix": seq_dict["predict_params"]["transition_matrix"],
@@ -1174,14 +1198,20 @@ def joint_token_relation_decoder(
         **kwargs
     )
 
+    seq_loss = tf.reduce_mean(seq_dict["losses"])
+    scaled_seq_loss = config.seq_loss_weight * seq_loss
+    scaled_group_loss = config.group_loss_weight * token_relation_dict["losses"]
+    tf.compat.v1.summary.scalar("Sequence Loss", seq_loss)
+    tf.compat.v1.summary.scalar("Group Loss", token_relation_dict["losses"])
+    tf.compat.v1.summary.scalar("Scaled Sequence Loss", scaled_seq_loss)
+    tf.compat.v1.summary.scalar("Scaled Group Loss", scaled_group_loss)
+
     return {
         "logits": {
             "ner_logits": seq_dict["logits"],
             "group_logits": token_relation_dict["logits"],
         },
-        # TODO: Make this a config option
-        "losses": config.group_loss_weight * token_relation_dict["losses"] + \
-            config.seq_loss_weight * seq_dict["losses"],
+        "losses": scaled_seq_loss + scaled_group_loss,
         "predict_params": {
             "sequence_length": lengths,
             "transition_matrix": seq_dict["predict_params"]["transition_matrix"],

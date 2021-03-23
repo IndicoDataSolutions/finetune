@@ -348,10 +348,13 @@ def get_default_config():
         # Line Items
         group_bio_tagging=False,
         relation_hidden_size=256,
+        crf_seq_loss_weight=1,
+        crf_group_loss_weight=1,
         start_token_loss_weight=1,
         next_token_loss_weight=1,
         seq_loss_weight=1,
         group_loss_weight=50,
+        #
         # Serialize finetune version with model
         version=VERSION,
     )
