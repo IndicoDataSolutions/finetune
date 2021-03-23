@@ -323,12 +323,12 @@ class MultiCRFGroupSequenceLabeler(GroupSequenceLabeler):
         idxs = tf.stack([idxs, group_idxs], axis=1)
 
         # Broadcast probabilities to make [batch, seq_len, n_classes * 3] matrix
+        batch_seq_shape, n_classes = tf.shape(probas)[:2], tf.shape(probas)[-1]
+        final_shape = tf.concat((batch_seq_shape, [n_classes * 3]), 0)
         # [batch, seq_len, n_classes, 1] * [batch, seq_len, 1, 3] =
         # [batch, seq_len, n_classes, 3]
         probas = tf.expand_dims(probas, 3) * tf.expand_dims(group_probas, 2)
         # Reshape to [batch, seq_len, n_classes * 3]
-        batch_seq_shape, n_classes = tf.shape(probas)[:2], tf.shape(probas)[-1]
-        final_shape = tf.concat((batch_seq_shape, [n_classes * 3]), 0)
         probas = tf.reshape(probas, final_shape)
 
         return idxs, probas
