@@ -480,14 +480,16 @@ class BROSEncoder(BaseEncoder):
         return labels, pad_idx
 
     @staticmethod
-    def group_overlaps(group, start, end, text):
+    def group_overlaps(group, start, end, text, input_text):
         for span in group["tokens"]:
-            overlap, agree = SequenceLabelingEncoder.overlaps(span, start, end, text)
+            overlap, agree = SequenceLabelingEncoder.overlaps(span, start, end,
+                                                              text, input_text)
             if overlap:
                 return overlap, agree
         return False, False
 
     def transform(self, out, labels):
+        input_text = "".join(out.input_text)
         labels, groups = labels
         labels, pad_idx = self.pre_process_label(out, labels)
         start_token_labels = [pad_idx for _ in out.tokens]
@@ -503,7 +505,7 @@ class BROSEncoder(BaseEncoder):
             for i, (start, end, text) in enumerate(zip(out.token_starts, out.token_ends, out.tokens)):
                 if group_end < (start + end + 1) // 2:
                     break
-                overlap, agree = self.group_overlaps(group, start, end, text)
+                overlap, agree = self.group_overlaps(group, start, end, text, input_text)
                 if overlap:
                     if not agree:
                         raise ValueError("Tokens and labels do not align")
@@ -543,6 +545,7 @@ class TokenRelationEncoder(BROSEncoder):
     i and token j are within the same group.
     """
     def transform(self, out, labels):
+        input_text = "".join(out.input_text)
         labels, groups = labels
         labels, pad_idx = self.pre_process_label(out, labels)
 
@@ -554,7 +557,7 @@ class TokenRelationEncoder(BROSEncoder):
             for i, (start, end, text) in enumerate(zip(out.token_starts, out.token_ends, out.tokens)):
                 if group_end < (start + end + 1) // 2:
                     break
-                overlap, agree = self.group_overlaps(group, start, end, text)
+                overlap, agree = self.group_overlaps(group, start, end, text, input_text)
                 if overlap:
                     if not agree:
                         raise ValueError("Tokens and groups do not align")
@@ -569,7 +572,8 @@ class TokenRelationEncoder(BROSEncoder):
         entity_mask = [[pad_idx for _ in out.tokens] for _ in out.tokens]
         for i, (start, end, text) in enumerate(zip(out.token_starts, out.token_ends, out.tokens)):
             for label in labels:
-                overlap, agree = SequenceLabelingEncoder.overlaps(label, start, end, text)
+                overlap, agree = SequenceLabelingEncoder.overlaps(label, start, end, text,
+                                                                  input_text)
                 if overlap:
                     if not agree:
                         raise ValueError("Tokens and labels do not align")

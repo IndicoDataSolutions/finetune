@@ -31,7 +31,8 @@ def test_nest_group_sequence_label():
         token_ends=np.array([-1,  4, 8, 12, 14, 15, 17, -1]), 
         token_starts=np.array([-1,  0,  5, 8, 13, 14, 15, -1]), 
         useful_start=0, 
-        useful_end=512
+        useful_end=512,
+        input_text=["five percent (5%)"],
     )
     label_arr = encoder.transform(out, label)
     # Classes are [PAD, BG-PAD, IG-PAD, B-z, BG-B-z, IG-B-z, I-z, BG-I-z, IG-I-z]
@@ -59,9 +60,10 @@ def test_multi_crf_group_sequence_label():
         token_ends=np.array([-1,  4, 8, 12, 14, 15, 17, -1]), 
         token_starts=np.array([-1,  0,  5, 8, 13, 14, 15, -1]), 
         useful_start=0, 
-        useful_end=512
+        useful_end=512,
+        input_text=["five percent (5%)"],
     )
-    label_arr = encod
+    label_arr = encoder.transform(out, label)
     # First list is NER information ([PAD, B-z, I-z])
     # Second list is group information ([Not in group, BG-, IG-])
     assert label_arr == [[0, 1, 1, 2, 1, 2, 2, 0], [0, 0, 1, 2, 2, 2, 2, 0]]
@@ -75,7 +77,7 @@ def test_pipeline_group_sequence_label():
     ]
     groups = [
         {'tokens': [
-            {'start': 13, 'end': 16, 'text': '(5%)'},
+            {'start': 13, 'end': 17, 'text': '(5%)'},
         ], 'label': None}
     ]
     label = (labels, groups)
@@ -87,7 +89,8 @@ def test_pipeline_group_sequence_label():
         token_ends=np.array([-1,  4, 8, 12, 14, 15, 17, -1]), 
         token_starts=np.array([-1,  0,  5, 8, 13, 14, 15, -1]), 
         useful_start=0, 
-        useful_end=512
+        useful_end=512,
+        input_text=["five percent (5%)"],
     )
     label_arr = encoder.transform(out, label)
     # Just group information ([Not in group, BG-, IG-])
@@ -118,7 +121,8 @@ def test_BROS_sequence_label():
         token_ends=np.array([-1,  4, 8, 12, 14, 15, 17, -1]), 
         token_starts=np.array([-1,  0,  5, 8, 13, 14, 15, -1]), 
         useful_start=0, 
-        useful_end=512
+        useful_end=512,
+        input_text=["five percent (5%)"],
     )
     label_arr = encoder.transform(out, label)
     # First list is start token information (Binary indicator of group start)
@@ -152,7 +156,8 @@ def test_joint_BROS_sequence_label():
         token_ends=np.array([-1,  4, 8, 12, 14, 15, 17, -1]), 
         token_starts=np.array([-1,  0,  5, 8, 13, 14, 15, -1]), 
         useful_start=0, 
-        useful_end=512
+        useful_end=512,
+        input_text=["five percent (5%)"],
     )
     label_arr = encoder.transform(out, label)
     # First list is standard sequence labeling label ([PAD, B-z, I-z])
@@ -185,7 +190,8 @@ def test_token_relation_sequence_label():
         token_ends=np.array([-1,  4, 8, 12, 14, 15, 17, -1]), 
         token_starts=np.array([-1,  0,  5, 8, 13, 14, 15, -1]), 
         useful_start=0, 
-        useful_end=512
+        useful_end=512,
+        input_text=["five percent (5%)"],
     )
     label_arr = encoder.transform(out, label)
     # First matrix is an entity mask matrix - [i][j] should be 1 if token i and
