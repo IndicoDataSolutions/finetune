@@ -16,19 +16,17 @@ def merge_output_state(states, X, lengths, chunk_pos_embed, hidden_dim):
         assert chunk_pos_embed is None, "Only None and learned chunk_pos_embed are supported"
 
     output_state = {
-        "embedding": states[0]["embedding"],
         "features": tf.reduce_mean([s["features"] for s in states]),
         "sequence_features": tf.concat([s["sequence_features"] for s in states], 1),
         "lengths": lengths,
-        "decoder": states[0]["decoder"],
         "inputs": X,
     }
+    if "decoder" in states[0]:
+        output_state["decoder"] = states[0]["decoder"]
+    if "embedding" in states[0]:
+        output_state["embedding"] = states[0]["embedding"],
     if "embed_weights" in states[0]:
         output_state["embed_weights"] = states[0]["embed_weights"]
-
-    output_state["sequence_features"] = tf.compat.v1.Print(
-        output_state["sequence_features"], [tf.shape(output_state["sequence_features"])]
-    )
     return output_state
 
 
@@ -55,6 +53,7 @@ def fused_featurizer(featurizer):
                         train,
                         reuse=reuse,
                         lengths=lengths,
+                        max_length=subsize,
                         **kwargs
                     )
                 )
@@ -67,6 +66,7 @@ def fused_featurizer(featurizer):
                         train,
                         reuse=reuse,
                         lengths=lengths,
+                        max_length=subsize,
                         **kwargs
                     )
                 )
