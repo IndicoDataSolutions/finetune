@@ -789,7 +789,7 @@ def multi_logit_group_labeler (
         # Broadcast probabilities to make [batch, seq_len, n_classes] matrix
         # [batch, seq_len, n_classes / 3, 1] * [batch, seq_len, 1, 3] = 
         # [batch, seq_len, n_classes / 3, 3]
-        logits = tf.expand_dims(ner_logits, 3) * tf.expand_dims(group_logits, 2)
+        logits = tf.expand_dims(ner_logits, 3) + tf.expand_dims(group_logits, 2)
         # Reshape down to [batch, seq_len, n_classes]
         final_shape = tf.concat((tf.shape(hidden)[:2], [n_targets]), 0)
         logits = tf.reshape(logits, final_shape)
