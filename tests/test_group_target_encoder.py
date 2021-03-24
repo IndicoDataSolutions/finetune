@@ -194,18 +194,18 @@ def test_token_relation_sequence_label():
         input_text=["five percent (5%)"],
     )
     label_arr = encoder.transform(out, label)
-    # First matrix is an entity mask matrix - [i][j] should be 1 if token i and
-    # token j are both within entites, and i != j
+    # First matrix is an entity mask matrix - Edges and diagonal should be 0s,
+    # and everything else should be 1, always
     # Second matrix is a token relation matrix - [i][j] should be 1 if token i
     # and token j are within the same group, and i != j
     assert label_arr == [
         [[0, 0, 0, 0, 0, 0, 0, 0],
-         [0, 0, 1, 0, 1, 1, 1, 0],
-         [0, 1, 0, 0, 1, 1, 1, 0],
-         [0, 0, 0, 0, 0, 0, 0, 0],
-         [0, 1, 1, 0, 0, 1, 1, 0],
-         [0, 1, 1, 0, 1, 0, 1, 0],
-         [0, 1, 1, 0, 1, 1, 0, 0],
+         [0, 0, 1, 1, 1, 1, 1, 0],
+         [0, 1, 0, 1, 1, 1, 1, 0],
+         [0, 1, 1, 0, 1, 1, 1, 0],
+         [0, 1, 1, 1, 0, 1, 1, 0],
+         [0, 1, 1, 1, 1, 0, 1, 0],
+         [0, 1, 1, 1, 1, 1, 0, 0],
          [0, 0, 0, 0, 0, 0, 0, 0]],
         [[0, 0, 0, 0, 0, 0, 0, 0],
          [0, 0, 0, 0, 1, 1, 1, 0],

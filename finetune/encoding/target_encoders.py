@@ -568,22 +568,13 @@ class TokenRelationEncoder(BROSEncoder):
                     encoded_labels[i][j] = 1
 
         # Build entity mask
-        label_idxs = []
-        entity_mask = [[pad_idx for _ in out.tokens] for _ in out.tokens]
-        for i, (start, end, text) in enumerate(zip(out.token_starts, out.token_ends, out.tokens)):
-            for label in labels:
-                overlap, agree = SequenceLabelingEncoder.overlaps(label, start, end, text,
-                                                                  input_text)
-                if overlap:
-                    if not agree:
-                        raise ValueError("Tokens and labels do not align")
-                    label_idxs.append(i)
-                    break
-        for i in label_idxs:
-            for j in label_idxs:
-                if i == j:
-                    continue
-                entity_mask[i][j] = 1
+        # Currently only masks edges and diagonal
+        entity_mask = [[1 for _ in out.tokens] for _ in out.tokens]
+        for i in range(len(out.tokens)):
+            for j in range(len(out.tokens)):
+                if (i == j or i == 0 or j == 0 or
+                    i == len(out.tokens) - 1 or j == len(out.tokens) - 1):
+                    entity_mask[i][j] = 0
 
         return [entity_mask, encoded_labels]
 

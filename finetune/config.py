@@ -353,7 +353,7 @@ def get_default_config():
         start_token_loss_weight=1,
         next_token_loss_weight=1,
         seq_loss_weight=1,
-        group_loss_weight=50,
+        group_loss_weight=200,
         #
         # Serialize finetune version with model
         version=VERSION,

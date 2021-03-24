@@ -433,7 +433,7 @@ class SequenceLabeler(BaseModel):
                     bio_prefix = ""
                     if label != self.config.pad_token:
                         bio_prefix, label = label[:2], label[2:]
-                if self.config.group_bio_tagging:
+                if self.config.group_bio_tagging and label != self.config.pad_token:
                     # Save the group prefix so the grouping target models can
                     # extract grouping information down the line
                     label = group_prefix + label

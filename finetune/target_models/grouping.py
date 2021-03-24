@@ -720,6 +720,7 @@ class TokenRelationLabeler(SequenceLabeler):
             assert start_of_doc and end_of_doc, "Chunk found in token relation!!"
 
             text = raw_texts[text_idx]
+            
 
             # TODO: Implement entity level pooling for the joint case when we
             # have access to this information
