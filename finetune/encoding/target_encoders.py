@@ -600,6 +600,8 @@ class JointBROSEncoder(BROSEncoder, SequenceLabelingEncoder):
         labels, groups = list(zip(*labels))
         BROSEncoder.fit(self, labels)
         self.group_classes_, self.group_lookup = self.classes_, self.lookup
+        # Run the sequence labeling fit second so that self.classes_ is the
+        # sequence labeling classes for the rest of finetune.
         SequenceLabelingEncoder.fit(self, labels)
         self.ner_classes_, self.ner_lookup = self.classes_, self.lookup
 

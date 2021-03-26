@@ -358,7 +358,7 @@ class SequenceLabeler(BaseModel):
     def _predict(
         self, zipped_data, per_token=False, return_negative_confidence=False, **kwargs
     ):
-        predictions = list(self.process_long_sequence(zipped_data, **kwargs))
+        predictions = self.process_long_sequence(zipped_data, **kwargs)
         return self._predict_decode(zipped_data, predictions,
                                     per_token=per_token,
                                     return_negative_confidence=return_negative_confidence,
