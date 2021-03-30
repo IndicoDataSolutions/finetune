@@ -209,9 +209,26 @@ def classifier(hidden, targets, n_targets, config, train=False, reuse=None, **kw
         logits: The unnormalised log probabilities of each class.
         losses: The loss for the classifier.
     """
+    def mlp(x, hidden_size: int = 768):
+        # TODO Could experiment with hidden size
+        # Makes sense to have first hidden layer have size 4 * bert_hidden_size
+        # and second layer of side bert_hidden_size
+        output = tf.compat.v1.layers.dense(x, hidden_size * 4, activation="relu")
+        # FIXME Should I have a relu activation here as well?
+        output = tf.compat.v1.layers.dense(output, hidden_size)
+        # output = x + output
+        # Makes output zero mean and unit variance, and learn beta and gamma
+        # normalization params. Might give smoother gradients?
+        # output = layer_norm(output)
+        return output
+
     with tf.compat.v1.variable_scope("classifier", reuse=reuse):
         hidden = dropout(hidden, config.clf_p_drop, train)
-        clf_logits = perceptron(hidden, n_targets, config)
+        if config.use_mlp:
+            hidden = mlp(hidden)
+            clf_logits = tf.compat.v1.layers.dense(hidden, n_targets)
+        else:
+            clf_logits = perceptron(hidden, n_targets, config)
         # clf_logits = tf.compat.v1.Print(
         #     clf_logits, ["clf_logits", clf_logits, tf.shape(clf_logits)], summarize=-1
         # )

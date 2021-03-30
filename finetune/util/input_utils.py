@@ -61,13 +61,27 @@ def add_length(x, y=None):
     return x
 
 
-def batch_dataset(dataset, batch_size, shapes, n_epochs=1):
+def batch_dataset(dataset, batch_size, shapes, n_epochs=1, config=None):
     if isinstance(shapes, tuple):
         shapes = ({**shapes[0], "length": tf.TensorShape([])}, shapes[1])
     else:
         shapes = {**shapes, "length": tf.TensorShape([])}
 
     def batched_dataset():
+        if config:
+            return (
+                dataset()
+                .map(add_length)
+                .padded_batch(batch_size, padded_shapes=shapes, drop_remainder=False)
+                .shuffle(
+                    config.shuffle_buffer_size,
+                    seed=config.seed,
+                    reshuffle_each_iteration=False,
+                )
+                .repeat(n_epochs)
+                .prefetch(tf.data.experimental.AUTOTUNE)
+            )
+
         return (
             dataset()
             .map(add_length)

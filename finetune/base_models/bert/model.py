@@ -136,6 +136,9 @@ class LongDocBERTModelCased(_BaseBert):
         "base_model_path": os.path.join("bert", "bert_small_cased-v2.jl"),
         # Does not make sense to chunk long sequences
         "chunk_long_sequences": False,
+        # If using attention as the chunk aggregation op, we need to initialize
+        # learnable key/value projections and query vector
+        "permit_uninitialized": r".*chunk_attn.*"
     }
     required_files = [
         {

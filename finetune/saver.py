@@ -258,7 +258,7 @@ class Saver:
                     if name.startswith("model/featurizer"):
                         permitted = self.permit_uninitialized is not None and re.findall(self.permit_uninitialized, name)
                         if not permitted:
-                            raise ValueError("Uninitialized featurizer variable {}".format(name))
+                            raise ValueError(f"variable={name} should be initialized with pretrained weights")
 
                     
             var_loader.run(session)
@@ -280,4 +280,3 @@ class Saver:
             [var for skip, var in zip(skips, variable_names) if not skip],
             [var_val for skip, var_val in zip(skips, variable_values) if not skip],
         )
-

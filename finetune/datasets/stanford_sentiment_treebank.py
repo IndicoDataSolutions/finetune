@@ -46,28 +46,30 @@ if __name__ == "__main__":
     # model = Classifier(
     #     base_model=BERT,
     #     chunk_long_sequences=False,
-    #     max_length=128,
+    #     max_length=512,
     #     visible_gpus=["0"],
-    #     # debugging_logs=True,
-    #     # summarize_grads=True,
-    #     # val_interval=1000,
+    #     debugging_logs=True,
+    #     num_layers_trained=0,
+    #     train_embeddings=False,
+    #     lr=0.0005,
     # )
     long_model = Classifier(
         base_model=LongDocBERT,
         visible_gpus=["0"],
-        max_length=128,
+        max_length=512,
         chunk_size=128,
         debugging_logs=True,
-        lr=0.005,
-        n_epochs=8,
-        batch_size=4,
+        lr=0.001,
+        chunk_pool_fn="mean",
+        n_epochs=512,
+        batch_size=8,
     )
 
     trainX, testX, trainY, testY = train_test_split(dataset.Text.values, dataset.Target.values, test_size=0.3, random_state=42)
     # model.fit(trainX, trainY)
-    long_model.fit(trainX, trainY)
+    long_model.fit(trainX[:8], trainY[:8])
     # preds = model.predict(testX)
-    long_preds = long_model.predict(testX)
+    long_preds = long_model.predict(trainX[:8])
     # print(preds, testY)
     # print(classification_report(testY, preds))
-    print(classification_report(testY, long_preds))
+    print(classification_report(trainY[:8], long_preds))

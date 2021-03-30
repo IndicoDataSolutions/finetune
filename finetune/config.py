@@ -210,6 +210,7 @@ def get_default_config():
         xla=False,
         optimize_for="accuracy",
         sort_by_length=True,
+        sort_by_length_train=False,
         collapse_whitespace=False,
         permit_uninitialized=None,
         #
@@ -334,8 +335,8 @@ def get_default_config():
                                 # using the batch dimension.
                                 # This means embedding_batch_size = batch_size * batch_size_scaler.
                                 # TODO should probably be determined based on how much we can fit in memory
-        # use_mlp=True,         # Flag for whether or not to use MLP as part of target model
-        extra_print=False,
+        use_mlp=False,          # Flag for whether or not to use MLP as part of target model
+        extra_print=False,      # Print the value of LongDocBERT tensors
         #
         # Auxiliary Information
         use_auxiliary_info=False,

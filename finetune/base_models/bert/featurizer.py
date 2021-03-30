@@ -177,7 +177,8 @@ def long_doc_bert_featurizer(
         hidden_act=config.act_fn,
         hidden_dropout_prob=config.resid_p_drop,
         attention_probs_dropout_prob=config.attn_p_drop,
-        max_position_embeddings=config.max_length,
+        # FIXME Running into errors with max_position_embeddings arg
+        # max_position_embeddings=config.max_length,
         # max_position_embeddings=config.chunk_size,
         type_vocab_size=2,
         initializer_range=config.weight_stddev,
@@ -241,6 +242,7 @@ def long_doc_bert_featurizer(
 
     # Create pad_mask so that embeddings for chunks that are all padding are not
     # considered during aggregation
+    # Pad mask is 1 for chunks that are all padding, and 0 otherwise
     pad_mask = tf.cast(tf.expand_dims(tf.equal(tf.reduce_sum(X, axis=2), 0), axis=-1), dtype=X.dtype)
     if config.extra_print:
         X = tf.compat.v1.Print(X, ["X_chunked", X, tf.shape(X), "pad_mask", pad_mask, tf.shape(pad_mask)], summarize=-1)
@@ -351,7 +353,8 @@ def long_doc_bert_featurizer(
 
         Args:
             pooled_outputs: [batch_size, num_chunks, hidden_size]
-            pad_mask: [batch_size, num_chunks, 1]
+            pad_mask: [batch_size, num_chunks, 1] - Mask is 1 for chunks that are
+                all padding, and 0 otherwise
 
         Returns:
             aggr_outputs: [batch_size, feature_size]
@@ -360,20 +363,23 @@ def long_doc_bert_featurizer(
 
         TODO Fix attention and add pad_mask
         """
-        inv_pad_mask = tf.cast(1 - pad_mask, dtype=pooled_outputs.dtype)
+        # Invert pad mask so that it is 0 for chunks that are all padding, and
+        # 0 otherwise
+        pad_mask = tf.cast(pad_mask, dtype=pooled_outputs.dtype)
+        inv_pad_mask = 1. - pad_mask
         if config.chunk_pool_fn == "mean":
-            # aggr_outputs = tf.reduce_mean(pooled_outputs, axis=1)
             denom = tf.reduce_sum(inv_pad_mask, axis=1)
             aggr_outputs = tf.reduce_sum(pooled_outputs * inv_pad_mask, axis=1) / denom
         elif config.chunk_pool_fn == "attention":
             # aggr_outputs = attn(pooled_outputs, config.weight_stddev)
-            aggr_outputs = attn(pooled_outputs, config)
+            aggr_outputs = attn(pooled_outputs, config, inv_pad_mask)
         elif config.chunk_pool_fn == "max":
-            aggr_outputs = tf.reduce_max(pooled_outputs * inv_pad_mask, axis=1)
+            # Make padded values very large negative numbers
+            aggr_outputs = tf.reduce_max(pooled_outputs - (pad_mask * 1e9), axis=1)
         elif config.chunk_pool_fn == "concat":
             mean_denom = tf.reduce_sum(inv_pad_mask, axis=1)
             aggr_mean = tf.reduce_sum(pooled_outputs * inv_pad_mask, axis=1) / mean_denom
-            aggr_max = tf.reduce_max(pooled_outputs * inv_pad_mask, axis=1)
+            aggr_max = tf.reduce_max(pooled_outputs - (pad_mask * 1e9), axis=1)
             # Concat across the hidden_size dim (axis=1) so feature_size dim is hidden_size * 2
             aggr_outputs = tf.concat([aggr_mean, aggr_max], axis=1)
         else:
@@ -404,7 +410,10 @@ def long_doc_bert_featurizer(
             [
                 batch_size,
                 num_chunks,
-                pool_shape[2],
+                config.n_embed,
+                # TODO Was previously using pool_shape[2] for hidden_size, but projection
+                # complains that the last dimension is undefined
+                # pool_shape[2],
             ],
         )
         if config.extra_print:
@@ -412,8 +421,32 @@ def long_doc_bert_featurizer(
                 pooled_output, ["pooled_rs", tf.shape(pooled_output), pooled_output[:, :, :4]], summarize=-1
             )
 
+        # Learn a projection on the BERT embeddings prior to aggregation
+        # [batch_size, num_chunks, hidden_size]
+        proj_output = tf.compat.v1.layers.dense(
+            inputs=pooled_output,
+            units=config.n_embed,
+            kernel_initializer=create_initializer(config.weight_stddev),
+            # FIXME This name only has chunk_attn is because I'm too lazy to fix regex
+            # on permit_uninitialized in base model. Same with gate_val
+            name="proj_not_chunk_attn"
+        )
+
+        # Learn a gating function to "turn on/off" certain chunks prior to aggregation
+        # [batch_size, num_chunks, 1]
+        gate_val = tf.compat.v1.layers.dense(
+            inputs=pooled_output,
+            units=1,
+            activation="sigmoid",
+            kernel_initializer=create_initializer(config.weight_stddev),
+            name="gate_val_not_chunk_attn"
+        )
+
+        # Multiply proj_output by gate_val prior to aggregation
+        proj_output = proj_output * gate_val
+
         # Reduce across chunk dim with aggregation operation [batch_size, feature_size]
-        features = chunk_aggregation(pooled_output, pad_mask)
+        features = chunk_aggregation(proj_output, pad_mask)
         if config.extra_print:
             features = tf.compat.v1.Print(
                 features, ["features", tf.shape(features), features[:, :4]], summarize=-1
@@ -442,16 +475,17 @@ def long_doc_bert_featurizer(
         return output_state
 
 
-def attn(hidden, config):
+def attn(hidden, config, inv_pad_mask):
     """
-    hidden [batch_size, num_chunks, hidden_size]
-    # TODO Sensibly initialize variables
+    Args:
+        hidden: [batch_size, num_chunks, feature_size]
+        inv_pad_mask: [batch_size, num_chunks, 1] - 0 for chunks that are all padding,
+            1 otherwise
     """
     # Shapes
-    # FIXME Running into shape errors trying to use this
+    # FIXME Running into shape errors trying to use this, so using config.n_embed instead
     # TypeError: Dimension value must be integer or None or have an __index__ method, got value '<tf.Tensor...
-    hidden_shape = get_shape_list(hidden)
-    print(hidden_shape)
+    # hidden_shape = get_shape_list(hidden)
     # hidden_size = hidden_shape[-1]
 
     # Define learnable key and value projections
@@ -461,7 +495,7 @@ def attn(hidden, config):
     # Typically key_proj is hidden_size x hidden_size, and output
     # is divided into the individual heads
     key_proj = tf.compat.v1.get_variable(
-        name="key_proj",
+        name="chunk_attn_key_proj",
         # In future, I could try [hidden_size, hidden_size * num_attn_heads]
         shape=[config.n_embed, config.n_embed],
         dtype=tf.float32,
@@ -469,7 +503,7 @@ def attn(hidden, config):
         initializer=create_initializer(config.weight_stddev)
     )
     value_proj = tf.compat.v1.get_variable(
-        name="value_proj",
+        name="chunk_attn_value_proj",
         shape=[config.n_embed, config.n_embed],
         dtype=tf.float32,
         trainable=True,
@@ -478,7 +512,7 @@ def attn(hidden, config):
 
     # Define learnable query vector
     query = tf.compat.v1.get_variable(
-        name="query",
+        name="chunk_attn_query",
         shape=[1, config.n_embed],
         dtype=tf.float32,
         trainable=True,
@@ -492,10 +526,15 @@ def attn(hidden, config):
     keys = tf.matmul(hidden, key_proj)
     values = tf.matmul(hidden, value_proj)
 
-    # Compute attention matrix, and then take softmax
+    # Compute attention matrix
     # [batch_size x n_chunks x hidden_size] * [hidden_size, 1] (transposed)
     # = [batch_size x n_chunks x 1]
     attn_matrix = tf.matmul(keys, query, transpose_b=True)
+
+    # Make attention a very large negative value where we have a chunk that is all padding
+    attn_matrix = attn_matrix - ((1 - inv_pad_mask) * 1e9)
+
+    # Take softmax
     attn_matrix = tf.nn.softmax(attn_matrix, axis=1)
 
     # Multiply values by attn_matrix to get output representation

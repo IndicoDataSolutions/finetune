@@ -204,7 +204,7 @@ class BaseModel(object, metaclass=ABCMeta):
         steps = int(math.ceil(n_examples / (batch_size * n_gpus)))
         return steps
 
-    def finetune(self, Xs, Y=None, context=None, update_hook=None):
+    def finetune(self, Xs, Y=None, context=None, update_hook=None, log_hooks=None):
         if callable(Xs):
             datasets = self.input_pipeline.get_dataset_from_generator(
                 Xs, input_mode=InputMode.TRAIN, update_hook=update_hook
@@ -213,6 +213,9 @@ class BaseModel(object, metaclass=ABCMeta):
             zipped_data_list = self.input_pipeline.zip_list_to_dict(
                 X=Xs, Y=Y, context=context
             )
+            # Sort inputs by length to speed up training
+            if self.config.sort_by_length:
+                zipped_data_list, _ = self._sort_by_length(zipped_data_list)
             datasets = self.input_pipeline.get_dataset_from_list(
                 zipped_data_list, input_mode=InputMode.TRAIN, update_hook=update_hook
             )
@@ -249,6 +252,9 @@ class BaseModel(object, metaclass=ABCMeta):
             early_stopping_interval = self.config.val_interval
         else:
             early_stopping_interval = sys.maxsize
+
+        if log_hooks:
+            train_hooks.extend(log_hooks)
 
         train_hooks.append(
             self.saver.get_saver_hook(
@@ -336,7 +342,8 @@ class BaseModel(object, metaclass=ABCMeta):
             save_checkpoints_steps=None,
             # disable auto summaries
             session_config=conf,
-            log_step_count_steps=100,
+            # log_step_count_steps=100,
+            log_step_count_steps=5,
             train_distribute=distribute_strategy,
             keep_checkpoint_max=1,
         )

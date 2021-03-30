@@ -339,6 +339,7 @@ class BasePipeline(metaclass=ABCMeta):
                 batch_size=self.config.batch_size,
                 shapes=shapes,
                 n_epochs=self.config.n_epochs,
+                config=self.config,
             ),
             "val_dataset": batch_dataset(
                 val_dataset_unbatched, batch_size=self.config.batch_size, shapes=shapes
