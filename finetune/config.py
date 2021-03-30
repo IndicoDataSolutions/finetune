@@ -283,6 +283,7 @@ def get_default_config():
         max_empty_chunk_ratio=1.0,
         auto_negative_sampling=False,
         max_document_chars=None,
+        bio_tagging=False,
         #
         # Regression Params
         regression_loss="L2",
