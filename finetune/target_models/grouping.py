@@ -21,7 +21,7 @@ from finetune.encoding.target_encoders import (
     TokenRelationEncoder,
     JointTokenRelationEncoder,
 )
-from finetune.nn.target_blocks import (
+from finetune.nn.group_target_blocks import (
     multi_crf_group_labeler,
     multi_logit_group_labeler,
     bros_decoder,
