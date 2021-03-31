@@ -765,6 +765,12 @@ class TokenRelationLabeler(SequenceLabeler):
                 group_spans = []
                 prev_idx = None
                 for idx in sorted(list(idxs)):
+                    if idx >= token_start_idx:
+                        warnings.warn("OOB index found!")
+                        print(f"Rows: {len(relations)}")
+                        print(f"Columns: {len(relations[0])}")
+                        print(f"Token Starts: {len(token_start_idx)}")
+                        continue
                     current_start_idx = token_start_idx[idx]
                     current_end_idx = token_end_idx[idx]
                     if (prev_idx is not None and prev_idx == (idx - 1)):
