@@ -421,29 +421,34 @@ def long_doc_bert_featurizer(
                 pooled_output, ["pooled_rs", tf.shape(pooled_output), pooled_output[:, :, :4]], summarize=-1
             )
 
-        # Learn a projection on the BERT embeddings prior to aggregation
+        # Learn a projection on the BERT embeddings prior to aggregation. Not necessary
+        # if the chunk_pool_fn is attention, because that already has learnable projections
         # [batch_size, num_chunks, hidden_size]
-        proj_output = tf.compat.v1.layers.dense(
-            inputs=pooled_output,
-            units=config.n_embed,
-            kernel_initializer=create_initializer(config.weight_stddev),
-            # FIXME This name only has chunk_attn is because I'm too lazy to fix regex
-            # on permit_uninitialized in base model. Same with gate_val
-            name="proj_not_chunk_attn"
-        )
+        if config.chunk_pool_fn != "attention":
+            proj_output = tf.compat.v1.layers.dense(
+                inputs=pooled_output,
+                units=config.n_embed,
+                kernel_initializer=create_initializer(config.weight_stddev),
+                # FIXME This name only has chunk_attn is because I'm too lazy to fix regex
+                # on permit_uninitialized in base model. Same with gate_val
+                name="proj_not_chunk_attn"
+            )
 
-        # Learn a gating function to "turn on/off" certain chunks prior to aggregation
-        # [batch_size, num_chunks, 1]
-        gate_val = tf.compat.v1.layers.dense(
-            inputs=pooled_output,
-            units=1,
-            activation="sigmoid",
-            kernel_initializer=create_initializer(config.weight_stddev),
-            name="gate_val_not_chunk_attn"
-        )
-
-        # Multiply proj_output by gate_val prior to aggregation
-        proj_output = proj_output * gate_val
+            # Commenting out for now because this did not improve performance
+            # Learn a gating function to "turn on/off" certain chunks prior to aggregation
+            # [batch_size, num_chunks, 1]
+            # gate_val = tf.compat.v1.layers.dense(
+            #     inputs=pooled_output,
+            #     units=1,
+            #     activation="sigmoid",
+            #     kernel_initializer=create_initializer(config.weight_stddev),
+            #     name="gate_val_not_chunk_attn"
+            # )
+            #
+            # Multiply proj_output by gate_val prior to aggregation
+            # proj_output = proj_output * gate_val
+        else:
+            proj_output = pooled_output
 
         # Reduce across chunk dim with aggregation operation [batch_size, feature_size]
         features = chunk_aggregation(proj_output, pad_mask)
