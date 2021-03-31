@@ -215,7 +215,7 @@ class FusedRoBERTa(RoBERTa):
     featurizer = fused_featurizer(bert_featurizer)
     settings = dict(RoBERTa.settings)
     settings.update({
-        "max_length": 2024,
+        "max_length": 2048,
         "num_fusion_shards": 4,
         "chunk_long_sequences": False,
     })
@@ -271,8 +271,8 @@ class FusedDocRep(RoBERTa):
     featurizer = fused_featurizer(bert_featurizer)
     settings = dict(DocRep.settings)
     settings.update({
-        "max_length": 1536,
-        "num_fusion_shards": 3,
+        "max_length": 2048,
+        "num_fusion_shards": 4,
         "chunk_long_sequences": False,
     })
 
