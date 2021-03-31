@@ -54,12 +54,30 @@ class GroupingPipeline(SequencePipeline):
             if Y is not None:
                 yield feats, self.label_encoder.transform(out, Y)
 
+class JointGroupingPipeline(GroupingPipeline):
+    """
+    Pipeline for models that jointly tag and group with two seperate tasks.
+
+    Implements _compute_class_counts that calls inverse_transform() with
+    only_labels=True, so we can compute class weights for the NER tagging task.
+    """
+    def _compute_class_counts(self, encoded_dataset):
+        counter = Counter()
+        for doc, target_arr in encoded_dataset:
+            target_arr = np.asarray(target_arr)
+            # Only labels flag gives us only NER labels
+            decoded_targets = self.label_encoder.inverse_transform(target_arr,
+                                                                   only_labels=True)
+            counter.update(decoded_targets)
+        return counter
+
+
 class GroupTaggingPipeline(GroupingPipeline):
     def _target_encoder(self):
         return GroupSequenceLabelingEncoder(pad_token=self.config.pad_token,
                                             bio_tagging=self.config.bio_tagging)
 
-class MultiCRFPipeline(GroupingPipeline):
+class MultiCRFPipeline(JointGroupingPipeline):
     def _target_encoder(self):
         return MultiCRFGroupSequenceLabelingEncoder(pad_token=self.config.pad_token,
                                                     bio_tagging=self.config.bio_tagging)
@@ -112,7 +130,7 @@ class BROSPipeline(GroupingPipeline):
             ),
         )
 
-class JointBROSPipeline(GroupingPipeline):
+class JointBROSPipeline(JointGroupingPipeline):
     def _target_encoder(self):
         return JointBROSEncoder(pad_token=self.config.pad_token,
                                 bio_tagging=self.config.bio_tagging)
@@ -155,7 +173,7 @@ class TokenRelationPipeline(GroupingPipeline):
             ),
         )
 
-class JointTokenRelationPipeline(GroupingPipeline):
+class JointTokenRelationPipeline(JointGroupingPipeline):
     def _target_encoder(self):
         return JointTokenRelationEncoder(pad_token=self.config.pad_token)
 
@@ -258,16 +276,6 @@ class MultiCRFGroupSequenceLabeler(GroupSequenceLabeler):
         return MultiCRFPipeline(
             config=self.config,
         )
-
-    def _compute_class_counts(self, encoded_dataset):
-        counter = Counter()
-        for doc, target_arr in encoded_dataset:
-            target_arr = np.asarray(target_arr)
-            # Only labels flag gives us only NER labels
-            decoded_targets = self.label_encoder.inverse_transform(target_arr,
-                                                                   only_labels=True)
-            counter.update(decoded_targets)
-        return counter
 
     def _target_model(
         self,
@@ -606,6 +614,7 @@ class JointBROSLabeler(BROSLabeler, SequenceLabeler):
 
         # Produces [batch_size, 3, seq_len]
         # Required to pass predictions through Finetune
+        ner_idxs = tf.cast(ner_idxs, tf.int32)
         group_idxs = tf.cast(group_idxs, tf.int32)
         start_token_idxs, next_token_idxs = group_idxs[:, 0, :], group_idxs[:, 1, :]
         idxs = tf.stack([ner_idxs, start_token_idxs, next_token_idxs], axis=1)
@@ -790,6 +799,17 @@ class JointTokenRelationLabeler(TokenRelationLabeler, SequenceLabeler):
 
     def _get_input_pipeline(self):
         return JointTokenRelationPipeline(config=self.config)
+
+    def _compute_class_counts(self, encoded_dataset):
+        # TODO: Figure out how to not duplicate this across three classes
+        counter = Counter()
+        for doc, target_arr in encoded_dataset:
+            target_arr = np.asarray(target_arr)
+            # Only labels flag gives us only NER labels
+            decoded_targets = self.label_encoder.inverse_transform(target_arr,
+                                                                   only_labels=True)
+            counter.update(decoded_targets)
+        return counter
 
     def _target_model(
         self,

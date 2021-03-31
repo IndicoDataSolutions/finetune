@@ -195,7 +195,7 @@ class TestGroupingLabelers(unittest.TestCase):
         self.assertEqual(preds, labels[1])
 
     def test_joint_bros_tagging(self):
-        model = JointBROSLabeler(lr=8e-5, n_epochs=16)
+        model = JointBROSLabeler(lr=8e-5, n_epochs=16, class_weights="sqrt")
         text = ("five percent (5%) \n " +
                 "fifty percent (50%) \n " +
                 "two percent (2%) \n " +
@@ -257,7 +257,9 @@ class TestGroupingLabelers(unittest.TestCase):
         self.assertEqual(preds, labels[1])
 
     def test_joint_token_relation_tagging(self):
-        model = JointTokenRelationLabeler(lr=8e-5, n_epochs=32, group_loss_weight=700)
+        model = JointTokenRelationLabeler(lr=8e-5, n_epochs=32,
+                                          group_loss_weight=700,
+                                          class_weights="sqrt")
         text = ("five percent (5%) \n " +
                 "fifty percent (50%) \n " +
                 "two percent (2%) \n " +

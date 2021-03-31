@@ -617,7 +617,7 @@ class JointBROSEncoder(BROSEncoder, SequenceLabelingEncoder):
 
         return [ner_labels, start_token_labels, next_token_labels]
 
-    def inverse_transform(self, y):
+    def inverse_transform(self, y, only_labels=False):
         tags, start_tokens, next_tokens = y
 
         self.classes_, self.lookup = self.group_classes_, self.group_lookup
@@ -627,7 +627,11 @@ class JointBROSEncoder(BROSEncoder, SequenceLabelingEncoder):
         self.classes_, self.lookup = self.ner_classes_, self.ner_lookup
         tags = SequenceLabelingEncoder.inverse_transform(self, tags)
 
-        return (tags, start_tokens, next_tokens)
+        if only_labels:
+            # Return only NER labels for class counts
+            return tags
+        else:
+            return (tags, start_tokens, next_tokens)
 
 class JointTokenRelationEncoder(TokenRelationEncoder, SequenceLabelingEncoder):
     """
@@ -661,12 +665,20 @@ class JointTokenRelationEncoder(TokenRelationEncoder, SequenceLabelingEncoder):
 
         return [ner_matrix, entity_mask, relation_matrix]
 
-    def inverse_transform(self, y):
-        tags, y = y
+    def inverse_transform(self, y, only_labels=False):
+        if only_labels:
+            # Also have to unpack mask when input is from target encoder
+            tags, _, y = y
+        else:
+            tags, y = y
         # Extract the NER labels from the padding matrix
         tags = tags[0]
         tags = SequenceLabelingEncoder.inverse_transform(self, tags)
-        return (tags, y)
+        if only_labels:
+            # Return only NER labels for class counts
+            return tags
+        else:
+            return (tags, y)
 
 class SequenceMultiLabelingEncoder(SequenceLabelingEncoder):
     def transform(self, out, labels):
