@@ -716,6 +716,46 @@ class JointTokenRelationEncoder(TokenRelationEncoder, SequenceLabelingEncoder):
         else:
             return (tags, y)
 
+class JointGroupRelationEncoder(GroupRelationEncoder, SequenceLabelingEncoder):
+    """
+    Produces labels for a joint Group Relation / Sequence Labeling model.
+
+    Sequence labels are packed into the group relation labels in the form of an
+    additional group added to the end.
+    """
+
+    def __init__(self, pad_token, n_groups, bio_tagging=False):
+        SequenceLabelingEncoder.__init__(self, pad_token,
+                                         bio_tagging=bio_tagging)
+        GroupRelationEncoder.__init__(self, pad_token, n_groups)
+
+    def fit(self, labels):
+        labels, groups = list(zip(*labels))
+        SequenceLabelingEncoder.fit(self, labels)
+        self.ner_classes_, self.ner_lookup = self.classes_, self.lookup
+
+    def transform(self, out, labels):
+        labels, groups = labels
+
+        group_labels = GroupRelationEncoder.transform(self, out, (labels, groups))
+        ner_labels = SequenceLabelingEncoder.transform(self, out, labels)
+
+        # [n_groups + 1, seq_len]
+        group_labels.append(ner_labels)
+        
+        return group_labels
+
+    def inverse_transform(self, y, only_labels=False):
+        tags, groups = y[-1], y[:-1]
+
+        tags = SequenceLabelingEncoder.inverse_transform(self, tags)
+
+        if only_labels:
+            # Return only NER labels for class counts
+            return tags
+        else:
+            return (tags, groups)
+
 class SequenceMultiLabelingEncoder(SequenceLabelingEncoder):
     def transform(self, out, labels):
         labels, _ = self.pre_process_label(out, labels)

@@ -614,7 +614,8 @@ def joint_token_relation_decoder(
 
     :param targets: The targets. The [:, 0, :, :] is assumed to contain a
     padded matrix with the sequence labeling targets, and the rest ([:, 1:, :, :]),
-    is expected to contain the BROS labels. [batch_size, 3, sequence_length, sequence_length]
+    is expected to contain the token realtion labels.
+    [batch_size, 3, sequence_length, sequence_length]
     :return: dict containing:
         "logits": Dictionary containing "ner_logits" [batch_size, seq_len]
         and "group_logits" [batch_size, seq_len, seq_len]
@@ -895,5 +896,98 @@ def group_relation_decoder(
         "losses": loss,
         "predict_params": {
             "probs": probs
+        },
+    }
+
+def joint_group_relation_decoder(
+    hidden,
+    targets,
+    n_targets,
+    n_groups,
+    config,
+    pad_id,
+    train=False,
+    reuse=None,
+    lengths=None,
+    use_crf=True,
+    hidden_size=768,
+    num_attention_heads=12,
+    intermediate_size=3072,
+    intermediate_act_fn=gelu,
+    hidden_dropout_prob=0.1,
+    attention_probs_dropout_prob=0.1,
+    initializer_range=0.02,
+    n_layers=3,
+    query_size=256,
+    **kwargs
+):
+    """
+    A target block that calls both the sequence labeling target block and the
+    group relation decoder target block. See each respective function for further details
+
+    :param targets: The targets. [:, -1, :] is assumed to contain the
+    sequence labeling targets, and the rest ([:, :-1, :]), is expected to
+    contain the group relation labels. [batch_size, 3, sequence_length,
+    sequence_length]
+    :return: dict containing:
+        "logits": Dictionary containing "ner_logits" [batch_size, seq_len]
+        and "group_logits" [batch_size, n_groups, seq_len]
+        "losses": Combined sequence labeling and group relation loss
+    """
+    group_relation_targets, seq_targets = None, None
+    if targets is not None:
+        group_relation_targets = targets[:, :-1, :]
+        seq_targets = targets[:, -1, :]
+        
+    group_relation_dict = group_relation_decoder(
+        hidden,
+        group_relation_targets,
+        n_groups,
+        config,
+        train=train,
+        reuse=reuse,
+        lengths=lengths,
+        hidden_size=hidden_size,
+        num_attention_heads=num_attention_heads,
+        intermediate_size=intermediate_size,
+        intermediate_act_fn=intermediate_act_fn,
+        hidden_dropout_prob=hidden_dropout_prob,
+        attention_probs_dropout_prob=attention_probs_dropout_prob,
+        initializer_range=initializer_range,
+        n_layers=n_layers,
+        query_size=query_size,
+    )
+    seq_dict = sequence_labeler(
+        hidden,
+        seq_targets,
+        n_targets,
+        config,
+        pad_id,
+        multilabel=False,
+        train=train,
+        reuse=reuse,
+        lengths=lengths,
+        use_crf=use_crf,
+        **kwargs
+    )
+
+    seq_loss = tf.reduce_mean(seq_dict["losses"])
+    scaled_seq_loss = config.seq_loss_weight * seq_loss
+    scaled_group_loss = config.group_loss_weight * group_relation_dict["losses"]
+    tf.compat.v1.summary.scalar("Sequence Loss", seq_loss)
+    tf.compat.v1.summary.scalar("Group Loss", group_relation_dict["losses"])
+    tf.compat.v1.summary.scalar("Scaled Sequence Loss", scaled_seq_loss)
+    tf.compat.v1.summary.scalar("Scaled Group Loss", scaled_group_loss)
+
+    return {
+        "logits": {
+            "ner_logits": seq_dict["logits"],
+            "group_logits": group_relation_dict["logits"],
+        },
+        "losses": scaled_seq_loss + scaled_group_loss,
+        "predict_params": {
+            "group_probs": group_relation_dict["predict_params"]["probs"],
+            "sequence_length": lengths,
+            "transition_matrix": seq_dict["predict_params"]["transition_matrix"],
         },
     }

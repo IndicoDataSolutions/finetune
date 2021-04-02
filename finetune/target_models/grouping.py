@@ -21,6 +21,7 @@ from finetune.encoding.target_encoders import (
     TokenRelationEncoder,
     JointTokenRelationEncoder,
     GroupRelationEncoder,
+    JointGroupRelationEncoder,
 )
 from finetune.nn.group_target_blocks import (
     multi_crf_group_labeler,
@@ -30,6 +31,7 @@ from finetune.nn.group_target_blocks import (
     token_relation_decoder,
     joint_token_relation_decoder,
     group_relation_decoder,
+    joint_group_relation_decoder,
 )
 
 class GroupingPipeline(SequencePipeline):
@@ -208,6 +210,28 @@ class GroupRelationPipeline(GroupingPipeline):
         shapes = {"tokens": TS([None])}
         types, shapes = self._add_context_info_if_present(types, shapes)
         target_shape = [self.config.n_groups, None]
+        return (
+            (
+                types,
+                tf.float32,
+            ),
+            (
+                shapes,
+                TS(target_shape),
+            ),
+        )
+
+class JointGroupRelationPipeline(JointGroupingPipeline):
+    def _target_encoder(self):
+        return JointGroupRelationEncoder(pad_token=self.config.pad_token,
+                                         n_groups=self.config.n_groups)
+
+    def feed_shape_type_def(self):
+        TS = tf.TensorShape
+        types = {"tokens": tf.int32}
+        shapes = {"tokens": TS([None])}
+        types, shapes = self._add_context_info_if_present(types, shapes)
+        target_shape = [self.config.n_groups + 1, None]
         return (
             (
                 types,
@@ -1003,3 +1027,90 @@ class GroupRelationLabeler(SequenceLabeler):
                     })
             all_groups.append(doc_groups)
         return all_groups
+
+class JointGroupRelationLabeler(GroupRelationLabeler, SequenceLabeler):
+    """
+    Joint group relation labeler. See GroupRelationLabeler or SequenceLabeler
+    for detail on respective target models.
+
+    Implements both a standard Sequence Labeler and a group relation labeler.
+    Each decoder acts independently but share a featurizer. Is a joint model,
+    and therefore returns both NER and group information.
+    """
+    defaults = {"chunk_long_sequences": False}
+
+    def _get_input_pipeline(self):
+        return JointGroupRelationPipeline(config=self.config)
+
+    def _target_model(
+        self,
+        *,
+        config,
+        featurizer_state,
+        targets,
+        n_outputs,
+        train=False,
+        reuse=None,
+        **kwargs
+    ):
+        return joint_group_relation_decoder(
+            hidden=featurizer_state["sequence_features"],
+            targets=targets,
+            n_targets=n_outputs,
+            n_groups=self.config.n_groups,
+            pad_id=config.pad_idx,
+            config=config,
+            train=train,
+            reuse=reuse,
+            lengths=featurizer_state["lengths"],
+            use_crf=self.config.crf_sequence_labeling,
+            # TODO: Move to config
+            hidden_size=768,
+            num_attention_heads=12,
+            n_layers=3,
+            query_size=256,
+            **kwargs
+        )
+
+    def _predict_op(self, logits, **kwargs):
+        group_idxs, group_probas = GroupRelationLabeler._predict_op(
+            self, logits["group_logits"], probs=kwargs.get("group_probs")
+        )
+        ner_idxs, ner_probas = SequenceLabeler._predict_op(
+            self, logits["ner_logits"], **kwargs
+        )
+
+        # Append ner idxs to matrix to feed predictions as a single tensor
+        # Will be unpacked in the target encoder
+        idxs = tf.concat([group_idxs, ner_idxs[:, None, :]], axis=1)
+        probas = ner_probas
+
+        return idxs, probas
+
+    def predict(self, X, **kwargs):
+        return super().predict(X, **kwargs)
+
+    def predict_proba(self, X, **kwargs):
+        raise NotImplementedError
+
+    def _predict(self, zipped_data, **kwargs):
+        # Seperate out predictions for each model
+        predictions = list(self.process_long_sequence(zipped_data))
+        (token_start_idx, token_end_idx, start_of_doc, end_of_doc, label_seq,
+         proba_seq, start, end) = list(zip(*predictions))
+        ner_labels, group_labels = list(zip(*label_seq))
+
+        group_predictions = zip(token_start_idx, token_end_idx, start_of_doc,
+                              end_of_doc, group_labels, proba_seq, start, end)
+        ner_predictions = zip(token_start_idx, token_end_idx, start_of_doc,
+                              end_of_doc, ner_labels, proba_seq, start, end)
+
+
+        group_predictions = GroupRelationLabeler._predict_decode(
+            self, zipped_data, group_predictions, **kwargs
+        )
+        ner_predictions = SequenceLabeler._predict_decode(
+            self, zipped_data, ner_predictions, **kwargs
+        )
+
+        return list(zip(ner_predictions, group_predictions))
