@@ -8,6 +8,7 @@ from finetune.encoding.target_encoders import (
     BROSEncoder,
     JointBROSEncoder,
     TokenRelationEncoder,
+    GroupRelationEncoder,
 )
 
 def test_nest_group_sequence_label():
@@ -215,5 +216,43 @@ def test_token_relation_sequence_label():
          [0, 1, 0, 0, 1, 0, 1, 0],
          [0, 1, 0, 0, 1, 1, 0, 0],
          [0, 0, 0, 0, 0, 0, 0, 0]],
+    ]
+
+def test_group_relation_sequence_label():
+    encoder = GroupRelationEncoder(pad_token="<PAD>", n_groups=5)
+    labels = [
+        {'start': 0, 'end': 4, 'label': 'z', 'text': 'five'},
+        {'start': 5, 'end': 8, 'label': 'z', 'text': 'per'},
+        {'start': 13, 'end': 17, 'label': 'z', 'text': '(5%)'},
+    ]
+    groups = [
+        {'tokens': [
+            {'start': 0, 'end': 4, 'text': 'five'},
+            {'start': 13, 'end': 17, 'text': '(5%)'},
+        ], 'label': None},
+        {'tokens': [
+            {'start': 5, 'end': 12, 'text': 'percent'},
+        ], 'label': None},
+    ]
+    label = (labels, groups)
+    encoder.fit([label])
+    out = EncodedOutput(
+        token_ids=np.array([   0, 9583,  139,   40,  249, 8875,    2]), 
+        tokens=np.array(['0', 'five', ' per', 'cent', ' (', '5', '%)', '2'], dtype='<U21'), 
+        token_ends=np.array([-1,  4, 8, 12, 14, 15, 17, -1]), 
+        token_starts=np.array([-1,  0,  5, 8, 13, 14, 15, -1]), 
+        useful_start=0, 
+        useful_end=512,
+        input_text=["five percent (5%)"],
+    )
+    label_arr = encoder.transform(out, label)
+    # Should be of shape [n_groups, seq_len]
+    # Is 1 when the token belongs to the respective group, 0 otherwise
+    assert label_arr == [
+        [0, 1, 0, 0, 1, 1, 1, 0],
+        [0, 0, 1, 1, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0]
     ]
 

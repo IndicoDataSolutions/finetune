@@ -547,10 +547,9 @@ class TokenRelationEncoder(BROSEncoder):
     def transform(self, out, labels):
         input_text = "".join(out.input_text)
         labels, groups = labels
-        labels, pad_idx = self.pre_process_label(out, labels)
 
         # Build relation matrix
-        encoded_labels = [[pad_idx for _ in out.tokens] for _ in out.tokens]
+        encoded_labels = [[0 for _ in out.tokens] for _ in out.tokens]
         for group in groups:
             group_idxs = []
             group_end = max([g["end"] for g in group["tokens"]])
@@ -579,7 +578,44 @@ class TokenRelationEncoder(BROSEncoder):
         return [entity_mask, encoded_labels]
 
     def inverse_transform(self, y):
-        # TODO: Fix this breaking class weights
+        return y
+
+class GroupRelationEncoder(BROSEncoder):
+    """
+    Produces labels for a group relation model.
+    
+    Labels are of shape [n_groups, seq_len], where each element is a 0 or 1 and
+    represents whether a token belongs to a certain group
+    """
+    def __init__(self, pad_token, n_groups):
+        self.classes_ = None
+        self.lookup = None
+        self.pad_token = pad_token
+        self.n_groups = n_groups
+
+    def transform(self, out, labels):
+        input_text = "".join(out.input_text)
+        labels, groups = labels
+
+        if len(groups) > self.n_groups:
+            raise ValueError(f"{len(groups)} found, more n_groups!")
+
+        # Build relation matrix
+        encoded_labels = [[0 for _ in out.tokens] for _ in range(self.n_groups)]
+        for i, group in enumerate(groups):
+            group_end = max([g["end"] for g in group["tokens"]])
+            for j, (start, end, text) in enumerate(zip(out.token_starts, out.token_ends, out.tokens)):
+                if group_end < (start + end + 1) // 2:
+                    break
+                overlap, agree = self.group_overlaps(group, start, end, text, input_text)
+                if overlap:
+                    if not agree:
+                        raise ValueError("Tokens and groups do not align")
+                    encoded_labels[i][j] = 1
+
+        return encoded_labels
+
+    def inverse_transform(self, y):
         return y
 
 class JointBROSEncoder(BROSEncoder, SequenceLabelingEncoder):
