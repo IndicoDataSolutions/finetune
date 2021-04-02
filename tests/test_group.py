@@ -25,6 +25,7 @@ from finetune.target_models.grouping import (
     JointBROSLabeler,
     TokenRelationLabeler,
     JointTokenRelationLabeler,
+    GroupRelationLabeler,
 )
 
 class TestGroupingLabelers(unittest.TestCase):
@@ -290,3 +291,32 @@ class TestGroupingLabelers(unittest.TestCase):
         self.assertEqual(len(preds[0]), 5)
         self.assertEqual(len(preds[1]), 2)
         self.assertEqual(preds, labels)
+
+    def test_group_relation_tagging(self):
+        model = GroupRelationLabeler(lr=8e-5)
+        text = ("five percent (5%) \n " +
+                "fifty percent (50%) \n " +
+                "two percent (2%) \n " +
+                "nine percent (9%) \n " +
+                "three percent (3%) \n ")
+        labels = [
+            {'start': 0, 'end': 17, 'label': 'a', 'text': 'five percent (5%)'},
+            {'start': 20, 'end': 39, 'label': 'b', 'text': 'fifty percent (50%)'},
+            {'start': 42, 'end': 58, 'label': 'a', 'text': 'two percent (2%)'},
+            {'start': 61, 'end': 78, 'label': 'b', 'text': 'nine percent (9%)'},
+            {'start': 81, 'end': 99, 'label': 'a', 'text': 'three percent (3%)'},
+        ]
+        groups = [
+            {'tokens': [
+                {'start': 0, 'end': 39, 'text': 'five percent (5%) \n fifty percent (50%)'},
+            ], 'label': None},
+            {'tokens': [
+                {'start': 61, 'end': 99, 'text': 'nine percent (9%) \n three percent (3%)'},
+            ], 'label': None}
+        ]
+        labels = (labels, groups)
+        model.fit([text] * 30, [labels] * 30)
+        preds = model.predict([text])[0]
+        print(preds)
+        self.assertEqual(len(preds), 2)
+        self.assertEqual(preds, labels[1])
