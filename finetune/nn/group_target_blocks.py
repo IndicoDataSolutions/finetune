@@ -2,6 +2,7 @@ import math
 import functools
 import tensorflow as tf
 from tensorflow_addons.text.crf import crf_log_likelihood
+from scipy.optimize import linear_sum_assignment
 
 from finetune.base_models.gpt.featurizer import attn, dropout, norm
 from finetune.util.shapes import shape_list, merge_leading_dims
