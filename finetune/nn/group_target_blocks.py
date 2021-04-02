@@ -18,6 +18,7 @@ from finetune.base_models.bert.modeling import (
     dropout,
     create_initializer,
     layer_norm,
+    gelu,
 )
 
 
@@ -719,17 +720,17 @@ def decoder_block(
             attention_output = layer_norm(attention_output + layer_input)
         return attention_output
 
-    if self.drop_self_attention:
+    if drop_self_attention:
         attention_output = layer_input
     else:
         with tf.compat.v1.variable_scope("self-attention"):
             attention_output = _attention(
-                layer_input, layer_input, None, seq_len, seq_len
+                layer_input, layer_input, None, seq_length, seq_length
             )
     with tf.compat.v1.variable_scope("cross-attention"):
         attention_output = _attention(
             attention_output, encoder_output, cross_attention_mask,
-            seq_len, encoder_length
+            seq_length, encoder_length
         )
 
     # The activation is only applied to the "intermediate" hidden layer.
@@ -760,12 +761,21 @@ def group_relation_decoder(
     lengths=None,
     hidden_size=768,
     num_attention_heads=12,
+    intermediate_size=3072,
+    intermediate_act_fn=gelu,
+    hidden_dropout_prob=0.1,
+    attention_probs_dropout_prob=0.1,
+    initializer_range=0.02,
     n_layers=3,
     query_size=256,
     **kwargs
 ):
     with tf.compat.v1.variable_scope("seq2seq-decoder"):
-        batch_size, encoder_length, encoder_hidden = tf.shape(hidden)
+        hidden_shape = tf.shape(hidden)
+        batch_size = hidden_shape[0]
+        encoder_length = hidden_shape[1]
+        # We use .shape here, since encoder hidden size is constant
+        encoder_hidden = hidden.shape[2]
 
         # Group embeddings
         group_embeddings = tf.cast(
@@ -807,7 +817,7 @@ def group_relation_decoder(
                     encoder_output=hidden,
                     attention_head_size=attention_head_size,
                     batch_size=batch_size,
-                    seq_length=seq_length,
+                    seq_length=n_groups,
                     encoder_length=encoder_length,
                     cross_attention_mask=mask,
                     hidden_size=hidden_size,
@@ -822,9 +832,11 @@ def group_relation_decoder(
                 if config.low_memory_mode:
                     block_fn = recompute_grad(block_fn, use_entire_scope=True)
                 layer_input = block_fn(layer_input)
+        # Move back to 3D
         attention_output = tf.reshape(
             layer_input, [batch_size, n_groups, hidden_size]
         )
+        hidden = tf.reshape(hidden, hidden_shape)
 
         # Output logits
         with tf.compat.v1.variable_scope("logits"):
@@ -838,7 +850,7 @@ def group_relation_decoder(
             probs = tf.sigmoid(logits)
 
         loss = 0.0
-        if targets:
+        if targets is not None:
             # Hungarian Algorithm
             with tf.compat.v1.variable_scope("hungarian-algorithm"):
                 # Cost matrix - get the sum of probailities of tokens in group
@@ -847,25 +859,29 @@ def group_relation_decoder(
                 # [batch_size, 1, n_groups, seq_len]
                 cost_targets = targets[:, None, :, :]
                 # [batch_size, n_groups, n_groups, seq_len]
-                costs = probs * targets
+                costs = cost_probs * cost_targets
                 # [batch_size, n_groups, n_groups]
                 costs = tf.reduce_sum(costs, axis=-1)
+                # Highest probability should be lowest cost
+                costs *= -1
 
                 # Normalize cost matrix
                 # [batch_size, 1, n_groups]
                 n_tokens_per_group = tf.reduce_sum(targets, axis=-1)[:, None, :]
                 # [batch_size, n_groups, n_groups]
-                costs /= n_tokens_per_group
+                costs = tf.math.divide_no_nan(costs, n_tokens_per_group)
 
                 # Run Hungarian Algorithm 
-                # [batch_size, 2, n_groups]
-                idxs = tf.map_fn(tf_linear_sum_assignment, costs)
+                # [2, batch_size, n_groups]
+                idxs = tf.map_fn(tf_linear_sum_assignment, costs,
+                                 dtype=[tf.int64, tf.int64])
+                # [batch_size, n_groups]
+                target_idxs = idxs[0]
 
                 # Reorder targets accordingly
-                # [batch_size, n_groups]
-                target_idxs = idxs[:, 1, :]
                 # [batch_size, n_groups, seq_len]
-                targets = tf.gather(targets, target_idxs, batch_dim=1)
+                targets = tf.gather(targets, target_idxs, batch_dims=1)
+                targets = tf.stop_gradient(targets)
 
             # Loss calculation
             with tf.compat.v1.variable_scope("loss"):
