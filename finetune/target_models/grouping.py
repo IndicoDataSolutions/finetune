@@ -20,6 +20,7 @@ from finetune.encoding.target_encoders import (
     JointBROSEncoder,
     TokenRelationEncoder,
     JointTokenRelationEncoder,
+    GroupRelationEncoder,
 )
 from finetune.nn.group_target_blocks import (
     multi_crf_group_labeler,
@@ -28,6 +29,7 @@ from finetune.nn.group_target_blocks import (
     joint_bros_decoder,
     token_relation_decoder,
     joint_token_relation_decoder,
+    group_relation_decoder,
 )
 
 class GroupingPipeline(SequencePipeline):
@@ -184,6 +186,28 @@ class JointTokenRelationPipeline(JointGroupingPipeline):
         types, shapes = self._add_context_info_if_present(types, shapes)
         # TODO: Figure out how to do this in a non-horrifying way 
         target_shape = [3, None, None]
+        return (
+            (
+                types,
+                tf.float32,
+            ),
+            (
+                shapes,
+                TS(target_shape),
+            ),
+        )
+
+class GroupRelationPipeline(GroupingPipeline):
+    def _target_encoder(self):
+        return GroupRelationEncoder(pad_token=self.config.pad_token,
+                                    n_groups=self.config.n_groups)
+
+    def feed_shape_type_def(self):
+        TS = tf.TensorShape
+        types = {"tokens": tf.int32}
+        shapes = {"tokens": TS([None])}
+        types, shapes = self._add_context_info_if_present(types, shapes)
+        target_shape = [self.config.n_groups, None]
         return (
             (
                 types,
@@ -806,17 +830,6 @@ class JointTokenRelationLabeler(TokenRelationLabeler, SequenceLabeler):
     def _get_input_pipeline(self):
         return JointTokenRelationPipeline(config=self.config)
 
-    def _compute_class_counts(self, encoded_dataset):
-        # TODO: Figure out how to not duplicate this across three classes
-        counter = Counter()
-        for doc, target_arr in encoded_dataset:
-            target_arr = np.asarray(target_arr)
-            # Only labels flag gives us only NER labels
-            decoded_targets = self.label_encoder.inverse_transform(target_arr,
-                                                                   only_labels=True)
-            counter.update(decoded_targets)
-        return counter
-
     def _target_model(
         self,
         *,
@@ -889,3 +902,104 @@ class JointTokenRelationLabeler(TokenRelationLabeler, SequenceLabeler):
         )
 
         return list(zip(ner_predictions, group_predictions))
+
+class GroupRelationLabeler(SequenceLabeler):
+    """
+    Group relation labeler. See https://arxiv.org/pdf/2011.01675v2.pdf for details
+
+    Implements a group relation decoder. Intended for use in a pipeline method,
+    so will only return group information. However, takes in both label in
+    group information for convenience.
+    """
+    defaults = {"chunk_long_sequences": False}
+
+    def _get_input_pipeline(self):
+        return GroupRelationPipeline(config=self.config)
+
+    def _target_model(
+        self,
+        *,
+        config,
+        featurizer_state,
+        targets,
+        n_outputs,
+        train=False,
+        reuse=None,
+        **kwargs
+    ):
+        return group_relation_decoder(
+            hidden=featurizer_state["sequence_features"],
+            targets=targets,
+            n_groups=self.config.n_groups,
+            config=config,
+            train=train,
+            reuse=reuse,
+            lengths=featurizer_state["lengths"],
+            # TODO: Move to config
+            hidden_size=768,
+            num_attention_heads=12,
+            n_layers=3,
+            query_size=256,
+            **kwargs
+        )
+
+    def _predict_op(self, logits, **kwargs):
+        # TODO: Move thresh to config
+        thresh = 0.8
+        probas = kwargs.get("probs")
+        relations = tf.cast(probas > thresh, tf.int32)
+        return relations, probas
+
+    def predict(self, X, **kwargs):
+        return super().predict(X, **kwargs)
+
+    def predict_proba(self, X, **kwargs):
+        raise NotImplementedError
+
+    def _predict(self, zipped_data, **kwargs):
+        predictions = list(self.process_long_sequence(zipped_data))
+        return self._predict_decode(zipped_data, predictions, **kwargs)
+
+    def _predict_decode(self, zipped_data, predictions, **kwargs):
+        raw_texts = list(data.get("raw_text", data["X"]) for data in zipped_data)
+        all_groups = []
+        for text_idx, (
+            token_start_idx,
+            token_end_idx,
+            start_of_doc,
+            end_of_doc,
+            label_seq,
+            proba_seq,
+            start,
+            end,
+        ) in enumerate(predictions):
+            assert start_of_doc and end_of_doc, "Chunk found in group relation!!"
+
+            text = raw_texts[text_idx]
+            
+            doc_groups = []
+            for group in label_seq:
+                group_spans = []
+                for i in range(len(group)):
+                    if group[i] == 1:
+                        start_idx = token_start_idx[i]
+                        end_idx = token_end_idx[i]
+                        if i == 0 or group[i - 1] != 1:
+                            # Create a new span
+                            group_spans.append({
+                                "start": start_idx,
+                                "end": end_idx,
+                                "text": text[start_idx:end_idx]
+                            })
+                        else:
+                            # Continue span
+                            group_spans[-1]["end"] = end_idx
+                            group_spans[-1]["text"] = text[group_spans[-1]["start"]:
+                                                           group_spans[-1]["end"]]
+                if group_spans:
+                    doc_groups.append({
+                        "tokens": group_spans,
+                        "label": None,
+                    })
+            all_groups.append(doc_groups)
+        return all_groups
