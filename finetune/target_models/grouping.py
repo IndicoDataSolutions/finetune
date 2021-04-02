@@ -1065,10 +1065,10 @@ class JointGroupRelationLabeler(GroupRelationLabeler, SequenceLabeler):
             lengths=featurizer_state["lengths"],
             use_crf=self.config.crf_sequence_labeling,
             # TODO: Move to config
-            hidden_size=768,
-            num_attention_heads=12,
-            n_layers=3,
-            query_size=256,
+            hidden_size=config.group_hidden_size,
+            num_attention_heads=config.group_attention_heads,
+            n_layers=config.group_n_layers,
+            query_size=config.group_query_size,
             **kwargs
         )
 
