@@ -1,3 +1,4 @@
+import math
 import functools
 import tensorflow as tf
 from tensorflow_addons.text.crf import crf_log_likelihood
@@ -10,6 +11,14 @@ from finetune.nn.activations import act_fns
 from finetune.nn.nn_utils import norm
 from finetune.nn.target_blocks import sequence_labeler
 from tensorflow.python.framework import function
+
+from finetune.base_models.bert.modeling import (
+    attention_layer,
+    dropout,
+    create_initializer,
+    layer_norm,
+)
+
 
 def multi_crf_group_labeler(
     hidden,
@@ -659,4 +668,223 @@ def joint_token_relation_decoder(
         },
     }
 
+@tf.function
+def tf_linear_sum_assignment(cost_matrix):
+    return tf.numpy_function(func=linear_sum_assignment,inp=[cost_matrix],Tout=[tf.int64,tf.int64])
 
+def decoder_block(
+    layer_input,
+    encoder_output,
+    attention_head_size,
+    batch_size,
+    seq_length,
+    encoder_length,
+    cross_attention_mask=None,
+    hidden_size=768,
+    num_attention_heads=12,
+    intermediate_size=3072,
+    intermediate_act_fn=gelu,
+    hidden_dropout_prob=0.1,
+    attention_probs_dropout_prob=0.1,
+    initializer_range=0.02,
+    drop_self_attention=False,
+):
+    """
+    Taken from base_models.bert.modeling.full_block()
+    Applies cross attention in addition to the blocks normal operations
+    """
+
+    def _attention(from_tensor, to_tensor, mask, from_len, to_len):
+        with tf.compat.v1.variable_scope("attention"):
+            attention_output = attention_layer(
+                from_tensor=from_tensor,
+                to_tensor=to_tensor,
+                attention_mask=mask,
+                num_attention_heads=num_attention_heads,
+                size_per_head=attention_head_size,
+                attention_probs_dropout_prob=attention_probs_dropout_prob,
+                initializer_range=initializer_range,
+                do_return_2d_tensor=True,
+                batch_size=batch_size,
+                from_seq_length=from_len,
+                to_seq_length=to_len,
+            )
+        with tf.compat.v1.variable_scope("output"):
+            attention_output = tf.compat.v1.layers.dense(
+                attention_output,
+                hidden_size,
+                kernel_initializer=create_initializer(initializer_range))
+            attention_output = dropout(attention_output, hidden_dropout_prob)
+            attention_output = layer_norm(attention_output + layer_input)
+        return attention_output
+
+    if self.drop_self_attention:
+        attention_output = layer_input
+    else:
+        with tf.compat.v1.variable_scope("self-attention"):
+            attention_output = _attention(
+                layer_input, layer_input, None, seq_len, seq_len
+            )
+    with tf.compat.v1.variable_scope("cross-attention"):
+        attention_output = _attention(
+            attention_output, encoder_output, cross_attention_mask,
+            seq_len, encoder_length
+        )
+
+    # The activation is only applied to the "intermediate" hidden layer.
+    with tf.compat.v1.variable_scope("intermediate"):
+        intermediate_output = tf.compat.v1.layers.dense(
+            attention_output,
+            intermediate_size,
+            activation=intermediate_act_fn,
+            kernel_initializer=create_initializer(initializer_range))
+
+    # Down-project back to `hidden_size` then add the residual.
+    with tf.compat.v1.variable_scope("output"):
+        layer_output = tf.compat.v1.layers.dense(
+            intermediate_output,
+            hidden_size,
+            kernel_initializer=create_initializer(initializer_range))
+        layer_output = dropout(layer_output, hidden_dropout_prob)
+        layer_output = layer_norm(layer_output + attention_output)
+    return layer_output
+
+def seq2seq_group_decoder(
+    hidden,
+    targets,
+    n_groups,
+    config,
+    train=False,
+    reuse=None,
+    lengths=None,
+    hidden_size=768,
+    num_attention_heads=12,
+    n_layers=3,
+    query_size=256,
+    **kwargs
+):
+    with tf.compat.v1.variable_scope("seq2seq-decoder"):
+        batch_size, encoder_length, encoder_hidden = tf.shape(hidden)
+
+        # Group embeddings
+        group_embeddings = tf.cast(
+            tf.compat.v1.get_variable(
+                "group_embeddings", shape=[n_groups, hidden_size]
+            ),
+            tf.float32,
+        )
+        # Duplicate group embeddings along batch dimension
+        group_embeddings = tf.tile(group_embeddings[None, :, :], [batch_size, 1, 1])
+        # Reshape to 2D for attention calculations
+        group_embeddings = tf.reshape(group_embeddings, [-1, hidden_size])
+        hidden = tf.reshape(hidden, [-1, encoder_hidden])
+
+        # Decoder blocks
+        # Modified version of base_models.bert.modeling.transformer_model()
+        if hidden_size % num_attention_heads != 0:
+            raise ValueError(
+                "The hidden size (%d) is not a multiple of the number of attention "
+                "heads (%d)" % (hidden_size, num_attention_heads)
+            )
+        attention_head_size = int(hidden_size / num_attention_heads)
+
+        # Build cross attention mask
+        # [batch_size, 1, seq_len]
+        encoder_mask = tf.sequence_mask(
+            lengths, encoder_length, dtype=tf.int32
+        )[:, None, :]
+        # [batch_size, n_groups, 1]
+        decoder_mask = tf.ones([batch_size, n_groups, 1], dtype=tf.int32)
+        # [batch_size, n_groups, seq_len]
+        mask = decoder_mask * encoder_mask
+
+        layer_input = group_embeddings
+        for layer_idx in range(n_layers):
+            with tf.compat.v1.variable_scope(f"decoder-block-{layer_idx}"):
+                block_fn = functools.partial(
+                    decoder_block,
+                    encoder_output=hidden,
+                    attention_head_size=attention_head_size,
+                    batch_size=batch_size,
+                    seq_length=seq_length,
+                    encoder_length=encoder_length,
+                    cross_attention_mask=mask,
+                    hidden_size=hidden_size,
+                    num_attention_heads=num_attention_heads,
+                    intermediate_size=intermediate_size,
+                    intermediate_act_fn=intermediate_act_fn,
+                    hidden_dropout_prob=hidden_dropout_prob,
+                    attention_probs_dropout_prob=attention_probs_dropout_prob,
+                    initializer_range=initializer_range,
+                    drop_self_attention=(layer_idx == 0)
+                )
+                if config.low_memory_mode:
+                    block_fn = recompute_grad(block_fn, use_entire_scope=True)
+                layer_input = block_fn(layer_input)
+        attention_output = tf.reshape(
+            layer_input, [batch_size, n_groups, hidden_size]
+        )
+
+        # Output logits
+        with tf.compat.v1.variable_scope("logits"):
+            # [batch_size, n_groups, query_size]
+            group_queries = tf.compat.v1.layers.dense(attention_output, query_size)
+            # [batch_size, seq_len, query_size]
+            token_keys = tf.compat.v1.layers.dense(hidden, query_size)
+            # [batch_size, n_groups, seq_len]
+            logits = tf.matmul(group_queries, token_keys, transpose_b=True)
+            logits *= 1.0 / math.sqrt(float(query_size))
+            probs = tf.sigmoid(logits)
+
+        loss = 0.0
+        if targets:
+            # Hungarian Algorithm
+            with tf.compat.v1.variable_scope("hungarian-algorithm"):
+                # Cost matrix - get the sum of probailities of tokens in group
+                # [batch_size, n_groups, 1, seq_len]
+                cost_probs = probs[:, :, None, :]
+                # [batch_size, 1, n_groups, seq_len]
+                cost_targets = targets[:, None, :, :]
+                # [batch_size, n_groups, n_groups, seq_len]
+                costs = probs * targets
+                # [batch_size, n_groups, n_groups]
+                costs = tf.reduce_sum(costs, axis=-1)
+
+                # Normalize cost matrix
+                # [batch_size, 1, n_groups]
+                n_tokens_per_group = tf.reduce_sum(targets, axis=-1)[:, None, :]
+                # [batch_size, n_groups, n_groups]
+                costs /= n_tokens_per_group
+
+                # Run Hungarian Algorithm 
+                # [batch_size, 2, n_groups]
+                idxs = tf.map_fn(tf_linear_sum_assignment, costs)
+
+                # Reorder targets accordingly
+                # [batch_size, n_groups]
+                target_idxs = idxs[:, 1, :]
+                # [batch_size, n_groups, seq_len]
+                targets = tf.gather(targets, target_idxs, batch_dim=1)
+
+            # Loss calculation
+            with tf.compat.v1.variable_scope("loss"):
+                # Averages over last dimension, so [batch_size, n_groups]
+                loss = tf.keras.losses.binary_crossentropy(
+                    targets, logits, from_logits=True,
+                )
+
+                # Re-weight by number of tokens per group
+                # [batch_size, n_groups]
+                n_tokens_per_group = tf.reduce_sum(targets, axis=-1)
+                weights = tf.math.divide_no_nan(
+                    tf.ones_like(n_tokens_per_group), n_tokens_per_group
+                )
+                loss = tf.reduce_mean(loss * weights)
+
+    return {
+        "logits": logits,
+        "losses": loss,
+        "predict_params": {
+            "probs": probs
+        },
+    }
