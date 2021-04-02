@@ -750,7 +750,7 @@ def decoder_block(
         layer_output = layer_norm(layer_output + attention_output)
     return layer_output
 
-def seq2seq_group_decoder(
+def group_relation_decoder(
     hidden,
     targets,
     n_groups,
@@ -870,17 +870,9 @@ def seq2seq_group_decoder(
             # Loss calculation
             with tf.compat.v1.variable_scope("loss"):
                 # Averages over last dimension, so [batch_size, n_groups]
-                loss = tf.keras.losses.binary_crossentropy(
+                loss = tf.reduce_mean(tf.keras.losses.binary_crossentropy(
                     targets, logits, from_logits=True,
-                )
-
-                # Re-weight by number of tokens per group
-                # [batch_size, n_groups]
-                n_tokens_per_group = tf.reduce_sum(targets, axis=-1)
-                weights = tf.math.divide_no_nan(
-                    tf.ones_like(n_tokens_per_group), n_tokens_per_group
-                )
-                loss = tf.reduce_mean(loss * weights)
+                ))
 
     return {
         "logits": logits,
