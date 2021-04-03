@@ -598,7 +598,8 @@ class GroupRelationEncoder(BROSEncoder):
         labels, groups = labels
 
         if len(groups) > self.n_groups:
-            raise ValueError(f"{len(groups)} found, more n_groups!")
+            print(groups)
+            raise ValueError(f"{len(groups)} groups found, more than n_groups!")
 
         # Build relation matrix
         encoded_labels = [[0 for _ in out.tokens] for _ in range(self.n_groups)]

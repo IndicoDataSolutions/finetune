@@ -886,10 +886,14 @@ def group_relation_decoder(
 
             # Loss calculation
             with tf.compat.v1.variable_scope("loss"):
-                # Averages over last dimension, so [batch_size, n_groups]
-                loss = tf.reduce_mean(tf.keras.losses.binary_crossentropy(
-                    targets, logits, from_logits=True,
-                ))
+                # [batch_size, n_groups, seq_len]
+                loss = tf.keras.losses.binary_crossentropy(
+                    targets[:, :, :, None], logits[:, :, :, None], from_logits=True,
+                )
+                # Mask out loss for padding
+                # [batch_size, n_groups, seq_len]
+                loss *= tf.cast(encoder_mask, tf.float32)
+                loss = tf.reduce_mean(loss)
 
     return {
         "logits": logits,

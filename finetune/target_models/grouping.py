@@ -1004,7 +1004,9 @@ class GroupRelationLabeler(SequenceLabeler):
             doc_groups = []
             for group in label_seq:
                 group_spans = []
-                for i in range(len(group)):
+                # Iterate over token length here, since groups have padding and
+                # are therefore longer
+                for i in range(len(token_start_idx)):
                     if group[i] == 1:
                         start_idx = token_start_idx[i]
                         end_idx = token_end_idx[i]
