@@ -960,18 +960,17 @@ class GroupRelationLabeler(SequenceLabeler):
             reuse=reuse,
             lengths=featurizer_state["lengths"],
             # TODO: Move to config
-            hidden_size=768,
-            num_attention_heads=12,
-            n_layers=3,
-            query_size=256,
+            hidden_size=config.group_hidden_size,
+            num_attention_heads=config.group_attention_heads,
+            n_layers=config.group_n_layers,
+            query_size=config.relation_hidden_size,
             **kwargs
         )
 
     def _predict_op(self, logits, **kwargs):
         # TODO: Move thresh to config
-        thresh = 0.8
         probas = kwargs.get("probs")
-        relations = tf.cast(probas > thresh, tf.int32)
+        relations = tf.cast(probas > self.config.group_thresh, tf.int32)
         return relations, probas
 
     def predict(self, X, **kwargs):
@@ -1070,7 +1069,7 @@ class JointGroupRelationLabeler(GroupRelationLabeler, SequenceLabeler):
             hidden_size=config.group_hidden_size,
             num_attention_heads=config.group_attention_heads,
             n_layers=config.group_n_layers,
-            query_size=config.group_query_size,
+            query_size=config.relation_hidden_size,
             **kwargs
         )
 

@@ -356,10 +356,10 @@ def get_default_config():
         group_loss_weight=200,
 
         n_groups=100,
-        group_hidden_size=256,
-        group_attention_heads=8,
-        group_n_layers=1,
-        group_query_size=256,
+        group_hidden_size=768,
+        group_attention_heads=12,
+        group_n_layers=3,
+        group_thresh=0.8,
         #
         # Serialize finetune version with model
         version=VERSION,
