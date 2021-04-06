@@ -848,29 +848,20 @@ def group_relation_decoder(
             # [batch_size, seq_len, query_size]
             token_keys = tf.compat.v1.layers.dense(hidden, query_size)
             # [batch_size, n_groups, seq_len]
-            group_logits = tf.matmul(group_queries, token_keys, transpose_b=True)
+            logits = tf.matmul(group_queries, token_keys, transpose_b=True)
             # Softmax across groups - each token is assigned to one group
-            group_probs = tf.nn.softmax(group_logits, axis=1)
-
-            # [batch_size, n_groups, 1]
-            pad_logits = tf.compat.v1.layers.dense(attention_output, 1)
-            # [batch_size, n_groups]
-            pad_logits = pad_logits[:, :, 0]
-            pad_probs = tf.nn.softmax(pad_logits, axis=-1)
+            probs = tf.nn.softmax(logits, axis=1)
 
         loss = 0.0
         if targets is not None:
             # Hungarian Algorithm
             with tf.compat.v1.variable_scope("hungarian-algorithm"):
                 # Cost matrix - get the sum of probabilities of tokens in group
-                # [batch_size, n_groups, seq_len + 1]
-                cost_probs = tf.concat([group_probs, pad_probs[:, :, None]],
-                                       axis=-1)
-                # [batch_size, n_groups, 1, seq_len + 1]
-                cost_probs = cost_probs[:, :, None, :]
-                # [batch_size, 1, n_groups, seq_len + 1]
+                # [batch_size, n_groups, 1, seq_len]
+                cost_probs = probs[:, :, None, :]
+                # [batch_size, 1, n_groups, seq_len]
                 cost_targets = targets[:, None, :, :]
-                # [batch_size, n_groups, n_groups, seq_len + 1]
+                # [batch_size, n_groups, n_groups, seq_len]
                 costs = cost_probs * cost_targets
                 # [batch_size, n_groups, n_groups]
                 costs = tf.reduce_sum(costs, axis=-1)
@@ -897,40 +888,23 @@ def group_relation_decoder(
 
             # Loss calculation
             with tf.compat.v1.variable_scope("loss"):
-                # [batch_size, n_groups, seq_len]
-                group_targets = targets[:, :, :-1]
-                # Transpose so we can calculate loss per token
+                # Transpose so we can calculate cross entropy per token
                 # [batch_size, seq_len, n_groups]
-                group_probs = tf.transpose(group_probs, perm=[0, 2, 1])
-                group_targets = tf.transpose(group_targets, perm=[0, 2, 1])
+                probs = tf.transpose(probs, perm=[0, 2, 1])
+                targets = tf.transpose(targets, perm=[0, 2, 1])
                 # [batch_size, seq_len]
-                group_loss = tf.keras.losses.categorical_crossentropy(
-                    group_targets, group_probs
+                loss = tf.keras.losses.categorical_crossentropy(
+                    targets, probs, from_logits=False,
                 )
                 # Mask out loss for padding
                 # [batch_size, seq_len]
-                group_loss *= tf.cast(sequence_mask, tf.float32)
-                group_loss = tf.reduce_mean(group_loss)
-
-                # [batch_size, n_groups]
-                pad_targets = targets[:, :, -1]
-                # [batch_size]
-                pad_loss = tf.keras.losses.categorical_crossentropy(
-                    pad_targets, pad_probs
-                )
-                pad_loss = tf.reduce_mean(pad_loss)
-
-                # loss = group_loss + pad_loss
-                loss = group_loss
+                loss *= tf.cast(sequence_mask, tf.float32)
+                loss = tf.reduce_mean(loss)
     return {
-        "logits": {
-            "group_logits": group_logits,
-            "pad_logits": pad_logits,
-        },
+        "logits": logits,
         "losses": loss,
         "predict_params": {
-            "group_probs": group_probs,
-            "pad_probs": pad_probs,
+            "probs": probs,
         },
     }
 
@@ -1017,13 +991,11 @@ def joint_group_relation_decoder(
     return {
         "logits": {
             "ner_logits": seq_dict["logits"],
-            "group_logits": group_relation_dict["logits"]["group_logits"],
-            "pad_logits": group_relation_dict["logits"]["pad_logits"],
+            "group_logits": group_relation_dict["logits"],
         },
         "losses": scaled_seq_loss + scaled_group_loss,
         "predict_params": {
-            "group_probs": group_relation_dict["predict_params"]["group_probs"],
-            "pad_probs": group_relation_dict["predict_params"]["pad_probs"],
+            "group_probs": group_relation_dict["predict_params"]["probs"],
             "sequence_length": lengths,
             "transition_matrix": seq_dict["predict_params"]["transition_matrix"],
         },

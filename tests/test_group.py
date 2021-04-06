@@ -324,7 +324,7 @@ class TestGroupingLabelers(unittest.TestCase):
 
     def test_joint_group_relation_tagging(self):
         model = JointGroupRelationLabeler(lr=8e-5,
-                                          group_loss_weight=1,
+                                          group_loss_weight=600,
                                           class_weights="sqrt")
         text = ("five percent (5%) \n " +
                 "fifty percent (50%) \n " +

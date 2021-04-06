@@ -603,12 +603,12 @@ class GroupRelationEncoder(BROSEncoder):
             raise ValueError(f"{len(groups)} groups found, more than n_groups!")
 
         # Build relation matrix
-        encoded_labels = [[0 for _ in range(len(out.tokens) + 1)]
+        encoded_labels = [[0 for _ in range(len(out.tokens))]
                           for _ in range(self.n_groups - 1)]
         # Final group is reserved for pad
         # Tokens default to this group, and the final element is 1 to indicate
         # it is the padding group
-        encoded_labels.append([1 for _ in range(len(out.tokens) + 1)])
+        encoded_labels.append([1 for _ in range(len(out.tokens))])
         for i, group in enumerate(groups):
             group_end = max([g["end"] for g in group["tokens"]])
             for j, (start, end, text) in enumerate(zip(out.token_starts, out.token_ends, out.tokens)):
@@ -760,8 +760,6 @@ class JointGroupRelationEncoder(GroupRelationEncoder, SequenceLabelingEncoder):
         else:
             # Unpack predict module output
             groups, tags = y[0], y[1]
-            # Remove padding added to NER tags
-            tags = tags[:-1]
 
         tags = SequenceLabelingEncoder.inverse_transform(self, tags)
 
