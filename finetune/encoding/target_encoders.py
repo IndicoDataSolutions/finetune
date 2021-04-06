@@ -584,8 +584,9 @@ class GroupRelationEncoder(BROSEncoder):
     """
     Produces labels for a group relation model.
     
-    Labels are of shape [n_groups, seq_len], where each element is a 0 or 1 and
-    represents whether a token belongs to a certain group
+    Labels are of shape [n_groups, seq_len + 1], where each element is a 0 or 1 and
+    represents whether a token belongs to a certain group, and the final
+    element of a group represents whether that group is a padding group or not
     """
     def __init__(self, pad_token, n_groups):
         self.classes_ = None
@@ -597,12 +598,17 @@ class GroupRelationEncoder(BROSEncoder):
         input_text = "".join(out.input_text)
         labels, groups = labels
 
-        if len(groups) > self.n_groups:
+        if len(groups) > self.n_groups - 1:
             print(groups)
             raise ValueError(f"{len(groups)} groups found, more than n_groups!")
 
         # Build relation matrix
-        encoded_labels = [[0 for _ in out.tokens] for _ in range(self.n_groups)]
+        encoded_labels = [[0 for _ in range(len(out.tokens) + 1)]
+                          for _ in range(self.n_groups - 1)]
+        # Final group is reserved for pad
+        # Tokens default to this group, and the final element is 1 to indicate
+        # it is the padding group
+        encoded_labels.append([1 for _ in range(len(out.tokens) + 1)])
         for i, group in enumerate(groups):
             group_end = max([g["end"] for g in group["tokens"]])
             for j, (start, end, text) in enumerate(zip(out.token_starts, out.token_ends, out.tokens)):
@@ -613,6 +619,7 @@ class GroupRelationEncoder(BROSEncoder):
                     if not agree:
                         raise ValueError("Tokens and groups do not align")
                     encoded_labels[i][j] = 1
+                    encoded_labels[-1][j] = 0
 
         return encoded_labels
 
@@ -741,13 +748,20 @@ class JointGroupRelationEncoder(GroupRelationEncoder, SequenceLabelingEncoder):
         group_labels = GroupRelationEncoder.transform(self, out, (labels, groups))
         ner_labels = SequenceLabelingEncoder.transform(self, out, labels)
 
-        # [n_groups + 1, seq_len]
-        group_labels.append(ner_labels)
-        
-        return group_labels
+        return {"groups": group_labels, "tags": ner_labels}
 
     def inverse_transform(self, y, only_labels=False):
-        tags, groups = y[-1], y[:-1]
+        if only_labels:
+            # Unpack 0-dim numpy array
+            y = y.item()
+            # Unpack target encoder output
+            groups = y["groups"]
+            tags = y["tags"]
+        else:
+            # Unpack predict module output
+            groups, tags = y[0], y[1]
+            # Remove padding added to NER tags
+            tags = tags[:-1]
 
         tags = SequenceLabelingEncoder.inverse_transform(self, tags)
 

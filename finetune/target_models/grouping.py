@@ -231,15 +231,21 @@ class JointGroupRelationPipeline(JointGroupingPipeline):
         types = {"tokens": tf.int32}
         shapes = {"tokens": TS([None])}
         types, shapes = self._add_context_info_if_present(types, shapes)
-        target_shape = [self.config.n_groups + 1, None]
+        target_shape = [self.config.n_groups, None]
         return (
             (
                 types,
-                tf.float32,
+                {
+                    "groups": tf.float32,
+                    "tags": tf.float32,
+                }
             ),
             (
                 shapes,
-                TS(target_shape),
+                {
+                    "groups": TS(target_shape),
+                    "tags": TS([None]),
+                }
             ),
         )
 
@@ -968,10 +974,25 @@ class GroupRelationLabeler(SequenceLabeler):
         )
 
     def _predict_op(self, logits, **kwargs):
-        # TODO: Move thresh to config
-        probas = kwargs.get("probs")
-        relations = tf.cast(probas > self.config.group_thresh, tf.int32)
-        return relations, probas
+        # [batch_size, n_groups, seq_len]
+        group_probas = kwargs["group_probs"]
+        # [batch_size, seq_len, n_groups]
+        group_probas = tf.transpose(group_probas, perm=[0, 2, 1])
+
+        # [batch_size, n_groups]
+        pad_probas = kwargs["pad_probs"]
+
+        # [batch_size, seq_len]
+        token_groups = tf.argmax(group_probas, axis=-1)
+        # [batch_size]
+        pad_groups = tf.argmax(pad_probas, axis=-1)
+        # [batch_size, 1]
+        pad_groups = pad_groups[:, None]
+
+        # [batch_size, seq_len + 1]
+        groups = tf.concat([token_groups, pad_groups], axis=-1)
+
+        return groups, group_probas
 
     def predict(self, X, **kwargs):
         return super().predict(X, **kwargs)
@@ -986,6 +1007,7 @@ class GroupRelationLabeler(SequenceLabeler):
     def _predict_decode(self, zipped_data, predictions, **kwargs):
         raw_texts = list(data.get("raw_text", data["X"]) for data in zipped_data)
         all_groups = []
+        import pdb; pdb.set_trace()
         for text_idx, (
             token_start_idx,
             token_end_idx,
@@ -999,33 +1021,40 @@ class GroupRelationLabeler(SequenceLabeler):
             assert start_of_doc and end_of_doc, "Chunk found in group relation!!"
 
             text = raw_texts[text_idx]
+
+            # pad_group = label_seq[-1]
+            pad_group = label_seq[0]
+            token_groups = label_seq[:-1]
             
-            doc_groups = []
-            for group in label_seq:
-                group_spans = []
-                # Iterate over token length here, since groups have padding and
-                # are therefore longer
-                for i in range(len(token_start_idx)):
-                    if group[i] == 1:
-                        start_idx = token_start_idx[i]
-                        end_idx = token_end_idx[i]
-                        if i == 0 or group[i - 1] != 1:
-                            # Create a new span
-                            group_spans.append({
-                                "start": start_idx,
-                                "end": end_idx,
-                                "text": text[start_idx:end_idx]
-                            })
-                        else:
-                            # Continue span
-                            group_spans[-1]["end"] = end_idx
-                            group_spans[-1]["text"] = text[group_spans[-1]["start"]:
-                                                           group_spans[-1]["end"]]
-                if group_spans:
-                    doc_groups.append({
-                        "tokens": group_spans,
-                        "label": None,
+            doc_groups = {}
+            for token_group, token_start, token_end in zip(token_groups,
+                                                           token_start_idx,
+                                                           token_end_idx):
+                if token_group == pad_group:
+                    continue
+                group = doc_groups.get(token_group, {
+                    "tokens": [],
+                    "label": None
+                })
+
+                # If there are no tokens or if there is text between the last
+                # token and the current one, start a new span
+                if (not group["tokens"] or
+                    text[group["tokens"][-1]["end"]:token_start].strip()):
+                    group["tokens"].append({
+                        "start": token_start,
+                        "end": token_end,
+                        "text": text[token_start:token_end]
                     })
+                # Otherwise, continue span
+                else:
+                    last_span = group["tokens"][-1]
+                    last_span["end"] = token_end
+                    last_span["text"] = text[last_span["start"]:
+                                             last_span["end"]]
+
+                doc_groups[token_group] = group
+            doc_groups = list(doc_groups.values())
             all_groups.append(doc_groups)
         return all_groups
 
@@ -1065,7 +1094,6 @@ class JointGroupRelationLabeler(GroupRelationLabeler, SequenceLabeler):
             reuse=reuse,
             lengths=featurizer_state["lengths"],
             use_crf=self.config.crf_sequence_labeling,
-            # TODO: Move to config
             hidden_size=config.group_hidden_size,
             num_attention_heads=config.group_attention_heads,
             n_layers=config.group_n_layers,
@@ -1075,15 +1103,25 @@ class JointGroupRelationLabeler(GroupRelationLabeler, SequenceLabeler):
 
     def _predict_op(self, logits, **kwargs):
         group_idxs, group_probas = GroupRelationLabeler._predict_op(
-            self, logits["group_logits"], probs=kwargs.get("group_probs")
+            self, (logits["group_logits"], logits["pad_logits"]),
+            group_probs=kwargs.get("group_probs"),
+            pad_probs=kwargs.get("pad_probs"),
         )
         ner_idxs, ner_probas = SequenceLabeler._predict_op(
             self, logits["ner_logits"], **kwargs
         )
 
-        # Append ner idxs to matrix to feed predictions as a single tensor
+        # Add padding to end of ner predictions to match group length
+        batch_size = tf.shape(ner_idxs)[0]
+        padding = tf.zeros((batch_size, 1), dtype=tf.int32)
+        # [batch_size, seq_len + 1]
+        ner_idxs = tf.concat([ner_idxs, padding], axis=-1)
+
+        # Stack to feed predictions as a single tensor
         # Will be unpacked in the target encoder
-        idxs = tf.concat([group_idxs, ner_idxs[:, None, :]], axis=1)
+        # [batch_size, 2, seq_len + 1]
+        group_idxs = tf.cast(group_idxs, tf.int32)
+        idxs = tf.stack([group_idxs, ner_idxs], axis=1)
         probas = ner_probas
 
         return idxs, probas

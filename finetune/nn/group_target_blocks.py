@@ -801,10 +801,12 @@ def group_relation_decoder(
         attention_head_size = int(hidden_size / num_attention_heads)
 
         # Build cross attention mask
-        # [batch_size, 1, seq_len]
-        encoder_mask = tf.sequence_mask(
+        # [batch_size, seq_len]
+        sequence_mask = tf.sequence_mask(
             lengths, encoder_length, dtype=tf.int32
-        )[:, None, :]
+        )
+        # [batch_size, 1, seq_len]
+        encoder_mask = sequence_mask[:, None, :]
         # [batch_size, n_groups, 1]
         decoder_mask = tf.ones([batch_size, n_groups, 1], dtype=tf.int32)
         # [batch_size, n_groups, seq_len]
@@ -846,20 +848,29 @@ def group_relation_decoder(
             # [batch_size, seq_len, query_size]
             token_keys = tf.compat.v1.layers.dense(hidden, query_size)
             # [batch_size, n_groups, seq_len]
-            logits = tf.matmul(group_queries, token_keys, transpose_b=True)
-            logits *= 1.0 / math.sqrt(float(query_size))
-            probs = tf.sigmoid(logits)
+            group_logits = tf.matmul(group_queries, token_keys, transpose_b=True)
+            # Softmax across groups - each token is assigned to one group
+            group_probs = tf.nn.softmax(group_logits, axis=1)
+
+            # [batch_size, n_groups, 1]
+            pad_logits = tf.compat.v1.layers.dense(attention_output, 1)
+            # [batch_size, n_groups]
+            pad_logits = pad_logits[:, :, 0]
+            pad_probs = tf.nn.softmax(pad_logits, axis=-1)
 
         loss = 0.0
         if targets is not None:
             # Hungarian Algorithm
             with tf.compat.v1.variable_scope("hungarian-algorithm"):
-                # Cost matrix - get the sum of probailities of tokens in group
-                # [batch_size, n_groups, 1, seq_len]
-                cost_probs = probs[:, :, None, :]
-                # [batch_size, 1, n_groups, seq_len]
+                # Cost matrix - get the sum of probabilities of tokens in group
+                # [batch_size, n_groups, seq_len + 1]
+                cost_probs = tf.concat([group_probs, pad_probs[:, :, None]],
+                                       axis=-1)
+                # [batch_size, n_groups, 1, seq_len + 1]
+                cost_probs = cost_probs[:, :, None, :]
+                # [batch_size, 1, n_groups, seq_len + 1]
                 cost_targets = targets[:, None, :, :]
-                # [batch_size, n_groups, n_groups, seq_len]
+                # [batch_size, n_groups, n_groups, seq_len + 1]
                 costs = cost_probs * cost_targets
                 # [batch_size, n_groups, n_groups]
                 costs = tf.reduce_sum(costs, axis=-1)
@@ -877,7 +888,7 @@ def group_relation_decoder(
                 idxs = tf.map_fn(tf_linear_sum_assignment, costs,
                                  dtype=[tf.int64, tf.int64])
                 # [batch_size, n_groups]
-                target_idxs = idxs[0]
+                target_idxs = idxs[1]
 
                 # Reorder targets accordingly
                 # [batch_size, n_groups, seq_len]
@@ -887,19 +898,39 @@ def group_relation_decoder(
             # Loss calculation
             with tf.compat.v1.variable_scope("loss"):
                 # [batch_size, n_groups, seq_len]
-                loss = tf.keras.losses.binary_crossentropy(
-                    targets[:, :, :, None], logits[:, :, :, None], from_logits=True,
+                group_targets = targets[:, :, :-1]
+                # Transpose so we can calculate loss per token
+                # [batch_size, seq_len, n_groups]
+                group_probs = tf.transpose(group_probs, perm=[0, 2, 1])
+                group_targets = tf.transpose(group_targets, perm=[0, 2, 1])
+                # [batch_size, seq_len]
+                group_loss = tf.keras.losses.categorical_crossentropy(
+                    group_targets, group_probs
                 )
                 # Mask out loss for padding
-                # [batch_size, n_groups, seq_len]
-                loss *= tf.cast(encoder_mask, tf.float32)
-                loss = tf.reduce_mean(loss)
+                # [batch_size, seq_len]
+                group_loss *= tf.cast(sequence_mask, tf.float32)
+                group_loss = tf.reduce_mean(group_loss)
 
+                # [batch_size, n_groups]
+                pad_targets = targets[:, :, -1]
+                # [batch_size]
+                pad_loss = tf.keras.losses.categorical_crossentropy(
+                    pad_targets, pad_probs
+                )
+                pad_loss = tf.reduce_mean(pad_loss)
+
+                # loss = group_loss + pad_loss
+                loss = group_loss
     return {
-        "logits": logits,
+        "logits": {
+            "group_logits": group_logits,
+            "pad_logits": pad_logits,
+        },
         "losses": loss,
         "predict_params": {
-            "probs": probs
+            "group_probs": group_probs,
+            "pad_probs": pad_probs,
         },
     }
 
@@ -940,8 +971,8 @@ def joint_group_relation_decoder(
     """
     group_relation_targets, seq_targets = None, None
     if targets is not None:
-        group_relation_targets = targets[:, :-1, :]
-        seq_targets = targets[:, -1, :]
+        group_relation_targets = targets["groups"]
+        seq_targets = targets["tags"]
         
     group_relation_dict = group_relation_decoder(
         hidden,
@@ -986,11 +1017,13 @@ def joint_group_relation_decoder(
     return {
         "logits": {
             "ner_logits": seq_dict["logits"],
-            "group_logits": group_relation_dict["logits"],
+            "group_logits": group_relation_dict["logits"]["group_logits"],
+            "pad_logits": group_relation_dict["logits"]["pad_logits"],
         },
         "losses": scaled_seq_loss + scaled_group_loss,
         "predict_params": {
-            "group_probs": group_relation_dict["predict_params"]["probs"],
+            "group_probs": group_relation_dict["predict_params"]["group_probs"],
+            "pad_probs": group_relation_dict["predict_params"]["pad_probs"],
             "sequence_length": lengths,
             "transition_matrix": seq_dict["predict_params"]["transition_matrix"],
         },
