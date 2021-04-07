@@ -13,6 +13,7 @@ from finetune.nn.nn_utils import norm
 from finetune.nn.target_blocks import sequence_labeler
 from tensorflow.python.framework import function
 
+from finetune.nn.target_blocks import class_reweighted_grad
 from finetune.base_models.bert.modeling import (
     attention_layer,
     dropout,
@@ -153,8 +154,8 @@ def multi_crf_group_labeler(
                         targets[:, 1, :], group_logits, weights=weights
                     )
                     group_loss = tf.reduce_mean(group_loss)
-                scaled_ner_loss = config.crf_seq_loss_weight * ner_loss
-                scaled_group_loss = config.crf_group_loss_weight * group_loss
+                scaled_ner_loss = config.seq_loss_weight * ner_loss
+                scaled_group_loss = config.group_loss_weight * group_loss
                 loss = scaled_ner_loss + scaled_group_loss
 
                 tf.compat.v1.summary.scalar("Sequence Loss", ner_loss)
@@ -845,7 +846,10 @@ def group_relation_decoder(
         with tf.compat.v1.variable_scope("logits"):
             # [batch_size, n_groups, query_size]
             group_queries = tf.compat.v1.layers.dense(attention_output, query_size)
+            # # [batch_size, seq_len, intermediate_size]
+            # token_intermediate = tf.compat.v1.layers.dense(hidden, intermediate_size)
             # [batch_size, seq_len, query_size]
+            # token_keys = tf.compat.v1.layers.dense(token_intermediate, query_size)
             token_keys = tf.compat.v1.layers.dense(hidden, query_size)
             # [batch_size, n_groups, seq_len]
             logits = tf.matmul(group_queries, token_keys, transpose_b=True)
