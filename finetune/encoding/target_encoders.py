@@ -1,5 +1,6 @@
 from abc import ABCMeta
 import logging
+import json
 
 import pandas as pd
 import numpy as np
@@ -129,13 +130,59 @@ class Seq2SeqLabelEncoder(BaseEncoder):
         output = []
         for y_i in y:
             out = self.encoder.encode_multi_input([y_i], max_length=self.max_len, include_bos_eos=True).token_ids
-            # out = self.encoder.encode_multi_input([y_i], max_length=1e10, include_bos_eos=True).token_ids
             output.append((out, len(out)))
         return output
 
     def inverse_transform(self, y):
         return [self.encoder.decode(y_i.tolist()) for y_i in y]
 
+class SequenceLabelingTextEncoder(Seq2SeqLabelEncoder):
+    def transform(self, y):
+        all_labels = []
+        for y_i in y:
+            # List of dictionaries, where the key is the label and the value is
+            # the span being labeled
+            labels = [{span["label"]: span["text"]} for span in y_i]
+            all_labels.append(json.dumps(labels))
+        ret = super().transform(all_labels)
+        return ret
+
+class GroupLabelingTextEncoder(Seq2SeqLabelEncoder):
+    def transform(self, y):
+        all_labels = []
+        for yi in y:
+            doc_groups = []
+            _, groups = yi
+            for group in groups:
+                # List of strings, where each string is on of the spans of the group
+                doc_groups.append([span["text"] for span in group["tokens"]])
+            all_labels.append(json.dumps(doc_groups))
+        ret = super().transform(all_labels)
+        return ret
+
+class JointLabelingTextEncoder(Seq2SeqLabelEncoder):
+    def transform(self, y):
+        all_labels = []
+        for yi in y:
+            labels, groups = yi
+            doc_groups = []
+            for group in groups:
+                group_labels = []
+                group_start = min([s["start"] for s in group["tokens"]])
+                group_end = max([s["end"] for s in group["tokens"]])
+                for label in labels:
+                    start = max(group_start, label["start"])
+                    end = min(group_end, label["end"])
+                    if start < end:
+                        # Overlaps
+                        group_labels.append({
+                            label["label"]: label["text"]
+                        })
+                if group_labels:
+                    doc_groups.append(group_labels)
+            all_labels.append(json.dumps(doc_groups))
+        ret = super().transform(all_labels)
+        return ret
 
 class OrdinalRegressionEncoder(OrdinalEncoder, BaseEncoder):
 

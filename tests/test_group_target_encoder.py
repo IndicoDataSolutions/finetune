@@ -1,5 +1,8 @@
 import numpy as np
+import json
 
+from finetune.target_models.seq2seq import HFS2S
+from finetune.base_models.huggingface.models import HFT5
 from finetune.encoding.input_encoder import EncodedOutput
 from finetune.encoding.target_encoders import (
     GroupSequenceLabelingEncoder, 
@@ -9,6 +12,9 @@ from finetune.encoding.target_encoders import (
     JointBROSEncoder,
     TokenRelationEncoder,
     GroupRelationEncoder,
+    SequenceLabelingTextEncoder,
+    GroupLabelingTextEncoder,
+    JointLabelingTextEncoder,
 )
 
 def test_nest_group_sequence_label():
@@ -253,6 +259,89 @@ def test_group_relation_sequence_label():
         [0, 0, 1, 1, 0, 0, 0, 0],
         [0, 0, 0, 0, 0, 0, 0, 0],
         [0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0]
+        [1, 0, 0, 0, 0, 0, 0, 1]
     ]
+
+def test_seq2seq_sequence_label():
+    model = HFS2S(base_model=HFT5)
+    pipeline = HFS2S._get_input_pipeline(model)
+    encoder = SequenceLabelingTextEncoder(pipeline, 512)
+    
+    labels = [
+        {'start': 0, 'end': 4, 'label': 'z', 'text': 'five'},
+        {'start': 5, 'end': 8, 'label': 'z', 'text': 'per'},
+        {'start': 13, 'end': 17, 'label': 'z', 'text': '(5%)'},
+    ]
+    correct = json.dumps([
+        {"z": "five"},
+        {"z": "per"},
+        {"z": "(5%)"},
+    ])
+    label_arr = encoder.transform([labels])[0][0]
+    label_text = encoder.inverse_transform([label_arr])[0]
+    # Account for weird white space produced when stiching tokens back together
+    label_text = label_text.replace(" ", "")
+    correct = correct.replace(" ", "")
+    assert label_text == correct
+
+def test_seq2seq_group_label():
+    model = HFS2S(base_model=HFT5)
+    pipeline = HFS2S._get_input_pipeline(model)
+    encoder = GroupLabelingTextEncoder(pipeline, 512)
+    
+    labels = [
+        {'start': 0, 'end': 4, 'label': 'z', 'text': 'five'},
+        {'start': 5, 'end': 8, 'label': 'z', 'text': 'per'},
+        {'start': 13, 'end': 17, 'label': 'z', 'text': '(5%)'},
+    ]
+    groups = [
+        {'tokens': [
+            {'start': 5, 'end': 8, 'text': 'per'},
+            {'start': 13, 'end': 17, 'text': '(5%)'},
+        ], 'label': None},
+        {'tokens': [
+            {'start': 8, 'end': 12, 'text': 'cent'},
+        ], 'label': None}
+    ]
+    label_arr = encoder.transform([(labels, groups)])[0][0]
+    label_text = encoder.inverse_transform([label_arr])[0]
+    correct = json.dumps([
+        ["per", "(5%)"],
+        ["cent"]
+    ])
+    # Account for weird white space produced when stiching tokens back together
+    label_text = label_text.replace(" ", "")
+    correct = correct.replace(" ", "")
+    assert label_text == correct
+
+def test_seq2seq_joint_label():
+    model = HFS2S(base_model=HFT5)
+    pipeline = HFS2S._get_input_pipeline(model)
+    encoder = JointLabelingTextEncoder(pipeline, 512)
+    
+    labels = [
+        {'start': 0, 'end': 4, 'label': 'z', 'text': 'five'},
+        {'start': 5, 'end': 8, 'label': 'z', 'text': 'per'},
+        {'start': 13, 'end': 17, 'label': 'z', 'text': '(5%)'},
+    ]
+    groups = [
+        {'tokens': [
+            {'start': 5, 'end': 8, 'text': 'per'},
+            {'start': 13, 'end': 17, 'text': '(5%)'},
+        ], 'label': None},
+        {'tokens': [
+            {'start': 8, 'end': 12, 'text': 'cent'},
+        ], 'label': None}
+    ]
+    label_arr = encoder.transform([(labels, groups)])[0][0]
+    label_text = encoder.inverse_transform([label_arr])[0]
+    correct = json.dumps([
+        [{"z":"per"}, {"z":"(5%)"}],
+    ])
+    # Account for weird white space produced when stiching tokens back together
+    label_text = label_text.replace(" ", "")
+    correct = correct.replace(" ", "")
+    print(label_text)
+    print(correct)
+    assert label_text == correct
 
