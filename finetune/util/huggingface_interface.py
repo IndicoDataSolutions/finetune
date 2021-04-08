@@ -287,7 +287,7 @@ def finetune_model_from_huggingface(
             "base_model_path": os.path.join("huggingface", weights_file),
             "n_layer": 12,
             "n_embed": hf_config_instance.hidden_size,
-            "max_length": hf_config_instance.max_position_embeddings,
+            "max_length": hf_config_instance.max_length,
             "include_bos_eos": include_bos_eos,
         }
         if config_overrides:

@@ -17,11 +17,11 @@ from transformers import (
     AlbertConfig,
     BertTokenizer
 )
-from transformers.modeling_tf_t5 import TFT5Model
-from transformers.modeling_tf_electra import TFElectraMainLayer
-from transformers.modeling_tf_roberta import TFRobertaMainLayer
-from transformers.modeling_tf_albert import TFAlbertMainLayer
-from transformers.tokenization_xlm_roberta import (
+from transformers.models.t5.modeling_tf_t5 import TFT5Model
+from transformers.models.electra.modeling_tf_electra import TFElectraMainLayer
+from transformers.models.roberta.modeling_tf_roberta import TFRobertaMainLayer
+from transformers.models.albert.modeling_tf_albert import TFAlbertMainLayer
+from transformers.models.xlm_roberta.tokenization_xlm_roberta import (
     VOCAB_FILES_NAMES,
     PRETRAINED_VOCAB_FILES_MAP,
     PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES,
