@@ -272,17 +272,15 @@ def test_seq2seq_sequence_label():
         {'start': 5, 'end': 8, 'label': 'z', 'text': 'per'},
         {'start': 13, 'end': 17, 'label': 'z', 'text': '(5%)'},
     ]
-    correct = json.dumps([
+    correct = [
         {"z": "five"},
         {"z": "per"},
         {"z": "(5%)"},
-    ])
+    ]
     label_arr = encoder.transform([labels])[0][0]
     label_text = encoder.inverse_transform([label_arr])[0]
-    # Account for weird white space produced when stiching tokens back together
-    label_text = label_text.replace(" ", "")
-    correct = correct.replace(" ", "")
-    assert label_text == correct
+    label_decoded = json.loads(label_text)
+    assert label_decoded == correct
 
 def test_seq2seq_group_label():
     model = HFS2S(base_model=HFT5)
@@ -305,14 +303,12 @@ def test_seq2seq_group_label():
     ]
     label_arr = encoder.transform([(labels, groups)])[0][0]
     label_text = encoder.inverse_transform([label_arr])[0]
-    correct = json.dumps([
+    correct = [
         ["per", "(5%)"],
         ["cent"]
-    ])
-    # Account for weird white space produced when stiching tokens back together
-    label_text = label_text.replace(" ", "")
-    correct = correct.replace(" ", "")
-    assert label_text == correct
+    ]
+    label_decoded = json.loads(label_text)
+    assert label_decoded == correct
 
 def test_seq2seq_joint_label():
     model = HFS2S(base_model=HFT5)
@@ -329,19 +325,14 @@ def test_seq2seq_joint_label():
             {'start': 5, 'end': 8, 'text': 'per'},
             {'start': 13, 'end': 17, 'text': '(5%)'},
         ], 'label': None},
-        {'tokens': [
-            {'start': 8, 'end': 12, 'text': 'cent'},
-        ], 'label': None}
     ]
     label_arr = encoder.transform([(labels, groups)])[0][0]
     label_text = encoder.inverse_transform([label_arr])[0]
-    correct = json.dumps([
+    correct = [
+        # Groups of labels...
         [{"z":"per"}, {"z":"(5%)"}],
-    ])
-    # Account for weird white space produced when stiching tokens back together
-    label_text = label_text.replace(" ", "")
-    correct = correct.replace(" ", "")
-    print(label_text)
-    print(correct)
-    assert label_text == correct
-
+        # ... followed by labels not in groups
+        {"z": "five"}
+    ]
+    label_decoded = json.loads(label_text)
+    assert label_decoded == correct

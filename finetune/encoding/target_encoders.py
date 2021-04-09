@@ -165,7 +165,8 @@ class JointLabelingTextEncoder(Seq2SeqLabelEncoder):
         all_labels = []
         for yi in y:
             labels, groups = yi
-            doc_groups = []
+            unused_labels = []
+            doc_labels = []
             for group in groups:
                 group_labels = []
                 group_start = min([s["start"] for s in group["tokens"]])
@@ -178,9 +179,16 @@ class JointLabelingTextEncoder(Seq2SeqLabelEncoder):
                         group_labels.append({
                             label["label"]: label["text"]
                         })
+                    else:
+                        unused_labels.append(label)
                 if group_labels:
-                    doc_groups.append(group_labels)
-            all_labels.append(json.dumps(doc_groups))
+                    doc_labels.append(group_labels)
+                # Ensure each label is only in a single group
+                labels = unused_labels
+            # Append labels not in groups to the end
+            doc_labels.extend([{span["label"]: span["text"]}
+                               for span in unused_labels])
+            all_labels.append(json.dumps(doc_labels))
         ret = super().transform(all_labels)
         return ret
 
