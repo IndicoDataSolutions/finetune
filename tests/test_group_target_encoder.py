@@ -295,7 +295,7 @@ def test_seq2seq_group_label():
     groups = [
         {'tokens': [
             {'start': 5, 'end': 8, 'text': 'per'},
-            {'start': 13, 'end': 17, 'text': '(5%)'},
+            {'start': 13, 'end': 25, 'text': '(5%) \n test'},
         ], 'label': None},
         {'tokens': [
             {'start': 8, 'end': 12, 'text': 'cent'},
@@ -304,10 +304,13 @@ def test_seq2seq_group_label():
     label_arr = encoder.transform([(labels, groups)])[0][0]
     label_text = encoder.inverse_transform([label_arr])[0]
     correct = [
-        ["per", "(5%)"],
+        # T5 tokenizer turns \n -> n
+        # Included in the test so we can adjust decoding if this changes
+        ["per", "(5%) n test"],
         ["cent"]
     ]
     label_decoded = json.loads(label_text)
+    print(label_decoded)
     assert label_decoded == correct
 
 def test_seq2seq_joint_label():
@@ -325,14 +328,25 @@ def test_seq2seq_joint_label():
             {'start': 5, 'end': 8, 'text': 'per'},
             {'start': 13, 'end': 17, 'text': '(5%)'},
         ], 'label': None},
+        {'tokens': [
+            {'start': 8, 'end': 12, 'text': 'cent'},
+        ], 'label': None}
     ]
     label_arr = encoder.transform([(labels, groups)])[0][0]
     label_text = encoder.inverse_transform([label_arr])[0]
+    # Two lists, first for NER labels and second for group labels
     correct = [
-        # Groups of labels...
-        [{"z":"per"}, {"z":"(5%)"}],
-        # ... followed by labels not in groups
-        {"z": "five"}
+        [
+            {"z": "five"},
+            {"z": "per"},
+            {"z": "(5%)"},
+        ],
+        [
+            ["per", "(5%)"],
+            ["cent"]
+        ]
     ]
+    print(label_text)
     label_decoded = json.loads(label_text)
+    print(label_decoded)
     assert label_decoded == correct
