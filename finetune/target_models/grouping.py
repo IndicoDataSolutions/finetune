@@ -1,3 +1,4 @@
+import json
 import warnings
 from collections import Counter
 
@@ -11,6 +12,10 @@ from finetune.target_models.sequence_labeling import (
     SequencePipeline,
     SequenceLabeler,
 )
+from finetune.target_models.seq2seq import (
+    S2SPipeline,
+    HFS2S,
+)
 from finetune.encoding.target_encoders import (
     SequenceLabelingEncoder,
     GroupSequenceLabelingEncoder,
@@ -22,6 +27,9 @@ from finetune.encoding.target_encoders import (
     JointTokenRelationEncoder,
     GroupRelationEncoder,
     JointGroupRelationEncoder,
+    SequenceLabelingTextEncoder,
+    GroupLabelingTextEncoder,
+    JointLabelingTextEncoder,
 )
 from finetune.nn.group_target_blocks import (
     multi_crf_group_labeler,
@@ -248,6 +256,18 @@ class JointGroupRelationPipeline(JointGroupingPipeline):
                 }
             ),
         )
+    
+class SequenceS2SPipeline(S2SPipeline):
+    def _target_encoder(self):
+        return SequenceLabelingTextEncoder(self, self.config.s2s_decoder_max_length)
+
+class GroupS2SPipeline(S2SPipeline):
+    def _target_encoder(self):
+        return GroupLabelingTextEncoder(self, self.config.s2s_decoder_max_length)
+
+class JointS2SPipeline(S2SPipeline):
+    def _target_encoder(self):
+        return JointLabelingTextEncoder(self, self.config.s2s_decoder_max_length)
 
 
 class GroupSequenceLabeler(SequenceLabeler):
@@ -1133,3 +1153,112 @@ class JointGroupRelationLabeler(GroupRelationLabeler, SequenceLabeler):
         )
 
         return list(zip(ner_predictions, group_predictions))
+
+def try_decode(pred):
+    try:
+        return json.loads(pred)
+    except:
+        return []
+
+class SequenceS2S(HFS2S):
+    def _get_input_pipeline(self):
+        return SequenceS2SPipeline(self.config)
+
+    def _predict(self, zipped_data, **kwargs):
+        raw_texts = list(data.get("raw_text", data["X"]) for data in zipped_data)
+        preds = super()._predict(zipped_data, **kwargs)
+        preds = map(try_decode, preds)
+        return self.decode_pred(preds, raw_texts)
+    
+    @staticmethod 
+    def decode_pred(preds, raw_texts):
+        all_labels = []
+        for raw_text, pred in zip(raw_texts, preds):
+            if not type(pred) == list:
+                all_labels.append([])
+                continue
+            doc_labels = []
+            for json_label in pred:
+                # json_label is a list of dictionaries of the form {key: text}
+                if not type(json_label) == dict:
+                    continue
+                tag, text = list(json_label.items())[0]
+                # Can't generate \n's, appear as a single n instead
+                text = text.replace(' n ', ' \n ')
+                label_start = raw_text.find(text)
+                label_end = label_start + len(text)
+                doc_labels.append({
+                    "label": tag,
+                    "start": label_start,
+                    "end": label_end,
+                    "text": text,
+                })
+            all_labels.append(doc_labels)
+        return all_labels
+
+class GroupS2S(HFS2S):
+    def _get_input_pipeline(self):
+        return GroupS2SPipeline(self.config)
+
+    def _predict(self, zipped_data, **kwargs):
+        raw_texts = list(data.get("raw_text", data["X"]) for data in zipped_data)
+        preds = super()._predict(zipped_data, **kwargs)
+        preds = map(try_decode, preds)
+        return self.decode_pred(preds, raw_texts)
+
+    @staticmethod 
+    def decode_pred(preds, raw_texts):
+        all_groups = []
+        for raw_text, pred in zip(raw_texts, preds):
+            if not type(pred) == list:
+                all_groups.append([])
+                continue
+            doc_groups = []
+            for json_group in pred:
+                if not type(json_group) == list:
+                    continue
+                # json_group is a lists of spans, represented as strings
+                group_spans = []
+                for span_text in json_group:
+                    if not type(span_text) == str:
+                        continue
+                    # Can't generate \n's, appear as a single n instead
+                    span_text = span_text.replace(' n ', ' \n ')
+                    span_start = raw_text.find(span_text)
+                    span_end = span_start + len(span_text)
+                    group_spans.append({
+                        "start": span_start,
+                        "end": span_end,
+                        "text": span_text,
+                    })
+                doc_groups.append({
+                    "tokens": group_spans,
+                    "label": None
+                })
+            all_groups.append(doc_groups)
+        return all_groups
+
+class JointS2S(HFS2S):
+    def _get_input_pipeline(self):
+        return JointS2SPipeline(self.config)
+
+    def _predict(self, zipped_data, **kwargs):
+        raw_texts = list(data.get("raw_text", data["X"]) for data in zipped_data)
+        preds = super()._predict(zipped_data, **kwargs)
+        preds = map(try_decode, preds)
+    
+        def split_decode(pred):
+            # Ensure NER and group predictions were generated
+            if len(pred) == 2:
+                return pred
+            else:
+                return ([], [])
+        preds = map(split_decode, preds)
+
+        seq_preds, group_preds = list(zip(*preds))
+
+        seq_ret = SequenceS2S.decode_pred(seq_preds, raw_texts)
+        group_ret = GroupS2S.decode_pred(group_preds, raw_texts)
+        return list(zip(seq_ret, group_ret))
+
+

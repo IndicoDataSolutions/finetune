@@ -16,6 +16,7 @@ from pytest import approx
 import tensorflow as tf
 import numpy as np
 
+from finetune.base_models.huggingface.models import HFT5
 from finetune.target_models.grouping import (
     GroupSequenceLabeler,
     PipelineSequenceLabeler,
@@ -27,6 +28,9 @@ from finetune.target_models.grouping import (
     JointTokenRelationLabeler,
     GroupRelationLabeler,
     JointGroupRelationLabeler,
+    SequenceS2S,
+    GroupS2S,
+    JointS2S,
 )
 
 class TestGroupingLabelers(unittest.TestCase):
@@ -351,6 +355,86 @@ class TestGroupingLabelers(unittest.TestCase):
         preds = model.predict([text])[0]
         for p in preds[0]:
             del p["confidence"]
+        print(preds)
+        self.assertEqual(len(preds), 2)
+        self.assertEqual(len(preds[0]), 5)
+        self.assertEqual(len(preds[1]), 2)
+        self.assertEqual(preds, labels)
+
+    def test_t5_sequence_tagging(self):
+        model = SequenceS2S(base_model=HFT5, n_epochs=8)
+        text = ("five percent (5%) \n " +
+                "fifty percent (50%) \n " +
+                "two percent (2%) \n " +
+                "nine percent (9%) \n " +
+                "three percent (3%) \n ")
+        labels = [
+            {'start': 0, 'end': 17, 'label': 'a', 'text': 'five percent (5%)'},
+            {'start': 20, 'end': 39, 'label': 'b', 'text': 'fifty percent (50%)'},
+            {'start': 42, 'end': 58, 'label': 'a', 'text': 'two percent (2%)'},
+            {'start': 61, 'end': 78, 'label': 'b', 'text': 'nine percent (9%)'},
+            {'start': 81, 'end': 99, 'label': 'a', 'text': 'three percent (3%)'},
+        ]
+        model.fit([text] * 30, [labels] * 30)
+        preds = model.predict([text])[0]
+        print(preds)
+        self.assertEqual(len(preds), 5)
+        self.assertEqual(preds, labels)
+
+    def test_t5_group_tagging(self):
+        model = GroupS2S(base_model=HFT5, n_epochs=8)
+        text = ("five percent (5%) \n " +
+                "fifty percent (50%) \n " +
+                "two percent (2%) \n " +
+                "nine percent (9%) \n " +
+                "three percent (3%) \n ")
+        labels = [
+            {'start': 0, 'end': 17, 'label': 'a', 'text': 'five percent (5%)'},
+            {'start': 20, 'end': 39, 'label': 'b', 'text': 'fifty percent (50%)'},
+            {'start': 42, 'end': 58, 'label': 'a', 'text': 'two percent (2%)'},
+            {'start': 61, 'end': 78, 'label': 'b', 'text': 'nine percent (9%)'},
+            {'start': 81, 'end': 99, 'label': 'a', 'text': 'three percent (3%)'},
+        ]
+        groups = [
+            {'tokens': [
+                {'start': 0, 'end': 39, 'text': 'five percent (5%) \n fifty percent (50%)'},
+            ], 'label': None},
+            {'tokens': [
+                {'start': 61, 'end': 99, 'text': 'nine percent (9%) \n three percent (3%)'},
+            ], 'label': None}
+        ]
+        labels = (labels, groups)
+        model.fit([text] * 30, [labels] * 30)
+        preds = model.predict([text])[0]
+        print(preds)
+        self.assertEqual(len(preds), 2)
+        self.assertEqual(preds, groups)
+
+    def test_t5_joint_tagging(self):
+        model = JointS2S(base_model=HFT5, n_epochs=8)
+        text = ("five percent (5%) \n " +
+                "fifty percent (50%) \n " +
+                "two percent (2%) \n " +
+                "nine percent (9%) \n " +
+                "three percent (3%) \n ")
+        labels = [
+            {'start': 0, 'end': 17, 'label': 'a', 'text': 'five percent (5%)'},
+            {'start': 20, 'end': 39, 'label': 'b', 'text': 'fifty percent (50%)'},
+            {'start': 42, 'end': 58, 'label': 'a', 'text': 'two percent (2%)'},
+            {'start': 61, 'end': 78, 'label': 'b', 'text': 'nine percent (9%)'},
+            {'start': 81, 'end': 99, 'label': 'a', 'text': 'three percent (3%)'},
+        ]
+        groups = [
+            {'tokens': [
+                {'start': 0, 'end': 39, 'text': 'five percent (5%) \n fifty percent (50%)'},
+            ], 'label': None},
+            {'tokens': [
+                {'start': 61, 'end': 99, 'text': 'nine percent (9%) \n three percent (3%)'},
+            ], 'label': None}
+        ]
+        labels = (labels, groups)
+        model.fit([text] * 30, [labels] * 30)
+        preds = model.predict([text])[0]
         print(preds)
         self.assertEqual(len(preds), 2)
         self.assertEqual(len(preds[0]), 5)
