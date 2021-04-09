@@ -105,6 +105,7 @@ class HFS2S(BaseModel):
                     encoder_decoder_mask, #encoder_attention_mask,
                     None, #decoder_inputs_embeds,
                     None, #head_mask,
+                    None, #encoder_head_mask,
                     None, #decoder_past_key_value_states,
                     False, #use_cache,
                     None, #output_attentions,
@@ -149,7 +150,7 @@ class HFS2S(BaseModel):
                 )
 
             def symbols_to_logits_fn(input_symbols, i, state, first=False): #[batch_size, decoded_ids] to [batch_size, vocab_size]
-                embeds, present_state = hf_decoder(
+                decoder_output = hf_decoder(
                     (
                         input_symbols[:, -1][:, None], #decoder_input_ids,
                         None, #decoder_attention_mask, # Seems like it does this automagically because these values are unpadded
@@ -157,6 +158,7 @@ class HFS2S(BaseModel):
                         state["encoder_decoder_mask"], #encoder_attention_mask,
                         None, #decoder_inputs_embeds,
                         None, #head_mask,
+                        None, #encoder_head_mask,
                         None if first else state["past_states"], #decoder_past_key_value_states,
                         True, #use_cache,
                         None, #output_attentions,
@@ -164,6 +166,8 @@ class HFS2S(BaseModel):
                     ),
                     training=False,
                 )
+                # HF return objects break unpacking for some reason
+                embeds, present_state = decoder_output[0], decoder_output[1]
                 logits = featurizer_state["embedding"](normalize_embeds(embeds[:, -1]), mode="linear")
                 logits_shape = tf.shape(logits)
 
