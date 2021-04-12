@@ -689,7 +689,7 @@ def decoder_block(
     intermediate_size=3072,
     intermediate_act_fn=gelu,
     hidden_dropout_prob=0.1,
-    attention_probs_dropout_prob=0.1,
+    attention_probs_dropout_prob=0,
     initializer_range=0.02,
     drop_self_attention=False,
 ):
@@ -766,7 +766,7 @@ def group_relation_decoder(
     intermediate_size=3072,
     intermediate_act_fn=gelu,
     hidden_dropout_prob=0.1,
-    attention_probs_dropout_prob=0.1,
+    attention_probs_dropout_prob=0,
     initializer_range=0.02,
     n_layers=3,
     query_size=256,
@@ -846,11 +846,22 @@ def group_relation_decoder(
         with tf.compat.v1.variable_scope("logits"):
             # [batch_size, n_groups, query_size]
             group_queries = tf.compat.v1.layers.dense(attention_output, query_size)
+            group_queries = tf.math.l2_normalize(group_queries, axis=-1)
+
             # # [batch_size, seq_len, intermediate_size]
             # token_intermediate = tf.compat.v1.layers.dense(hidden, intermediate_size)
-            # [batch_size, seq_len, query_size]
+            # # [batch_size, seq_len, query_size]
             # token_keys = tf.compat.v1.layers.dense(token_intermediate, query_size)
+
+            # [batch_size, seq_len, query_size]
             token_keys = tf.compat.v1.layers.dense(hidden, query_size)
+            token_keys = tf.math.l2_normalize(token_keys, axis=-1)
+
+            # As we have normalized keys and queries to unit vectors, this
+            # matrix multiplication measures the cos distance between vectors
+            # Fits the clustering framing where queries are learned centroids
+            # and keys are points we are clustering
+
             # [batch_size, n_groups, seq_len]
             logits = tf.matmul(group_queries, token_keys, transpose_b=True)
             # Softmax across groups - each token is assigned to one group
