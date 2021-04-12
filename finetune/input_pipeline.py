@@ -413,6 +413,7 @@ class BasePipeline(metaclass=ABCMeta):
         else:
             encoder_out = self.text_encoder.encode_multi_input(
                 Xs, max_length=self.config.max_length,
+                remove_repeated_whitespace=self.config.collapse_whitespace,
             )
 
             d = dict()
