@@ -338,6 +338,7 @@ def get_default_config():
                                 # TODO should probably be determined based on how much we can fit in memory
         use_mlp=False,          # Flag for whether or not to use MLP as part of target model
         extra_print=False,      # Print the value of LongDocBERT tensors
+        conv_proj=False,        # Use width 3 convolution instead of linear projection before aggregation op
         #
         # Auxiliary Information
         use_auxiliary_info=False,
