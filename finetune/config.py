@@ -339,6 +339,7 @@ def get_default_config():
         use_mlp=False,          # Flag for whether or not to use MLP as part of target model
         extra_print=False,      # Print the value of LongDocBERT tensors
         conv_proj=False,        # Use width 3 convolution instead of linear projection before aggregation op
+        aggr_attn_heads=4,      # Number of attention heads for self attention aggregation operation
         #
         # Auxiliary Information
         use_auxiliary_info=False,

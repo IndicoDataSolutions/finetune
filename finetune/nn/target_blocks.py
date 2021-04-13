@@ -31,10 +31,12 @@ def perceptron(x, ny, config, w_init=None, b_init=None):
         nx = config.n_embed
         # The hidden_size dim is twice as large if using concat pooling
         # FIXME This could be an issue for base models that don't rely on pooling across chunks
-        if config.chunk_pool_fn in {"concat", "concat_2proj"}:
+        if config.chunk_pool_fn == "concat":
             nx *= 2
         elif config.chunk_pool_fn == "concat_attn":
-            nx *= 3
+            nx *= (2 + config.aggr_attn_heads)
+        elif config.chunk_pool_fn == "attention":
+            nx *= config.aggr_attn_heads
         w = tf.compat.v1.get_variable("w", [nx, ny], initializer=w_init)
         b = tf.compat.v1.get_variable("b", [ny], initializer=b_init)
         return tf.matmul(x, w) + b

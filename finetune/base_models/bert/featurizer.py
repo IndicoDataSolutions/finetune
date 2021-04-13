@@ -384,9 +384,7 @@ def long_doc_bert_featurizer(
         seq_mask = tf.cast(seq_mask, dtype=seq_output.dtype)
         # Invert mask so that it is 0 where you have tokens, and 1 otherwise
         inv_seq_mask = 1. - seq_mask
-        # Create separate projections for mean/max/attn
-        # TODO Try width 3 conv instead of implicit 1. filters is hidden_size
-        # Use kernel_size=3 with conv1d.
+        # Create separate projections for mean/max
         if config.conv_proj:
             seq_proj_mean = tf.compat.v1.layers.conv1d(
                 inputs=seq_output,
@@ -419,21 +417,20 @@ def long_doc_bert_featurizer(
                 kernel_initializer=create_initializer(config.weight_stddev),
                 name="max_proj_not_chunk_attn"
             )
-        # seq_proj_attn = tf.compat.v1.layers.dense(
-        #     inputs=seq_output,
-        #     units=config.n_embed,
-        #     kernel_initializer=create_initializer(config.weight_stddev),
-        #     name="attn_proj_not_chunk_attn"
-        # )
+
         if config.chunk_pool_fn == "mean":
             denom = tf.reduce_sum(seq_mask, axis=1)
             aggr_outputs = tf.reduce_sum(seq_proj_mean * seq_mask, axis=1) / denom
         elif config.chunk_pool_fn == "attention":
-            # aggr_outputs = attn(pooled_outputs, config.weight_stddev)
-            aggr_outputs = attn(seq_output, config, seq_mask)
-            # Need to project seq_mask from [batch_size, effective_seq_len, 1] to
-            # [batch_size, effective_seq_len, effective_seq_len]
-            # aggr_outputs = attention_layer(seq_output, seq_output, num_attention_heads=4, attention_mask=seq_mask)
+            # aggr_outputs = attn(seq_output, config, seq_mask)
+            aggr_outputs = attention_layer(
+                to_tensor=seq_output,
+                num_attention_heads=config.aggr_attn_heads,
+                size_per_head=config.n_embed,
+                attention_mask=seq_mask,
+                do_return_2d_tensor=True,
+                extra_print=config.extra_print,
+            )
         elif config.chunk_pool_fn == "max":
             # Make padded values very large negative numbers
             aggr_outputs = tf.reduce_max(seq_proj_max - (inv_seq_mask * 1e9), axis=1)
@@ -442,7 +439,15 @@ def long_doc_bert_featurizer(
             aggr_mean = tf.reduce_sum(seq_proj_mean * seq_mask, axis=1) / mean_denom
             aggr_max = tf.reduce_max(seq_proj_max - (inv_seq_mask * 1e9), axis=1)
             if config.chunk_pool_fn == "concat_attn":
-                aggr_attn = attn(seq_output, config, seq_mask)
+                # aggr_attn = attn(seq_output, config, seq_mask)
+                aggr_attn = attention_layer(
+                    to_tensor=seq_output,
+                    num_attention_heads=config.aggr_attn_heads,
+                    size_per_head=config.n_embed,
+                    attention_mask=seq_mask,
+                    do_return_2d_tensor=True,
+                    extra_print=config.extra_print,
+                )
                 aggr_outputs = tf.concat([aggr_mean, aggr_max, aggr_attn], axis=1)
             else:
                 # Concat across the hidden_size dim (axis=1) so feature_size dim is hidden_size * 2
@@ -618,20 +623,15 @@ def attn(hidden, config, seq_mask):
 
 
 def attention_layer(
-        from_tensor,
         to_tensor,
         attention_mask=None,
-        num_attention_heads=1,
-        size_per_head=512,
-        query_act=None,
+        num_attention_heads=4,
+        size_per_head=768,
         key_act=None,
         value_act=None,
-        attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
         do_return_2d_tensor=False,
-        batch_size=None,
-        from_seq_length=None,
-        to_seq_length=None,
+        extra_print=False,
 ):
     """Performs multi-headed attention from `from_tensor` to `to_tensor`.
 
@@ -654,40 +654,25 @@ def attention_layer(
     reshapes rather than actual separate tensors.
 
     Args:
-        from_tensor: float Tensor of shape [batch_size, from_seq_length,
-            from_width].
         to_tensor: float Tensor of shape [batch_size, to_seq_length, to_width].
-        attention_mask: (optional) int32 Tensor of shape [batch_size,
-        from_seq_length, to_seq_length]. The values should be 1 or 0. The
-            attention scores will effectively be set to -infinity for any positions in
-        the mask that are 0, and will be unchanged for positions that are 1.
+        attention_mask: (optional) int32 Tensor of shape [batch_size, from_seq_length, 1].
+            The values should be 1 or 0. The attention scores will effectively be set
+            to -infinity for any positions in the mask that are 0, and will be unchanged for
+            positions that are 1.
         num_attention_heads: int. Number of attention heads.
         size_per_head: int. Size of each attention head.
-        query_act: (optional) Activation function for the query transform.
         key_act: (optional) Activation function for the key transform.
         value_act: (optional) Activation function for the value transform.
-        attention_probs_dropout_prob: (optional) float. Dropout probability of the
-            attention probabilities.
         initializer_range: float. Range of the weight initializer.
         do_return_2d_tensor: bool. If True, the output will be of shape [batch_size
             * from_seq_length, num_attention_heads * size_per_head]. If False, the
             output will be of shape [batch_size, from_seq_length, num_attention_heads
             * size_per_head].
-        batch_size: (Optional) int. If the input is 2D, this might be the batch size
-            of the 3D version of the `from_tensor` and `to_tensor`.
-        from_seq_length: (Optional) If the input is 2D, this might be the seq length
-            of the 3D version of the `from_tensor`.
-        to_seq_length: (Optional) If the input is 2D, this might be the seq length
-            of the 3D version of the `to_tensor`.
 
     Returns:
-        float Tensor of shape [batch_size, from_seq_length,
-            num_attention_heads * size_per_head]. (If `do_return_2d_tensor` is
-            true, this will be of shape [batch_size * from_seq_length,
-            num_attention_heads * size_per_head]).
-
-    Raises:
-        ValueError: Any of the arguments or tensor shapes are invalid.
+        float Tensor of shape [batch_size, 1, num_attention_heads * size_per_head].
+            (If `do_return_2d_tensor` is true, this will be of shape
+            [batch_size, num_attention_heads * size_per_head]).
     """
 
     def transpose_for_scores(
@@ -700,53 +685,32 @@ def attention_layer(
         output_tensor = tf.transpose(a=output_tensor, perm=[0, 2, 1, 3])
         return output_tensor
 
-    from_shape = get_shape_list(from_tensor, expected_rank=[2, 3])
     to_shape = get_shape_list(to_tensor, expected_rank=[2, 3])
-
-    if len(from_shape) != len(to_shape):
-        raise ValueError(
-            "The rank of `from_tensor` must match the rank of `to_tensor`."
-        )
-
-    if len(from_shape) == 3:
-        batch_size = from_shape[0]
-        from_seq_length = from_shape[1]
-        to_seq_length = to_shape[1]
-    elif len(from_shape) == 2:
-        if batch_size is None or from_seq_length is None or to_seq_length is None:
-            raise ValueError(
-                "When passing in rank 2 tensors to attention_layer, the values "
-                "for `batch_size`, `from_seq_length`, and `to_seq_length` "
-                "must all be specified."
-            )
+    batch_size = to_shape[0]
+    to_seq_length = to_shape[1]
 
     # Scalar dimensions referenced here:
     #   B = batch size (number of sequences)
-    #   F = `from_tensor` sequence length
+    #   F = `from_tensor` sequence length - hard coding this to 1 so that
+    #       we have one query per head rather than per token
     #   T = `to_tensor` sequence length
     #   N = `num_attention_heads`
     #   H = `size_per_head`
 
-    from_tensor_2d = reshape_to_matrix(from_tensor)
     to_tensor_2d = reshape_to_matrix(to_tensor)
 
-    # `query_layer` = [B*F, N*H]
-    # query_layer = tf.compat.v1.layers.dense(
-    #     from_tensor_2d,
-    #     num_attention_heads * size_per_head,
-    #     activation=query_act,
-    #     name="query",
-    #     kernel_initializer=create_initializer(initializer_range),
-    # )
+    # `query_layer` = [1, N*H]
     query_layer = tf.compat.v1.get_variable(
         name="chunk_attn_query_multihead",
-        # FIXME Complains about dimensions needing to be int
-        shape=[batch_size * from_seq_length, num_attention_heads * size_per_head],
-        # shape=[1, num_attention_heads * size_per_head],
+        shape=[1, num_attention_heads * size_per_head],
         dtype=tf.float32,
         trainable=True,
         initializer=create_initializer(initializer_range)
     )
+    if extra_print:
+        query_layer = tf.compat.v1.Print(
+            query_layer, ["query_layer", tf.shape(query_layer)], summarize=-1
+        )
 
     # `key_layer` = [B*T, N*H]
     key_layer = tf.compat.v1.layers.dense(
@@ -756,6 +720,10 @@ def attention_layer(
         name="key_not_chunk_attn",
         kernel_initializer=create_initializer(initializer_range),
     )
+    if extra_print:
+        key_layer = tf.compat.v1.Print(
+            key_layer, ["key_layer", tf.shape(key_layer)], summarize=-1
+        )
 
     # `value_layer` = [B*T, N*H]
     value_layer = tf.compat.v1.layers.dense(
@@ -765,29 +733,52 @@ def attention_layer(
         name="value_not_chunk_attn",
         kernel_initializer=create_initializer(initializer_range),
     )
+    if extra_print:
+        value_layer = tf.compat.v1.Print(
+            value_layer, ["value_layer", tf.shape(value_layer)], summarize=-1
+        )
 
-    # `query_layer` = [B, N, F, H]
-    # query_layer = transpose_for_scores(
-    #     query_layer, batch_size, num_attention_heads, from_seq_length, size_per_head
-    # )
+    # `query_layer` = [1, N, 1, H]
+    query_layer = transpose_for_scores(
+        query_layer, 1, num_attention_heads, 1, size_per_head
+    )
+    if extra_print:
+        query_layer = tf.compat.v1.Print(
+            query_layer, ["query_layer_tp", tf.shape(query_layer)], summarize=-1
+        )
 
     # `key_layer` = [B, N, T, H]
     key_layer = transpose_for_scores(
         key_layer, batch_size, num_attention_heads, to_seq_length, size_per_head
     )
+    if extra_print:
+        key_layer = tf.compat.v1.Print(
+            key_layer, ["key_layer_tp", tf.shape(key_layer)], summarize=-1
+        )
 
     # Take the dot product between "query" and "key" to get the raw
     # attention scores.
-    # `attention_scores` = [B, N, F, T]
-
+    # [1, N, 1, H] * [B, N, H, T] = [B, N, 1, T]
+    # `attention_scores` = [B, N, 1, T]
     attention_scores = tf.matmul(query_layer, key_layer, transpose_b=True)
     attention_scores = tf.multiply(
         attention_scores, 1.0 / math.sqrt(float(size_per_head))
     )
+    if extra_print:
+        attention_scores = tf.compat.v1.Print(
+            attention_scores, ["attention_scores", tf.shape(attention_scores)], summarize=-1
+        )
 
     if attention_mask is not None:
-        # `attention_mask` = [B, 1, F, T]
-        attention_mask = tf.expand_dims(attention_mask, axis=[1])
+        # Starting dims are [B, T, 1]. Need to reshape to [B, 1, 1, T]
+        # After expanding, dims `attention_mask` = [B, T, 1, 1]
+        attention_mask = tf.expand_dims(attention_mask, axis=-1)
+        # After reshape, [B, 1, 1, T]
+        attention_mask = tf.transpose(a=attention_mask, perm=[0, 2, 3, 1])
+        if extra_print:
+            attention_mask = tf.compat.v1.Print(
+                attention_mask, ["attention_mask", tf.shape(attention_mask)], summarize=-1
+            )
 
         # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
         # masked positions, this operation will create a tensor which is 0.0 for
@@ -798,38 +789,56 @@ def attention_layer(
         # effectively the same as removing these entirely.
         attention_scores += adder
 
-    # Make attention a very large negative value where we have a pad token
-    # attention_scores = attention_scores - ((1 - seq_mask) * 1e9)
-
     # Normalize the attention scores to probabilities.
-    # `attention_probs` = [B, N, F, T]
+    # `attention_probs` = [B, N, 1, T]
     attention_probs = tf.nn.softmax(attention_scores)
+    if extra_print:
+        attention_probs = tf.compat.v1.Print(
+            attention_probs, ["attention_probs", tf.shape(attention_probs)], summarize=-1
+        )
 
     # `value_layer` = [B, T, N, H]
     value_layer = tf.reshape(
         value_layer, [batch_size, to_seq_length, num_attention_heads, size_per_head]
     )
+    if extra_print:
+        value_layer = tf.compat.v1.Print(
+            value_layer, ["value_layer_rshp", tf.shape(value_layer)], summarize=-1
+        )
 
     # `value_layer` = [B, N, T, H]
     value_layer = tf.transpose(a=value_layer, perm=[0, 2, 1, 3])
+    if extra_print:
+        value_layer = tf.compat.v1.Print(
+            value_layer, ["value_layer_tp", tf.shape(value_layer)], summarize=-1
+        )
 
-    # `context_layer` = [B, N, F, H]
+    # [B, N, 1, T] * [B, N, T, H] = [B, N, 1, H]
+    # `context_layer` = [B, N, 1, H]
     context_layer = tf.matmul(attention_probs, value_layer)
+    if extra_print:
+        context_layer = tf.compat.v1.Print(
+            context_layer, ["context_layer", tf.shape(context_layer)], summarize=-1
+        )
 
-    # `context_layer` = [B, F, N, H]
+    # `context_layer` = [B, 1, N, H]
     context_layer = tf.transpose(a=context_layer, perm=[0, 2, 1, 3])
+    if extra_print:
+        context_layer = tf.compat.v1.Print(
+            context_layer, ["context_layer_tp", tf.shape(context_layer)], summarize=-1
+        )
 
     if do_return_2d_tensor:
-        # `context_layer` = [B*F, N*H]
+        # `context_layer` = [B*1, N*H]
         context_layer = tf.reshape(
             context_layer,
-            [batch_size * from_seq_length, num_attention_heads * size_per_head],
+            [batch_size, num_attention_heads * size_per_head],
         )
     else:
-        # `context_layer` = [B, F, N*H]
+        # `context_layer` = [B, 1, N*H]
         context_layer = tf.reshape(
             context_layer,
-            [batch_size, from_seq_length, num_attention_heads * size_per_head],
+            [batch_size, 1, num_attention_heads * size_per_head],
         )
 
     return context_layer
