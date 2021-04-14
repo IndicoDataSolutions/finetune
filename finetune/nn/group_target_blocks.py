@@ -766,7 +766,7 @@ def group_relation_decoder(
     intermediate_size=3072,
     intermediate_act_fn=gelu,
     hidden_dropout_prob=0.1,
-    attention_probs_dropout_prob=0,
+    attention_probs_dropout_prob=0.1,
     initializer_range=0.02,
     n_layers=3,
     query_size=256,
@@ -790,6 +790,8 @@ def group_relation_decoder(
         group_embeddings = tf.tile(group_embeddings[None, :, :], [batch_size, 1, 1])
         # Reshape to 2D for attention calculations
         group_embeddings = tf.reshape(group_embeddings, [-1, hidden_size])
+
+        hidden = tf.compat.v1.layers.dense(hidden, query_size)
         hidden = tf.reshape(hidden, [-1, encoder_hidden])
 
         # Decoder blocks
@@ -846,16 +848,17 @@ def group_relation_decoder(
         with tf.compat.v1.variable_scope("logits"):
             # [batch_size, n_groups, query_size]
             group_queries = tf.compat.v1.layers.dense(attention_output, query_size)
-            group_queries = tf.math.l2_normalize(group_queries, axis=-1)
+            # group_queries = tf.math.l2_normalize(group_queries, axis=-1)
 
             # # [batch_size, seq_len, intermediate_size]
             # token_intermediate = tf.compat.v1.layers.dense(hidden, intermediate_size)
             # # [batch_size, seq_len, query_size]
             # token_keys = tf.compat.v1.layers.dense(token_intermediate, query_size)
+            token_keys = hidden
 
             # [batch_size, seq_len, query_size]
-            token_keys = tf.compat.v1.layers.dense(hidden, query_size)
-            token_keys = tf.math.l2_normalize(token_keys, axis=-1)
+            # token_keys = tf.compat.v1.layers.dense(hidden, query_size)
+            # token_keys = tf.math.l2_normalize(token_keys, axis=-1)
 
             # As we have normalized keys and queries to unit vectors, this
             # matrix multiplication measures the cos distance between vectors

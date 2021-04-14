@@ -171,7 +171,7 @@ class JointLabelingTextEncoder(Seq2SeqLabelEncoder):
             doc_groups = []
             for group in groups:
                 doc_groups.append([span["text"] for span in group["tokens"]])
-            # Combine with a seperator
+            # Combine
             all_labels.append(json.dumps([doc_labels, doc_groups]))
         ret = super().transform(all_labels)
         return ret
