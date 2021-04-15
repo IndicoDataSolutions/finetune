@@ -28,15 +28,14 @@ def perceptron(x, ny, config, w_init=None, b_init=None):
     b_init = b_init or tf.compat.v1.constant_initializer(0)
 
     with tf.compat.v1.variable_scope("perceptron"):
-        nx = config.n_embed
-        # The hidden_size dim is twice as large if using concat pooling
         # FIXME This could be an issue for base models that don't rely on pooling across chunks
-        if config.chunk_pool_fn == "concat":
-            nx *= 2
-        elif config.chunk_pool_fn == "concat_attn":
-            nx *= (2 + config.aggr_attn_heads)
-        elif config.chunk_pool_fn == "attention":
-            nx *= config.aggr_attn_heads
+        # If using top_k, nx is determined by k in config
+        if config.chunk_pool_fn == "top_k":
+            nx = config.n_embed * config.aggr_k
+        # nx is hidden_size * 2 due to combining max pooling with another op
+        else:
+            nx = config.n_embed * 2
+
         w = tf.compat.v1.get_variable("w", [nx, ny], initializer=w_init)
         b = tf.compat.v1.get_variable("b", [ny], initializer=b_init)
         return tf.matmul(x, w) + b

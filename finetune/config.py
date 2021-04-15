@@ -329,8 +329,7 @@ def get_default_config():
                                 # will be populated by the base model. If set to "auto" and using a base
                                 # model other than LongDocBERT, there will be errors. Must be >=3 to
                                 # account for
-        chunk_pool_fn="mean",   # aggregation function across chunks in LongDocBERT featurizer
-                                # must be in {"mean", "max", "attention", "lstm", "concat"}
+        chunk_pool_fn="mean",   # aggregation function (along with max) across chunks in LongDocBERT featurizer
         batch_size_scaler=2,    # Scaling factor for batch size when passing chunks to BERT featurizer
                                 # to reduce memory usage by passing multiple chunks through featurizer
                                 # using the batch dimension.
@@ -339,7 +338,10 @@ def get_default_config():
         use_mlp=False,          # Flag for whether or not to use MLP as part of target model
         extra_print=False,      # Print the value of LongDocBERT tensors
         conv_proj=False,        # Use width 3 convolution instead of linear projection before aggregation op
+        use_gate_fn=False,      # If True, apply a gating function after linear projection on non max aggr op
+                                # to "turn on/off" chunks. Should be particularly useful for mean - like ops
         aggr_attn_heads=4,      # Number of attention heads for self attention aggregation operation
+        aggr_k=5,               # top k for aggregation operations
         #
         # Auxiliary Information
         use_auxiliary_info=False,

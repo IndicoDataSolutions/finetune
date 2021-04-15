@@ -368,8 +368,7 @@ def long_doc_bert_featurizer(
         Function for aggregating/pooling the pooled outputs from the BERT featurizer
         across the chunk dimension
 
-        feature_size = hidden_size for mean, max, attention
-        feature_size = hidden_size * 2 for concat
+        feature_size = hidden_size * 2
 
         Args:
             seq_output: [batch_size, effective_seq_len, hidden_size]
@@ -378,15 +377,13 @@ def long_doc_bert_featurizer(
 
         Returns:
             aggr_outputs: [batch_size, feature_size]
-
-        TODO Implement LSTM
         """
         seq_mask = tf.cast(seq_mask, dtype=seq_output.dtype)
         # Invert mask so that it is 0 where you have tokens, and 1 otherwise
         inv_seq_mask = 1. - seq_mask
-        # Create separate projections for mean/max
+        # Create separate projections for max and other operation
         if config.conv_proj:
-            seq_proj_mean = tf.compat.v1.layers.conv1d(
+            seq_proj = tf.compat.v1.layers.conv1d(
                 inputs=seq_output,
                 filters=config.n_embed,
                 # width
@@ -405,7 +402,7 @@ def long_doc_bert_featurizer(
                 name="max_proj_conv_not_chunk_attn"
             )
         else:
-            seq_proj_mean = tf.compat.v1.layers.dense(
+            seq_proj = tf.compat.v1.layers.dense(
                 inputs=seq_output,
                 units=config.n_embed,
                 kernel_initializer=create_initializer(config.weight_stddev),
@@ -417,43 +414,60 @@ def long_doc_bert_featurizer(
                 kernel_initializer=create_initializer(config.weight_stddev),
                 name="max_proj_not_chunk_attn"
             )
-
+        # TODO Could add gating function back
         if config.chunk_pool_fn == "mean":
-            denom = tf.reduce_sum(seq_mask, axis=1)
-            aggr_outputs = tf.reduce_sum(seq_proj_mean * seq_mask, axis=1) / denom
+            mean_denom = tf.reduce_sum(seq_mask, axis=1)
+            # _op to indicate aggregation op other than max pooling
+            aggr_op = tf.reduce_sum(seq_proj * seq_mask, axis=1) / mean_denom
         elif config.chunk_pool_fn == "attention":
-            # aggr_outputs = attn(seq_output, config, seq_mask)
-            aggr_outputs = attention_layer(
+            aggr_op = attention_layer(
                 to_tensor=seq_output,
                 num_attention_heads=config.aggr_attn_heads,
-                size_per_head=config.n_embed,
+                size_per_head=config.n_embed // config.aggr_attn_heads,
                 attention_mask=seq_mask,
                 do_return_2d_tensor=True,
                 extra_print=config.extra_print,
             )
-        elif config.chunk_pool_fn == "max":
+        elif config.chunk_pool_fn == "min":
+            # Make padded values very large positive numbers
+            aggr_op = tf.reduce_min(seq_proj_max + (inv_seq_mask * 1e9), axis=1)
+        elif config.chunk_pool_fn == "var":
+            # Use ragged boolean mask so we don't compute variance on masked tokens
+            seq_mask = tf.cast(seq_mask, tf.bool)
+            masked_proj = tf.ragged.boolean_mask(seq_proj, seq_mask)
+            aggr_op = tf.math.reduce_variance(masked_proj, axis=1)
+        elif config.chunk_pool_fn == "lstm":
+            lstm = tf.keras.layers.LSTM(units=config.n_embed)
+            # TODO Not sure if I need seq_mask or inv_seq_mask here
+            # inv_seq_mask is 0 where you have tokens, and 1 otherwise, which I
+            # think is what the LSTM op expects
+            # Also not sure if I want to specify an initial state
+            aggr_op = lstm(inputs=seq_proj, mask=inv_seq_mask)
+        elif config.chunk_pool_fn.contains("top_k"):
             # Make padded values very large negative numbers
-            aggr_outputs = tf.reduce_max(seq_proj_max - (inv_seq_mask * 1e9), axis=1)
-        elif config.chunk_pool_fn in {"concat", "concat_attn"}:
-            mean_denom = tf.reduce_sum(seq_mask, axis=1)
-            aggr_mean = tf.reduce_sum(seq_proj_mean * seq_mask, axis=1) / mean_denom
-            aggr_max = tf.reduce_max(seq_proj_max - (inv_seq_mask * 1e9), axis=1)
-            if config.chunk_pool_fn == "concat_attn":
-                # aggr_attn = attn(seq_output, config, seq_mask)
-                aggr_attn = attention_layer(
-                    to_tensor=seq_output,
-                    num_attention_heads=config.aggr_attn_heads,
-                    size_per_head=config.n_embed,
-                    attention_mask=seq_mask,
-                    do_return_2d_tensor=True,
-                    extra_print=config.extra_print,
-                )
-                aggr_outputs = tf.concat([aggr_mean, aggr_max, aggr_attn], axis=1)
+            masked_proj = seq_proj_max - (inv_seq_mask * 1e9)
+            # tf.math.top_k operates on the last dim, so need to transpose
+            # to make last dim the sequence dim instead of the feature dim
+            masked_proj = tf.transpose(masked_proj, [0, 2, 1])
+            top_k = tf.math.top_k(input=masked_proj, k=config.aggr_k)
+            if config.chunk_pool_fn == "top_k_mean":
+                aggr_op = tf.reduce_mean(top_k, axis=2)
             else:
-                # Concat across the hidden_size dim (axis=1) so feature_size dim is hidden_size * 2
-                aggr_outputs = tf.concat([aggr_mean, aggr_max], axis=1)
+                # Need to reshape to be [batch_size, feature_size] instead of [batch_size, hidden_size, k]
+                top_k_shape = tf.shape(top_k)
+                top_k = tf.reshape(top_k, tf.concat([top_k_shape[0], top_k_shape[1] * top_k_shape[2]], axis=0))
+                # Directly return because it doesn't make sense to combine top_k with max
+                return top_k
+
+        # TODO Add TextCNN
         else:
             raise ValueError(f"chunk_pool_fn={config.chunk_pool_fn} is not supported")
+
+        # Make padded values very large negative numbers
+        aggr_max = tf.reduce_max(seq_proj_max - (inv_seq_mask * 1e9), axis=1)
+
+        # Concat across the hidden_size dim (axis=1) so feature_size dim is hidden_size * 2
+        aggr_outputs = tf.concat([aggr_op, aggr_max], axis=1)
 
         return aggr_outputs
 
