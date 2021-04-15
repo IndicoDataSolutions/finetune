@@ -66,7 +66,7 @@ def _remove_repeated_whitespace(encoded):
         encoded.token_ids, encoded.tokens, encoded.token_ends, encoded.token_starts
     ):
         mask = [
-            i != 0 and token.strip() == tokens[i - 1].strip() == "" for i, token in enumerate(tokens)
+            i != 0 and token.strip(" ") == tokens[i - 1].strip(" ") == "" for i, token in enumerate(tokens)
         ]
         batch_token_idxs.append([x for x, c in zip(token_ids, mask) if not c])
         batch_tokens.append([x for x, c in zip(tokens, mask) if not c])
