@@ -355,7 +355,7 @@ def bros_decoder(
             return logits
 
         with tf.compat.v1.variable_scope("start_token_logits"):
-            # [Batch Size, Sequence Length, 2]
+            # [batch_size, seq_len, 2]
             if config.low_memory_mode and train:
                 get_out_logits = recompute_grad(get_out_logits, use_entire_scope=True)
             start_token_logits = get_out_logits(hidden)
@@ -363,30 +363,32 @@ def bros_decoder(
         with tf.compat.v1.variable_scope("start_token_hidden"):
             if config.low_memory_mode and train:
                 get_out_hidden = recompute_grad(get_out_hidden, use_entire_scope=True)
-            # [Batch Size, Sequence Length, Hidden Size]
+            # [batch_size, seq_len, hidden_size]
             start_token_hidden = get_out_hidden(hidden)
             start_token_hidden = tf.cast(start_token_hidden, tf.float32)
         with tf.compat.v1.variable_scope("next_token_hidden"):
             if config.low_memory_mode and train:
                 get_out_hidden = recompute_grad(get_out_hidden, use_entire_scope=True)
-            # [Batch Size, Sequence Length, Hidden Size]
+            # [batch_size, seq_len, hidden_size]
             next_token_hidden = get_out_hidden(hidden)
             next_token_hidden = tf.cast(next_token_hidden, tf.float32)
 
+            # [hidden_size]
             no_next_hidden = tf.cast(
                 tf.compat.v1.get_variable(
                     "no_next_hidden", shape=[hidden_size]
                 ),
                 tf.float32,
             )
+            # [1, 1, hidden_size]
             no_next_hidden = tf.reshape(no_next_hidden, (1, 1, hidden_size))
+            # [batch_size, 1, hidden_size]
             no_next_hidden = tf.repeat(no_next_hidden, tf.shape(hidden)[0], axis=0)
-            # [Batch Size, Sequence Length + 1, Hidden Size]
-            # Note: The no relation embedding comes first
-
+            # [batch_size, seq_len + 1, hidden_size]
+            # Note: The no relation embedding comes first, this matters for decoding
             next_token_hidden = tf.concat((no_next_hidden, next_token_hidden), axis=1)
         with tf.compat.v1.variable_scope("next_token_logits"):
-            # [Batch Size, Sequence Length, Sequence Legth + 1]
+            # [batch_size, seq_len, seq_len + 1]
             next_token_logits = tf.matmul(
                 start_token_hidden,
                 next_token_hidden,
@@ -399,19 +401,50 @@ def bros_decoder(
             )
 
         loss = 0.0
-        # class_weights = kwargs.get("class_weights")
-        with tf.device("CPU:0" if train else start_token_logits.device):
-            # if class_weights is not None and train:
-            #     class_weights = tf.reshape(class_weights, [1, 1, -1])
-            #     one_hot_class_weights = class_weights * tf.one_hot(
-            #         targets, depth=n_targets
-            #     )
-            #     per_token_weights = tf.reduce_sum(
-            #         input_tensor=one_hot_class_weights, axis=-1, keepdims=True
-            #     )
-            #     logits = class_reweighted_grad(logits, per_token_weights)
-
+        class_weights = kwargs.get("class_weights")
+        with tf.compat.v1.variable_scope("loss"):
             if targets is not None:
+                # [batch_size, seq_len]
+                start_targets = targets[:, 0, :]
+                next_targets = targets[:, 1, :]
+
+                if class_weights is not None and train:
+                    # [1, 1, 2]
+                    # Last dim will not be 2 if we add more classes to BROS
+                    start_weights = class_weights[:-2][None, None, :]
+                    one_hot_start_weights = start_weights * tf.one_hot(
+                        start_targets, depth=2
+                    )
+                    per_token_start_weights = tf.reduce_sum(
+                        input_tensor=one_hot_start_weights, axis=-1, keepdims=True
+                    )
+                    start_token_logits = class_reweighted_grad(
+                        start_token_logits, per_token_start_weights,
+                        name="start_reweighted_grad"
+                    )
+
+                    # [2]
+                    next_weights = class_weights[-2:]
+                    stop_weight, cont_weight = next_weights[0], next_weights[1]
+                    seq_len = tf.shape(next_targets)[-1]
+                    # cont_weight applies to all tokens but the delimiter token
+                    cont_weight = tf.repeat(cont_weight, seq_len)
+                    # [seq_len + 1]
+                    next_weights = tf.concat(
+                        [[stop_weight], cont_weight], axis=0
+                    )
+                    one_hot_next_weights = next_weights * tf.one_hot(
+                        next_targets, depth=seq_len + 1,
+                    )
+                    per_token_next_weights = tf.reduce_sum(
+                        input_tensor=one_hot_next_weights, axis=-1, keepdims=True
+                    )
+                    next_token_logits = class_reweighted_grad(
+                        next_token_logits, per_token_next_weights,
+                        name="next_reweighted_grad"
+                    )
+                    
+
                 weights = tf.math.divide_no_nan(
                     tf.sequence_mask(
                         lengths,
@@ -421,10 +454,10 @@ def bros_decoder(
                     tf.expand_dims(tf.cast(lengths, tf.float32), -1),
                 )
                 start_token_loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(
-                    targets[:, 0, :], start_token_logits, weights=weights
+                     start_targets, start_token_logits, weights=weights
                 )
                 next_token_loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(
-                    targets[:, 1, :], next_token_logits, weights=weights
+                    next_targets, next_token_logits, weights=weights
                 )
                 scaled_start_token_loss = config.start_token_loss_weight * start_token_loss
                 scaled_next_token_loss = config.next_token_loss_weight * next_token_loss
@@ -465,11 +498,22 @@ def joint_bros_decoder(
         "logits": Dictionary containing "ner_logits", "start_token_logits" and "next_token_logits"
         "losses": Combined sequence labeling and bros loss
     """
+
     # Unpack the targets
     bros_targets, seq_targets = None, None
     if targets is not None:
         bros_targets = targets[:, 1:, :]
         seq_targets = targets[:, 0, :]
+
+    # Correct n_targets, subtract number of group labels
+    n_targets -= 4
+
+    # Unpack class weights
+    bros_weights, ner_weights = None, None
+    class_weights = kwargs.pop("class_weights")
+    if class_weights is not None:
+        bros_weights = class_weights[n_targets:]
+        ner_weights = class_weights[:n_targets]
         
     bros_dict = bros_decoder(
         hidden,
@@ -479,6 +523,7 @@ def joint_bros_decoder(
         train=train,
         reuse=reuse,
         lengths=lengths,
+        class_weights=bros_weights,
         **kwargs
     )
     seq_dict = sequence_labeler(
@@ -492,6 +537,7 @@ def joint_bros_decoder(
         reuse=reuse,
         lengths=lengths,
         use_crf=use_crf,
+        class_weights=ner_weights,
         **kwargs
     )
 

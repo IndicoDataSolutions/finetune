@@ -363,7 +363,7 @@ def ordinal_regressor(
         return {"logits": outputs, "losses": loss}
 
 
-def class_reweighted_grad(logits, class_weights):
+def class_reweighted_grad(logits, class_weights, name="class_reweighted_grad"):
     def custom_grad_fn(op, g):
         new_g = g * class_weights
         ratio = tf.math.divide_no_nan(tf.norm(g), tf.norm(new_g))
@@ -371,7 +371,7 @@ def class_reweighted_grad(logits, class_weights):
 
     @function.Defun(
         logits.dtype,
-        func_name="class_reweight_grad",
+        func_name=name,
         python_grad_func=custom_grad_fn,
         shape_func=lambda _: [logits.get_shape()],
     )

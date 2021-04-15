@@ -8,6 +8,7 @@ import tensorflow as tf
 from finetune.model import PredictMode
 from finetune.nn.crf import sequence_decode
 from finetune.encoding.input_encoder import tokenize_context
+from finetune.util.imbalance import compute_class_weights
 from finetune.target_models.sequence_labeling import (
     SequencePipeline,
     SequenceLabeler,
@@ -125,6 +126,36 @@ class BROSPipeline(GroupingPipeline):
     def _target_encoder(self):
         return BROSEncoder(pad_token=self.config.pad_token)
 
+    def _compute_class_counts(self, encoded_dataset):
+        start_counter = Counter()
+        next_counter = Counter()
+        for doc, target_arr in encoded_dataset:
+            target_arr = np.asarray(target_arr)
+            decoded_targets = self.label_encoder.inverse_transform(target_arr)
+
+            start_tokens, next_tokens = decoded_targets
+            # We only care about 0 vs non-0 for weighting next tokens
+            # STOP and CONT are hardcoded values in BROSEncoder
+            next_tokens = ["STOP" if n == 0 else "CONT" for n in next_tokens]
+
+            # {"<PAD>": count, "GROUP": count}
+            start_counter.update(start_tokens)
+            # {"STOP": count, "CONT": count}
+            next_counter.update(next_tokens)
+        # Passed directly to and unpacked in _compute_class_weights
+        return (start_counter, next_counter)
+
+    def _compute_class_weights(self, class_weights, class_counts):
+        start_counter, next_counter = class_counts
+        start_weights = compute_class_weights(
+            class_weights=class_weights, class_counts=start_counter
+        )
+        next_weights = compute_class_weights(
+            class_weights=class_weights, class_counts=next_counter
+        )
+        # {"<PAD>": ratio, "GROUP": ratio, "STOP": ratio, "CONT": ratio}
+        return {**start_weights, **next_weights}
+
     def feed_shape_type_def(self):
         TS = tf.TensorShape
         types = {"tokens": tf.int32}
@@ -146,6 +177,40 @@ class JointBROSPipeline(JointGroupingPipeline):
     def _target_encoder(self):
         return JointBROSEncoder(pad_token=self.config.pad_token,
                                 bio_tagging=self.config.bio_tagging)
+
+    def _compute_class_counts(self, encoded_dataset):
+        ner_counter = Counter()
+        start_counter = Counter()
+        next_counter = Counter()
+        for doc, target_arr in encoded_dataset:
+            # TODO: Get rid of code duplication
+            target_arr = np.asarray(target_arr)
+            decoded_targets = self.label_encoder.inverse_transform(target_arr)
+
+            ner_labels, start_tokens, next_tokens = decoded_targets
+            # We only care about 0 vs non-0 for weighting next tokens
+            # STOP and CONT are hardcoded values in BROSEncoder
+            next_tokens = ["STOP" if n == 0 else "CONT" for n in next_tokens]
+
+            ner_counter.update(ner_labels)
+            start_counter.update(start_tokens)
+            next_counter.update(next_tokens)
+        # Passed directly to and unpacked in _compute_class_weights
+        return (ner_counter, start_counter, next_counter)
+
+    def _compute_class_weights(self, class_weights, class_counts):
+        ner_counter, start_counter, next_counter = class_counts
+        ner_weights = compute_class_weights(
+            class_weights=class_weights, class_counts=ner_counter
+        )
+        start_weights = compute_class_weights(
+            class_weights=class_weights, class_counts=start_counter
+        )
+        next_weights = compute_class_weights(
+            class_weights=class_weights, class_counts=next_counter
+        )
+        # The tensor this creates in unpacked in the target block
+        return {**ner_weights, **start_weights, **next_weights}
 
     def feed_shape_type_def(self):
         TS = tf.TensorShape

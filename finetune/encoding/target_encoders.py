@@ -511,7 +511,11 @@ class BROSEncoder(BaseEncoder):
         self.lookup = None
 
     def fit(self, labels):
-        self.classes_ = sorted([self.pad_token, "GROUP"])
+        # STOP and CONT represent 0 and non-0 next tokens, respectively
+        # STOP and CONT only matter when class weights are being used - see
+        # BROSPipeline and util.imabalance.class_weight_tensor
+        # Note: This means finetune's n_targets count used elsewhere is broken
+        self.classes_ = [self.pad_token, "GROUP", "STOP", "CONT"]
         self.lookup = {c: i for i, c in enumerate(self.classes_)}
 
     def pre_process_label(self, out, labels):
@@ -537,7 +541,6 @@ class BROSEncoder(BaseEncoder):
         next_token_labels = [0 for _ in out.tokens]
 
         for group in groups:
-            # Placeholder, may be changed if we decide to use labels
             current_tag = "GROUP"
             prev_idx = None
             group_end = max([g["end"] for g in group["tokens"]])
@@ -683,13 +686,21 @@ class JointBROSEncoder(BROSEncoder, SequenceLabelingEncoder):
         labels, groups = list(zip(*labels))
         BROSEncoder.fit(self, labels)
         self.group_classes_, self.group_lookup = self.classes_, self.lookup
-        # Run the sequence labeling fit second so that self.classes_ is the
-        # sequence labeling classes for the rest of finetune.
         SequenceLabelingEncoder.fit(self, labels)
         self.ner_classes_, self.ner_lookup = self.classes_, self.lookup
+        
+        # Create a combination of both classes so we can create a single class
+        # weight tensor in util.imbalance.class_weight_tensor
+        # Note: Finetune calculates n_labels as the length of classes_, so this
+        # caues n_labels to be too large. We manually adjust for this in the
+        # joint_bros target block
+        self.classes_ = [c for c in self.ner_classes_]
+        self.classes_.extend(self.group_classes_)
 
     def transform(self, out, labels):
         labels, groups = labels
+
+        _classes_ = self.classes_
 
         self.classes_, self.lookup = self.group_classes_, self.group_lookup
         group_labels = BROSEncoder.transform(self, out, (labels, groups))
@@ -697,6 +708,9 @@ class JointBROSEncoder(BROSEncoder, SequenceLabelingEncoder):
 
         self.classes_, self.lookup = self.ner_classes_, self.ner_lookup
         ner_labels = SequenceLabelingEncoder.transform(self, out, labels)
+
+        # Ensure we always have the full list of classes for class weights
+        self.classes_ = _classes_
 
         return [ner_labels, start_token_labels, next_token_labels]
 
