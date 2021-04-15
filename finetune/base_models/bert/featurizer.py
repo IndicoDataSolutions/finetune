@@ -2,6 +2,7 @@ import functools
 import math
 
 import tensorflow as tf
+from tensorflow.python.ops import gen_math_ops
 from finetune.util.shapes import lengths_from_eos_idx
 from finetune.base_models.bert.roberta_encoder import RoBERTaEncoder
 from finetune.base_models.bert.modeling import BertConfig, BertModel, LayoutLMModel, \
@@ -433,29 +434,38 @@ def long_doc_bert_featurizer(
             aggr_op = tf.reduce_min(seq_proj_max + (inv_seq_mask * 1e9), axis=1)
         elif config.chunk_pool_fn == "var":
             # Use ragged boolean mask so we don't compute variance on masked tokens
-            seq_mask = tf.cast(seq_mask, tf.bool)
+            # Also squeeze empty dimension
+            seq_mask = tf.squeeze(tf.cast(seq_mask, tf.bool), axis=2)
             masked_proj = tf.ragged.boolean_mask(seq_proj, seq_mask)
-            aggr_op = tf.math.reduce_variance(masked_proj, axis=1)
+            # This is kind of a hack because reduce_variance doesn't support ragged tensors
+            # https://github.com/tensorflow/tensorflow/pull/37014/files
+            # https://github.com/tensorflow/tensorflow/issues/37000
+            square_of_input = gen_math_ops.square(masked_proj)
+            mean_of_square = tf.reduce_mean(square_of_input, axis=1)
+            mean = tf.reduce_mean(masked_proj, axis=1)
+            square_of_mean = gen_math_ops.square(mean)
+            aggr_op = mean_of_square - square_of_mean
+            # aggr_op = tf.math.reduce_variance(masked_proj, axis=1)
         elif config.chunk_pool_fn == "lstm":
-            lstm = tf.keras.layers.LSTM(units=config.n_embed)
+            lstm = tf.keras.layers.LSTM(units=config.n_embed, name="lstm_not_chunk_attn")
             # TODO Not sure if I need seq_mask or inv_seq_mask here
             # inv_seq_mask is 0 where you have tokens, and 1 otherwise, which I
             # think is what the LSTM op expects
             # Also not sure if I want to specify an initial state
             aggr_op = lstm(inputs=seq_proj, mask=inv_seq_mask)
-        elif config.chunk_pool_fn.contains("top_k"):
+        elif "top_k" in config.chunk_pool_fn:
             # Make padded values very large negative numbers
             masked_proj = seq_proj_max - (inv_seq_mask * 1e9)
             # tf.math.top_k operates on the last dim, so need to transpose
             # to make last dim the sequence dim instead of the feature dim
             masked_proj = tf.transpose(masked_proj, [0, 2, 1])
-            top_k = tf.math.top_k(input=masked_proj, k=config.aggr_k)
+            top_k = tf.math.top_k(input=masked_proj, k=config.aggr_k).values
             if config.chunk_pool_fn == "top_k_mean":
                 aggr_op = tf.reduce_mean(top_k, axis=2)
             else:
                 # Need to reshape to be [batch_size, feature_size] instead of [batch_size, hidden_size, k]
                 top_k_shape = tf.shape(top_k)
-                top_k = tf.reshape(top_k, tf.concat([top_k_shape[0], top_k_shape[1] * top_k_shape[2]], axis=0))
+                top_k = tf.reshape(top_k, shape=[top_k_shape[0], top_k_shape[1] * top_k_shape[2]])
                 # Directly return because it doesn't make sense to combine top_k with max
                 return top_k
 
