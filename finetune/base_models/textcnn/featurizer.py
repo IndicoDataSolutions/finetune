@@ -73,7 +73,20 @@ def textcnn_featurizer(
                 kernel_initializer=tf.compat.v1.initializers.glorot_normal,
             )
             conv_layers.append(conv)
-            pool = tf.reduce_max(input_tensor=conv + mask * -1e9, axis=1)
+            if config.chunk_pool_fn == "top_k":
+                n_embed = config.n_embed * config.aggr_k
+                # Make padded values very large negative numbers
+                masked_proj = conv - (mask * 1e9)
+                # tf.math.top_k operates on the last dim, so need to transpose
+                # to make last dim the sequence dim instead of the feature dim
+                masked_proj = tf.transpose(masked_proj, [0, 2, 1])
+                top_k = tf.math.top_k(input=masked_proj, k=config.aggr_k).values
+                top_k_shape = tf.shape(top_k)
+                pool = tf.reshape(top_k, shape=[top_k_shape[0], top_k_shape[1] * top_k_shape[2]])
+            # else default to max
+            else:
+                n_embed = config.n_embed
+                pool = tf.reduce_max(input_tensor=conv + mask * -1e9, axis=1)
             pool_layers.append(pool)
 
         # Concat the output of the convolutional layers for use in sequence embedding
@@ -83,7 +96,7 @@ def textcnn_featurizer(
         # Concatenate the univariate vectors as features for classification
         clf_h = tf.concat(pool_layers, axis=1)
         clf_h = tf.reshape(
-            clf_h, shape=tf.concat((initial_shape[:-1], [config.n_embed]), 0)
+            clf_h, shape=tf.concat((initial_shape[:-1], [n_embed]), 0)
         )
 
         # note that, due to convolution and pooling, the dimensionality of the features is much smaller than in the

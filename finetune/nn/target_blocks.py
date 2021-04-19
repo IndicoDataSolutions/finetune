@@ -33,8 +33,10 @@ def perceptron(x, ny, config, w_init=None, b_init=None):
         if config.chunk_pool_fn == "top_k":
             nx = config.n_embed * config.aggr_k
         # nx is hidden_size * 2 due to combining max pooling with another op
-        else:
+        elif config.base_model == "LongDocBERT":
             nx = config.n_embed * 2
+        else:
+            nx = config.n_embed
 
         w = tf.compat.v1.get_variable("w", [nx, ny], initializer=w_init)
         b = tf.compat.v1.get_variable("b", [ny], initializer=b_init)

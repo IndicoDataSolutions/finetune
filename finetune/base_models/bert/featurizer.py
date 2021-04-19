@@ -7,6 +7,7 @@ from finetune.util.shapes import lengths_from_eos_idx
 from finetune.base_models.bert.roberta_encoder import RoBERTaEncoder
 from finetune.base_models.bert.modeling import BertConfig, BertModel, LayoutLMModel, \
     create_initializer, get_shape_list, reshape_to_matrix
+from finetune.base_models.gpt.featurizer import dropout
 
 
 def get_decay_for_half(total_num_steps):
@@ -866,6 +867,54 @@ def attention_layer(
         )
 
     return context_layer
+
+
+def textcnn_pooler(
+    seq_features,
+    mask,
+    config,
+    train=False,
+    reuse=None,
+    **kwargs
+):
+    """
+    The transformer element of the finetuning model. Maps from tokens ids to a dense, embedding of the sequence.
+
+    :param X: A tensor of token indexes with shape [batch_size, sequence_length, token_idx]
+    :param encoder: A TextEncoder object.
+    :param config: A config object, containing all parameters for the featurizer.
+    :param train: If this flag is true, dropout and losses are added to the graph.
+    :param reuse: Should reuse be set within this scope.
+    :return: A dict containing;
+        embed_weights: the word embedding matrix.
+        features: The output of the featurizer_final state.
+        sequence_features: The output of the featurizer at each timestep.
+    """
+    initial_shape = tf.shape(input=seq_features)
+
+    # Convolutional Layer (this is all the same layer, just different filter sizes)
+    pool_layers = []
+    conv_layers = []
+    for i, kernel_size in enumerate(config.kernel_sizes):
+        conv = tf.compat.v1.layers.conv1d(
+            inputs=seq_features,
+            filters=config.num_filters_per_size,
+            kernel_size=kernel_size,
+            padding="same",
+            activation=tf.nn.relu,
+            name="conv_not_chunk_attn" + str(i),
+            kernel_initializer=tf.compat.v1.initializers.glorot_normal,
+        )
+        conv_layers.append(conv)
+        pool = tf.reduce_max(input_tensor=conv + mask * -1e9, axis=1)
+        pool_layers.append(pool)
+
+    # Concatenate the univariate vectors as features for classification
+    features = tf.concat(pool_layers, axis=1)
+    features = tf.reshape(
+        features, shape=tf.concat((initial_shape[:-1], [config.n_embed]), 0)
+    )
+    return features
 
 
 layoutlm_featurizer = functools.partial(bert_featurizer, underlying_model=LayoutLMModel)
