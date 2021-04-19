@@ -1,7 +1,7 @@
 import os
 import unittest
 import logging
-from copy import copy
+from copy import copy, deepcopy
 from pathlib import Path
 import codecs
 import json
@@ -81,10 +81,8 @@ class TestSequenceLabeler(unittest.TestCase):
             docs.append(texts)
             docs_labels.append(labels)
 
-
         with open(cls.processed_path, 'wt') as fp:
             json.dump((docs, docs_labels), fp)
-
 
     @classmethod
     def setUpClass(cls):
@@ -191,7 +189,6 @@ class TestSequenceLabeler(unittest.TestCase):
 
         self.assertGreater(reweighted_token_recall['Named Entity'], token_recall['Named Entity'])
 
-
     def test_cached_predict(self):
         """
         Ensure model training does not error out
@@ -202,7 +199,7 @@ class TestSequenceLabeler(unittest.TestCase):
                                                          none_value=self.model.config.pad_token)
         train_texts, test_texts, train_annotations, _ = train_test_split(texts, annotations, test_size=0.1)
         self.model.fit(train_texts, train_annotations)
-        
+
         self.model.config.chunk_long_sequences = True
         self.model.config.max_length = 128
 
@@ -231,7 +228,6 @@ class TestSequenceLabeler(unittest.TestCase):
     def test_raises_when_text_doesnt_match(self):
         with self.assertRaises(ValueError):
             self.model.fit(["Text about a dog."], [[{"start": 0, "end": 5, "text": "cat", "label": "dog"}]])
-
 
     def test_reasonable_predictions(self):
         test_sequence = ["I am a dog. A dog that's incredibly bright. I can talk, read, and write!"]
@@ -267,7 +263,6 @@ class TestSequenceLabeler(unittest.TestCase):
         predictions = self.model.predict(test_sequence)
         self.assertEqual(len(predictions[0]), 20)
         self.assertTrue(any(pred["text"].strip() == "dog" for pred in predictions[0]))
-        
 
     def test_fit_predict_multi_model(self):
         """
@@ -290,7 +285,6 @@ class TestSequenceLabeler(unittest.TestCase):
         model = SequenceLabeler.load(self.save_file)
         model.predict(test_texts)
 
-
     def test_pred_alignment(self):
         model = SequenceLabeler(subtoken_predictions=True)
         text = "John J Johnson"
@@ -301,6 +295,20 @@ class TestSequenceLabeler(unittest.TestCase):
         del preds[0]["confidence"]
         self.assertEquals(preds, labels)
 
+    def test_bio_tagging(self):
+        model = SequenceLabeler(bio_tagging=True)
+        text = "Look! Sequential entity-tagging!"
+        labels = [
+            {"start": 6, "end": 16, "text": "Sequential", "label": "entity"},
+            {"start": 17, "end": 24, "text": "entity-", "label": "entity"},
+            {"start": 24, "end": 31, "text": "tagging", "label": "entity"},
+        ]
+        model.fit([text] * 30, [labels] * 30)
+        preds = model.predict([text])[0]
+        self.assertEqual(len(preds), 3)
+        for p in preds:
+            del p["confidence"]
+        self.assertEqual(preds, labels)
 
     def test_auto_negative_chunks(self):
         raw_docs = ["".join(text) for text in self.texts]
@@ -320,6 +328,80 @@ class TestSequenceLabeler(unittest.TestCase):
         baseline_token_precision = sequence_labeling_token_precision(test_annotations, baseline_predictions)
 
         assert ans_token_precision['Named Entity'] > baseline_token_precision['Named Entity']
+
+    def test_pre_chunking(self):
+        """
+        If config.max_document_chars is set, documents are "pre chunked" into "sub
+        documents" prior to creation of the input pipeline. This test asserts that
+        the splitting and rejoining behaves as expected.
+        """
+        max_doc_len = 250
+
+        # Create a mix of short and long sequences for prediction
+        test_sequence = "I am a dog. A dog that's incredibly bright. I can talk, read, and write! "
+        test_sequences = [test_sequence, test_sequence * 10, test_sequence, test_sequence * 10]
+
+        # Use animal test data to train model
+        path = os.path.join(os.path.dirname(__file__), "data", "testdata.json")
+        with open(path, "rt") as fp:
+            text, labels = json.load(fp)
+        self.model.finetune(text * 10, labels * 10)
+
+        # Split inputs into "sub documents"
+        self.model.config.max_document_chars = max_doc_len
+        split_sequences, split_indices = self.model._pre_chunk_document(test_sequences)
+
+        # Predict on the newly split sequences. We unset config.max_document chars
+        # prior to calling predict so that we don't repeat the pre chunking that we
+        # did explicitly above. This has the potential to be brittle if the functionality
+        # of predict in sequence_labeler.py changes
+        self.model.config.max_document_chars = None
+        split_preds = self.model.predict(split_sequences)
+
+        # Rejoin predictions using split_indices
+        self.model.config.max_document_chars = max_doc_len
+        preds = self.model._merge_chunked_preds(deepcopy(split_preds), split_indices)
+
+        # Assert that documents were split properly
+        assert split_indices == [[0], [1, 2, 3], [4], [5, 6, 7]]
+        assert len(split_preds) == 8
+        assert len(preds) == 4
+
+        # Assert that the offset is calculated correctly for start/end indices after
+        # merging predictions by specifically looking at the last "sub document" of
+        # second (index 1) document, which was split into three "sub documents"
+        sub_split_preds = split_preds[3]
+        sub_preds = [pred for pred in preds[1] if pred["start"] >= max_doc_len * 2]
+        for split_pred, pred in zip(sub_split_preds, sub_preds):
+            assert split_pred["start"] + max_doc_len * 2 == pred["start"]
+            assert split_pred["end"] + max_doc_len * 2 == pred["end"]
+
+    def test_max_document_chars(self):
+        """
+        If documents are "pre chunked" due to config.max_document_chars being set,
+        predictions are impacted when a document is split in the middle of a non-pad
+        token. This test asserts that the impact is minimal.
+        """
+        # Use animal test data to train model
+        test_sequence = ["I am a dog. A dog that's incredibly bright. I can talk, read, and write! " * 10]
+        path = os.path.join(os.path.dirname(__file__), "data", "testdata.json")
+        with open(path, "rt") as fp:
+            text, labels = json.load(fp)
+        self.model.finetune(text * 10, labels * 10)
+
+        # Predict without config.max_document_chars
+        preds = self.model.predict(test_sequence)
+
+        # Predict with config.max_document_chars set to split long sequence
+        self.model.config.max_document_chars = 250
+        pre_chunk_preds = self.model.predict(test_sequence)
+
+        # Ensure that the number of predictions of the span "dog" is almost identical
+        # between preds and pre_chunk_preds. The reason these values are not identical
+        # is because with pre chunking, "dog" can be split across multiple sub documents
+        num_dog_preds = len([p for p in preds[0] if p["text"] == "dog"])
+        num_dog_pre_chunk_preds = len([p for p in pre_chunk_preds[0] if p["text"] == "dog"])
+        assert num_dog_pre_chunk_preds / num_dog_preds >= 0.95
 
 
 class TestSequenceMemoryLeak(unittest.TestCase):
@@ -351,7 +433,6 @@ class TestSequenceMemoryLeak(unittest.TestCase):
                 except Exception as e:
                     print(e)
         return weakrefs
-
 
     def test_leaking_objects(self):
         previous_model_wrs = None

@@ -132,6 +132,7 @@ class DocumentPipeline(SequencePipeline):
                 chunk_dict = chunk._asdict()
                 chunk_dict["token_starts"] = [start if start == -1 else start + offset for start in chunk_dict["token_starts"]]
                 chunk_dict["token_ends"] = [end if end == -1 else end + offset for end in chunk_dict["token_ends"]]
+                chunk_dict["offset"] = offset
                 yield EncodedOutput(**chunk_dict)
             offset += len(X_page)
 

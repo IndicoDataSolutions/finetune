@@ -66,6 +66,7 @@ DISTIL_BERT_PARAMS = {
 
 class _BaseBert(SourceModel):
     is_bidirectional = True
+    is_roberta = False
 
     @classmethod
     def get_optimal_params(cls, config):
@@ -78,7 +79,7 @@ class _BaseBert(SourceModel):
                 "n_epochs": 5,
                 "batch_size": 4,
                 "chunk_context": 16,
-                "predict_batch_size": 48,
+                "predict_batch_size": 256 if config.float_16_predict else 48,
             }
 
         elif config.optimize_for.lower() == "accuracy":
@@ -96,7 +97,7 @@ class _BaseBert(SourceModel):
                 "n_epochs": base_n_epochs,
                 "batch_size": base_batch_size,
                 "chunk_context": 16,
-                "predict_batch_size": 48,
+                "predict_batch_size": 256 if config.float_16_predict else 48,
             }
         else:
             raise ValueError(
@@ -174,6 +175,7 @@ class BERTModelMultilingualCased(_BaseBert):
 class RoBERTa(_BaseBert):
     encoder = RoBERTaEncoderV2
     featurizer = bert_featurizer
+    is_roberta = True
     settings = {
         **BERT_BASE_PARAMS,
         "epsilon": 1e-8,
@@ -211,6 +213,7 @@ class RoBERTa(_BaseBert):
 class DocRep(_BaseBert):
     encoder = RoBERTaEncoderV2
     featurizer = bert_featurizer
+    is_roberta = True
     settings = dict(RoBERTa.settings)
     settings.update(
         {
@@ -258,6 +261,7 @@ class DocRep(_BaseBert):
 
 class RoBERTaLarge(RoBERTa):
     encoder = RoBERTaEncoderV2
+    is_roberta = True
     featurizer = bert_featurizer
     settings = {
          **BERT_LARGE_PARAMS,
@@ -308,6 +312,8 @@ class DistilBERT(_BaseBert):
 class DistilRoBERTa(_BaseBert):
     encoder = RoBERTaEncoder
     featurizer = bert_featurizer
+    is_roberta = True
+
     settings = {
         **DISTIL_BERT_PARAMS,
         "base_model_path": os.path.join("bert", "distilroberta.jl"),

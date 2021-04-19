@@ -223,5 +223,5 @@ def gpt2_featurizer(
             "features": clf_h,
             "sequence_features": seq_feats,
             "eos_idx": pool_idx,
-            "lengths": lengths
+            "length": lengths
         }

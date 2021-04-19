@@ -33,7 +33,12 @@ class TestSortByLength(unittest.TestCase):
 
         print(total_sorted, total_no_sort)
 
-        assert total_sorted < total_no_sort
+        # This is somewhat arbitrary to require that the time to predict with sorting
+        # is twice as fast as without sorting. This is to ensure that sorting actually
+        # happens, because otherwise total_sorted can still be less than total_no_sort
+        # by a very minimal fraction due to chance. In practice with this curated dataset,
+        # the ratio between total_no_sort and total_sorted is >3
+        assert total_no_sort / total_sorted > 2
         for pair in zip(probas, probas_sorted):
             assert np.allclose(list(pair[0].values()), list(pair[1].values()), atol=1e-6)
 
@@ -51,5 +56,3 @@ class TestSortByLength(unittest.TestCase):
 
         for pair in zip(probas, probas_sorted):
             assert np.allclose(list(pair[0].values()), list(pair[1].values()), atol=1e-6)
-
-        

@@ -123,7 +123,11 @@ class Settings(dict):
     :param val_set: Where it is neccessary to use an explicit validation set, provide it here as a tuple (text, labels)
     :param per_process_gpu_memory_fraction: fraction of the overall amount of memory that each visible GPU should be allocated, defaults to `1.0`.
     :param max_empty_chunk_ratio: Controls the maximum ratio of empty to labeled chunks for sequence labeling. None includes all chunks, defaults to 1.0.
-
+    :param auto_negative_sampling: Method to use with long sparse documents to cut down on training
+        time and limit false positives. Defaults to False
+    :param max_document_chars: Maximum number of characters in a document before splitting into
+        len(document) / max_document_chars "sub documents" for prediction to avoid memory issues
+        during creation of the input pipeline. Defaults to None (no splitting)
     """
 
     def get_grid_searchable(self):
@@ -265,7 +269,7 @@ def get_default_config():
         seq_num_heads=16,
         pad_token="<PAD>",
         pad_idx=None,
-        subtoken_predictions=False,
+        subtoken_predictions=True,
         multi_label_sequences=False,
         multi_label_threshold=0.5,
         chunk_long_sequences=True,
@@ -277,6 +281,9 @@ def get_default_config():
         use_gpu_crf_predict="auto",
         max_empty_chunk_ratio=1.0,
         auto_negative_sampling=False,
+        max_document_chars=None,
+        bio_tagging=False,
+        # Partial labels (for sequence labeling)
         unknown_labels=False,
         unknown_token="<UNK>",
         filter_unknown_examples=True,

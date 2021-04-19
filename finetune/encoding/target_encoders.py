@@ -186,17 +186,29 @@ class OrdinalRegressionEncoder(OrdinalEncoder, BaseEncoder):
 
 class SequenceLabelingEncoder(BaseEncoder):
 
-    def __init__(self, pad_token):
+    def __init__(self, pad_token, bio_tagging=False):
         self.classes_ = None
         self.pad_token = pad_token
         self.lookup = None
+        self.bio_tagging = bio_tagging
 
     def fit(self, labels):
         self.classes_ = sorted(list(set(lab_i["label"] for lab in labels for lab_i in lab) | {self.pad_token}))
         # Put unknown token at the end. This is an awful hack
+        add_unk = False
         if "<UNK>" in self.classes_:
             self.classes_.remove("<UNK>")
+            add_unk = True
+
+        if self.bio_tagging:
+            # <PAD> is duplicated here, removed in the set() call
+            self.classes_ = [pre + c if c != self.pad_token else c
+                             for c in self.classes_ for pre in ("B-", "I-")]
+            self.classes_ = sorted(list(set(self.classes_)))
+
+        if add_unk:
             self.classes_.append("<UNK>")
+
         self.lookup = {c: i for i, c in enumerate(self.classes_)}
 
     def pre_process_label(self, out, labels):
@@ -204,7 +216,7 @@ class SequenceLabelingEncoder(BaseEncoder):
         return labels, pad_idx
 
     @staticmethod
-    def overlaps(label, tok_start, tok_end, tok_text):
+    def overlaps(label, tok_start, tok_end, tok_text, input_text, offset=None):
         does_overlap = (
             label["start"] < tok_end <= label["end"] or
             tok_start < label["end"] <= tok_end
@@ -214,34 +226,49 @@ class SequenceLabelingEncoder(BaseEncoder):
 
         # Don't run check if text wasn't provided
         if 'text' in label:
-            sub_text = label["text"][tok_start - label["start"]: tok_end - label["start"]]
-            strings_agree = sub_text.lower() in tok_text.lower()
+            if offset is not None:
+                strings_agree = input_text[label["start"] - offset: label["end"] - offset] == label["text"]
+            else:
+                strings_agree = input_text[label["start"]: label["end"]] == label["text"]
         else:
             strings_agree = True
 
         return does_overlap, strings_agree
 
     def transform(self, out, labels):
+        # This is basically input_text[0] in the normal case and joins pages for doclabeler
+        input_text = "".join(out.input_text)
         labels, pad_idx = self.pre_process_label(out, labels)
         labels_out = [pad_idx for _ in out.tokens]
+        offset = out.offset or 0
         for label in labels:
+            current_label = label["label"]
+            if self.bio_tagging:
+                current_label = "B-" + current_label
             for i, (start, end, text) in enumerate(zip(out.token_starts, out.token_ends, out.tokens)):
                 # Label extends less than halfway through token
                 if label["end"] < (start + end + 1) // 2:
                     break
-                overlap, agree = self.overlaps(label, start, end, text)
+                overlap, agree = self.overlaps(label, start, end, text, input_text, offset=offset)
                 if overlap:
                     if not agree:
-                        raise ValueError("Tokens and labels do not align")
-                    if labels_out[i] != pad_idx and self.lookup[label["label"]] != labels_out[i]:
+                        raise ValueError(
+                            "Tokens and labels do not align. {} matches with {}".format(
+                                label,
+                                input_text[label["start"] - offset: label["end"] - offset]
+                            )
+                        )
+                    if labels_out[i] != pad_idx and self.lookup[current_label] != labels_out[i]:
                         LOGGER.warning("Overlapping labels were found, consider multilabel_sequence=True")
-                    if label["label"] not in self.lookup:
+                    if current_label not in self.lookup:
                         LOGGER.warning(
                             "Attempting to encode unknown labels : {}, ignoring for now but this will likely not "
-                            "result in desirable behaviour. Available labels are {}".format(label["label"], self.lookup.keys())
+                            "result in desirable behaviour. Available labels are {}".format(current_label, self.lookup.keys())
                         )
                     else:
-                        labels_out[i] = self.lookup[label["label"]]
+                        labels_out[i] = self.lookup[current_label]
+                        if self.bio_tagging and current_label[:2] == "B-":
+                            current_label = "I-" + current_label[2:]
         return labels_out
 
     def inverse_transform(self, y):

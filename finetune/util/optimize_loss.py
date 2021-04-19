@@ -47,7 +47,7 @@ def get_optimizer(
         Optimizer = get_grad_accumulation_optimizer(Optimizer, accumulate_steps)
 
     decay_var_list = [
-        v for v in tf.compat.v1.global_variables() if len(v.get_shape()) > 1 or vector_l2
+        v for v in tf.compat.v1.global_variables() if (len(v.get_shape()) > 1 or vector_l2) and "Transition_matrix" not in v.name
     ]
 
     opt = Optimizer(
