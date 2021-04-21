@@ -267,7 +267,7 @@ class DocRep(_BaseBert):
     def get_encoder(cls, config=None, **kwargs):
         return cls.encoder(**kwargs)
     
-class FusedDocRep(RoBERTa):
+class FusedDocRep(DocRep):
     featurizer = fused_featurizer(bert_featurizer)
     settings = dict(DocRep.settings)
     settings.update({

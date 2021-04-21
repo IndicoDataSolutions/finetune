@@ -68,7 +68,6 @@ def bert_featurizer(
     X.set_shape([None, None])
     # To fit the interface of finetune we are going to compute the mask and type id at runtime.
     delimiters = tf.cast(tf.equal(X, encoder.delimiter_token), tf.int32)
-
     token_type_ids = tf.cumsum(delimiters, exclusive=True, axis=1)
 
     seq_length = tf.shape(input=delimiters)[1]
@@ -85,7 +84,6 @@ def bert_featurizer(
         return tf.zeros(tf.shape(X)[0], dtype=tf.int64)
     
     eos_idx = tf.cond(tf.equal(seq_length, 0), true_fn=get_zeros, false_fn=get_eos)
-        
 
     lengths = lengths_from_eos_idx(eos_idx=eos_idx, max_length=seq_length)
 
