@@ -433,12 +433,15 @@ def bros_decoder(
                     next_weights = tf.concat(
                         [[stop_weight], cont_weight], axis=0
                     )
+                    # [batch_size, seq_len, seq_len + 1]
                     one_hot_next_weights = next_weights * tf.one_hot(
                         next_targets, depth=seq_len + 1,
                     )
+                    # [batch_size, seq_len, 1]
                     per_token_next_weights = tf.reduce_sum(
                         input_tensor=one_hot_next_weights, axis=-1, keepdims=True
                     )
+                    # [batch_size, seq_len]
                     next_token_logits = class_reweighted_grad(
                         next_token_logits, per_token_next_weights,
                         name="next_reweighted_grad"
@@ -917,6 +920,7 @@ def group_relation_decoder(
             probs = tf.nn.softmax(logits, axis=1)
 
         loss = 0.0
+        class_weights = kwargs.get("class_weights")
         if targets is not None:
             # Hungarian Algorithm
             with tf.compat.v1.variable_scope("hungarian-algorithm"):
@@ -948,21 +952,55 @@ def group_relation_decoder(
                 # Reorder targets accordingly
                 # [batch_size, n_groups, seq_len]
                 targets = tf.gather(targets, target_idxs, batch_dims=1)
+
+                # Transpose so we can calculate cross entropy per token
+                # [batch_size, seq_len, n_groups]
+                logits = tf.transpose(logits, perm=[0, 2, 1])
+                targets = tf.transpose(targets, perm=[0, 2, 1])
+
+                # Convert from one hot to idx for class weights
+                # [batch_size, seq_len]
+                targets = tf.argmax(targets, axis=-1)
                 targets = tf.stop_gradient(targets)
+
+            # Class weights
+            if class_weights is not None and train:
+                with tf.compat.v1.variable_scope("class_weights"):
+                    # [1], [1]
+                    # Weight order from target encoder classes_ attribute
+                    group_weight, pad_weight = class_weights[0], class_weights[1]
+                    # Group weight applies to all groups but the pad group
+                    # [n_groups - 1]
+                    group_weights = tf.repeat(group_weight, n_groups - 1)
+                    # Note that pad weight is last, as the pad group is encoded
+                    # as the last group in the target encoder
+                    # [n_groups]
+                    weights = tf.concat(
+                        [group_weights, [pad_weight]], axis=0
+                    )
+                    # [batch_size, seq_len, n_groups]
+                    one_hot_weights = weights * tf.one_hot(
+                        targets, depth=n_groups,
+                    )
+                    # [batch_size, seq_len, 1]
+                    per_token_weights = tf.reduce_sum(
+                        one_hot_weights, axis=-1, keepdims=True
+                    )
+                    # [batch_size, seq_len, n_groups]
+                    logits = class_reweighted_grad(
+                        logits, per_token_weights, name="group_reweighted_grad"
+                    )
 
             # Loss calculation
             with tf.compat.v1.variable_scope("loss"):
-                # Transpose so we can calculate cross entropy per token
-                # [batch_size, seq_len, n_groups]
-                probs = tf.transpose(probs, perm=[0, 2, 1])
-                targets = tf.transpose(targets, perm=[0, 2, 1])
                 # [batch_size, seq_len]
-                loss = tf.keras.losses.categorical_crossentropy(
-                    targets, probs, from_logits=False,
+                loss = tf.keras.losses.sparse_categorical_crossentropy(
+                    targets, logits, from_logits=True,
                 )
-                # Mask out loss for padding
+                # Mask paddding out of the loss
                 # [batch_size, seq_len]
                 loss *= tf.cast(sequence_mask, tf.float32)
+                #[]
                 loss = tf.reduce_mean(loss)
     return {
         "logits": logits,
@@ -1011,6 +1049,16 @@ def joint_group_relation_decoder(
     if targets is not None:
         group_relation_targets = targets["groups"]
         seq_targets = targets["tags"]
+
+    # Correct n_targets, subtract number of group labels
+    n_targets -= 2
+
+    # Unpack class weights
+    group_weights, ner_weights = None, None
+    class_weights = kwargs.pop("class_weights")
+    if class_weights is not None:
+        group_weights = class_weights[n_targets:]
+        ner_weights = class_weights[:n_targets]
         
     group_relation_dict = group_relation_decoder(
         hidden,
@@ -1029,6 +1077,7 @@ def joint_group_relation_decoder(
         initializer_range=initializer_range,
         n_layers=n_layers,
         query_size=query_size,
+        class_weights=group_weights,
     )
     seq_dict = sequence_labeler(
         hidden,
@@ -1041,6 +1090,7 @@ def joint_group_relation_decoder(
         reuse=reuse,
         lengths=lengths,
         use_crf=use_crf,
+        class_weights=ner_weights,
         **kwargs
     )
 

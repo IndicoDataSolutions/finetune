@@ -209,7 +209,7 @@ class JointBROSPipeline(JointGroupingPipeline):
         next_weights = compute_class_weights(
             class_weights=class_weights, class_counts=next_counter
         )
-        # The tensor this creates in unpacked in the target block
+        # The tensor this creates is unpacked in the target block
         return {**ner_weights, **start_weights, **next_weights}
 
     def feed_shape_type_def(self):
@@ -277,6 +277,25 @@ class GroupRelationPipeline(GroupingPipeline):
         return GroupRelationEncoder(pad_token=self.config.pad_token,
                                     n_groups=self.config.n_groups)
 
+    def _compute_class_counts(self, encoded_dataset):
+        counter = Counter()
+        for doc, target_arr in encoded_dataset:
+            target_arr = np.asarray(target_arr)
+            label = self.label_encoder.inverse_transform(target_arr)
+
+            # Count number of tokens in non-pad groups and pad group
+            groups = label[:-1]
+            counter["GROUP"] += sum([sum(g) for g in groups])
+            pad_group = label[-1]
+            counter["PAD"] += sum(pad_group)
+        return counter
+
+    def _compute_class_weights(self, class_weights, class_counts):
+        weights = compute_class_weights(
+            class_weights=class_weights, class_counts=class_counts
+        )
+        return weights
+
     def feed_shape_type_def(self):
         TS = tf.TensorShape
         types = {"tokens": tf.int32}
@@ -298,6 +317,33 @@ class JointGroupRelationPipeline(JointGroupingPipeline):
     def _target_encoder(self):
         return JointGroupRelationEncoder(pad_token=self.config.pad_token,
                                          n_groups=self.config.n_groups)
+
+    def _compute_class_counts(self, encoded_dataset):
+        ner_counter = Counter()
+        group_counter = Counter()
+        for doc, target_arr in encoded_dataset:
+            target_arr = np.asarray(target_arr)
+            ner_labels, group_labels = self.label_encoder.inverse_transform(
+                target_arr, class_weights=True
+            )
+            ner_counter.update(ner_labels)
+            # Count number of tokens in non-pad groups and pad group
+            non_pad_groups = group_labels[:-1]
+            group_counter["GROUP"] += sum([sum(g) for g in non_pad_groups])
+            pad_group = group_labels[-1]
+            group_counter["PAD"] += sum(pad_group)
+        # Unpacked in _compute_class_weights
+        return (ner_counter, group_counter)
+
+    def _compute_class_weights(self, class_weights, class_counts):
+        ner_counts, group_counts = class_counts
+        ner_weights = compute_class_weights(
+            class_weights=class_weights, class_counts=ner_counts,
+        )
+        group_weights = compute_class_weights(
+            class_weights=class_weights, class_counts=group_counts,
+        )
+        return {**ner_weights, **group_weights}
 
     def feed_shape_type_def(self):
         TS = tf.TensorShape

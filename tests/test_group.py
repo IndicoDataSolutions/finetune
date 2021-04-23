@@ -298,7 +298,7 @@ class TestGroupingLabelers(unittest.TestCase):
         self.assertEqual(preds, labels)
 
     def test_group_relation_tagging(self):
-        model = GroupRelationLabeler(lr=8e-5)
+        model = GroupRelationLabeler(lr=8e-5, class_weights="sqrt")
         text = ("five percent (5%) \n " +
                 "fifty percent (50%) \n " +
                 "two percent (2%) \n " +

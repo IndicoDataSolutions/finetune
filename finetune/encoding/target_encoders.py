@@ -626,15 +626,23 @@ class GroupRelationEncoder(BROSEncoder):
     """
     Produces labels for a group relation model.
     
-    Labels are of shape [n_groups, seq_len + 1], where each element is a 0 or 1 and
-    represents whether a token belongs to a certain group, and the final
-    element of a group represents whether that group is a padding group or not
+    Labels are of shape [n_groups, seq_len], where each element is a 0 or 1 and
+    represents whether a token belongs to a certain group, and where the last
+    group represents the pad group
     """
     def __init__(self, pad_token, n_groups):
         self.classes_ = None
         self.lookup = None
         self.pad_token = pad_token
         self.n_groups = n_groups
+
+    def fit(self, labels):
+        # PAD and GROUP represent tokens in the pad group and all other tokens
+        # PAD and GROUP only matter when class weights are being used - see
+        # GroupRelationsPipeline and util.imabalance.class_weight_tensor
+        # Note: This means finetune's n_targets count used elsewhere is broken
+        self.classes_ = ["GROUP", "PAD"]
+        self.lookup = {c: i for i, c in enumerate(self.classes_)}
 
     def transform(self, out, labels):
         input_text = "".join(out.input_text)
@@ -648,8 +656,7 @@ class GroupRelationEncoder(BROSEncoder):
         encoded_labels = [[0 for _ in range(len(out.tokens))]
                           for _ in range(self.n_groups - 1)]
         # Final group is reserved for pad
-        # Tokens default to this group, and the final element is 1 to indicate
-        # it is the padding group
+        # Tokens default to this group
         encoded_labels.append([1 for _ in range(len(out.tokens))])
         for i, group in enumerate(groups):
             group_end = max([g["end"] for g in group["tokens"]])
@@ -728,11 +735,7 @@ class JointBROSEncoder(BROSEncoder, SequenceLabelingEncoder):
 
         self.classes_ = _classes_
 
-        if only_labels:
-            # Return only NER labels for class counts
-            return tags
-        else:
-            return (tags, start_tokens, next_tokens)
+        return (tags, start_tokens, next_tokens)
 
 class JointTokenRelationEncoder(TokenRelationEncoder, SequenceLabelingEncoder):
     """
@@ -796,19 +799,37 @@ class JointGroupRelationEncoder(GroupRelationEncoder, SequenceLabelingEncoder):
 
     def fit(self, labels):
         labels, groups = list(zip(*labels))
+        GroupRelationEncoder.fit(self, labels)
+        self.group_classes_, self.group_lookup = self.classes_, self.lookup
         SequenceLabelingEncoder.fit(self, labels)
         self.ner_classes_, self.ner_lookup = self.classes_, self.lookup
+        
+        # Create a combination of both classes so we can create a single class
+        # weight tensor in util.imbalance.class_weight_tensor
+        # Note: Finetune calculates n_labels as the length of classes_, so this
+        # caues n_labels to be too large. We manually adjust for this in the
+        # joint_group_relation target block
+        self.classes_ = [c for c in self.ner_classes_]
+        self.classes_.extend(self.group_classes_)
 
     def transform(self, out, labels):
         labels, groups = labels
 
+        _classes_ = self.classes_
+
+        self.classes_, self.lookup = self.group_classes_, self.group_lookup
         group_labels = GroupRelationEncoder.transform(self, out, (labels, groups))
+
+        self.classes_, self.lookup = self.ner_classes_, self.ner_lookup
         ner_labels = SequenceLabelingEncoder.transform(self, out, labels)
+
+        self.classes_ = _classes_
 
         return {"groups": group_labels, "tags": ner_labels}
 
-    def inverse_transform(self, y, only_labels=False):
-        if only_labels:
+    def inverse_transform(self, y, class_weights=False):
+        # Input in different form if coming from target encoder versus preds
+        if class_weights:
             # Unpack 0-dim numpy array
             y = y.item()
             # Unpack target encoder output
@@ -818,13 +839,14 @@ class JointGroupRelationEncoder(GroupRelationEncoder, SequenceLabelingEncoder):
             # Unpack predict module output
             groups, tags = y[0], y[1]
 
+        _classes_ = self.classes_
+
+        self.classes_, self.lookup = self.ner_classes_, self.ner_lookup
         tags = SequenceLabelingEncoder.inverse_transform(self, tags)
 
-        if only_labels:
-            # Return only NER labels for class counts
-            return tags
-        else:
-            return (tags, groups)
+        self.classes_ = _classes_
+
+        return (tags, groups)
 
 class SequenceMultiLabelingEncoder(SequenceLabelingEncoder):
     def transform(self, out, labels):
