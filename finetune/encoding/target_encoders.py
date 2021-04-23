@@ -717,12 +717,16 @@ class JointBROSEncoder(BROSEncoder, SequenceLabelingEncoder):
     def inverse_transform(self, y, only_labels=False):
         tags, start_tokens, next_tokens = y
 
+        _classes_ = self.classes_
+
         self.classes_, self.lookup = self.group_classes_, self.group_lookup
         group_tags = BROSEncoder.inverse_transform(self, (start_tokens, next_tokens))
         start_tokens, next_tokens = group_tags
 
         self.classes_, self.lookup = self.ner_classes_, self.ner_lookup
         tags = SequenceLabelingEncoder.inverse_transform(self, tags)
+
+        self.classes_ = _classes_
 
         if only_labels:
             # Return only NER labels for class counts
