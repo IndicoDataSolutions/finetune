@@ -837,7 +837,7 @@ def group_relation_decoder(
         # Reshape to 2D for attention calculations
         group_embeddings = tf.reshape(group_embeddings, [-1, hidden_size])
 
-        hidden = tf.compat.v1.layers.dense(hidden, query_size)
+        # hidden = tf.compat.v1.layers.dense(hidden, query_size)
         hidden = tf.reshape(hidden, [-1, encoder_hidden])
 
         # Decoder blocks
@@ -896,11 +896,11 @@ def group_relation_decoder(
             group_queries = tf.compat.v1.layers.dense(attention_output, query_size)
             # group_queries = tf.math.l2_normalize(group_queries, axis=-1)
 
-            # # [batch_size, seq_len, intermediate_size]
-            # token_intermediate = tf.compat.v1.layers.dense(hidden, intermediate_size)
-            # # [batch_size, seq_len, query_size]
-            # token_keys = tf.compat.v1.layers.dense(token_intermediate, query_size)
-            token_keys = hidden
+            # [batch_size, seq_len, intermediate_size]
+            token_intermediate = tf.compat.v1.layers.dense(hidden, intermediate_size)
+            # [batch_size, seq_len, query_size]
+            token_keys = tf.compat.v1.layers.dense(token_intermediate, query_size)
+            # token_keys = hidden
 
             # [batch_size, seq_len, query_size]
             # token_keys = tf.compat.v1.layers.dense(hidden, query_size)
