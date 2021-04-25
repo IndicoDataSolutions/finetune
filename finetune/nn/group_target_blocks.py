@@ -900,9 +900,9 @@ def group_relation_decoder(
             # group_queries = tf.math.l2_normalize(group_queries, axis=-1)
 
             # [batch_size, seq_len, intermediate_size]
-            token_intermediate = tf.compat.v1.layers.dense(hidden, intermediate_size)
+            # token_intermediate = tf.compat.v1.layers.dense(hidden, intermediate_size)
             # [batch_size, seq_len, query_size]
-            token_keys = tf.compat.v1.layers.dense(token_intermediate, query_size)
+            token_keys = tf.compat.v1.layers.dense(hidden, query_size)
             # token_keys = hidden
 
             # [batch_size, seq_len, query_size]
@@ -952,16 +952,12 @@ def group_relation_decoder(
                 # Reorder targets accordingly
                 # [batch_size, n_groups, seq_len]
                 targets = tf.gather(targets, target_idxs, batch_dims=1)
+                targets = tf.stop_gradient(targets)
 
                 # Transpose so we can calculate cross entropy per token
                 # [batch_size, seq_len, n_groups]
                 logits = tf.transpose(logits, perm=[0, 2, 1])
                 targets = tf.transpose(targets, perm=[0, 2, 1])
-
-                # Convert from one hot to idx for class weights
-                # [batch_size, seq_len]
-                targets = tf.argmax(targets, axis=-1)
-                targets = tf.stop_gradient(targets)
 
             # Class weights
             if class_weights is not None and train:
@@ -978,10 +974,14 @@ def group_relation_decoder(
                     weights = tf.concat(
                         [group_weights, [pad_weight]], axis=0
                     )
+                    # [batch_size, n_groups]
+                    weights = tf.tile(weights[None, :], [batch_size, 1])
+                    # Permute the weights to match the target permutations
+                    weights = tf.gather(weights, target_idxs, batch_dims=1)
+                    # [batch_size, 1, n_groups]
+                    weights = weights[:, None, :]
                     # [batch_size, seq_len, n_groups]
-                    one_hot_weights = weights * tf.one_hot(
-                        targets, depth=n_groups,
-                    )
+                    one_hot_weights = weights * targets
                     # [batch_size, seq_len, 1]
                     per_token_weights = tf.reduce_sum(
                         one_hot_weights, axis=-1, keepdims=True
@@ -994,13 +994,12 @@ def group_relation_decoder(
             # Loss calculation
             with tf.compat.v1.variable_scope("loss"):
                 # [batch_size, seq_len]
-                loss = tf.keras.losses.sparse_categorical_crossentropy(
+                loss = tf.keras.losses.categorical_crossentropy(
                     targets, logits, from_logits=True,
                 )
                 # Mask paddding out of the loss
                 # [batch_size, seq_len]
                 loss *= tf.cast(sequence_mask, tf.float32)
-                #[]
                 loss = tf.reduce_mean(loss)
     return {
         "logits": logits,
