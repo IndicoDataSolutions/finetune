@@ -1269,6 +1269,10 @@ def try_decode(pred):
         return []
 
 class SequenceS2S(HFS2S):
+    """
+    T5 wrapper for seqeunce labeling. Primarily decodes JSON into standard
+    finetune NER labels.
+    """
     def _get_input_pipeline(self):
         return SequenceS2SPipeline(self.config)
 
@@ -1305,6 +1309,9 @@ class SequenceS2S(HFS2S):
         return all_labels
 
 class GroupS2S(HFS2S):
+    """
+    T5 wrapper for grouping. Primarily decodes JSON into standard group labels.
+    """
     def _get_input_pipeline(self):
         return GroupS2SPipeline(self.config)
 
@@ -1347,6 +1354,10 @@ class GroupS2S(HFS2S):
         return all_groups
 
 class JointS2S(HFS2S):
+    """
+    T5 wrapper for joint sequence tagging and grouping. Calls SequenceS2S and
+    GroupS2S to decode JSON outputs.
+    """
     def _get_input_pipeline(self):
         return JointS2SPipeline(self.config)
 
