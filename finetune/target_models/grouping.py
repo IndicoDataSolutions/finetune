@@ -1096,7 +1096,6 @@ class GroupRelationLabeler(SequenceLabeler):
             train=train,
             reuse=reuse,
             lengths=featurizer_state["lengths"],
-            # TODO: Move to config
             hidden_size=config.group_hidden_size,
             num_attention_heads=config.group_attention_heads,
             n_layers=config.group_n_layers,
@@ -1105,15 +1104,13 @@ class GroupRelationLabeler(SequenceLabeler):
         )
 
     def _predict_op(self, logits, **kwargs):
-        # [batch_size, n_groups, seq_len]
-        group_probas = kwargs["probs"]
         # [batch_size, seq_len, n_groups]
-        group_probas = tf.transpose(group_probas, perm=[0, 2, 1])
-
+        logits = tf.transpose(logits, perm=[0, 2, 1])
+        probs = tf.nn.softmax(logits, axis=-1)
         # [batch_size, seq_len]
-        token_groups = tf.argmax(group_probas, axis=-1)
-
-        return token_groups, group_probas
+        probs = tf.compat.v1.Print(probs, [tf.shape(logits), tf.shape(probs)])
+        token_groups = tf.argmax(probs, axis=-1)
+        return token_groups, probs
 
     def predict(self, X, **kwargs):
         return super().predict(X, **kwargs)
@@ -1222,7 +1219,7 @@ class JointGroupRelationLabeler(GroupRelationLabeler, SequenceLabeler):
 
     def _predict_op(self, logits, **kwargs):
         group_idxs, group_probas = GroupRelationLabeler._predict_op(
-            self, logits["group_logits"], probs=kwargs.get("group_probs")
+            self, logits["group_logits"]
         )
         ner_idxs, ner_probas = SequenceLabeler._predict_op(
             self, logits["ner_logits"], **kwargs

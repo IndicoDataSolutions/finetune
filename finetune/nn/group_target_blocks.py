@@ -821,6 +821,20 @@ def group_relation_decoder(
     query_size=256,
     **kwargs
 ):
+    """
+    A group relation decoder.
+
+    :param hidden: The output of the featurizer. [batch_size, sequence_length, embed_dim]
+    :param targets: The targets. [batch_size, n_groups, seq_len]
+    :param config: A config object, containing all parameters for the featurizer.
+    :param train: If this flag is true, dropout and losses are added to the graph.
+    :param reuse: Should reuse be set within this scope.
+    :param lengths: The number of non-padding tokens in the input.
+    :param kwargs: Spare arguments.
+    :return: dict containing:
+        "logits": Un-normalized logits. [batch_size, seq_len, n_groups]
+        "losses": Cross entropy loss.
+    """
     with tf.compat.v1.variable_scope("seq2seq-decoder"):
         hidden_shape = tf.shape(hidden)
         batch_size = hidden_shape[0]
@@ -840,7 +854,6 @@ def group_relation_decoder(
         # Reshape to 2D for attention calculations
         group_embeddings = tf.reshape(group_embeddings, [-1, hidden_size])
 
-        # hidden = tf.compat.v1.layers.dense(hidden, query_size)
         hidden = tf.reshape(hidden, [-1, encoder_hidden])
 
         # Decoder blocks
@@ -899,20 +912,8 @@ def group_relation_decoder(
             group_queries = tf.compat.v1.layers.dense(attention_output, query_size)
             # group_queries = tf.math.l2_normalize(group_queries, axis=-1)
 
-            # [batch_size, seq_len, intermediate_size]
-            # token_intermediate = tf.compat.v1.layers.dense(hidden, intermediate_size)
             # [batch_size, seq_len, query_size]
             token_keys = tf.compat.v1.layers.dense(hidden, query_size)
-            # token_keys = hidden
-
-            # [batch_size, seq_len, query_size]
-            # token_keys = tf.compat.v1.layers.dense(hidden, query_size)
-            # token_keys = tf.math.l2_normalize(token_keys, axis=-1)
-
-            # As we have normalized keys and queries to unit vectors, this
-            # matrix multiplication measures the cos distance between vectors
-            # Fits the clustering framing where queries are learned centroids
-            # and keys are points we are clustering
 
             # [batch_size, n_groups, seq_len]
             logits = tf.matmul(group_queries, token_keys, transpose_b=True)
@@ -963,7 +964,7 @@ def group_relation_decoder(
             if class_weights is not None and train:
                 with tf.compat.v1.variable_scope("class_weights"):
                     # [1], [1]
-                    # Weight order from target encoder classes_ attribute
+                    # Weight order taken from target encoder classes_ attribute
                     group_weight, pad_weight = class_weights[0], class_weights[1]
                     # Group weight applies to all groups but the pad group
                     # [n_groups - 1]
@@ -1004,9 +1005,6 @@ def group_relation_decoder(
     return {
         "logits": logits,
         "losses": loss,
-        "predict_params": {
-            "probs": probs,
-        },
     }
 
 def joint_group_relation_decoder(
@@ -1035,13 +1033,15 @@ def joint_group_relation_decoder(
     A target block that calls both the sequence labeling target block and the
     group relation decoder target block. See each respective function for further details
 
-    :param targets: The targets. [:, -1, :] is assumed to contain the
-    sequence labeling targets, and the rest ([:, :-1, :]), is expected to
-    contain the group relation labels. [batch_size, 3, sequence_length,
-    sequence_length]
+    :param targets: The targets. A dictionary containing the group relation
+    targest in the key "groups" and the ner targets in the key "tags"
+    :return: dict containing:
+    :param class_weights: Class weights as calculated by the target model. Of
+    length n_ner_targets + 2, where the last two weights are for the group
+    relation model.
     :return: dict containing:
         "logits": Dictionary containing "ner_logits" [batch_size, seq_len]
-        and "group_logits" [batch_size, n_groups, seq_len]
+        and "group_logits" [batch_size, seq_len, n_groups]
         "losses": Combined sequence labeling and group relation loss
     """
     group_relation_targets, seq_targets = None, None
@@ -1108,7 +1108,6 @@ def joint_group_relation_decoder(
         },
         "losses": scaled_seq_loss + scaled_group_loss,
         "predict_params": {
-            "group_probs": group_relation_dict["predict_params"]["probs"],
             "sequence_length": lengths,
             "transition_matrix": seq_dict["predict_params"]["transition_matrix"],
         },
