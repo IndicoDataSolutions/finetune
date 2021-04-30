@@ -577,51 +577,6 @@ class BROSEncoder(BaseEncoder):
         start_tokens = [self.classes_[l] for l in start_tokens]
         return (start_tokens, next_tokens)
 
-class TokenRelationEncoder(BROSEncoder):
-    """
-    Produces labels for a token relation model.
-    
-    First set of labels is a [seq_len, seq_len] entity mask. It is used to
-    restrict our loss to relations between entities. Second set of labels is a
-    [seq_len, seq_len] symetric relation matrix, where [i][j] = 1 means token
-    i and token j are within the same group.
-    """
-    def transform(self, out, labels):
-        input_text = "".join(out.input_text)
-        labels, groups = labels
-
-        # Build relation matrix
-        encoded_labels = [[0 for _ in out.tokens] for _ in out.tokens]
-        for group in groups:
-            group_idxs = []
-            group_end = max([g["end"] for g in group["tokens"]])
-            for i, (start, end, text) in enumerate(zip(out.token_starts, out.token_ends, out.tokens)):
-                if group_end < (start + end + 1) // 2:
-                    break
-                overlap, agree = self.group_overlaps(group, start, end, text, input_text)
-                if overlap:
-                    if not agree:
-                        raise ValueError("Tokens and groups do not align")
-                    group_idxs.append(i)
-            for i in group_idxs:
-                for j in group_idxs:
-                    if i == j: continue
-                    encoded_labels[i][j] = 1
-
-        # Build entity mask
-        # Currently only masks edges and diagonal
-        entity_mask = [[1 for _ in out.tokens] for _ in out.tokens]
-        for i in range(len(out.tokens)):
-            for j in range(len(out.tokens)):
-                if (i == j or i == 0 or j == 0 or
-                    i == len(out.tokens) - 1 or j == len(out.tokens) - 1):
-                    entity_mask[i][j] = 0
-
-        return [entity_mask, encoded_labels]
-
-    def inverse_transform(self, y):
-        return y
-
 class GroupRelationEncoder(BROSEncoder):
     """
     Produces labels for a group relation model.
@@ -736,53 +691,6 @@ class JointBROSEncoder(BROSEncoder, SequenceLabelingEncoder):
         self.classes_ = _classes_
 
         return (tags, start_tokens, next_tokens)
-
-class JointTokenRelationEncoder(TokenRelationEncoder, SequenceLabelingEncoder):
-    """
-    Produces labels for a joint Token Relation / Sequence Labeling model.
-    
-    First set of labels are standard NER sequence labeling models, second and
-    third set of labels are token relation entity mask and relation matrix
-    labels.
-    """
-    def __init__(self, pad_token, bio_tagging=False):
-        SequenceLabelingEncoder.__init__(self, pad_token,
-                                         bio_tagging=bio_tagging)
-
-    def fit(self, labels):
-        labels, groups = list(zip(*labels))
-        SequenceLabelingEncoder.fit(self, labels)
-
-    def transform(self, out, labels):
-        labels, groups = labels
-
-        group_labels = TokenRelationEncoder.transform(self, out, (labels, groups))
-        entity_mask, relation_matrix = group_labels
-        ner_labels = SequenceLabelingEncoder.transform(self, out, labels)
-        
-        # We have to pack the NER labels into a padded [seq_len, seq_len]
-        # matrix so we can pass the labels through Finetune as a single tensor
-        labels, pad_idx = self.pre_process_label(out, labels)
-        ner_matrix = [[pad_idx for _ in range(len(ner_labels))]
-                      for _ in range(len(ner_labels))]
-        ner_matrix[0] = ner_labels
-
-        return [ner_matrix, entity_mask, relation_matrix]
-
-    def inverse_transform(self, y, only_labels=False):
-        if only_labels:
-            # Also have to unpack mask when input is from target encoder
-            tags, _, y = y
-        else:
-            tags, y = y
-        # Extract the NER labels from the padding matrix
-        tags = tags[0]
-        tags = SequenceLabelingEncoder.inverse_transform(self, tags)
-        if only_labels:
-            # Return only NER labels for class counts
-            return tags
-        else:
-            return (tags, y)
 
 class JointGroupRelationEncoder(GroupRelationEncoder, SequenceLabelingEncoder):
     """
