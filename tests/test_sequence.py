@@ -403,6 +403,18 @@ class TestSequenceLabeler(unittest.TestCase):
         num_dog_pre_chunk_preds = len([p for p in pre_chunk_preds[0] if p["text"] == "dog"])
         assert num_dog_pre_chunk_preds / num_dog_preds >= 0.95
 
+    def test_labeled_whitespace(self):
+        model = SequenceLabeler()
+        text = "I am a dog. A dog that's incredibly bright. I can talk, read, and write!"
+        labels = [{"start": 0, "end": 7, "text": "I am a ", "label": "entity"}]
+        model.fit([text] * 30, [labels] * 30)
+        preds = model.predict([text])[0]
+        self.assertEqual(len(preds), 1)
+        for p in preds:
+            del p["confidence"]
+        correct_label = [{"start": 0, "end": 6, "text": "I am a", "label": "entity"}]
+        self.assertEqual(preds, correct_label)
+
 
 class TestSequenceMemoryLeak(unittest.TestCase):
 
