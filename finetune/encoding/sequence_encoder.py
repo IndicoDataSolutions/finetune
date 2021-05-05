@@ -296,7 +296,7 @@ def strip_annotation_whitespace(annotation):
     r_pad = len(l_strip) - len(lr_strip)
 
     annotation["text"] = lr_strip
-    annotation["start"] -= l_pad
-    annotation["end"] -= l_pad + r_pad
+    annotation["start"] += l_pad
+    annotation["end"] -= r_pad
 
     return annotation

@@ -405,14 +405,14 @@ class TestSequenceLabeler(unittest.TestCase):
 
     def test_labeled_whitespace(self):
         model = SequenceLabeler()
-        text = "I am a dog. A dog that's incredibly bright. I can talk, read, and write!"
-        labels = [{"start": 0, "end": 7, "text": "I am a ", "label": "entity"}]
+        text = " I am a dog. A dog that's incredibly bright. I can talk, read, and write!"
+        labels = [{"start": 0, "end": 8, "text": " I am a ", "label": "entity"}]
         model.fit([text] * 30, [labels] * 30)
         preds = model.predict([text])[0]
         self.assertEqual(len(preds), 1)
         for p in preds:
             del p["confidence"]
-        correct_label = [{"start": 0, "end": 6, "text": "I am a", "label": "entity"}]
+        correct_label = [{"start": 1, "end": 7, "text": "I am a", "label": "entity"}]
         self.assertEqual(preds, correct_label)
 
 
