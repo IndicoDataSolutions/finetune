@@ -140,8 +140,11 @@ def calc_class_counts(all_preds, all_labels, span_type="exact"):
             group_count = doc_counts[pred_idx][label_idx]
             pred_label = doc_preds[pred_idx]["label"]
             label_label = doc_labels[label_idx]["label"]
+
             class_counts[label_label]["true_positives"] += group_count["TP"]
+            # False positives attributed to the predicted label
             class_counts[pred_label]["false_positives"] += group_count["FP"]
+            # False negatives attributed to the ground truth label
             class_counts[label_label]["false_negatives"] += group_count["FN"]
 
         pred_idxs, label_idxs = list(zip(*assign_idxs))
@@ -169,6 +172,24 @@ def calc_class_counts(all_preds, all_labels, span_type="exact"):
     return class_counts
 
 def calc_class_metrics(class_counts):
+    """
+    Calculates a set of metrics for each class.
+    Returns a dictioary of the form:
+    {
+        "class1": {
+            "precision": 0.5,
+            "recall": 0.5,
+            "f1-score": 0.5,
+            "true_positives: 1,
+            "false_positives: 1,
+            "false_negatives": 1,
+        }
+        .
+        .
+        .
+        "class_n: {...},
+    }
+    """
     per_class_metrics = {}
     for cls, counts in class_counts.items():
         TP = counts["true_positives"]
@@ -191,23 +212,31 @@ def calc_class_metrics(class_counts):
         }
     return per_class_metrics
 
-def micro_avg(class_counts):
-    classes = list(class_counts.keys())
-    TP = sum([class_counts[c]["true_positives"] for c in classes])
-    FP = sum([class_counts[c]["false_positives"] for c in classes])
-    FN = sum([class_counts[c]["false_negatives"] for c in classes])
+def micro_avg(class_metrics):
+    """
+    Takes a dictionary of class metrics and calculates micro F1
+    """
+    TP = sum([c["true_positives"] for c in class_metrics.values()])
+    FP = sum([c["false_positives"] for c in class_metrics.values()])
+    FN = sum([c["false_negatives"] for c in class_metrics.values()])
     precision = calc_precision(TP, FP)
     recall = calc_recall(TP, FN)
     return calc_f1(recall, precision)
 
-def macro_avg(class_counts):
-    f1s = [c["f1_score"] for _, c in class_counts.items()]
+def macro_avg(class_metrics):
+    """
+    Takes a dictionary of class metrics and calculates macro F1
+    """
+    f1s = [c["f1_score"] for c in class_metrics.values()]
     return np.average(f1s)
 
-def weighted_avg(class_counts):
-    classes = list(class_counts.keys())
-    f1s = [class_counts[c]["f1_score"] for c in classes]
-    supports = [class_counts[c]["support"] for c in classes]
+def weighted_avg(class_metrics):
+    """
+    Takes a dictionary of class metrics and calculates weighted macro F1
+    """
+    classes = list(class_metrics.keys())
+    f1s = [class_metrics[c]["f1_score"] for c in classes]
+    supports = [class_metrics[c]["support"] for c in classes]
     return np.average(f1s, weight=supports)
 
 def get_average_fn(average):
@@ -219,6 +248,13 @@ def get_average_fn(average):
     return fns[average.lower()]
 
 def group_metrics(preds, labels, span_type="exact", average=None):
+    """
+    Takes a set of group predictions and labels, returns either metrics
+    per-class, or average metrics.
+
+    Note: Takes lists of groups, not lists of tuples containing groups. Output
+    from grouping models should be unzipped before being evaluated.
+    """
     class_counts = calc_class_counts(preds, labels, span_type=span_type)
     per_class_metrics = calc_class_metrics(class_counts)
 
