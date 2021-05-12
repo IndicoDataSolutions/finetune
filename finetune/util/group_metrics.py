@@ -14,6 +14,9 @@ Counts = namedtuple("TP", "FP", "FN")
 def group_exact_counts(pred, label):
     """
     Return TP if groups match exactly
+
+    :param pred, label: A group, represeted as a dict
+    :return: A Counts namedtuple with TP, FP and FN counts
     """
     if (pred["label"] != label["label"] or
         len(pred["tokens"]) != len(label["tokens"])):
@@ -29,6 +32,9 @@ def group_exact_counts(pred, label):
 def group_token_counts(pred, label):
     """
     Return TP, FP, FN counts based on tokens in groups
+
+    :param pred, label: A group, represeted as a dict
+    :return: A Counts namedtuple with TP, FP and FN counts
     """
     pred_tokens = _convert_to_token_list(pred["tokens"])
     label_tokens = _convert_to_token_list(label["tokens"])
@@ -61,6 +67,9 @@ def group_token_counts(pred, label):
 def group_overlap_counts(pred, label):
     """
     Return TP if groups overlap at all
+
+    :param pred, label: A group, represeted as a dict
+    :return: A Counts namedtuple with TP, FP and FN counts
     """
     if (pred["label"] != label["label"]):
         return Counts(0, 1, 1)
@@ -76,6 +85,8 @@ def group_overlap_counts(pred, label):
 def group_superset_counts(pred, label):
     """
     Return TP if all label spans appear within pred spans
+    :param pred, label: A group, represeted as a dict
+    :return: A Counts namedtuple with TP, FP and FN counts
     """
     if (pred["label"] != label["label"]):
         return Counts(0, 1, 1)
@@ -91,6 +102,9 @@ def group_superset_counts(pred, label):
 def joint_exact_counts(pred, label):
     """
     Return TP if joint groups match exactly
+
+    :param pred, label: A joint group, represeted as a dict
+    :return: A Counts namedtuple with TP, FP and FN counts
     """
     if (pred["label"] != label["label"] or
         len(pred["entities"]) != len(label["entities"])):
@@ -107,6 +121,9 @@ def joint_exact_counts(pred, label):
 def joint_token_counts(pred, label):
     """
     Return TP, FP, FN counts based on tokens in joint groups
+
+    :param pred, label: A joint group, represeted as a dict
+    :return: A Counts namedtuple with TP, FP and FN counts
     """
     pred_tokens = _convert_to_token_list(pred["entities"])
     label_tokens = _convert_to_token_list(label["entities"])
@@ -141,6 +158,9 @@ def joint_token_counts(pred, label):
 def joint_overlap_counts(pred, label):
     """
     Return TP if joint groups overlap at all
+
+    :param pred, label: A joint group, represeted as a dict
+    :return: A Counts namedtuple with TP, FP and FN counts
     """
     if (pred["label"] != label["label"]):
         return Counts(0, 1, 1)
@@ -156,6 +176,9 @@ def joint_overlap_counts(pred, label):
 def joint_superset_counts(pred, label):
     """
     Return TP if all label entities appear within pred entities
+
+    :param pred, label: A joint group, represeted as a dict
+    :return: A Counts namedtuple with TP, FP and FN counts
     """
     if (pred["label"] != label["label"]):
         return Counts(0, 1, 1)
@@ -173,12 +196,16 @@ def get_count_fn(metric_type, span_type):
     """
     Returns a function used to count TPs, FPs and FNs between two groups
 
-    Group count functions compare based on the label of the group and the token
+    Group count functions compare based on the label of the group and the text
     spans contained within the group.
 
     Joint count functions compare based on the label of the group and the
     entity spans contained within the group. Requires groups to be in joint
-    group format.
+    group format with an "entities" key.
+
+    :param metric_type: A string, either "group" or "joint"
+    :param span_type: A string, one of "exact", "token", "overlap", "superset"
+    :return: A function that takes two groups and returns a Counts namedtuple
     """
     fns = {
         "group": {
@@ -198,7 +225,14 @@ def get_count_fn(metric_type, span_type):
 
 def calc_group_assignment(preds, labels, count_fn):
     """
-    Calculate optimal pred to label group assignments
+    Calculate optimal prediction to ground truth group assignments
+
+    :param preds, labels: A list of regular or joint groups
+    :return assign_idxs: A list of tuples representing the mapping of predicted
+    groups to ground truth groups, where (i, j) means preds[i] maps to labels[j]
+    :return counts: A list of shape [len(preds), len(labels)], where
+    counts[i][j] contains the TP, FP, FN counts if predicted group i was
+    assigned to ground truth group j
     """
     counts = [[(0, 0, 0) for _ in len(labels)] for _ in len(preds)]
     costs = [[0 for _ in len(labels)] for _ in len(preds)]
@@ -211,24 +245,29 @@ def calc_group_assignment(preds, labels, count_fn):
 
     pred_idxs, label_idxs = linear_sum_assignment(costs)
     pred_idxs, label_idxs = list(pred_idxs), list(label_idxs)
-
-    return list(zip(pred_idxs, label_idxs)), counts
+    assign_idxs = list(zip(pred_idxs, label_idxs))
+    return assign_idxs, counts
 
 def calc_class_counts(all_preds, all_labels, metric_type="group", span_type="exact"):
     """
     Calculate per-class TP, FP and FN counts.
-    Returns a dictionary of the form:
-    {
-        "class1": {
-            "true_positives: 1,
-            "false_positives: 1,
-            "false_negatives": 1,
+
+    :param all_preds, all_labels: A list of list of groups. If metric_type ==
+    "joint", the groups should in joint form with an "entities" key
+    :param metric_type: A string, either "group" or "joint"
+    :param span_type: A string, one of "exact", "token", "overlap", "superset"
+    :return class_counts: A dictionary of the form:
+        {
+            "class1": {
+                "true_positives: 1,
+                "false_positives: 1,
+                "false_negatives": 1,
+            }
+            .
+            .
+            .
+            "class_n: {...},
         }
-        .
-        .
-        .
-        "class_n: {...},
-    }
     """
     if metric_type == "joint":
         assert "entities" in all_preds[0][0] and "entities" in all_labels[0][0],
@@ -286,28 +325,33 @@ def calc_class_counts(all_preds, all_labels, metric_type="group", span_type="exa
 
     return class_counts
 
-def calc_class_metrics(preds, labels, metric_type="group", span_type="exact"):
+def calc_class_metrics(all_preds, all_labels, metric_type="group", span_type="exact"):
     """
     Calculates a set of metrics for each class.
-    Returns a dictioary of the form:
-    {
-        "class1": {
-            "precision": 0.5,
-            "recall": 0.5,
-            "f1-score": 0.5,
-            "support": 2,
-            "true_positives: 1,
-            "false_positives: 1,
-            "false_negatives": 1,
+
+    :param all_preds, all_labels: A list of list of groups. If metric_type ==
+    "joint", the groups should in joint form with an "entities" key
+    :param metric_type: A string, either "group" or "joint"
+    :param span_type: A string, one of "exact", "token", "overlap", "superset"
+    :return per_class_metrics: A dictionary of the form:
+        {
+            "class1": {
+                "precision": 0.5,
+                "recall": 0.5,
+                "f1-score": 0.5,
+                "support": 2,
+                "true_positives: 1,
+                "false_positives: 1,
+                "false_negatives": 1,
+            }
+            .
+            .
+            .
+            "class_n: {...},
         }
-        .
-        .
-        .
-        "class_n: {...},
-    }
     """
     class_counts = calc_class_counts(
-        preds, labels, metric_type=metric_type, span_type=span_type
+        all_preds, all_labels, metric_type=metric_type, span_type=span_type
     )
     per_class_metrics = {}
     for cls, counts in class_counts.items():
@@ -334,6 +378,10 @@ def calc_class_metrics(preds, labels, metric_type="group", span_type="exact"):
 def micro_avg(class_metrics):
     """
     Takes a dictionary of class metrics and calculates micro F1
+
+    :param class_metrics: A dictionary of class metrics as produced by
+    calc_class_metrics()
+    :return: Micro F1
     """
     TP = sum([c["true_positives"] for c in class_metrics.values()])
     FP = sum([c["false_positives"] for c in class_metrics.values()])
@@ -345,6 +393,10 @@ def micro_avg(class_metrics):
 def macro_avg(class_metrics):
     """
     Takes a dictionary of class metrics and calculates macro F1
+
+    :param class_metrics: A dictionary of class metrics as produced by
+    calc_class_metrics()
+    :return: Macro F1
     """
     f1s = [c["f1_score"] for c in class_metrics.values()]
     return np.average(f1s)
@@ -352,6 +404,10 @@ def macro_avg(class_metrics):
 def weighted_avg(class_metrics):
     """
     Takes a dictionary of class metrics and calculates weighted F1
+
+    :param class_metrics: A dictionary of class metrics as produced by
+    calc_class_metrics()
+    :return: Weighted F1
     """
     classes = list(class_metrics.keys())
     f1s = [class_metrics[c]["f1_score"] for c in classes]
@@ -359,6 +415,14 @@ def weighted_avg(class_metrics):
     return np.average(f1s, weight=supports)
 
 def get_average(average, class_metrics):
+    """
+    Calculates average F1 
+
+    :param average: A string, one of "micro", "macro", "weighted"
+    :param class_metrics: A dictionary of class metrics as produced by
+    calc_class_metrics()
+    :return: Average F1 as calculated by the appropriate function
+    """
     fns = {
         "micro": micro_avg,
         "macro": macro_avg,
@@ -371,8 +435,12 @@ def group_metrics(preds, labels, span_type="exact", average=None):
     Takes a set of group predictions and labels and returns either per-class
     metrics or average metrics.
 
-    Note: Takes lists of groups. Output from grouping models should be unzipped
-    to isolate group and NER predictions before being evaluated.
+    :param preds, labels: A list of list of groups. Output from joint grouping
+    models should be unzipped to seperate group and NER predictions before
+    being evaluated.
+    :param span_type: A string, one of "exact", "token", "overlap", "superset"
+    :param average: A string, one of "micro", "macro", "weighted"
+    :return: Average F1 if average was specified, else per-class metrics
     """
     per_class_metrics = calc_class_metrics(
         preds, labels, metric_type="group", span_type=span_type
@@ -386,6 +454,8 @@ def group_metrics(preds, labels, span_type="exact", average=None):
 def entity_in_group(entity, group):
     """
     Returns True if entity is contained in a group span, False otherwise
+    :param entity: A single entity span
+    :param group: A single group
     """
     for span in group["tokens"]:
         if (span["start"] <= entity["start"] and
@@ -396,6 +466,11 @@ def entity_in_group(entity, group):
 def attach_entitites(groups, entities):
     """
     Attaches a documents entities to the documents groups
+
+    :param groups: A list of groups
+    :param entities: A list of entities
+    :return: A copy of the groups param with an additional "entities" key added
+    to each group containing all entities that appear within the group
     """
     # Copy so we don't modify input
     groups = deepcopy(groups)
@@ -410,6 +485,12 @@ def create_joint_groups(outputs):
     """
     Given a list of NER and group outputs, create a list of joint groups. Joint
     groups are groups that contain entity information.
+
+    :param outputs: A list of tuples, where each tuple is ([Doc A NER
+    annotations, ...], [Doc A group annotations, ...])
+    :returns joint_groups: A list of list of groups, where each groups has an
+    additional "entities" key containing all entities that appear within the
+    group
     """
     joint_groups = []
     for doc_entities, doc_groups in outputs:
@@ -422,10 +503,13 @@ def joint_metrics(preds, labels, span_type="exact", average=None):
     Takes a set of NER + group predictions and labels and returns either per-class
     metrics or average metrics.
 
-    Note: Takes lists of NER and group spans. Output of grouping models can be
-    directly used.
+    :param preds, labels: A list of tuples, where each tuple is ([Doc A NER
+    annotations, ...], [Doc A group annotations, ...]). The output of joint
+    grouping models can be directly used
+    :param span_type: A string, one of "exact", "token", "overlap", "superset"
+    :param average: A string, one of "micro", "macro", "weighted"
+    :return: Average F1 if average was specified, else per-class metrics
     """
-    # Attach entities to groups
     pred_groups = create_joint_groups(preds)
     label_groups = create_joint_groups(labels)
 
