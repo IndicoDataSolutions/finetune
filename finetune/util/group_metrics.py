@@ -9,7 +9,7 @@ from finetune.util.metrics import (
     calc_precision, calc_recall, calc_f1,
 )
 
-Counts = namedtuple("TP", "FP", "FN")
+Counts = namedtuple("Counts", ["TP", "FP", "FN"])
 
 def group_exact_counts(pred, label):
     """
