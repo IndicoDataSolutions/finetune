@@ -177,7 +177,8 @@ def get_count_fn(metric_type, span_type):
     spans contained within the group.
 
     Joint count functions compare based on the label of the group and the
-    entity spans contained within the group.
+    entity spans contained within the group. Requires groups to be in joint
+    group format.
     """
     fns = {
         "group": {
@@ -229,6 +230,13 @@ def calc_class_counts(all_preds, all_labels, metric_type="group", span_type="exa
         "class_n: {...},
     }
     """
+    if metric_type == "joint":
+        assert "entities" in all_preds[0][0] and "entities" in all_labels[0][0],
+        (
+            "To calculate joint metrics, groups must in in joint group format! "
+            "Use create_joint_groups() to produce groups in joint group format."
+        )
+
     count_fn = get_count_fn(metric_type, span_type)
     classes = _get_unique_classes(preds, labels)
     class_counts = {
@@ -389,12 +397,25 @@ def attach_entitites(groups, entities):
     """
     Attaches a documents entities to the documents groups
     """
+    # Copy so we don't modify input
+    groups = deepcopy(groups)
     for group in groups:
         group["entities"] = []
         for entity in entities:
             if entity_in_group(entity, group):
                 group["entities"].append(entity)
     return groups
+
+def create_joint_groups(outputs):
+    """
+    Given a list of NER and group outputs, create a list of joint groups. Joint
+    groups are groups that contain entity information.
+    """
+    joint_groups = []
+    for doc_entities, doc_groups in outputs:
+        doc_joint_groups = attach_entities(doc_groups, doc_entities)
+        joint_groups.append(doc_joint_groups)
+    return joint_groups
 
 def joint_metrics(preds, labels, span_type="exact", average=None):
     """
@@ -404,21 +425,9 @@ def joint_metrics(preds, labels, span_type="exact", average=None):
     Note: Takes lists of NER and group spans. Output of grouping models can be
     directly used.
     """
-    pred_groups, label_groups = [], []
     # Attach entities to groups
-    for doc_pred, doc_label in zip(preds, labels):
-        # Copy so we don't modify input groups
-        doc_pred_entities, doc_pred_groups = doc_pred
-        doc_pred_groups = deepcopy(doc_pred_groups)
-        doc_label_entities, doc_label_groups = doc_label
-        doc_label_groups = deepcopy(doc_label_groups)
-
-        doc_pred_groups = attach_entities(doc_pred_entities, doc_pred_groups)
-        doc_label_groups = attach_entities(doc_label_entites, doc_label_groups)
-
-        # Only need groups
-        pred_groups.append(doc_pred_groups)
-        label_groups.append(doc_label_groups)
+    pred_groups = create_joint_groups(preds)
+    label_groups = create_joint_groups(labels)
 
     per_class_metrics = calc_class_metrics(
         pred_groups, label_groups, metric_type="joint", span_type=span_type
