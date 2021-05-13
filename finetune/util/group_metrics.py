@@ -270,8 +270,7 @@ def calc_class_counts(all_preds, all_labels, metric_type="group", span_type="exa
         }
     """
     if metric_type == "joint":
-        assert "entities" in all_preds[0][0] and "entities" in all_labels[0][0],
-        (
+        assert "entities" in all_preds[0][0] and "entities" in all_labels[0][0], (
             "To calculate joint metrics, groups must in in joint group format! "
             "Use create_joint_groups() to produce groups in joint group format."
         )
