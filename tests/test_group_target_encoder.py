@@ -4,7 +4,7 @@ import json
 from finetune.target_models.seq2seq import HFS2S
 from finetune.base_models.huggingface.models import HFT5
 from finetune.encoding.input_encoder import EncodedOutput
-from finetune.encoding.target_encoders import (
+from finetune.encoding.group_target_encoders import (
     GroupSequenceLabelingEncoder, 
     PipelineSequenceLabelingEncoder, 
     MultiCRFGroupSequenceLabelingEncoder,
@@ -16,6 +16,8 @@ from finetune.encoding.target_encoders import (
     GroupLabelingTextEncoder,
     JointLabelingTextEncoder,
 )
+
+from finetune.encoding.target_encoders import SequenceLabelingTextEncoder,
 
 def test_nest_group_sequence_label():
     encoder = GroupSequenceLabelingEncoder(pad_token="<PAD>", bio_tagging=True)

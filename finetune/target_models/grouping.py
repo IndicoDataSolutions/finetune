@@ -17,7 +17,7 @@ from finetune.target_models.seq2seq import (
     S2SPipeline,
     HFS2S,
 )
-from finetune.encoding.target_encoders import (
+from finetune.encoding.group_target_encoders import (
     SequenceLabelingEncoder,
     GroupSequenceLabelingEncoder,
     MultiCRFGroupSequenceLabelingEncoder,
