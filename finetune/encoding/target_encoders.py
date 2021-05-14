@@ -142,6 +142,10 @@ class SequenceLabelingTextEncoder(Seq2SeqLabelEncoder):
         for y_i in y:
             # List of dictionaries, where the key is the label and the value is
             # the span being labeled
+
+            # TODO: Add sorting of y_i before encoding, as Doc2Dict tends to do
+            # bettter when labels and text appear in a consistent order
+
             labels = [{span["label"]: span["text"]} for span in y_i]
             all_labels.append(json.dumps(labels))
         ret = super().transform(all_labels)
@@ -154,6 +158,9 @@ class GroupLabelingTextEncoder(Seq2SeqLabelEncoder):
             doc_groups = []
             _, groups = yi
             for group in groups:
+                # TODO: Add sorting of group tokens before encoding, as Doc2Dict tends to do
+                # bettter when labels and text appear in a consistent order
+
                 # List of strings, where each string is on of the spans of the group
                 doc_groups.append([span["text"] for span in group["tokens"]])
             all_labels.append(json.dumps(doc_groups))
@@ -165,6 +172,11 @@ class JointLabelingTextEncoder(Seq2SeqLabelEncoder):
         all_labels = []
         for yi in y:
             labels, groups = yi
+
+            # TODO: Add sorting of labels and groups before encoding, as
+            # Doc2Dict tends to do bettter when labels and text appear in a
+            # consistent order
+
             # NER Labels
             doc_labels = [{span["label"]: span["text"]} for span in labels]
             # Group Labels
