@@ -234,8 +234,13 @@ def calc_group_assignment(preds, labels, count_fn):
     counts[i][j] contains the TP, FP, FN counts if predicted group i was
     assigned to ground truth group j
     """
-    counts = [[(0, 0, 0) for _ in len(labels)] for _ in len(preds)]
-    costs = [[0 for _ in len(labels)] for _ in len(preds)]
+    assert len(preds) and len(labels), (
+        "Preds and labels must have non-0 length!"
+    )
+    counts = [[(0, 0, 0) for _ in range(len(labels))]
+              for _ in range(len(preds))]
+    costs = [[0 for _ in range(len(labels))]
+             for _ in range(len(preds))]
 
     for i, pred in enumerate(preds):
         for j, label in enumerate(labels):
@@ -253,7 +258,7 @@ def calc_class_counts(all_preds, all_labels, metric_type="group", span_type="exa
     Calculate per-class TP, FP and FN counts.
 
     :param all_preds, all_labels: A list of list of groups. If metric_type ==
-    "joint", the groups should in joint form with an "entities" key
+    "joint", the groups should in be joint form with an "entities" key
     :param metric_type: A string, either "group" or "joint"
     :param span_type: A string, one of "exact", "token", "overlap", "superset"
     :return class_counts: A dictionary of the form:
@@ -276,7 +281,7 @@ def calc_class_counts(all_preds, all_labels, metric_type="group", span_type="exa
         )
 
     count_fn = get_count_fn(metric_type, span_type)
-    classes = _get_unique_classes(preds, labels)
+    classes = _get_unique_classes(all_preds, all_labels)
     class_counts = {
         cls: {
             "true_positives": 0,
@@ -307,20 +312,21 @@ def calc_class_counts(all_preds, all_labels, metric_type="group", span_type="exa
             extra_groups = doc_preds
             # All examples in extra pred groups are false positives
             add_count = "false_positives"
-        elif len(label_groups) > len(pred_groups):
+        elif len(doc_labels) > len(doc_preds):
             missing_idxs = set(range(len(doc_labels))) - set(label_idxs)
             extra_groups = doc_labels
             # All examples in extra label groups are false negatives
             add_count = "false_negatives"
-        for idx in missing_idxs:
-            group = extra_groups[idx]
-            if span_type == "token" and metric_type == "group":
-                group_len = len(_convert_to_token_list(group["tokens"]))
-            elif span_type == "token" and metric_type == "joint":
-                group_len = len(_convert_to_token_list(group["entities"]))
-            else:
-                group_len = 1
-            class_counts[group["label"]][add_count] += group_len
+        if len(doc_labels) != len(doc_preds):
+            for idx in missing_idxs:
+                group = extra_groups[idx]
+                if span_type == "token" and metric_type == "group":
+                    group_len = len(_convert_to_token_list(group["tokens"]))
+                elif span_type == "token" and metric_type == "joint":
+                    group_len = len(_convert_to_token_list(group["entities"]))
+                else:
+                    group_len = 1
+                class_counts[group["label"]][add_count] += group_len
 
     return class_counts
 
@@ -339,8 +345,8 @@ def calc_class_metrics(all_preds, all_labels, metric_type="group", span_type="ex
                 "recall": 0.5,
                 "f1-score": 0.5,
                 "support": 2,
-                "true_positives: 1,
-                "false_positives: 1,
+                "true_positives": 1,
+                "false_positives": 1,
                 "false_negatives": 1,
             }
             .
@@ -397,7 +403,7 @@ def macro_avg(class_metrics):
     calc_class_metrics()
     :return: Macro F1
     """
-    f1s = [c["f1_score"] for c in class_metrics.values()]
+    f1s = [c["f1-score"] for c in class_metrics.values()]
     return np.average(f1s)
 
 def weighted_avg(class_metrics):
@@ -409,9 +415,9 @@ def weighted_avg(class_metrics):
     :return: Weighted F1
     """
     classes = list(class_metrics.keys())
-    f1s = [class_metrics[c]["f1_score"] for c in classes]
+    f1s = [class_metrics[c]["f1-score"] for c in classes]
     supports = [class_metrics[c]["support"] for c in classes]
-    return np.average(f1s, weight=supports)
+    return np.average(f1s, weights=supports)
 
 def get_average(average, class_metrics):
     """
@@ -429,20 +435,19 @@ def get_average(average, class_metrics):
     }
     return fns[average.lower()](class_metrics)
 
-def group_metrics(preds, labels, span_type="exact", average=None):
+def get_metrics(preds, labels, metric_type="group", span_type="exact",
+                average=None):
     """
-    Takes a set of group predictions and labels and returns either per-class
-    metrics or average metrics.
+    Takes a set of group or joint group predictions and labels and returns
+    either per-class metrics or average metrics.
 
-    :param preds, labels: A list of list of groups. Output from joint grouping
-    models should be unzipped to seperate group and NER predictions before
-    being evaluated.
+    :param preds, labels: A list of list of groups or joint groups.
     :param span_type: A string, one of "exact", "token", "overlap", "superset"
     :param average: A string, one of "micro", "macro", "weighted"
     :return: Average F1 if average was specified, else per-class metrics
     """
     per_class_metrics = calc_class_metrics(
-        preds, labels, metric_type="group", span_type=span_type
+        preds, labels, metric_type=metric_type, span_type=span_type
     )
     if average:
         # Returns single F1 value
@@ -462,7 +467,7 @@ def entity_in_group(entity, group):
             return True
     return False
 
-def attach_entitites(groups, entities):
+def attach_entities(groups, entities):
     """
     Attaches a documents entities to the documents groups
 
@@ -497,6 +502,24 @@ def create_joint_groups(outputs):
         joint_groups.append(doc_joint_groups)
     return joint_groups
 
+def group_metrics(preds, labels, span_type="exact", average=None):
+    """
+    Takes a set of group predictions and labels and returns either per-class
+    metrics or average metrics.
+
+    :param preds, labels: A list of list of groups. Output from joint grouping
+    models should be unzipped to seperate group and NER predictions before
+    being evaluated.
+    :param span_type: A string, one of "exact", "token", "overlap", "superset"
+    :param average: A string, one of "micro", "macro", "weighted"
+    :return: Average F1 if average was specified, else per-class metrics
+    """
+    return get_metrics(
+        preds, labels, 
+        metric_type="group", span_type=span_type,
+        average=average,
+    )
+
 def joint_metrics(preds, labels, span_type="exact", average=None):
     """
     Takes a set of NER + group predictions and labels and returns either per-class
@@ -512,11 +535,8 @@ def joint_metrics(preds, labels, span_type="exact", average=None):
     pred_groups = create_joint_groups(preds)
     label_groups = create_joint_groups(labels)
 
-    per_class_metrics = calc_class_metrics(
-        pred_groups, label_groups, metric_type="joint", span_type=span_type
+    return get_metrics(
+        pred_groups, label_groups, 
+        metric_type="joint", span_type=span_type,
+        average=average,
     )
-    if average:
-        # Returns single F1 value
-        return get_average(average, per_class_metrics)
-    else:
-        return per_class_metrics
