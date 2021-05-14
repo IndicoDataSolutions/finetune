@@ -93,4 +93,4 @@ def test_sequence_label_bio_tagging():
         input_text=["five percent (5%)"]
     )
     label_arr = encoder.transform(out, labels)
-    assert label_arr == [0, 1, 1, 2, 1, 2, 2, 0]
+    assert label_arr == [0, 1, 1, 2, 1, 2, 1, 0]

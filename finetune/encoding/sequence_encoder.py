@@ -170,6 +170,9 @@ def finetune_to_indico_sequence(
                     "text": raw_text[annotation_start:annotation_end],
                 }
 
+                if annotation["text"].strip() != annotation["text"]:
+                    annotation = strip_annotation_whitespace(annotation)
+
                 # if we don't want to allow subtoken predictions, adjust start and end to match
                 # the start and ends of the nearest full tokens
                 if not subtoken_predictions:
@@ -284,3 +287,16 @@ def overlap_handler(current_annotation, annotation, text, multi_label):
     chunks = [first_chunk, second_chunk, third_chunk]
     chunks = [c for c in chunks if c["start"] != c["end"]]
     return chunks
+
+def strip_annotation_whitespace(annotation):
+    text = annotation["text"]
+    l_strip = text.lstrip()
+    l_pad = len(text) - len(l_strip)
+    lr_strip = l_strip.rstrip()
+    r_pad = len(l_strip) - len(lr_strip)
+
+    annotation["text"] = lr_strip
+    annotation["start"] += l_pad
+    annotation["end"] -= r_pad
+
+    return annotation

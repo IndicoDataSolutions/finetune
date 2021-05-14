@@ -173,6 +173,8 @@ def negative_samples(preds, labels, pad="<PAD>"):
 def negative_samples(preds, labels, pad="<PAD>"):
     modified_labels = []
     for p, l in zip(preds, labels):
+        if isinstance(l, np.ndarray):
+            l = l.tolist()
         new_labels = []
         for pi in p:
             if not any(sequences_overlap(pi, li) for li in l):
@@ -430,7 +432,7 @@ class SequenceLabeler(BaseModel):
                     if label[:3] == "BG-" or label[:3] == "IG-":
                         group_prefix, label = label[:3], label[3:]
                 if self.config.bio_tagging:
-                    bio_prefix = ""
+                    bio_prefix = None
                     if label != self.config.pad_token:
                         bio_prefix, label = label[:2], label[2:]
                 if self.config.group_bio_tagging and label != self.config.pad_token:
