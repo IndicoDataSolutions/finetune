@@ -11,6 +11,12 @@ from finetune.encoding.target_encoders import (
 
 LOGGER = logging.getLogger("finetune")
 
+def try_decode(pred):
+    try:
+        return json.loads(pred)
+    except:
+        return []
+
 class SequenceLabelingTextEncoder(Seq2SeqLabelEncoder):
     def transform(self, y):
         all_labels = []
@@ -25,6 +31,37 @@ class SequenceLabelingTextEncoder(Seq2SeqLabelEncoder):
             all_labels.append(json.dumps(labels))
         ret = super().transform(all_labels)
         return ret
+
+    def inverse_transform(self, preds, raw_texts):
+        preds = super().inverse_transform(preds)
+        preds = map(try_decode(pred), preds)
+        return self.decode_preds(preds, raw_texts)
+
+    @staticmethod
+    def decode_preds(preds, raw_texts):
+        all_labels = []
+        for raw_text, pred in zip(raw_texts, preds):
+            if not type(pred) == list:
+                all_labels.append([])
+                continue
+            doc_labels = []
+            for json_label in pred:
+                # json_label is a list of dictionaries of the form {key: text}
+                if not type(json_label) == dict:
+                    continue
+                tag, text = list(json_label.items())[0]
+                # Can't generate \n's, appear as a single n instead
+                text = text.replace(' n ', ' \n ')
+                label_start = raw_text.find(text)
+                label_end = label_start + len(text)
+                doc_labels.append({
+                    "label": tag,
+                    "start": label_start,
+                    "end": label_end,
+                    "text": text,
+                })
+            all_labels.append(doc_labels)
+        return all_labels
 
 class GroupLabelingTextEncoder(Seq2SeqLabelEncoder):
     def transform(self, y):
@@ -41,6 +78,44 @@ class GroupLabelingTextEncoder(Seq2SeqLabelEncoder):
             all_labels.append(json.dumps(doc_groups))
         ret = super().transform(all_labels)
         return ret
+
+    def inverse_transform(self, preds, raw_texts):
+        preds = super().inverse_transform(preds)
+        preds = map(try_decode(pred), preds)
+        return self.decode_preds(preds, raw_texts)
+    
+    @staticmethod
+    def decode_preds(preds, raw_texts):
+        all_groups = []
+        for raw_text, pred in zip(raw_texts, preds):
+            if not type(pred) == list:
+                all_groups.append([])
+                continue
+            doc_groups = []
+            for json_group in pred:
+                if not type(json_group) == list:
+                    continue
+                # json_group is a lists of spans, represented as strings
+                group_spans = []
+                for span_text in json_group:
+                    if not type(span_text) == str:
+                        continue
+                    # Can't generate \n's, appear as a single n instead
+                    span_text = span_text.replace(' n ', ' \n ')
+                    span_start = raw_text.find(span_text)
+                    span_end = span_start + len(span_text)
+                    group_spans.append({
+                        "start": span_start,
+                        "end": span_end,
+                        "text": span_text,
+                    })
+                doc_groups.append({
+                    "tokens": group_spans,
+                    "label": None
+                })
+            all_groups.append(doc_groups)
+        return all_groups
+
 
 class JointLabelingTextEncoder(Seq2SeqLabelEncoder):
     def transform(self, y):
@@ -62,6 +137,23 @@ class JointLabelingTextEncoder(Seq2SeqLabelEncoder):
             all_labels.append(json.dumps([doc_labels, doc_groups]))
         ret = super().transform(all_labels)
         return ret
+    
+    def inverse_transform(self, preds, raw_texts):
+        preds = super().inverse_transform(preds)
+
+        preds = map(try_decode, preds)
+        def split_decode(pred):
+            # Ensure NER and group predictions were generated
+            if len(pred) == 2:
+                return pred
+            else:
+                return ([], [])
+        preds = map(split_decode, preds)
+
+        seq_preds, group_preds = list(zip(*preds))
+        seq_ret = SequenceLabelingTextEncoder.decode_preds(seq_preds, raw_texts)
+        group_ret = GroupLabelingTextEncoder.decode_preds(group_preds, raw_texts)
+        return list(zip(seq_ret, group_ret))
 
 def is_continuous(group):
     # If there is only a single span, the group is continuous
