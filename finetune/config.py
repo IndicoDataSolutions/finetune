@@ -339,7 +339,6 @@ def get_default_config():
         beam_search_alpha=0.2,
         delim_tokens="",
         s2s_decoder_max_length=512,
-        bracket_constraints=None,
         num_fusion_shards=None,
         chunk_pos_embed=None, 
         fusion_low_memory=True,

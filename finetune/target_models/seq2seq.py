@@ -12,48 +12,6 @@ from tensorflow.python.util import nest
 import itertools
 import sys
 
-def py_bracket_constraint(history, bracket_idx_pairs, eos_token, vocab_size):
-    vocab_mask = np.ones([vocab_size], dtype=np.float32)
-    stack = []
-    opening_brackets = [b[0] for b in bracket_idx_pairs]
-    closing_brackets = [b[1] for b in bracket_idx_pairs]
-    for tok in history.tolist():
-        if tok in opening_brackets:
-            stack.append(opening_brackets.index(tok)) # idx in bracket_idx_pairs
-        if tok in closing_brackets:
-            assert closing_brackets.index(tok) == stack.pop()
-    if stack:
-        stack_head = stack[-1]
-        vocab_mask[eos_token] = 0 # do not allow the sequence to end here.
-    else:
-        stack_head = None # Do not allow any closing brackets
-
-    for i, cb in enumerate(closing_brackets):
-        if stack_head == i:
-            continue # allow the current stack head to be closed
-        vocab_mask[cb] = 0 # mask all other bracket closes
-    return vocab_mask
-
-
-class BracketConstrainedPredictions:
-    def __init__(self, bracket_idx_pairs, eos_token, vocab_size):
-        self.bracket_idx_pairs = bracket_idx_pairs
-        self.eos_token = eos_token
-        self.vocab_size = vocab_size
-
-    def mask_for_batched_history(self, history):
-        def tf_bracket_constraint_single(single_history):
-            return tf.numpy_function(
-                functools.partial(
-                    py_bracket_constraint,
-                    bracket_idx_pairs=self.bracket_idx_pairs,
-                    eos_token=self.eos_token,
-                    vocab_size=self.vocab_size
-                ), [single_history], tf.float32, name=None
-            )
-        return tf.map_fn(tf_bracket_constraint_single, history, parallel_iterations=100, back_prop=False, dtype=tf.float32)
-
-
 class S2SPipeline(BasePipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -137,18 +95,6 @@ class HFS2S(BaseModel):
                 # Add delim tokens to all examples
                 constraint = tf.concat((featurizer_state["inputs"], encoded_delim), axis=-1)
 
-            if config.bracket_constraints:
-                bracket_idx_pairs = []
-                for ob, cb in config.bracket_constraints:
-                    ob_idx = text_encoder._encode([ob])
-                    cb_idx =  text_encoder._encode([cb])
-                    bracket_idx_pairs.append((ob_idx.token_ids[0][-1], cb_idx.token_ids[0][-1]))
-                bracket_constrainer = BracketConstrainedPredictions(
-                    bracket_idx_pairs,
-                    text_encoder.end_token,
-                    featurizer_state["embedding"].vocab_size
-                )
-
             def symbols_to_logits_fn(input_symbols, i, state, first=False): #[batch_size, decoded_ids] to [batch_size, vocab_size]
                 decoder_output = hf_decoder(
                     (
@@ -171,21 +117,15 @@ class HFS2S(BaseModel):
                 logits = featurizer_state["embedding"](normalize_embeds(embeds[:, -1]), mode="linear")
                 logits_shape = tf.shape(logits)
 
-                if config.delim_tokens or config.bracket_constraints:
-                    if config.delim_tokens:
-                        batch_indices = tf.range(tf.shape(state["constraint"])[0])[:, None] + \
-                                tf.zeros_like(state["constraint"])
-                        full_indices = tf.reshape(tf.stack([batch_indices, state["constraint"]], axis=2), [-1,2])
-                        mask = tf.scatter_nd(full_indices,
-                                            tf.ones((tf.shape(full_indices)[0],)),
-                                            shape=tf.shape(logits))
-                        # Normalize for the way scatter_nd handles duplicates
-                        mask = tf.math.divide_no_nan(mask, mask)
-                    else:
-                        mask = 1.0
-
-                    if config.bracket_constraints:
-                        mask = mask * bracket_constrainer.mask_for_batched_history(input_symbols)
+                if config.delim_tokens:
+                    batch_indices = tf.range(tf.shape(state["constraint"])[0])[:, None] + \
+                            tf.zeros_like(state["constraint"])
+                    full_indices = tf.reshape(tf.stack([batch_indices, state["constraint"]], axis=2), [-1,2])
+                    mask = tf.scatter_nd(full_indices,
+                                        tf.ones((tf.shape(full_indices)[0],)),
+                                        shape=tf.shape(logits))
+                    # Normalize for the way scatter_nd handles duplicates
+                    mask = tf.math.divide_no_nan(mask, mask)
                     logits = logits * mask + ((1 - mask) * -1e5)
                 
                 state["past_states"] = present_state
