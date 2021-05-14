@@ -457,7 +457,6 @@ class MultiCRFGroupSequenceLabelingEncoder(SequenceLabelingEncoder):
         labels = [self.label_classes_[l] for l in labels]
 
         # Option to only return encoded labels for class weight calculations
-        # (The group CRF does not receive class weights, potential improvement)
         if only_labels:
             return labels
 
@@ -583,7 +582,6 @@ class BROSEncoder(BaseEncoder):
         return [start_token_labels, next_token_labels]
 
     def inverse_transform(self, y):
-        # TODO: Fix this breaking class weights
         start_tokens, next_tokens = y
         # Placeholder for is we ever add labels
         start_tokens = [self.classes_[l] for l in start_tokens]
