@@ -342,6 +342,7 @@ def get_default_config():
         bracket_constraints=None,
         num_fusion_shards=None,
         chunk_pos_embed=None, 
+        fusion_low_memory=True,
 
         include_bos_eos=True,
         #

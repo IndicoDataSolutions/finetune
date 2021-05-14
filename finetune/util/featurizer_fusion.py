@@ -48,34 +48,33 @@ def fused_featurizer(featurizer):
                 ci = context[:, start : start + subsize]
             else:
                 ci = None
-            # if config.low_memory_mode and train:
-            # if train:
-            #     out.append(
-            #         featurizer_w_recompute(
-            #             xi,
-            #             encoder,
-            #             config,
-            #             train,
-            #             reuse=reuse,
-            #             lengths=lengths,
-            #             max_length=subsize,
-            #             **kwargs
-            #         )
-            #     )
-            # else:
-            out.append(
-                featurizer(
-                    xi,
-                    encoder,
-                    config,
-                    train,
-                    reuse=reuse,
-                    lengths=lengths,
-                    max_length=subsize,
-                    context=ci,
-                    **kwargs
+            if config.low_memory_mode and config.fusion_low_memory and train:
+                out.append(
+                    featurizer_w_recompute(
+                        xi,
+                        encoder,
+                        config,
+                        train,
+                        reuse=reuse,
+                        lengths=lengths,
+                        max_length=subsize,
+                        **kwargs
+                    )
                 )
-            )
+            else:
+                out.append(
+                    featurizer(
+                        xi,
+                        encoder,
+                        config,
+                        train,
+                        reuse=reuse,
+                        lengths=lengths,
+                        max_length=subsize,
+                        context=ci,
+                        **kwargs
+                    )
+                )
             reuse = True
         return merge_output_state(out, X, orig_lengths, config.chunk_pos_embed, hidden_dim=config.n_embed)
 
