@@ -18,20 +18,20 @@ class TestGroupMetrics(unittest.TestCase):
                 "three percent (3%) \n ")
         self.base_groups = [
             {
-                "tokens": [
+                "spans": [
                     {"start": 0, "end": 17, "text": "five percent (5%)"},
                     {"start": 61, "end": 78, "text": "nine percent (9%)"},
                 ],
                 "label": "class1"
             },
             {
-                "tokens": [
+                "spans": [
                     {"start": 42, "end": 58, "text": "two percent (2%)"},
                 ],
                 "label": "class1"
             },
             {
-                "tokens": [
+                "spans": [
                     {"start": 81, "end": 99, "text": "three percent (3%)"},
                 ],
                 "label": "class2"
@@ -39,7 +39,7 @@ class TestGroupMetrics(unittest.TestCase):
         ]
         self.incorrect_groups = [
             {
-                "tokens": [
+                "spans": [
                     {"start": 0, "end": 17, "text": "five percent (5%)"},
                 ],
                 "label": "class1"
@@ -579,21 +579,21 @@ class TestGroupMetricCountFunctions(unittest.TestCase):
                 "nine percent (9%) \n " +
                 "three percent (3%) \n ")
         group_a = {
-            "tokens": [
+            "spans": [
                 {"start": 0, "end": 39, "text": "five percent (5%) \n fifty percent (50%)"},
                 {"start": 61, "end": 78, "text": "nine percent (9%)"},
             ],
             "label": "class1"
         }
         group_b = {
-            "tokens": [
+            "spans": [
                 {"start": 42, "end": 58, "text": "two percent (2%)"},
                 {"start": 81, "end": 99, "text": "three percent (3%)"},
             ],
             "label": "class1"
         }
         group_overlap = {
-            "tokens": [
+            "spans": [
                 {"start": 20, "end": 58, "text": "fifty percent (50%) \n two percent (2%)"},
                 # Non overlapping span for joint metric tests
                 {"start": 42, "end": 58, "text": "two percent (2%)"},
@@ -602,7 +602,7 @@ class TestGroupMetricCountFunctions(unittest.TestCase):
             "label": "class1"
         }
         group_superset = {
-            "tokens": [
+            "spans": [
                 {"start": 0, "end": 53, "text": text[0:53]},
                 # Non superset span for joint metric tests
                 {"start": 42, "end": 58, "text": "two percent (2%)"},
@@ -611,7 +611,7 @@ class TestGroupMetricCountFunctions(unittest.TestCase):
             "label": "class1"
         }
         group_tokens = {
-            "tokens": [
+            "spans": [
                 {"start": 0, "end": 4, "text": "five"},
                 {"start": 54, "end": 58, "text": "(3%)"},
                 {"start": 74, "end": 78, "text": "(9%)"},
@@ -619,7 +619,7 @@ class TestGroupMetricCountFunctions(unittest.TestCase):
             "label": "class1"
         }
         group_all = {
-            "tokens": [
+            "spans": [
                 {"start": 0, "end": 102, "text": text},
             ],
             "label": "class1"
@@ -653,7 +653,7 @@ class TestGroupMetricCountFunctions(unittest.TestCase):
         mix_inv_labels = mix_labels[::-1]
         for name, group in self.groups.items():
             name = name.replace("group", "joint")
-            num_spans = len(group["tokens"])
+            num_spans = len(group["spans"])
             # All correct labels
             self.joint_groups[name + "_cl"] = self.add_entities(
                 group, correct_labels[:num_spans]
@@ -674,7 +674,7 @@ class TestGroupMetricCountFunctions(unittest.TestCase):
     def add_entities(self, group, labels):
         # Make a copy with an "entities" field added
         group = deepcopy(group)
-        spans = deepcopy(group["tokens"])
+        spans = deepcopy(group["spans"])
         group["entities"] = spans
         if len(spans) != len(labels):
             raise ValueError(

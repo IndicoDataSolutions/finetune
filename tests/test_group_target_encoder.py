@@ -27,7 +27,7 @@ def test_nest_group_sequence_label():
         {'start': 13, 'end': 17, 'label': 'z', 'text': '(5%)'},
     ]
     groups = [
-        {'tokens': [
+        {"spans": [
             {'start': 5, 'end': 17, 'text': 'percent (5%)'},
         ], 'label': None}
     ]
@@ -55,7 +55,7 @@ def test_multi_crf_group_sequence_label():
         {'start': 13, 'end': 17, 'label': 'z', 'text': '(5%)'},
     ]
     groups = [
-        {'tokens': [
+        {"spans": [
             {'start': 5, 'end': 17, 'text': 'percent (5%)'},
         ], 'label': None}
     ]
@@ -85,7 +85,7 @@ def test_pipeline_group_sequence_label():
         {'start': 13, 'end': 17, 'label': 'z', 'text': '(5%)'},
     ]
     groups = [
-        {'tokens': [
+        {"spans": [
             {'start': 13, 'end': 17, 'text': '(5%)'},
         ], 'label': None}
     ]
@@ -113,11 +113,11 @@ def test_BROS_sequence_label():
         {'start': 13, 'end': 17, 'label': 'z', 'text': '(5%)'},
     ]
     groups = [
-        {'tokens': [
+        {"spans": [
             {'start': 5, 'end': 8, 'text': 'per'},
             {'start': 13, 'end': 17, 'text': '(5%)'},
         ], 'label': None},
-        {'tokens': [
+        {"spans": [
             {'start': 8, 'end': 12, 'text': 'cent'},
         ], 'label': None}
     ]
@@ -146,11 +146,11 @@ def test_joint_BROS_sequence_label():
         {'start': 13, 'end': 17, 'label': 'z', 'text': '(5%)'},
     ]
     groups = [
-        {'tokens': [
+        {"spans": [
             {'start': 5, 'end': 8, 'text': 'per'},
             {'start': 13, 'end': 17, 'text': '(5%)'},
         ], 'label': None},
-        {'tokens': [
+        {"spans": [
             {'start': 8, 'end': 12, 'text': 'cent'},
         ], 'label': None}
     ]
@@ -187,11 +187,11 @@ def test_group_relation_sequence_label():
         {'start': 13, 'end': 17, 'label': 'z', 'text': '(5%)'},
     ]
     groups = [
-        {'tokens': [
+        {"spans": [
             {'start': 0, 'end': 4, 'text': 'five'},
             {'start': 13, 'end': 17, 'text': '(5%)'},
         ], 'label': None},
-        {'tokens': [
+        {"spans": [
             {'start': 5, 'end': 12, 'text': 'percent'},
         ], 'label': None},
     ]
@@ -248,11 +248,11 @@ def test_seq2seq_group_label():
         {'start': 13, 'end': 17, 'label': 'z', 'text': '(5%)'},
     ]
     groups = [
-        {'tokens': [
+        {"spans": [
             {'start': 5, 'end': 8, 'text': 'per'},
             {'start': 13, 'end': 25, 'text': '(5%) \n test'},
         ], 'label': None},
-        {'tokens': [
+        {"spans": [
             {'start': 8, 'end': 12, 'text': 'cent'},
         ], 'label': None}
     ]
@@ -279,11 +279,11 @@ def test_seq2seq_joint_label():
         {'start': 13, 'end': 17, 'label': 'z', 'text': '(5%)'},
     ]
     groups = [
-        {'tokens': [
+        {"spans": [
             {'start': 5, 'end': 8, 'text': 'per'},
             {'start': 13, 'end': 17, 'text': '(5%)'},
         ], 'label': None},
-        {'tokens': [
+        {"spans": [
             {'start': 8, 'end': 12, 'text': 'cent'},
         ], 'label': None}
     ]

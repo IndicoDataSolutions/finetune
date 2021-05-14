@@ -47,10 +47,10 @@ class TestGroupingLabelers(unittest.TestCase):
             {'start': 81, 'end': 99, 'label': 'a', 'text': 'three percent (3%)'},
         ]
         groups = [
-            {'tokens': [
+            {"spans": [
                 {'start': 0, 'end': 39, 'text': 'five percent (5%) \n fifty percent (50%)'},
             ], 'label': None},
-            {'tokens': [
+            {"spans": [
                 {'start': 61, 'end': 99, 'text': 'nine percent (9%) \n three percent (3%)'},
             ], 'label': None}
         ]
@@ -85,10 +85,10 @@ class TestGroupingLabelers(unittest.TestCase):
             {'start': 81, 'end': 99, 'label': 'a', 'text': 'three percent (3%)'},
         ]
         groups = [
-            {'tokens': [
+            {"spans": [
                 {'start': 0, 'end': 39, 'text': 'five percent (5%) \n fifty percent (50%)'},
             ], 'label': None},
-            {'tokens': [
+            {"spans": [
                 {'start': 61, 'end': 99, 'text': 'nine percent (9%) \n three percent (3%)'},
             ], 'label': None}
         ]
@@ -122,10 +122,10 @@ class TestGroupingLabelers(unittest.TestCase):
             {'start': 81, 'end': 99, 'label': 'a', 'text': 'three percent (3%)'},
         ]
         groups = [
-            {'tokens': [
+            {"spans": [
                 {'start': 0, 'end': 39, 'text': 'five percent (5%) \n fifty percent (50%)'},
             ], 'label': None},
-            {'tokens': [
+            {"spans": [
                 {'start': 61, 'end': 99, 'text': 'nine percent (9%) \n three percent (3%)'},
             ], 'label': None}
         ]
@@ -158,10 +158,10 @@ class TestGroupingLabelers(unittest.TestCase):
             {'start': 81, 'end': 99, 'label': 'a', 'text': 'three percent (3%)'},
         ]
         groups = [
-            {'tokens': [
+            {"spans": [
                 {'start': 0, 'end': 39, 'text': 'five percent (5%) \n fifty percent (50%)'},
             ], 'label': None},
-            {'tokens': [
+            {"spans": [
                 {'start': 61, 'end': 99, 'text': 'nine percent (9%) \n three percent (3%)'},
             ], 'label': None}
         ]
@@ -186,17 +186,16 @@ class TestGroupingLabelers(unittest.TestCase):
             {'start': 81, 'end': 99, 'label': 'a', 'text': 'three percent (3%)'},
         ]
         groups = [
-            {'tokens': [
+            {"spans": [
                 {'start': 0, 'end': 39, 'text': 'five percent (5%) \n fifty percent (50%)'},
             ], 'label': None},
-            {'tokens': [
+            {"spans": [
                 {'start': 61, 'end': 99, 'text': 'nine percent (9%) \n three percent (3%)'},
             ], 'label': None}
         ]
         labels = (labels, groups)
         model.fit([text] * 30, [labels] * 30)
         preds = model.predict([text])[0]
-        print(preds)
         self.assertEqual(len(preds), 2)
         self.assertEqual(preds, labels[1])
 
@@ -215,10 +214,10 @@ class TestGroupingLabelers(unittest.TestCase):
             {'start': 81, 'end': 99, 'label': 'a', 'text': 'three percent (3%)'},
         ]
         groups = [
-            {'tokens': [
+            {"spans": [
                 {'start': 0, 'end': 39, 'text': 'five percent (5%) \n fifty percent (50%)'},
             ], 'label': None},
-            {'tokens': [
+            {"spans": [
                 {'start': 61, 'end': 99, 'text': 'nine percent (9%) \n three percent (3%)'},
             ], 'label': None}
         ]
@@ -227,7 +226,6 @@ class TestGroupingLabelers(unittest.TestCase):
         preds = model.predict([text])[0]
         for p in preds[0]:
             del p["confidence"]
-        print(preds)
         self.assertEqual(len(preds), 2)
         self.assertEqual(len(preds[0]), 5)
         self.assertEqual(len(preds[1]), 2)
@@ -248,17 +246,16 @@ class TestGroupingLabelers(unittest.TestCase):
             {'start': 81, 'end': 99, 'label': 'a', 'text': 'three percent (3%)'},
         ]
         groups = [
-            {'tokens': [
+            {"spans": [
                 {'start': 0, 'end': 39, 'text': 'five percent (5%) \n fifty percent (50%)'},
             ], 'label': None},
-            {'tokens': [
+            {"spans": [
                 {'start': 61, 'end': 99, 'text': 'nine percent (9%) \n three percent (3%)'},
             ], 'label': None}
         ]
         labels = (labels, groups)
         model.fit([text] * 30, [labels] * 30)
         preds = model.predict([text])[0]
-        print(preds)
         self.assertEqual(len(preds), 2)
         self.assertEqual(preds, labels[1])
 
@@ -279,10 +276,10 @@ class TestGroupingLabelers(unittest.TestCase):
             {'start': 81, 'end': 99, 'label': 'a', 'text': 'three percent (3%)'},
         ]
         groups = [
-            {'tokens': [
+            {"spans": [
                 {'start': 0, 'end': 39, 'text': 'five percent (5%) \n fifty percent (50%)'},
             ], 'label': None},
-            {'tokens': [
+            {"spans": [
                 {'start': 61, 'end': 99, 'text': 'nine percent (9%) \n three percent (3%)'},
             ], 'label': None}
         ]
@@ -291,7 +288,6 @@ class TestGroupingLabelers(unittest.TestCase):
         preds = model.predict([text])[0]
         for p in preds[0]:
             del p["confidence"]
-        print(preds)
         self.assertEqual(len(preds), 2)
         self.assertEqual(len(preds[0]), 5)
         self.assertEqual(len(preds[1]), 2)
@@ -313,7 +309,6 @@ class TestGroupingLabelers(unittest.TestCase):
         ]
         model.fit([text] * 30, [labels] * 30)
         preds = model.predict([text])[0]
-        print(preds)
         self.assertEqual(len(preds), 5)
         self.assertEqual(preds, labels)
 
@@ -332,17 +327,16 @@ class TestGroupingLabelers(unittest.TestCase):
             {'start': 81, 'end': 99, 'label': 'a', 'text': 'three percent (3%)'},
         ]
         groups = [
-            {'tokens': [
+            {"spans": [
                 {'start': 0, 'end': 39, 'text': 'five percent (5%) \n fifty percent (50%)'},
             ], 'label': None},
-            {'tokens': [
+            {"spans": [
                 {'start': 61, 'end': 99, 'text': 'nine percent (9%) \n three percent (3%)'},
             ], 'label': None}
         ]
         labels = (labels, groups)
         model.fit([text] * 30, [labels] * 30)
         preds = model.predict([text])[0]
-        print(preds)
         self.assertEqual(len(preds), 2)
         self.assertEqual(preds, groups)
 
@@ -361,17 +355,16 @@ class TestGroupingLabelers(unittest.TestCase):
             {'start': 81, 'end': 99, 'label': 'a', 'text': 'three percent (3%)'},
         ]
         groups = [
-            {'tokens': [
+            {"spans": [
                 {'start': 0, 'end': 39, 'text': 'five percent (5%) \n fifty percent (50%)'},
             ], 'label': None},
-            {'tokens': [
+            {"spans": [
                 {'start': 61, 'end': 99, 'text': 'nine percent (9%) \n three percent (3%)'},
             ], 'label': None}
         ]
         labels = (labels, groups)
         model.fit([text] * 30, [labels] * 30)
         preds = model.predict([text])[0]
-        print(preds)
         self.assertEqual(len(preds), 2)
         self.assertEqual(len(preds[0]), 5)
         self.assertEqual(len(preds[1]), 2)

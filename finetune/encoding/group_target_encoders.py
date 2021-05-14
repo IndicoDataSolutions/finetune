@@ -34,7 +34,7 @@ class SequenceLabelingTextEncoder(Seq2SeqLabelEncoder):
 
     def inverse_transform(self, preds, raw_texts):
         preds = super().inverse_transform(preds)
-        preds = map(try_decode(pred), preds)
+        preds = map(try_decode, preds)
         return self.decode_preds(preds, raw_texts)
 
     @staticmethod
@@ -74,14 +74,14 @@ class GroupLabelingTextEncoder(Seq2SeqLabelEncoder):
                 # bettter when labels and text appear in a consistent order
 
                 # List of strings, where each string is on of the spans of the group
-                doc_groups.append([span["text"] for span in group["tokens"]])
+                doc_groups.append([span["text"] for span in group["spans"]])
             all_labels.append(json.dumps(doc_groups))
         ret = super().transform(all_labels)
         return ret
 
     def inverse_transform(self, preds, raw_texts):
         preds = super().inverse_transform(preds)
-        preds = map(try_decode(pred), preds)
+        preds = map(try_decode, preds)
         return self.decode_preds(preds, raw_texts)
     
     @staticmethod
@@ -110,7 +110,7 @@ class GroupLabelingTextEncoder(Seq2SeqLabelEncoder):
                         "text": span_text,
                     })
                 doc_groups.append({
-                    "tokens": group_spans,
+                    "spans": group_spans,
                     "label": None
                 })
             all_groups.append(doc_groups)
@@ -132,7 +132,7 @@ class JointLabelingTextEncoder(Seq2SeqLabelEncoder):
             # Group Labels
             doc_groups = []
             for group in groups:
-                doc_groups.append([span["text"] for span in group["tokens"]])
+                doc_groups.append([span["text"] for span in group["spans"]])
             # Combine
             all_labels.append(json.dumps([doc_labels, doc_groups]))
         ret = super().transform(all_labels)
@@ -157,7 +157,7 @@ class JointLabelingTextEncoder(Seq2SeqLabelEncoder):
 
 def is_continuous(group):
     # If there is only a single span, the group is continuous
-    return len(group["tokens"]) == 1
+    return len(group["spans"]) == 1
 
 class GroupSequenceLabelingEncoder(SequenceLabelingEncoder):
     """
@@ -195,8 +195,8 @@ class GroupSequenceLabelingEncoder(SequenceLabelingEncoder):
 
             # Gather entities inside group
             # Note that we assume groups are made up of only entities
-            group_start = min([t["start"] for t in group["tokens"]])
-            group_end = max([t["end"] for t in group["tokens"]])
+            group_start = min([t["start"] for t in group["spans"]])
+            group_end = max([t["end"] for t in group["spans"]])
             group_labels = []
             for label in labels:
                 if label["start"] >= group_start and label["end"] <= group_end:
@@ -243,9 +243,9 @@ class MultiCRFGroupSequenceLabelingEncoder(SequenceLabelingEncoder):
         for group in groups:
             if not is_continuous(group):
                 continue
-            group_start = min([t["start"] for t in group["tokens"]])
-            group_end = max([t["end"] for t in group["tokens"]])
-            group_text = " ".join([t["text"] for t in group["tokens"]])
+            group_start = min([t["start"] for t in group["spans"]])
+            group_end = max([t["end"] for t in group["spans"]])
+            group_text = " ".join([t["text"] for t in group["spans"]])
             group_labels.append({
                 "start": group_start,
                 "end": group_end,
@@ -319,9 +319,9 @@ class PipelineSequenceLabelingEncoder(SequenceLabelingEncoder):
             for group in groups:
                 if not is_continuous(group):
                     continue
-                group_start = min([t["start"] for t in group["tokens"]])
-                group_end = max([t["end"] for t in group["tokens"]])
-                group_text = " ".join([t["text"] for t in group["tokens"]])
+                group_start = min([t["start"] for t in group["spans"]])
+                group_end = max([t["end"] for t in group["spans"]])
+                group_text = " ".join([t["text"] for t in group["spans"]])
                 labels.append({
                     "start": group_start,
                     "end": group_end,
@@ -357,7 +357,7 @@ class BROSEncoder(BaseEncoder):
 
     @staticmethod
     def group_overlaps(group, start, end, text, input_text):
-        for span in group["tokens"]:
+        for span in group["spans"]:
             overlap, agree = SequenceLabelingEncoder.overlaps(span, start, end,
                                                               text, input_text)
             if overlap:
@@ -376,7 +376,7 @@ class BROSEncoder(BaseEncoder):
         for group in groups:
             current_tag = "GROUP"
             prev_idx = None
-            group_end = max([g["end"] for g in group["tokens"]])
+            group_end = max([g["end"] for g in group["spans"]])
             for i, (start, end, text) in enumerate(zip(out.token_starts, out.token_ends, out.tokens)):
                 if group_end < (start + end + 1) // 2:
                     break
@@ -446,7 +446,7 @@ class GroupRelationEncoder(BROSEncoder):
         # Tokens default to this group
         encoded_labels.append([1 for _ in range(len(out.tokens))])
         for i, group in enumerate(groups):
-            group_end = max([g["end"] for g in group["tokens"]])
+            group_end = max([g["end"] for g in group["spans"]])
             for j, (start, end, text) in enumerate(zip(out.token_starts, out.token_ends, out.tokens)):
                 if group_end < (start + end + 1) // 2:
                     break

@@ -380,7 +380,7 @@ class GroupSequenceLabeler(SequenceLabeler):
 
                 if (not groups or (pre == "BG-")):
                     groups.append({
-                        "tokens": [
+                        "spans": [
                             {
                                 "start": label["start"],
                                 "end": label["end"],
@@ -393,7 +393,7 @@ class GroupSequenceLabeler(SequenceLabeler):
                     # Note that we extend groups to include the next IG- span,
                     # regardless of if there is space between the end of the
                     # previous span and the start of the IG- span.
-                    last_token = groups[-1]["tokens"][-1]
+                    last_token = groups[-1]["spans"][-1]
                     last_token["end"] = label["end"]
                     last_token["text"] = text[last_token["start"]:last_token["end"]]
             all_groups.append(groups)
@@ -550,7 +550,7 @@ class PipelineSequenceLabeler(SequenceLabeler):
             groups = []
             for label in labels:
                 groups.append({
-                    "tokens": [{
+                    "spans": [{
                         "start": label["start"],
                         "end": label["end"],
                         "text": label["text"],
@@ -696,11 +696,11 @@ class BROSLabeler(SequenceLabeler):
                 # Sort spans to match group format (could be moved to eval)
                 group_spans = sorted(group_spans, key=lambda x: x["start"])
                 doc_groups.append({
-                    "tokens": group_spans,
+                    "spans": group_spans,
                     "label": None,
                 })
             # Sort groups to match group format (could be moved to eval)
-            doc_groups = sorted(doc_groups, key=lambda x: x["tokens"][0]["start"])
+            doc_groups = sorted(doc_groups, key=lambda x: x["spans"][0]["start"])
             all_groups.append(doc_groups)
         return all_groups
 
@@ -875,22 +875,22 @@ class GroupRelationLabeler(SequenceLabeler):
                 if token_group == pad_group or token_end == -1:
                     continue
                 group = doc_groups.get(token_group, {
-                    "tokens": [],
+                    "spans": [],
                     "label": None
                 })
 
                 # If there are no tokens or if there is text between the last
                 # token and the current one, start a new span
-                if (not group["tokens"] or
-                    text[group["tokens"][-1]["end"]:token_start].strip()):
-                    group["tokens"].append({
+                if (not group["spans"] or
+                    text[group["spans"][-1]["end"]:token_start].strip()):
+                    group["spans"].append({
                         "start": token_start,
                         "end": token_end,
                         "text": text[token_start:token_end]
                     })
                 # Otherwise, continue span
                 else:
-                    last_span = group["tokens"][-1]
+                    last_span = group["spans"][-1]
                     last_span["end"] = token_end
                     last_span["text"] = text[last_span["start"]:
                                              last_span["end"]]
