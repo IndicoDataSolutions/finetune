@@ -11,21 +11,22 @@ class TextCNNModel(SourceModel):
     is_bidirectional = False
     encoder = GPT2Encoder
     featurizer = textcnn_featurizer
-    kernel_sizes = [2, 3, 4]
+    kernel_sizes = [2, 4, 8]
     settings = {
         "n_embed_featurizer": 768,
         "n_layer": 1,
-        "n_epochs": 100,
-        "keep_best_model": True,
-        "early_stopping_steps": 100,
-        "val_size": "auto",
+        "n_epochs": 8,
+        "keep_best_model": False,
+        "early_stopping_steps": None,
+        "val_size": 0,
+        "chunk_long_sequences": False,
         "num_layers_trained": 1,
         "kernel_sizes": kernel_sizes,
-        "num_filters_per_size": 2,
-        "n_embed": len(kernel_sizes) * 2,
+        "num_filters_per_size": 256,
+        "n_embed": len(kernel_sizes) * 256,
         "act_fn": "gelu",
         "train_embeddings": True,
-        "lr": 0.01,
+        "lr": 2e-3,
         "seq_num_heads": len(kernel_sizes) * 2,
         "base_model_path": os.path.join("gpt2", "model-sm.jl"),
         "permit_uninitialized": r"conv[0-9]+",
