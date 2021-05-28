@@ -10,14 +10,14 @@ from finetune.encoding.group_target_encoders import (
     MultiCRFGroupSequenceLabelingEncoder,
     BROSEncoder,
     JointBROSEncoder,
-    TokenRelationEncoder,
+#    TokenRelationEncoder,
     GroupRelationEncoder,
-    SequenceLabelingTextEncoder,
+#    SequenceLabelingTextEncoder,
     GroupLabelingTextEncoder,
     JointLabelingTextEncoder,
 )
 
-from finetune.encoding.target_encoders import SequenceLabelingTextEncoder,
+#from finetune.encoding.target_encoders import SequenceLabelingTextEncoder
 
 def test_nest_group_sequence_label():
     encoder = GroupSequenceLabelingEncoder(pad_token="<PAD>", bio_tagging=True)
