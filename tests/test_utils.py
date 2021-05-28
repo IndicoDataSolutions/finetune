@@ -202,7 +202,7 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
         indicoy = [
             [
                 {'start': 0, 'end': 13, 'label': '1', 'text': 'Indico Is the'},
-                {'start': 6, 'end': 18, 'label': '2', 'text': ' Is the best'},
+                {'start': 7, 'end': 18, 'label': '2', 'text': 'Is the best'},
             ]
         ]
         self.assertEqual(indicoy, indicoy_pred)

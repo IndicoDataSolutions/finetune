@@ -250,9 +250,16 @@ class _BertModel(object):
                 def first_token():
                     return tf.squeeze(self.sequence_output[:, 0:1, :], axis=1)
                 def empty():
-                    return tf.zeros(tf.concat([[output_shape[0]], [output_shape[-1]]], axis=0))
+                    return tf.zeros(
+                        tf.concat(
+                            [[output_shape[0]], [config.hidden_size]],
+                            axis=0
+                        ),
+                        dtype=self.sequence_output.dtype
+                    )
                 first_token_tensor = tf.cond(tf.equal(output_shape[1], 0),
                                              true_fn=empty, false_fn=first_token)
+                first_token_tensor.set_shape([None, config.hidden_size])
                 # first_token_tensor = tf.squeeze(self.sequence_output[:, 0:1, :], axis=1)
                 if use_pooler:
                     self.pooled_output = tf.compat.v1.layers.dense(

@@ -165,7 +165,9 @@ def finetune_model_from_huggingface(
                 "inputs": X,
             }
             if not hf_config_instance.is_encoder_decoder:
-                output_state["embed_weights"] = embedding.word_embeddings
+                #TODO: Seems that this has changed in the HF update :(
+                #output_state["embed_weights"] = embedding.word_embeddings
+                pass
 
             return output_state
 
