@@ -23,7 +23,7 @@ def merge_output_state(states, X, lengths, chunk_pos_embed, hidden_dim):
     if "decoder" in states[0]:
         output_state["decoder"] = states[0]["decoder"]
     if "embedding" in states[0]:
-        output_state["embedding"] = states[0]["embedding"],
+        output_state["embedding"] = states[0]["embedding"]
     if "embed_weights" in states[0]:
         output_state["embed_weights"] = states[0]["embed_weights"]
     return output_state
