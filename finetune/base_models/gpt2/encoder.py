@@ -13,6 +13,7 @@ FINETUNE_FOLDER = os.path.dirname(finetune.__file__)
 ENCODER_PATH = os.path.join(FINETUNE_FOLDER, "model", "gpt2", "encoder.json")
 VOCAB_PATH = os.path.join(FINETUNE_FOLDER, "model", "gpt2", "vocab.bpe")
 
+
 @lru_cache()
 def bytes_to_unicode():
     """
@@ -52,16 +53,14 @@ class GPT2Encoder(BaseEncoder):
     def __init__(self, encoder_path=ENCODER_PATH, vocab_path=VOCAB_PATH):
         super().__init__(encoder_path=encoder_path, vocab_path=vocab_path)
 
-    def _lazy_init(self, errors="replace"):
-        if self.initialized:
-            return
-
         # Load encoder
         with open(self.encoder_path, "r") as f:
             self.encoder = json.load(f)
 
         if self.offset != 0:
-            self.encoder.update((token, idx + self.offset) for token, idx in self.encoder.items())
+            self.encoder.update(
+                (token, idx + self.offset) for token, idx in self.encoder.items()
+            )
 
         # Load BPE
         with open(self.vocab_path, "r", encoding="utf-8") as f:
@@ -74,7 +73,7 @@ class GPT2Encoder(BaseEncoder):
         self._add_extra_toks()
 
         self.decoder = {v: k for k, v in self.encoder.items()}
-        self.errors = errors
+        self.errors = "replace"
         self.byte_encoder = bytes_to_unicode()
         self.byte_decoder = {v: k for k, v in self.byte_encoder.items()}
 
@@ -82,7 +81,6 @@ class GPT2Encoder(BaseEncoder):
         self.pat = re.compile(
             r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
         )
-        self.initialized = True
 
     def _add_extra_toks(self):
         self.special_tokens = ["_delimiter_", "_classify_"]
@@ -157,14 +155,13 @@ class GPT2Encoder(BaseEncoder):
         """
         Convert a sample of raw text to a list of byte-pair encoded token indices.
         """
-        self._lazy_init()
         batch_tokens = []
         batch_token_idxs = []
         batch_char_ends = []
         # to account for the fact that some BPEs have different lengths than their original tokens
         # (e.g. special characters such as bullets)
         batch_char_starts = []
-        
+
         for i, text in enumerate(texts):  # text = one label span
             subtokens = []
             subtoken_idxs = []
@@ -192,10 +189,10 @@ class GPT2Encoder(BaseEncoder):
                     [self.encoder.get(t, self.UNK_IDX) for t in bpe_toks]
                 )
                 lens = [None for _ in bpe_toks]
-                
+
                 for i, tok in enumerate(decoded_bpe_toks):
                     lens[i] = len(tok.strip())
-                    
+
                 token_char_ends = np.cumsum(lens) + token_start
                 token_char_starts = [token_start] + token_char_ends[:-1].tolist()
                 token_start += len(token.strip())

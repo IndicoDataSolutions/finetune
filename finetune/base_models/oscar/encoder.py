@@ -13,9 +13,10 @@ import sentencepiece as spm
 import unicodedata
 
 FINETUNE_FOLDER = os.path.dirname(finetune.__file__)
-ENCODER_PATH = os.path.join(FINETUNE_FOLDER, 'model', 'oscar', 'encoder')
+ENCODER_PATH = os.path.join(FINETUNE_FOLDER, "model", "oscar", "encoder")
 
 LOGGER = logging.getLogger("finetune")
+
 
 def train_tokenizer(filename, vocab_size=128000):
     spm.SentencePieceTrainer.train(
@@ -23,7 +24,8 @@ def train_tokenizer(filename, vocab_size=128000):
             "--input={} --model_prefix={} --user_defined_symbols=<_start_>,<_delimiter_>,<_classify_> --unk_id=0 "
             "--vocab_size={} --input_sentence_size=10000000 --shuffle_input_sentence=true"
             " --max_sentence_length=10000000 --character_coverage=0.9999"
-        ).format(filename, ENCODER_PATH, vocab_size))
+        ).format(filename, ENCODER_PATH, vocab_size)
+    )
 
 
 class GPCEncoder(BaseEncoder):
@@ -32,29 +34,21 @@ class GPCEncoder(BaseEncoder):
     def __init__(self, encoder_path=ENCODER_PATH, vocab_path=None):
         super().__init__(encoder_path=encoder_path, vocab_path=vocab_path)
 
-    def _lazy_init(self):
-        if self.initialized:
-            return
-
         self.encoder = spm.SentencePieceProcessor()
         self.encoder.Load(ENCODER_PATH + ".model")
 
-        self.start_token = self.encoder.piece_to_id('<_start_>')
-        self.delimiter_token = self.encoder.piece_to_id('<_delimiter_>')
-        self.end_token = self.encoder.piece_to_id('<_classify_>')
+        self.start_token = self.encoder.piece_to_id("<_start_>")
+        self.delimiter_token = self.encoder.piece_to_id("<_delimiter_>")
+        self.end_token = self.encoder.piece_to_id("<_classify_>")
         self.cache = {}
-
-        self.initialized = True
 
     def nfck_norm_aligned(self, text):
         return normalize_nfkc(text)
-            
+
     def _encode(self, texts, stochastic=False):
         """
         Convert a batch of raw text to a batch of byte-pair encoded token indices.
         """
-        self._lazy_init()
-
         batch_tokens = []
         batch_token_idxs = []
         batch_character_locs = []
@@ -77,17 +71,21 @@ class GPCEncoder(BaseEncoder):
             for j, token in enumerate(encoded):
                 subtoken_idxs.append(self.encoder.piece_to_id(token))
                 raw_text = token.replace(WEIRD_SPM_CHAR, "")
-                
+
                 token_start_temp = normed_text.find(raw_text, token_end)
                 if token_start_temp == -1:
-                    LOGGER.warning("SentencePiece produced a token {} not found in the original string {}".format(raw_text, text))
+                    LOGGER.warning(
+                        "SentencePiece produced a token {} not found in the original string {}".format(
+                            raw_text, text
+                        )
+                    )
                 else:
                     token_start = token_start_temp
                     token_end = token_start + len(raw_text)
                 real_end = alignment[token_end]
                 real_start = alignment[token_start]
                 subtokens.append(token)
-                
+
                 tok_pos.append(alignment[token_end])
                 # start after the end of the last token.
                 # This causes chars that become multiple tokens to get reasonable char idxs
@@ -116,4 +114,3 @@ class GPCEncoder(BaseEncoder):
 
     def __setstate__(self, state):
         self.__init__()
-        self._lazy_init()

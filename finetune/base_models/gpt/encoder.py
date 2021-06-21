@@ -11,7 +11,12 @@ import numpy as np
 from ftfy.fixes import uncurl_quotes
 
 import finetune
-from finetune.encoding.input_encoder import get_spacy, EncodedOutput, BaseEncoder, get_pairs
+from finetune.encoding.input_encoder import (
+    get_spacy,
+    EncodedOutput,
+    BaseEncoder,
+    get_pairs,
+)
 
 
 FINETUNE_FOLDER = os.path.dirname(finetune.__file__)
@@ -46,11 +51,6 @@ class GPTEncoder(BaseEncoder):
     def __init__(self, encoder_path=ENCODER_PATH, vocab_path=VOCAB_PATH):
         super().__init__(encoder_path=encoder_path, vocab_path=vocab_path)
 
-    def _lazy_init(self):
-        # Must set
-        if self.initialized:
-            return
-
         with open(self.encoder_path, "r") as f:
             self.encoder = json.load(f)
 
@@ -71,7 +71,6 @@ class GPTEncoder(BaseEncoder):
         self.start_token = self.encoder["_start_"]
         self.delimiter_token = self.encoder["_delimiter_"]
         self.end_token = self.encoder["_classify_"]
-        self.initialized = True
 
     def _token_length(self, token):
         return len(token.strip().replace("</w>", ""))
@@ -125,7 +124,6 @@ class GPTEncoder(BaseEncoder):
         """
         nlp = get_spacy()
 
-        self._lazy_init()
         batch_tokens = []
         batch_token_idxs = []
         batch_char_ends = []
@@ -136,7 +134,7 @@ class GPTEncoder(BaseEncoder):
         for i, text in enumerate(texts):
 
             raw_text = text.lower()
-            
+
             # Only fine to apply this fix because it preserves character locations
             ftfy_text = uncurl_quotes(raw_text)
             tokens = nlp(_text_standardize(text))
@@ -168,7 +166,12 @@ class GPTEncoder(BaseEncoder):
                     token.text.replace(" ", "")
                 )
 
-                token_char_ends = np.cumsum([len(tok.strip().replace("</w>", "")) for tok in bpe_toks]) + token_start
+                token_char_ends = (
+                    np.cumsum(
+                        [len(tok.strip().replace("</w>", "")) for tok in bpe_toks]
+                    )
+                    + token_start
+                )
                 token_char_starts = [token_start] + token_char_ends[:-1].tolist()
                 token_start += len(token.text.strip())
                 char_ends.extend(token_char_ends)
@@ -232,7 +235,7 @@ def aggregate_to_full_tokens(attn, tokens, token_starts, token_ends, attention=T
 def finetune_to_indico_explain(raw_texts, attn_weights, encoder, attention=True):
     """
     Maps the attention weights or explain probability values one-to-one with the raw text tokens.
-    
+
     :param raw_texts: A list of segmented text of the form list(list(str))
     :param attn_weights: An array of attention weights of shape [batch, seq_len]
     :param encoder: The encoder used in the model that output the attention weights
@@ -268,4 +271,3 @@ def finetune_to_indico_explain(raw_texts, attn_weights, encoder, attention=True)
         )
         spacy_outputs.append(spacy_output)
     return spacy_outputs
-
