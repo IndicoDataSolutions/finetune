@@ -29,6 +29,9 @@ TEXTCNN_BASE_PARAMS = {
     "lr": 2e-3,
     "seq_num_heads": len(KERNEL_SIZES) * 2,
     "permit_uninitialized": r"conv[0-9]+",
+    # For reasonable memory consumption
+    "max_length": 25000,
+    "predict_batch_size": 4,
 }
 
 
