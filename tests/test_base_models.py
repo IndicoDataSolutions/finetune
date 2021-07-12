@@ -20,7 +20,17 @@ import requests
 from bs4 import BeautifulSoup as bs
 from bs4.element import Tag
 
-from finetune.base_models import TextCNN, BERTModelCased, GPT2Model, GPTModel, RoBERTa, OSCAR, TCNModel, DistilBERT
+from finetune.base_models import (
+    TextCNN,
+    FastTextCNN,
+    BERTModelCased,
+    GPT2Model,
+    GPTModel,
+    RoBERTa,
+    OSCAR,
+    TCNModel,
+    DistilBERT,
+)
 
 from finetune import Classifier, Comparison, SequenceLabeler
 from finetune.datasets import generic_download
@@ -40,9 +50,7 @@ except ImportError:
     HFBert = None
     HFElectraGen = None
     HFElectraDiscrim = None
-    
     HUGGINGFACE_MODELS = False
-
 
 
 SST_FILENAME = "SST-binary.csv"
@@ -62,7 +70,6 @@ class TestModelBase(unittest.TestCase):
         )
         defaults.update(kwargs)
         return defaults
-
 
 
 class TestClassifierTextCNN(TestModelBase):
@@ -492,6 +499,7 @@ class TestSequenceLabelerTextCNN(TestModelBase):
     def test_featurize_sequence(self):
         _test_featurize_sequence(self, model_fn=SequenceLabeler)
 
+
 def _test_featurize_sequence(self, model_fn):
     test_input = ["""Pirateipsum: Corsair bilge rat interloper. Nipperkin
                   aye chase. Brigantine yard weigh anchor.  Jolly boat
@@ -511,6 +519,7 @@ def _test_featurize_sequence(self, model_fn):
     prev_features = [None] * len(test_input)
     for max_len in [32, 64, 128, 256]:
         chunk_config = self.default_config()
+        chunk_config["chunk_long_sequences"] = True
         chunk_config["max_length"] = max_len
         model2 = model_fn(**chunk_config)
         chunk_features = model2.featurize_sequence(test_input)
@@ -528,6 +537,19 @@ def _test_featurize_sequence(self, model_fn):
             if prev is not None:
                 self.assertTrue(prev.shape == chunk.shape)
         prev_features = chunk_features
+
+
+class TestSequenceLabelerFastTextCNN(TestSequenceLabelerTextCNN):
+    base_model = FastTextCNN
+
+
+class TestClassifierFastTextCNN(TestClassifierTextCNN):
+    base_model = FastTextCNN
+
+
+class TestComparisonFastTextCNN(TestComparisonTextCNN):
+    base_model = FastTextCNN
+
 
 class TestSequenceLabelerBert(TestSequenceLabelerTextCNN):
     model_specific_config = {"n_epochs": 2, "lr": 1e-4}

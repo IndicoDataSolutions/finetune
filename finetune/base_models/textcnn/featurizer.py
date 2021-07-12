@@ -4,14 +4,7 @@ from finetune.util.shapes import lengths_from_eos_idx
 from finetune.base_models.gpt.featurizer import dropout, embed
 
 
-def textcnn_featurizer(
-    X,
-    encoder,
-    config,
-    train=False,
-    reuse=None,
-    **kwargs
-):
+def textcnn_featurizer(X, encoder, config, train=False, reuse=None, **kwargs):
     """
     The transformer element of the finetuning model. Maps from tokens ids to a dense, embedding of the sequence.
 
@@ -29,10 +22,20 @@ def textcnn_featurizer(
     X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-1:]), 0))
     sequence_length = tf.shape(input=X)[1]
     with tf.compat.v1.variable_scope("model/featurizer", reuse=reuse):
+        # Name of embed weights variable depends on tokenizer/base model weights file
+        if "roberta" in config.base_model_path:
+            embed_weights_name = "bert/embeddings/word_embeddings"
+            clf_token = encoder.delimiter_token
+        else:
+            embed_weights_name = "we"
+            clf_token = encoder["_classify_"]
+
         embed_weights = tf.compat.v1.get_variable(
-            name="we",
+            name=embed_weights_name,
             shape=[encoder.vocab_size, config.n_embed_featurizer],
-            initializer=tf.compat.v1.random_normal_initializer(stddev=config.weight_stddev),
+            initializer=tf.compat.v1.random_normal_initializer(
+                stddev=config.weight_stddev
+            ),
         )
 
         if config.train_embeddings:
@@ -42,8 +45,11 @@ def textcnn_featurizer(
 
         h = tf.gather(embed_weights, X)
 
-        # keep track of the classify token
-        clf_token = encoder["_classify_"]
+        # Keep track of the classify token. Token depends on tokenizer / base model weights file
+        # if "roberta" in config.base_model_path:
+        #     clf_token = encoder.delimiter_token
+        # else:
+        #     clf_token = encoder["_classify_"]
 
         # mask out the values past the classify token before performing pooling
         pool_idx = tf.cast(
@@ -53,9 +59,7 @@ def textcnn_featurizer(
         # mask is past the classify token (i.e. make those results extremely negative)
         mask = tf.expand_dims(
             1.0
-            - tf.sequence_mask(
-                pool_idx, maxlen=tf.shape(input=h)[1], dtype=tf.float32
-            ),
+            - tf.sequence_mask(pool_idx, maxlen=tf.shape(input=h)[1], dtype=tf.float32),
             -1,
         )
 
@@ -95,5 +99,5 @@ def textcnn_featurizer(
             "features": clf_h,  # [batch_size, n_embed] for classify, [batch_size, 1, n_embed] for comparison, etc.
             "sequence_features": seq_feats,  # [batch_size, seq_len, n_embed]
             "eos_idx": pool_idx,  # [batch_size]
-            "lengths": lengths
+            "lengths": lengths,
         }

@@ -287,9 +287,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         resolved_gpus_string = ["/gpu:{}".format(gpu) for gpu in resolved_gpus]
         if len(resolved_gpus_string) == 1:
-            distribute_strategy = tf.distribute.OneDeviceStrategy(
-                resolved_gpus_string[0]
-            )
+            distribute_strategy = None
         else:
             if self.config.per_process_gpu_memory_fraction is not None:
                 warnings.warn(
