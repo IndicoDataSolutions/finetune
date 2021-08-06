@@ -4,12 +4,15 @@ import logging
 import sys
 import warnings
 import re
+import math
 
 import joblib
 import numpy as np
 import tensorflow as tf
 from tensorflow.compat.v1.train import SessionRunHook
 from tensorflow_estimator.python.estimator.early_stopping import _StopOnPredicateHook
+from scipy import interpolate
+
 
 from finetune.errors import FinetuneError
 from finetune.config import get_config
@@ -124,6 +127,17 @@ class BatchedVarLoad:
 
     def add(self, var, val):
         if var.name.endswith("we:0") or "bert/embeddings/position_embedding" in var.name: # for backwards comaptibility with pre-saved models
+            if val.shape[0] < var.shape[0]:
+#                multiplier = math.ceil(var.shape[0] / val.shape[0])
+#                val = np.asarray([val_row for val_row in val for _ in range(multiplier)])
+                # goes like 0, 0, 1, 1, 2, 2, ...
+                 xx = np.linspace(0, val.shape[0], var.shape[0])
+                 new_kernel = interpolate.RectBivariateSpline(
+                     np.arange(val.shape[0]),
+                     np.arange(val.shape[1]),
+                     val,
+                 )
+                 val = new_kernel(xx, np.arange(val.shape[1]))
             val = val[:var.shape[0]]
         if hasattr(var, "_values"):
             underlying_vars = var._values
