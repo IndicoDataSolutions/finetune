@@ -15,12 +15,16 @@ from transformers import (
     T5Config,
     AlbertTokenizerFast,
     AlbertConfig,
-    BertTokenizer
+    BertTokenizer,
+    LongformerTokenizerFast,
+    LongformerConfig,
 )
 from transformers.models.t5.modeling_tf_t5 import TFT5Model
 from transformers.models.electra.modeling_tf_electra import TFElectraMainLayer
 from transformers.models.roberta.modeling_tf_roberta import TFRobertaMainLayer
 from transformers.models.albert.modeling_tf_albert import TFAlbertMainLayer
+from transformers.models.longformer.modeling_tf_longformer import TFLongformerMainLayer
+
 from transformers.models.xlm_roberta.tokenization_xlm_roberta import (
     VOCAB_FILES_NAMES,
     PRETRAINED_VOCAB_FILES_MAP,
@@ -44,6 +48,24 @@ HFXLMRoberta = finetune_model_from_huggingface(
             "model/featurizer/tf_roberta_main_layer",
         )
     ],
+)
+
+
+HFLongformer = finetune_model_from_huggingface(
+    pretrained_weights="allenai/longformer-base-4096",
+    archive_map={
+        "allenai/longformer-base-4096": "https://cdn.huggingface.co/allenai/longformer-base-4096/tf_model.h5"
+    },
+    hf_featurizer=TFLongformerMainLayer,
+    hf_tokenizer=LongformerTokenizerFast,
+    hf_config=LongformerConfig,
+    weights_replacement=[
+        (
+            "tf_longformer_for_masked_lm/longformer",
+            "model/featurizer/tf_longformer_main_layer"
+        )
+    ],
+    config_overrides={"low_memory_mode": True}
 )
 
 
