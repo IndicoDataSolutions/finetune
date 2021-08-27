@@ -39,6 +39,7 @@ LOGGER = logging.getLogger("finetune")
 
 
 def load_weights_from_hdf5_group_by_name(filepath, weights_replacement):
+    print(filepath)
     with h5py.File(filepath, "r") as f:
         if "layer_names" not in f.attrs and "model_weights" in f:
             f = f["model_weights"]
@@ -205,6 +206,9 @@ def finetune_model_from_huggingface(
                     token_ends = []
                     token_starts = []
                     for start, end in encoded.offsets:
+                        if token_ends:
+                            start = max(token_ends[-1], start)
+                            end = max(end, start)
                         token_starts.append(start)
                         token_ends.append(end)
 
