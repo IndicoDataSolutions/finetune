@@ -12,12 +12,10 @@ from finetune.encoding.group_target_encoders import (
     JointBROSEncoder,
 #    TokenRelationEncoder,
     GroupRelationEncoder,
-#    SequenceLabelingTextEncoder,
+    SequenceLabelingTextEncoder,
     GroupLabelingTextEncoder,
     JointLabelingTextEncoder,
 )
-
-#from finetune.encoding.target_encoders import SequenceLabelingTextEncoder
 
 def test_nest_group_sequence_label():
     encoder = GroupSequenceLabelingEncoder(pad_token="<PAD>", bio_tagging=True)
@@ -123,7 +121,7 @@ def test_BROS_sequence_label():
     ]
     label = (labels, groups)
     encoder.fit([label])
-    assert len(encoder.classes_) == 2
+    assert len(encoder.classes_) == 4
     out = EncodedOutput(
         token_ids=np.array([   0, 9583,  139,   40,  249, 8875,    2]), 
         tokens=np.array(['0', 'five', ' per', 'cent', ' (', '5', '%)', '2'], dtype='<U21'), 
@@ -158,7 +156,7 @@ def test_joint_BROS_sequence_label():
     encoder.fit([label])
     print(encoder.classes_)
     assert len(encoder.ner_classes_) == 3
-    assert len(encoder.group_classes_) == 2
+    assert len(encoder.group_classes_) == 4
     out = EncodedOutput(
         token_ids=np.array([   0, 9583,  139,   40,  249, 8875,    2]), 
         tokens=np.array(['0', 'five', ' per', 'cent', ' (', '5', '%)', '2'], dtype='<U21'), 
@@ -221,27 +219,22 @@ def test_seq2seq_sequence_label():
     model = HFS2S(base_model=HFT5)
     pipeline = HFS2S._get_input_pipeline(model)
     encoder = SequenceLabelingTextEncoder(pipeline, 512)
-    
+    text = "five percent (5%)"
     labels = [
         {'start': 0, 'end': 4, 'label': 'z', 'text': 'five'},
         {'start': 5, 'end': 8, 'label': 'z', 'text': 'per'},
         {'start': 13, 'end': 17, 'label': 'z', 'text': '(5%)'},
     ]
-    correct = [
-        {"z": "five"},
-        {"z": "per"},
-        {"z": "(5%)"},
-    ]
     label_arr = encoder.transform([labels])[0][0]
-    label_text = encoder.inverse_transform([label_arr])[0]
-    label_decoded = json.loads(label_text)
-    assert label_decoded == correct
+    assert isinstance(label_arr, np.ndarray) # token ids
+    labels_out = encoder.inverse_transform([label_arr], [text])[0]
+    assert labels_out == labels # Round trip back to labels
 
 def test_seq2seq_group_label():
     model = HFS2S(base_model=HFT5)
     pipeline = HFS2S._get_input_pipeline(model)
     encoder = GroupLabelingTextEncoder(pipeline, 512)
-    
+    text = "five percent (5%) \n test"
     labels = [
         {'start': 0, 'end': 4, 'label': 'z', 'text': 'five'},
         {'start': 5, 'end': 8, 'label': 'z', 'text': 'per'},
@@ -250,29 +243,22 @@ def test_seq2seq_group_label():
     groups = [
         {"spans": [
             {'start': 5, 'end': 8, 'text': 'per'},
-            {'start': 13, 'end': 25, 'text': '(5%) \n test'},
+            {'start': 13, 'end': 24, 'text': '(5%) \n test'},
         ], 'label': None},
         {"spans": [
             {'start': 8, 'end': 12, 'text': 'cent'},
         ], 'label': None}
     ]
     label_arr = encoder.transform([(labels, groups)])[0][0]
-    label_text = encoder.inverse_transform([label_arr])[0]
-    correct = [
-        # T5 tokenizer turns \n -> n
-        # Included in the test so we can adjust decoding if this changes
-        ["per", "(5%) n test"],
-        ["cent"]
-    ]
-    label_decoded = json.loads(label_text)
-    print(label_decoded)
-    assert label_decoded == correct
+    assert isinstance(label_arr, np.ndarray) # token ids                                                                                              
+    groups_out = encoder.inverse_transform([label_arr], [text])[0] # Takes labels and groups in but only encodes groups?
+    assert groups_out == groups
 
 def test_seq2seq_joint_label():
     model = HFS2S(base_model=HFT5)
     pipeline = HFS2S._get_input_pipeline(model)
     encoder = JointLabelingTextEncoder(pipeline, 512)
-    
+    text = "five percent (5%)"
     labels = [
         {'start': 0, 'end': 4, 'label': 'z', 'text': 'five'},
         {'start': 5, 'end': 8, 'label': 'z', 'text': 'per'},
@@ -288,20 +274,7 @@ def test_seq2seq_joint_label():
         ], 'label': None}
     ]
     label_arr = encoder.transform([(labels, groups)])[0][0]
-    label_text = encoder.inverse_transform([label_arr])[0]
-    # Two lists, first for NER labels and second for group labels
-    correct = [
-        [
-            {"z": "five"},
-            {"z": "per"},
-            {"z": "(5%)"},
-        ],
-        [
-            ["per", "(5%)"],
-            ["cent"]
-        ]
-    ]
-    print(label_text)
-    label_decoded = json.loads(label_text)
-    print(label_decoded)
-    assert label_decoded == correct
+    assert isinstance(label_arr, np.ndarray)
+    labels_out, groups_out = encoder.inverse_transform([label_arr], [text])[0]
+    assert labels_out == labels
+    assert groups_out == groups
