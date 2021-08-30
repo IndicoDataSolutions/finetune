@@ -19,10 +19,10 @@ def group_exact_counts(pred, label):
     :return: A Counts namedtuple with TP, FP and FN counts
     """
     if (pred["label"] != label["label"] or
-        len(pred["tokens"]) != len(label["tokens"])):
+        len(pred["spans"]) != len(label["spans"])):
         return Counts(0, 1, 1)
-    pred_spans = sorted(pred["tokens"], key=lambda x: x["start"])
-    label_spans = sorted(label["tokens"], key=lambda x: x["start"])
+    pred_spans = sorted(pred["spans"], key=lambda x: x["start"])
+    label_spans = sorted(label["spans"], key=lambda x: x["start"])
     for pred_span, label_span in zip(pred_spans, label_spans):
         if (pred_span["start"] != label_span["start"] or
             pred_span["end"] != label_span["end"]):
@@ -36,8 +36,8 @@ def group_token_counts(pred, label):
     :param pred, label: A group, represeted as a dict
     :return: A Counts namedtuple with TP, FP and FN counts
     """
-    pred_tokens = _convert_to_token_list(pred["tokens"])
-    label_tokens = _convert_to_token_list(label["tokens"])
+    pred_tokens = _convert_to_token_list(pred["spans"])
+    label_tokens = _convert_to_token_list(label["spans"])
 
     if pred["label"] != label["label"]:
         # All predicted tokens are false positives
@@ -73,8 +73,8 @@ def group_overlap_counts(pred, label):
     """
     if (pred["label"] != label["label"]):
         return Counts(0, 1, 1)
-    for pred_span in pred["tokens"]:
-        for label_span in label["tokens"]:
+    for pred_span in pred["spans"]:
+        for label_span in label["spans"]:
             start = max(pred_span["start"], label_span["start"])
             end = min(pred_span["end"], label_span["end"])
             # If overlapping...
@@ -90,8 +90,8 @@ def group_superset_counts(pred, label):
     """
     if (pred["label"] != label["label"]):
         return Counts(0, 1, 1)
-    for label_span in label["tokens"]:
-        for pred_span in pred["tokens"]:
+    for label_span in label["spans"]:
+        for pred_span in pred["spans"]:
             if (pred_span["start"] <= label_span["start"] and
                 pred_span["end"] >= label_span["end"]):
                 break
@@ -321,7 +321,7 @@ def calc_class_counts(all_preds, all_labels, metric_type="group", span_type="exa
             for idx in missing_idxs:
                 group = extra_groups[idx]
                 if span_type == "token" and metric_type == "group":
-                    group_len = len(_convert_to_token_list(group["tokens"]))
+                    group_len = len(_convert_to_token_list(group["spans"]))
                 elif span_type == "token" and metric_type == "joint":
                     group_len = len(_convert_to_token_list(group["entities"]))
                 else:
@@ -461,7 +461,7 @@ def entity_in_group(entity, group):
     :param entity: A single entity span
     :param group: A single group
     """
-    for span in group["tokens"]:
+    for span in group["spans"]:
         if (span["start"] <= entity["start"] and
             span["end"] >= entity["end"]):
             return True

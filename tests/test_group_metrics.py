@@ -346,7 +346,7 @@ class TestGroupMetrics(unittest.TestCase):
             "avg_f1": {
                 "micro": 0.57143,
                 "macro": 0.58333,
-                "weighted": 0.77777,
+                "weighted": 0.61111,
             }
         }
         preds = [self.under_over_predict_groups] * 10
