@@ -33,7 +33,7 @@ from finetune.util.huggingface_interface import finetune_model_from_huggingface
 HFXLMRoberta = finetune_model_from_huggingface(
     pretrained_weights="jplu/tf-xlm-roberta-base",
     archive_map={
-        "jplu/tf-xlm-roberta-base": "https://cdn.huggingface.co/bert/jplu/tf-xlm-roberta-base/tf_model.h5"
+        "jplu/tf-xlm-roberta-base": "https://s3.amazonaws.com/models.huggingface.co/bert/jplu/tf-xlm-roberta-base/tf_model.h5"
     },
     hf_featurizer=TFRobertaMainLayer,
     hf_tokenizer=XLMRobertaTokenizer,

@@ -45,7 +45,7 @@ class TestHuggingFace(unittest.TestCase):
     def huggingface_embedding(self, text, model_path):
         tokenizer = AutoTokenizer.from_pretrained(model_path)
         model = TFAutoModel.from_pretrained(model_path)
-        input_ids = tf.constant(tokenizer.encode(self.text))[None,:-1]  # Batch size 1
+        input_ids = tf.constant(tokenizer.encode(self.text))[None, :]  # Batch size 1
         print("HF TOKENS", input_ids.numpy(), input_ids.numpy().shape)
         kwargs = {
             "attention_mask": tf.ones_like(input_ids, dtype=tf.float32),
