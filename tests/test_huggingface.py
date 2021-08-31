@@ -31,9 +31,7 @@ class TestHuggingFace(unittest.TestCase):
     def check_embeddings_equal(self, finetune_base_model, hf_model_path, **kwargs):
         finetune_model = SequenceLabeler(
             base_model=finetune_base_model,
-            train_embeddings=False,
-            n_epochs=1,
-            batch_size=1,
+            chunk_long_sequences=False
         )
         finetune_seq_features = finetune_model.featurize_sequence([self.text])[0]
         hf_seq_features = self.huggingface_embedding(self.text, hf_model_path, **kwargs)[0]
@@ -47,13 +45,19 @@ class TestHuggingFace(unittest.TestCase):
     def huggingface_embedding(self, text, model_path):
         tokenizer = AutoTokenizer.from_pretrained(model_path)
         model = TFAutoModel.from_pretrained(model_path)
-        input_ids = tf.constant(tokenizer.encode(self.text))[None, :]  # Batch size 1
-
+        input_ids = tf.constant(tokenizer.encode(self.text))[None,:-1]  # Batch size 1
+        print("HF TOKENS", input_ids.numpy(), input_ids.numpy().shape)
+        kwargs = {
+            "attention_mask": tf.ones_like(input_ids, dtype=tf.float32),
+            #"token_type_ids": tf.zeros_like(input_ids),
+            "inputs_embeds": None,
+            "training": False,
+        }
         if model.config.is_encoder_decoder:
-            outputs = model.encoder(input_ids)
+            outputs = model.encoder(input_ids, **kwargs)
         else:
             outputs = model(
-                input_ids,
+                input_ids, **kwargs
             )  # outputs is tuple where first element is sequence features
         last_hidden_states = outputs[0]
         return last_hidden_states.numpy()

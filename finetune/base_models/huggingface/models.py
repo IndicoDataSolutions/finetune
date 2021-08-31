@@ -13,7 +13,7 @@ from transformers import (
     XLMRobertaConfig,
     T5Tokenizer,
     T5Config,
-    AlbertTokenizer,
+    AlbertTokenizerFast,
     AlbertConfig,
     BertTokenizer
 )
@@ -126,12 +126,12 @@ HFAlbert = finetune_model_from_huggingface(
         "albert-base-v2": "https://cdn.huggingface.co/albert-base-v2-tf_model.h5"
     },
     hf_featurizer=TFAlbertMainLayer,
-    hf_tokenizer=AlbertTokenizer,
+    hf_tokenizer=AlbertTokenizerFast,
     hf_config=AlbertConfig,
     weights_replacement=[
         ("tf_albert_for_masked_lm_1/albert/", "model/featurizer/tf_albert_main_layer/")
     ],
-    config_overrides={"n_embed": 756, "n_epochs": 8, "lr": 2e-5, "batch_size": 8},
+    config_overrides={"n_embed": 768, "n_epochs": 8, "lr": 2e-5, "batch_size": 8},
     aggressive_token_alignment=True,
 )
 
@@ -142,7 +142,7 @@ HFAlbertXLarge = finetune_model_from_huggingface(
         "albert-xlarge-v2": "https://cdn.huggingface.co/albert-xlarge-v2-tf_model.h5"
     },
     hf_featurizer=TFAlbertMainLayer,
-    hf_tokenizer=AlbertTokenizer,
+    hf_tokenizer=AlbertTokenizerFast,
     hf_config=AlbertConfig,
     weights_replacement=[
         ("tf_albert_for_masked_lm_5/albert/", "model/featurizer/tf_albert_main_layer/")
