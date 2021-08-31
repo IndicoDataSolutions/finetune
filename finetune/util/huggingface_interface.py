@@ -88,7 +88,6 @@ def finetune_model_from_huggingface(
 
         seq_length = tf.shape(input=delimiters)[1]
         mask = tf.sequence_mask(lengths, maxlen=seq_length, dtype=tf.float32)
-
         with tf.compat.v1.variable_scope("model/featurizer", reuse=reuse):
             if hf_model_original is None or not reuse:
                 hf_model_original = hf_featurizer(hf_config_instance)
@@ -259,7 +258,6 @@ def finetune_model_from_huggingface(
                     batch_tokens.append(encoded_tokens)
                     batch_char_ends.append(tok_pos)
                     batch_char_starts.append(char_starts)
-
             output = EncodedOutput(
                 token_ids=batch_token_idxs,
                 tokens=batch_tokens,
@@ -285,13 +283,18 @@ def finetune_model_from_huggingface(
     class HuggingFaceModel(SourceModel):
         encoder = HuggingFaceEncoder
         featurizer = finetune_featurizer
+        if hasattr(hf_config_instance, "n_positions"):
+            max_length = hf_config_instance.n_positions
+        else:
+            max_length = hf_config_instance.max_position_embeddings
         settings = {
             "base_model_path": os.path.join("huggingface", weights_file),
             "n_layer": 12,
             "n_embed": hf_config_instance.hidden_size,
-            "max_length": hf_config_instance.max_length,
+            "max_length": max_length,
             "include_bos_eos": include_bos_eos,
         }
+
         if config_overrides:
             settings.update(config_overrides)
         required_files = [{"url": weights_url, "file": raw_weights_path}]
