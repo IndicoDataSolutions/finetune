@@ -46,7 +46,6 @@ class TestHuggingFace(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(model_path)
         model = TFAutoModel.from_pretrained(model_path)
         input_ids = tf.constant(tokenizer.encode(self.text))[None, :]  # Batch size 1
-        print("HF TOKENS", input_ids.numpy(), input_ids.numpy().shape)
         kwargs = {
             "attention_mask": tf.ones_like(input_ids, dtype=tf.float32),
             #"token_type_ids": tf.zeros_like(input_ids),
@@ -105,8 +104,8 @@ class TestHuggingFace(unittest.TestCase):
         self.assertTrue(pred_correct)
 
     def test_t5(self):
+        # Huggingface t5 has added an EOS token that we do not use - I think this is really for the decoder, but it seems like huggingface includes it for encoder too?
         self.check_embeddings_equal(HFT5, "t5-base")
-
 
     def test_albert(self):
         self.check_embeddings_equal(HFAlbert, "albert-base-v2")

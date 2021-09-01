@@ -341,7 +341,7 @@ class TestGroupingLabelers(unittest.TestCase):
         self.assertEqual(preds, groups)
 
     def test_t5_joint_tagging(self):
-        model = JointS2S(base_model=HFT5, n_epochs=8)
+        model = JointS2S(base_model=HFT5, n_epochs=16)
         text = ("five percent (5%) \n " +
                 "fifty percent (50%) \n " +
                 "two percent (2%) \n " +
@@ -362,10 +362,10 @@ class TestGroupingLabelers(unittest.TestCase):
                 {'start': 61, 'end': 99, 'text': 'nine percent (9%) \n three percent (3%)'},
             ], 'label': None}
         ]
-        labels = (labels, groups)
-        model.fit([text] * 30, [labels] * 30)
-        preds = model.predict([text])[0]
-        self.assertEqual(len(preds), 2)
-        self.assertEqual(len(preds[0]), 5)
-        self.assertEqual(len(preds[1]), 2)
-        self.assertEqual(preds, labels)
+        all_labels = (labels, groups)
+        model.fit([text] * 30, [all_labels] * 30)
+        label_preds, group_preds = model.predict([text])[0]
+        self.assertEqual(len(label_preds), 5)
+        self.assertEqual(labels, label_preds)
+        self.assertEqual(len(group_preds), 2)
+        self.assertEqual(groups, group_preds)
