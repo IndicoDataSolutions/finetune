@@ -215,7 +215,7 @@ class BaseEncoder(metaclass=SingletonMeta):
             else:
                 cut_len = allocated_max_len + (empty_tokens // num_over)
 
-        if include_bos_eos:
+        if include_bos_eos == True or include_bos_eos == "bos":
             joined = [start]
         else:
             joined = []
@@ -224,7 +224,7 @@ class BaseEncoder(metaclass=SingletonMeta):
             joined += d[:cut_len] + [delimiter]
         joined = joined[:-1]
 
-        if include_bos_eos:
+        if include_bos_eos == True or include_bos_eos == "eos":
             if eos_on_cut or cut_len is None:
                 joined += [clf_token]
         return joined
