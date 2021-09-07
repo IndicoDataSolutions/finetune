@@ -16,6 +16,7 @@ from finetune.base_models.huggingface.models import (
     HFXLMRoberta,
     HFT5,
     HFAlbert,
+    HFLongformer,
 )
 from finetune.target_models.seq2seq import HFS2S
 from sklearn.model_selection import train_test_split
@@ -31,7 +32,7 @@ class TestHuggingFace(unittest.TestCase):
     def check_embeddings_equal(self, finetune_base_model, hf_model_path, **kwargs):
         finetune_model = SequenceLabeler(
             base_model=finetune_base_model,
-            chunk_long_sequences=False
+            chunk_long_sequences=False,
         )
         finetune_seq_features = finetune_model.featurize_sequence([self.text])[0]
         hf_seq_features = self.huggingface_embedding(self.text, hf_model_path, **kwargs)[0]
@@ -45,9 +46,10 @@ class TestHuggingFace(unittest.TestCase):
     def huggingface_embedding(self, text, model_path):
         tokenizer = AutoTokenizer.from_pretrained(model_path)
         model = TFAutoModel.from_pretrained(model_path)
-        input_ids = tf.constant(tokenizer.encode(self.text))[None, :]  # Batch size 1
+        tokens = tokenizer.encode(self.text)
+        input_ids = tf.constant(tokens)[None, :]  # Batch size 1
         kwargs = {
-            "attention_mask": tf.ones_like(input_ids, dtype=tf.float32),
+            #"attention_mask": tf.ones_like(input_ids, dtype=tf.float32),
             #"token_type_ids": tf.zeros_like(input_ids),
             "inputs_embeds": None,
             "training": False,
@@ -109,6 +111,9 @@ class TestHuggingFace(unittest.TestCase):
 
     def test_albert(self):
         self.check_embeddings_equal(HFAlbert, "albert-base-v2")
+
+    def test_longformer(self):
+        self.check_embeddings_equal(HFLongformer, "allenai/longformer-base-4096")
 
     def test_layoutlm(self):
         activations_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "data", "test-layoutlm-activations.jl")
