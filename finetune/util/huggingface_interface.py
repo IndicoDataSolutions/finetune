@@ -196,9 +196,6 @@ def finetune_model_from_huggingface(
             self.tokenizer = hf_tokenizer_instance
             self.hf_config = hf_config_instance
             # Pad token ID is fallback for T5
-            self.start_token = None
-            self.delimiter_token = None
-            self.mask_token = None
             self.start_token = select_first_non_none(
                 self.hf_config.bos_token_id,
                 self.tokenizer.bos_token_id,
