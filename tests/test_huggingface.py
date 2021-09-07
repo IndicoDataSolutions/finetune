@@ -38,6 +38,8 @@ class TestHuggingFace(unittest.TestCase):
         hf_seq_features = self.huggingface_embedding(self.text, hf_model_path, **kwargs)[0]
         if len(finetune_seq_features) + 2 == len(hf_seq_features):
             hf_seq_features = hf_seq_features[1:-1]
+        if len(finetune_seq_features) + 1 == len(hf_seq_features):
+            hf_seq_features = hf_seq_features[:-1]
         np.testing.assert_array_almost_equal(
             finetune_seq_features, hf_seq_features, decimal=2,
         )
