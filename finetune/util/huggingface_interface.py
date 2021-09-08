@@ -110,7 +110,6 @@ def finetune_model_from_huggingface(
                     embedding.vocab_size = new_size
                     hf_model_original.config.vocab_size = new_size
                     hf_model_original.vocab_size = new_size
-
                 if config.low_memory_mode and train:
                     if hf_config_instance.is_encoder_decoder:
                         for layer in (

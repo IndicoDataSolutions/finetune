@@ -51,8 +51,6 @@ class TestHuggingFace(unittest.TestCase):
         tokens = tokenizer.encode(self.text)
         input_ids = tf.constant(tokens)[None, :]  # Batch size 1
         kwargs = {
-            #"attention_mask": tf.ones_like(input_ids, dtype=tf.float32),
-            #"token_type_ids": tf.zeros_like(input_ids),
             "inputs_embeds": None,
             "training": False,
         }
