@@ -239,9 +239,16 @@ class SequenceLabeler(BaseModel):
             model_copy.config.auto_negative_sampling = False
             model_copy.finetune(Xs, Y=Y, context=context, update_hook=update_hook)
             initial_run_preds = []
-            outer_batch_size = self.config.predict_batch_size
-            for b_start in range(0, len(Xs), outer_batch_size):
-                initial_run_preds += model_copy.predict(Xs[b_start: b_start + outer_batch_size])
+
+            # Heuristic to select batch size for prediction to limit memory consumption.
+            # Aim is to give us the smallest batch size that will give us full batches.
+            approx_max_tokens_per_doc = max(len(x) for x in Xs) / 5
+            approx_chunks_per_doc = approx_max_tokens_per_doc / (self.config.max_length - self.config.chunk_context)
+            outer_batch_size = min(max(int(self.config.predict_batch_size / approx_chunks_per_doc), 1), self.config.predict_batch_size)
+
+            with self.cached_predict():
+                for b_start in range(0, len(Xs), outer_batch_size):
+                    initial_run_preds += model_copy.predict(Xs[b_start: b_start + outer_batch_size])
             del model_copy
             Y_with_neg_samples = negative_samples(
                 initial_run_preds, Y, pad=self.config.pad_token

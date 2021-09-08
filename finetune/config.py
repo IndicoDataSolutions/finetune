@@ -29,6 +29,7 @@ def all_gpus(visible_gpus=None):
     Get integer ids of all available GPUs.
     """
     if visible_gpus is not None:
+        os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(gpu) for gpu in visible_gpus)
         return [int(gpu) for gpu in visible_gpus]
     devices = tf.config.experimental.list_physical_devices("GPU")
     LOGGER.info(

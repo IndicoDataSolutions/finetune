@@ -28,10 +28,10 @@ EncodedOutput = namedtuple(
         "tokens",  # list of list of subtokens (strs)
         "token_ends",  # list of list of character locations (ints)
         "token_starts",  # list of list of character starts (locs are character ends) (ints)
-        "useful_start", # an int token idx - where to begin using the predictions when chunking
-        "useful_end", # an int token idx - where to stop using the predictions when chunking
-        "input_text", # The raw text - pre tokenization.
-        "offset", # Offset applied to the token_starts and ends - currently used only by DocumentLabeler
+        "useful_start",  # an int token idx - where to begin using the predictions when chunking
+        "useful_end",  # an int token idx - where to stop using the predictions when chunking
+        "input_text",  # The raw text - pre tokenization.
+        "offset",  # Offset applied to the token_starts and ends - currently used only by DocumentLabeler
     ],
 )
 EncodedOutput.__new__.__defaults__ = (None,) * len(EncodedOutput._fields)
@@ -66,7 +66,7 @@ def _remove_repeated_whitespace(encoded):
         encoded.token_ids, encoded.tokens, encoded.token_ends, encoded.token_starts
     ):
         mask = [
-            i != 0 and token == tokens[i - 1] == "" for i, token in enumerate(tokens)
+            i != 0 and token.strip(" ") == tokens[i - 1].strip(" ") == "" for i, token in enumerate(tokens)
         ]
         batch_token_idxs.append([x for x, c in zip(token_ids, mask) if not c])
         batch_tokens.append([x for x, c in zip(tokens, mask) if not c])
@@ -126,7 +126,6 @@ class BaseEncoder(metaclass=SingletonMeta):
     UNK_IDX = 0
 
     def __init__(self, encoder_path, vocab_path):
-        self.initialized = False
         self.encoder_path = encoder_path
         self.vocab_path = vocab_path
 
@@ -140,12 +139,8 @@ class BaseEncoder(metaclass=SingletonMeta):
         self.decoder = None
         self.cache = CacheDict()
 
-    def _lazy_init(self):
-        pass
-
     @property
     def vocab_size(self):
-        self._lazy_init()
         return len(self.encoder)
 
     def __getitem__(self, key):

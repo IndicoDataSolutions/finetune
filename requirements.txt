@@ -5,7 +5,7 @@ numpy>=1.18.4
 scipy>=1.1.0
 scikit-learn>=0.20.2,<0.23
 ftfy>=4.4.0
-spacy>=2.0.0
+spacy>=2.0.0,<3.0.0
 pytest>=3.6.3
 h5py>=2.8.0
 joblib>=0.12.0
@@ -18,6 +18,6 @@ tqdl==0.0.4
 sentencepiece>=0.1.83
 tabulate>=0.8.6,<0.9.0
 tensorflow-addons==0.11.2
-tensorflow-estimator==2.3.0
+tensorflow-estimator
 psutil==5.7.0
 transformers==4.5.1
