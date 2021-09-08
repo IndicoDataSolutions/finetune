@@ -14,7 +14,7 @@ NLP = None
 def get_spacy():
     global NLP
     if NLP is None:
-        NLP = spacy.load("en", disable=["parser", "tagger", "ner", "textcat"])
+        NLP = spacy.load("en_core_web_sm", disable=["parser", "tagger", "ner", "textcat"])
         NLP.max_length = (
             800000000  # approximately one volume of the encyclopedia britannica.
         )
