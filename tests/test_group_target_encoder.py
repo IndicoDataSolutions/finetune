@@ -10,7 +10,6 @@ from finetune.encoding.group_target_encoders import (
     MultiCRFGroupSequenceLabelingEncoder,
     BROSEncoder,
     JointBROSEncoder,
-#    TokenRelationEncoder,
     GroupRelationEncoder,
     SequenceLabelingTextEncoder,
     GroupLabelingTextEncoder,
