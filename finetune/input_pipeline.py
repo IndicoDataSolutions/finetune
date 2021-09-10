@@ -414,6 +414,7 @@ class BasePipeline(metaclass=ABCMeta):
             encoder_out = self.text_encoder.encode_multi_input(
                 Xs, max_length=self.config.max_length,
                 remove_repeated_whitespace=self.config.collapse_whitespace,
+                include_bos_eos=self.config.include_bos_eos,
             )
 
             d = dict()

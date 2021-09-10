@@ -60,6 +60,8 @@ def load_weights_from_hdf5_group_by_name(filepath, weights_replacement):
                 output_name = name
                 for fro, to in weights_replacement:
                     output_name = output_name.replace(fro, to)
+                if output_name in weight_lookup:
+                    raise ValueError("Duplicate names found in weight mapping, check your weight replacement rules.")
                 weight_lookup[output_name] = np.asarray(g[name])
     return weight_lookup
 
@@ -110,7 +112,6 @@ def finetune_model_from_huggingface(
                     embedding.vocab_size = new_size
                     hf_model_original.config.vocab_size = new_size
                     hf_model_original.vocab_size = new_size
-
                 if config.low_memory_mode and train:
                     if hf_config_instance.is_encoder_decoder:
                         for layer in (
