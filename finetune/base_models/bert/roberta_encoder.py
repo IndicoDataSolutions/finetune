@@ -118,7 +118,7 @@ class RoBERTaEncoderV2(BaseEncoder):
             token_starts = []
             tokens = []
             for (start, end), t in zip(encoded.offsets, encoded.tokens):
-                if t.startswith("Ġ") or t.startswith("Ċ"):
+                if t.startswith("Ġ") or t.startswith("Ċ") or t.startswith("Â"):
                     t = t[1:]
                 tokens.append(t.strip())
                 if token_ends:

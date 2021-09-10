@@ -1,5 +1,6 @@
 from abc import ABCMeta
 import logging
+import json
 
 import pandas as pd
 import numpy as np
@@ -104,7 +105,6 @@ class NoisyLabelEncoder(LabelEncoder, BaseEncoder):
         dataframe = pd.DataFrame(probabilities, columns=self.classes_)
         return list(dataframe.T.to_dict().values())
 
-
 class Seq2SeqLabelEncoder(BaseEncoder):
     def __init__(self, input_pipeline, max_len, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -134,7 +134,6 @@ class Seq2SeqLabelEncoder(BaseEncoder):
 
     def inverse_transform(self, y):
         return [self.encoder.decode(y_i.tolist()) for y_i in y]
-
 
 class OrdinalRegressionEncoder(OrdinalEncoder, BaseEncoder):
 
@@ -183,14 +182,13 @@ class OrdinalRegressionEncoder(OrdinalEncoder, BaseEncoder):
     def target_labels(self):
         raise ValueError
 
-
 class SequenceLabelingEncoder(BaseEncoder):
-
-    def __init__(self, pad_token, bio_tagging=False):
+    def __init__(self, pad_token, bio_tagging=False, group_tagging=False):
         self.classes_ = None
         self.pad_token = pad_token
         self.lookup = None
         self.bio_tagging = bio_tagging
+        self.group_tagging = group_tagging
 
     def fit(self, labels):
         self.classes_ = sorted(list(set(lab_i["label"] for lab in labels for lab_i in lab) | {self.pad_token}))
@@ -231,10 +229,23 @@ class SequenceLabelingEncoder(BaseEncoder):
         labels, pad_idx = self.pre_process_label(out, labels)
         labels_out = [pad_idx for _ in out.tokens]
         offset = out.offset or 0
+        bio_pre, group_pre = None, None
+
         for label in labels:
-            current_label = label["label"]
-            if self.bio_tagging:
-                current_label = "B-" + current_label
+            current_tag = label["label"]
+            current_label = current_tag
+
+            if self.bio_tagging or self.group_tagging:
+                bio_pre, group_pre = "", ""
+                if self.bio_tagging:
+                    bio_pre = "B-"
+                if self.group_tagging:
+                    if label["group_start"]:
+                        group_pre = "BG-"
+                    elif label["group_start"] is not None:
+                        group_pre = "IG-"
+                current_label = f"{group_pre}{bio_pre}{current_tag}"
+
             for i, (start, end, text) in enumerate(zip(out.token_starts, out.token_ends, out.tokens)):
                 # Label extends less than halfway through token
                 if label["end"] < (start + end + 1) // 2:
@@ -257,14 +268,17 @@ class SequenceLabelingEncoder(BaseEncoder):
                         )
                     else:
                         labels_out[i] = self.lookup[current_label]
-                        if self.bio_tagging and current_label[:2] == "B-":
-                            current_label = "I-" + current_label[2:]
+                        if self.bio_tagging or self.group_tagging:
+                            if self.bio_tagging and bio_pre == "B-":
+                                bio_pre = "I-"
+                            if self.group_tagging and group_pre == "BG-":
+                                group_pre = "IG-"
+                            current_label = f"{group_pre}{bio_pre}{current_tag}"
         return labels_out
 
     def inverse_transform(self, y):
         # TODO: update when finetune_to_indico is removed
         return [self.classes_[l] for l in y]
-
 
 class SequenceMultiLabelingEncoder(SequenceLabelingEncoder):
     def transform(self, out, labels):

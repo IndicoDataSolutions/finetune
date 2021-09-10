@@ -53,10 +53,12 @@ from finetune.base_models.bert.model import (
     BERTModelCased,
     BERTModelLargeCased,
     RoBERTa,
+    FusedRoBERTa,
     RoBERTaLarge,
     DistilBERT,
     DistilRoBERTa,
     DocRep,
+    FusedDocRep,
     LayoutLM
 )
 from finetune.base_models.tcn.model import TCNModel

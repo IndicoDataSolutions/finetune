@@ -1,7 +1,9 @@
 import numpy as np
 
 from finetune.encoding.input_encoder import EncodedOutput
-from finetune.encoding.target_encoders import SequenceLabelingEncoder
+from finetune.encoding.target_encoders import (
+    SequenceLabelingEncoder,
+)
 
 def test_sequence_label_encoder():
     encoder = SequenceLabelingEncoder(pad_token="<PAD>")
@@ -49,7 +51,6 @@ def test_sequence_label_encoder_exceeds_half():
         useful_start=0, 
         useful_end=512,
         input_text=["token"]
-
     )
     label_arr = encoder.transform(out, labels)
     assert label_arr == [0, 1, 0]

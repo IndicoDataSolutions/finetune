@@ -19,6 +19,7 @@ from finetune.util.download import (
     LAYOUTLM_BASE_URL,
     FINETUNE_BASE_FOLDER
 )
+from finetune.util.featurizer_fusion import fused_featurizer
 
 BERT_BASE_PARAMS = {
     "lm_type": "mlm",
@@ -210,6 +211,15 @@ class RoBERTa(_BaseBert):
         else:
             return RoBERTaEncoder(**kwargs)
 
+class FusedRoBERTa(RoBERTa):
+    featurizer = fused_featurizer(bert_featurizer)
+    settings = dict(RoBERTa.settings)
+    settings.update({
+        "max_length": 2048,
+        "num_fusion_shards": 4,
+        "chunk_long_sequences": False,
+    })
+
 class DocRep(_BaseBert):
     encoder = RoBERTaEncoderV2
     featurizer = bert_featurizer
@@ -256,8 +266,15 @@ class DocRep(_BaseBert):
     @classmethod
     def get_encoder(cls, config=None, **kwargs):
         return cls.encoder(**kwargs)
-
-
+    
+class FusedDocRep(DocRep):
+    featurizer = fused_featurizer(bert_featurizer)
+    settings = dict(DocRep.settings)
+    settings.update({
+        "max_length": 2048,
+        "num_fusion_shards": 4,
+        "chunk_long_sequences": False,
+    })
 
 class RoBERTaLarge(RoBERTa):
     encoder = RoBERTaEncoderV2
