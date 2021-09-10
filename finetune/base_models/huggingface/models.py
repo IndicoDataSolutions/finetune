@@ -11,7 +11,7 @@ from transformers import (
     BertConfig,
     XLMRobertaTokenizer,
     XLMRobertaConfig,
-    T5TokenizerFast,
+    T5Tokenizer,
     T5Config,
     AlbertTokenizerFast,
     AlbertConfig,
@@ -116,7 +116,7 @@ HFT5 = finetune_model_from_huggingface(
     pretrained_weights="t5-base",
     archive_map={"t5-base": "https://cdn.huggingface.co/t5-base-tf_model.h5"},
     hf_featurizer=TFT5Model,
-    hf_tokenizer=T5TokenizerFast,
+    hf_tokenizer=T5Tokenizer,
     hf_config=T5Config,
     weights_replacement=[
         ("tf_t5with_lm_head_model/shared/", "model/featurizer/shared/shared/"),
@@ -131,7 +131,7 @@ HFT5Small = finetune_model_from_huggingface(
     pretrained_weights="t5-small",
     archive_map={"t5-small": "https://cdn.huggingface.co/t5-small-tf_model.h5"},
     hf_featurizer=TFT5Model,
-    hf_tokenizer=T5TokenizerFast,
+    hf_tokenizer=T5Tokenizer,
     hf_config=T5Config,
     weights_replacement=[
         ("tf_t5with_lm_head_model/shared/", "model/featurizer/shared/shared/"),
