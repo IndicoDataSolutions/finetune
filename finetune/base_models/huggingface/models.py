@@ -13,15 +13,19 @@ from transformers import (
     XLMRobertaConfig,
     T5Tokenizer,
     T5Config,
-    AlbertTokenizer,
+    AlbertTokenizerFast,
     AlbertConfig,
-    BertTokenizer
+    BertTokenizer,
+    LongformerTokenizerFast,
+    LongformerConfig,
 )
-from transformers.modeling_tf_t5 import TFT5Model
-from transformers.modeling_tf_electra import TFElectraMainLayer
-from transformers.modeling_tf_roberta import TFRobertaMainLayer
-from transformers.modeling_tf_albert import TFAlbertMainLayer
-from transformers.tokenization_xlm_roberta import (
+from transformers.models.t5.modeling_tf_t5 import TFT5Model
+from transformers.models.electra.modeling_tf_electra import TFElectraMainLayer
+from transformers.models.roberta.modeling_tf_roberta import TFRobertaMainLayer
+from transformers.models.albert.modeling_tf_albert import TFAlbertMainLayer
+from transformers.models.longformer.modeling_tf_longformer import TFLongformerMainLayer
+
+from transformers.models.xlm_roberta.tokenization_xlm_roberta import (
     VOCAB_FILES_NAMES,
     PRETRAINED_VOCAB_FILES_MAP,
     PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES,
@@ -33,7 +37,7 @@ from finetune.util.huggingface_interface import finetune_model_from_huggingface
 HFXLMRoberta = finetune_model_from_huggingface(
     pretrained_weights="jplu/tf-xlm-roberta-base",
     archive_map={
-        "jplu/tf-xlm-roberta-base": "https://cdn.huggingface.co/bert/jplu/tf-xlm-roberta-base/tf_model.h5"
+        "jplu/tf-xlm-roberta-base": "https://s3.amazonaws.com/models.huggingface.co/bert/jplu/tf-xlm-roberta-base/tf_model.h5"
     },
     hf_featurizer=TFRobertaMainLayer,
     hf_tokenizer=XLMRobertaTokenizer,
@@ -44,6 +48,24 @@ HFXLMRoberta = finetune_model_from_huggingface(
             "model/featurizer/tf_roberta_main_layer",
         )
     ],
+)
+
+
+HFLongformer = finetune_model_from_huggingface(
+    pretrained_weights="allenai/longformer-base-4096",
+    archive_map={
+        "allenai/longformer-base-4096": "https://cdn.huggingface.co/allenai/longformer-base-4096/tf_model.h5"
+    },
+    hf_featurizer=TFLongformerMainLayer,
+    hf_tokenizer=LongformerTokenizerFast,
+    hf_config=LongformerConfig,
+    weights_replacement=[
+        (
+            "tf_longformer_for_masked_lm/longformer",
+            "model/featurizer/tf_longformer_main_layer"
+        )
+    ],
+    config_overrides={"low_memory_mode": True}
 )
 
 
@@ -101,7 +123,23 @@ HFT5 = finetune_model_from_huggingface(
         ("tf_t5with_lm_head_model/encoder", "model/featurizer/encoder"),
         ("tf_t5with_lm_head_model/decoder", "model/target/decoder"),
     ],
-    include_bos_eos=False,
+    include_bos_eos="eos",
+    add_tokens=["{", "}", "<"]# "[", "]"],
+)
+
+HFT5Small = finetune_model_from_huggingface(
+    pretrained_weights="t5-small",
+    archive_map={"t5-small": "https://cdn.huggingface.co/t5-small-tf_model.h5"},
+    hf_featurizer=TFT5Model,
+    hf_tokenizer=T5Tokenizer,
+    hf_config=T5Config,
+    weights_replacement=[
+        ("tf_t5with_lm_head_model/shared/", "model/featurizer/shared/shared/"),
+        ("tf_t5with_lm_head_model/encoder", "model/featurizer/encoder"),
+        ("tf_t5with_lm_head_model/decoder", "model/target/decoder"),
+    ],
+    include_bos_eos="eos",
+    add_tokens=["{", "}", "<"]# "[", "]"],
 )
 
 HFAlbert = finetune_model_from_huggingface(
@@ -110,12 +148,12 @@ HFAlbert = finetune_model_from_huggingface(
         "albert-base-v2": "https://cdn.huggingface.co/albert-base-v2-tf_model.h5"
     },
     hf_featurizer=TFAlbertMainLayer,
-    hf_tokenizer=AlbertTokenizer,
+    hf_tokenizer=AlbertTokenizerFast,
     hf_config=AlbertConfig,
     weights_replacement=[
         ("tf_albert_for_masked_lm_1/albert/", "model/featurizer/tf_albert_main_layer/")
     ],
-    config_overrides={"n_embed": 756, "n_epochs": 8, "lr": 2e-5, "batch_size": 8},
+    config_overrides={"n_embed": 768, "n_epochs": 8, "lr": 2e-5, "batch_size": 8},
     aggressive_token_alignment=True,
 )
 
@@ -126,7 +164,7 @@ HFAlbertXLarge = finetune_model_from_huggingface(
         "albert-xlarge-v2": "https://cdn.huggingface.co/albert-xlarge-v2-tf_model.h5"
     },
     hf_featurizer=TFAlbertMainLayer,
-    hf_tokenizer=AlbertTokenizer,
+    hf_tokenizer=AlbertTokenizerFast,
     hf_config=AlbertConfig,
     weights_replacement=[
         ("tf_albert_for_masked_lm_5/albert/", "model/featurizer/tf_albert_main_layer/")

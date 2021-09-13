@@ -1,3 +1,4 @@
+typer>=0.4.0
 pandas>=0.23.1
 tqdm>=4.0.0
 numpy>=1.18.4
@@ -19,4 +20,4 @@ tabulate>=0.8.6,<0.9.0
 tensorflow-addons==0.11.2
 tensorflow-estimator
 psutil==5.7.0
-transformers==3.0.2
+transformers==4.5.1

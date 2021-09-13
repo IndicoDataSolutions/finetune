@@ -338,7 +338,28 @@ def get_default_config():
         # T5
         beam_size=1,
         beam_search_alpha=0.2,
+        delim_tokens="",
+        s2s_decoder_max_length=512,
+        num_fusion_shards=None,
+        chunk_pos_embed=None, 
+        fusion_low_memory=True,
+
         include_bos_eos=True,
+        #
+        # Line Items
+        group_bio_tagging=False,
+        relation_hidden_size=256,
+        start_token_loss_weight=1,
+        next_token_loss_weight=1,
+        seq_loss_weight=1,
+        group_loss_weight=200,
+
+        n_groups=100,
+        group_hidden_size=768,
+        group_attention_heads=12,
+        group_n_layers=3,
+        group_thresh=0.8,
+        #
         # Serialize finetune version with model
         version=VERSION,
     )

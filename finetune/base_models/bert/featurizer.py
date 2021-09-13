@@ -20,6 +20,7 @@ def bert_featurizer(
     context=None,
     total_num_steps=None,
     underlying_model=BertModel,
+    max_length=None,
     **kwargs
 ):
     """
@@ -39,7 +40,9 @@ def bert_featurizer(
     is_roberta = config.base_model.is_roberta
     model_filename = config.base_model_path.rpartition('/')[-1]
     is_roberta_v1 = is_roberta and config.base_model.encoder == RoBERTaEncoder
-
+    
+    if max_length is None:
+        max_length = config.max_length
     bert_config = BertConfig(
         vocab_size=encoder.vocab_size,
         hidden_size=config.n_embed,
@@ -49,7 +52,7 @@ def bert_featurizer(
         hidden_act=config.act_fn,
         hidden_dropout_prob=config.resid_p_drop,
         attention_probs_dropout_prob=config.attn_p_drop,
-        max_position_embeddings=config.max_length, 
+        max_position_embeddings=max_length, 
         type_vocab_size=2,
         initializer_range=config.weight_stddev,
         low_memory_mode=config.low_memory_mode,
@@ -65,18 +68,22 @@ def bert_featurizer(
     X.set_shape([None, None])
     # To fit the interface of finetune we are going to compute the mask and type id at runtime.
     delimiters = tf.cast(tf.equal(X, encoder.delimiter_token), tf.int32)
-
     token_type_ids = tf.cumsum(delimiters, exclusive=True, axis=1)
 
     seq_length = tf.shape(input=delimiters)[1]
 
-    eos_idx = tf.argmax(
-        input=tf.cast(delimiters, tf.float32)
-        * tf.expand_dims(
-            tf.range(tf.cast(seq_length, tf.float32), dtype=tf.float32), 0
-        ),
-        axis=1,
-    )
+    def get_eos():
+        return tf.argmax(
+            input=tf.cast(delimiters, tf.float32)
+            * tf.expand_dims(
+                tf.range(tf.cast(seq_length, tf.float32), dtype=tf.float32), 0
+            ),
+            axis=1,
+        )
+    def get_zeros():
+        return tf.zeros(tf.shape(X)[0], dtype=tf.int64)
+    
+    eos_idx = tf.cond(tf.equal(seq_length, 0), true_fn=get_zeros, false_fn=get_eos)
 
     lengths = lengths_from_eos_idx(eos_idx=eos_idx, max_length=seq_length)
 

@@ -16,6 +16,7 @@ from finetune.base_models.huggingface.models import (
     HFXLMRoberta,
     HFT5,
     HFAlbert,
+    HFLongformer,
 )
 from finetune.target_models.seq2seq import HFS2S
 from sklearn.model_selection import train_test_split
@@ -25,34 +26,39 @@ class TestHuggingFace(unittest.TestCase):
     def setUp(self):
         with open('tests/data/weird_text.txt') as f:
             weird_text = ''.join(f.readlines())
-        self.text = weird_text[:1000]
+        # This token is added to our t5 model, causes differences if it appears in the text
+        self.text = weird_text[:1000].replace("<", "")
 
-    def check_embeddings_equal(self, finetune_base_model, hf_model_path, **kwargs):
+    def check_embeddings_equal(self, finetune_base_model, hf_model_path, decimal=2, use_fast=True, **kwargs):
         finetune_model = SequenceLabeler(
             base_model=finetune_base_model,
-            train_embeddings=False,
-            n_epochs=1,
-            batch_size=1,
+            chunk_long_sequences=False,
         )
         finetune_seq_features = finetune_model.featurize_sequence([self.text])[0]
-        hf_seq_features = self.huggingface_embedding(self.text, hf_model_path, **kwargs)[0]
+        hf_seq_features = self.huggingface_embedding(self.text, hf_model_path, use_fast=use_fast, **kwargs)[0]
         if len(finetune_seq_features) + 2 == len(hf_seq_features):
             hf_seq_features = hf_seq_features[1:-1]
+        if len(finetune_seq_features) + 1 == len(hf_seq_features):
+            hf_seq_features = hf_seq_features[:-1]
         np.testing.assert_array_almost_equal(
-            finetune_seq_features, hf_seq_features, decimal=5,
+            finetune_seq_features, hf_seq_features, decimal=decimal,
         )
         finetune_model.fit([self.text], [[{"start": 0, "end": 4, "label": "class_a"}]])
 
-    def huggingface_embedding(self, text, model_path):
-        tokenizer = AutoTokenizer.from_pretrained(model_path)
+    def huggingface_embedding(self, text, model_path, use_fast=True):
+        tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=use_fast)
         model = TFAutoModel.from_pretrained(model_path)
-        input_ids = tf.constant(tokenizer.encode(self.text))[None, :]  # Batch size 1
-
+        tokens = tokenizer.encode(self.text)
+        input_ids = tf.constant(tokens)[None, :]  # Batch size 1
+        kwargs = {
+            "inputs_embeds": None,
+            "training": False,
+        }
         if model.config.is_encoder_decoder:
-            outputs = model.encoder(input_ids)
+            outputs = model.encoder(input_ids, **kwargs)
         else:
             outputs = model(
-                input_ids,
+                input_ids, **kwargs
             )  # outputs is tuple where first element is sequence features
         last_hidden_states = outputs[0]
         return last_hidden_states.numpy()
@@ -64,11 +70,11 @@ class TestHuggingFace(unittest.TestCase):
         self.check_embeddings_equal(HFBert, "bert-base-uncased")
 
     def test_t5_s2s(self):
-        text = "sequence test text"
+        text = "sequence test { text }"
         finetune_model = HFS2S(
             base_model=HFT5,
-            n_epochs=30,
-            batch_size=2,
+            n_epochs=100,
+            batch_size=1,
         )
         finetune_model.fit([text] * 5, [text] * 5)
         finetune_model.save("test.jl")
@@ -88,8 +94,6 @@ class TestHuggingFace(unittest.TestCase):
         )
         finetune_model = HFS2S(
             base_model=HFT5,
-            n_epochs=3,
-            batch_size=2,
         )
         finetune_model.fit(train_texts, train_annotations)
         seps_included = False
@@ -102,11 +106,14 @@ class TestHuggingFace(unittest.TestCase):
         self.assertTrue(pred_correct)
 
     def test_t5(self):
-        self.check_embeddings_equal(HFT5, "t5-base")
-
+        # Huggingface fast tokenizer is a bit broken and does weird things with whitespace.
+        self.check_embeddings_equal(HFT5, "t5-base", use_fast=False, decimal=1)
 
     def test_albert(self):
         self.check_embeddings_equal(HFAlbert, "albert-base-v2")
+
+    def test_longformer(self):
+        self.check_embeddings_equal(HFLongformer, "allenai/longformer-base-4096")
 
     def test_layoutlm(self):
         activations_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "data", "test-layoutlm-activations.jl")

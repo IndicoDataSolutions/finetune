@@ -27,4 +27,4 @@ COPY docker/bashrc /etc/bash.bashrc
 RUN chmod a+rwx /etc/bash.bashrc
 RUN python3 setup.py develop
 
-CMD ["sleep","infinity"]
+CMD ["sleep", "infinity"]

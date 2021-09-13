@@ -163,6 +163,19 @@ def _spacy_token_predictions(raw_text, tokens, probas, positions):
 
     return spacy_results
 
+def negative_samples(preds, labels, pad="<PAD>"):
+    modified_labels = []
+    for p, l in zip(preds, labels):
+        if isinstance(l, np.ndarray):
+            l = l.tolist()
+        new_labels = []
+        for pi in p:
+            if not any(sequences_overlap(pi, li) for li in l):
+                pi["label"] = pad
+                new_labels.append(pi)
+        modified_labels.append(l + new_labels)
+    return modified_labels
+
 
 def negative_samples(preds, labels, pad="<PAD>"):
     """
@@ -231,6 +244,7 @@ class SequenceLabeler(BaseModel):
         Y=None,
         context=None,
         update_hook=None,
+        log_hooks=None,
         X_partial=None,
         Y_partial=None,
     ):
@@ -247,7 +261,6 @@ class SequenceLabeler(BaseModel):
             self.saver = None
             model_copy = copy.deepcopy(self)
             model_copy._initialize()
-
             model_copy.input_pipeline.total_epoch_offset = self.config.n_epochs
             self.input_pipeline.current_epoch_offset = self.config.n_epochs
             self.input_pipeline.total_epoch_offset = self.config.n_epochs
@@ -294,7 +307,7 @@ class SequenceLabeler(BaseModel):
                 # TODO Determine if we need something more sophisticated for chunking
                 self.config.max_empty_chunk_ratio = 0.0
 
-        return super().finetune(Xs, Y=Y, context=context, update_hook=update_hook)
+        return super().finetune(Xs, Y=Y, context=context, update_hook=update_hook, log_hooks=log_hooks)
 
     def _pre_chunk_document(self, texts: List[str]) -> Tuple[List[str], List[List[int]]]:
         """
@@ -400,6 +413,15 @@ class SequenceLabeler(BaseModel):
     def _predict(
         self, zipped_data, per_token=False, return_negative_confidence=False, **kwargs
     ):
+        predictions = self.process_long_sequence(zipped_data, **kwargs)
+        return self._predict_decode(zipped_data, predictions,
+                                    per_token=per_token,
+                                    return_negative_confidence=return_negative_confidence,
+                                    **kwargs)
+
+    def _predict_decode(
+        self, zipped_data, predictions, per_token=False, return_negative_confidence=False, **kwargs
+    ):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
 
@@ -420,7 +442,7 @@ class SequenceLabeler(BaseModel):
             proba_seq,
             start,
             end,
-        ) in self.process_long_sequence(zipped_data, **kwargs):
+        ) in predictions:
             if start_of_doc:
                 # if this is the first chunk in a document, start accumulating from scratch
                 doc_subseqs = []
@@ -458,16 +480,43 @@ class SequenceLabeler(BaseModel):
                 )
                 last_end = end_idx
 
+                if self.config.group_bio_tagging:
+                    group_prefix = ""
+                    if label[:3] == "BG-" or label[:3] == "IG-":
+                        group_prefix, label = label[:3], label[3:]
                 if self.config.bio_tagging:
                     bio_prefix = None
                     if label != self.config.pad_token:
                         bio_prefix, label = label[:2], label[2:]
+                if self.config.group_bio_tagging and label != self.config.pad_token:
+                    # Save the group prefix so the grouping target models can
+                    # extract grouping information down the line
+                    label = group_prefix + label
+
+                def _get_label(label):
+                    if label[:3] == "BG-" or label[:3] == "IG-":
+                        return label[3:]
+                    return label
 
                 # if there are no current subsequences
                 # or the current subsequence has the wrong label
                 # or bio tagging is on and we have a B- tag
-                if (not doc_subseqs or label != doc_labels[-1] or per_token or
-                    (self.config.bio_tagging and bio_prefix == "B-")):
+                if (
+                    not doc_subseqs or per_token or
+                    (self.config.bio_tagging and bio_prefix == "B-") or
+                    (self.config.group_bio_tagging and group_prefix == "BG-") or
+                    (
+                        label != doc_labels[-1] and
+                        (
+                            # Merge spans if the labels are the same,
+                            # disregarding group BIO tags
+                            # This is safe as we already hard break on BG-, so
+                            # we will only be merging IG- tags
+                            not self.config.group_bio_tagging or
+                            _get_label(label) != _get_label(doc_labels[-1])
+                        )
+                    )
+                   ):
                     assert start_idx <= end_idx, "Start: {}, End: {}".format(
                         start_idx, end_idx
                     )
@@ -507,7 +556,7 @@ class SequenceLabeler(BaseModel):
                     probs=[prob_dicts],
                     none_value=self.config.pad_token,
                     subtoken_predictions=self.config.subtoken_predictions,
-                    bio_tagging=self.config.bio_tagging,
+                    bio_tagging=self.config.bio_tagging or self.config.group_bio_tagging,
                 )
                 if per_token:
                     doc_annotations.append(

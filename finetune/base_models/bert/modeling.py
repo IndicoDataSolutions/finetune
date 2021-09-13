@@ -246,8 +246,21 @@ class _BertModel(object):
             with tf.compat.v1.variable_scope("pooler"):
                 # We "pool" the model by simply taking the hidden state corresponding
                 # to the first token. We assume that this has been pre-trained
-
-                first_token_tensor = tf.squeeze(self.sequence_output[:, 0:1, :], axis=1)
+                output_shape = tf.shape(self.sequence_output)
+                def first_token():
+                    return tf.squeeze(self.sequence_output[:, 0:1, :], axis=1)
+                def empty():
+                    return tf.zeros(
+                        tf.concat(
+                            [[output_shape[0]], [config.hidden_size]],
+                            axis=0
+                        ),
+                        dtype=self.sequence_output.dtype
+                    )
+                first_token_tensor = tf.cond(tf.equal(output_shape[1], 0),
+                                             true_fn=empty, false_fn=first_token)
+                first_token_tensor.set_shape([None, config.hidden_size])
+                # first_token_tensor = tf.squeeze(self.sequence_output[:, 0:1, :], axis=1)
                 if use_pooler:
                     self.pooled_output = tf.compat.v1.layers.dense(
                         first_token_tensor,

@@ -162,6 +162,7 @@ class BaseModel(object, metaclass=ABCMeta):
             exclude_matches=None if self.config.save_adam_vars else "OptimizeLoss",
             save_dtype=self.config.save_dtype,
             permit_uninitialized=self.config.permit_uninitialized,
+            add_tokens=getattr(self.config.base_model, "_add_tokens", None)
         )
 
     def init_from_checkpoint(self, checkpoint_path):
@@ -204,7 +205,7 @@ class BaseModel(object, metaclass=ABCMeta):
         steps = int(math.ceil(n_examples / (batch_size * n_gpus)))
         return steps
 
-    def finetune(self, Xs, Y=None, context=None, update_hook=None):
+    def finetune(self, Xs, Y=None, context=None, update_hook=None, log_hooks=None):
         if callable(Xs):
             datasets = self.input_pipeline.get_dataset_from_generator(
                 Xs, input_mode=InputMode.TRAIN, update_hook=update_hook
@@ -263,6 +264,9 @@ class BaseModel(object, metaclass=ABCMeta):
 
         if self.config.in_memory_finetune is not None:
             train_hooks.extend(make_in_memory_finetune_hooks(self, estimator))
+
+        if log_hooks:
+            train_hooks.extend(log_hooks)
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
