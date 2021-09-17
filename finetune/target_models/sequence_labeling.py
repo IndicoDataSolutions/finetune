@@ -255,7 +255,7 @@ class SequenceLabeler(BaseModel):
         Xs and Y as fully annotated data. We only perform auto negative sampling on
         fully annotated data.
         """
-        if self.config.auto_negative_sampling and Y is not None:
+        if self.config.chunk_long_sequences and self.config.auto_negative_sampling and Y is not None:
             # clear the saver to save memory.
             self.saver.fallback # retrieve the fallback future.
             self.saver = None
@@ -274,7 +274,10 @@ class SequenceLabeler(BaseModel):
             # Heuristic to select batch size for prediction to limit memory consumption.
             # Aim is to give us the smallest batch size that will give us full batches.
             approx_max_tokens_per_doc = max(len(x) for x in Xs) / 5
-            approx_chunks_per_doc = approx_max_tokens_per_doc / (self.config.max_length - self.config.chunk_context)
+            chunk_context = self.config.chunk_context
+            if chunk_context is None:
+                chunk_context = 2 * self.config.max_length // 3
+            approx_chunks_per_doc = approx_max_tokens_per_doc / (self.config.max_length - chunk_context)
             outer_batch_size = min(max(int(self.config.predict_batch_size / approx_chunks_per_doc), 1), self.config.predict_batch_size)
 
             with self.cached_predict():
