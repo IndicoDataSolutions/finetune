@@ -60,8 +60,14 @@ def load_weights_from_hdf5_group_by_name(filepath, weights_replacement):
                 output_name = name
                 for fro, to in weights_replacement:
                     output_name = output_name.replace(fro, to)
-                if output_name in weight_lookup and not np.all(weight_lookup[output_name] == g[name]):
-                    raise ValueError("Duplicate names found in weight mapping for {}, check your weight replacement rules.")
+                if output_name in weight_lookup and not np.all(
+                    weight_lookup[output_name] == g[name]
+                ):
+                    raise ValueError(
+                        "Duplicate names found in weight mapping for {}, check your weight replacement rules.".format(
+                            output_name
+                        )
+                    )
                 weight_lookup[output_name] = np.asarray(g[name])
     return weight_lookup
 
