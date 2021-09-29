@@ -11,7 +11,7 @@ import weakref
 import gc
 
 # required for tensorflow logging control
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 import pytest
 from pytest import approx
@@ -29,8 +29,10 @@ from finetune.base_models import GPT
 from finetune.config import get_config
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
 from finetune.util.metrics import (
-    sequence_labeling_token_precision, sequence_labeling_token_recall,
-    sequence_labeling_overlap_precision, sequence_labeling_overlap_recall
+    sequence_labeling_token_precision,
+    sequence_labeling_token_recall,
+    sequence_labeling_overlap_precision,
+    sequence_labeling_overlap_recall,
 )
 
 SKIP_LM_TESTS = get_config().base_model.is_bidirectional
@@ -39,10 +41,8 @@ SKIP_LM_TESTS = get_config().base_model.is_bidirectional
 class TestSequenceLabeler(unittest.TestCase):
 
     n_sample = 100
-    dataset_path = os.path.join(
-        'Data', 'Sequence', 'reuters.xml'
-    )
-    processed_path = os.path.join('Data', 'Sequence', 'reuters.json')
+    dataset_path = os.path.join("Data", "Sequence", "reuters.xml")
+    processed_path = os.path.join("Data", "Sequence", "reuters.json")
 
     @classmethod
     def _download_reuters(cls):
@@ -81,7 +81,7 @@ class TestSequenceLabeler(unittest.TestCase):
             docs.append(texts)
             docs_labels.append(labels)
 
-        with open(cls.processed_path, 'wt') as fp:
+        with open(cls.processed_path, "wt") as fp:
             json.dump((docs, docs_labels), fp)
 
     @classmethod
@@ -100,26 +100,29 @@ class TestSequenceLabeler(unittest.TestCase):
         return d
 
     def setUp(self):
-        self.save_file = 'tests/saved-models/test-save-load'
+        self.save_file = "tests/saved-models/test-save-load"
         random.seed(42)
         np.random.seed(42)
-        with open(self.processed_path, 'rt') as fp:
+        with open(self.processed_path, "rt") as fp:
             self.texts, self.labels = json.load(fp)
 
-        self.model = SequenceLabeler(
-            **self.default_config()
-        )
+        self.model = SequenceLabeler(**self.default_config())
 
-    @pytest.mark.skipif(SKIP_LM_TESTS, reason="Bidirectional models do not yet support LM functions")
+    @pytest.mark.skipif(
+        SKIP_LM_TESTS, reason="Bidirectional models do not yet support LM functions"
+    )
     def test_fit_lm_only(self):
         """
         Ensure model training does not error out
         Ensure model returns predictions
         """
         raw_docs = ["".join(text) for text in self.texts]
-        texts, annotations = finetune_to_indico_sequence(raw_docs, self.texts, self.labels,
-                                                         none_value=self.model.config.pad_token)
-        train_texts, test_texts, train_annotations, test_annotations = train_test_split(texts, annotations, test_size=0.1)
+        texts, annotations = finetune_to_indico_sequence(
+            raw_docs, self.texts, self.labels, none_value=self.model.config.pad_token
+        )
+        train_texts, test_texts, train_annotations, test_annotations = train_test_split(
+            texts, annotations, test_size=0.1
+        )
         self.model.fit(train_texts)
         self.model.fit(train_texts, train_annotations)
         predictions = self.model.predict(test_texts)
@@ -127,15 +130,19 @@ class TestSequenceLabeler(unittest.TestCase):
         self.assertIsInstance(probas, list)
         self.assertIsInstance(probas[0], list)
         self.assertIsInstance(probas[0][0], dict)
-        self.assertIsInstance(probas[0][0]['confidence'], dict)
-        token_precision = sequence_labeling_token_precision(test_annotations, predictions)
+        self.assertIsInstance(probas[0][0]["confidence"], dict)
+        token_precision = sequence_labeling_token_precision(
+            test_annotations, predictions
+        )
         token_recall = sequence_labeling_token_recall(test_annotations, predictions)
-        overlap_precision = sequence_labeling_overlap_precision(test_annotations, predictions)
+        overlap_precision = sequence_labeling_overlap_precision(
+            test_annotations, predictions
+        )
         overlap_recall = sequence_labeling_overlap_recall(test_annotations, predictions)
-        self.assertIn('Named Entity', token_precision)
-        self.assertIn('Named Entity', token_recall)
-        self.assertIn('Named Entity', overlap_precision)
-        self.assertIn('Named Entity', overlap_recall)
+        self.assertIn("Named Entity", token_precision)
+        self.assertIn("Named Entity", token_recall)
+        self.assertIn("Named Entity", overlap_precision)
+        self.assertIn("Named Entity", overlap_recall)
         self.model.save(self.save_file)
         model = SequenceLabeler.load(self.save_file)
         predictions = model.predict(test_texts)
@@ -147,23 +154,28 @@ class TestSequenceLabeler(unittest.TestCase):
         Ensure class reweighting behaves as intended
         """
         raw_docs = ["".join(text) for text in self.texts]
-        texts, annotations = finetune_to_indico_sequence(raw_docs, self.texts, self.labels,
-                                                         none_value=self.model.config.pad_token)
+        texts, annotations = finetune_to_indico_sequence(
+            raw_docs, self.texts, self.labels, none_value=self.model.config.pad_token
+        )
         train_texts, test_texts, train_annotations, test_annotations = train_test_split(
             texts, annotations, test_size=0.1, random_state=42
         )
 
         reweighted_model = SequenceLabeler(
-            **self.default_config(class_weights={'Named Entity': 10.})
+            **self.default_config(class_weights={"Named Entity": 10.0})
         )
         reweighted_model.fit(train_texts, train_annotations)
         reweighted_predictions = reweighted_model.predict(test_texts)
-        reweighted_token_recall = sequence_labeling_token_recall(test_annotations, reweighted_predictions)
+        reweighted_token_recall = sequence_labeling_token_recall(
+            test_annotations, reweighted_predictions
+        )
 
         self.model.fit(train_texts, train_annotations)
         predictions = self.model.predict(test_texts)
         per_token_predictions = self.model.predict(test_texts, per_token=True)
-        with_doc_probas = self.model.predict(test_texts, return_negative_confidence=True)
+        with_doc_probas = self.model.predict(
+            test_texts, return_negative_confidence=True
+        )
         probas = self.model.predict_proba(test_texts)
 
         for pred, pred_with_prob in zip(predictions, with_doc_probas):
@@ -173,22 +185,27 @@ class TestSequenceLabeler(unittest.TestCase):
         self.assertIsInstance(probas, list)
         self.assertIsInstance(probas[0], list)
         self.assertIsInstance(probas[0][0], dict)
-        self.assertIsInstance(probas[0][0]['confidence'], dict)
+        self.assertIsInstance(probas[0][0]["confidence"], dict)
 
-        token_precision = sequence_labeling_token_precision(test_annotations, predictions)
+        token_precision = sequence_labeling_token_precision(
+            test_annotations, predictions
+        )
         token_recall = sequence_labeling_token_recall(test_annotations, predictions)
-        overlap_precision = sequence_labeling_overlap_precision(test_annotations, predictions)
+        overlap_precision = sequence_labeling_overlap_precision(
+            test_annotations, predictions
+        )
         overlap_recall = sequence_labeling_overlap_recall(test_annotations, predictions)
 
-        self.assertIn('Named Entity', token_precision)
-        self.assertIn('Named Entity', token_recall)
-        self.assertIn('Named Entity', overlap_precision)
-        self.assertIn('Named Entity', overlap_recall)
+        self.assertIn("Named Entity", token_precision)
+        self.assertIn("Named Entity", token_recall)
+        self.assertIn("Named Entity", overlap_precision)
+        self.assertIn("Named Entity", overlap_recall)
 
         self.model.save(self.save_file)
 
-        self.assertGreater(reweighted_token_recall['Named Entity'], token_recall['Named Entity'])
-
+        self.assertGreater(
+            reweighted_token_recall["Named Entity"], token_recall["Named Entity"]
+        )
 
     def test_cached_predict(self):
         """
@@ -196,9 +213,12 @@ class TestSequenceLabeler(unittest.TestCase):
         Ensure model returns predictions
         """
         raw_docs = ["".join(text) for text in self.texts]
-        texts, annotations = finetune_to_indico_sequence(raw_docs, self.texts, self.labels,
-                                                         none_value=self.model.config.pad_token)
-        train_texts, test_texts, train_annotations, _ = train_test_split(texts, annotations, test_size=0.1)
+        texts, annotations = finetune_to_indico_sequence(
+            raw_docs, self.texts, self.labels, none_value=self.model.config.pad_token
+        )
+        train_texts, test_texts, train_annotations, _ = train_test_split(
+            texts, annotations, test_size=0.1
+        )
         self.model.fit(train_texts, train_annotations)
 
         self.model.config.chunk_long_sequences = True
@@ -218,20 +238,27 @@ class TestSequenceLabeler(unittest.TestCase):
             assert len(preds) == 2
 
         for uncached_pred, cached_pred in zip(uncached_preds, preds):
-            for a, b in zip(tf.nest.flatten(uncached_pred),  tf.nest.flatten(cached_pred)):
+            for a, b in zip(
+                tf.nest.flatten(uncached_pred), tf.nest.flatten(cached_pred)
+            ):
                 if a != b and a != approx(b, abs=1e-5):
                     raise Exception("Predictions are not equal")
 
-        first_prediction_time = (first - start)
-        second_prediction_time = (second - first)
-        self.assertLess(second_prediction_time, first_prediction_time / 2.)
+        first_prediction_time = first - start
+        second_prediction_time = second - first
+        self.assertLess(second_prediction_time, first_prediction_time / 2.0)
 
     def test_raises_when_text_doesnt_match(self):
         with self.assertRaises(ValueError):
-            self.model.fit(["Text about a dog."], [[{"start": 0, "end": 5, "text": "cat", "label": "dog"}]])
+            self.model.fit(
+                ["Text about a dog."],
+                [[{"start": 0, "end": 5, "text": "cat", "label": "dog"}]],
+            )
 
     def test_reasonable_predictions(self):
-        test_sequence = ["I am a dog. A dog that's incredibly bright. I can talk, read, and write!"]
+        test_sequence = [
+            "I am a dog. A dog that's incredibly bright. I can talk, read, and write!"
+        ]
         path = os.path.join(os.path.dirname(__file__), "data", "testdata.json")
 
         with open(path, "rt") as fp:
@@ -248,7 +275,10 @@ class TestSequenceLabeler(unittest.TestCase):
         self.assertTrue(any(pred["text"].strip() == "dog" for pred in predictions[0]))
 
     def test_chunk_long_sequences(self):
-        test_sequence = ["I am a dog. A dog that's incredibly bright. I can talk, read, and write! " * 10]
+        test_sequence = [
+            "I am a dog. A dog that's incredibly bright. I can talk, read, and write! "
+            * 10
+        ]
         path = os.path.join(os.path.dirname(__file__), "data", "testdata.json")
 
         # test ValueError raised when raw text is passed along with character idxs and doesn't match
@@ -270,18 +300,23 @@ class TestSequenceLabeler(unittest.TestCase):
         Ensure model training does not error out
         Ensure model returns predictions
         """
-        self.model = SequenceLabeler(batch_size=2, max_length=256, lm_loss_coef=0.0, multi_label_sequences=True)
+        self.model = SequenceLabeler(
+            batch_size=2, max_length=256, lm_loss_coef=0.0, multi_label_sequences=True
+        )
         raw_docs = ["".join(text) for text in self.texts]
-        texts, annotations = finetune_to_indico_sequence(raw_docs, self.texts, self.labels,
-                                                         none_value=self.model.config.pad_token)
-        train_texts, test_texts, train_annotations, _ = train_test_split(texts, annotations, test_size=0.1)
+        texts, annotations = finetune_to_indico_sequence(
+            raw_docs, self.texts, self.labels, none_value=self.model.config.pad_token
+        )
+        train_texts, test_texts, train_annotations, _ = train_test_split(
+            texts, annotations, test_size=0.1
+        )
         self.model.fit(train_texts, train_annotations)
         self.model.predict(test_texts)
         probas = self.model.predict_proba(test_texts)
         self.assertIsInstance(probas, list)
         self.assertIsInstance(probas[0], list)
         self.assertIsInstance(probas[0][0], dict)
-        self.assertIsInstance(probas[0][0]['confidence'], dict)
+        self.assertIsInstance(probas[0][0]["confidence"], dict)
         self.model.save(self.save_file)
         model = SequenceLabeler.load(self.save_file)
         model.predict(test_texts)
@@ -313,22 +348,48 @@ class TestSequenceLabeler(unittest.TestCase):
 
     def test_auto_negative_chunks(self):
         raw_docs = ["".join(text) for text in self.texts]
-        texts, annotations = finetune_to_indico_sequence(raw_docs, self.texts, self.labels,
-                                                         none_value=self.model.config.pad_token)
+        texts, annotations = finetune_to_indico_sequence(
+            raw_docs, self.texts, self.labels, none_value=self.model.config.pad_token
+        )
         train_texts, test_texts, train_annotations, test_annotations = train_test_split(
             texts, annotations, test_size=0.1, random_state=42
         )
-        ans_model = SequenceLabeler(max_length=5, chunk_context=0, auto_negative_sampling=True, n_epochs=1)
+        ans_model = SequenceLabeler(
+            max_length=5, chunk_context=0, auto_negative_sampling=True, n_epochs=1
+        )
         ans_model.fit(train_texts, train_annotations)
         ans_predictions = ans_model.predict(test_texts)
-        ans_token_precision = sequence_labeling_token_precision(test_annotations, ans_predictions)
+        ans_token_precision = sequence_labeling_token_precision(
+            test_annotations, ans_predictions
+        )
 
-        baseline_model = SequenceLabeler(max_length=5, chunk_context=0, auto_negative_sampling=False, n_epochs=1)
+        baseline_model = SequenceLabeler(
+            max_length=5, chunk_context=0, auto_negative_sampling=False, n_epochs=1
+        )
         baseline_model.fit(train_texts, train_annotations)
         baseline_predictions = baseline_model.predict(test_texts)
-        baseline_token_precision = sequence_labeling_token_precision(test_annotations, baseline_predictions)
+        baseline_token_precision = sequence_labeling_token_precision(
+            test_annotations, baseline_predictions
+        )
 
-        assert ans_token_precision['Named Entity'] > baseline_token_precision['Named Entity']
+        assert (
+            ans_token_precision["Named Entity"]
+            > baseline_token_precision["Named Entity"]
+        )
+
+    def test_auto_negative_chunks_chunk_context_default(self):
+        raw_docs = ["".join(text) for text in self.texts]
+        texts, annotations = finetune_to_indico_sequence(
+            raw_docs, self.texts, self.labels, none_value=self.model.config.pad_token
+        )
+        train_texts, test_texts, train_annotations, test_annotations = train_test_split(
+            texts, annotations, test_size=0.1, random_state=42
+        )
+        ans_model = SequenceLabeler(
+            max_length=32, auto_negative_sampling=True, n_epochs=1
+        )
+        ans_model.fit(train_texts, train_annotations)
+        ans_predictions = ans_model.predict(test_texts)
 
     def test_pre_chunking(self):
         """
@@ -339,8 +400,15 @@ class TestSequenceLabeler(unittest.TestCase):
         max_doc_len = 250
 
         # Create a mix of short and long sequences for prediction
-        test_sequence = "I am a dog. A dog that's incredibly bright. I can talk, read, and write! "
-        test_sequences = [test_sequence, test_sequence * 10, test_sequence, test_sequence * 10]
+        test_sequence = (
+            "I am a dog. A dog that's incredibly bright. I can talk, read, and write! "
+        )
+        test_sequences = [
+            test_sequence,
+            test_sequence * 10,
+            test_sequence,
+            test_sequence * 10,
+        ]
 
         # Use animal test data to train model
         path = os.path.join(os.path.dirname(__file__), "data", "testdata.json")
@@ -384,7 +452,10 @@ class TestSequenceLabeler(unittest.TestCase):
         token. This test asserts that the impact is minimal.
         """
         # Use animal test data to train model
-        test_sequence = ["I am a dog. A dog that's incredibly bright. I can talk, read, and write! " * 10]
+        test_sequence = [
+            "I am a dog. A dog that's incredibly bright. I can talk, read, and write! "
+            * 10
+        ]
         path = os.path.join(os.path.dirname(__file__), "data", "testdata.json")
         with open(path, "rt") as fp:
             text, labels = json.load(fp)
@@ -401,12 +472,16 @@ class TestSequenceLabeler(unittest.TestCase):
         # between preds and pre_chunk_preds. The reason these values are not identical
         # is because with pre chunking, "dog" can be split across multiple sub documents
         num_dog_preds = len([p for p in preds[0] if p["text"] == "dog"])
-        num_dog_pre_chunk_preds = len([p for p in pre_chunk_preds[0] if p["text"] == "dog"])
+        num_dog_pre_chunk_preds = len(
+            [p for p in pre_chunk_preds[0] if p["text"] == "dog"]
+        )
         assert num_dog_pre_chunk_preds / num_dog_preds >= 0.95
 
     def test_labeled_whitespace(self):
         model = SequenceLabeler()
-        text = " I am a dog. A dog that's incredibly bright. I can talk, read, and write!"
+        text = (
+            " I am a dog. A dog that's incredibly bright. I can talk, read, and write!"
+        )
         labels = [{"start": 0, "end": 8, "text": " I am a ", "label": "entity"}]
         model.fit([text] * 30, [labels] * 30)
         preds = model.predict([text])[0]
@@ -418,7 +493,6 @@ class TestSequenceLabeler(unittest.TestCase):
 
 
 class TestSequenceMemoryLeak(unittest.TestCase):
-
     @staticmethod
     def is_wr(val):
         return val is not None and not isinstance(val, (int, float, str))
@@ -466,7 +540,6 @@ class TestSequenceMemoryLeak(unittest.TestCase):
                     print(new)
                     self.assertTrue(any(new is old for old in prevous_refs))
 
-
     def test_pred_alignment(self):
         model = SequenceLabeler(subtoken_predictions=True)
         text = "John J Johnson"
@@ -477,30 +550,40 @@ class TestSequenceMemoryLeak(unittest.TestCase):
         del preds[0]["confidence"]
         self.assertEquals(preds, labels)
 
-
     def test_auto_negative_chunks(self):
         raw_docs = ["".join(text) for text in self.texts]
-        texts, annotations = finetune_to_indico_sequence(raw_docs, self.texts, self.labels,
-                                                         none_value=self.model.config.pad_token)
+        texts, annotations = finetune_to_indico_sequence(
+            raw_docs, self.texts, self.labels, none_value=self.model.config.pad_token
+        )
         train_texts, test_texts, train_annotations, test_annotations = train_test_split(
             texts, annotations, test_size=0.1, random_state=42
         )
 
-        ans_model = SequenceLabeler(max_length=5, chunk_context=0, auto_negative_sampling=True, n_epochs=1)
+        ans_model = SequenceLabeler(
+            max_length=5, chunk_context=0, auto_negative_sampling=True, n_epochs=1
+        )
         ans_model.fit(train_texts, train_annotations)
         ans_predictions = ans_model.predict(test_texts)
-        ans_token_precision = sequence_labeling_token_precision(test_annotations, ans_predictions)
+        ans_token_precision = sequence_labeling_token_precision(
+            test_annotations, ans_predictions
+        )
 
-        baseline_model = SequenceLabeler(max_length=5, chunk_context=0, auto_negative_sampling=False, n_epochs=1)
+        baseline_model = SequenceLabeler(
+            max_length=5, chunk_context=0, auto_negative_sampling=False, n_epochs=1
+        )
         baseline_model.fit(train_texts, train_annotations)
         baseline_predictions = baseline_model.predict(test_texts)
-        baseline_token_precision = sequence_labeling_token_precision(test_annotations, baseline_predictions)
+        baseline_token_precision = sequence_labeling_token_precision(
+            test_annotations, baseline_predictions
+        )
 
-        assert ans_token_precision['Named Entity'] > baseline_token_precision['Named Entity']
+        assert (
+            ans_token_precision["Named Entity"]
+            > baseline_token_precision["Named Entity"]
+        )
 
 
 class TestSequenceMemoryLeak(unittest.TestCase):
-
     @staticmethod
     def is_wr(val):
         return val is not None and not isinstance(val, (int, float, str))
@@ -528,7 +611,6 @@ class TestSequenceMemoryLeak(unittest.TestCase):
                 except Exception as e:
                     print(e)
         return weakrefs
-
 
     def test_leaking_objects(self):
         previous_model_wrs = None
