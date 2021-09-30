@@ -1,8 +1,8 @@
 import itertools
 import copy
-from collections import Counter
+from collections import Counter, defaultdict
 import math
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
 
 import tensorflow as tf
 import numpy as np
@@ -110,8 +110,9 @@ class SequencePipeline(BasePipeline):
     def _target_encoder(self):
         if self.multi_label:
             return SequenceMultiLabelingEncoder(pad_token=self.config.pad_token)
-        return SequenceLabelingEncoder(pad_token=self.config.pad_token,
-                                       bio_tagging=self.config.bio_tagging)
+        return SequenceLabelingEncoder(
+            pad_token=self.config.pad_token, bio_tagging=self.config.bio_tagging
+        )
 
 
 def _combine_and_format(subtokens, start, end, raw_text):
@@ -162,6 +163,7 @@ def _spacy_token_predictions(raw_text, tokens, probas, positions):
         to_combine = []
 
     return spacy_results
+
 
 def negative_samples(preds, labels, pad="<PAD>"):
     modified_labels = []
@@ -257,7 +259,7 @@ class SequenceLabeler(BaseModel):
         """
         if self.config.auto_negative_sampling and Y is not None:
             # clear the saver to save memory.
-            self.saver.fallback # retrieve the fallback future.
+            self.saver.fallback  # retrieve the fallback future.
             self.saver = None
             model_copy = copy.deepcopy(self)
             model_copy._initialize()
@@ -274,12 +276,19 @@ class SequenceLabeler(BaseModel):
             # Heuristic to select batch size for prediction to limit memory consumption.
             # Aim is to give us the smallest batch size that will give us full batches.
             approx_max_tokens_per_doc = max(len(x) for x in Xs) / 5
-            approx_chunks_per_doc = approx_max_tokens_per_doc / (self.config.max_length - self.config.chunk_context)
-            outer_batch_size = min(max(int(self.config.predict_batch_size / approx_chunks_per_doc), 1), self.config.predict_batch_size)
+            approx_chunks_per_doc = approx_max_tokens_per_doc / (
+                self.config.max_length - self.config.chunk_context
+            )
+            outer_batch_size = min(
+                max(int(self.config.predict_batch_size / approx_chunks_per_doc), 1),
+                self.config.predict_batch_size,
+            )
 
             with self.cached_predict():
                 for b_start in range(0, len(Xs), outer_batch_size):
-                    initial_run_preds += model_copy.predict(Xs[b_start: b_start + outer_batch_size])
+                    initial_run_preds += model_copy.predict(
+                        Xs[b_start : b_start + outer_batch_size]
+                    )
             del model_copy
 
             # Tag negative predictions with <PAD> label and add to label set
@@ -307,9 +316,13 @@ class SequenceLabeler(BaseModel):
                 # TODO Determine if we need something more sophisticated for chunking
                 self.config.max_empty_chunk_ratio = 0.0
 
-        return super().finetune(Xs, Y=Y, context=context, update_hook=update_hook, log_hooks=log_hooks)
+        return super().finetune(
+            Xs, Y=Y, context=context, update_hook=update_hook, log_hooks=log_hooks
+        )
 
-    def _pre_chunk_document(self, texts: List[str]) -> Tuple[List[str], List[List[int]]]:
+    def _pre_chunk_document(
+        self, texts: List[str]
+    ) -> Tuple[List[str], List[List[int]]]:
         """
         If self.config.max_document_chars is set, "pre-chunk" any documents that
         are longer than that into multiple "sub documents" to more easily process
@@ -331,8 +344,12 @@ class SequenceLabeler(BaseModel):
             if len(doc) > max_doc_len:
                 num_splits = math.ceil(len(doc) / max_doc_len)
                 for split_idx in range(num_splits):
-                    new_texts.append(doc[split_idx * max_doc_len: (split_idx + 1) * max_doc_len])
-                split_indices.append(list(range(doc_idx + offset, doc_idx + offset + num_splits)))
+                    new_texts.append(
+                        doc[split_idx * max_doc_len : (split_idx + 1) * max_doc_len]
+                    )
+                split_indices.append(
+                    list(range(doc_idx + offset, doc_idx + offset + num_splits))
+                )
                 offset += num_splits - 1
             else:
                 new_texts.append(doc)
@@ -340,16 +357,29 @@ class SequenceLabeler(BaseModel):
 
         return new_texts, split_indices
 
-    def _merge_chunked_preds(self, preds: List[Dict], split_indices: List[List[int]]) -> List[Dict]:
+    def _merge_chunked_preds(
+        self,
+        preds: Union[List[List[Dict]], List[Dict]],
+        split_indices: List[List[int]],
+        return_negative_confidence: bool = False,
+    ) -> List[List[Dict]]:
         """
         If self.config.max_document_chars is set, text for long documents is split
         into multiple "sub documents". Given model predictions, and the indices
         specifying which documents have been split, join the labels for previously
         split documents together.
 
+        preds is a list, where each element of the list corresponds to a document.
+        In most cases, this will be a List[List[Dict]], where we have a List[Dict]
+        for each document, which is a list of predictions.
+        However, if return_negative_confidence is True, we instead have a Dict for
+        each document, which contains the keys "negative_confidence" and "prediction"
+
         Args:
             preds: Model predictions
             split_indices: Indices specifying how documents were split
+            return_negative_confidence: If True, expect preds to be List[Dict]
+                instead List[List[Dict]]
 
         Returns:
             merged_preds: Model predictions after merging documents together
@@ -358,9 +388,29 @@ class SequenceLabeler(BaseModel):
         for pred_idxs in split_indices:
             if len(pred_idxs) == 1:
                 merged_preds.append(preds[pred_idxs[0]])
+            # len(pred_idxs) > 1 indicates that a document was split into multiple
+            # "sub documents", for which the labels need to be merged
+            elif return_negative_confidence:
+                doc_preds = {"prediction": []}
+                all_doc_neg_confs = defaultdict(list)
+                for chunk_idx, pred_idx in enumerate(pred_idxs):
+                    offset = chunk_idx * self.config.max_document_chars
+                    chunk_preds = preds[pred_idx]["prediction"]
+                    # Add offset to label start/ends so that they index correctly
+                    # into the text after joining across pre chunks
+                    for i in range(len(chunk_preds)):
+                        chunk_preds[i]["start"] += offset
+                        chunk_preds[i]["end"] += offset
+                    doc_preds["prediction"].extend(chunk_preds)
+                    # Create list of negative confidences for each key, to later take the max of
+                    for key, val in preds[pred_idx]["negative_confidence"].items():
+                        all_doc_neg_confs[key].append(val)
+                # Get max of negative conf values for each key
+                doc_preds["negative_confidence"] = {
+                    key: np.max(vals) for key, vals in all_doc_neg_confs.items()
+                }
+                merged_preds.append(doc_preds)
             else:
-                # len(pred_idxs) > 1 indicates that a document was split into multiple
-                # "sub documents", for which the labels need to be merged
                 doc_preds = []
                 for chunk_idx, pred_idx in enumerate(pred_idxs):
                     offset = chunk_idx * self.config.max_document_chars
@@ -371,7 +421,6 @@ class SequenceLabeler(BaseModel):
                         chunk_preds[i]["start"] += offset
                         chunk_preds[i]["end"] += offset
                     doc_preds.extend(chunk_preds)
-
                 merged_preds.append(doc_preds)
 
         return merged_preds
@@ -406,7 +455,9 @@ class SequenceLabeler(BaseModel):
         )
 
         if self.config.max_document_chars:
-            preds = self._merge_chunked_preds(preds, split_indices)
+            preds = self._merge_chunked_preds(
+                preds, split_indices, return_negative_confidence
+            )
 
         return preds
 
@@ -414,13 +465,21 @@ class SequenceLabeler(BaseModel):
         self, zipped_data, per_token=False, return_negative_confidence=False, **kwargs
     ):
         predictions = self.process_long_sequence(zipped_data, **kwargs)
-        return self._predict_decode(zipped_data, predictions,
-                                    per_token=per_token,
-                                    return_negative_confidence=return_negative_confidence,
-                                    **kwargs)
+        return self._predict_decode(
+            zipped_data,
+            predictions,
+            per_token=per_token,
+            return_negative_confidence=return_negative_confidence,
+            **kwargs
+        )
 
     def _predict_decode(
-        self, zipped_data, predictions, per_token=False, return_negative_confidence=False, **kwargs
+        self,
+        zipped_data,
+        predictions,
+        per_token=False,
+        return_negative_confidence=False,
+        **kwargs
     ):
         """
         Produces a list of most likely class labels as determined by the fine-tuned model.
@@ -502,21 +561,22 @@ class SequenceLabeler(BaseModel):
                 # or the current subsequence has the wrong label
                 # or bio tagging is on and we have a B- tag
                 if (
-                    not doc_subseqs or per_token or
-                    (self.config.bio_tagging and bio_prefix == "B-") or
-                    (self.config.group_bio_tagging and group_prefix == "BG-") or
-                    (
-                        label != doc_labels[-1] and
-                        (
+                    not doc_subseqs
+                    or per_token
+                    or (self.config.bio_tagging and bio_prefix == "B-")
+                    or (self.config.group_bio_tagging and group_prefix == "BG-")
+                    or (
+                        label != doc_labels[-1]
+                        and (
                             # Merge spans if the labels are the same,
                             # disregarding group BIO tags
                             # This is safe as we already hard break on BG-, so
                             # we will only be merging IG- tags
-                            not self.config.group_bio_tagging or
-                            _get_label(label) != _get_label(doc_labels[-1])
+                            not self.config.group_bio_tagging
+                            or _get_label(label) != _get_label(doc_labels[-1])
                         )
                     )
-                   ):
+                ):
                     assert start_idx <= end_idx, "Start: {}, End: {}".format(
                         start_idx, end_idx
                     )
@@ -556,7 +616,8 @@ class SequenceLabeler(BaseModel):
                     probs=[prob_dicts],
                     none_value=self.config.pad_token,
                     subtoken_predictions=self.config.subtoken_predictions,
-                    bio_tagging=self.config.bio_tagging or self.config.group_bio_tagging,
+                    bio_tagging=self.config.bio_tagging
+                    or self.config.group_bio_tagging,
                 )
                 if per_token:
                     doc_annotations.append(
