@@ -1,8 +1,8 @@
 import itertools
 import copy
-from collections import Counter
+from collections import Counter, defaultdict
 import math
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
 
 import tensorflow as tf
 import numpy as np
