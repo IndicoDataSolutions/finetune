@@ -1,8 +1,8 @@
 import itertools
 import copy
-from collections import Counter, defaultdict
+from collections import Counter
 import math
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Tuple
 
 import tensorflow as tf
 import numpy as np
@@ -257,7 +257,11 @@ class SequenceLabeler(BaseModel):
         Xs and Y as fully annotated data. We only perform auto negative sampling on
         fully annotated data.
         """
-        if self.config.auto_negative_sampling and Y is not None:
+        if (
+            self.config.chunk_long_sequences
+            and self.config.auto_negative_sampling
+            and Y is not None
+        ):
             # clear the saver to save memory.
             self.saver.fallback  # retrieve the fallback future.
             self.saver = None
@@ -277,7 +281,7 @@ class SequenceLabeler(BaseModel):
             # Aim is to give us the smallest batch size that will give us full batches.
             approx_max_tokens_per_doc = max(len(x) for x in Xs) / 5
             approx_chunks_per_doc = approx_max_tokens_per_doc / (
-                self.config.max_length - self.config.chunk_context
+                self.config.max_length - self.input_pipeline.chunker.total_context_width
             )
             outer_batch_size = min(
                 max(int(self.config.predict_batch_size / approx_chunks_per_doc), 1),
@@ -368,19 +372,16 @@ class SequenceLabeler(BaseModel):
         into multiple "sub documents". Given model predictions, and the indices
         specifying which documents have been split, join the labels for previously
         split documents together.
-
         preds is a list, where each element of the list corresponds to a document.
         In most cases, this will be a List[List[Dict]], where we have a List[Dict]
         for each document, which is a list of predictions.
         However, if return_negative_confidence is True, we instead have a Dict for
         each document, which contains the keys "negative_confidence" and "prediction"
-
         Args:
             preds: Model predictions
             split_indices: Indices specifying how documents were split
             return_negative_confidence: If True, expect preds to be List[Dict]
                 instead List[List[Dict]]
-
         Returns:
             merged_preds: Model predictions after merging documents together
         """

@@ -377,6 +377,20 @@ class TestSequenceLabeler(unittest.TestCase):
             > baseline_token_precision["Named Entity"]
         )
 
+    def test_auto_negative_chunks_chunk_context_default(self):
+        raw_docs = ["".join(text) for text in self.texts]
+        texts, annotations = finetune_to_indico_sequence(
+            raw_docs, self.texts, self.labels, none_value=self.model.config.pad_token
+        )
+        train_texts, test_texts, train_annotations, test_annotations = train_test_split(
+            texts, annotations, test_size=0.1, random_state=42
+        )
+        ans_model = SequenceLabeler(
+            max_length=32, auto_negative_sampling=True, n_epochs=1
+        )
+        ans_model.fit(train_texts, train_annotations)
+        ans_predictions = ans_model.predict(test_texts)
+
     def test_pre_chunking(self):
         """
         If config.max_document_chars is set, documents are "pre chunked" into "sub

@@ -427,6 +427,7 @@ class BasePipeline(metaclass=ABCMeta):
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        del state["_text_encoder"]
+        if "_text_encoder" in state:
+            del state["_text_encoder"]
         return state
 
