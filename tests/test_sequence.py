@@ -445,6 +445,40 @@ class TestSequenceLabeler(unittest.TestCase):
             assert split_pred["start"] + max_doc_len * 2 == pred["start"]
             assert split_pred["end"] + max_doc_len * 2 == pred["end"]
 
+    def test_pre_chunking_neg_confidences(self):
+        """
+        Similar to test_pre_chunking(), except with running predict w/ the
+        return_negative_confidence flag set to True. This changes the return format
+        of prediction from List[List[Dict]] to List[Dict], so hits a different
+        code path in merging of chunks that needs to be tested.
+        """
+        max_doc_len = 250
+
+        # Create a mix of short and long sequences for prediction
+        test_sequence = (
+            "I am a dog. A dog that's incredibly bright. I can talk, read, and write! "
+        )
+        test_sequences = [test_sequence * 10]
+
+        # Use animal test data to train model
+        path = os.path.join(os.path.dirname(__file__), "data", "testdata.json")
+        with open(path, "rt") as fp:
+            text, labels = json.load(fp)
+        self.model.finetune(text * 10, labels * 10)
+
+        # Predict w/ max_document_chars set
+        self.model.config.max_document_chars = max_doc_len
+        preds_mdc = self.model.predict(test_sequences, return_negative_confidence=True)
+
+        # Predict w/o max_document_chars set
+        self.model.config.max_document_chars = None
+        preds = self.model.predict(test_sequences, return_negative_confidence=True)
+
+        # Verify that the indices line up
+        for pred_mdc, pred in zip(preds_mdc[0]["prediction"], preds[0]["prediction"]):
+            assert pred_mdc["start"] == pred["start"]
+            assert pred_mdc["end"] == pred["end"]
+
     def test_max_document_chars(self):
         """
         If documents are "pre chunked" due to config.max_document_chars being set,
