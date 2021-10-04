@@ -1,3 +1,4 @@
+import time
 from tqdm import tqdm
 
 
@@ -10,6 +11,8 @@ class ProgressBar(tqdm):
         self.current_epoch = kwargs.pop("current_epoch", 1)
         self.total_epochs = kwargs.pop("total_epochs", 1)
         self.remaining_epochs = self.total_epochs - self.current_epoch
+        self._quiet_update_frequency = kwargs.pop("_quiet_update_frequency", 30)
+        self.last_update = 0
         super().__init__(*args, **kwargs)
 
     @property
@@ -29,8 +32,21 @@ class ProgressBar(tqdm):
         """
         Be careful to avoid expensive update hooks
         """
-        if self._update_hook is not None:
-            self._update_hook(self.format_dict)
+        curr_time = time.time()
+        update = False
+        if curr_time - self.last_update > self._quiet_update_frequency:
+            update = True
+            self.last_update = curr_time
 
-        if not self._silent:
+        if self._update_hook is not None and update:
+            self._update_hook(self.format_dict)
+        if self._silent:
+            if update:
+                self.fp.write(
+                    "{prefix}: {n} / {total} {unit} Estimated {estimated_remaining_seconds} seconds remaining. \n".format(
+                        **self.format_dict
+                    )
+                )
+                self.fp.flush()
+        else:
             return super().display(*args, **kwargs)
