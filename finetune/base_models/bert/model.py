@@ -81,6 +81,8 @@ class _BaseBert(SourceModel):
                 "batch_size": 4,
                 "chunk_context": 16,
                 "predict_batch_size": 256 if config.float_16_predict else 48,
+                "mixed_precision": False,
+                "float_16_predict": False,
             }
 
         elif config.optimize_for.lower() == "accuracy":
@@ -90,6 +92,8 @@ class _BaseBert(SourceModel):
                 "batch_size": base_batch_size,
                 "chunk_context": None,
                 "predict_batch_size": 20,
+                "mixed_precision": False,
+                "float_16_predict": False,
             }
 
         elif config.optimize_for.lower() == "predict_speed":
@@ -99,6 +103,8 @@ class _BaseBert(SourceModel):
                 "batch_size": base_batch_size,
                 "chunk_context": 16,
                 "predict_batch_size": 256 if config.float_16_predict else 48,
+                "mixed_precision": False,
+                "float_16_predict": False,
             }
         elif config.optimize_for.lower() == "accuracy_fp16":
             overrides = {
