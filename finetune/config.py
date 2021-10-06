@@ -284,6 +284,7 @@ def get_default_config():
         use_gpu_crf_predict="auto",
         max_empty_chunk_ratio=1.0,
         auto_negative_sampling=False,
+        drop_hardest_negative_samples_rate=None,
         max_document_chars=None,
         bio_tagging=False,
         #

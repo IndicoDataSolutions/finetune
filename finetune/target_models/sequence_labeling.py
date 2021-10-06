@@ -179,7 +179,7 @@ def negative_samples(preds, labels, pad="<PAD>"):
     return modified_labels
 
 
-def negative_samples(preds, labels, pad="<PAD>"):
+def negative_samples(preds, labels, pad="<PAD>", drop_hardest_negative_samples_rate=None):
     """
     Used for auto negative sampling
 
@@ -188,16 +188,31 @@ def negative_samples(preds, labels, pad="<PAD>"):
     them with the PAD label, and add them to the label set
     """
     modified_labels = []
+    confidences = []
     for p, l in zip(preds, labels):
         if isinstance(l, np.ndarray):
             l = l.tolist()
         new_labels = []
         for pi in p:
             if not any(sequences_overlap(pi, li) for li in l):
+                pi["pred_confidence"] = pi["confidence"][pi["label"]]
+                confidences.append(pi["pred_confidence"]) 
                 pi["label"] = pad
                 new_labels.append(pi)
         modified_labels.append(l + new_labels)
-    return modified_labels
+
+    if drop_hardest_negative_samples_rate is None or drop_hardest_negative_samples_rate == 0.0:
+        return modified_labels
+
+    threshold = np.quantile(confidences, 1.0 - drop_hardest_negative_samples_rate)
+    output_labels = []
+    for l in modified_labels:
+        out_i = []
+        for li in l:
+            if li.get("pred_confidence", 1.1) > threshold:
+                out_i.append(li)
+        output_labels.append(out_i)
+    return output_labels
 
 
 class SequenceLabeler(BaseModel):
@@ -297,7 +312,7 @@ class SequenceLabeler(BaseModel):
 
             # Tag negative predictions with <PAD> label and add to label set
             Y_with_neg_samples = negative_samples(
-                initial_run_preds, Y, pad=self.config.pad_token
+                initial_run_preds, Y, pad=self.config.pad_token, drop_hardest_negative_samples_rate=self.config.drop_hardest_negative_samples_rate
             )
 
             # this means we get the same absolute number of randomly sampled empty chunks with or without this option.
