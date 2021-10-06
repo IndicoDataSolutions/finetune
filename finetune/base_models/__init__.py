@@ -5,7 +5,9 @@ COMMON_SETTINGS = {
     'batch_size': 2,
     'n_epochs': 3,
     'predict_batch_size': 20,
-    'chunk_context': None
+    'chunk_context': None,
+    "mixed_precision": False,
+    "float_16_predict": False,
 }
 
 
