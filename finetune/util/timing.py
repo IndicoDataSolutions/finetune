@@ -7,7 +7,7 @@ class ProgressBar(tqdm):
 
     def __init__(self, *args, **kwargs):
         self._update_hook = kwargs.pop("update_hook", None)
-        self._silent = kwargs.pop("silent", False)
+        self._quiet = kwargs.pop("quiet", False)
         self.current_epoch = kwargs.pop("current_epoch", 1)
         self.total_epochs = kwargs.pop("total_epochs", 1)
         self.remaining_epochs = self.total_epochs - self.current_epoch
@@ -40,7 +40,7 @@ class ProgressBar(tqdm):
 
         if self._update_hook is not None and update:
             self._update_hook(self.format_dict)
-        if self._silent:
+        if self._quiet:
             if update:
                 self.fp.write(
                     "{prefix}: {n} / {total} {unit} Estimated {estimated_remaining_seconds} seconds remaining. \n".format(

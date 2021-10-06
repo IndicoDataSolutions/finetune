@@ -88,7 +88,7 @@ def wrap_tqdm(
     current_epoch_offset=0,
     total_epoch_offset=0,
     skip_val=False,
-    silent=False,
+    quiet=False,
     update_hook=None,
 ):
     assert mode in {"train", "predict", "evaluate"}
@@ -125,7 +125,7 @@ def wrap_tqdm(
             miniters=1,
             leave=current_epoch == n_epochs and mode == "train",
             update_hook=update_hook,
-            silent=silent,
+            quiet=quiet,
             current_epoch=current_epoch + current_epoch_offset,
             total_epochs=n_epochs + total_epoch_offset,
         ):
