@@ -4,7 +4,7 @@ import copy
 import tensorflow as tf
 import tensorflow_addons as tfa
 import numpy as np
-from imblearn.over_sampling import RandomOverSampler
+#from imblearn.over_sampling import RandomOverSampler
 from sklearn.utils import shuffle
 
 from finetune.base import BaseModel

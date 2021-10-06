@@ -31,7 +31,7 @@ def _clip_gradients_by_norm(grads_and_vars, clip_gradients):
 
 
 def get_optimizer(
-    optimizer_name, learning_rate, b1, b2, epsilon, l2_reg, vector_l2, accumulate_steps, scale_loss
+    optimizer_name, learning_rate, b1, b2, epsilon, l2_reg, vector_l2, accumulate_steps, mixed_precision
 ):
     Optimizer = OPTIMIZERS.get(optimizer_name, None)
     if Optimizer is None:
@@ -57,7 +57,7 @@ def get_optimizer(
         decay_var_list=decay_var_list
     )
 
-    if scale_loss:
+    if mixed_precision:
         opt = tf.compat.v1.train.experimental.MixedPrecisionLossScaleOptimizer(opt, "dynamic")
     return opt
 
@@ -71,7 +71,7 @@ def optimize_loss(
     lr_warmup,
     total_num_steps,
     summarize_grads,
-    scale_loss,
+    mixed_precision,
     b1,
     b2,
     epsilon,
@@ -101,7 +101,7 @@ def optimize_loss(
             l2_reg=l2_reg,
             vector_l2=vector_l2,
             accumulate_steps=accumulate_steps,
-            scale_loss=scale_loss
+            mixed_precision=mixed_precision,
         )
         variables = tf.compat.v1.trainable_variables()
 
@@ -117,7 +117,7 @@ def optimize_loss(
             )
         )
         tf.compat.v1.summary.scalar(
-            "global_norm/gradient_norm", tf.linalg.global_norm(list(zip(*gradients))[0]),
+            "global_norm/gradient_norm", tf.linalg.global_norm([tf.cast(g[0], tf.float32) for g in gradients]),
         )
 
         gradients = _clip_gradients_by_norm(gradients, clip_gradients)

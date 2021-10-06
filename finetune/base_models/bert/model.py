@@ -7,7 +7,7 @@ from finetune.base_models.bert.encoder import (
     BERTEncoderMultuilingal,
     BERTEncoderLarge,
     DistilBERTEncoder,
-    LayoutLMEncoder
+    LayoutLMEncoder,
 )
 
 from finetune.base_models.bert.roberta_encoder import RoBERTaEncoder, RoBERTaEncoderV2
@@ -17,7 +17,7 @@ from finetune.util.download import (
     GPT2_BASE_URL,
     ROBERTA_BASE_URL,
     LAYOUTLM_BASE_URL,
-    FINETUNE_BASE_FOLDER
+    FINETUNE_BASE_FOLDER,
 )
 from finetune.util.featurizer_fusion import fused_featurizer
 
@@ -100,6 +100,27 @@ class _BaseBert(SourceModel):
                 "chunk_context": 16,
                 "predict_batch_size": 256 if config.float_16_predict else 48,
             }
+        elif config.optimize_for.lower() == "accuracy_fp16":
+            overrides = {
+                "max_length": base_max_length,
+                "n_epochs": base_n_epochs,
+                "batch_size": 12,
+                "chunk_context": None,
+                "predict_batch_size": 40,
+                "mixed_precision": True,
+                "float_16_predict": True,
+            }
+
+        elif config.optimize_for.lower() == "predict_speed_fp16":
+            overrides = {
+                "max_length": 128 if config.chunk_long_sequences else base_max_length,
+                "n_epochs": base_n_epochs,
+                "batch_size": 64,
+                "chunk_context": 16,
+                "predict_batch_size": 256,
+                "mixed_precision": True,
+                "float_16_predict": True,
+            }
         else:
             raise ValueError(
                 "Cannot optimise hyperparams for {}, must be either 'speed', 'predict_speed' or 'accuracy'".format(
@@ -145,7 +166,7 @@ class BERTModelLargeWWMCased(_BaseBert):
     encoder = BERTEncoderLarge
     featurizer = bert_featurizer
     settings = {
-         **BERT_LARGE_PARAMS,
+        **BERT_LARGE_PARAMS,
         "base_model_path": os.path.join("bert", "bert_wwm_large_cased-v2.jl"),
     }
     required_files = [
@@ -185,7 +206,9 @@ class RoBERTa(_BaseBert):
     }
     required_files = [
         {
-            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "roberta-model-sm-v2.jl"),
+            "file": os.path.join(
+                FINETUNE_BASE_FOLDER, "model", "bert", "roberta-model-sm-v2.jl"
+            ),
             "url": urljoin(ROBERTA_BASE_URL, "roberta-model-sm-v2.jl"),
         },
         {
@@ -193,32 +216,43 @@ class RoBERTa(_BaseBert):
             "url": urljoin(ROBERTA_BASE_URL, "dict.txt"),
         },
         {
-            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "roberta_vocab.bpe"),
+            "file": os.path.join(
+                FINETUNE_BASE_FOLDER, "model", "bert", "roberta_vocab.bpe"
+            ),
             "url": urljoin(ROBERTA_BASE_URL, "roberta_vocab.bpe"),
         },
         {
-            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "roberta_encoder.json"),
+            "file": os.path.join(
+                FINETUNE_BASE_FOLDER, "model", "bert", "roberta_encoder.json"
+            ),
             "url": urljoin(ROBERTA_BASE_URL, "roberta_encoder.json"),
         },
     ]
 
     @classmethod
     def get_encoder(cls, config=None, **kwargs):
-        roberta_filename = config.base_model_path.rpartition('/')[-1]
-        missing_mask_token = roberta_filename in ('roberta-model-sm.jl', 'roberta-model-lg.jl')
+        roberta_filename = config.base_model_path.rpartition("/")[-1]
+        missing_mask_token = roberta_filename in (
+            "roberta-model-sm.jl",
+            "roberta-model-lg.jl",
+        )
         if config is not None and not missing_mask_token:
             return cls.encoder(**kwargs)
         else:
             return RoBERTaEncoder(**kwargs)
 
+
 class FusedRoBERTa(RoBERTa):
     featurizer = fused_featurizer(bert_featurizer)
     settings = dict(RoBERTa.settings)
-    settings.update({
-        "max_length": 2048,
-        "num_fusion_shards": 4,
-        "chunk_long_sequences": False,
-    })
+    settings.update(
+        {
+            "max_length": 2048,
+            "num_fusion_shards": 4,
+            "chunk_long_sequences": False,
+        }
+    )
+
 
 class DocRep(_BaseBert):
     encoder = RoBERTaEncoderV2
@@ -227,17 +261,17 @@ class DocRep(_BaseBert):
     settings = dict(RoBERTa.settings)
     settings.update(
         {
-	    "lr": 1e-4,
+            "lr": 1e-4,
             "context_injection": True,
             "reading_order_removed": True,
             "context_channels": 192,
             "crf_sequence_labeling": False,
             "context_dim": 4,
-            "default_context":{
-                'left': 0,
-                'right': 0,
-                'top': 0,
-                'bottom': 0,
+            "default_context": {
+                "left": 0,
+                "right": 0,
+                "top": 0,
+                "bottom": 0,
             },
             "use_auxiliary_info": True,
             "low_memory_mode": True,
@@ -246,7 +280,9 @@ class DocRep(_BaseBert):
     )
     required_files = [
         {
-            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "doc_rep_v1.jl"),
+            "file": os.path.join(
+                FINETUNE_BASE_FOLDER, "model", "bert", "doc_rep_v1.jl"
+            ),
             "url": urljoin(BERT_BASE_URL, "doc_rep_v1.jl"),
         },
         {
@@ -254,11 +290,15 @@ class DocRep(_BaseBert):
             "url": urljoin(ROBERTA_BASE_URL, "dict.txt"),
         },
         {
-            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "roberta_vocab.bpe"),
+            "file": os.path.join(
+                FINETUNE_BASE_FOLDER, "model", "bert", "roberta_vocab.bpe"
+            ),
             "url": urljoin(ROBERTA_BASE_URL, "roberta_vocab.bpe"),
         },
         {
-            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "roberta_encoder.json"),
+            "file": os.path.join(
+                FINETUNE_BASE_FOLDER, "model", "bert", "roberta_encoder.json"
+            ),
             "url": urljoin(ROBERTA_BASE_URL, "roberta_encoder.json"),
         },
     ]
@@ -266,22 +306,26 @@ class DocRep(_BaseBert):
     @classmethod
     def get_encoder(cls, config=None, **kwargs):
         return cls.encoder(**kwargs)
-    
+
+
 class FusedDocRep(DocRep):
     featurizer = fused_featurizer(bert_featurizer)
     settings = dict(DocRep.settings)
-    settings.update({
-        "max_length": 2048,
-        "num_fusion_shards": 4,
-        "chunk_long_sequences": False,
-    })
+    settings.update(
+        {
+            "max_length": 2048,
+            "num_fusion_shards": 4,
+            "chunk_long_sequences": False,
+        }
+    )
+
 
 class RoBERTaLarge(RoBERTa):
     encoder = RoBERTaEncoderV2
     is_roberta = True
     featurizer = bert_featurizer
     settings = {
-         **BERT_LARGE_PARAMS,
+        **BERT_LARGE_PARAMS,
         "bert_use_pooler": False,
         "base_model_path": os.path.join("bert", "roberta-model-lg-v2.jl"),
     }
@@ -297,16 +341,20 @@ class RoBERTaLarge(RoBERTa):
             "url": urljoin(ROBERTA_BASE_URL, "dict.txt"),
         },
         {
-            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "roberta_vocab.bpe"),
+            "file": os.path.join(
+                FINETUNE_BASE_FOLDER, "model", "bert", "roberta_vocab.bpe"
+            ),
             "url": urljoin(ROBERTA_BASE_URL, "roberta_vocab.bpe"),
         },
         {
-            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "roberta_encoder.json"),
+            "file": os.path.join(
+                FINETUNE_BASE_FOLDER, "model", "bert", "roberta_encoder.json"
+            ),
             "url": urljoin(ROBERTA_BASE_URL, "roberta_encoder.json"),
         },
     ]
 
-   
+
 ZuckerBERT = RoBERTa
 
 
@@ -337,8 +385,10 @@ class DistilRoBERTa(_BaseBert):
     }
     required_files = [
         {
-            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", 'distilroberta.jl'),
-            "url": urljoin(BERT_BASE_URL, 'distilroberta.jl'),
+            "file": os.path.join(
+                FINETUNE_BASE_FOLDER, "model", "bert", "distilroberta.jl"
+            ),
+            "url": urljoin(BERT_BASE_URL, "distilroberta.jl"),
         },
         {
             "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "dict.txt"),
@@ -351,7 +401,7 @@ class DistilRoBERTa(_BaseBert):
         {
             "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "gpt2", "encoder.json"),
             "url": urljoin(GPT2_BASE_URL, "encoder.json"),
-        }
+        },
     ]
 
 
@@ -365,24 +415,28 @@ class LayoutLM(_BaseBert):
         "context_injection": True,
         "crf_sequence_labeling": False,
         "context_dim": 4,
-        "default_context":{
-            'left': 0,
-            'right': 0,
-            'top': 0,
-            'bottom': 0,
+        "default_context": {
+            "left": 0,
+            "right": 0,
+            "top": 0,
+            "bottom": 0,
         },
         "use_auxiliary_info": True,
         "low_memory_mode": True,
         "base_model_path": os.path.join("bert", "layoutlm-base-uncased.jl"),
-        "include_bos_eos": False
+        "include_bos_eos": False,
     }
     required_files = [
         {
-            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "layoutlm-base-uncased.jl"),
+            "file": os.path.join(
+                FINETUNE_BASE_FOLDER, "model", "bert", "layoutlm-base-uncased.jl"
+            ),
             "url": urljoin(LAYOUTLM_BASE_URL, "layoutlm-base-uncased.jl"),
         },
         {
-            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "layoutlm_vocab.txt"),
+            "file": os.path.join(
+                FINETUNE_BASE_FOLDER, "model", "bert", "layoutlm_vocab.txt"
+            ),
             "url": urljoin(LAYOUTLM_BASE_URL, "layoutlm_vocab.txt"),
         },
     ]

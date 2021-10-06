@@ -108,12 +108,17 @@ class BaseModel(object, metaclass=ABCMeta):
             elif k in config.base_model.settings:
                 config[k] = config.base_model.settings[k]
 
-        overrides = config.base_model.get_optimal_params(config)
-
-        if not issubclass(config.base_model, _BaseBert) and config.float_16_predict:
-            LOGGER.warning("float_16_predict only supported by bert based models")
+        # This has to be here before optimal_params are derived because some are dependant on these values.
+        if not issubclass(config.base_model, _BaseBert) and (
+            config.float_16_predict == True or config.mixed_precision == True
+        ):
+            LOGGER.warning(
+                "float_16_predict and mixed_precision only supported by bert based models"
+            )
             config.float_16_predict = False
+            config.mixed_precision = False
 
+        overrides = config.base_model.get_optimal_params(config)
         for ak in auto_keys:
             if ak in ["val_size", "use_gpu_crf_predict"]:
                 continue  # this auto is resolved after data is provided.
@@ -162,7 +167,7 @@ class BaseModel(object, metaclass=ABCMeta):
             exclude_matches=None if self.config.save_adam_vars else "OptimizeLoss",
             save_dtype=self.config.save_dtype,
             permit_uninitialized=self.config.permit_uninitialized,
-            add_tokens=getattr(self.config.base_model, "_add_tokens", None)
+            add_tokens=getattr(self.config.base_model, "_add_tokens", None),
         )
 
     def init_from_checkpoint(self, checkpoint_path):
@@ -355,7 +360,7 @@ class BaseModel(object, metaclass=ABCMeta):
             fp16_predict = self.config.float_16_predict
             if fp16_predict:
                 if not gpu_info(config.session_config)["fp16_inference"]:
-                    LOGGER.info(
+                    LOGGER.warn(
                         "config.float_16_predict is true but the GPU does not support float16, it is being turned off"
                     )
                     fp16_predict = False
@@ -373,6 +378,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 build_explain=build_explain,
                 n_replicas=max(1, len(self.resolved_gpus)),
                 fp16_predict=fp16_predict,
+                mixed_precision=self.config.mixed_precision,
             )
             est = IndicoEstimator(
                 model_dir=self.estimator_dir,
@@ -404,7 +410,9 @@ class BaseModel(object, metaclass=ABCMeta):
         self._cached_predict = False
         self.close()
 
-    def _sort_by_length(self, zipped_text: List[Dict[str, str]]) -> Tuple[List[Dict[str, str]], np.ndarray]:
+    def _sort_by_length(
+        self, zipped_text: List[Dict[str, str]]
+    ) -> Tuple[List[Dict[str, str]], np.ndarray]:
         """
         Given a list of dictionaries from "X" to text of a document, sort the list
         by the length of each element in the zipped_text
@@ -483,7 +491,7 @@ class BaseModel(object, metaclass=ABCMeta):
             )
 
     def fit(self, *args, **kwargs):
-        """ An alias for finetune. """
+        """An alias for finetune."""
         return self.finetune(*args, **kwargs)
 
     def _predict(self, zipped_data, **kwargs):
