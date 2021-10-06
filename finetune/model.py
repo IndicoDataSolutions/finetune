@@ -15,6 +15,7 @@ from finetune.base_models import GPTModel, GPTModelSmall
 
 LOGGER = logging.getLogger("finetune")
 
+
 class PredictMode:
     FEATURIZE = "FEAT"
     NORMAL = "NORM"
@@ -28,24 +29,14 @@ class PredictMode:
     ASSOCIATION_PROBAS = "ASSOCIATION_PROBA"
     EXPLAIN = "EXPLAIN"
 
-def fp16_variable_getter(getter, name, shape=None, dtype=None,
-                         initializer=None, regularizer=None,
-                         trainable=True,
-                         *args, **kwargs):
-    dtype = tf.float16 if dtype in [tf.float16, tf.float32] else dtype
-    return getter(name, shape, dtype=dtype,
-                      initializer=initializer, regularizer=regularizer,
-                      trainable=trainable,
-                      *args, **kwargs)
-
 
 def language_model_op(X, params, featurizer_state, mode, encoder):
     language_model_state = language_model(
         X=X,
         sequence_lengths=featurizer_state["lengths"],
         config=params,
-        embed_weights=featurizer_state['embed_weights'],
-        hidden=featurizer_state['sequence_features'],
+        embed_weights=featurizer_state["embed_weights"],
+        hidden=featurizer_state["sequence_features"],
         train=mode == tf.estimator.ModeKeys.TRAIN,
     )
     lm_logits = language_model_state["logits"]
@@ -69,7 +60,9 @@ def language_model_op(X, params, featurizer_state, mode, encoder):
     return lm_predict_op, language_model_state
 
 
-def masked_language_model_op(X, mlm_weights, mlm_ids, mlm_positions, params, featurizer_state, mode):
+def masked_language_model_op(
+    X, mlm_weights, mlm_ids, mlm_positions, params, featurizer_state, mode
+):
     return masked_language_model(
         X=X,
         mlm_weights=mlm_weights,
@@ -78,16 +71,21 @@ def masked_language_model_op(X, mlm_weights, mlm_ids, mlm_positions, params, fea
         config=params,
         embed_weights=featurizer_state["embed_weights"],
         hidden=featurizer_state["sequence_features"],
-        train=(mode == tf.estimator.ModeKeys.TRAIN)
+        train=(mode == tf.estimator.ModeKeys.TRAIN),
     )
     return language_model_state
 
 
 def fp16_variable_getter(
-        getter, name, shape=None, dtype=None,
-        initializer=None, regularizer=None,
-        trainable=True,
-        *args, **kwargs
+    getter,
+    name,
+    shape=None,
+    dtype=None,
+    initializer=None,
+    regularizer=None,
+    trainable=True,
+    *args,
+    **kwargs
 ):
     return getter(
         name,
@@ -101,16 +99,53 @@ def fp16_variable_getter(
     )
 
 
-def get_variable_getter(estimator_mode, features, fp16_predict):
-    if estimator_mode == tf.estimator.ModeKeys.PREDICT and fp16_predict:
+def mp_variable_getter(
+    getter,
+    name,
+    shape=None,
+    dtype=None,
+    initializer=None,
+    regularizer=None,
+    trainable=True,
+    *args,
+    **kwargs
+):
+    var = getter(
+        name,
+        shape,
+        dtype=tf.float32 if dtype in [tf.float16, tf.float32] else dtype,
+        initializer=initializer,
+        regularizer=regularizer,
+        trainable=trainable,
+        *args,
+        **kwargs
+    )
+    if var.dtype == tf.float32:
+        var = tf.cast(var, tf.float16)
+    return var
+
+
+def get_variable_getter(estimator_mode, features, fp16_predict, mixed_precision):
+    if estimator_mode == tf.estimator.ModeKeys.TRAIN and mixed_precision:
+        custom_getter = mp_variable_getter
+        features = tf.nest.map_structure(
+            lambda feat: tf.cast(feat, tf.float16)
+            if feat.dtype == tf.float32
+            else feat,
+            features,
+        )
+    elif estimator_mode == tf.estimator.ModeKeys.PREDICT and fp16_predict:
         custom_getter = fp16_variable_getter
         features = tf.nest.map_structure(
-            lambda feat: tf.cast(feat, tf.float16) if feat.dtype == tf.float32 else feat,
-            features
+            lambda feat: tf.cast(feat, tf.float16)
+            if feat.dtype == tf.float32
+            else feat,
+            features,
         )
     else:
         custom_getter = None
     return custom_getter, features
+
 
 def get_model_fn(
     target_model_fn,
@@ -125,6 +160,7 @@ def get_model_fn(
     build_explain,
     n_replicas,
     fp16_predict,
+    mixed_precision,
 ):
     def target_model_op(featurizer_state, Y, params, mode, **kwargs):
         weighted_tensor = None
@@ -147,11 +183,13 @@ def get_model_fn(
                 label_encoder=label_encoder,
                 **kwargs
             )
-            
+
         return target_model_state
 
     def _model_fn(features, labels, mode, params):
-        var_getter, features = get_variable_getter(mode, features, fp16_predict)
+        var_getter, features = get_variable_getter(
+            mode, features, fp16_predict, mixed_precision
+        )
         if not build_target_model:
             lm_loss_coef = 1.0
         else:
@@ -167,9 +205,15 @@ def get_model_fn(
         if estimator_mode == tf.estimator.ModeKeys.PREDICT:
             total_num_steps = None
         else:
-            total_num_steps = params.n_epochs * params.dataset_size // (params.batch_size * n_replicas)
-            
-        with tf.compat.v1.variable_scope(tf.compat.v1.get_variable_scope(), custom_getter=var_getter):
+            total_num_steps = (
+                params.n_epochs
+                * params.dataset_size
+                // (params.batch_size * n_replicas)
+            )
+
+        with tf.compat.v1.variable_scope(
+            tf.compat.v1.get_variable_scope(), custom_getter=var_getter
+        ):
             train_loss = 0.0
             featurizer_state = params.base_model.get_featurizer(
                 X,
@@ -182,8 +226,8 @@ def get_model_fn(
                 lengths=features.get("length"),
             )
             predictions = {
-                PredictMode.FEATURIZE: featurizer_state["features"], 
-                PredictMode.SEQUENCE: featurizer_state["sequence_features"]
+                PredictMode.FEATURIZE: featurizer_state["features"],
+                PredictMode.SEQUENCE: featurizer_state["sequence_features"],
             }
 
             if params.base_model in [GPTModel, GPTModelSmall]:
@@ -202,7 +246,10 @@ def get_model_fn(
                     mode == tf.estimator.ModeKeys.TRAIN
                     or mode == tf.estimator.ModeKeys.EVAL
                 ) and Y is not None:
-                    target_loss = tf.reduce_mean(input_tensor=target_model_state["losses"])
+                    target_loss = tf.cast(
+                        tf.reduce_mean(input_tensor=target_model_state["losses"]),
+                        tf.float32,
+                    )
                     train_loss += (1 - lm_loss_coef) * target_loss
                     tf.compat.v1.summary.scalar("TargetModelLoss", target_loss)
                 if mode == tf.estimator.ModeKeys.PREDICT or tf.estimator.ModeKeys.EVAL:
@@ -230,35 +277,43 @@ def get_model_fn(
                         ]
 
             if lm_type is not None:
-                if lm_type.lower() == 'lm':
+                if lm_type.lower() == "lm":
                     lm_predict_op, language_model_state = language_model_op(
-                        X=X, params=params, featurizer_state=featurizer_state, mode=mode, encoder=encoder
+                        X=X,
+                        params=params,
+                        featurizer_state=featurizer_state,
+                        mode=mode,
+                        encoder=encoder,
                     )
-                elif lm_type.lower() == 'mlm':
+                elif lm_type.lower() == "mlm":
                     if "mlm_weights" not in features:
                         raise FinetuneError(
                             "MLM pretraining must be performed through MaskedLanguageModel model type,"
                             " please either provide targets or switch to the MaskedLanagugeModel."
                         )
                     language_model_state = masked_language_model_op(
-                        X=X, 
-                        mlm_weights=features['mlm_weights'],
-                        mlm_ids=features['mlm_ids'],
-                        mlm_positions=features['mlm_positions'],
-                        params=params, 
+                        X=X,
+                        mlm_weights=features["mlm_weights"],
+                        mlm_ids=features["mlm_ids"],
+                        mlm_positions=features["mlm_positions"],
+                        params=params,
                         featurizer_state=featurizer_state,
-                        mode=mode
+                        mode=mode,
                     )
                     # No support for any form of text generation for MLM for now
                     lm_predict_op = None
-                else: 
-                    raise FinetuneError("Unsupport `lm_type` option: {}".format(lm_type))
+                else:
+                    raise FinetuneError(
+                        "Unsupport `lm_type` option: {}".format(lm_type)
+                    )
 
                 if (
                     mode == tf.estimator.ModeKeys.TRAIN
                     or mode == tf.estimator.ModeKeys.EVAL
                 ):
-                    lm_loss = tf.reduce_mean(input_tensor=language_model_state["losses"])
+                    lm_loss = tf.reduce_mean(
+                        input_tensor=language_model_state["losses"]
+                    )
                     train_loss += lm_loss_coef * lm_loss
                     tf.compat.v1.summary.scalar("LanguageModelLoss", lm_loss)
                 if mode == tf.estimator.ModeKeys.PREDICT:
@@ -269,7 +324,11 @@ def get_model_fn(
                     ]
 
         if mode == tf.estimator.ModeKeys.TRAIN:
-            total_num_steps = params.n_epochs * params.dataset_size // (params.batch_size * n_replicas)
+            total_num_steps = (
+                params.n_epochs
+                * params.dataset_size
+                // (params.batch_size * n_replicas)
+            )
 
             train_op = optimize_loss(
                 loss=train_loss,
@@ -280,7 +339,7 @@ def get_model_fn(
                 lr_warmup=params.lr_warmup,
                 total_num_steps=total_num_steps,
                 summarize_grads=params.summarize_grads,
-                scale_loss=params.scale_loss,
+                mixed_precision=params.mixed_precision,
                 b1=params.b1,
                 b2=params.b2,
                 epsilon=params.epsilon,
@@ -293,7 +352,7 @@ def get_model_fn(
             for k, v in predictions.items():
                 if v.dtype == tf.float16:
                     predictions[k] = tf.cast(v, tf.float32)
-                
+
             return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
 
         if mode == tf.estimator.ModeKeys.TRAIN:
@@ -307,7 +366,11 @@ def get_model_fn(
         if params.eval_acc and pred_op is not None:
             LOGGER.info("Adding evaluation metrics, Accuracy")
             labels_dense = tf.argmax(input=labels, axis=-1)
-            metrics = {"Accuracy": tf.compat.v1.metrics.accuracy(tf.argmax(input=pred_op, axis=-1), labels_dense)}
+            metrics = {
+                "Accuracy": tf.compat.v1.metrics.accuracy(
+                    tf.argmax(input=pred_op, axis=-1), labels_dense
+                )
+            }
         else:
             metrics = None
 
