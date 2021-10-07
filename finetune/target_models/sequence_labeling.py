@@ -179,7 +179,7 @@ def negative_samples(preds, labels, pad="<PAD>"):
     return modified_labels
 
 
-def negative_samples(preds, labels, pad="<PAD>", drop_hardest_negative_samples_rate=None):
+def negative_samples(preds, labels, per_chunk_loss, pad="<PAD>", drop="<DROP>", drop_hardest_samples_rate=None):
     """
     Used for auto negative sampling
 
@@ -188,31 +188,29 @@ def negative_samples(preds, labels, pad="<PAD>", drop_hardest_negative_samples_r
     them with the PAD label, and add them to the label set
     """
     modified_labels = []
-    confidences = []
     for p, l in zip(preds, labels):
         if isinstance(l, np.ndarray):
             l = l.tolist()
         new_labels = []
         for pi in p:
             if not any(sequences_overlap(pi, li) for li in l):
-                pi["pred_confidence"] = pi["confidence"][pi["label"]]
-                confidences.append(pi["pred_confidence"]) 
                 pi["label"] = pad
                 new_labels.append(pi)
         modified_labels.append(l + new_labels)
 
-    if drop_hardest_negative_samples_rate is None or drop_hardest_negative_samples_rate == 0.0:
+    if drop_hardest_samples_rate is None or drop_hardest_samples_rate == 0.0:
         return modified_labels
 
-    threshold = np.quantile(confidences, 1.0 - drop_hardest_negative_samples_rate)
-    output_labels = []
-    for l in modified_labels:
-        out_i = []
-        for li in l:
-            if li.get("pred_confidence", 1.1) > threshold:
-                out_i.append(li)
-        output_labels.append(out_i)
-    return output_labels
+    losses = [li["loss"] for l in per_chunk_loss for li in l]
+    threshold = np.quantile(losses, 1.0 - drop_hardest_samples_rate)
+
+    for l, losses in zip(modified_labels, per_chunk_loss):
+        for loss in losses:
+            if loss["loss"] > threshold:
+                loss["label"] = drop
+                l.append(loss) # causes this chunk to be dropped
+
+    return modified_labels
 
 
 class SequenceLabeler(BaseModel):
@@ -291,6 +289,7 @@ class SequenceLabeler(BaseModel):
             model_copy.config.auto_negative_sampling = False
             model_copy.finetune(Xs, Y=Y, context=context, update_hook=update_hook)
             initial_run_preds = []
+            per_chunk_loss = []
 
             # Heuristic to select batch size for prediction to limit memory consumption.
             # Aim is to give us the smallest batch size that will give us full batches.
@@ -308,11 +307,15 @@ class SequenceLabeler(BaseModel):
                     initial_run_preds += model_copy.predict(
                         Xs[b_start : b_start + outer_batch_size]
                     )
+                    per_chunk_loss += model_copy.per_chunk_loss(
+                        Xs[b_start : b_start + outer_batch_size], Y[b_start : b_start + outer_batch_size]    
+                    )
             del model_copy
+            
 
             # Tag negative predictions with <PAD> label and add to label set
             Y_with_neg_samples = negative_samples(
-                initial_run_preds, Y, pad=self.config.pad_token, drop_hardest_negative_samples_rate=self.config.drop_hardest_negative_samples_rate
+                initial_run_preds, Y, pad=self.config.pad_token, drop=self.config.drop_token, per_chunk_loss=per_chunk_loss, drop_hardest_samples_rate=self.config.drop_hardest_samples_rate
             )
 
             # this means we get the same absolute number of randomly sampled empty chunks with or without this option.

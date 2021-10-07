@@ -80,10 +80,10 @@ if __name__ == "__main__":
         test_size=0.2,
         random_state=42
     )
-    model = SequenceLabeler()#auto_negative_sampling=True, drop_hardest_negative_samples_rate=0.05)
+    model = SequenceLabeler(auto_negative_sampling=True, drop_hardest_samples_rate=0.05)
     start = time.time()
-    model.fit(trainX[:2], trainY[:2])
-    print(model.per_chunk_loss(testX[:2], testY[:2]))
+    model.fit(trainX, trainY)
+#    print(model.per_chunk_loss(testX[:2], testY[:2]))
     
 #    start = time.time()
     predictions = model.predict(testX)
