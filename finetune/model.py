@@ -28,6 +28,7 @@ class PredictMode:
     ASSOCIATION = "ASSOCIATION"
     ASSOCIATION_PROBAS = "ASSOCIATION_PROBA"
     EXPLAIN = "EXPLAIN"
+    LOSS = "LOSS"
 
 
 def language_model_op(X, params, featurizer_state, mode, encoder):
@@ -161,6 +162,7 @@ def get_model_fn(
     n_replicas,
     fp16_predict,
     mixed_precision,
+    force_build_loss=False,
 ):
     def target_model_op(featurizer_state, Y, params, mode, **kwargs):
         weighted_tensor = None
@@ -200,6 +202,8 @@ def get_model_fn(
         X = features["tokens"]
         context = features.get("context", None)
         Y = labels
+        if "labels" in features:
+            Y = features["labels"]
         pred_op = None
 
         if estimator_mode == tf.estimator.ModeKeys.PREDICT:
@@ -240,11 +244,15 @@ def get_model_fn(
                     featurizer_state=featurizer_state,
                     Y=Y,
                     params=params,
-                    mode=mode,
+                    # TODO: independently set predict and loss building for the tagret model.
+                    # Putting the model into train mode means that we will build the loss. In the case of sequence labeling (and possibly others) 
+                    # it also means we lose prediction which means we cannot re-use the model to run predictions.
+                    mode=tf.estimator.ModeKeys.TRAIN if force_build_loss else mode, 
                 )
                 if (
                     mode == tf.estimator.ModeKeys.TRAIN
                     or mode == tf.estimator.ModeKeys.EVAL
+                    or force_build_loss
                 ) and Y is not None:
                     target_loss = tf.cast(
                         tf.reduce_mean(input_tensor=target_model_state["losses"]),
@@ -252,6 +260,7 @@ def get_model_fn(
                     )
                     train_loss += (1 - lm_loss_coef) * target_loss
                     tf.compat.v1.summary.scalar("TargetModelLoss", target_loss)
+                    predictions[PredictMode.LOSS] = target_model_state["losses"]
                 if mode == tf.estimator.ModeKeys.PREDICT or tf.estimator.ModeKeys.EVAL:
                     logits = target_model_state["logits"]
                     predict_params = target_model_state.get("predict_params", {})

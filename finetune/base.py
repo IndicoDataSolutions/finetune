@@ -349,7 +349,7 @@ class BaseModel(object, metaclass=ABCMeta):
         )
         return config
 
-    def get_estimator(self, force_build_lm=False, build_explain=False, cache=False):
+    def get_estimator(self, force_build_lm=False, build_explain=False, cache=False, force_build_loss=False):
         if self._cached_estimator is not None:
             est = self._cached_estimator
             hooks = []
@@ -379,6 +379,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 n_replicas=max(1, len(self.resolved_gpus)),
                 fp16_predict=fp16_predict,
                 mixed_precision=self.config.mixed_precision,
+                force_build_loss=force_build_loss,
             )
             est = IndicoEstimator(
                 model_dir=self.estimator_dir,
@@ -451,6 +452,7 @@ class BaseModel(object, metaclass=ABCMeta):
         estimator, hooks = self.get_estimator(
             build_explain=PredictMode.EXPLAIN in predict_keys,
             cache=self._cached_predict,
+            force_build_loss=PredictMode.LOSS in predict_keys,
         )
         length = chunked_length if chunked_length is not None else len(zipped_data)
 
@@ -593,6 +595,37 @@ class BaseModel(object, metaclass=ABCMeta):
             processed_preds[chunk_to_seq[i]].extend(no_pad_pred)
 
         processed_preds = [np.asarray(pred) for pred in processed_preds]
+        return processed_preds
+
+    
+    def per_chunk_loss(self, Xs, Y, context=None):
+        zipped_data = self.input_pipeline.zip_list_to_dict(X=Xs, Y=Y, context=context)
+        raw_preds = self._inference(
+            zipped_data, predict_keys=[PredictMode.LOSS]
+        )
+        chunk_gens = [self.input_pipeline._text_to_ids(d["X"]) for d in zipped_data]
+
+        chunks = []
+        chunk_to_seq = []
+        for i, gen in enumerate(chunk_gens):
+            for chunk in gen:
+                chunks.append(chunk)
+                chunk_to_seq.append(i)
+
+        processed_preds = [[] for _ in range(len(zipped_data))]
+        for i, pred in enumerate(raw_preds):
+            if self.config.chunk_long_sequences:
+                start, end = chunks[i].useful_start, chunks[i].useful_end
+            else:
+                start, end = 0, self.config.max_length
+            end = min(end, len(Xs[chunk_to_seq[i]]))
+            processed_preds[chunk_to_seq[i]].append(
+                {
+                    "start": start,
+                    "end": end or len(Xs[chunk_to_seq[i]]),
+                    "loss": pred,
+                }
+            )
         return processed_preds
 
     @classmethod
@@ -906,13 +939,13 @@ class BaseModel(object, metaclass=ABCMeta):
 
         return max(aggregated_results, key=lambda x: x[1])[0]
 
-    def process_long_sequence(self, zipped_data):
+    def process_long_sequence(self, zipped_data, predict_keys=None):
         labels, batch_probas = [], []
 
         # outputs predictions for each chunk of each document.
         pred_iterator = self._inference(
             zipped_data,
-            predict_keys=[PredictMode.PROBAS, PredictMode.NORMAL],
+            predict_keys=[PredictMode.PROBAS, PredictMode.NORMAL] if predict_keys is None else predict_keys,
             chunked_length=0,
             list_output=False,
         )

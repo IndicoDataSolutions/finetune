@@ -183,15 +183,16 @@ class OrdinalRegressionEncoder(OrdinalEncoder, BaseEncoder):
         raise ValueError
 
 class SequenceLabelingEncoder(BaseEncoder):
-    def __init__(self, pad_token, bio_tagging=False, group_tagging=False):
+    def __init__(self, pad_token, drop_token, bio_tagging=False, group_tagging=False):
         self.classes_ = None
         self.pad_token = pad_token
+        self.drop_token = drop_token
         self.lookup = None
         self.bio_tagging = bio_tagging
         self.group_tagging = group_tagging
 
     def fit(self, labels):
-        self.classes_ = sorted(list(set(lab_i["label"] for lab in labels for lab_i in lab) | {self.pad_token}))
+        self.classes_ = sorted(list(set(lab_i["label"] for lab in labels for lab_i in lab if lab_i["label"] != self.drop_token) | {self.pad_token}))
         if self.bio_tagging:
             # <PAD> is duplicated here, removed in the set() call
             self.classes_ = [pre + c if c != self.pad_token else c

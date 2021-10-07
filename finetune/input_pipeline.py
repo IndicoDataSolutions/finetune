@@ -194,8 +194,7 @@ class BasePipeline(metaclass=ABCMeta):
             tqdm_mode = "predict"
         else:
             tqdm_mode = "train"
-
-        if input_mode == InputMode.PREDICT or not has_targets(generator_fn):
+        if not has_targets(chunked_and_tokenized_dataset):
             types = types[0]
             shapes = shapes[0]
 

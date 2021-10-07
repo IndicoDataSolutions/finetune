@@ -19,6 +19,7 @@ from finetune.encoding.input_encoder import get_spacy
 from finetune.input_pipeline import BasePipeline
 from finetune.util.metrics import sequences_overlap
 from finetune.encoding.input_encoder import tokenize_context
+from finetune.model import PredictMode
 
 
 class SequencePipeline(BasePipeline):
@@ -51,7 +52,6 @@ class SequencePipeline(BasePipeline):
             [self.config.pad_token] if self.multi_label else self.config.pad_token
         )
         out_gen = self._text_to_ids(X, pad_token=pad_token)
-
         for out in out_gen:
             feats = {"tokens": out.token_ids}
             if context is not None:
@@ -68,10 +68,10 @@ class SequencePipeline(BasePipeline):
                     if lab["end"] >= min_starts and lab["start"] <= max_ends
                 ]
                 empty = len(filtered_labels) == 0
-                if (
+                if ((
                     self.config.filter_empty_examples
                     or self.empty_ratio > self.config.max_empty_chunk_ratio
-                ) and empty:
+                ) and empty) or any(l["label"] == self.config.drop_token for l in filtered_labels):
                     continue
                 self._update_empty_ratio(empty)
                 yield feats, self.label_encoder.transform(out, filtered_labels)
@@ -109,9 +109,9 @@ class SequencePipeline(BasePipeline):
 
     def _target_encoder(self):
         if self.multi_label:
-            return SequenceMultiLabelingEncoder(pad_token=self.config.pad_token)
+            return SequenceMultiLabelingEncoder(pad_token=self.config.pad_token, drop_token=self.config.drop_token)
         return SequenceLabelingEncoder(
-            pad_token=self.config.pad_token, bio_tagging=self.config.bio_tagging
+            pad_token=self.config.pad_token, drop_token=self.config.drop_token, bio_tagging=self.config.bio_tagging
         )
 
 
@@ -488,6 +488,7 @@ class SequenceLabeler(BaseModel):
             return_negative_confidence=return_negative_confidence,
             **kwargs
         )
+
 
     def _predict_decode(
         self,

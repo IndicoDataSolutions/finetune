@@ -57,13 +57,14 @@ def has_targets(generator):
 def add_length(x, y=None):
     x["length"] = tf.shape(x["tokens"])[0]
     if y is not None:
+        x["labels"] = y
         return x, y
     return x
 
 
 def batch_dataset(dataset, batch_size, shapes, n_epochs=1):
     if isinstance(shapes, tuple):
-        shapes = ({**shapes[0], "length": tf.TensorShape([])}, shapes[1])
+        shapes = ({**shapes[0], "length": tf.TensorShape([]), "labels": shapes[1]}, shapes[1])
     else:
         shapes = {**shapes, "length": tf.TensorShape([])}
 
