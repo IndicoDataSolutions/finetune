@@ -252,7 +252,7 @@ def get_default_config():
         b2=0.999,
         epsilon=1e-8,
         lr_schedule="warmup_linear",
-        lr=GridSearchable(6.25e-5, [6.25e-4, 6.25e-5, 6.25e-6]),
+        lr="auto",
         lr_warmup=0.002,
         max_grad_norm=1.0,
         accum_steps=1,

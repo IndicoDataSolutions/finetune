@@ -8,6 +8,7 @@ COMMON_SETTINGS = {
     'chunk_context': None,
     "mixed_precision": False,
     "float_16_predict": False,
+    "lr": 6.25e-5,
 }
 
 

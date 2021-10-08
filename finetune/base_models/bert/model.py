@@ -74,6 +74,7 @@ class _BaseBert(SourceModel):
         base_max_length = config.base_model.settings.get("max_length", 512)
         base_n_epochs = config.base_model.settings.get("n_epochs", 8)
         base_batch_size = config.base_model.settings.get("batch_size", 2)
+        base_learning_rate = config.base_model.settings.get("lr", 1e-5)
         if config.optimize_for.lower() == "speed":
             overrides = {
                 "max_length": 128 if config.chunk_long_sequences else base_max_length,
@@ -83,6 +84,7 @@ class _BaseBert(SourceModel):
                 "predict_batch_size": 256 if config.float_16_predict else 48,
                 "mixed_precision": False,
                 "float_16_predict": False,
+                "lr": base_learning_rate,
             }
 
         elif config.optimize_for.lower() == "accuracy":
@@ -94,6 +96,7 @@ class _BaseBert(SourceModel):
                 "predict_batch_size": 20,
                 "mixed_precision": False,
                 "float_16_predict": False,
+                "lr": base_learning_rate,
             }
 
         elif config.optimize_for.lower() == "predict_speed":
@@ -105,6 +108,7 @@ class _BaseBert(SourceModel):
                 "predict_batch_size": 256 if config.float_16_predict else 48,
                 "mixed_precision": False,
                 "float_16_predict": False,
+                "lr": base_learning_rate,
             }
         elif config.optimize_for.lower() == "accuracy_fp16":
             overrides = {
@@ -115,6 +119,7 @@ class _BaseBert(SourceModel):
                 "predict_batch_size": 40,
                 "mixed_precision": True,
                 "float_16_predict": True,
+                "lr": base_learning_rate * 6,
             }
 
         elif config.optimize_for.lower() == "predict_speed_fp16":
@@ -126,6 +131,7 @@ class _BaseBert(SourceModel):
                 "predict_batch_size": 256,
                 "mixed_precision": True,
                 "float_16_predict": True,
+                "lr": base_learning_rate * 32,
             }
         else:
             raise ValueError(
