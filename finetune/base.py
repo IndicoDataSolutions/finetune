@@ -445,6 +445,9 @@ class BaseModel(object, metaclass=ABCMeta):
         def get_zipped_data():
             return iter(zipped_data)
 
+        length = chunked_length if chunked_length is not None else len(zipped_data)
+        if length == 0:
+            return []
         input_fn = self.input_pipeline.get_dataset_from_generator(
             get_zipped_data, input_mode=InputMode.PREDICT, update_hook=update_hook
         )["predict_dataset"]
@@ -454,7 +457,6 @@ class BaseModel(object, metaclass=ABCMeta):
             cache=self._cached_predict,
             force_build_loss=PredictMode.LOSS in predict_keys,
         )
-        length = chunked_length if chunked_length is not None else len(zipped_data)
 
         if self._cached_predict:
             # Add commonly used (cheap) predict keys to the graph to prevent having to rebuild
