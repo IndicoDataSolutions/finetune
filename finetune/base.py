@@ -446,7 +446,7 @@ class BaseModel(object, metaclass=ABCMeta):
             return iter(zipped_data)
 
         length = chunked_length if chunked_length is not None else len(zipped_data)
-        if length == 0:
+        if len(zipped_data) == 0:
             return []
         input_fn = self.input_pipeline.get_dataset_from_generator(
             get_zipped_data, input_mode=InputMode.PREDICT, update_hook=update_hook
