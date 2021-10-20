@@ -172,7 +172,7 @@ class BasePipeline(metaclass=ABCMeta):
                     val_size=self.config.val_size,
                     dataset_size=self.config.dataset_size,
                     skip_val=skip_val,
-                    silent=self.config.debugging_logs,
+                    quiet=self.config.debugging_logs,
                     update_hook=update_hook,
                     current_epoch_offset=self.current_epoch_offset if tqdm_mode == "train" else 0,
                     total_epoch_offset=self.total_epoch_offset if tqdm_mode == "train" else 0,
