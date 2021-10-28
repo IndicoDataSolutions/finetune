@@ -2,6 +2,7 @@ import itertools
 import copy
 from collections import Counter, defaultdict
 import math
+import random
 from typing import Dict, List, Tuple, Union
 
 import tensorflow as tf
@@ -52,6 +53,10 @@ class SequencePipeline(BasePipeline):
         )
         out_gen = self._text_to_ids(X, pad_token=pad_token)
 
+        empty_chunks = []
+        ans_chunks = []
+        labeled_chunks = []
+
         for out in out_gen:
             feats = {"tokens": out.token_ids}
             if context is not None:
@@ -67,14 +72,23 @@ class SequencePipeline(BasePipeline):
                     for lab in Y
                     if lab["end"] >= min_starts and lab["start"] <= max_ends
                 ]
-                empty = len(filtered_labels) == 0
-                if (
-                    self.config.filter_empty_examples
-                    or self.empty_ratio > self.config.max_empty_chunk_ratio
-                ) and empty:
-                    continue
-                self._update_empty_ratio(empty)
-                yield feats, self.label_encoder.transform(out, filtered_labels)
+                chunk_w_labels = (
+                    feats,
+                    self.label_encoder.transform(out, filtered_labels),
+                )
+                if len(filtered_labels) == 0:
+                    empty_chunks.append(chunk_w_labels)
+                elif all(f == self.config.pad_token for f in filtered_labels):
+                    ans_chunks.append(chunk_w_labels)
+                else:
+                    labeled_chunks.append(chunk_w_labels)
+        all_chunks = (
+            labeled_chunks
+            + random.sample(empty_chunks, min(math.ceil(len(labeled_chunks) * self.config.max_empty_chunk_ratio), len(empty_chunks)))
+            + random.sample(ans_chunks, min(math.ceil(len(labeled_chunks) * self.config.max_ans_chunk_ratio), len(ans_chunks)))
+        )
+        random.shuffle(all_chunks) # This is shuffled again later but it's a resivoir shuffle so this is probably better.
+        yield from all_chunks
 
     def _compute_class_counts(self, encoded_dataset):
         counter = Counter()
@@ -96,16 +110,7 @@ class SequencePipeline(BasePipeline):
         target_shape = (
             [None, self.label_encoder.target_dim] if self.multi_label else [None]
         )
-        return (
-            (
-                types,
-                tf.float32,
-            ),
-            (
-                shapes,
-                TS(target_shape),
-            ),
-        )
+        return ((types, tf.float32), (shapes, TS(target_shape)))
 
     def _target_encoder(self):
         if self.multi_label:
