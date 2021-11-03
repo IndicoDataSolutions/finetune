@@ -79,10 +79,9 @@ class BaseModel(object, metaclass=ABCMeta):
                 BaseModel.__del__(strong_self)
 
         atexit.register(cleanup)
-        d = deepcopy(self.defaults)
-        d.update(kwargs)
-
-        self.config = self.resolve_config(**d)
+        self.config_overrides = deepcopy(self.defaults)
+        self.config_overrides.update(kwargs)
+        self.config = self.resolve_config()
         self.resolved_gpus = None
         self.validate_config()
         download_data_if_required(self.config.base_model)
@@ -92,31 +91,42 @@ class BaseModel(object, metaclass=ABCMeta):
         if self.config.debugging_logs:
             os.environ["TF_CPP_MIN_LOG_LEVEL"] = "0"
             tf_logging.set_verbosity(tf_logging.DEBUG)
+        
+        if not gpu_info(self._get_estimator_config().session_config)["fp16_inference"]:
+            if self.config.float_16_predict or self.config.mixed_precision:
+                LOGGER.warning("This GPU does not support float 16 ops but they were requested in the config. They are being turned off.")
+                self.config = self.resolve_config(no_fp16=True)
 
-    def resolve_config(self, **kwargs):
-        assert_valid_config(**kwargs)
+    def resolve_config(self, no_fp16=False, **kwargs):
+        self.config_overrides.update(kwargs)
+        assert_valid_config(**self.config_overrides)
         config = get_default_config()
         config.base_model = kwargs.get("base_model", config.base_model)
 
         auto_keys = []
-        config.update(kwargs)
+        config.update(self.config_overrides)
         for k, v in config.items():
             if isinstance(v, str) and v.lower() == "auto":
                 auto_keys.append(k)
-            elif k in kwargs:
+            elif k in self.config_overrides:
                 continue
             elif k in config.base_model.settings:
                 config[k] = config.base_model.settings[k]
 
         # This has to be here before optimal_params are derived because some are dependant on these values.
-        if not issubclass(config.base_model, _BaseBert) and (
+        if (not issubclass(config.base_model, _BaseBert) or no_fp16) and (
             config.float_16_predict == True or config.mixed_precision == True
         ):
             LOGGER.warning(
-                "float_16_predict and mixed_precision only supported by bert based models"
+                "float_16_predict and mixed_precision only supported by bert based models and Volta or newer GPUs"
             )
             config.float_16_predict = False
             config.mixed_precision = False
+        
+        if (not issubclass(config.base_model, _BaseBert) or no_fp16) and "fp16" in config.optimize_for:
+            new_optimize_for = config.optimize_for.replace("_fp16", "")
+            LOGGER.warning("optimize_for was set to {} but fp16 is not supported by this gpu so falling back to {}".format(config.optimize_for, new_optimize_for))
+            config.optimize_for = new_optimize_for
 
         overrides = config.base_model.get_optimal_params(config)
         for ak in auto_keys:
@@ -125,6 +135,15 @@ class BaseModel(object, metaclass=ABCMeta):
             if ak not in overrides:
                 raise ValueError("There is no auto setting for {}".format(ak))
             config[ak] = overrides[ak]
+        
+        if hasattr(self, "input_pipeline"):
+            self.input_pipeline.config = config
+        
+        if hasattr(self, "config"):
+            for k, v in self.config.items():
+                if k not in auto_keys and k != "optimize_for" and config[k] != v:
+                    LOGGER.warning("Copying value {} for key {} from old config when reinitializing".format(v, k))
+                    config[k] = v
         return config
 
     def validate_config(self):
@@ -356,14 +375,6 @@ class BaseModel(object, metaclass=ABCMeta):
             build_lm = force_build_lm or self.config.lm_loss_coef > 0.0
             config = self._get_estimator_config()
 
-            fp16_predict = self.config.float_16_predict
-            if fp16_predict:
-                if not gpu_info(config.session_config)["fp16_inference"]:
-                    LOGGER.warn(
-                        "config.float_16_predict is true but the GPU does not support float16, it is being turned off"
-                    )
-                    fp16_predict = False
-
             model_fn = get_model_fn(
                 target_model_fn=self._target_model,
                 pre_target_model_hook=self._pre_target_model_hook,
@@ -376,7 +387,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 label_encoder=self.input_pipeline.label_encoder,
                 build_explain=build_explain,
                 n_replicas=max(1, len(self.resolved_gpus)),
-                fp16_predict=fp16_predict,
+                fp16_predict=self.config.float_16_predict,
                 mixed_precision=self.config.mixed_precision,
             )
             est = IndicoEstimator(
@@ -442,7 +453,7 @@ class BaseModel(object, metaclass=ABCMeta):
     ):
         def get_zipped_data():
             return iter(zipped_data)
-
+        
         input_fn = self.input_pipeline.get_dataset_from_generator(
             get_zipped_data, input_mode=InputMode.PREDICT, update_hook=update_hook
         )["predict_dataset"]
