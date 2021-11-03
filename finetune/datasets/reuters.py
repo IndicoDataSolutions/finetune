@@ -80,7 +80,7 @@ if __name__ == "__main__":
         test_size=0.2,
         random_state=42
     )
-    model = SequenceLabeler(optimize_for="predict_speed_fp16")##mixed_precision=True, float_16_predict=True, tensorboard_folder="fp16", batch_size=12, predict_batch_size=40)
+    model = SequenceLabeler(optimize_for="predict_speed_fp16")
     start = time.time()
     model.fit(trainX, trainY)
 #    start = time.time()

@@ -17,10 +17,7 @@ OPTIMIZER_SUMMARIES = [
     "global_gradient_norm",
 ]
 
-OPTIMIZERS = {
-    "AdamW": AdamW,
-    "Adafactor": AdafactorOptimizer,
-}
+OPTIMIZERS = {"AdamW": AdamW, "Adafactor": AdafactorOptimizer}
 
 
 def _clip_gradients_by_norm(grads_and_vars, clip_gradients):
@@ -31,7 +28,15 @@ def _clip_gradients_by_norm(grads_and_vars, clip_gradients):
 
 
 def get_optimizer(
-    optimizer_name, learning_rate, b1, b2, epsilon, l2_reg, vector_l2, accumulate_steps, mixed_precision
+    optimizer_name,
+    learning_rate,
+    b1,
+    b2,
+    epsilon,
+    l2_reg,
+    vector_l2,
+    accumulate_steps,
+    mixed_precision,
 ):
     Optimizer = OPTIMIZERS.get(optimizer_name, None)
     if Optimizer is None:
@@ -45,7 +50,9 @@ def get_optimizer(
         Optimizer = get_grad_accumulation_optimizer(Optimizer, accumulate_steps)
 
     decay_var_list = [
-        v for v in tf.compat.v1.global_variables() if (len(v.get_shape()) > 1 or vector_l2) and "Transition_matrix" not in v.name
+        v
+        for v in tf.compat.v1.global_variables()
+        if (len(v.get_shape()) > 1 or vector_l2) and "Transition_matrix" not in v.name
     ]
 
     opt = Optimizer(
@@ -54,11 +61,17 @@ def get_optimizer(
         beta2=b2,
         epsilon=epsilon,
         weight_decay=l2_reg * learning_rate,
-        decay_var_list=decay_var_list
+        decay_var_list=decay_var_list,
     )
 
     if mixed_precision:
-        opt = tf.compat.v1.train.experimental.MixedPrecisionLossScaleOptimizer(opt, "dynamic")
+        opt = tf.compat.v1.train.experimental.MixedPrecisionLossScaleOptimizer(
+            # Default is 2k which is too high for some of our small datasets. May be sitting at underflowing gradients for large amounts of training.
+            opt,
+            tf.compat.v1.train.experimental.DynamicLossScale(
+                increment_period=100
+            ),
+        )
     return opt
 
 
@@ -88,14 +101,14 @@ def optimize_loss(
         training_fraction = tf.cast(global_step, dtype=tf.float32) / total_num_steps
         learning_rate = tf.maximum(
             0.0,
-            learning_rate * schedules[lr_schedule](training_fraction, warmup=lr_warmup)
+            learning_rate * schedules[lr_schedule](training_fraction, warmup=lr_warmup),
         )
         tf.compat.v1.summary.scalar("learning_rate", learning_rate)
 
         opt = get_optimizer(
             optimizer_name=optimizer_name,
             learning_rate=learning_rate,
-            b1=b1, 
+            b1=b1,
             b2=b2,
             epsilon=epsilon,
             l2_reg=l2_reg,
@@ -107,17 +120,11 @@ def optimize_loss(
 
         # Compute gradients.
         gradients = list(
-            zip(
-                tf.gradients(
-                    ys=loss,
-                    xs=variables,
-                    name='gradients',
-                ),
-                variables,
-            )
+            zip(tf.gradients(ys=loss, xs=variables, name="gradients"), variables)
         )
         tf.compat.v1.summary.scalar(
-            "global_norm/gradient_norm", tf.linalg.global_norm([tf.cast(g[0], tf.float32) for g in gradients]),
+            "global_norm/gradient_norm",
+            tf.linalg.global_norm([g[0] for g in gradients]),
         )
 
         gradients = _clip_gradients_by_norm(gradients, clip_gradients)
@@ -136,11 +143,13 @@ def optimize_loss(
 
                 if grad_values is not None:
                     var_name = variable.name.replace(":", "_")
-                    tf.compat.v1.summary.histogram("gradients/%s" % var_name, grad_values)
-                    tf.compat.v1.summary.scalar(
-                        "gradient_norm/%s" % var_name, tf.linalg.global_norm([grad_values]),
+                    tf.compat.v1.summary.histogram(
+                        "gradients/%s" % var_name, grad_values
                     )
-
+                    tf.compat.v1.summary.scalar(
+                        "gradient_norm/%s" % var_name,
+                        tf.linalg.global_norm([grad_values]),
+                    )
 
         # Create gradient updates.
         with tf.compat.v1.control_dependencies([global_step.assign_add(1)]):
