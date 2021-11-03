@@ -91,10 +91,14 @@ class BaseModel(object, metaclass=ABCMeta):
         if self.config.debugging_logs:
             os.environ["TF_CPP_MIN_LOG_LEVEL"] = "0"
             tf_logging.set_verbosity(tf_logging.DEBUG)
-        
+        self.check_gpu_for_fp16()
+
+    def check_gpu_for_fp16(self):
         if not gpu_info(self._get_estimator_config().session_config)["fp16_inference"]:
             if self.config.float_16_predict or self.config.mixed_precision:
-                LOGGER.warning("This GPU does not support float 16 ops but they were requested in the config. They are being turned off.")
+                LOGGER.warning(
+                    "This GPU does not support float 16 ops but they were requested in the config. They are being turned off."
+                )
                 self.config = self.resolve_config(no_fp16=True)
 
     def resolve_config(self, no_fp16=False, **kwargs):
@@ -122,10 +126,16 @@ class BaseModel(object, metaclass=ABCMeta):
             )
             config.float_16_predict = False
             config.mixed_precision = False
-        
-        if (not issubclass(config.base_model, _BaseBert) or no_fp16) and "fp16" in config.optimize_for:
+
+        if (
+            not issubclass(config.base_model, _BaseBert) or no_fp16
+        ) and "fp16" in config.optimize_for:
             new_optimize_for = config.optimize_for.replace("_fp16", "")
-            LOGGER.warning("optimize_for was set to {} but fp16 is not supported by this gpu so falling back to {}".format(config.optimize_for, new_optimize_for))
+            LOGGER.warning(
+                "optimize_for was set to {} but fp16 is not supported by this gpu so falling back to {}".format(
+                    config.optimize_for, new_optimize_for
+                )
+            )
             config.optimize_for = new_optimize_for
 
         overrides = config.base_model.get_optimal_params(config)
@@ -135,14 +145,18 @@ class BaseModel(object, metaclass=ABCMeta):
             if ak not in overrides:
                 raise ValueError("There is no auto setting for {}".format(ak))
             config[ak] = overrides[ak]
-        
+
         if hasattr(self, "input_pipeline"):
             self.input_pipeline.config = config
-        
+
         if hasattr(self, "config"):
             for k, v in self.config.items():
                 if k not in auto_keys and k != "optimize_for" and config[k] != v:
-                    LOGGER.warning("Copying value {} for key {} from old config when reinitializing".format(v, k))
+                    LOGGER.warning(
+                        "Copying value {} for key {} from old config when reinitializing".format(
+                            v, k
+                        )
+                    )
                     config[k] = v
         return config
 
@@ -325,10 +339,8 @@ class BaseModel(object, metaclass=ABCMeta):
                 if self.config.distribution_strategy.lower() == "mirrored":
                     distribute_strategy = tf.distribute.MirroredStrategy()
                 elif self.config.distribution_strategy.lower() == "central_storage":
-                    distribute_strategy = (
-                        tf.distribute.experimental.CentralStorageStrategy(
-                            resolved_gpus_string or None
-                        )
+                    distribute_strategy = tf.distribute.experimental.CentralStorageStrategy(
+                        resolved_gpus_string or None
                     )
                 else:
                     raise FinetuneError(
@@ -453,7 +465,7 @@ class BaseModel(object, metaclass=ABCMeta):
     ):
         def get_zipped_data():
             return iter(zipped_data)
-        
+
         input_fn = self.input_pipeline.get_dataset_from_generator(
             get_zipped_data, input_mode=InputMode.PREDICT, update_hook=update_hook
         )["predict_dataset"]
@@ -799,6 +811,7 @@ class BaseModel(object, metaclass=ABCMeta):
         model._initialize()
         model.saver.variables = saver.variables
         model._trained = True
+        model.check_gpu_for_fp16()
         return model
 
     @classmethod
