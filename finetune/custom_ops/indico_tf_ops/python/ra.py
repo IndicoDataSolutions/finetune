@@ -25,7 +25,7 @@ def _causalmax(x, dim, pool_len, padding_type="left"):
 
     return tf.squeeze(
         tf.nn.max_pool(
-            value=tf.expand_dims(padded_x, 2),
+            input=tf.expand_dims(padded_x, 2),
             ksize=kernel_size,
             strides=[1, 1, 1, 1],
             padding="VALID"
@@ -50,7 +50,7 @@ def batch_to_time(value, dilation):
         prepared = tf.reshape(value, [dilation, -1, shape[2]])
         transposed = tf.transpose(prepared, perm=[1, 0, 2])
         return tf.reshape(transposed,
-                          [tf.div(shape[0], dilation), -1, shape[2]])
+                          [tf.math.divide(shape[0], dilation), -1, shape[2]])
 
 
 def _dilated_causal_max_pool(value, kernel_size, dilation, padding="left"):

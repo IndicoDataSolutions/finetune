@@ -803,8 +803,8 @@ class BaseModel(object, metaclass=ABCMeta):
                     "The config value {} is no longer supported".format(setting)
                 )
                 del model.config[setting]
-
-        model.config = model.resolve_config(**model.config)
+        model.config_overrides = model.config
+        model.config = model.resolve_config()
         model.input_pipeline.config = model.config
         download_data_if_required(model.config.base_model)
         saver.set_fallback(model.config.base_model_path)
