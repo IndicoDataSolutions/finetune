@@ -307,6 +307,13 @@ class BasePipeline(metaclass=ABCMeta):
                 self.text_to_tokens_mask(**d) for d in val_split
             )
         )
+        if self.config.val_size != len(tokenized_val_split):
+            LOGGER.warning(
+                "Updating validation size from {} to {} this is possibly due to chunking but may cause issues with val frequency.".format(
+                    self.config.val_size, len(tokenized_val_split)
+                )
+            )
+            self.config.val_size = len(tokenized_val_split)
 
         if self.config.class_weights is not None:
             class_counts = self._compute_class_counts(tokenized_train_split)

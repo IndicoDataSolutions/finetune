@@ -236,7 +236,6 @@ class BaseModel(object, metaclass=ABCMeta):
             n_gpus=max(1, len(self.resolved_gpus)),
         )
         num_steps = steps_per_epoch * self.config.n_epochs
-
         if self.config.val_size > 0:
             # Validation with all other tasks.
             train_hooks.append(
