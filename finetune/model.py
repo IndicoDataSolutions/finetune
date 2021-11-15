@@ -99,7 +99,7 @@ def fp16_variable_getter(
     )
 
 
-def mp_variable_getter(
+def mixed_precision_variable_getter(
     getter,
     name,
     shape=None,
@@ -127,7 +127,7 @@ def mp_variable_getter(
 
 def get_variable_getter(estimator_mode, features, fp16_predict, mixed_precision):
     if estimator_mode == tf.estimator.ModeKeys.TRAIN and mixed_precision:
-        custom_getter = mp_variable_getter
+        custom_getter = mixed_precision_variable_getter
         features = tf.nest.map_structure(
             lambda feat: tf.cast(feat, tf.float16)
             if feat.dtype == tf.float32
@@ -304,7 +304,7 @@ def get_model_fn(
                     lm_predict_op = None
                 else:
                     raise FinetuneError(
-                        "Unsupport `lm_type` option: {}".format(lm_type)
+                        "Unsupported `lm_type` option: {}".format(lm_type)
                     )
 
                 if (

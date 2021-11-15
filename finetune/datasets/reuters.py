@@ -5,7 +5,6 @@ import json
 import hashlib
 import io
 from pathlib import Path
-import time
 
 import pandas as pd
 from bs4 import BeautifulSoup as bs
@@ -15,7 +14,6 @@ from sklearn.model_selection import train_test_split
 from finetune import SequenceLabeler
 from finetune.datasets import Dataset
 from finetune.base_models import GPT, GPT2, TCN, RoBERTa
-#from finetune.base_models.huggingface.models import HFLongformer
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
 from finetune.util.metrics import annotation_report, sequence_labeling_token_confusion
 
@@ -80,13 +78,9 @@ if __name__ == "__main__":
         test_size=0.2,
         random_state=42
     )
-    model = SequenceLabeler(optimize_for="predict_speed_fp16")
-    start = time.time()
+    model = SequenceLabeler(batch_size=1, n_epochs=3, val_size=0.0, max_length=512, chunk_long_sequences=True, subtoken_predictions=False, crf_sequence_labeling=True, multi_label_sequences=False)
     model.fit(trainX, trainY)
-#    start = time.time()
     predictions = model.predict(testX)
-    print("Elapsed", time.time() - start)
-#    exit()
-#    print(predictions)
+    print(predictions)
     print(annotation_report(testY, predictions))
-#    sequence_labeling_token_confusion(testX, testY, predictions)
+    sequence_labeling_token_confusion(testX, testY, predictions)
