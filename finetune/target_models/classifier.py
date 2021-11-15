@@ -4,7 +4,6 @@ import copy
 import tensorflow as tf
 import tensorflow_addons as tfa
 import numpy as np
-from imblearn.over_sampling import RandomOverSampler
 from sklearn.utils import shuffle
 
 from finetune.base import BaseModel
@@ -16,21 +15,6 @@ from finetune.base_models.gpt.encoder import finetune_to_indico_explain
 
 
 class ClassificationPipeline(BasePipeline):
-    def resampling(self, Xs, Y, context=None):
-        if context is not None:
-            if self.config.oversample:
-                idxs, Ys, contexts = shuffle(
-                    *RandomOverSampler().fit_sample([[i] for i in range(len(Xs))], Y, context)
-                )
-                return [Xs[i[0]] for i in idxs], Ys, contexts
-            return Xs, Y, context
-        else:
-            if self.config.oversample:
-                idxs, Ys = shuffle(
-                    *RandomOverSampler().fit_sample([[i] for i in range(len(Xs))], Y)
-                )
-                return [Xs[i[0]] for i in idxs], Ys, None
-            return Xs, Y, None
 
     def _target_encoder(self):
         return OneHotLabelEncoder()
