@@ -214,16 +214,6 @@ class TestClassifier(unittest.TestCase):
         for proba in probabilities:
             self.assertIsInstance(proba, dict)
 
-    def test_oversample(self):
-        """
-        Ensure model training does not error out when oversampling is set to True
-        """
-
-        model = Classifier(**self.default_config())
-        model.config.oversample = True
-        train_sample = self.dataset.sample(n=self.n_sample)
-        model.fit(train_sample.Text.values, train_sample.Target.values)
-
     def test_class_weights(self):
         # testing class weights
         train_sample = self.dataset.sample(n=self.n_sample * 3)
