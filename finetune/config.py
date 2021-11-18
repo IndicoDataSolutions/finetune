@@ -116,7 +116,6 @@ class Settings(dict):
     :param num_layers_trained: How many layers to finetune.  Specifying a value less than model's number of layers will train layers starting from model output. Defaults to `12`.
     :param train_embeddings: Should embedding layer be finetuned? Defaults to `True`.
     :param class_weights: One of 'log', 'linear', or 'sqrt'. Auto-scales gradient updates based on class frequency.  Can also be a dictionary that maps from true class name to loss coefficient. Defaults to `None`.
-    :param oversample: Should rare classes be oversampled?  Defaults to `False`.
     :param eval_acc: if True, calculates accuracy and writes it to the tensorboard summary files for valudation runs.
     :param save_dtype: specifies what precision to save model weights with.  Defaults to `np.float32`.
     :param regression_loss: the loss to use for regression models. One of `L1` or `L2`, defaults to `L2`.
@@ -244,7 +243,6 @@ def get_default_config():
         #
         # Class Imbalance
         class_weights=None,
-        oversample=False,
         #
         # Optimization Params
         optimizer="AdamW",
