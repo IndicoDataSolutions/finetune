@@ -1,5 +1,6 @@
 import itertools
 import copy
+import os
 from collections import Counter, defaultdict
 import math
 from typing import Dict, List, Tuple, Union
@@ -266,6 +267,8 @@ class SequenceLabeler(BaseModel):
             self.saver.fallback  # retrieve the fallback future.
             self.saver = None
             model_copy = copy.deepcopy(self)
+            if model_copy.config.tensorboard_folder:
+                model_copy.config.tensorboard_folder = os.path.join(model_copy.config.tensorboard_folder, "ans_run")
             model_copy._initialize()
             model_copy.input_pipeline.total_epoch_offset = self.config.n_epochs
             self.input_pipeline.current_epoch_offset = self.config.n_epochs
