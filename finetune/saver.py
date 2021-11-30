@@ -39,6 +39,8 @@ class SaverHook(_StopOnPredicateHook):
         )
         self.get_current_weights = False
         self.included = None
+        self.scalar_vals = None
+
         self.saver = saver
         self.keep_best_model = keep_best_model
         self.early_stopping_steps = early_stopping_steps or sys.maxsize
@@ -47,6 +49,12 @@ class SaverHook(_StopOnPredicateHook):
         self.cache_weights_to_file = cache_weights_to_file
 
     def stop_if_no_metric_improvement_fn(self):
+        if self.scalar_vals:
+            train_frac = self.scalar_vals["OptimizeLoss/training_fraction:0"]
+            LOGGER.debug("Training Fraction = {}".format(train_frac))
+            if train_frac == 1.0:
+                LOGGER.info("Training is Complete")
+                return True
         if not self.keep_best_model:
             return False
         eval_results = read_eval_metrics(self.estimator.eval_dir())
@@ -74,8 +82,17 @@ class SaverHook(_StopOnPredicateHook):
     def begin(self):
         super().begin()
         self.included = tf.compat.v1.global_variables()
+        self.scalars = [w for w in tf.compat.v1.global_variables() if "training_fraction" in w.name]
         if self.saver.exclude_matches and not self.cache_weights_to_file:
             self.included = [w for w in self.included if self.saver.exclude_matches not in w.name]
+
+    def _get_non_trainable(self, session):
+        self.scalar_vals = dict(
+            zip(
+                (var.name for var in self.scalars),
+                session.run(self.scalars),
+            )
+        )
 
     def _get_weights(self, session):
         if not self.keep_best_model or self.saver.variables is None or self.get_current_weights:
@@ -90,6 +107,7 @@ class SaverHook(_StopOnPredicateHook):
             self.get_current_weights = False
 
     def after_run(self, run_context, run_values):
+        self._get_non_trainable(session=run_context.session)
         super().after_run(run_context, run_values)
         if self.get_current_weights:
             self._get_weights(session=run_context.session)
