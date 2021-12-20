@@ -1,6 +1,7 @@
 import functools
 
 import tensorflow as tf
+from tensorflow.python import training
 import tensorflow_addons as tfa
 
 from finetune.optimizers.adafactor import AdafactorOptimizer
@@ -91,6 +92,7 @@ def optimize_loss(
     l2_reg,
     vector_l2,
     accumulate_steps,
+    max_training_hours=None,
     colocate_gradients_with_ops=True,
 ):
     global_step = tf.compat.v1.train.get_or_create_global_step()
@@ -99,6 +101,26 @@ def optimize_loss(
         tf.compat.v1.summary.scalar("loss", loss)
 
         training_fraction = tf.cast(global_step, dtype=tf.float32) / total_num_steps
+        if max_training_hours is not None:
+            start_time = tf.compat.v1.get_variable(
+                initializer=tf.timestamp,
+                trainable=False,
+                name="start_time",
+                dtype=tf.float32,
+            )
+            training_fraction = tf.minimum(
+                tf.maximum(
+                    training_fraction,
+                    tf.cast((tf.timestamp() - start_time) / (max_training_hours * 3600), tf.float32),
+                ),
+                1.0,
+            )
+        training_fraction_var = tf.compat.v1.get_variable(
+            initializer=-1.0,
+            trainable=False,
+            name="training_fraction",
+            dtype=tf.float32,
+        )
         learning_rate = tf.maximum(
             0.0,
             learning_rate * schedules[lr_schedule](training_fraction, warmup=lr_warmup),
@@ -152,7 +174,9 @@ def optimize_loss(
                     )
 
         # Create gradient updates.
-        with tf.compat.v1.control_dependencies([global_step.assign_add(1)]):
+        with tf.compat.v1.control_dependencies(
+            [global_step.assign_add(1), training_fraction_var.assign(training_fraction)]
+        ):
             grad_updates = opt.apply_gradients(gradients, name="train")
 
     return grad_updates

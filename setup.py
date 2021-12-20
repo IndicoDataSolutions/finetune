@@ -48,7 +48,7 @@ class OpsBuild(build_ext):
 setup(
     name="finetune",
     packages=find_packages(),
-    version="0.8.6",
+    version="0.9.0",
     install_requires=REQUIREMENTS,
     extras_require={
         "tf": ["tensorflow==2.3.0"],

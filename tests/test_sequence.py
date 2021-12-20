@@ -90,11 +90,7 @@ class TestSequenceLabeler(unittest.TestCase):
 
     def default_config(self, **kwargs):
         d = dict(
-            base_model=GPT,
-            batch_size=2,
-            max_length=256,
-            lm_loss_coef=0.0,
-            val_size=0,
+            base_model=GPT, batch_size=2, max_length=256, lm_loss_coef=0.0, val_size=0
         )
         d.update(**kwargs)
         return d
@@ -273,6 +269,22 @@ class TestSequenceLabeler(unittest.TestCase):
         predictions = self.model.predict(test_sequence)
         self.assertTrue(1 <= len(predictions[0]) <= 3)
         self.assertTrue(any(pred["text"].strip() == "dog" for pred in predictions[0]))
+
+    def test_max_time(self):
+        path = os.path.join(os.path.dirname(__file__), "data", "testdata.json")
+        with open(path, "rt") as fp:
+            text, labels = json.load(fp)
+
+        start = time.time()
+        model = SequenceLabeler(**self.default_config(max_training_hours=1 / 3600))
+        model.fit(text * 600, labels * 600)
+        middle = time.time()
+        model = SequenceLabeler(**self.default_config())
+        model.fit(text * 600, labels * 600)
+        end = time.time()
+
+        assert middle - start < 1.5 * 60
+        assert end - middle > 3 * 60
 
     def test_chunk_long_sequences(self):
         test_sequence = [
