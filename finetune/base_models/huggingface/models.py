@@ -62,10 +62,18 @@ HFLongformer = finetune_model_from_huggingface(
     weights_replacement=[
         (
             "tf_longformer_for_masked_lm/longformer",
-            "model/featurizer/tf_longformer_main_layer"
+            "model/featurizer/tf_longformer_main_layer",
         )
     ],
-    config_overrides={"low_memory_mode": True}
+    config_overrides={
+        "low_memory_mode": True,
+        "batch_size": 2,
+        "n_epochs": 16,
+        "lr": 1.68e-3,
+        "max_grad_norm": 1.1,
+        "lr_warmup": 0.7,  # Not a typo - just weird.
+        "l2_reg": 0.194,
+    },
 )
 
 
@@ -124,7 +132,7 @@ HFT5 = finetune_model_from_huggingface(
         ("tf_t5with_lm_head_model/decoder", "model/target/decoder"),
     ],
     include_bos_eos="eos",
-    add_tokens=["{", "}", "<"]# "[", "]"],
+    add_tokens=["{", "}", "<"],  # "[", "]"],
 )
 
 HFT5Small = finetune_model_from_huggingface(
@@ -139,7 +147,7 @@ HFT5Small = finetune_model_from_huggingface(
         ("tf_t5with_lm_head_model/decoder", "model/target/decoder"),
     ],
     include_bos_eos="eos",
-    add_tokens=["{", "}", "<"]# "[", "]"],
+    add_tokens=["{", "}", "<"],  # "[", "]"],
 )
 
 HFAlbert = finetune_model_from_huggingface(

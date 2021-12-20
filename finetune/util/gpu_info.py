@@ -29,7 +29,7 @@ def gpu_info(session_config=None):
     num_devices = device_lib.list_local_devices(session_config=session_config)
     return {
         "n_gpus": num_devices,
-        "fp16_inference": is_fp16_capable
+        "fp16_inference": is_fp16_capable,
     }
             
 if __name__ == "__main__":

@@ -192,7 +192,9 @@ def get_default_config():
     settings = Settings(
         # General Settings
         low_memory_mode=False,
-        float_16_predict=False,
+        float_16_predict="auto",
+        mixed_precision="auto",
+
         save_adam_vars=False,
         shuffle_buffer_size=100,
         dataset_size=None,
@@ -251,7 +253,7 @@ def get_default_config():
         b2=0.999,
         epsilon=1e-8,
         lr_schedule="warmup_linear",
-        lr=GridSearchable(6.25e-5, [6.25e-4, 6.25e-5, 6.25e-6]),
+        lr="auto",
         lr_warmup=0.002,
         max_grad_norm=1.0,
         accum_steps=1,
@@ -294,7 +296,6 @@ def get_default_config():
         #
         # Oscar only
         oscar_use_fp16=False,
-        scale_loss=False,
         oscar_use_timing=True,
         oscar_feat_mode="final_state",
         oscar_use_fused_kernel=False,
