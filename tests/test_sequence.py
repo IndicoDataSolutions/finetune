@@ -277,13 +277,14 @@ class TestSequenceLabeler(unittest.TestCase):
 
         start = time.time()
         model = SequenceLabeler(**self.default_config(max_training_hours=1 / 3600))
-        model.fit(text * 200, labels * 200)
+        model.fit(text * 600, labels * 600)
         middle = time.time()
         model = SequenceLabeler(**self.default_config())
-        model.fit(text * 200, labels * 200)
+        model.fit(text * 600, labels * 600)
         end = time.time()
 
-        assert middle - start < end - middle
+        assert middle - start < 1.5 * 60
+        assert end - middle > 3 * 60
 
     def test_chunk_long_sequences(self):
         test_sequence = [
