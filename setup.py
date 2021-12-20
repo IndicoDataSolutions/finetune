@@ -29,7 +29,6 @@ REQUIREMENTS = [
     "tqdl==0.0.4",
     "psutil==5.7.0",
     "transformers==4.5.1",
-    "imbalanced-learn==0.6.2",
 ]
 
 
