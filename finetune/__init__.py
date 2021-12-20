@@ -28,7 +28,7 @@ from finetune.target_models.language_model import LanguageModel
 from finetune.target_models.masked_language_model import MaskedLanguageModel
 from finetune.target_models.document_labeling import DocumentLabeler
 
-__version__, VERSION, version = ("0.8.6",) * 3
+__version__, VERSION, version = ("0.9.0",) * 3
 
 
 # Logging configuration
