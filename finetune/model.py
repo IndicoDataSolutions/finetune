@@ -287,6 +287,7 @@ def get_model_fn(
                 l2_reg=params.l2_reg,
                 vector_l2=params.vector_l2,
                 accumulate_steps=params.accum_steps,
+                max_training_hours=params.max_training_hours,
             )
 
         if mode == tf.estimator.ModeKeys.PREDICT:

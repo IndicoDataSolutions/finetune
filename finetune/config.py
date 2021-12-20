@@ -212,6 +212,7 @@ def get_default_config():
         sort_by_length=True,
         collapse_whitespace=False,
         permit_uninitialized=None,
+        max_training_hours=None,
         #
         # Regularization
         embed_p_drop=0.1,
