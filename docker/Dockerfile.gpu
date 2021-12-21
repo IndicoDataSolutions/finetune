@@ -1,4 +1,4 @@
-FROM tensorflow/tensorflow:2.3.0-gpu
+FROM tensorflow/tensorflow:2.4.4-gpu
 LABEL Author="Ben Townsend, Madison May"
 
 # tensorboard
