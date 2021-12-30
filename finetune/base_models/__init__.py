@@ -62,7 +62,8 @@ from finetune.base_models.bert.model import (
     DistilRoBERTa,
     DocRep,
     FusedDocRep,
-    LayoutLM
+    LayoutLM,
+    DummyModel,
 )
 from finetune.base_models.tcn.model import TCNModel
 from finetune.base_models.oscar.model import GPCModel

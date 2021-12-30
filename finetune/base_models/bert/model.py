@@ -11,7 +11,7 @@ from finetune.base_models.bert.encoder import (
 )
 
 from finetune.base_models.bert.roberta_encoder import RoBERTaEncoder, RoBERTaEncoderV2
-from finetune.base_models.bert.featurizer import bert_featurizer, layoutlm_featurizer
+from finetune.base_models.bert.featurizer import bert_featurizer, dummy_featurizer, layoutlm_featurizer
 from finetune.util.download import (
     BERT_BASE_URL,
     GPT2_BASE_URL,
@@ -450,5 +450,40 @@ class LayoutLM(_BaseBert):
                 FINETUNE_BASE_FOLDER, "model", "bert", "layoutlm_vocab.txt"
             ),
             "url": urljoin(LAYOUTLM_BASE_URL, "layoutlm_vocab.txt"),
+        },
+    ]
+
+class DummyModel(_BaseBert):
+    encoder = RoBERTaEncoderV2
+    featurizer = dummy_featurizer
+    # Defaults to make the model run as fast as possible.
+    settings = {
+        "lm_type": "mlm",
+        "n_embed": 4,
+        "crf_sequence_labeling": False,
+        "auto_negative_sampling": False,
+        "chunk_long_sequences": False,
+        "predict_batch_size": 2048,
+        "base_model_path": None,
+        "train_embeddings": False,
+        "permit_uninitialized": ".*",
+
+    }
+    required_files = [
+        {
+            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "dict.txt"),
+            "url": urljoin(ROBERTA_BASE_URL, "dict.txt"),
+        },
+        {
+            "file": os.path.join(
+                FINETUNE_BASE_FOLDER, "model", "bert", "roberta_vocab.bpe"
+            ),
+            "url": urljoin(ROBERTA_BASE_URL, "roberta_vocab.bpe"),
+        },
+        {
+            "file": os.path.join(
+                FINETUNE_BASE_FOLDER, "model", "bert", "roberta_encoder.json"
+            ),
+            "url": urljoin(ROBERTA_BASE_URL, "roberta_encoder.json"),
         },
     ]

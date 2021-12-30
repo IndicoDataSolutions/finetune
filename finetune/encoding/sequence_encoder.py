@@ -97,8 +97,10 @@ def finetune_to_indico_sequence(
     loop_vals = zip(raw_texts, spacy_docs, subseqs, labels, probs or [None] * len(raw_texts))
     for doc_idx, (raw_text, spacy_tokens, doc_seq, label_seq, prob_seq) in enumerate(loop_vals):
         if not subtoken_predictions:
+            # All of our tokenisers include whitespace in the token boundaries.
+            # This should too to result in correct token joins.
             spacy_token_starts = np.asarray([token.idx for token in spacy_tokens])
-            spacy_token_ends = np.asarray([token.idx + len(token.text) for token in spacy_tokens])
+            spacy_token_ends = np.asarray([token.idx for token in spacy_tokens[1:]] + [len(raw_text)])
         doc_annotations = []
         annotation_ranges = set()
         raw_annotation_end = 0

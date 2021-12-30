@@ -168,7 +168,9 @@ class Saver:
         self.exclude_matches = exclude_matches
         self.variables = None
         self.save_dtype = save_dtype
-        if fallback_filename is not None:
+        if fallback_filename is None:
+            self.fallback_ = {}
+        else:
             self.set_fallback(fallback_filename)
         self.restart_global_step = restart_global_step
         self.permit_uninitialized = permit_uninitialized

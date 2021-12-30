@@ -10,6 +10,8 @@ import time
 import weakref
 import gc
 
+from finetune.base_models.bert.model import DummyModel
+
 # required for tensorflow logging control
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
@@ -690,3 +692,21 @@ class TestSequenceLabelerNoCRF(TestSequenceLabeler):
         )
         d.update(**kwargs)
         return d
+
+
+class TestDummyModel(unittest.TestCase):
+
+    n_sample = TestSequenceLabeler.n_sample
+    dataset_path = TestSequenceLabeler.dataset_path
+    processed_path = TestSequenceLabeler.processed_path
+    setUpClass = TestSequenceLabeler.setUpClass
+    setUp = TestSequenceLabeler.setUp
+
+    def default_config(self, **kwargs):
+        return {"base_model": DummyModel, **kwargs}
+
+    test_cached_predict = TestSequenceLabeler.test_cached_predict
+    test_raises_when_text_doesnt_match = (
+        TestSequenceLabeler.test_raises_when_text_doesnt_match
+    )
+    test_fit_predict_multi_model = TestSequenceLabeler.test_fit_predict_multi_model

@@ -144,7 +144,9 @@ class Settings(dict):
             raise AttributeError
 
         if attr == "base_model_path":
-            full_path = finetune_model_path(self["base_model_path"])
+            if self[attr] is None:
+                return None
+            full_path = finetune_model_path(self[attr])
             if os.path.exists(full_path):
                 return full_path
 

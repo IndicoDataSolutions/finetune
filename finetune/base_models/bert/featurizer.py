@@ -11,6 +11,39 @@ def get_decay_for_half(total_num_steps):
     tf.compat.v1.summary.scalar("positional_decay_rate", decay)
     return decay
 
+def prep_for_model(X, delimiter_token):
+    initial_shape = tf.shape(input=X)
+    X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-1:]), 0))
+    X.set_shape([None, None])
+    # To fit the interface of finetune we are going to compute the mask and type id at runtime.
+    delimiters = tf.cast(tf.equal(X, delimiter_token), tf.int32)
+    token_type_ids = tf.cumsum(delimiters, exclusive=True, axis=1)
+
+    seq_length = tf.shape(input=delimiters)[1]
+
+    def get_eos():
+        return tf.argmax(
+            input=tf.cast(delimiters, tf.float32)
+            * tf.expand_dims(
+                tf.range(tf.cast(seq_length, tf.float32), dtype=tf.float32), 0
+            ),
+            axis=1,
+        )
+    def get_zeros():
+        return tf.zeros(tf.shape(X)[0], dtype=tf.int64)
+    
+    eos_idx = tf.cond(tf.equal(seq_length, 0), true_fn=get_zeros, false_fn=get_eos)
+
+    lengths = lengths_from_eos_idx(eos_idx=eos_idx, max_length=seq_length)
+    return {
+        "X": X,
+        "eos_idx": eos_idx,
+        "lengths": lengths,
+        "token_type_ids": token_type_ids,
+        "seq_length": seq_length,
+        "initial_shape": initial_shape
+    }
+
 def bert_featurizer(
     X,
     encoder,
@@ -38,7 +71,6 @@ def bert_featurizer(
     """
 
     is_roberta = config.base_model.is_roberta
-    model_filename = config.base_model_path.rpartition('/')[-1]
     is_roberta_v1 = is_roberta and config.base_model.encoder == RoBERTaEncoder
     
     if max_length is None:
@@ -63,29 +95,7 @@ def bert_featurizer(
         positional_channels=config.context_channels,
     )
 
-    initial_shape = tf.shape(input=X)
-    X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-1:]), 0))
-    X.set_shape([None, None])
-    # To fit the interface of finetune we are going to compute the mask and type id at runtime.
-    delimiters = tf.cast(tf.equal(X, encoder.delimiter_token), tf.int32)
-    token_type_ids = tf.cumsum(delimiters, exclusive=True, axis=1)
-
-    seq_length = tf.shape(input=delimiters)[1]
-
-    def get_eos():
-        return tf.argmax(
-            input=tf.cast(delimiters, tf.float32)
-            * tf.expand_dims(
-                tf.range(tf.cast(seq_length, tf.float32), dtype=tf.float32), 0
-            ),
-            axis=1,
-        )
-    def get_zeros():
-        return tf.zeros(tf.shape(X)[0], dtype=tf.int64)
-    
-    eos_idx = tf.cond(tf.equal(seq_length, 0), true_fn=get_zeros, false_fn=get_eos)
-
-    lengths = lengths_from_eos_idx(eos_idx=eos_idx, max_length=seq_length)
+    model_inputs = prep_for_model(X, encoder.delimiter_token)
 
     if is_roberta:
         # In our use case (padding token has index 1), roberta's position indexes begin at 2, so our
@@ -96,7 +106,7 @@ def bert_featurizer(
 
         bert_config.max_position_embeddings += 2
 
-    mask = tf.sequence_mask(lengths, maxlen=seq_length, dtype=tf.float32)
+    mask = tf.sequence_mask(model_inputs["lengths"], maxlen=model_inputs["seq_length"], dtype=tf.float32)
 
     if config.num_layers_trained not in [config.n_layer, 0]:
         raise ValueError(
@@ -112,10 +122,10 @@ def bert_featurizer(
         bert = underlying_model(
             config=bert_config,
             is_training=train,
-            input_ids=X,
+            input_ids=model_inputs["X"],
             input_mask=mask,
             input_context=context,
-            token_type_ids=token_type_ids,
+            token_type_ids=model_inputs["token_type_ids"],
             use_one_hot_embeddings=False,
             scope=None,
             use_pooler=config.bert_use_pooler,
@@ -127,19 +137,19 @@ def bert_featurizer(
         embed_weights = bert.get_embedding_table()
         features = tf.reshape(
             bert.get_pooled_output(),
-            shape=tf.concat((initial_shape[:-1], [config.n_embed]), 0),
+            shape=tf.concat((model_inputs["initial_shape"][:-1], [config.n_embed]), 0),
         )
         sequence_features = tf.reshape(
             bert.get_sequence_output(),
-            shape=tf.concat((initial_shape, [config.n_embed]), 0),
+            shape=tf.concat((model_inputs["initial_shape"], [config.n_embed]), 0),
         )
 
         output_state = {
             "embed_weights": embed_weights,
             "features": features,
             "sequence_features": sequence_features,
-            "lengths": lengths,
-            "eos_idx": eos_idx,
+            "lengths": model_inputs["lengths"],
+            "eos_idx": model_inputs["eos_idx"],
         }
         if config.num_layers_trained == 0:
             output_state = {k: tf.stop_gradient(v) for k, v in output_state.items()}
@@ -148,3 +158,37 @@ def bert_featurizer(
 
 
 layoutlm_featurizer = functools.partial(bert_featurizer, underlying_model=LayoutLMModel)
+
+
+def dummy_featurizer(
+    X,
+    encoder,
+    config,
+    train=False,
+    reuse=None,
+    context=None,
+    total_num_steps=None,
+    underlying_model=BertModel,
+    max_length=None,
+    **kwargs
+):
+    model_inputs = prep_for_model(X, encoder.delimiter_token)
+    new_shape = tf.shape(model_inputs["X"])
+    with tf.compat.v1.variable_scope("model/featurizer", reuse=reuse):
+        features_single = tf.compat.v1.get_variable("features", shape=[1, config.n_embed])
+        seq_features_single = tf.compat.v1.get_variable("seq_features", shape=[1, 1, config.n_embed])
+        seq_features = tf.tile(seq_features_single, [new_shape[0], new_shape[1], 1])
+        features = tf.tile(features_single, [new_shape[0], 1])
+        return {
+            "embed_weights": tf.compat.v1.get_variable("we", shape=[encoder.vocab_size, config.n_embed]),
+            "features": tf.reshape(
+                features,
+                shape=tf.concat((model_inputs["initial_shape"][:-1], [config.n_embed]), 0),
+            ),
+            "sequence_features": tf.reshape(
+                seq_features,
+                shape=tf.concat((model_inputs["initial_shape"], [config.n_embed]), 0),
+            ),
+            "lengths": model_inputs["lengths"],
+            "eos_idx": model_inputs["eos_idx"],
+        }
