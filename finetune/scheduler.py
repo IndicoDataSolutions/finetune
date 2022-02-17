@@ -18,7 +18,7 @@ def bytes_to_meg(x):
 
 def scheduled(fn):
     @functools.wraps(fn)
-    def scheduled_predict(self, model_file, x, *args, **kwargs):
+    def scheduled_predict(self, model_file, x, *args, config_overrides=None, **kwargs):
         model = self._rotate_in_model(model_file)
         try:
             preds = fn(self, model_file=model_file, x=x, *args, model=model, **kwargs)
@@ -32,7 +32,7 @@ def scheduled(fn):
             self.close_all()
             try:
                 # Reload in preparation for prediction
-                model = self._rotate_in_model(model_file)
+                model = self._rotate_in_model(model_file, config_overrides=config_overrides)
                 preds = fn(
                     self, model_file=model_file, x=x, *args, model=model, **kwargs
                 )
@@ -108,7 +108,7 @@ class Scheduler:
         else:
             LOGGER.info("No models cached -- cannot remove oldest model.")
 
-    def _rotate_in_model(self, model):
+    def _rotate_in_model(self, model, config_overrides=None):
         if model not in self.loaded_models:
             if (
                 (
@@ -118,7 +118,8 @@ class Scheduler:
                 or not self._memory_for_one_more()
             ):
                 self._close_oldest_model()
-            out_model = BaseModel.load(model, **self.config)
+            config_overrides = config_overrides or {}
+            out_model = BaseModel.load(model, **self.config, **config_overrides)
             self.model_cache[model] = out_model
         else:
             out_model = self.model_cache[model]

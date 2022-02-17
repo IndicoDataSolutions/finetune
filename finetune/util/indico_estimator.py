@@ -1,5 +1,14 @@
 import numpy as np
 import tensorflow as tf
+import warnings
+
+try:
+    from tensorflow.neuron import trace as neuron_trace
+
+    AWS_NEURON_AVAILABLE = True
+except ImportError:
+    AWS_NEURON_AVAILABLE = False
+
 
 def placeholder_like(tensor):
     return tf.compat.v1.placeholder(tensor.dtype, shape=tensor.shape)
@@ -48,6 +57,59 @@ class IndicoEstimator(tf.estimator.Estimator):
         if self.mon_sess is not None:
             self.mon_sess.close()
         self.mon_sess = None
+
+    def inferentia_predict(
+        self,
+        input_fn,
+        predict_keys=None,
+        hooks=None,
+        checkpoint_path=None,
+        yield_single_examples=True,
+    ):
+        if not AWS_NEURON_AVAILABLE:
+            raise ValueError("AWS Neuron not available")
+        # Check that model has been trained.
+        self.g = self.g or tf.Graph()
+        tf.compat.v1.set_random_seed(self._config.tf_random_seed)
+        features_real, features = self.get_features_from_fn(input_fn) # Still use a tf-session for this.
+        with self.g.as_default(): # TODO: probably remove this - I hope that tracing happens in it's own graph that is then properly cleaned up.
+            if self.aws_neuron_model is None:
+                example_feats = tf.nest.map_structure(tf.ones_like, features)
+
+                def place_on_inferentia(nodedef):
+                    # TODO: probably need to generically filter out any CRFs or similar funkiness.
+                    return True
+
+                # TODO: This does not include the pre-trained weights. Need to figure out how the tracing works and how to inject  the weights from the hooks.
+                def get_prediction_graph(features):
+                    all_hooks = hooks or []
+                    all_hooks.extend(list(self.estimator_spec.prediction_hooks or []))
+                    return self._extract_keys(
+                        self._call_model_fn(
+                            features, None, tf.estimator.ModeKeys.PREDICT, self.config
+                        ).predictions,
+                        predict_keys,
+                    )
+
+                self.aws_neuron_model = neuron_trace(
+                    get_prediction_graph,
+                    example_feats,
+                    subgraph_builder_function=place_on_inferentia,
+                )
+                # TODO: save out using code below and attach to the saver and re-save with the build model. We can then try to only build if pre-build doesn't exist?
+                #                model_dir = './model_neuron'
+                #                model_neuron.save(model_dir)
+                #                model_neuron_reloaded = tf.keras.models.load_model(model_dir)
+            for feats in features_real:
+                preds_evaluated = self.aws_neuron_model(feats)
+                if not yield_single_examples:
+                    yield preds_evaluated
+                elif not isinstance(self.predictions, dict):
+                    for pred in preds_evaluated:
+                        yield pred
+                else:
+                    for i in range(self._extract_batch_length(preds_evaluated)):
+                        yield {key: value[i] for key, value in preds_evaluated.items()}
 
     def cached_predict(
         self,
