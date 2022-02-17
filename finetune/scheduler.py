@@ -19,7 +19,7 @@ def bytes_to_meg(x):
 def scheduled(fn):
     @functools.wraps(fn)
     def scheduled_predict(self, model_file, x, *args, config_overrides=None, **kwargs):
-        model = self._rotate_in_model(model_file)
+        model = self._rotate_in_model(model_file, config_overrides=config_overrides)
         try:
             preds = fn(self, model_file=model_file, x=x, *args, model=model, **kwargs)
         except Exception as orig_except:
