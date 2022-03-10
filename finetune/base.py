@@ -43,6 +43,12 @@ from finetune.input_pipeline import InputMode
 
 LOGGER = logging.getLogger("finetune")
 
+def issubclass_or_instance(a, b):
+    try:
+        return issubclass(a, b)
+    except TypeError:
+        return isinstance(a, b)
+
 
 def start_end_gen(gen):
     """
@@ -118,7 +124,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 config[k] = config.base_model.settings[k]
 
         # This has to be here before optimal_params are derived because some are dependant on these values.
-        if (not issubclass(config.base_model, _BaseBert) or no_fp16) and (
+        if (not issubclass_or_instance(config.base_model, _BaseBert) or no_fp16) and (
             config.float_16_predict == True or config.mixed_precision == True
         ):
             LOGGER.warning(
@@ -128,7 +134,7 @@ class BaseModel(object, metaclass=ABCMeta):
             config.mixed_precision = False
 
         if (
-            not issubclass(config.base_model, _BaseBert) or no_fp16
+            not issubclass_or_instance(config.base_model, _BaseBert) or no_fp16
         ) and "fp16" in config.optimize_for:
             new_optimize_for = config.optimize_for.replace("_fp16", "")
             LOGGER.warning(
