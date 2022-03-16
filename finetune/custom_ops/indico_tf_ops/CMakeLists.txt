@@ -22,8 +22,8 @@ message("TF_LFLAGS " ${TF_LFLAGS})
 
 find_package(CUDA)
 
-# C++11 required for tensorflow
-set(CMAKE_CXX_FLAGS "-std=c++11 ${CMAKE_CXX_FLAGS}")
+# C++14 required for tensorflow
+set(CMAKE_CXX_FLAGS "-std=c++14 ${CMAKE_CXX_FLAGS}")
 set(CMAKE_CXX_FLAGS "-O2 ${CMAKE_CXX_FLAGS}")
 set(CMAKE_CXX_FLAGS "-shared ${CMAKE_CXX_FLAGS}")
 set(CMAKE_CXX_FLAGS "-fPIC ${CMAKE_CXX_FLAGS}")
