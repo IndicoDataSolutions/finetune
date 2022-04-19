@@ -10,11 +10,11 @@ from finetune import DocumentLabeler
 from finetune.base_models import DocRep
 
 from finetune.util.metrics import sequence_labeling_micro_token_f1
-    
 
 
 
-DATA_PATH = os.path.join("Data", "Sequence", "doc_rep_integration.csv")
+
+DATA_PATH = os.path.join("tests", "data", "doc_rep_integration.csv")
 
 class TestDocumentLabeler(unittest.TestCase):
     def setUp(self):

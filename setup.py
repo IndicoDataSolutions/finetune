@@ -47,7 +47,7 @@ class OpsBuild(build_ext):
 
 setup(
     name="finetune",
-    packages=find_packages(),
+    packages=find_packages(exclude=["tests", "tests.*"]),
     version="0.9.0",
     install_requires=REQUIREMENTS,
     extras_require={
@@ -55,6 +55,6 @@ setup(
         "tf_gpu": ["tensorflow-gpu==2.7.1"],
     },
     zip_safe=False,
-    cmdclass={"build_ext": OpsBuild,},
+    cmdclass={"build_ext": OpsBuild},
     include_package_data=True
 )
