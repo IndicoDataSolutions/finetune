@@ -119,7 +119,8 @@ class Scheduler:
             ):
                 self._close_oldest_model()
             config_overrides = config_overrides or {}
-            out_model = BaseModel.load(model, **self.config, **config_overrides)
+            merged_config = {**self.config, **config_overrides}
+            out_model = BaseModel.load(model, **merged_config)
             self.model_cache[model] = out_model
         else:
             out_model = self.model_cache[model]
