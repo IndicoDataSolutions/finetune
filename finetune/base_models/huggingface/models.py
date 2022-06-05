@@ -15,21 +15,17 @@ from transformers import (
     T5Config,
     AlbertTokenizerFast,
     AlbertConfig,
-    BertTokenizer,
     LongformerTokenizerFast,
     LongformerConfig,
+    DebertaV2Config,
+    DebertaV2Tokenizer
 )
 from transformers.models.t5.modeling_tf_t5 import TFT5Model
 from transformers.models.electra.modeling_tf_electra import TFElectraMainLayer
 from transformers.models.roberta.modeling_tf_roberta import TFRobertaMainLayer
 from transformers.models.albert.modeling_tf_albert import TFAlbertMainLayer
 from transformers.models.longformer.modeling_tf_longformer import TFLongformerMainLayer
-
-from transformers.models.xlm_roberta.tokenization_xlm_roberta import (
-    VOCAB_FILES_NAMES,
-    PRETRAINED_VOCAB_FILES_MAP,
-    PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES,
-)
+from transformers.models.deberta_v2.modeling_tf_deberta_v2 import TFDebertaV2MainLayer
 
 from finetune.util.huggingface_interface import finetune_model_from_huggingface
 
@@ -135,6 +131,22 @@ HFT5 = finetune_model_from_huggingface(
     add_tokens=["{", "}", "<"],  # "[", "]"],
 )
 
+DebertaV3Base = finetune_model_from_huggingface(
+    pretrained_weights="microsoft/deberta-v3-base",
+    archive_map={"microsoft/deberta-v3-base": "https://huggingface.co/microsoft/deberta-v3-base/resolve/main/tf_model.h5"},
+    hf_featurizer=TFDebertaV2MainLayer,
+    # Check for changes in V3
+    hf_tokenizer=DebertaV2Tokenizer,
+    hf_config=DebertaV2Config,
+    config_overrides={"n_embed": 768, "n_epochs": 8, "lr": 1e-5, "batch_size": 2},
+    weights_replacement=[
+        ("tf_deberta_v2_model_4/deberta/embeddings", "model/featurizer/tf_deberta_v2_main_layer/embeddings"),
+        ("tf_deberta_v2_model_4/deberta/encoder", 'model/featurizer/tf_deberta_v2_main_layer/encoder'),
+        ("tf_deberta_v2_base_model/deberta", "model/featurizer/encoder"),
+
+    ]
+)
+
 HFT5Small = finetune_model_from_huggingface(
     pretrained_weights="t5-small",
     archive_map={"t5-small": "https://cdn.huggingface.co/t5-small-tf_model.h5"},
@@ -147,7 +159,7 @@ HFT5Small = finetune_model_from_huggingface(
         ("tf_t5with_lm_head_model/decoder", "model/target/decoder"),
     ],
     include_bos_eos="eos",
-    add_tokens=["{", "}", "<"],  # "[", "]"],
+    add_tokens=["{", "}", "<"], 
 )
 
 HFAlbert = finetune_model_from_huggingface(
