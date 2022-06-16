@@ -326,6 +326,5 @@ class TestOptimizers(unittest.TestCase):
                     sess.run(train_op)
             self.assertLess(sess.run(loss), original_loss)
 
-
 if __name__ == '__main__':
     unittest.main()

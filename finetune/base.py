@@ -38,10 +38,13 @@ from finetune.util.indico_estimator import IndicoEstimator
 from finetune.util.gpu_info import gpu_info
 
 from finetune.base_models.bert.model import _BaseBert
+from finetune.base_models.bert.roberta_encoder import RoBERTaEncoderV2
 from finetune.base_models import GPTModel, GPTModelSmall
+
 from finetune.input_pipeline import InputMode
 
 LOGGER = logging.getLogger("finetune")
+
 
 def issubclass_or_instance(a, b):
     try:
@@ -811,6 +814,13 @@ class BaseModel(object, metaclass=ABCMeta):
                 del model.config[setting]
         model.config_overrides = model.config
         model.config = model.resolve_config()
+        if (
+            model.config.version == "0.8.6"
+            and model.config.base_model.encoder == RoBERTaEncoderV2
+        ):
+            # In version 0.8.6 collapse whitespace was broken
+            model.config.collapse_whitespace = False
+
         model.input_pipeline.config = model.config
         download_data_if_required(model.config.base_model)
         saver.set_fallback(model.config.base_model_path)
