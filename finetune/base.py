@@ -252,7 +252,7 @@ class BaseModel(object, metaclass=ABCMeta):
         steps = int(math.ceil(n_examples / (batch_size * n_gpus)))
         return steps
 
-    def finetune(self, Xs, Y=None, context=None, update_hook=None, log_hooks=None):
+    def finetune(self, Xs, Y=None, context=None, update_hook=None, log_hooks=None, force_build_lm=False):
         if callable(Xs):
             datasets = self.input_pipeline.get_dataset_from_generator(
                 Xs, input_mode=InputMode.TRAIN, update_hook=update_hook
@@ -273,7 +273,7 @@ class BaseModel(object, metaclass=ABCMeta):
                     )
                 )
 
-        force_build_lm = Y is None
+        force_build_lm = Y is None or force_build_lm
         estimator, hooks = self.get_estimator(force_build_lm=force_build_lm)
         train_hooks = hooks.copy()
 

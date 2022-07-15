@@ -274,14 +274,16 @@ class _BertModel(object):
     def get_pooled_output(self):
         return self.pooled_output
 
-    def get_sequence_output(self):
+    def get_sequence_output(self, layer_num=None):
         """Gets final hidden layer of encoder.
 
         Returns:
             float Tensor of shape [batch_size, seq_length, hidden_size] corresponding
             to the final hidden of the transformer encoder.
         """
-        return self.sequence_output
+        if layer_num is None:
+            return self.sequence_output
+        return self.all_encoder_layers[layer_num]
 
     def get_all_encoder_layers(self):
         return self.all_encoder_layers

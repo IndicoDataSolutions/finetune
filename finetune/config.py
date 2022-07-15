@@ -215,6 +215,8 @@ def get_default_config():
         collapse_whitespace=False,
         permit_uninitialized=None,
         max_training_hours=None,
+        feature_layer_num=None,
+
         #
         # Regularization
         embed_p_drop=0.1,
@@ -285,6 +287,7 @@ def get_default_config():
         auto_negative_sampling=False,
         max_document_chars=None,
         bio_tagging=False,
+        low_shot=False,
         #
         # Regression Params
         regression_loss="L2",

@@ -13,7 +13,7 @@ from finetune.encoding.target_encoders import (
     SequenceLabelingEncoder,
     SequenceMultiLabelingEncoder,
 )
-from finetune.nn.target_blocks import sequence_labeler
+from finetune.nn.target_blocks import sequence_labeler, sequence_labeler_low_shot
 from finetune.nn.crf import sequence_decode
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
 from finetune.encoding.input_encoder import get_spacy
@@ -685,6 +685,22 @@ class SequenceLabeler(BaseModel):
         reuse=None,
         **kwargs
     ):
+        if self.config.low_shot:
+            return sequence_labeler_low_shot(
+                hidden=featurizer_state["sequence_features"],
+                targets=targets,
+                n_targets=n_outputs,
+                pad_id=config.pad_idx,
+                config=config,
+                train=train,
+                multilabel=config.multi_label_sequences,
+                reuse=reuse,
+                lengths=featurizer_state["lengths"],
+                use_crf=self.config.crf_sequence_labeling,
+                target_names=self.input_pipeline.label_encoder.target_labels,
+                **kwargs
+            )
+
         return sequence_labeler(
             hidden=featurizer_state["sequence_features"],
             targets=targets,

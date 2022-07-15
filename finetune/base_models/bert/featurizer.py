@@ -130,7 +130,7 @@ def bert_featurizer(
             shape=tf.concat((initial_shape[:-1], [config.n_embed]), 0),
         )
         sequence_features = tf.reshape(
-            bert.get_sequence_output(),
+            bert.get_sequence_output(layer_num=config.feature_layer_num),
             shape=tf.concat((initial_shape, [config.n_embed]), 0),
         )
 
