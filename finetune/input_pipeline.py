@@ -326,6 +326,11 @@ class BasePipeline(metaclass=ABCMeta):
             types = types[0]
             shapes = shapes[0]
 
+        if self.config.min_steps is not None:
+            self.config.n_epochs = max(
+                self.config.n_epochs, math.ceil(self.config.min_steps / self.config.dataset_size)
+            )
+    
         train_dataset_unbatched = self.make_dataset_fn(
             data_fn=lambda: tokenized_train_split,
             tqdm_mode="train",

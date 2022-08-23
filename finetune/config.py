@@ -202,6 +202,7 @@ def get_default_config():
         predict_batch_size="auto",
         visible_gpus=None,  # defaults to all available
         n_epochs="auto",
+        min_steps=None,
         seed=42,
         max_length="auto",
         weight_stddev=0.02,
