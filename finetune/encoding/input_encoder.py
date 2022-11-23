@@ -298,7 +298,8 @@ def tokenize_context(context, encoded_output, config):
     current_char_loc = 0
     tokenized_context = []
     assert len(encoded_output.tokens) == len(encoded_output.token_ends)
-    assert encoded_output.token_starts[1] <= encoded_output.token_ends[-2]
+    #print(encoded_output.token_starts)
+    #assert encoded_output.token_starts[1] <= encoded_output.token_ends[-2]
     for i, (token, char_loc) in enumerate(
         zip(encoded_output.tokens, encoded_output.token_ends)
     ):

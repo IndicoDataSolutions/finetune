@@ -529,6 +529,10 @@ def layoutlm_pos_embed(input_context, positional_channels, batch_size, seq_lengt
     ]
     return tf.math.add_n(all_2d_pos_embeddings)
 
+def xdoc_pos_embed(input_context, positional_channels, batch_size, seq_length, width):
+    layoutlm_pos = layoutlm_pos_embed(input_context, positional_channels, batch_size, seq_length, width)
+    doc_layer1_out = tf.compat.v1.layers.dense(layoutlm_pos, units=width, name="doc_linear1", activation=tf.nn.relu)
+    return tf.compat.v1.layers.dense(doc_layer1_out, units=width, name="doc_linear2")
 
 def embedding_postprocessor(
         input_tensor,
@@ -1189,3 +1193,9 @@ class BertModel(_BertModel):
 class LayoutLMModel(_BertModel):
     def embedding_postprocessor(self, *args, **kwargs):
         return embedding_postprocessor(*args, pos2d_embedding_fn=layoutlm_pos_embed, **kwargs)
+
+
+class XDocModel(_BertModel):
+    def embedding_postprocessor(self, *args, **kwargs):
+        kwargs["token_type_vocab_size"] = 1
+        return embedding_postprocessor(*args, pos2d_embedding_fn=xdoc_pos_embed, **kwargs)

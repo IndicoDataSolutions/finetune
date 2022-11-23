@@ -1,4 +1,5 @@
 import itertools
+import time
 import copy
 import os
 from collections import Counter, defaultdict
@@ -496,6 +497,7 @@ class SequenceLabeler(BaseModel):
         doc_idx = -1
         doc_annotations = []
         raw_text = [data.get("raw_text", data["X"]) for data in zipped_data]
+        post_proc_time = 0.0
         for (
             token_start_idx,
             token_end_idx,
@@ -506,6 +508,7 @@ class SequenceLabeler(BaseModel):
             start,
             end,
         ) in predictions:
+            start_time = time.time()
             if start_of_doc:
                 # if this is the first chunk in a document, start accumulating from scratch
                 doc_subseqs = []
@@ -647,6 +650,8 @@ class SequenceLabeler(BaseModel):
 
                 else:
                     doc_annotations.append(doc_annotations_sample[0])
+            post_proc_time += (time.time() - start_time)
+        print("Total post proc time (seconds) {}".format(post_proc_time))
         return doc_annotations
 
     def featurize(self, X, **kwargs):

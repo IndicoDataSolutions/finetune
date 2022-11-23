@@ -4,7 +4,7 @@ import functools
 import tensorflow as tf
 from finetune.util.shapes import lengths_from_eos_idx
 from finetune.base_models.bert.roberta_encoder import RoBERTaEncoder
-from finetune.base_models.bert.modeling import BertConfig, BertModel, LayoutLMModel
+from finetune.base_models.bert.modeling import BertConfig, BertModel, LayoutLMModel, XDocModel
 
 def get_decay_for_half(total_num_steps):
     decay = tf.minimum(tf.cast(tf.compat.v1.train.get_global_step(), tf.float32) / (total_num_steps / 2), 1.0)
@@ -148,3 +148,4 @@ def bert_featurizer(
 
 
 layoutlm_featurizer = functools.partial(bert_featurizer, underlying_model=LayoutLMModel)
+xdoc_featurizer = functools.partial(bert_featurizer, underlying_model=XDocModel)
