@@ -10,8 +10,8 @@ from finetune.base_models.bert.encoder import (
     LayoutLMEncoder,
 )
 
-from finetune.base_models.bert.roberta_encoder import RoBERTaEncoder, RoBERTaEncoderV2
-from finetune.base_models.bert.featurizer import bert_featurizer, layoutlm_featurizer
+from finetune.base_models.bert.roberta_encoder import RoBERTaEncoder, RoBERTaEncoderV2, RoBERTaEncoderXDoc
+from finetune.base_models.bert.featurizer import bert_featurizer, layoutlm_featurizer, xdoc_featurizer
 from finetune.util.download import (
     BERT_BASE_URL,
     GPT2_BASE_URL,
@@ -452,3 +452,56 @@ class LayoutLM(_BaseBert):
             "url": urljoin(LAYOUTLM_BASE_URL, "layoutlm_vocab.txt"),
         },
     ]
+
+
+
+class XDocBase(_BaseBert):
+    featurizer = xdoc_featurizer
+    encoder = RoBERTaEncoderXDoc
+    is_roberta = True
+    settings = {
+        **BERT_BASE_PARAMS,
+        "epsilon": 1e-8,
+        "lr": 1e-4,
+        "context_injection": True,
+        "crf_sequence_labeling": False,
+        "context_dim": 4,
+        "default_context": {
+            "left": 0,
+            "right": 0,
+            "top": 0,
+            "bottom": 0,
+        },
+        "use_auxiliary_info": True,
+        "low_memory_mode": True,
+        "base_model_path": os.path.join("bert", "XDoc.jl"),
+        "include_bos_eos": False,
+    }
+    required_files = [
+        # {
+        #     "file": os.path.join(
+        #         FINETUNE_BASE_FOLDER, "model", "bert", "roberta-model-sm-v2.jl"
+        #     ),
+        #     "url": urljoin(ROBERTA_BASE_URL, "roberta-model-sm-v2.jl"),
+        # },
+        {
+            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "dict.txt"),
+            "url": urljoin(ROBERTA_BASE_URL, "dict.txt"),
+        },
+        {
+            "file": os.path.join(
+                FINETUNE_BASE_FOLDER, "model", "bert", "roberta_vocab.bpe"
+            ),
+            "url": urljoin(ROBERTA_BASE_URL, "roberta_vocab.bpe"),
+        },
+        {
+            "file": os.path.join(
+                FINETUNE_BASE_FOLDER, "model", "bert", "roberta_encoder.json"
+            ),
+            "url": urljoin(ROBERTA_BASE_URL, "roberta_encoder.json"),
+        },
+    ]
+
+    @classmethod
+    def get_encoder(cls, config=None, **kwargs):
+        return cls.encoder(**kwargs)

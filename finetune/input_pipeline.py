@@ -384,6 +384,7 @@ class BasePipeline(metaclass=ABCMeta):
         return [X]
 
     def _text_to_ids(self, Xs, pad_token=None):
+        print("Xs", Xs)
         Xs = self._format_for_encoding(Xs)
         if self.config.chunk_long_sequences and len(Xs) == 1:
             # can only chunk single sequence inputs
@@ -397,7 +398,8 @@ class BasePipeline(metaclass=ABCMeta):
             field_starts_and_ends = dict()
             for field in EncodedOutput._fields:
                 field_value = getattr(encoded, field)
-                if field_value is not None:
+                print(field, field_value)
+                if field_value is not None and len(field_value):
                     field_starts_and_ends[field] = (field_value[0], field_value[-1])
             if self.config.chunk_context == 0 and self.config.add_eos_bos_to_chunk:
                 warnings.warn("""Chunk context of 0 will not capture the start

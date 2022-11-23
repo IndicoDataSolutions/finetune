@@ -142,3 +142,12 @@ class RoBERTaEncoderV2(BaseEncoder):
 
     def decode(self, ids):
         return self.tokenizer.decode(ids, skip_special_tokens=True)
+
+
+
+class RoBERTaEncoderXDoc(RoBERTaEncoderV2):
+    offset = 0
+
+    @property
+    def vocab_size(self):
+        return 50265
