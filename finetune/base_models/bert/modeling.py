@@ -21,6 +21,8 @@ import numpy as np
 import tensorflow as tf
 import functools
 
+from transformers.activations_tf import gelu as hf_gelu
+
 from finetune.optimizers.recompute_grads import recompute_grad
 from finetune.nn.auxiliary import embed_position
 
@@ -352,6 +354,8 @@ def get_activation(activation_string):
         return gelu
     elif act == "tanh":
         return tf.tanh
+    elif act == "hf_gelu":
+        return hf_gelu
     else:
         raise ValueError("Unsupported activation: %s" % act)
 
@@ -533,7 +537,7 @@ def xdoc_pos_embed(input_context, positional_channels, batch_size, seq_length, w
     layoutlm_pos = layoutlm_pos_embed(input_context, positional_channels, batch_size, seq_length, width)
     doc_layer1_out = tf.compat.v1.layers.dense(layoutlm_pos, units=width, name="doc_linear1", activation=tf.nn.relu)
     return tf.compat.v1.layers.dense(doc_layer1_out, units=width, name="doc_linear2")
-
+    
 def embedding_postprocessor(
         input_tensor,
         input_context=None,
@@ -949,7 +953,6 @@ def full_block(
             # In the case where we have other sequences, we just concatenate
             # them to the self-attention head before the projection.
             attention_output = tf.concat(attention_heads, axis=-1)
-
         # Run a linear projection of `hidden_size` then add a residual
         # with `layer_input`.
         with tf.compat.v1.variable_scope("output"):

@@ -458,7 +458,7 @@ class LayoutLM(_BaseBert):
 class XDocBase(_BaseBert):
     featurizer = xdoc_featurizer
     encoder = RoBERTaEncoderXDoc
-    is_roberta = True
+    is_roberta = False
     settings = {
         **BERT_BASE_PARAMS,
         "epsilon": 1e-8,
@@ -475,7 +475,7 @@ class XDocBase(_BaseBert):
         "use_auxiliary_info": True,
         "low_memory_mode": True,
         "base_model_path": os.path.join("bert", "XDoc.jl"),
-        "include_bos_eos": False,
+        "act_fn": "hf_gelu",
     }
     required_files = [
         # {
