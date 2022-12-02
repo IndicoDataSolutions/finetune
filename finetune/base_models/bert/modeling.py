@@ -383,7 +383,7 @@ def layer_norm(input_tensor, name=None):
         inputs_rank = inputs_shape.ndims
 
         dtype = input_tensor.dtype.base_dtype
-        begin_norm_axis = inputs_rank -1
+        begin_norm_axis = inputs_rank - 1
 
         params_shape = inputs_shape[-1:]
 
@@ -660,7 +660,7 @@ def embedding_postprocessor(
             )
             output += position_embeddings
             
-    if pos_injection:
+    if pos_injection and input_context is not None:
         output += pos2d_embedding_fn(
             input_context=input_context,
             positional_channels=positional_channels,

@@ -64,6 +64,7 @@ from finetune.base_models.bert.model import (
     FusedDocRep,
     LayoutLM,
     XDocBase,
+    TableRoBERTa,
 )
 from finetune.base_models.tcn.model import TCNModel
 from finetune.base_models.oscar.model import GPCModel

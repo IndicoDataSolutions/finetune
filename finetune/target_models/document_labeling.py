@@ -3,7 +3,7 @@ import warnings
 from finetune.target_models.sequence_labeling import SequenceLabeler, SequencePipeline
 from finetune.encoding.input_encoder import EncodedOutput
 from finetune.errors import FinetuneError
-from finetune.base_models import DocRep, LayoutLM
+from finetune.base_models import DocRep, LayoutLM, XDocBase
 
 def get_context(document, dpi_norm, base_model):
     """
@@ -12,7 +12,7 @@ def get_context(document, dpi_norm, base_model):
     """
     if base_model == DocRep:
         return get_context_doc_rep(document, dpi_norm)
-    elif base_model == LayoutLM:
+    elif base_model in [LayoutLM, XDocBase]:
         return get_context_layoutlm(document)
     else:
         warnings.warn("Running DocumentLabeler with a base model that doesn't utilize position info.")
