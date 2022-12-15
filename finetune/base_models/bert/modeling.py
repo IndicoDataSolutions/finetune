@@ -1306,6 +1306,8 @@ class TwinBertModel(_BertModel):
             input_mask_b=None,
             token_type_ids_a=None,
             token_type_ids_b=None,
+            context_a=None,
+            context_b=None,
             mixing_fn=None,
             mixing_inputs=None,
             use_one_hot_embeddings=False,
@@ -1367,7 +1369,7 @@ class TwinBertModel(_BertModel):
                 # normalize and perform dropout.
                 self.embedding_output_a = self.embedding_postprocessor(
                     input_tensor=self.embedding_output_a,
-                    input_context=None,
+                    input_context=context_a,
                     use_token_type=use_token_type,
                     token_type_ids=token_type_ids_a,
                     token_type_vocab_size=config.type_vocab_size,
@@ -1378,10 +1380,11 @@ class TwinBertModel(_BertModel):
                     max_position_embeddings=config.max_position_embeddings,
                     dropout_prob=config.hidden_dropout_prob,
                     roberta=roberta,
-                    pos_injection=config.pos_injection,
                     positional_channels=config.positional_channels,
                     reading_order_decay_rate=reading_order_decay_rate,
                     anneal_reading_order=config.anneal_reading_order,
+                    pos_injection=True,
+
                 )
 
             with tf.compat.v1.variable_scope("embeddings", reuse=True):
@@ -1398,7 +1401,7 @@ class TwinBertModel(_BertModel):
                 # normalize and perform dropout.
                 self.embedding_output_b = self.embedding_postprocessor(
                     input_tensor=self.embedding_output_b,
-                    input_context=None,
+                    input_context=context_b,
                     use_token_type=use_token_type,
                     token_type_ids=token_type_ids_b,
                     token_type_vocab_size=config.type_vocab_size,
@@ -1409,10 +1412,10 @@ class TwinBertModel(_BertModel):
                     max_position_embeddings=config.max_position_embeddings,
                     dropout_prob=config.hidden_dropout_prob,
                     roberta=roberta,
-                    pos_injection=config.pos_injection,
                     positional_channels=config.positional_channels,
                     reading_order_decay_rate=reading_order_decay_rate,
                     anneal_reading_order=config.anneal_reading_order,
+                    pos_injection=True,
                 )
 
             with tf.compat.v1.variable_scope("encoder"):
@@ -1449,7 +1452,29 @@ class TwinBertModel(_BertModel):
                 self.all_encoder_layers = None
 
     def embedding_postprocessor(self, *args, **kwargs):
-        return embedding_postprocessor(*args, pos2d_embedding_fn=docrep_pos_embed, **kwargs)
+        def table_pos_embed(input_context, positional_channels, batch_size, seq_length, width):
+            print("Embedding positions")
+            max_row_col_embedding = 1024
+            other_pos_embed_table = tf.compat.v1.get_variable(
+                name="other_pos",
+                shape=[max_row_col_embedding, width],
+                initializer=tf.compat.v1.random_normal_initializer(stddev=1e-3),
+            )
+            this_pos_embed_table = tf.compat.v1.get_variable(
+                name="this_pos_embed",
+                shape=[max_row_col_embedding, width],
+                initializer=tf.compat.v1.random_normal_initializer(stddev=1e-3),
+            )
+            # context is in alphabetical order, so bottom, left, right, top
+            other_position = tf.cast(input_context[:, :, 0], dtype='int32')
+            this_position = tf.cast(input_context[:, :, 1], dtype='int32')
+            other_embed = tf.gather(other_pos_embed_table, other_position)
+            this_embed = tf.gather(this_pos_embed_table, this_position)
+
+            return other_embed + this_embed
+
+
+        return embedding_postprocessor(*args, pos2d_embedding_fn=table_pos_embed, **kwargs)
 
 
 

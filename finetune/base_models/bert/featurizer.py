@@ -170,19 +170,25 @@ def slice_and_dice_tables(
 ):
     col_values_list = []
     col_scatter_list = []
+    pos_idx_list = []
+    other_start = tf.cast(other_start, tf.int32)
     mask = tf.sequence_mask(sequence_lengths, maxlen=tf.shape(X)[1])
     for i in range(max_rows_cols):
-        i = float(i)
+        # NOTE: in graph mode this could be done with a while loop - while i <= max(end)
+        # Use the while loop to get the masks and then use map_fn to apply them to each of values, scatter_idxs and pos_idx.
+        float_i = float(i)
         # SHould not include pad values as these will have a max/min row/col of -1
         col_mask = tf.math.logical_and(
             tf.math.logical_and(
-                tf.math.less_equal(start, i), tf.math.less_equal(i, end)
+                tf.math.less_equal(start, float_i), tf.math.less_equal(float_i, end)
             ),
             mask,
         )
         #col_mask = tf.compat.v1.Print(col_mask, [col_mask])
         col_values_i = tf.ragged.boolean_mask(X, col_mask)
         col_scatter_i = tf.ragged.boolean_mask(scatter_idx_orig, col_mask)
+        pos_i = tf.ragged.boolean_mask(other_start, col_mask)
+
         # Which batches have non-0 number of entries in row/col X
         batch_mask = tf.math.not_equal(col_values_i.row_lengths(), 0)
 
@@ -190,6 +196,7 @@ def slice_and_dice_tables(
         col_bs = tf.shape(col_values.row_lengths())[0]
         bos_expanded = tf.tile(tf.RaggedTensor.from_tensor(tf.expand_dims(tf.expand_dims(bos_id, 0), 0)), [col_bs, 1, *(1 for _ in bos_id.shape)])
         eos_expanded = tf.tile(tf.RaggedTensor.from_tensor(tf.expand_dims(tf.expand_dims(eos_id, 0), 0)), [col_bs, 1, *(1 for _ in bos_id.shape)])
+
         col_values = tf.concat(
             [
                 bos_expanded,
@@ -217,10 +224,38 @@ def slice_and_dice_tables(
             ],
             1
         )
+
+        pos = tf.ragged.boolean_mask(pos_i, batch_mask)
+        pos = tf.stack([pos, tf.ones_like(pos) * i], -1) # Add in the current row/col idx.
+
+        # TODO: use the same values to concat as the scatter idxs to reduce graph size.
+        pos = tf.concat(
+            [
+                tf.tile(
+                    tf.ragged.constant(
+                        [[[1, 1]]]
+                    ),
+                    [col_bs, 1, 1]
+                ),
+                pos,
+                tf.tile(
+                    tf.ragged.constant(
+                        [[[1, 1]]]
+                    ),
+                    [col_bs, 1, 1]
+                ),
+            ],
+            1
+        )
+
         col_values_list.append(col_values)
         col_scatter_list.append(col_scatter)
+        pos_idx_list.append(pos)
+    
     col_values_ragged = tf.concat(col_values_list, axis=0)
     col_scatter_ragged = tf.concat(col_scatter_list, axis=0)
+    pos_ragged = tf.concat(pos_idx_list, axis=0)
+
     col_seq_lens = col_values_ragged.row_lengths()
     # I don't think this default matters here as these are masked. Cannot be < 0
     col_values = col_values_ragged.to_tensor(
@@ -229,6 +264,7 @@ def slice_and_dice_tables(
     col_scatter = col_scatter_ragged.to_tensor(
         default_value=-1, shape=col_scatter_ragged.bounding_shape()
     )
+    pos = pos_ragged.to_tensor(default_value=0, shape=pos_ragged.bounding_shape())
     with tf.control_dependencies(
         [
             tf.cond(
@@ -248,10 +284,12 @@ def slice_and_dice_tables(
     ):
         col_values = col_values[:, :max_length]
         col_scatter = col_scatter[:, :max_length]
+        pos = pos[:, :max_length]
     return {
         "seq_lens": col_seq_lens,
         "values": col_values,
         "scatter_vals": col_scatter,
+        "positions": pos,
     }
 
 
@@ -624,7 +662,9 @@ def table_roberta_featurizer_twinbert(
                 dtype=tf.float32,
             ),
             token_type_ids_a=tf.zeros_like(row_col_values["row"]["values"]),
-            token_type_ids_b=tf.zeros_like(row_col_values["col"]["values"]),            
+            token_type_ids_b=tf.zeros_like(row_col_values["col"]["values"]),
+            context_a=row_col_values["row"]["positions"],        
+            context_b=row_col_values["col"]["positions"],
             use_one_hot_embeddings=False,
             scope=None,
             use_token_type=config.bert_use_type_embed,
