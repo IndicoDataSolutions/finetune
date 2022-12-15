@@ -9,6 +9,8 @@ from finetune.base_models.bert.modeling import (
     BertModel,
     LayoutLMModel,
     XDocModel,
+    TwinBertModel,
+    gelu
 )
 
 
@@ -161,9 +163,10 @@ def bert_featurizer(
 layoutlm_featurizer = functools.partial(bert_featurizer, underlying_model=LayoutLMModel)
 xdoc_featurizer = functools.partial(bert_featurizer, underlying_model=XDocModel)
 
+MAX_ROWS_AND_COLS = 50
 
 def slice_and_dice_tables(
-    X, sequence_lengths, scatter_idx_orig, start, end, max_rows_cols, bos_id, eos_id, max_length=512
+    X, sequence_lengths, scatter_idx_orig, start, end, other_start, max_rows_cols, bos_id, eos_id, max_length=512
 ):
     col_values_list = []
     col_scatter_list = []
@@ -185,8 +188,8 @@ def slice_and_dice_tables(
 
         col_values = tf.ragged.boolean_mask(col_values_i, batch_mask)
         col_bs = tf.shape(col_values.row_lengths())[0]
-        bos_expanded = tf.tile(tf.ragged.constant([[bos_id]]), [col_bs, 1])
-        eos_expanded = tf.tile(tf.ragged.constant([[eos_id]]), [col_bs, 1])
+        bos_expanded = tf.tile(tf.RaggedTensor.from_tensor(tf.expand_dims(tf.expand_dims(bos_id, 0), 0)), [col_bs, 1, *(1 for _ in bos_id.shape)])
+        eos_expanded = tf.tile(tf.RaggedTensor.from_tensor(tf.expand_dims(tf.expand_dims(eos_id, 0), 0)), [col_bs, 1, *(1 for _ in bos_id.shape)])
         col_values = tf.concat(
             [
                 bos_expanded,
@@ -252,7 +255,7 @@ def slice_and_dice_tables(
     }
 
 
-def get_row_col_values(X, context, sequence_lengths, bos_id, eos_id, max_rows_cols=100):
+def get_row_col_values(X, context, sequence_lengths, bos_id, eos_id, max_rows_cols=MAX_ROWS_AND_COLS):
     #context = tf.compat.v1.Print(context, [context], summarize=10000)
     end_col, end_row, start_col, start_row = tf.unstack(context, num=4, axis=2)
     batch_idx = tf.tile(
@@ -262,19 +265,20 @@ def get_row_col_values(X, context, sequence_lengths, bos_id, eos_id, max_rows_co
     scatter_idx_orig = tf.stack([batch_idx, seq_idx], axis=-1)  # batch, seq, 2
     return {
         "row": slice_and_dice_tables(
-            X, sequence_lengths, scatter_idx_orig, start_row, end_row, max_rows_cols, bos_id=bos_id, eos_id=eos_id
+            X, sequence_lengths, scatter_idx_orig, start_row, end_row, start_col, max_rows_cols, bos_id=tf.constant(bos_id), eos_id=tf.constant(eos_id)
         ),
         "col": slice_and_dice_tables(
-            X, sequence_lengths, scatter_idx_orig, start_col, end_col, max_rows_cols, bos_id=bos_id, eos_id=eos_id
+            X, sequence_lengths, scatter_idx_orig, start_col, end_col, start_row, max_rows_cols, bos_id=tf.constant(bos_id), eos_id=tf.constant(eos_id)
         ),
     }
 
 
-def scatter_feats(input_tensor, sequence_feats, scatter_vals):
+def scatter_feats(output_shape, sequence_feats, scatter_vals):
+    input_tensor = tf.zeros(shape=output_shape, dtype=tf.float32)
+    input_tensor.set_shape([None, None, 768])
     mask = tf.math.not_equal(scatter_vals[:, :, 0], -1)
     feats = tf.boolean_mask(sequence_feats, mask)
     scatter_idxs = tf.boolean_mask(scatter_vals, mask)
-    print(feats.shape, scatter_idxs.shape)
     # Averages any cases where tokens are in multiple cells - for example when cells span multiple rows / cols.
     divide_by = tf.tensor_scatter_nd_add(
         tf.zeros_like(input_tensor), scatter_idxs, tf.ones_like(feats)
@@ -291,16 +295,58 @@ def scatter_feats(input_tensor, sequence_feats, scatter_vals):
 def reassemble_sequence_feats(
     shape, row_sequence_feats, col_sequence_feats, row_scatter_vals, col_scatter_vals
 ):
-    output = tf.zeros(shape=shape, dtype=tf.float32)
-    output.set_shape([None, None, 768])
     return tf.concat(
         [
-            scatter_feats(output, col_sequence_feats, col_scatter_vals),
-            scatter_feats(output, row_sequence_feats, row_scatter_vals),
+            scatter_feats(shape, col_sequence_feats, col_scatter_vals),
+            scatter_feats(shape, row_sequence_feats, row_scatter_vals),
         ],
         -1,
     )
 
+def adaptor_block(inp, hidden_dim):
+    # Note - no residual in here as the residual connection will be from the original stack and not the mixed stack.
+    hidden = tf.compat.v1.layers.dense(inp, hidden_dim, activation=gelu, kernel_initializer=tf.compat.v1.truncated_normal_initializer(stddev=1e-3))
+    return tf.compat.v1.layers.dense(hidden, inp.shape[-1], activation=None, kernel_initializer=tf.compat.v1.truncated_normal_initializer(stddev=1e-3))
+
+def table_cross_row_col_mixing_fn(row_feats, col_feats, *, lengths, context, output_shape, row_col_values, max_rows_cols=MAX_ROWS_AND_COLS):
+    bos_var = tf.compat.v1.get_variable(
+        'bos',
+        shape=[768],
+        dtype=tf.float32,
+        initializer=tf.compat.v1.truncated_normal_initializer(),
+        trainable=True
+    )
+    eos_var = tf.compat.v1.get_variable(
+        'eos',
+        shape=[768],
+        dtype=tf.float32,
+        initializer=tf.compat.v1.truncated_normal_initializer(),
+        trainable=True
+    )
+    end_col, end_row, start_col, start_row = tf.unstack(context, num=4, axis=2)
+    batch_idx = tf.tile(
+        tf.expand_dims(tf.range(output_shape[0]), 1), [1, output_shape[1]]
+    )
+    seq_idx = tf.tile(tf.expand_dims(tf.range(output_shape[1]), 0), [output_shape[0], 1])
+    scatter_idx_orig = tf.stack([batch_idx, seq_idx], axis=-1)  # batch, seq, 2
+
+    col_feats_orig_shape = scatter_feats(output_shape, col_feats, row_col_values["col"]["scatter_vals"])
+    row_feats_orig_shape = scatter_feats(output_shape, row_feats, row_col_values["row"]["scatter_vals"])
+
+    # Scatter col feats into rows arrangement
+    col_feats_reshaped = slice_and_dice_tables(
+        col_feats_orig_shape, lengths, scatter_idx_orig, start_row, end_row, start_col, max_rows_cols, bos_id=bos_var, eos_id=eos_var
+    )["values"]
+
+    # Scatter row feats into cols arrangement.
+    row_feats_reshaped = slice_and_dice_tables(
+        row_feats_orig_shape, lengths, scatter_idx_orig, start_col, end_col, start_row, max_rows_cols, bos_id=bos_var, eos_id=eos_var
+    )["values"]
+
+    return adaptor_block(col_feats_reshaped, 64) + row_feats, adaptor_block(row_feats_reshaped, 64) + col_feats
+
+
+    
 
 def table_roberta_featurizer(
     X,
@@ -447,6 +493,153 @@ def table_roberta_featurizer(
             "features": tf.zeros(shape=[initial_shape[0], 768]),
             "sequence_features": reassemble_sequence_feats(
                 tf.concat([tf.shape(X), [config.n_embed]], axis=0),
+                row_sequence_features,
+                col_sequence_features,
+                row_col_values["row"]["scatter_vals"],
+                row_col_values["col"]["scatter_vals"],
+            ),
+            "lengths": lengths,
+            "eos_idx": eos_idx,
+        }
+        if config.num_layers_trained == 0:
+            output_state = {k: tf.stop_gradient(v) for k, v in output_state.items()}
+
+        return output_state
+
+
+
+def table_roberta_featurizer_twinbert(
+    X,
+    encoder,
+    config,
+    train=False,
+    reuse=None,
+    context=None,
+    total_num_steps=None,
+    underlying_model=TwinBertModel,
+    max_length=None,
+    lengths=None,
+    **kwargs
+):
+    """
+    The transformer element of the finetuning model. Maps from tokens ids to a dense, embedding of the sequence.
+
+    :param X: A tensor of token indexes with shape [batch_size, sequence_length, token_idx]
+    :param encoder: A TextEncoder object.
+    :param config: A config object, containing all parameters for the featurizer.
+    :param train: If this flag is true, dropout and losses are added to the graph.
+    :param reuse: Should reuse be set within this scope.
+    :return: A dict containing;
+        embed_weights: the word embedding matrix.
+        features: The output of the featurizer_final state.
+        sequence_features: The output of the featurizer at each timestep.
+    """
+
+    is_roberta = config.base_model.is_roberta
+    is_roberta_v1 = is_roberta and config.base_model.encoder == RoBERTaEncoder
+
+    if max_length is None:
+        max_length = config.max_length
+    bert_config = BertConfig(
+        vocab_size=encoder.vocab_size,
+        hidden_size=config.n_embed,
+        num_hidden_layers=config.n_layer,
+        num_attention_heads=config.n_heads,
+        intermediate_size=config.bert_intermediate_size,
+        hidden_act=config.act_fn,
+        hidden_dropout_prob=config.resid_p_drop,
+        attention_probs_dropout_prob=config.attn_p_drop,
+        max_position_embeddings=512,  # Overriden because we have a much longer effective max length than the models support.
+        type_vocab_size=2,
+        initializer_range=config.weight_stddev,
+        low_memory_mode=config.low_memory_mode,
+        pos_injection=config.context_injection,
+        reading_order_removed=config.reading_order_removed,
+        anneal_reading_order=config.anneal_reading_order,
+        positional_channels=config.context_channels,
+    )
+
+    initial_shape = tf.shape(input=X)
+    X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-1:]), 0))
+    # X.set_shape([None, None])
+    # To fit the interface of finetune we are going to compute the mask and type id at runtime.
+    delimiters = tf.cast(tf.equal(X, encoder.delimiter_token), tf.int32)
+    seq_length = tf.shape(input=delimiters)[1]
+
+    def get_eos():
+        return tf.argmax(
+            input=tf.cast(delimiters, tf.float32)
+            * tf.expand_dims(
+                tf.range(tf.cast(seq_length, tf.float32), dtype=tf.float32), 0
+            ),
+            axis=1,
+        )
+
+    def get_zeros():
+        return tf.zeros(tf.shape(X)[0], dtype=tf.int64)
+
+    eos_idx = tf.cond(tf.equal(seq_length, 0), true_fn=get_zeros, false_fn=get_eos)
+    if is_roberta:
+        # In our use case (padding token has index 1), roberta's position indexes begin at 2, so our
+        # positions embeddings come from indices 2:514.
+        if is_roberta_v1:
+            # v1 vocab didn't include MASK token although the embedding did
+            bert_config.vocab_size += 1
+
+        bert_config.max_position_embeddings += 2
+
+    if config.num_layers_trained not in [config.n_layer, 0]:
+        raise ValueError(
+            "Bert base model does not support num_layers_trained not equal to 0 or n_layer"
+        )
+
+    if config.anneal_reading_order:
+        reading_order_decay_rate = get_decay_for_half(total_num_steps)
+    else:
+        reading_order_decay_rate = None
+    output_shape = tf.concat([tf.shape(X), [config.n_embed]], axis=0)
+    with tf.compat.v1.variable_scope("model/featurizer", reuse=reuse):
+        row_col_values = get_row_col_values(X, context, lengths, bos_id=encoder.start_token, eos_id=encoder.end_token)
+        bert = underlying_model(
+            mixing_fn=table_cross_row_col_mixing_fn,
+            mixing_inputs=dict(
+                lengths=lengths,
+                context=context,
+                output_shape=output_shape,
+                row_col_values=row_col_values,
+            ),
+            config=bert_config,
+            is_training=train,
+            input_ids_a=row_col_values["row"]["values"],
+            input_ids_b=row_col_values["col"]["values"],
+
+            input_mask_a=tf.sequence_mask(
+                row_col_values["row"]["seq_lens"],
+                maxlen=tf.shape(row_col_values["row"]["values"])[1],
+                dtype=tf.float32,
+            ),
+            input_mask_b=tf.sequence_mask(
+                row_col_values["col"]["seq_lens"],
+                maxlen=tf.shape(row_col_values["col"]["values"])[1],
+                dtype=tf.float32,
+            ),
+            token_type_ids_a=tf.zeros_like(row_col_values["row"]["values"]),
+            token_type_ids_b=tf.zeros_like(row_col_values["col"]["values"]),            
+            use_one_hot_embeddings=False,
+            scope=None,
+            use_token_type=config.bert_use_type_embed,
+            roberta=is_roberta,
+            reading_order_decay_rate=reading_order_decay_rate,
+        )
+        embed_weights = bert.get_embedding_table()
+        row_sequence_features, col_sequence_features = bert.sequence_output
+
+        #row_sequence_features = tf.compat.v1.Print(row_sequence_features, ["row shape", tf.shape(row_sequence_features), "col shape", tf.shape(col_sequence_features)])
+        output_state = {
+            "embed_weights": embed_weights,
+            "features": tf.zeros(shape=[initial_shape[0], 768]),
+            "sequence_features": reassemble_sequence_feats(
+                output_shape,
                 row_sequence_features,
                 col_sequence_features,
                 row_col_values["row"]["scatter_vals"],

@@ -65,6 +65,7 @@ from finetune.base_models.bert.model import (
     LayoutLM,
     XDocBase,
     TableRoBERTa,
+    TableRoBERTaTwinBert,
 )
 from finetune.base_models.tcn.model import TCNModel
 from finetune.base_models.oscar.model import GPCModel

@@ -1188,6 +1188,271 @@ def assert_rank(tensor, expected_rank, name=None):
         )
 
 
+def twin_transformer_model(
+                      input_tensor_a,
+                      input_tensor_b,
+                      attention_mask_a=None,
+                      attention_mask_b=None,
+                      mixing_inputs=None,
+                      mixing_fn=None,
+                      hidden_size=768,
+                      num_hidden_layers=12,
+                      num_attention_heads=12,
+                      intermediate_size=3072,
+                      intermediate_act_fn=gelu,
+                      hidden_dropout_prob=0.1,
+                      attention_probs_dropout_prob=0.1,
+                      initializer_range=0.02,
+                      do_return_all_layers=False,
+                      low_memory_mode=False):
+    assert do_return_all_layers == False
+    if hidden_size % num_attention_heads != 0:
+        raise ValueError(
+            "The hidden size (%d) is not a multiple of the number of attention "
+            "heads (%d)" % (hidden_size, num_attention_heads))
+
+    if mixing_inputs is None:
+        mixing_inputs = dict()
+
+    attention_head_size = int(hidden_size / num_attention_heads)
+    input_shape_a = get_shape_list(input_tensor_a, expected_rank=3)
+    input_shape_b = get_shape_list(input_tensor_b, expected_rank=3)
+
+    input_width = input_shape_a[2]
+
+    # The Transformer performs sum residuals on all layers so the input needs
+    # to be the same as the hidden size.
+    if input_width != hidden_size:
+        raise ValueError("The width of the input tensor (%d) != hidden size (%d)" %
+                         (input_width, hidden_size))
+
+    # We keep the representation as a 2D tensor to avoid re-shaping it back and
+    # forth from a 3D tensor to a 2D tensor. Re-shapes are normally free on
+    # the GPU/CPU but may not be free on the TPU, so we want to minimize them to
+    # help the optimizer.
+    prev_output_a = reshape_to_matrix(input_tensor_a)
+    prev_output_b = reshape_to_matrix(input_tensor_b)
+
+    for layer_idx in range(num_hidden_layers):
+        with tf.compat.v1.variable_scope("layer_a_%d" % layer_idx):
+            block_fn = functools.partial(full_block,
+                                         attention_head_size=attention_head_size,
+                                         batch_size=input_shape_a[0],
+                                         seq_length=input_shape_a[1],
+                                         attention_mask=attention_mask_a,
+                                         hidden_size=hidden_size,
+                                         num_attention_heads=num_attention_heads,
+                                         intermediate_size=intermediate_size,
+                                         intermediate_act_fn=intermediate_act_fn,
+                                         hidden_dropout_prob=hidden_dropout_prob,
+                                         attention_probs_dropout_prob=attention_probs_dropout_prob,
+                                         initializer_range=initializer_range,
+            )
+
+            if low_memory_mode:
+                block_fn = recompute_grad(block_fn, use_entire_scope=True)
+            prev_output_a = block_fn(prev_output_a)
+
+        with tf.compat.v1.variable_scope("layer_b_%d" % layer_idx):
+            block_fn = functools.partial(full_block,
+                                         attention_head_size=attention_head_size,
+                                         batch_size=input_shape_b[0],
+                                         seq_length=input_shape_b[1],
+                                         attention_mask=attention_mask_b,
+                                         hidden_size=hidden_size,
+                                         num_attention_heads=num_attention_heads,
+                                         intermediate_size=intermediate_size,
+                                         intermediate_act_fn=intermediate_act_fn,
+                                         hidden_dropout_prob=hidden_dropout_prob,
+                                         attention_probs_dropout_prob=attention_probs_dropout_prob,
+                                         initializer_range=initializer_range,
+            )
+
+            if low_memory_mode:
+                block_fn = recompute_grad(block_fn, use_entire_scope=True)
+            prev_output_b = block_fn(prev_output_b)
+        
+        if mixing_fn is not None and layer_idx != num_attention_heads - 1:
+            if layer_idx % 2 == 0:
+                # TODO: probably remove this but just included to test 1 block of this.
+                with tf.compat.v1.variable_scope("mixing_fn_%d" % layer_idx):
+                    print("Building Mixing Fn")
+                    mix_output_a, mix_output_b = mixing_fn(
+                        reshape_from_matrix(prev_output_a, input_shape_a),
+                        reshape_from_matrix(prev_output_b, input_shape_b),
+                        **mixing_inputs
+                    )
+                    prev_output_a = reshape_to_matrix(mix_output_a)
+                    prev_output_b = reshape_to_matrix(mix_output_b)
+
+    final_output_a = reshape_from_matrix(prev_output_a, input_shape_a)
+    final_output_b = reshape_from_matrix(prev_output_b, input_shape_b)
+
+    return final_output_a, final_output_b
+
+
+
+class TwinBertModel(_BertModel):
+    # TODO: refactor BertModel so that we don't have to duplicate so much code if this becomes useful.
+
+
+    def __init__(
+            self,
+            config,
+            is_training,
+            input_ids_a,
+            input_ids_b,
+            input_mask_a=None,
+            input_mask_b=None,
+            token_type_ids_a=None,
+            token_type_ids_b=None,
+            mixing_fn=None,
+            mixing_inputs=None,
+            use_one_hot_embeddings=False,
+            scope=None,
+            roberta=False,
+            use_token_type=True,
+            reading_order_decay_rate=None,
+    ):
+        """Constructor for BertModel.
+
+        Args:
+            config: `BertConfig` instance.
+            is_training: bool. true for training model, false for eval model. Controls
+            whether dropout will be applied.
+            input_ids: int32 Tensor of shape [batch_size, seq_length].
+            input_mask: (optional) int32 Tensor of shape [batch_size, seq_length].
+            token_type_ids: (optional) int32 Tensor of shape [batch_size, seq_length].
+            use_one_hot_embeddings: (optional) bool. Whether to use one-hot word
+            embeddings or tf.embedding_lookup() for the word embeddings.
+            scope: (optional) variable scope. Defaults to "bert".
+
+        Raises:
+            ValueError: The config is invalid or one of the input tensor shapes
+                is invalid.
+        """
+        config = copy.deepcopy(config)
+        if not is_training:
+            config.hidden_dropout_prob = 0.0
+            config.attention_probs_dropout_prob = 0.0
+
+        input_shape_a = get_shape_list(input_ids_a, expected_rank=2)
+        batch_size_a = input_shape_a[0]
+        seq_length_a = input_shape_a[1]
+
+        input_shape_b = get_shape_list(input_ids_b, expected_rank=2)
+        batch_size_b = input_shape_b[0]
+        seq_length_b = input_shape_b[1]
+
+
+        if input_mask_a is None:
+            input_mask_a = tf.ones(shape=[batch_size_a, seq_length_a], dtype=tf.int32)
+
+        if input_mask_b is None:
+            input_mask_b = tf.ones(shape=[batch_size_b, seq_length_b], dtype=tf.int32)
+
+
+        with tf.compat.v1.variable_scope(scope, default_name="bert"):
+            with tf.compat.v1.variable_scope("embeddings"):
+                # Perform embedding lookup on the word ids.
+                (self.embedding_output_a, self.embedding_table) = embedding_lookup(
+                    input_ids=input_ids_a,
+                    vocab_size=config.vocab_size,
+                    embedding_size=config.hidden_size,
+                    initializer_range=config.initializer_range,
+                    word_embedding_name="word_embeddings",
+                    use_one_hot_embeddings=use_one_hot_embeddings,
+                )
+                # Add positional embeddings and token type embeddings, then layer
+                # normalize and perform dropout.
+                self.embedding_output_a = self.embedding_postprocessor(
+                    input_tensor=self.embedding_output_a,
+                    input_context=None,
+                    use_token_type=use_token_type,
+                    token_type_ids=token_type_ids_a,
+                    token_type_vocab_size=config.type_vocab_size,
+                    token_type_embedding_name="token_type_embeddings",
+                    use_position_embeddings=not config.reading_order_removed,
+                    position_embedding_name="position_embeddings",
+                    initializer_range=config.initializer_range,
+                    max_position_embeddings=config.max_position_embeddings,
+                    dropout_prob=config.hidden_dropout_prob,
+                    roberta=roberta,
+                    pos_injection=config.pos_injection,
+                    positional_channels=config.positional_channels,
+                    reading_order_decay_rate=reading_order_decay_rate,
+                    anneal_reading_order=config.anneal_reading_order,
+                )
+
+            with tf.compat.v1.variable_scope("embeddings", reuse=True):
+                # Perform embedding lookup on the word ids.
+                (self.embedding_output_b, _) = embedding_lookup(
+                    input_ids=input_ids_b,
+                    vocab_size=config.vocab_size,
+                    embedding_size=config.hidden_size,
+                    initializer_range=config.initializer_range,
+                    word_embedding_name="word_embeddings",
+                    use_one_hot_embeddings=use_one_hot_embeddings,
+                )
+                # Add positional embeddings and token type embeddings, then layer
+                # normalize and perform dropout.
+                self.embedding_output_b = self.embedding_postprocessor(
+                    input_tensor=self.embedding_output_b,
+                    input_context=None,
+                    use_token_type=use_token_type,
+                    token_type_ids=token_type_ids_b,
+                    token_type_vocab_size=config.type_vocab_size,
+                    token_type_embedding_name="token_type_embeddings",
+                    use_position_embeddings=not config.reading_order_removed,
+                    position_embedding_name="position_embeddings",
+                    initializer_range=config.initializer_range,
+                    max_position_embeddings=config.max_position_embeddings,
+                    dropout_prob=config.hidden_dropout_prob,
+                    roberta=roberta,
+                    pos_injection=config.pos_injection,
+                    positional_channels=config.positional_channels,
+                    reading_order_decay_rate=reading_order_decay_rate,
+                    anneal_reading_order=config.anneal_reading_order,
+                )
+
+            with tf.compat.v1.variable_scope("encoder"):
+                # This converts a 2D mask of shape [batch_size, seq_length] to a 3D
+                # mask of shape [batch_size, seq_length, seq_length] which is used
+                # for the attention scores.
+                attention_mask_a = create_attention_mask_from_input_mask(
+                    input_ids_a, input_mask_a,
+                )
+                attention_mask_b = create_attention_mask_from_input_mask(
+                    input_ids_b, input_mask_b,
+                )
+
+                # Run the stacked transformer.
+                # `sequence_output` shape = [batch_size, seq_length, hidden_size].
+                self.sequence_output = twin_transformer_model(
+                    input_tensor_a=self.embedding_output_a,
+                    input_tensor_b=self.embedding_output_b,
+                    attention_mask_a=attention_mask_a,
+                    attention_mask_b=attention_mask_b,
+                    mixing_inputs=mixing_inputs,
+                    mixing_fn=mixing_fn,
+                    hidden_size=config.hidden_size,
+                    num_hidden_layers=config.num_hidden_layers,
+                    num_attention_heads=config.num_attention_heads,
+                    intermediate_size=config.intermediate_size,
+                    intermediate_act_fn=get_activation(config.hidden_act),
+                    hidden_dropout_prob=config.hidden_dropout_prob,
+                    attention_probs_dropout_prob=config.attention_probs_dropout_prob,
+                    initializer_range=config.initializer_range,
+                    do_return_all_layers=False,
+                    low_memory_mode=config.low_memory_mode and is_training
+                )
+                self.all_encoder_layers = None
+
+    def embedding_postprocessor(self, *args, **kwargs):
+        return embedding_postprocessor(*args, pos2d_embedding_fn=docrep_pos_embed, **kwargs)
+
+
+
 class BertModel(_BertModel):
     def embedding_postprocessor(self, *args, **kwargs):
         return embedding_postprocessor(*args, pos2d_embedding_fn=docrep_pos_embed, **kwargs)
