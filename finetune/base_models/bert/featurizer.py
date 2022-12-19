@@ -163,44 +163,29 @@ def bert_featurizer(
 layoutlm_featurizer = functools.partial(bert_featurizer, underlying_model=LayoutLMModel)
 xdoc_featurizer = functools.partial(bert_featurizer, underlying_model=XDocModel)
 
-MAX_ROWS_AND_COLS = 50
-
-def get_col_masks(X, sequence_lengths, start, end, max_rows_cols=MAX_ROWS_AND_COLS):
-    # NOTE: in graph mode this could be done with a while loop - while i <= max(end)
-    # Use the while loop to get the masks and then use map_fn to apply them to each of values, scatter_idxs and pos_idx.
-    # Somehow cache the masks and re-use those across each use of slice_and_dice tables.
-    # Only build the graphs for portions that are used.
-
-    mask = tf.sequence_mask(sequence_lengths, maxlen=tf.shape(X)[1])
-    col_masks = []
-    for i in range(max_rows_cols):
-        # NOTE: in graph mode this could be done with a while loop - while i <= max(end)
-        # Use the while loop to get the masks and then use map_fn to apply them to each of values, scatter_idxs and pos_idx.
-        # Somehow cache the masks and re-use those across each use of slice_and_dice tables.
-        # Only build the graphs for portions that are used.
-        float_i = float(i)
-        # SHould not include pad values as these will have a max/min row/col of -1
-        col_mask = tf.math.logical_and(
-            tf.math.logical_and(
-                tf.math.less_equal(start, float_i), tf.math.less_equal(float_i, end)
-            ),
-            mask,
-        )
-        col_masks.append(col_mask)
-    return col_masks
-
+def get_col_masks(X, sequence_lengths, start, end):
+    mask = tf.expand_dims(tf.sequence_mask(sequence_lengths, maxlen=tf.shape(X)[1]), 0) # 1, batch, seq
+    range = tf.expand_dims(tf.expand_dims(tf.range(tf.reduce_max(end), dtype=start.dtype), 1), 1) #num_cols, 1, 1
+    start = tf.expand_dims(start, 0) # 1, batch, max_len
+    end = tf.expand_dims(end, 0) # 1, batch, max_len
+    return tf.math.logical_and(
+        tf.math.logical_and(
+            tf.math.less_equal(start, range), tf.math.less_equal(range, end)
+        ),
+        mask,
+    ) # num_cols, batch, seq
 
 def slice_and_dice_single(inp, col_masks, eos_pad, bos_pad, pad_val, max_length=512, check_len=False):
-    bos_pad = tf.RaggedTensor.from_tensor(tf.expand_dims(tf.expand_dims(bos_pad, 0), 0))
-    eos_pad = tf.RaggedTensor.from_tensor(tf.expand_dims(tf.expand_dims(eos_pad, 0), 0))
-    output = []
-    for col_mask in col_masks:
+    bos_pad_ragged = tf.RaggedTensor.from_tensor(tf.expand_dims(tf.expand_dims(bos_pad, 0), 0))
+    eos_pad_ragged = tf.RaggedTensor.from_tensor(tf.expand_dims(tf.expand_dims(eos_pad, 0), 0))
+
+    def map_fn_internal(col_mask):
         inp_values_i = tf.ragged.boolean_mask(inp, col_mask)
         batch_mask = tf.math.not_equal(inp_values_i.row_lengths(), 0)
         inp_values = tf.ragged.boolean_mask(inp_values_i, batch_mask)
         col_bs = tf.shape(inp_values.row_lengths())[0]
-        bos_expanded = tf.tile(bos_pad, [col_bs, 1, *(1 for _ in bos_pad.shape)])
-        eos_expanded = tf.tile(eos_pad, [col_bs, 1, *(1 for _ in eos_pad.shape)])
+        bos_expanded = tf.tile(bos_pad_ragged, [col_bs, 1, *(1 for _ in bos_pad.shape)])
+        eos_expanded = tf.tile(eos_pad_ragged, [col_bs, 1, *(1 for _ in eos_pad.shape)])
         inp_values = tf.concat(
             [
                 bos_expanded,
@@ -209,8 +194,19 @@ def slice_and_dice_single(inp, col_masks, eos_pad, bos_pad, pad_val, max_length=
             ],
             axis=1,
         )
-        output.append(inp_values)
-    output_ragged = tf.concat(output, axis=0)
+        return inp_values
+
+    with tf.device("cpu"):
+        output_ragged = tf.map_fn(
+            map_fn_internal,
+            col_masks,
+            fn_output_signature=tf.RaggedTensorSpec(
+                shape=[None, None] + inp.shape[2:],
+                dtype=inp.dtype,
+                ragged_rank=1,
+            ),
+            parallel_iterations=1,
+        ).merge_dims(0, 1)
     col_seq_lens = output_ragged.row_lengths()
 
     # I don't think this default matters here as these are masked. Cannot be < 0
@@ -272,22 +268,23 @@ def get_row_col_values(X, context, row_masks, col_masks, bos_id, eos_id):
 
 
 def scatter_feats(output_shape, sequence_feats, scatter_vals):
-    input_tensor = tf.zeros(shape=output_shape, dtype=tf.float32)
-    input_tensor.set_shape([None, None, 768])
-    mask = tf.math.not_equal(scatter_vals[:, :, 0], -1)
-    feats = tf.boolean_mask(sequence_feats, mask)
-    scatter_idxs = tf.boolean_mask(scatter_vals, mask)
-    # Averages any cases where tokens are in multiple cells - for example when cells span multiple rows / cols.
-    divide_by = tf.tensor_scatter_nd_add(
-        tf.zeros_like(input_tensor), scatter_idxs, tf.ones_like(feats)
-    )
-    #divide_by = tf.compat.v1.Print(divide_by, ["Divide by", divide_by[0, :, 0]], summarize=100000)
-    return tf.math.divide_no_nan(
-        tf.tensor_scatter_nd_add(
-            input_tensor, scatter_idxs, feats
-        ),
-        divide_by
-    )
+    with tf.device("cpu"):
+        input_tensor = tf.zeros(shape=output_shape, dtype=tf.float32)
+        input_tensor.set_shape([None, None, 768])
+        mask = tf.math.not_equal(scatter_vals[:, :, 0], -1)
+        feats = tf.boolean_mask(sequence_feats, mask)
+        scatter_idxs = tf.boolean_mask(scatter_vals, mask)
+        # Averages any cases where tokens are in multiple cells - for example when cells span multiple rows / cols.
+        divide_by = tf.tensor_scatter_nd_add(
+            tf.zeros_like(input_tensor), scatter_idxs, tf.ones_like(feats)
+        )
+        #divide_by = tf.compat.v1.Print(divide_by, ["Divide by", divide_by[0, :, 0]], summarize=100000)
+        return tf.math.divide_no_nan(
+            tf.tensor_scatter_nd_add(
+                input_tensor, scatter_idxs, feats
+            ),
+            divide_by
+        )
 
 
 def reassemble_sequence_feats(
