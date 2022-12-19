@@ -165,17 +165,19 @@ xdoc_featurizer = functools.partial(bert_featurizer, underlying_model=XDocModel)
 
 MAX_ROWS_AND_COLS = 50
 
-def slice_and_dice_tables(
-    X, sequence_lengths, scatter_idx_orig, start, end, other_start, max_rows_cols, bos_id, eos_id, max_length=512
-):
-    col_values_list = []
-    col_scatter_list = []
-    pos_idx_list = []
-    other_start = tf.cast(other_start, tf.int32)
+def get_col_masks(X, sequence_lengths, start, end, max_rows_cols=MAX_ROWS_AND_COLS):
+    # NOTE: in graph mode this could be done with a while loop - while i <= max(end)
+    # Use the while loop to get the masks and then use map_fn to apply them to each of values, scatter_idxs and pos_idx.
+    # Somehow cache the masks and re-use those across each use of slice_and_dice tables.
+    # Only build the graphs for portions that are used.
+
     mask = tf.sequence_mask(sequence_lengths, maxlen=tf.shape(X)[1])
+    col_masks = []
     for i in range(max_rows_cols):
         # NOTE: in graph mode this could be done with a while loop - while i <= max(end)
         # Use the while loop to get the masks and then use map_fn to apply them to each of values, scatter_idxs and pos_idx.
+        # Somehow cache the masks and re-use those across each use of slice_and_dice tables.
+        # Only build the graphs for portions that are used.
         float_i = float(i)
         # SHould not include pad values as these will have a max/min row/col of -1
         col_mask = tf.math.logical_and(
@@ -184,91 +186,41 @@ def slice_and_dice_tables(
             ),
             mask,
         )
-        #col_mask = tf.compat.v1.Print(col_mask, [col_mask])
-        col_values_i = tf.ragged.boolean_mask(X, col_mask)
-        col_scatter_i = tf.ragged.boolean_mask(scatter_idx_orig, col_mask)
-        pos_i = tf.ragged.boolean_mask(other_start, col_mask)
+        col_masks.append(col_mask)
+    return col_masks
 
-        # Which batches have non-0 number of entries in row/col X
-        batch_mask = tf.math.not_equal(col_values_i.row_lengths(), 0)
 
-        col_values = tf.ragged.boolean_mask(col_values_i, batch_mask)
-        col_bs = tf.shape(col_values.row_lengths())[0]
-        bos_expanded = tf.tile(tf.RaggedTensor.from_tensor(tf.expand_dims(tf.expand_dims(bos_id, 0), 0)), [col_bs, 1, *(1 for _ in bos_id.shape)])
-        eos_expanded = tf.tile(tf.RaggedTensor.from_tensor(tf.expand_dims(tf.expand_dims(eos_id, 0), 0)), [col_bs, 1, *(1 for _ in bos_id.shape)])
-
-        col_values = tf.concat(
+def slice_and_dice_single(inp, col_masks, eos_pad, bos_pad, pad_val, max_length=512, check_len=False):
+    bos_pad = tf.RaggedTensor.from_tensor(tf.expand_dims(tf.expand_dims(bos_pad, 0), 0))
+    eos_pad = tf.RaggedTensor.from_tensor(tf.expand_dims(tf.expand_dims(eos_pad, 0), 0))
+    output = []
+    for col_mask in col_masks:
+        inp_values_i = tf.ragged.boolean_mask(inp, col_mask)
+        batch_mask = tf.math.not_equal(inp_values_i.row_lengths(), 0)
+        inp_values = tf.ragged.boolean_mask(inp_values_i, batch_mask)
+        col_bs = tf.shape(inp_values.row_lengths())[0]
+        bos_expanded = tf.tile(bos_pad, [col_bs, 1, *(1 for _ in bos_pad.shape)])
+        eos_expanded = tf.tile(eos_pad, [col_bs, 1, *(1 for _ in eos_pad.shape)])
+        inp_values = tf.concat(
             [
                 bos_expanded,
-                col_values,
+                inp_values,
                 eos_expanded,
             ],
-            1
+            axis=1,
         )
-        col_scatter = tf.ragged.boolean_mask(col_scatter_i, batch_mask)
-        col_scatter = tf.concat(
-            [
-                tf.tile(
-                    tf.ragged.constant(
-                        [[[-1, -1]]]
-                    ),
-                    [col_bs, 1, 1]
-                ),
-                col_scatter,
-                tf.tile(
-                    tf.ragged.constant(
-                        [[[-1, -1]]]
-                    ),
-                    [col_bs, 1, 1]
-                ),
-            ],
-            1
-        )
+        output.append(inp_values)
+    output_ragged = tf.concat(output, axis=0)
+    col_seq_lens = output_ragged.row_lengths()
 
-        pos = tf.ragged.boolean_mask(pos_i, batch_mask)
-        pos = tf.stack([pos, tf.ones_like(pos) * i], -1) # Add in the current row/col idx.
-
-        # TODO: use the same values to concat as the scatter idxs to reduce graph size.
-        pos = tf.concat(
-            [
-                tf.tile(
-                    tf.ragged.constant(
-                        [[[1, 1]]]
-                    ),
-                    [col_bs, 1, 1]
-                ),
-                pos,
-                tf.tile(
-                    tf.ragged.constant(
-                        [[[1, 1]]]
-                    ),
-                    [col_bs, 1, 1]
-                ),
-            ],
-            1
-        )
-
-        col_values_list.append(col_values)
-        col_scatter_list.append(col_scatter)
-        pos_idx_list.append(pos)
-    
-    col_values_ragged = tf.concat(col_values_list, axis=0)
-    col_scatter_ragged = tf.concat(col_scatter_list, axis=0)
-    pos_ragged = tf.concat(pos_idx_list, axis=0)
-
-    col_seq_lens = col_values_ragged.row_lengths()
     # I don't think this default matters here as these are masked. Cannot be < 0
-    col_values = col_values_ragged.to_tensor(
-        default_value=1234, shape=col_values_ragged.bounding_shape()
+    col_values = output_ragged.to_tensor(
+        default_value=pad_val, shape=output_ragged.bounding_shape()
     )
-    col_scatter = col_scatter_ragged.to_tensor(
-        default_value=-1, shape=col_scatter_ragged.bounding_shape()
-    )
-    pos = pos_ragged.to_tensor(default_value=0, shape=pos_ragged.bounding_shape())
-    with tf.control_dependencies(
-        [
+    if check_len:
+        ctrl_dep = [
             tf.cond(
-                tf.shape(col_scatter)[1] > max_length,
+                tf.shape(col_values)[1] > max_length,
                 false_fn=tf.no_op,
                 true_fn=lambda: tf.compat.v1.Print(
                     True,
@@ -276,26 +228,34 @@ def slice_and_dice_tables(
                         "The length of produced tensors is > {} shape is: ".format(
                             max_length
                         ),
-                        tf.shape(col_scatter),
+                        tf.shape(col_values),
                     ],
                 ),
             )
         ]
-    ):
+    else:
+        ctrl_dep = []
+    with tf.control_dependencies(ctrl_dep):
         col_values = col_values[:, :max_length]
-        col_scatter = col_scatter[:, :max_length]
-        pos = pos[:, :max_length]
+
     return {
         "seq_lens": col_seq_lens,
         "values": col_values,
-        "scatter_vals": col_scatter,
-        "positions": pos,
+    }
+    
+
+
+def slice_and_dice_tables(
+    X, col_masks, scatter_idx_orig, context, bos_id, eos_id
+):
+    return {
+        **slice_and_dice_single(X, col_masks, eos_id, bos_id, pad_val=1234),
+        "scatter_vals": slice_and_dice_single(scatter_idx_orig, col_masks, tf.constant([-1, -1]), tf.constant([-1, -1]), pad_val=-1)["values"],
+        "positions": slice_and_dice_single(tf.cast(context[:, :, 2:], tf.int32), col_masks, tf.constant([0, 0]), tf.constant([0, 0]), pad_val=1)["values"],
     }
 
 
-def get_row_col_values(X, context, sequence_lengths, bos_id, eos_id, max_rows_cols=MAX_ROWS_AND_COLS):
-    #context = tf.compat.v1.Print(context, [context], summarize=10000)
-    end_col, end_row, start_col, start_row = tf.unstack(context, num=4, axis=2)
+def get_row_col_values(X, context, row_masks, col_masks, bos_id, eos_id):
     batch_idx = tf.tile(
         tf.expand_dims(tf.range(tf.shape(X)[0]), 1), [1, tf.shape(X)[1]]
     )
@@ -303,10 +263,10 @@ def get_row_col_values(X, context, sequence_lengths, bos_id, eos_id, max_rows_co
     scatter_idx_orig = tf.stack([batch_idx, seq_idx], axis=-1)  # batch, seq, 2
     return {
         "row": slice_and_dice_tables(
-            X, sequence_lengths, scatter_idx_orig, start_row, end_row, start_col, max_rows_cols, bos_id=tf.constant(bos_id), eos_id=tf.constant(eos_id)
+            X, row_masks, scatter_idx_orig, context, bos_id=tf.constant(bos_id), eos_id=tf.constant(eos_id)
         ),
         "col": slice_and_dice_tables(
-            X, sequence_lengths, scatter_idx_orig, start_col, end_col, start_row, max_rows_cols, bos_id=tf.constant(bos_id), eos_id=tf.constant(eos_id)
+            X, col_masks, scatter_idx_orig, context, bos_id=tf.constant(bos_id), eos_id=tf.constant(eos_id)
         ),
     }
 
@@ -346,7 +306,7 @@ def adaptor_block(inp, hidden_dim):
     hidden = tf.compat.v1.layers.dense(inp, hidden_dim, activation=gelu, kernel_initializer=tf.compat.v1.truncated_normal_initializer(stddev=1e-3))
     return tf.compat.v1.layers.dense(hidden, inp.shape[-1], activation=None, kernel_initializer=tf.compat.v1.truncated_normal_initializer(stddev=1e-3))
 
-def table_cross_row_col_mixing_fn(row_feats, col_feats, *, lengths, context, output_shape, row_col_values, max_rows_cols=MAX_ROWS_AND_COLS):
+def table_cross_row_col_mixing_fn(row_feats, col_feats, *, row_masks, col_masks, output_shape, row_col_values):
     bos_var = tf.compat.v1.get_variable(
         'bos',
         shape=[768],
@@ -361,28 +321,17 @@ def table_cross_row_col_mixing_fn(row_feats, col_feats, *, lengths, context, out
         initializer=tf.compat.v1.truncated_normal_initializer(),
         trainable=True
     )
-    end_col, end_row, start_col, start_row = tf.unstack(context, num=4, axis=2)
-    batch_idx = tf.tile(
-        tf.expand_dims(tf.range(output_shape[0]), 1), [1, output_shape[1]]
-    )
-    seq_idx = tf.tile(tf.expand_dims(tf.range(output_shape[1]), 0), [output_shape[0], 1])
-    scatter_idx_orig = tf.stack([batch_idx, seq_idx], axis=-1)  # batch, seq, 2
 
     col_feats_orig_shape = scatter_feats(output_shape, col_feats, row_col_values["col"]["scatter_vals"])
     row_feats_orig_shape = scatter_feats(output_shape, row_feats, row_col_values["row"]["scatter_vals"])
 
     # Scatter col feats into rows arrangement
-    col_feats_reshaped = slice_and_dice_tables(
-        col_feats_orig_shape, lengths, scatter_idx_orig, start_row, end_row, start_col, max_rows_cols, bos_id=bos_var, eos_id=eos_var
-    )["values"]
+    col_feats_reshaped = slice_and_dice_single(col_feats_orig_shape, row_masks, bos_pad=bos_var, eos_pad=eos_var, pad_val=1234)["values"]
 
     # Scatter row feats into cols arrangement.
-    row_feats_reshaped = slice_and_dice_tables(
-        row_feats_orig_shape, lengths, scatter_idx_orig, start_col, end_col, start_row, max_rows_cols, bos_id=bos_var, eos_id=eos_var
-    )["values"]
+    row_feats_reshaped = slice_and_dice_single(row_feats_orig_shape, col_masks, bos_pad=bos_var, eos_pad=eos_var, pad_val=1234)["values"]
 
     return adaptor_block(col_feats_reshaped, 64) + row_feats, adaptor_block(row_feats_reshaped, 64) + col_feats
-
 
     
 
@@ -477,8 +426,12 @@ def table_roberta_featurizer(
     else:
         reading_order_decay_rate = None
 
+    end_col, end_row, start_col, start_row = tf.unstack(context, num=4, axis=2)
+    row_masks = get_col_masks(X, lengths, start_row, end_row)
+    col_masks = get_col_masks(X, lengths, start_col, end_col)
+
     with tf.compat.v1.variable_scope("model/featurizer", reuse=reuse):
-        row_col_values = get_row_col_values(X, context, lengths, bos_id=encoder.start_token, eos_id=encoder.end_token)
+        row_col_values = get_row_col_values(X, context, row_masks, col_masks, bos_id=encoder.start_token, eos_id=encoder.end_token) 
         with tf.compat.v1.variable_scope("row"):
             bert = underlying_model(
                 config=bert_config,
@@ -636,15 +589,20 @@ def table_roberta_featurizer_twinbert(
     else:
         reading_order_decay_rate = None
     output_shape = tf.concat([tf.shape(X), [config.n_embed]], axis=0)
+    
+    end_col, end_row, start_col, start_row = tf.unstack(context, num=4, axis=2)
+    row_masks = get_col_masks(X, lengths, start_row, end_row)
+    col_masks = get_col_masks(X, lengths, start_col, end_col)
+
     with tf.compat.v1.variable_scope("model/featurizer", reuse=reuse):
-        row_col_values = get_row_col_values(X, context, lengths, bos_id=encoder.start_token, eos_id=encoder.end_token)
+        row_col_values = get_row_col_values(X, context, row_masks, col_masks, bos_id=encoder.start_token, eos_id=encoder.end_token)
         bert = underlying_model(
             mixing_fn=table_cross_row_col_mixing_fn,
             mixing_inputs=dict(
-                lengths=lengths,
-                context=context,
                 output_shape=output_shape,
                 row_col_values=row_col_values,
+                row_masks=row_masks,
+                col_masks=col_masks,
             ),
             config=bert_config,
             is_training=train,
