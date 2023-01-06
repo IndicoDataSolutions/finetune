@@ -586,7 +586,7 @@ class TableRoBERTaTwinBert(_BaseBert):
         "bert_use_pooler": False,
         "chunk_long_sequences": False, # Technically possible but probably undesirable here.
         "include_bos_eos": False,
-        "permit_uninitialized": r"mixing_fn_|other_pos|this_pos",
+        "permit_uninitialized": r"mixing_fn_|pos_|kernel|bias", # TODO: this can be refined.
     }
     required_files = [
         # {

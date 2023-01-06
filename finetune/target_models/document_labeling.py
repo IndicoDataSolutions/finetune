@@ -124,10 +124,10 @@ class DocumentPipeline(SequencePipeline):
             out.append(sample)
         return out
     
-    def _text_to_ids(self, X, pad_token=None):
+    def _text_to_ids(self, X, pad_token=None, is_training=False):
         offset = 0
         for X_page in X:
-            for chunk in super()._text_to_ids(X_page, pad_token):
+            for chunk in super()._text_to_ids(X_page, pad_token, is_training=is_training):
                 assert len(chunk.token_starts) == len(chunk.token_ends)
                 chunk_dict = chunk._asdict()
                 chunk_dict["token_starts"] = [start if start == -1 else start + offset for start in chunk_dict["token_starts"]]

@@ -41,7 +41,7 @@ class SequencePipeline(BasePipeline):
         # Smoothed to prevent zero division
         return self.empty_counts["empty"] / (self.empty_counts["labeled"] + 1)
 
-    def text_to_tokens_mask(self, X, Y=None, context=None):
+    def text_to_tokens_mask(self, X, Y=None, context=None, is_training=False):
         """
         Given the text from a single document (X), and optionally the labels found
         in that document (Y), tokenize the text, and yield chunks
@@ -52,7 +52,7 @@ class SequencePipeline(BasePipeline):
         pad_token = (
             [self.config.pad_token] if self.multi_label else self.config.pad_token
         )
-        out_gen = self._text_to_ids(X, pad_token=pad_token)
+        out_gen = self._text_to_ids(X, pad_token=pad_token, is_training=is_training)
 
         for out in out_gen:
             feats = {"tokens": out.token_ids}
@@ -278,6 +278,8 @@ class SequenceLabeler(BaseModel):
             # Train model with only positive chunks
             model_copy.config.max_empty_chunk_ratio = 0.0
             model_copy.config.auto_negative_sampling = False
+            # Cannot have anything that changes pred format here.
+            model_copy.config.predict_chunk_markers = False
             model_copy.finetune(Xs, Y=Y, context=context, update_hook=update_hook)
             initial_run_preds = []
 
@@ -519,12 +521,20 @@ class SequenceLabeler(BaseModel):
                 doc_idx += 1
                 last_end = 0
                 doc_level_probas = []
+                chunk_spans = []
 
             label_seq = label_seq[start:end]
             end_of_token_seq = token_end_idx[start:end]
             start_of_token_seq = token_start_idx[start:end]
             proba_seq = proba_seq[start:end]
-
+            chunk_spans.append(
+                {
+                    # This indexing is done like this because end may be > len(token_end_idx) and is intended to be used only for slicing.
+                    "start": int([i for i in token_start_idx[start: ] if i != -1][0]),
+                    "end": int(max(token_end_idx[: end])), # Max to dodge the -1s
+                    "label": "CHUNK SPAN",
+                }
+            )
             proba_seq_masked = proba_seq.copy()
 
             for il, label in enumerate(label_seq):
@@ -647,9 +657,16 @@ class SequenceLabeler(BaseModel):
                             ),
                         }
                     )
-
+                elif self.config.predict_chunk_markers:
+                    doc_annotations.append(
+                        {
+                            "prediction": doc_annotations_sample[0],
+                            "chunks": chunk_spans,
+                        }
+                    )
                 else:
                     doc_annotations.append(doc_annotations_sample[0])
+
             post_proc_time += (time.time() - start_time)
         print("Total post proc time (seconds) {}".format(post_proc_time))
         return doc_annotations

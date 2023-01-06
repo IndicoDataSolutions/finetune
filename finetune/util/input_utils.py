@@ -1,4 +1,5 @@
 import math
+import random
 
 import tensorflow as tf
 
@@ -61,7 +62,7 @@ def add_length(x, y=None):
     return x
 
 
-def batch_dataset(dataset, batch_size, shapes, n_epochs=1):
+def batch_dataset(dataset, batch_size, shapes, n_epochs=1, shuffle=False):
     if isinstance(shapes, tuple):
         shapes = ({**shapes[0], "length": tf.TensorShape([])}, shapes[1])
     else:
@@ -71,6 +72,7 @@ def batch_dataset(dataset, batch_size, shapes, n_epochs=1):
         return (
             dataset()
             .map(add_length)
+            .shuffle(500 if shuffle else 1)
             .padded_batch(batch_size, padded_shapes=shapes, drop_remainder=False)
             .repeat(n_epochs)
             .prefetch(tf.data.experimental.AUTOTUNE)
@@ -137,7 +139,7 @@ def wrap_tqdm(
 
 
 class Chunker:
-    def __init__(self, max_length, total_context_width, justify="c"):
+    def __init__(self, max_length, total_context_width, justify="c", chunk_augmentation=False):
         if total_context_width is None:
             total_context_width = 2 * max_length // 3
         assert total_context_width < max_length
@@ -157,9 +159,14 @@ class Chunker:
             self.normal_start = total_context_width // 2
 
         self.normal_end = self.normal_start + self.useful_chunk_width
+        self.chunk_augmentation = chunk_augmentation
 
-    def generate_chunks(self, length):
+    def generate_chunks(self, length, is_training=False):
+        #TODO: add chunk augmentation when is_training
         for start in range(0, length, self.useful_chunk_width):
+            if self.chunk_augmentation and is_training:
+                start += random.randint(-10, 10)
+                start = min(max(start, 0), length - 1)
             end = start + self.chunk_size
             is_start = start == 0
             is_end = end >= length

@@ -363,6 +363,17 @@ def get_default_config():
         group_attention_heads=12,
         group_n_layers=3,
         group_thresh=0.8,
+
+        # Table model
+        table_position=False,
+        table_position_type="row_col",
+        include_row_col_summaries=False, # TODO: next
+        down_project_feats=False,
+
+        #chunking_tweaks
+        reshuffle_chunks=False,
+        chunk_augmentation=False,
+        predict_chunk_markers=False,
         #
         # Serialize finetune version with model
         version=VERSION,

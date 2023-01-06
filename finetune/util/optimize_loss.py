@@ -101,7 +101,6 @@ def optimize_loss(
         tf.compat.v1.summary.scalar("loss", loss)
 
         training_fraction = tf.cast(global_step, dtype=tf.float32) / total_num_steps
-        training_fraction = tf.compat.v1.Print(training_fraction, ["LOSS", loss])
         if max_training_hours is not None:
             start_time = tf.compat.v1.get_variable(
                 initializer=tf.timestamp,
@@ -142,7 +141,6 @@ def optimize_loss(
         variables = tf.compat.v1.trainable_variables()
 
         # Compute gradients.
-        loss = tf.compat.v1.Print(loss, ["LOSS", loss])
         gradients = list(
             zip(tf.gradients(ys=loss, xs=variables, name="gradients"), variables)
         )

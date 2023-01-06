@@ -199,8 +199,8 @@ class BaseEncoder(metaclass=SingletonMeta):
             cut_len = None
         else:
             warnings.warn(
-                "Document is longer than max length allowed, trimming document to {} tokens. Try chunk_long_sequences=True".format(
-                    max_length
+                "Document is longer than max length of the model, trimming document from {} to {} tokens. Try chunk_long_sequences=True".format(
+                    -spare + max_length, max_length
                 )
             )
             empty_tokens = sum(max(overflow, 0) for overflow in overflows)

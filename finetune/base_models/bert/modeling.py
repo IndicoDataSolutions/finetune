@@ -47,6 +47,8 @@ class BertConfig(object):
             reading_order_removed=False,
             anneal_reading_order=False,
             positional_channels=None,
+            table_position=False,
+            table_position_type="row_col",
     ):
         """Constructs BertConfig.
 
@@ -88,6 +90,8 @@ class BertConfig(object):
         self.reading_order_removed = reading_order_removed
         self.anneal_reading_order = anneal_reading_order
         self.positional_channels = positional_channels
+        self.table_position = table_position
+        self.table_position_type = table_position_type
 
     @classmethod
     def from_dict(cls, json_object):
@@ -1333,6 +1337,7 @@ class TwinBertModel(_BertModel):
             ValueError: The config is invalid or one of the input tensor shapes
                 is invalid.
         """
+        self.table_position_type = config.table_position_type
         config = copy.deepcopy(config)
         if not is_training:
             config.hidden_dropout_prob = 0.0
@@ -1383,7 +1388,7 @@ class TwinBertModel(_BertModel):
                     positional_channels=config.positional_channels,
                     reading_order_decay_rate=reading_order_decay_rate,
                     anneal_reading_order=config.anneal_reading_order,
-                    pos_injection=True,
+                    pos_injection=config.table_position, #True,
 
                 )
 
@@ -1415,7 +1420,7 @@ class TwinBertModel(_BertModel):
                     positional_channels=config.positional_channels,
                     reading_order_decay_rate=reading_order_decay_rate,
                     anneal_reading_order=config.anneal_reading_order,
-                    pos_injection=True,
+                    pos_injection=config.table_position, #True,
                 )
 
             with tf.compat.v1.variable_scope("encoder"):
@@ -1455,24 +1460,16 @@ class TwinBertModel(_BertModel):
         def table_pos_embed(input_context, positional_channels, batch_size, seq_length, width):
             print("Embedding positions")
             max_row_col_embedding = 1024
-            other_pos_embed_table = tf.compat.v1.get_variable(
-                name="other_pos",
-                shape=[max_row_col_embedding, width],
-                initializer=tf.compat.v1.random_normal_initializer(stddev=1e-3),
-            )
-            this_pos_embed_table = tf.compat.v1.get_variable(
-                name="this_pos_embed",
-                shape=[max_row_col_embedding, width],
-                initializer=tf.compat.v1.random_normal_initializer(stddev=1e-3),
-            )
-            # context is in alphabetical order, so bottom, left, right, top
-            other_position = tf.cast(input_context[:, :, 0], dtype='int32')
-            this_position = tf.cast(input_context[:, :, 1], dtype='int32')
-            other_embed = tf.gather(other_pos_embed_table, other_position)
-            this_embed = tf.gather(this_pos_embed_table, this_position)
-
-            return other_embed + this_embed
-
+            output = []
+            for entry in ([0, 1] if self.table_position_type == "row_col" else [0, 1, 2, 3]):
+                position_table = tf.compat.v1.get_variable(
+                    name="pos_{}".format(entry),
+                    shape=[max_row_col_embedding, width],
+                    initializer=tf.compat.v1.random_normal_initializer(stddev=1e-3),
+                )
+                position = tf.cast(input_context[:, :, entry], dtype='int32')
+                output.append(tf.gather(position_table, position))
+            return tf.math.add_n(output)
 
         return embedding_postprocessor(*args, pos2d_embedding_fn=table_pos_embed, **kwargs)
 
