@@ -271,72 +271,43 @@ def _slice_and_dice_single(
     include_mask=False,
 ):
     print("Running slice and dice single")
-    bos_pad_ragged = tf.RaggedTensor.from_tensor(
-        tf.expand_dims(tf.expand_dims(bos_pad, 0), 0)
-    )
-    eos_pad_ragged = tf.RaggedTensor.from_tensor(
-        tf.expand_dims(tf.expand_dims(eos_pad, 0), 0)
-    )
+    with tf.device("cpu"):
+        bos_pad_ragged = tf.RaggedTensor.from_tensor(
+            tf.expand_dims(tf.expand_dims(bos_pad, 0), 0)
+        )
+        eos_pad_ragged = tf.RaggedTensor.from_tensor(
+            tf.expand_dims(tf.expand_dims(eos_pad, 0), 0)
+        )
 
-    # def map_fn_internal(col_mask):
-    #     inp_values_i = tf.ragged.boolean_mask(inp, col_mask)
-    #     batch_mask = tf.math.not_equal(inp_values_i.row_lengths(), 0)
-    #     inp_values = tf.RaggedTensor.from_row_lengths(
-    #         values=inp_values_i.flat_values,
-    #         row_lengths=tf.boolean_mask(inp_values_i.row_lengths(), batch_mask)
-    #     )
-    #     col_bs = tf.shape(inp_values.row_lengths())[0]
-    #     bos_expanded = tf.tile(bos_pad_ragged, [col_bs, 1, *(1 for _ in bos_pad.shape)])
-    #     eos_expanded = tf.tile(eos_pad_ragged, [col_bs, 1, *(1 for _ in eos_pad.shape)])
-    #     inp_values = tf.concat(
-    #         [
-    #             bos_expanded,
-    #             inp_values,
-    #             eos_expanded,
-    #         ],
-    #         axis=1,
-    #     )
-    #     return inp_values
+        inp_expanded = tf.expand_dims(inp, 0)  # 1, bs, seq, ...
+        inp_values_i = tf.ragged.boolean_mask(
+            tf.tile(inp_expanded, [tf.shape(col_masks)[0], 1, 1, *(1 for _ in bos_pad.shape)]),
+            col_masks,
+        ).merge_dims(0, 1)
+        batch_mask = tf.math.not_equal(inp_values_i.row_lengths(), 0)
+        inp_values = tf.RaggedTensor.from_row_lengths(
+            values=inp_values_i.flat_values,
+            row_lengths=tf.boolean_mask(inp_values_i.row_lengths(), batch_mask)
+        )
+        col_bs = tf.shape(inp_values.row_lengths())[0]
+        bos_expanded = tf.tile(bos_pad_ragged, [col_bs, 1, *(1 for _ in bos_pad.shape)])
+        eos_expanded = tf.tile(eos_pad_ragged, [col_bs, 1, *(1 for _ in eos_pad.shape)])
+        output_ragged = tf.concat(
+            [
+                bos_expanded,
+                inp_values,
+                eos_expanded,
+            ],
+            axis=1,
+        )
 
-    # output_ragged = tf.map_fn(
-    #     map_fn_internal,
-    #     col_masks,
-    #     fn_output_signature=tf.RaggedTensorSpec(
-    #         shape=[None, None] + inp.shape[2:],
-    #         dtype=inp.dtype,
-    #         ragged_rank=1,
-    #     ),
-    #     parallel_iterations=1,
-    # ).merge_dims(0, 1)
+        output_ragged, mask = batch_packing(output_ragged, include_mask=include_mask)
+        col_seq_lens = output_ragged.row_lengths()
 
-    inp_expanded = tf.expand_dims(inp, 0)  # 1, bs, seq, ...
-    inp_values_i = tf.ragged.boolean_mask(
-        tf.tile(inp_expanded, [tf.shape(col_masks)[0], 1, 1, *(1 for _ in bos_pad.shape)]),
-        col_masks,
-    ).merge_dims(0, 1)
-    batch_mask = tf.math.not_equal(inp_values_i.row_lengths(), 0)
-    inp_values = tf.RaggedTensor.from_row_lengths(
-           values=inp_values_i.flat_values,
-           row_lengths=tf.boolean_mask(inp_values_i.row_lengths(), batch_mask)
-    )
-    col_bs = tf.shape(inp_values.row_lengths())[0]
-    bos_expanded = tf.tile(bos_pad_ragged, [col_bs, 1, *(1 for _ in bos_pad.shape)])
-    eos_expanded = tf.tile(eos_pad_ragged, [col_bs, 1, *(1 for _ in eos_pad.shape)])
-    output_ragged = tf.concat(
-        [
-            bos_expanded,
-            inp_values,
-            eos_expanded,
-        ],
-        axis=1,
-    )
-    output_ragged, mask = batch_packing(output_ragged, include_mask=include_mask)
-    col_seq_lens = output_ragged.row_lengths()
-
-    # I don't think this default matters here as these are masked. Cannot be < 0
-    col_values = output_ragged.to_tensor(
-        default_value=pad_val, shape=[None, None] + inp.shape[2:]
-    )
+        # I don't think this default matters here as these are masked. Cannot be < 0
+        col_values = output_ragged.to_tensor(
+            default_value=pad_val, shape=[None, None] + inp.shape[2:]
+        )
     # This is to handle some edge cases where 0 length values are missing the final dim after conversion.
     col_values.set_shape([None, None] + list(inp.shape[2:]))
     max_length = tf.minimum(
@@ -603,7 +574,7 @@ def table_roberta_featurizer(
         features: The output of the featurizer_final state.
         sequence_features: The output of the featurizer at each timestep.
     """
-
+    raise ValueError("This model is currently broken.")
     is_roberta = config.base_model.is_roberta
     model_filename = config.base_model_path.rpartition("/")[-1]
     is_roberta_v1 = is_roberta and config.base_model.encoder == RoBERTaEncoder
