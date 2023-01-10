@@ -883,6 +883,7 @@ def attention_layer(
 
     # Normalize the attention scores to probabilities.
     # `attention_probs` = [B, N, F, T]
+    print("Pre softmax shape", attention_scores.shape)
     attention_probs = tf.nn.softmax(attention_scores)
 
     # This is actually dropping out entire tokens to attend to, which might
@@ -933,6 +934,7 @@ def full_block(
         attention_probs_dropout_prob=0.1,
         initializer_range=0.02,
 ):
+
     with tf.compat.v1.variable_scope("attention"):
         attention_heads = []
         with tf.compat.v1.variable_scope("self"):
@@ -1280,7 +1282,6 @@ def twin_transformer_model(
             if layer_idx % 2 == 0:
                 # TODO: probably remove this but just included to test 1 block of this.
                 with tf.compat.v1.variable_scope("mixing_fn_%d" % layer_idx):
-                    print("Building Mixing Fn")
                     mix_output_a, mix_output_b = mixing_fn(
                         reshape_from_matrix(prev_output_a, input_shape_a),
                         reshape_from_matrix(prev_output_b, input_shape_b),
@@ -1306,8 +1307,8 @@ class TwinBertModel(_BertModel):
             is_training,
             input_ids_a,
             input_ids_b,
-            input_mask_a=None,
-            input_mask_b=None,
+            attention_mask_a=None,
+            attention_mask_b=None,
             token_type_ids_a=None,
             token_type_ids_b=None,
             context_a=None,
@@ -1350,13 +1351,6 @@ class TwinBertModel(_BertModel):
         input_shape_b = get_shape_list(input_ids_b, expected_rank=2)
         batch_size_b = input_shape_b[0]
         seq_length_b = input_shape_b[1]
-
-
-        if input_mask_a is None:
-            input_mask_a = tf.ones(shape=[batch_size_a, seq_length_a], dtype=tf.int32)
-
-        if input_mask_b is None:
-            input_mask_b = tf.ones(shape=[batch_size_b, seq_length_b], dtype=tf.int32)
 
 
         with tf.compat.v1.variable_scope(scope, default_name="bert"):
@@ -1424,16 +1418,6 @@ class TwinBertModel(_BertModel):
                 )
 
             with tf.compat.v1.variable_scope("encoder"):
-                # This converts a 2D mask of shape [batch_size, seq_length] to a 3D
-                # mask of shape [batch_size, seq_length, seq_length] which is used
-                # for the attention scores.
-                attention_mask_a = create_attention_mask_from_input_mask(
-                    input_ids_a, input_mask_a,
-                )
-                attention_mask_b = create_attention_mask_from_input_mask(
-                    input_ids_b, input_mask_b,
-                )
-
                 # Run the stacked transformer.
                 # `sequence_output` shape = [batch_size, seq_length, hidden_size].
                 self.sequence_output = twin_transformer_model(
@@ -1458,7 +1442,6 @@ class TwinBertModel(_BertModel):
 
     def embedding_postprocessor(self, *args, **kwargs):
         def table_pos_embed(input_context, positional_channels, batch_size, seq_length, width):
-            print("Embedding positions")
             max_row_col_embedding = 1024
             output = []
             for entry in ([0, 1] if self.table_position_type == "row_col" else [0, 1, 2, 3]):
