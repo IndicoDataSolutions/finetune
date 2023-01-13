@@ -1,4 +1,3 @@
-import os
 import functools
 
 import tensorflow as tf
@@ -241,7 +240,7 @@ def batch_packing(ragged_input, include_mask=True):
     )
     if include_mask:
         lengths_ts = tf.math.cumsum(lengths.to_tensor(), 1)
-        raw_mask = tf.sequence_mask(lengths_ts, dtype=tf.float32)
+        raw_mask = tf.sequence_mask(lengths_ts, dtype=tf.float32, maxlen=tf.minimum(512, tf.cast(tf.reduce_max(lengths_ts), tf.int32)))
         compound_mask = tf.reduce_sum(
             tf.expand_dims(raw_mask, 2) * tf.expand_dims(raw_mask, 3), 1
         )
@@ -443,6 +442,15 @@ def scatter_feats(output_shape, sequence_feats, scatter_vals):
         tf.tensor_scatter_nd_add(input_tensor, scatter_idxs, feats), divide_by
     )
 
+
+def get_summary_values(inp, gather_vals, input_seq_len):
+    bos_mask = tf.reduce_all(tf.equal(tf.convert_to_tensor([0, input_seq_len + 1]), gather_vals), 2)
+    bos_mask_idxs = tf.range(tf.shape(inp)[1]) * tf.cast(bos_mask, tf.int32)
+    bos_mask_idxs_t = tf.transpose(bos_mask_idxs, [1, 0])
+    cumulative_max = tf.scan(lambda a, b: tf.maximum(a, b), bos_mask_idxs_t, initializer=tf.reduce_min(bos_mask_idxs_t, axis=0))
+    return tf.gather(inp, tf.transpose(cumulative_max, [1, 0]), batch_dims=1)
+
+
 def reassemble_sequence_feats(
     shape,
     row_sequence_feats,
@@ -457,18 +465,12 @@ def reassemble_sequence_feats(
         summaries = [
             scatter_feats(
                 shape,
-                tf.tile(
-                    col_sequence_feats[:, :1, :],
-                    [1, tf.shape(col_sequence_feats)[1], 1],
-                ),
+                get_summary_values(col_sequence_feats, col_scatter_vals, shape[1]),
                 col_scatter_vals,
             ),
             scatter_feats(
                 shape,
-                tf.tile(
-                    row_sequence_feats[:, :1, :],
-                    [1, tf.shape(row_sequence_feats)[1], 1],
-                ),
+                get_summary_values(row_sequence_feats, row_scatter_vals, shape[1]),
                 row_scatter_vals,
             ),
         ]
