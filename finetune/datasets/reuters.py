@@ -21,77 +21,6 @@ XML_PATH = os.path.join("Data", "Sequence", "reuters.xml")
 DATA_PATH = os.path.join("Data", "Sequence", "reuters.json")
 CHECKSUM = "a79cab99ed30b7932d46711ef8d662e0"
 
-from colorama import Back
-
-def overlaps(a, b):
-    return a["start"] < b["end"] <= a["end"] or b["start"] < a["end"] <= b["end"]
-
-def get_preds_labels_comparison(text, labels, preds):
-    char_labels = [None for _ in text]
-    char_preds = [None for _ in text]
-    for l in labels:
-        for i in range(l["start"], l["end"]):
-            char_labels[i] = l["label"]
-    for p in preds:
-        for i in range(p["start"], p["end"]):
-            char_preds[i] = p["label"]
-
-    output = []
-    for i, (p, l) in enumerate(zip(char_preds, char_labels)):
-        if p is not None or l is not None:
-            if (
-                    output
-                    and output[-1]["end"] == i
-                    and output[-1]["pred"] == p
-                    and output[-1]["label"] == l
-                    and text[i: i + 1].strip("\n")
-            ):
-                output[-1]["end"] = i + 1
-            else:
-                output.append(
-                    {
-                        "start": i,
-                        "end": i + 1,
-                        "label": l,
-                        "pred": p,
-                    }
-                )
-    return output
-
-def remove_overlaps(labels):
-    labels_out = []
-    for l in labels:
-        for lo in labels_out:
-            if overlaps(lo, l):
-                break
-        else:
-            labels_out.append(l)
-    return labels_out
-
-def adjust_positions(after, labels, offset=1):
-    for l in labels:
-        if l["start"] >= after:
-            l["start"] += offset
-        if l["end"] > after:
-            l["end"] += offset
-    return labels
-
-def get_color_text(text, labels, preds, chunk_bounds):
-    labels = remove_overlaps(labels)
-    comparison = get_preds_labels_comparison(text, labels, preds)
-    original_text = text
-    colours = [Back.RED, Back.GREEN, Back.YELLOW, Back.BLUE, Back.MAGENTA, Back.CYAN]
-    for cb in sorted(chunk_bounds, key=lambda x: -x["start"]):
-        join_txt = "✂️"
-        text = text[: cb["start"]] + join_txt + text[cb["start"]:]
-        comparison = adjust_positions(cb["start"], comparison, offset=len(join_txt))
-    comparison = sorted(comparison, key=lambda x:-x["start"])
-    for c in comparison:
-        col = Back.GREEN if c["label"] == c["pred"] else Back.RED
-        text = text[:c["start"]] + col+ text[c["start"]: c["end"]] + Back.RESET + text[c["end"]:]
-    return text
-
-
 class Reuters(Dataset):
 
     def __init__(self, filename=None, **kwargs):
@@ -149,10 +78,9 @@ if __name__ == "__main__":
         test_size=0.2,
         random_state=42
     )
-    model = SequenceLabeler(batch_size=8, n_epochs=1, val_size=0.0, max_length=32, chunk_long_sequences=True, subtoken_predictions=False, crf_sequence_labeling=True, multi_label_sequences=False, min_steps=2048, predict_chunk_markers=True)
+    model = SequenceLabeler(batch_size=1, n_epochs=3, val_size=0.0, max_length=512, chunk_long_sequences=True, subtoken_predictions=False, crf_sequence_labeling=True, multi_label_sequences=False)
     model.fit(trainX, trainY)
     predictions = model.predict(testX)
-    for t, l, p in zip(testX, testY, predictions):
-        print(get_color_text(t, l, p["prediction"], p["chunks"]))
-        input(">>>>")
-
+    print(predictions)
+    print(annotation_report(testY, predictions))
+    sequence_labeling_token_confusion(testX, testY, predictions)

@@ -1,5 +1,4 @@
 import math
-import random
 
 import tensorflow as tf
 
@@ -139,7 +138,7 @@ def wrap_tqdm(
 
 
 class Chunker:
-    def __init__(self, max_length, total_context_width, justify="c", chunk_augmentation=False):
+    def __init__(self, max_length, total_context_width, justify="c"):
         if total_context_width is None:
             total_context_width = 2 * max_length // 3
         assert total_context_width < max_length
@@ -159,14 +158,9 @@ class Chunker:
             self.normal_start = total_context_width // 2
 
         self.normal_end = self.normal_start + self.useful_chunk_width
-        self.chunk_augmentation = chunk_augmentation
 
-    def generate_chunks(self, length, is_training=False):
-        #TODO: add chunk augmentation when is_training
+    def generate_chunks(self, length):
         for start in range(0, length, self.useful_chunk_width):
-            if self.chunk_augmentation and is_training:
-                start += random.randint(-10, 10)
-                start = min(max(start, 0), length - 1)
             end = start + self.chunk_size
             is_start = start == 0
             is_end = end >= length

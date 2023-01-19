@@ -288,7 +288,6 @@ def get_default_config():
         auto_negative_sampling=False,
         max_document_chars=None,
         bio_tagging=False,
-        low_shot=False,
         #
         # Regression Params
         regression_loss="L2",
@@ -369,10 +368,10 @@ def get_default_config():
         table_position_type="row_col",
         include_row_col_summaries=False, # TODO: next
         down_project_feats=False,
+        renorm_after_class_weights=True,
 
         #chunking_tweaks
         reshuffle_chunks=False,
-        chunk_augmentation=False,
         predict_chunk_markers=False,
         #
         # Serialize finetune version with model

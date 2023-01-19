@@ -1,6 +1,4 @@
 import logging
-import functools
-from multiprocessing.sharedctypes import Value
 
 import numpy as np
 import tensorflow as tf
@@ -29,7 +27,6 @@ class PredictMode:
     ASSOCIATION = "ASSOCIATION"
     ASSOCIATION_PROBAS = "ASSOCIATION_PROBA"
     EXPLAIN = "EXPLAIN"
-    PASSTHROUGH = "PASSTHROUGH"
 
 
 def language_model_op(X, params, featurizer_state, mode, encoder):

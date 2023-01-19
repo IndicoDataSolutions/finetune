@@ -70,7 +70,6 @@ class BasePipeline(metaclass=ABCMeta):
                 max_length=self.config.max_length,
                 total_context_width=self.config.chunk_context,
                 justify=self.config.chunk_alignment,
-                chunk_augmentation=self.config.chunk_augmentation,
             )
         return self._chunker
 
@@ -116,8 +115,8 @@ class BasePipeline(metaclass=ABCMeta):
             out.append(sample)
         return out
 
-    def text_to_tokens_mask(self, X, Y=None, context=None, is_training=False):
-        out_gen = self._text_to_ids(X, pad_token=self.config.pad_token, is_training=is_training)
+    def text_to_tokens_mask(self, X, Y=None, context=None):
+        out_gen = self._text_to_ids(X, pad_token=self.config.pad_token)
         for i, out in enumerate(out_gen):
             if context is None:
                 feats = {"tokens": out.token_ids}
@@ -187,8 +186,7 @@ class BasePipeline(metaclass=ABCMeta):
     def get_dataset_from_generator(self, generator_fn, input_mode, update_hook=None):
         def chunked_and_tokenized_dataset():
             for d in generator_fn():
-                # TODO: clean it up so we do not set is_training on validation set in generator mode.s
-                yield from self.text_to_tokens_mask(**d, is_training=input_mode==InputMode.TRAIN)
+                yield from self.text_to_tokens_mask(**d)
 
         types, shapes = self.feed_shape_type_def()
 
@@ -299,7 +297,7 @@ class BasePipeline(metaclass=ABCMeta):
 
         tokenized_train_split = list(
             itertools.chain.from_iterable(
-                self.text_to_tokens_mask(**d, is_training=True) for d in train_split
+                self.text_to_tokens_mask(**d) for d in train_split
             )
         )
 
@@ -387,7 +385,7 @@ class BasePipeline(metaclass=ABCMeta):
         """
         return [X]
 
-    def _text_to_ids(self, Xs, pad_token=None, is_training=False):
+    def _text_to_ids(self, Xs, pad_token=None):
         Xs = self._format_for_encoding(Xs)
         if self.config.chunk_long_sequences and len(Xs) == 1:
             # can only chunk single sequence inputs
@@ -406,7 +404,7 @@ class BasePipeline(metaclass=ABCMeta):
             if self.config.chunk_context == 0 and self.config.add_eos_bos_to_chunk:
                 warnings.warn("""Chunk context of 0 will not capture the start
                               and end tokens added by add_eos_bos_to_chunk""")
-            for start, end, (useful_start, useful_end) in self.chunker.generate_chunks(length, is_training=is_training):
+            for start, end, (useful_start, useful_end) in self.chunker.generate_chunks(length):
                 d = dict()
                 for field in EncodedOutput._fields:
                     field_value = getattr(encoded, field)

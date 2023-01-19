@@ -9,7 +9,12 @@ from finetune.base_models.bert.modeling import (
     LayoutLMModel,
     XDocModel,
     TwinBertModel,
-    gelu,
+)
+from finetune.base_models.bert.table_utils import (
+    get_gather_indices,
+    get_row_col_values,
+    table_cross_row_col_mixing_fn,
+    reassemble_sequence_feats,
 )
 
 
@@ -163,565 +168,6 @@ layoutlm_featurizer = functools.partial(bert_featurizer, underlying_model=Layout
 xdoc_featurizer = functools.partial(bert_featurizer, underlying_model=XDocModel)
 
 
-def get_gather_indices(X, sequence_lengths, start, end):
-    seq_len = tf.shape(X)[1]
-    bs = tf.shape(X)[0]
-
-    mask = tf.expand_dims(
-        tf.sequence_mask(sequence_lengths, maxlen=seq_len), 0
-    )  # 1, batch, seq
-    range = tf.expand_dims(
-        tf.expand_dims(tf.range(tf.reduce_max(end) + 1, dtype=start.dtype), 1), 1
-    )  # num_cols, 1, 1
-    start = tf.expand_dims(start, 0)  # 1, batch, max_len
-    end = tf.expand_dims(end, 0)  # 1, batch, max_len
-    col_masks = tf.math.logical_and(
-        tf.math.logical_and(
-            tf.math.less_equal(start, range), tf.math.less_equal(range, end)
-        ),
-        mask,
-    )  # num_cols, batch, seq
-
-    batch_idx = tf.tile(
-        tf.expand_dims(tf.range(bs), 1), [1, seq_len]
-    )
-    seq_idx = tf.tile(tf.expand_dims(tf.range(seq_len), 0), [bs, 1])
-    scatter_idx_orig = tf.stack([batch_idx, seq_idx], axis=-1)  # batch, seq, 2
-    scatter_idx_orig = tf.reshape(scatter_idx_orig, [bs, seq_len, 2])
-    return _slice_and_dice_single(
-        scatter_idx_orig,
-        col_masks,
-        tf.convert_to_tensor([0, seq_len]),
-        tf.convert_to_tensor([0, seq_len + 1]),
-        pad_val=tf.convert_to_tensor([0, seq_len + 2]),
-        include_mask=True,
-    )
-
-
-
-def batch_packing(ragged_input, include_mask=True):
-    # Basically the next fit binpacking algorithm.
-
-    # If there is some fast way to sort the rows of a ragged tensor we might consider doing this first.
-    col_seq_lens = ragged_input.row_lengths()
-    max_length = tf.reduce_max(col_seq_lens)
-
-    def loop_body(l, i):
-        temp_ragged = tf.RaggedTensor.from_row_lengths(
-            values=col_seq_lens[:i],
-            row_lengths=l,
-        )
-        return (
-            tf.cond(
-                pred=tf.math.less_equal(
-                    tf.minimum(tf.reduce_sum(temp_ragged[-1]), 512),
-                    max_length - col_seq_lens[i],
-                ),
-                true_fn=lambda: tf.concat((l[:-1], [l[-1] + 1]), axis=0),
-                false_fn=lambda: tf.concat((l, [1]), axis=0),
-            ),
-            i + 1,
-        )
-
-    lengths, _ = tf.while_loop(
-        cond=lambda _, i: tf.math.less(i, tf.shape(col_seq_lens)[0]),
-        body=loop_body,
-        loop_vars=(tf.ones([1], dtype=tf.int64), tf.constant(1)),
-        parallel_iterations=1,
-        shape_invariants=(tf.TensorShape([None]), tf.TensorShape([])),
-    )
-
-    lengths = tf.RaggedTensor.from_row_lengths(
-        values=col_seq_lens,
-        row_lengths=lengths,
-    )
-    ragged = tf.RaggedTensor.from_row_lengths(
-        values=ragged_input.flat_values, row_lengths=tf.reduce_sum(lengths, 1)
-    )
-    if include_mask:
-        lengths_ts = tf.math.cumsum(lengths.to_tensor(), 1)
-        raw_mask = tf.sequence_mask(lengths_ts, dtype=tf.float32, maxlen=tf.minimum(512, tf.cast(tf.reduce_max(lengths_ts), tf.int32)))
-        compound_mask = tf.reduce_sum(
-            tf.expand_dims(raw_mask, 2) * tf.expand_dims(raw_mask, 3), 1
-        )
-        row_max = tf.reduce_max(compound_mask, 1)
-        output_mask = tf.cast(
-            tf.logical_and(
-                tf.equal(compound_mask, tf.expand_dims(row_max, 1)),
-                tf.equal(compound_mask, tf.expand_dims(row_max, 2)),
-            ),
-            tf.float32,
-        )
-    else:
-        output_mask = None
-    # output_mask = tf.compat.v1.Print(output_mask, ["Original", col_seq_lens, "After packing", ragged.row_lengths()], summarize=100000)
-    return ragged, output_mask
-
-
-def _slice_and_dice_single(
-    inp,
-    col_masks,
-    eos_pad,
-    bos_pad,
-    pad_val,
-    max_length=512,
-    max_tokens_per_batch=512 * 100,
-    check_len=False,
-    include_mask=False,
-):
-    print("Running slice and dice single")
-    with tf.device("cpu"):
-        bos_pad_ragged = tf.RaggedTensor.from_tensor(
-            tf.expand_dims(tf.expand_dims(bos_pad, 0), 0)
-        )
-        eos_pad_ragged = tf.RaggedTensor.from_tensor(
-            tf.expand_dims(tf.expand_dims(eos_pad, 0), 0)
-        )
-
-        inp_expanded = tf.expand_dims(inp, 0)  # 1, bs, seq, ...
-        inp_values_i = tf.ragged.boolean_mask(
-            tf.tile(inp_expanded, [tf.shape(col_masks)[0], 1, 1, *(1 for _ in bos_pad.shape)]),
-            col_masks,
-        ).merge_dims(0, 1)
-        batch_mask = tf.math.not_equal(inp_values_i.row_lengths(), 0)
-        inp_values = tf.RaggedTensor.from_row_lengths(
-            values=inp_values_i.flat_values,
-            row_lengths=tf.boolean_mask(inp_values_i.row_lengths(), batch_mask)
-        )
-        col_bs = tf.shape(inp_values.row_lengths())[0]
-        bos_expanded = tf.tile(bos_pad_ragged, [col_bs, 1, *(1 for _ in bos_pad.shape)])
-        eos_expanded = tf.tile(eos_pad_ragged, [col_bs, 1, *(1 for _ in eos_pad.shape)])
-        output_ragged = tf.concat(
-            [
-                bos_expanded,
-                inp_values,
-                eos_expanded,
-            ],
-            axis=1,
-        )
-
-        output_ragged, mask = batch_packing(output_ragged, include_mask=include_mask)
-        col_seq_lens = output_ragged.row_lengths()
-
-        # I don't think this default matters here as these are masked. Cannot be < 0
-        col_values = output_ragged.to_tensor(
-            default_value=pad_val, shape=[None, None] + inp.shape[2:]
-        )
-    # This is to handle some edge cases where 0 length values are missing the final dim after conversion.
-    col_values.set_shape([None, None] + list(inp.shape[2:]))
-    max_length = tf.minimum(
-        tf.math.floordiv(max_tokens_per_batch, tf.shape(col_values)[0]), max_length
-    )
-    if check_len:
-        ctrl_dep = [
-            tf.cond(
-                tf.shape(col_values)[1] > max_length,
-                false_fn=tf.no_op,
-                true_fn=lambda: tf.compat.v1.Print(
-                    True,
-                    [
-                        "The length of produced tensors is >",
-                        max_length,
-                        "shape is: ",
-                        tf.shape(col_values),
-                    ],
-                ),
-            )
-        ]
-    else:
-        ctrl_dep = []
-    with tf.control_dependencies(ctrl_dep):
-        col_values = col_values[:, :max_length]
-        if include_mask:
-            mask = mask[:, :max_length, :max_length]
-            mask.set_shape([None, None, None])
-
-    col_values.set_shape([None, None] + list(inp.shape[2:]))
-    return {
-        "seq_lens": col_seq_lens,  # tf.compat.v1.Print(col_seq_lens, ["Lengths", col_seq_lens], summarize=1000),
-        "values": col_values,
-        "attn_mask": mask,
-    }
-
-def gather_col_vals(
-    inp,
-    gather_output,
-    eos_pad,
-    bos_pad,
-    pad_val,
-):
-    bs = tf.shape(inp)[0]
-    bos_expanded = tf.tile(tf.expand_dims(tf.expand_dims(bos_pad, 0), 0), [bs, 1, *(1 for _ in bos_pad.shape)])
-    eos_expanded = tf.tile(tf.expand_dims(tf.expand_dims(eos_pad, 0), 0), [bs, 1, *(1 for _ in eos_pad.shape)])
-    inp_w_extra_toks = tf.concat(
-        [
-            inp,
-            bos_expanded,
-            eos_expanded,
-            tf.ones_like(eos_expanded) * pad_val
-        ],
-        axis=1
-    )
-    values = tf.gather_nd(indices=gather_output["values"], params=inp_w_extra_toks)
-    return {
-        "seq_lens": gather_output["seq_lens"],
-        "values": values,
-        "attn_mask": gather_output["attn_mask"],
-    }
-    
-
-
-def gather_tables(
-    X,
-    col_gather,
-    context,
-    bos_id,
-    eos_id,
-    table_position_type,
-):
-    if table_position_type == "row_col":
-        pos_raw = context[:, :, 2:]
-        # 1023 because it's least likely to be used so can be a special token for EOS and BOS.
-        pos_eos = tf.constant([1023, 1023])
-    elif table_position_type == "all":
-        pos_raw = context
-        pos_eos = tf.constant([1023, 1023, 1023, 1023])
-
-    return {
-        **gather_col_vals(
-            X,
-            col_gather,
-            eos_id,
-            bos_id,
-            pad_val=1234,
-        ),
-        "scatter_vals": col_gather["values"],
-        "positions": gather_col_vals(
-            tf.cast(pos_raw, tf.int32), col_gather, pos_eos, pos_eos, pad_val=1
-        )["values"],
-    }
-
-
-def get_row_col_values(
-    X, context, row_gather, col_gather, bos_id, eos_id, table_position_type
-):
-    return {
-        "row": gather_tables(
-            X,
-            row_gather,
-            context,
-            bos_id=tf.constant(bos_id),
-            eos_id=tf.constant(eos_id),
-            table_position_type=table_position_type,
-        ),
-        "col": gather_tables(
-            X,
-            col_gather,
-            context,
-            bos_id=tf.constant(bos_id),
-            eos_id=tf.constant(eos_id),
-            table_position_type=table_position_type,
-        ),
-    }
-
-
-def scatter_feats(output_shape, sequence_feats, scatter_vals):
-    print("Running scatter feats")
-    input_tensor = tf.zeros(shape=output_shape, dtype=tf.float32)
-    # input_tensor.set_shape([None, None, 768])
-    # scatter_vals.set_shape([None, None, 2])
-    mask = tf.math.less(scatter_vals[:, :, 0], output_shape[1]) # Special tokens were placed after the length of the shape.
-    feats = tf.boolean_mask(sequence_feats, mask)
-    scatter_idxs = tf.boolean_mask(scatter_vals, mask)
-    # Averages any cases where tokens are in multiple cells - for example when cells span multiple rows / cols.
-    divide_by = tf.tensor_scatter_nd_add(
-        input_tensor, scatter_idxs, tf.ones_like(feats)
-    )
-    # divide_by = tf.compat.v1.Print(divide_by, ["Divide by", divide_by[0, :, 0]], summarize=100000)
-    return tf.math.divide_no_nan(
-        tf.tensor_scatter_nd_add(input_tensor, scatter_idxs, feats), divide_by
-    )
-
-
-def get_summary_values(inp, gather_vals, input_seq_len):
-    bos_mask = tf.reduce_all(tf.equal(tf.convert_to_tensor([0, input_seq_len + 1]), gather_vals), 2)
-    bos_mask_idxs = tf.range(tf.shape(inp)[1]) * tf.cast(bos_mask, tf.int32)
-    bos_mask_idxs_t = tf.transpose(bos_mask_idxs, [1, 0])
-    cumulative_max = tf.scan(lambda a, b: tf.maximum(a, b), bos_mask_idxs_t, initializer=tf.reduce_min(bos_mask_idxs_t, axis=0))
-    return tf.gather(inp, tf.transpose(cumulative_max, [1, 0]), batch_dims=1)
-
-
-def reassemble_sequence_feats(
-    shape,
-    row_sequence_feats,
-    col_sequence_feats,
-    row_scatter_vals,
-    col_scatter_vals,
-    include_row_col_summaries,
-    down_project_feats,
-):
-    if include_row_col_summaries:
-        feat_dim = 768 * 4
-        summaries = [
-            scatter_feats(
-                shape,
-                get_summary_values(col_sequence_feats, col_scatter_vals, shape[1]),
-                col_scatter_vals,
-            ),
-            scatter_feats(
-                shape,
-                get_summary_values(row_sequence_feats, row_scatter_vals, shape[1]),
-                row_scatter_vals,
-            ),
-        ]
-    else:
-        feat_dim = 768 * 2
-        summaries = []
-
-    feats = tf.concat(
-        [
-            scatter_feats(shape, col_sequence_feats, col_scatter_vals),
-            scatter_feats(shape, row_sequence_feats, row_scatter_vals),
-            *summaries,
-        ],
-        -1,
-    )
-    feats.set_shape([None, None, feat_dim])
-    if down_project_feats:
-        feats = tf.compat.v1.layers.dense(feats, 768, activation=gelu)
-
-    return feats
-
-
-def adaptor_block(inp, hidden_dim):
-    # Note - no residual in here as the residual connection will be from the original stack and not the mixed stack.
-    hidden = tf.compat.v1.layers.dense(
-        inp,
-        hidden_dim,
-        activation=gelu,
-        kernel_initializer=tf.compat.v1.truncated_normal_initializer(stddev=1e-3),
-    )
-    return tf.compat.v1.layers.dense(
-        hidden,
-        inp.shape[-1],
-        activation=None,
-        kernel_initializer=tf.compat.v1.truncated_normal_initializer(stddev=1e-3),
-    )
-
-
-def table_cross_row_col_mixing_fn(
-    row_feats, col_feats, *, row_gather, col_gather, output_shape, row_col_values
-):
-    bos_var = tf.compat.v1.get_variable(
-        "bos",
-        shape=[768],
-        dtype=tf.float32,
-        initializer=tf.compat.v1.truncated_normal_initializer(),
-        trainable=True,
-    )
-    eos_var = tf.compat.v1.get_variable(
-        "eos",
-        shape=[768],
-        dtype=tf.float32,
-        initializer=tf.compat.v1.truncated_normal_initializer(),
-        trainable=True,
-    )
-
-    col_feats_orig_shape = scatter_feats(
-        output_shape, col_feats, row_col_values["col"]["scatter_vals"]
-    )
-    row_feats_orig_shape = scatter_feats(
-        output_shape, row_feats, row_col_values["row"]["scatter_vals"]
-    )
-
-    # Scatter col feats into rows arrangement
-    col_feats_reshaped = gather_col_vals(
-        col_feats_orig_shape, row_gather, bos_pad=bos_var, eos_pad=eos_var, pad_val=1234
-    )["values"]
-
-    # Scatter row feats into cols arrangement.
-    row_feats_reshaped = gather_col_vals(
-        row_feats_orig_shape, col_gather, bos_pad=bos_var, eos_pad=eos_var, pad_val=1234
-    )["values"]
-
-    return (
-        adaptor_block(col_feats_reshaped, 64) + row_feats,
-        adaptor_block(row_feats_reshaped, 64) + col_feats,
-    )
-
-
-def table_roberta_featurizer(
-    X,
-    encoder,
-    config,
-    train=False,
-    reuse=None,
-    context=None,
-    total_num_steps=None,
-    underlying_model=BertModel,
-    max_length=None,
-    lengths=None,
-    **kwargs
-):
-    """
-    The transformer element of the finetuning model. Maps from tokens ids to a dense, embedding of the sequence.
-
-    :param X: A tensor of token indexes with shape [batch_size, sequence_length, token_idx]
-    :param encoder: A TextEncoder object.
-    :param config: A config object, containing all parameters for the featurizer.
-    :param train: If this flag is true, dropout and losses are added to the graph.
-    :param reuse: Should reuse be set within this scope.
-    :return: A dict containing;
-        embed_weights: the word embedding matrix.
-        features: The output of the featurizer_final state.
-        sequence_features: The output of the featurizer at each timestep.
-    """
-    raise ValueError("This model is currently broken.")
-    is_roberta = config.base_model.is_roberta
-    model_filename = config.base_model_path.rpartition("/")[-1]
-    is_roberta_v1 = is_roberta and config.base_model.encoder == RoBERTaEncoder
-    if max_length is None:
-        max_length = config.max_length
-    bert_config = BertConfig(
-        vocab_size=encoder.vocab_size,
-        hidden_size=config.n_embed,
-        num_hidden_layers=config.n_layer,
-        num_attention_heads=config.n_heads,
-        intermediate_size=config.bert_intermediate_size,
-        hidden_act=config.act_fn,
-        hidden_dropout_prob=config.resid_p_drop,
-        attention_probs_dropout_prob=config.attn_p_drop,
-        max_position_embeddings=512,  # Overriden because we have a much longer effective max length than the models support.
-        type_vocab_size=2,
-        initializer_range=config.weight_stddev,
-        low_memory_mode=config.low_memory_mode,
-        pos_injection=config.context_injection,
-        reading_order_removed=config.reading_order_removed,
-        anneal_reading_order=config.anneal_reading_order,
-        positional_channels=config.context_channels,
-    )
-
-    initial_shape = tf.shape(input=X)
-    X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-1:]), 0))
-    # X.set_shape([None, None])
-    # To fit the interface of finetune we are going to compute the mask and type id at runtime.
-    delimiters = tf.cast(tf.equal(X, encoder.delimiter_token), tf.int32)
-    seq_length = tf.shape(input=delimiters)[1]
-
-    def get_eos():
-        return tf.argmax(
-            input=tf.cast(delimiters, tf.float32)
-            * tf.expand_dims(
-                tf.range(tf.cast(seq_length, tf.float32), dtype=tf.float32), 0
-            ),
-            axis=1,
-        )
-
-    def get_zeros():
-        return tf.zeros(tf.shape(X)[0], dtype=tf.int64)
-
-    eos_idx = tf.cond(tf.equal(seq_length, 0), true_fn=get_zeros, false_fn=get_eos)
-    if is_roberta:
-        # In our use case (padding token has index 1), roberta's position indexes begin at 2, so our
-        # positions embeddings come from indices 2:514.
-        if is_roberta_v1:
-            # v1 vocab didn't include MASK token although the embedding did
-            bert_config.vocab_size += 1
-
-        bert_config.max_position_embeddings += 2
-
-    if config.num_layers_trained not in [config.n_layer, 0]:
-        raise ValueError(
-            "Bert base model does not support num_layers_trained not equal to 0 or n_layer"
-        )
-
-    if config.anneal_reading_order:
-        reading_order_decay_rate = get_decay_for_half(total_num_steps)
-    else:
-        reading_order_decay_rate = None
-
-    end_col, end_row, start_col, start_row = tf.unstack(context, num=4, axis=2)
-    row_gather = get_gather_indices(X, lengths, start_row, end_row)
-    col_gather = get_gather_indices(X, lengths, start_col, end_col)
-
-    with tf.compat.v1.variable_scope("model/featurizer", reuse=reuse):
-        row_col_values = get_row_col_values(
-            X,
-            context,
-            row_gather,
-            col_gather,
-            bos_id=encoder.start_token,
-            eos_id=encoder.end_token,
-            table_position_type="row_col",
-        )
-        with tf.compat.v1.variable_scope("row"):
-            bert = underlying_model(
-                config=bert_config,
-                is_training=train,
-                input_ids=row_col_values["row"]["values"],
-                input_mask=tf.sequence_mask(
-                    row_col_values["row"]["seq_lens"],
-                    maxlen=tf.shape(row_col_values["row"]["values"])[1],
-                    dtype=tf.float32,
-                ),
-                input_context=None,
-                token_type_ids=tf.zeros_like(row_col_values["row"]["values"]),
-                use_one_hot_embeddings=False,
-                scope=None,
-                use_pooler=config.bert_use_pooler,
-                use_token_type=config.bert_use_type_embed,
-                roberta=is_roberta,
-                reading_order_decay_rate=reading_order_decay_rate,
-            )
-            embed_weights = bert.get_embedding_table()
-            row_sequence_features = bert.get_sequence_output(
-                layer_num=config.feature_layer_num
-            )
-        with tf.compat.v1.variable_scope("col"):
-            bert = underlying_model(
-                config=bert_config,
-                is_training=train,
-                input_ids=row_col_values["col"]["values"],
-                input_mask=tf.sequence_mask(
-                    row_col_values["col"]["seq_lens"],
-                    maxlen=tf.shape(row_col_values["col"]["values"])[1],
-                    dtype=tf.float32,
-                ),
-                input_context=None,
-                token_type_ids=tf.zeros_like(row_col_values["col"]["values"]),
-                use_one_hot_embeddings=False,
-                scope=None,
-                use_pooler=config.bert_use_pooler,
-                use_token_type=config.bert_use_type_embed,
-                roberta=is_roberta,
-                reading_order_decay_rate=reading_order_decay_rate,
-            )
-            embed_weights = bert.get_embedding_table()
-            col_sequence_features = bert.get_sequence_output(
-                layer_num=config.feature_layer_num
-            )
-        # row_sequence_features = tf.compat.v1.Print(row_sequence_features, ["row shape", tf.shape(row_sequence_features), "col shape", tf.shape(col_sequence_features)])
-        output_state = {
-            "embed_weights": embed_weights,
-            "features": tf.zeros(shape=[initial_shape[0], 768]),
-            "sequence_features": reassemble_sequence_feats(
-                tf.concat([tf.shape(X), [config.n_embed]], axis=0),
-                row_sequence_features,
-                col_sequence_features,
-                row_col_values["row"]["scatter_vals"],
-                row_col_values["col"]["scatter_vals"],
-                include_row_col_summaries=config.include_row_col_summaries,
-                down_project_feats=config.down_project_feats,
-            ),
-            "lengths": lengths,
-            "eos_idx": eos_idx,
-        }
-        if config.num_layers_trained == 0:
-            output_state = {k: tf.stop_gradient(v) for k, v in output_state.items()}
-
-        return output_state
-
-
 def table_roberta_featurizer_twinbert(
     X,
     encoder,
@@ -729,14 +175,13 @@ def table_roberta_featurizer_twinbert(
     train=False,
     reuse=None,
     context=None,
-    total_num_steps=None,
     underlying_model=TwinBertModel,
     max_length=None,
     lengths=None,
     **kwargs
 ):
     """
-    The transformer element of the finetuning model. Maps from tokens ids to a dense, embedding of the sequence.
+    The backbone of the table model.
 
     :param X: A tensor of token indexes with shape [batch_size, sequence_length, token_idx]
     :param encoder: A TextEncoder object.
@@ -748,7 +193,7 @@ def table_roberta_featurizer_twinbert(
         features: The output of the featurizer_final state.
         sequence_features: The output of the featurizer at each timestep.
     """
-
+    X = tf.compat.v1.Print(X, ["Input shape", tf.shape(X)])
     is_roberta = config.base_model.is_roberta
     is_roberta_v1 = is_roberta and config.base_model.encoder == RoBERTaEncoder
 
@@ -763,7 +208,7 @@ def table_roberta_featurizer_twinbert(
         hidden_act=config.act_fn,
         hidden_dropout_prob=config.resid_p_drop,
         attention_probs_dropout_prob=config.attn_p_drop,
-        max_position_embeddings=512,  # Overriden because we have a much longer effective max length than the models support.
+        max_position_embeddings=512,  # Overriden because the max length of the transformers is not the max length from our config.
         type_vocab_size=2,
         initializer_range=config.weight_stddev,
         low_memory_mode=config.low_memory_mode,
@@ -832,17 +277,13 @@ def table_roberta_featurizer_twinbert(
             roberta=is_roberta,
             reading_order_decay_rate=None,
         )
-        embed_weights = bert.get_embedding_table()
-        row_sequence_features, col_sequence_features = bert.sequence_output
 
-        # row_sequence_features = tf.compat.v1.Print(row_sequence_features, ["row shape", tf.shape(row_sequence_features), "col shape", tf.shape(col_sequence_features)])
         output_state = {
-            "embed_weights": embed_weights,
+            "embed_weights": bert.get_embedding_table(),
             "features": tf.zeros(shape=[initial_shape[0], 768]),
             "sequence_features": reassemble_sequence_feats(
                 output_shape,
-                row_sequence_features,
-                col_sequence_features,
+                *bert.sequence_output, #row, col
                 row_col_values["row"]["scatter_vals"],
                 row_col_values["col"]["scatter_vals"],
                 include_row_col_summaries=config.include_row_col_summaries,

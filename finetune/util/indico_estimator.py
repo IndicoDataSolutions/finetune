@@ -1,7 +1,5 @@
-from tracemalloc import start
 import numpy as np
 import tensorflow as tf
-import time
 
 def placeholder_like(tensor):
     return tf.compat.v1.placeholder(tensor.dtype, shape=tensor.shape)
@@ -26,7 +24,6 @@ class IndicoEstimator(tf.estimator.Estimator):
         super().__init__(*args, **kwargs)
 
     def get_features_from_fn(self, input_fn, predict=True):
-        start_time = time.time()
         with tf.Graph().as_default() as g:
             result = self._call_input_fn(input_fn, tf.estimator.ModeKeys.PREDICT)
             features, initializer = parse_input_fn_result(result)
@@ -40,8 +37,7 @@ class IndicoEstimator(tf.estimator.Estimator):
                         output.append(sess.run(features))
                     except tf.errors.OutOfRangeError:
                         break
-        print("Amount of time spent generating inputs = {}".format(time.time() - start_time))
-        return output, features
+            return output, features
 
     def close_predict(self):
         self.estimator_spec = None
@@ -65,8 +61,6 @@ class IndicoEstimator(tf.estimator.Estimator):
         self.g = self.g or tf.Graph()
         tf.compat.v1.set_random_seed(self._config.tf_random_seed)
         features_real, features = self.get_features_from_fn(input_fn)
-        start_time = time.time()
-        time_spend_elsewhere = 0.0
         with self.g.as_default():
             if self.estimator_spec is None:
                 self._create_and_assert_global_step(self.g)
@@ -111,7 +105,6 @@ class IndicoEstimator(tf.estimator.Estimator):
                 preds_evaluated = self.mon_sess.run(
                     self.predictions, feed_dict=feed_dict
                 )
-                start_yield = time.time()
                 if not yield_single_examples:
                     yield preds_evaluated
                 elif not isinstance(self.predictions, dict):
@@ -120,5 +113,3 @@ class IndicoEstimator(tf.estimator.Estimator):
                 else:
                     for i in range(self._extract_batch_length(preds_evaluated)):
                         yield {key: value[i] for key, value in preds_evaluated.items()}
-                time_spend_elsewhere += (time.time() - start_yield)
-        print("\nTotal cached predict time = {} of which {} spent blocked on yield".format(time.time() - start_time, time_spend_elsewhere))

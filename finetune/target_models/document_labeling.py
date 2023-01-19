@@ -5,20 +5,21 @@ from finetune.encoding.input_encoder import EncodedOutput
 from finetune.errors import FinetuneError
 from finetune.base_models import DocRep, LayoutLM, XDocBase
 
+
 def get_context(document, dpi_norm, base_model):
     """
-    Gets the context as formatted for the DocRep base model from 
+    Gets the context as formatted for the DocRep base model from
     the output of indico's PDFExtraction api.
     """
-    if base_model == DocRep:
-        return get_context_doc_rep(document, dpi_norm)
-    elif base_model in [LayoutLM, XDocBase]:
-        return get_context_layoutlm(document)
-    else:
-        warnings.warn("Running DocumentLabeler with a base model that doesn't utilize position info.")
-        return get_context_doc_rep(document, dpi_norm)
+    if base_model.get_context_fn is not None:
+        return base_model.get_context_fn(document, dpi_norm)
+    warnings.warn(
+        "Running DocumentLabeler with a base model that doesn't utilize position info."
+    )
+    return get_context_doc_rep(document, dpi_norm)
 
-def get_context_layoutlm(document):
+
+def get_context_layoutlm(document, dpi_norm):
     context = []
     for page in document:
         for token in page["tokens"]:
@@ -28,47 +29,51 @@ def get_context_layoutlm(document):
             height = page["pages"][0]["size"]["height"]
             context.append(
                 {
-                    'top': int(pos["top"] / height * 1000),
-                    'bottom': int(pos["bottom"] / height * 1000),
-                    'left': int(pos["left"] / width * 1000),
-                    'right': int(pos["right"] / width * 1000),
-                    'start': offset["start"],
-                    'end': offset["end"],
-                    'text': token["text"],
+                    "top": int(pos["top"] / height * 1000),
+                    "bottom": int(pos["bottom"] / height * 1000),
+                    "left": int(pos["left"] / width * 1000),
+                    "right": int(pos["right"] / width * 1000),
+                    "start": offset["start"],
+                    "end": offset["end"],
+                    "text": token["text"],
                 }
             )
     return context
 
+
 def get_context_doc_rep(document, dpi_norm):
     context = []
     for page in document:
-        # This norm factor is 
+        # This norm factor is
         if dpi_norm:
             dpi = page["pages"][0]["dpi"]
             x_norm = 300 / dpi["dpix"]
             y_norm = 300 / dpi["dpiy"]
         else:
-            x_norm = 1.
-            y_norm = 1.
+            x_norm = 1.0
+            y_norm = 1.0
 
         for token in page["tokens"]:
             pos = token["position"]
             offset = token["doc_offset"]
             context.append(
                 {
-                    'top': pos["top"] * y_norm,
-                    'bottom': pos["bottom"] * y_norm,
-                    'left': pos["left"] * x_norm,
-                    'right': pos["right"] * x_norm,
-                    'start': offset["start"],
-                    'end': offset["end"],
-                    'text': token["text"],
+                    "top": pos["top"] * y_norm,
+                    "bottom": pos["bottom"] * y_norm,
+                    "left": pos["left"] * x_norm,
+                    "right": pos["right"] * x_norm,
+                    "start": offset["start"],
+                    "end": offset["end"],
+                    "text": token["text"],
                 }
-	        )
+            )
     return context
 
+
 def _single_convert_to_finetune(*, document, dpi_norm=True, config={}):
-    context = get_context(document, dpi_norm, base_model=config.get('base_model', DocRep))
+    context = get_context(
+        document, dpi_norm, base_model=config.get("base_model", DocRep)
+    )
     texts = []
     offsets = []
     last_end = -1
@@ -80,7 +85,9 @@ def _single_convert_to_finetune(*, document, dpi_norm=True, config={}):
         else:
             texts.append(page_obj["text"] + "\n")
         offset = page_obj["doc_offset"]
-        assert offset["start"] == last_end + 1, "If ever this ceases to hold then we have a problem"
+        assert (
+            offset["start"] == last_end + 1
+        ), "If ever this ceases to hold then we have a problem"
         last_end = offset["end"]
     return texts, context
 
@@ -98,13 +105,13 @@ class DocumentPipeline(SequencePipeline):
         if Y is not None:
             Y = list(Y)
             if len(X) != len(Y):
-                raise FinetuneError("the length of your labels does not match the length of your text")
+                raise FinetuneError(
+                    "the length of your labels does not match the length of your text"
+                )
 
         out = []
         for i, x in enumerate(X):
-            text, context = _single_convert_to_finetune(
-                document=x, config=self.config
-            )
+            text, context = _single_convert_to_finetune(document=x, config=self.config)
             joined_text = "".join(text)
             sample = {
                 "X": text,
@@ -113,34 +120,42 @@ class DocumentPipeline(SequencePipeline):
             }
             if self.config.default_context:
                 for cii in context:
-                    assert cii["text"] == joined_text[cii["start"]: cii["end"]]
+                    assert cii["text"] == joined_text[cii["start"] : cii["end"]]
                 sample["context"] = context
-                
+
             if Y is not None:
                 for yii in Y[i]:
                     if "text" in yii:
-                        assert yii["text"] == joined_text[yii["start"]: yii["end"]]
+                        assert yii["text"] == joined_text[yii["start"] : yii["end"]]
                 sample["Y"] = Y[i]
             out.append(sample)
         return out
-    
-    def _text_to_ids(self, X, pad_token=None, is_training=False):
+
+    def _text_to_ids(self, X, pad_token=None):
         offset = 0
         for X_page in X:
-            for chunk in super()._text_to_ids(X_page, pad_token, is_training=is_training):
+            for chunk in super()._text_to_ids(X_page, pad_token):
                 assert len(chunk.token_starts) == len(chunk.token_ends)
                 chunk_dict = chunk._asdict()
-                chunk_dict["token_starts"] = [start if start == -1 else start + offset for start in chunk_dict["token_starts"]]
-                chunk_dict["token_ends"] = [end if end == -1 else end + offset for end in chunk_dict["token_ends"]]
+                chunk_dict["token_starts"] = [
+                    start if start == -1 else start + offset
+                    for start in chunk_dict["token_starts"]
+                ]
+                chunk_dict["token_ends"] = [
+                    end if end == -1 else end + offset
+                    for end in chunk_dict["token_ends"]
+                ]
                 chunk_dict["offset"] = offset
                 yield EncodedOutput(**chunk_dict)
             offset += len(X_page)
 
+
 class DocumentLabeler(SequenceLabeler):
     """
-    A wrapper to use SequenceLabeler ontop of indico's PDFExtraction APi 
+    A wrapper to use SequenceLabeler ontop of indico's PDFExtraction APi
     in ondocument mode with labels at a document charachter level.
     """
+
     def _get_input_pipeline(self):
         return DocumentPipeline(
             config=self.config, multi_label=self.config.multi_label_sequences

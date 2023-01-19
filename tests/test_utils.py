@@ -255,7 +255,6 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
 
 class TestGradientAccumulation(unittest.TestCase):
 
-    @tf.function
     def body_of_test_gradient_accumulating_optimizer(self, opt):
         with tf.Graph().as_default():
             loss = tf.compat.v1.get_variable("loss", shape=1)
@@ -280,15 +279,16 @@ class TestGradientAccumulation(unittest.TestCase):
                 sess.run(train_op)
 
                 val_after2 = sess.run(loss)
+
+                gs = sess.run(global_step)
                 self.assertEqual(val_before, val_after1)  # first step should not actually do anything
                 self.assertEqual(val_before - (grad_before + grad_after1) * lr, val_after2)
+                self.assertEqual(gs, (i + 1) * 2)
     
 
-    @pytest.mark.xfail
     def test_gradient_accumulating_optimizer_keras(self):
         self.body_of_test_gradient_accumulating_optimizer(tf.keras.optimizers.SGD)
 
-    @pytest.mark.xfail
     def test_gradient_accumulating_optimizer_compat(self):
         self.body_of_test_gradient_accumulating_optimizer(tf.compat.v1.train.GradientDescentOptimizer)
 

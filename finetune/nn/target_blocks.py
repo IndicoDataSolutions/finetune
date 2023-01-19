@@ -1,6 +1,5 @@
 import functools
 import tensorflow as tf
-import numpy as np
 from tensorflow_addons.text.crf import crf_log_likelihood
 
 from finetune.base_models.gpt.featurizer import attn, dropout, norm
@@ -152,23 +151,24 @@ def language_model(
         }
 
 
-def _apply_class_weight(losses, targets, class_weights=None):
+def _apply_class_weight(losses, targets, class_weights=None, norm_grads=True):
     if class_weights is not None:
         # loss multiplier applied based on true class
         weights = tf.reduce_sum(
             input_tensor=class_weights * tf.cast(targets, dtype=tf.float32), axis=1
         )
-        weights *= tf.math.divide_no_nan(
-            tf.cast(
-                tf.reduce_prod(input_tensor=tf.shape(input=weights)), dtype=tf.float32
-            ),
-            tf.reduce_sum(input_tensor=weights),
-        )
+        if norm_grads:
+            weights *= tf.math.divide_no_nan(
+                tf.cast(
+                    tf.reduce_prod(input_tensor=tf.shape(input=weights)), dtype=tf.float32
+                ),
+                tf.reduce_sum(input_tensor=weights),
+            )
         losses *= tf.expand_dims(weights, 1)
     return losses
 
 
-def _apply_multilabel_class_weight(losses, targets, class_weights=None):
+def _apply_multilabel_class_weight(losses, targets, class_weights=None, norm_grads=True):
     if class_weights is not None:
         # loss multiplier applied based on true class
         weights = (
@@ -178,12 +178,13 @@ def _apply_multilabel_class_weight(losses, targets, class_weights=None):
             # contribution of negative class
             tf.ones_like(class_weights) * (1 - tf.cast(targets, dtype=tf.float32))
         )
-        weights *= tf.math.divide_no_nan(
-            tf.cast(
-                tf.reduce_prod(input_tensor=tf.shape(input=weights)), dtype=tf.float32
-            ),
-            tf.reduce_sum(input_tensor=weights),
-        )
+        if norm_grads:
+            weights *= tf.math.divide_no_nan(
+                tf.cast(
+                    tf.reduce_prod(input_tensor=tf.shape(input=weights)), dtype=tf.float32
+                ),
+                tf.reduce_sum(input_tensor=weights),
+            )
         losses *= weights
     return losses
 
@@ -215,7 +216,7 @@ def classifier(hidden, targets, n_targets, config, train=False, reuse=None, **kw
             )
 
             clf_losses = _apply_class_weight(
-                clf_losses, targets, kwargs.get("class_weights")
+                clf_losses, targets, kwargs.get("class_weights"), norm_grads=config.renorm_after_class_weights
             )
 
         return {"logits": clf_logits, "losses": clf_losses}
@@ -243,7 +244,7 @@ def multi_choice_question(
             )
 
             clf_losses = _apply_class_weight(
-                clf_losses, targets, kwargs.get("class_weights")
+                clf_losses, targets, kwargs.get("class_weights"), norm_grads=config.renorm_after_class_weights
             )
 
         return {"logits": clf_out, "losses": clf_losses}
@@ -276,7 +277,7 @@ def multi_classifier(
                 logits=clf_logits, labels=tf.stop_gradient(targets)
             )
             clf_losses = _apply_multilabel_class_weight(
-                clf_losses, targets, kwargs.get("class_weights")
+                clf_losses, targets, kwargs.get("class_weights"), norm_grads=config.renorm_after_class_weights
             )
         return {"logits": clf_logits, "losses": clf_losses}
 
@@ -364,10 +365,13 @@ def ordinal_regressor(
         return {"logits": outputs, "losses": loss}
 
 
-def class_reweighted_grad(logits, class_weights, name="class_reweighted_grad"):
+def class_reweighted_grad(logits, class_weights, norm_grads=True, name="class_reweighted_grad"):
     def custom_grad_fn(op, g):
         new_g = g * class_weights
-        ratio = tf.math.divide_no_nan(tf.norm(g), tf.norm(new_g))
+        if norm_grads:
+            ratio = tf.math.divide_no_nan(tf.norm(g), tf.norm(new_g))
+        else:
+            ratio = 1.0
         return [new_g * ratio]
 
     @function.Defun(
@@ -499,7 +503,7 @@ def sequence_labeler(
                                 + class_weights[pad_id] * (1.0 - is_pos_cls),
                                 -1,
                             )
-                            logits_i = class_reweighted_grad(logits[-1], class_weight)
+                            logits_i = class_reweighted_grad(logits[-1], class_weight, norm_grads=config.renorm_after_class_weights)
                         else:
                             logits_i = logits[i]
                         if use_crf:
@@ -531,7 +535,7 @@ def sequence_labeler(
                     per_token_weights = tf.reduce_sum(
                         input_tensor=one_hot_class_weights, axis=-1, keepdims=True
                     )
-                    logits = class_reweighted_grad(logits, per_token_weights)
+                    logits = class_reweighted_grad(logits, per_token_weights, norm_grads=config.renorm_after_class_weights)
 
                 transition_params = tf.cast(
                     tf.compat.v1.get_variable(
@@ -570,80 +574,6 @@ def sequence_labeler(
             },
         }
 
-
-SPACY_VECTOR_MODEL = None
-
-def word_embedding(target_name: str):
-    global SPACY_VECTOR_MODEL
-    if SPACY_VECTOR_MODEL is None:
-        SPACY_VECTOR_MODEL = spacy.load("en_core_web_lg")
-    return SPACY_VECTOR_MODEL(target_name).vector
-
-def sequence_labeler_low_shot(
-    hidden,
-    targets,
-    config,
-    pad_id,
-    multilabel=False,
-    train=False,
-    reuse=None,
-    lengths=None,
-    use_crf=True,
-    target_names=None,
-    **kwargs
-):
-    with tf.compat.v1.variable_scope("sequence-labeler", reuse=reuse):
-        if targets is not None:
-            targets = tf.cast(targets, dtype=tf.int32)
-
-        output_weights = tf.constant(np.array([word_embedding(target_name) for target_name in target_names]))
-        projected = tf.compat.v1.layers.dense(hidden, output_weights.shape[1])
-
-        logits = tf.reshape(
-            tf.matmul(projected, output_weights, transpose_b=True), tf.concat([tf.shape(input=hidden)[:2], [len(target_names)]], 0)
-        )
-        loss = 0.0
-
-        default_lengths = tf.shape(input=hidden)[1] * tf.ones(
-            tf.shape(input=hidden)[0], dtype=tf.int32
-        )
-        if lengths is None:
-            lengths = default_lengths
-
-        class_weights = kwargs.get("class_weights")
-
-        with tf.device("CPU:0" if train else logits.device):
-            if class_weights is not None and train:
-                class_weights = tf.reshape(class_weights, [1, 1, -1])
-                one_hot_class_weights = class_weights * tf.one_hot(
-                    targets, depth=len(target_names)
-                )
-                per_token_weights = tf.reduce_sum(
-                    input_tensor=one_hot_class_weights, axis=-1, keepdims=True
-                )
-                logits = class_reweighted_grad(logits, per_token_weights)
-
-            if targets is not None:
-                weights = tf.math.divide_no_nan(
-                    tf.sequence_mask(
-                        lengths,
-                        maxlen=tf.shape(input=targets)[1],
-                        dtype=tf.float32,
-                    ),
-                    tf.expand_dims(tf.cast(lengths, tf.float32), -1),
-                )
-                loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(
-                    targets, logits, weights=weights
-                )
-
-        return {
-            "logits": logits,
-            "losses": loss,
-            "predict_params": {
-                "transition_matrix": None,
-                "sequence_length": lengths,
-            },
-        }
 
 def association(
     hidden, lengths, targets, n_targets, config, train=False, reuse=None, **kwargs

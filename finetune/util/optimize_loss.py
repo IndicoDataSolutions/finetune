@@ -1,14 +1,14 @@
-import functools
-
+import logging
 import tensorflow as tf
-from tensorflow.python import training
-import tensorflow_addons as tfa
 
 from finetune.optimizers.adafactor import AdafactorOptimizer
 
 from finetune.optimizers.gradient_accumulation import get_grad_accumulation_optimizer
 from finetune.optimizers.learning_rate_schedules import schedules
 from finetune.optimizers.weight_decay import AdamW
+
+LOGGER = logging.getLogger("finetune")
+
 
 OPTIMIZER_SUMMARIES = [
     "learning_rate",
@@ -146,7 +146,7 @@ def optimize_loss(
         )
         for g, v in gradients:
             if g is None:
-                print("Variable {} has None grads".format(v.name))
+                LOGGER.warning("Variable {} has None grads".format(v.name))
 
         tf.compat.v1.summary.scalar(
             "global_norm/gradient_norm",

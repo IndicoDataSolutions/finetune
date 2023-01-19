@@ -1,4 +1,3 @@
-import itertools
 import time
 import copy
 import os
@@ -14,7 +13,7 @@ from finetune.encoding.target_encoders import (
     SequenceLabelingEncoder,
     SequenceMultiLabelingEncoder,
 )
-from finetune.nn.target_blocks import sequence_labeler, sequence_labeler_low_shot
+from finetune.nn.target_blocks import sequence_labeler
 from finetune.nn.crf import sequence_decode
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
 from finetune.encoding.input_encoder import get_spacy
@@ -41,7 +40,7 @@ class SequencePipeline(BasePipeline):
         # Smoothed to prevent zero division
         return self.empty_counts["empty"] / (self.empty_counts["labeled"] + 1)
 
-    def text_to_tokens_mask(self, X, Y=None, context=None, is_training=False):
+    def text_to_tokens_mask(self, X, Y=None, context=None):
         """
         Given the text from a single document (X), and optionally the labels found
         in that document (Y), tokenize the text, and yield chunks
@@ -52,7 +51,7 @@ class SequencePipeline(BasePipeline):
         pad_token = (
             [self.config.pad_token] if self.multi_label else self.config.pad_token
         )
-        out_gen = self._text_to_ids(X, pad_token=pad_token, is_training=is_training)
+        out_gen = self._text_to_ids(X, pad_token=pad_token)
 
         for out in out_gen:
             feats = {"tokens": out.token_ids}
@@ -707,22 +706,6 @@ class SequenceLabeler(BaseModel):
         reuse=None,
         **kwargs
     ):
-        if self.config.low_shot:
-            return sequence_labeler_low_shot(
-                hidden=featurizer_state["sequence_features"],
-                targets=targets,
-                n_targets=n_outputs,
-                pad_id=config.pad_idx,
-                config=config,
-                train=train,
-                multilabel=config.multi_label_sequences,
-                reuse=reuse,
-                lengths=featurizer_state["lengths"],
-                use_crf=self.config.crf_sequence_labeling,
-                target_names=self.input_pipeline.label_encoder.target_labels,
-                **kwargs
-            )
-
         return sequence_labeler(
             hidden=featurizer_state["sequence_features"],
             targets=targets,
