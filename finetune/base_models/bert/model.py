@@ -22,7 +22,7 @@ from finetune.base_models.bert.featurizer import (
     table_roberta_featurizer_twinbert,
 )
 
-from finetune.target_models.document_labeling import get_context_doc_rep, get_context_layoutlm
+from finetune.util.context_utils import get_context_layoutlm, get_context_doc_rep
 from finetune.util.download import (
     BERT_BASE_URL,
     GPT2_BASE_URL,

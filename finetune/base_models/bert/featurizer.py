@@ -193,7 +193,6 @@ def table_roberta_featurizer_twinbert(
         features: The output of the featurizer_final state.
         sequence_features: The output of the featurizer at each timestep.
     """
-    X = tf.compat.v1.Print(X, ["Input shape", tf.shape(X)])
     is_roberta = config.base_model.is_roberta
     is_roberta_v1 = is_roberta and config.base_model.encoder == RoBERTaEncoder
 
@@ -271,6 +270,8 @@ def table_roberta_featurizer_twinbert(
             token_type_ids_b=tf.zeros_like(row_col_values["col"]["values"]),
             context_a=row_col_values["row"]["positions"],
             context_b=row_col_values["col"]["positions"],
+            pos_ids_a=row_gather["pos_ids"],
+            pos_ids_b=col_gather["pos_ids"],
             use_one_hot_embeddings=False,
             scope=None,
             use_token_type=config.bert_use_type_embed,

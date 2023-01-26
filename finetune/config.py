@@ -366,7 +366,7 @@ def get_default_config():
         # Table model
         table_position=False,
         table_position_type="row_col",
-        include_row_col_summaries=False, # TODO: next
+        include_row_col_summaries=False,
         down_project_feats=False,
         renorm_after_class_weights=True,
 

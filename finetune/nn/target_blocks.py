@@ -10,7 +10,6 @@ from finetune.nn.activations import act_fns
 from finetune.nn.nn_utils import norm
 from tensorflow.python.framework import function
 
-import spacy
 
 def perceptron(x, ny, config, w_init=None, b_init=None):
     """
@@ -84,7 +83,8 @@ def masked_language_model(
         logits = tf.nn.bias_add(logits, output_bias)
 
         mlm_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(
-            logits=logits, labels=mlm_ids,
+            logits=logits,
+            labels=mlm_ids,
         )  # No weights needed as there is no padding.
         logits = tf.scatter_nd(
             indices=flat_positions, updates=logits, shape=[batch * seq, n_vocab]
@@ -160,7 +160,8 @@ def _apply_class_weight(losses, targets, class_weights=None, norm_grads=True):
         if norm_grads:
             weights *= tf.math.divide_no_nan(
                 tf.cast(
-                    tf.reduce_prod(input_tensor=tf.shape(input=weights)), dtype=tf.float32
+                    tf.reduce_prod(input_tensor=tf.shape(input=weights)),
+                    dtype=tf.float32,
                 ),
                 tf.reduce_sum(input_tensor=weights),
             )
@@ -168,7 +169,9 @@ def _apply_class_weight(losses, targets, class_weights=None, norm_grads=True):
     return losses
 
 
-def _apply_multilabel_class_weight(losses, targets, class_weights=None, norm_grads=True):
+def _apply_multilabel_class_weight(
+    losses, targets, class_weights=None, norm_grads=True
+):
     if class_weights is not None:
         # loss multiplier applied based on true class
         weights = (
@@ -181,7 +184,8 @@ def _apply_multilabel_class_weight(losses, targets, class_weights=None, norm_gra
         if norm_grads:
             weights *= tf.math.divide_no_nan(
                 tf.cast(
-                    tf.reduce_prod(input_tensor=tf.shape(input=weights)), dtype=tf.float32
+                    tf.reduce_prod(input_tensor=tf.shape(input=weights)),
+                    dtype=tf.float32,
                 ),
                 tf.reduce_sum(input_tensor=weights),
             )
@@ -216,7 +220,10 @@ def classifier(hidden, targets, n_targets, config, train=False, reuse=None, **kw
             )
 
             clf_losses = _apply_class_weight(
-                clf_losses, targets, kwargs.get("class_weights"), norm_grads=config.renorm_after_class_weights
+                clf_losses,
+                targets,
+                kwargs.get("class_weights"),
+                norm_grads=config.renorm_after_class_weights,
             )
 
         return {"logits": clf_logits, "losses": clf_losses}
@@ -244,7 +251,10 @@ def multi_choice_question(
             )
 
             clf_losses = _apply_class_weight(
-                clf_losses, targets, kwargs.get("class_weights"), norm_grads=config.renorm_after_class_weights
+                clf_losses,
+                targets,
+                kwargs.get("class_weights"),
+                norm_grads=config.renorm_after_class_weights,
             )
 
         return {"logits": clf_out, "losses": clf_losses}
@@ -277,7 +287,10 @@ def multi_classifier(
                 logits=clf_logits, labels=tf.stop_gradient(targets)
             )
             clf_losses = _apply_multilabel_class_weight(
-                clf_losses, targets, kwargs.get("class_weights"), norm_grads=config.renorm_after_class_weights
+                clf_losses,
+                targets,
+                kwargs.get("class_weights"),
+                norm_grads=config.renorm_after_class_weights,
             )
         return {"logits": clf_logits, "losses": clf_losses}
 
@@ -365,7 +378,9 @@ def ordinal_regressor(
         return {"logits": outputs, "losses": loss}
 
 
-def class_reweighted_grad(logits, class_weights, norm_grads=True, name="class_reweighted_grad"):
+def class_reweighted_grad(
+    logits, class_weights, norm_grads=True, name="class_reweighted_grad"
+):
     def custom_grad_fn(op, g):
         new_g = g * class_weights
         if norm_grads:
@@ -503,7 +518,11 @@ def sequence_labeler(
                                 + class_weights[pad_id] * (1.0 - is_pos_cls),
                                 -1,
                             )
-                            logits_i = class_reweighted_grad(logits[-1], class_weight, norm_grads=config.renorm_after_class_weights)
+                            logits_i = class_reweighted_grad(
+                                logits[-1],
+                                class_weight,
+                                norm_grads=config.renorm_after_class_weights,
+                            )
                         else:
                             logits_i = logits[i]
                         if use_crf:
@@ -535,7 +554,11 @@ def sequence_labeler(
                     per_token_weights = tf.reduce_sum(
                         input_tensor=one_hot_class_weights, axis=-1, keepdims=True
                     )
-                    logits = class_reweighted_grad(logits, per_token_weights, norm_grads=config.renorm_after_class_weights)
+                    logits = class_reweighted_grad(
+                        logits,
+                        per_token_weights,
+                        norm_grads=config.renorm_after_class_weights,
+                    )
 
                 transition_params = tf.cast(
                     tf.compat.v1.get_variable(

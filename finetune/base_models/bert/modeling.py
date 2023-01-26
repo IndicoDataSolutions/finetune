@@ -563,6 +563,7 @@ def embedding_postprocessor(
     input_context=None,
     use_token_type=False,
     token_type_ids=None,
+    position_ids=None,
     token_type_vocab_size=16,
     token_type_embedding_name="token_type_embeddings",
     use_position_embeddings=True,
@@ -668,18 +669,21 @@ def embedding_postprocessor(
                 position_embeddings = tf.slice(
                     full_position_embeddings, [0, 0], [seq_length, -1]
                 )
-            num_dims = len(output.shape.as_list())
 
-            # Only the last two dimensions are relevant (`seq_length` and `width`), so
-            # we broadcast among the first dimensions, which is typically just
-            # the batch size.
-            position_broadcast_shape = []
-            for _ in range(num_dims - 2):
-                position_broadcast_shape.append(1)
-            position_broadcast_shape.extend([seq_length, width])
-            position_embeddings = tf.reshape(
-                position_embeddings, position_broadcast_shape
-            )
+            if position_ids is None:
+                num_dims = len(output.shape.as_list())
+                # Only the last two dimensions are relevant (`seq_length` and `width`), so
+                # we broadcast among the first dimensions, which is typically just
+                # the batch size.
+                position_broadcast_shape = []
+                for _ in range(num_dims - 2):
+                    position_broadcast_shape.append(1)
+                position_broadcast_shape.extend([seq_length, width])
+                position_embeddings = tf.reshape(
+                    position_embeddings, position_broadcast_shape
+                )
+            else:
+                position_embeddings = tf.gather(position_embeddings, position_ids)
             output += position_embeddings
 
     if pos_injection and input_context is not None:
@@ -1345,6 +1349,8 @@ class TwinBertModel(_BertModel):
         token_type_ids_b=None,
         context_a=None,
         context_b=None,
+        pos_ids_a=None,
+        pos_ids_b=None,
         mixing_fn=None,
         mixing_inputs=None,
         use_one_hot_embeddings=False,
@@ -1394,6 +1400,7 @@ class TwinBertModel(_BertModel):
                     input_context=context_a,
                     use_token_type=use_token_type,
                     token_type_ids=token_type_ids_a,
+                    position_ids=pos_ids_a,
                     token_type_vocab_size=config.type_vocab_size,
                     token_type_embedding_name="token_type_embeddings",
                     use_position_embeddings=not config.reading_order_removed,
@@ -1425,6 +1432,7 @@ class TwinBertModel(_BertModel):
                     input_context=context_b,
                     use_token_type=use_token_type,
                     token_type_ids=token_type_ids_b,
+                    position_ids=pos_ids_b,
                     token_type_vocab_size=config.type_vocab_size,
                     token_type_embedding_name="token_type_embeddings",
                     use_position_embeddings=not config.reading_order_removed,

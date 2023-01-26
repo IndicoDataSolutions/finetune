@@ -73,6 +73,7 @@ def batch_packing(ragged_input, include_mask=True):
     Returns:
         new output - repacked but still ragged.
         the mask [batch, seq_len, seq_len]
+        position ids [batch, seq_len]
     """
     # Basically the next fit binpacking algorithm.
 
@@ -130,9 +131,15 @@ def batch_packing(ragged_input, include_mask=True):
             ),
             tf.float32,
         )
+
     else:
         output_mask = None
-    return ragged, output_mask
+
+    pos_ids = tf.RaggedTensor.from_row_lengths(
+        values=tf.ragged.range(lengths.flat_values).flat_values,
+        row_lengths=tf.reduce_sum(lengths, 1),
+    )
+    return ragged, output_mask, pos_ids
 
 
 def slice_by_table_indices(
@@ -183,12 +190,15 @@ def slice_by_table_indices(
             axis=1,
         )
 
-        output_ragged, mask = batch_packing(output_ragged, include_mask=include_mask)
+        output_ragged, mask, pos_ids = batch_packing(output_ragged, include_mask=include_mask)
         col_seq_lens = output_ragged.row_lengths()
 
         # I don't think this default matters here as these are masked. Cannot be < 0
         col_values = output_ragged.to_tensor(
             default_value=pad_val, shape=[None, None] + inp.shape[2:]
+        )
+        pos_ids = pos_ids.to_tensor(
+            default_value=0, shape=[None, None]
         )
     # This is to handle some edge cases where 0 length values are missing the final dim after conversion.
     col_values.set_shape([None, None] + list(inp.shape[2:]))
@@ -218,12 +228,14 @@ def slice_by_table_indices(
         if include_mask:
             mask = mask[:, :max_length, :max_length]
             mask.set_shape([None, None, None])
+        pos_ids = pos_ids[:, :max_length]
 
     col_values.set_shape([None, None] + list(inp.shape[2:]))
     return {
         "seq_lens": col_seq_lens,
         "values": col_values,
         "attn_mask": mask,
+        "pos_ids": pos_ids,
     }
 
 
