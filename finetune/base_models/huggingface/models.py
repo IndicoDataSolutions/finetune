@@ -18,12 +18,15 @@ from transformers import (
     BertTokenizer,
     LongformerTokenizerFast,
     LongformerConfig,
+    DebertaV2Config,
+    DebertaV2TokenizerFast,
 )
 from transformers.models.t5.modeling_tf_t5 import TFT5Model
 from transformers.models.electra.modeling_tf_electra import TFElectraMainLayer
 from transformers.models.roberta.modeling_tf_roberta import TFRobertaMainLayer
 from transformers.models.albert.modeling_tf_albert import TFAlbertMainLayer
 from transformers.models.longformer.modeling_tf_longformer import TFLongformerMainLayer
+from transformers.models.deberta_v2.modeling_tf_deberta_v2 import TFDebertaV2MainLayer
 
 from transformers.models.xlm_roberta.tokenization_xlm_roberta import (
     VOCAB_FILES_NAMES,
@@ -33,6 +36,20 @@ from transformers.models.xlm_roberta.tokenization_xlm_roberta import (
 
 from finetune.util.huggingface_interface import finetune_model_from_huggingface
 
+HFDebertaV3Base = finetune_model_from_huggingface(
+    pretrained_weights="microsoft/deberta-v3-base",
+    archive_map={"microsoft/deberta-v3-base": "https://huggingface.co/microsoft/deberta-v3-base/resolve/main/tf_model.h5"},
+    hf_featurizer=TFDebertaV2MainLayer,
+    hf_tokenizer=DebertaV2TokenizerFast,
+    hf_config=DebertaV2Config,
+    config_overrides={"n_embed": 768, "n_epochs": 8, "lr": 1e-5, "batch_size": 2},
+    weights_replacement=[
+        ("tf_deberta_v2_model_4/deberta/embeddings", "model/featurizer/tf_deberta_v2_main_layer/embeddings"),
+        ("tf_deberta_v2_model_4/deberta/encoder", 'model/featurizer/tf_deberta_v2_main_layer/encoder'),
+        ("tf_deberta_v2_base_model/deberta", "model/featurizer/encoder"),
+
+    ]
+)
 
 HFXLMRoberta = finetune_model_from_huggingface(
     pretrained_weights="jplu/tf-xlm-roberta-base",
