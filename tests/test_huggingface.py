@@ -17,6 +17,7 @@ from finetune.base_models.huggingface.models import (
     HFT5,
     HFAlbert,
     HFLongformer,
+    HFDebertaV3Basem,
 )
 from finetune.target_models.seq2seq import HFS2S
 from sklearn.model_selection import train_test_split
@@ -111,6 +112,9 @@ class TestHuggingFace(unittest.TestCase):
 
     def test_albert(self):
         self.check_embeddings_equal(HFAlbert, "albert-base-v2")
+        
+    def test_deberta(self):
+        self.check_embeddings_equal(HFDebertaV3Base,"microsoft/deberta-v3-base")
 
     def test_longformer(self):
         self.check_embeddings_equal(HFLongformer, "allenai/longformer-base-4096")
