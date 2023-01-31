@@ -55,23 +55,22 @@ class HFS2S(BaseModel):
         if targets is not None:
             targets, lengths = targets
             padding_mask = tf.sequence_mask(lengths - 1, dtype=tf.float32)
-            embeds = hf_decoder(
-                (
-                    targets[:, :-1], #decoder_input_ids, # cuts final token off internally?
-                    padding_mask, #decoder_attention_mask,
-                    featurizer_state["sequence_features"], #hidden_states,
-                    encoder_decoder_mask, #encoder_attention_mask,
-                    None, #decoder_inputs_embeds,
-                    None, #head_mask,
-                    None, #encoder_head_mask,
-                    None, #decoder_past_key_value_states,
-                    False, #use_cache,
-                    None, #output_attentions,
-                    None, #output_hidden_states,
-                ),
+            decoder_out = hf_decoder(
+                input_ids=targets[:, :-1], #decoder_input_ids, # cuts final token off internally?
+                attention_mask=padding_mask, #decoder_attention_mask,
+                encoder_hidden_states=featurizer_state["sequence_features"], #hidden_states,
+                encoder_attention_mask=encoder_decoder_mask, #encoder_attention_mask,
+                use_cache=False, #use_cache,
                 training=train,
-            )[0]
-            logits = featurizer_state["embedding"](normalize_embeds(embeds), mode="linear")
+            )
+            logits = tf.matmul(
+                normalize_embeds(
+                    decoder_out.last_hidden_state
+                ),
+                featurizer_state["embedding"].weights,
+                transpose_b=True
+            )
+            logits = tf.compat.v1.Print(logits, [tf.shape(logits), tf.shape(targets[:, 1:]), targets[:, 1:]])
             loss = tf.nn.sparse_softmax_cross_entropy_with_logits(
                 logits=logits, labels=targets[:, 1:], 
             )
@@ -97,25 +96,18 @@ class HFS2S(BaseModel):
 
             def symbols_to_logits_fn(input_symbols, i, state, first=False): #[batch_size, decoded_ids] to [batch_size, vocab_size]
                 decoder_output = hf_decoder(
-                    (
-                        input_symbols[:, -1][:, None], #decoder_input_ids,
-                        None, #decoder_attention_mask, # Seems like it does this automagically because these values are unpadded
-                        state["encoder_output"], #hidden_states,
-                        state["encoder_decoder_mask"], #encoder_attention_mask,
-                        None, #decoder_inputs_embeds,
-                        None, #head_mask,
-                        None, #encoder_head_mask,
-                        None if first else state["past_states"], #decoder_past_key_value_states,
-                        True, #use_cache,
-                        None, #output_attentions,
-                        None, #output_hidden_states,
-                    ),
+                    input_ids=input_symbols, #decoder_input_ids,
+                    encoder_hidden_states=state["encoder_output"], #hidden_states,
+                    encoder_attention_mask=state["encoder_decoder_mask"], #encoder_attention_mask,
+                    # TODO: reintroduce past_key_values if we ever need to be able to run this quickly.
+                    # past_key_values=None if first else state["past_states"], #decoder_past_key_value_states,
+                    # Input ids becomes input_ids=input_symbols[:, -1][:, None] when we do.
+                    use_cache=True, #use_cache,
                     training=False,
                 )
                 # HF return objects break unpacking for some reason
-                embeds, present_state = decoder_output[0], decoder_output[1]
-                logits = featurizer_state["embedding"](normalize_embeds(embeds[:, -1]), mode="linear")
-                logits_shape = tf.shape(logits)
+                embeds, present_state = decoder_output.last_hidden_state, decoder_output.past_key_values
+                logits = tf.matmul(normalize_embeds(embeds[:, -1]), featurizer_state["embedding"].weights, transpose_b=True)
 
                 if config.delim_tokens:
                     batch_indices = tf.range(tf.shape(state["constraint"])[0])[:, None] + \
@@ -154,7 +146,7 @@ class HFS2S(BaseModel):
                 initial_ids=initial_ids,
                 beam_size=config.beam_size,
                 decode_length=config.s2s_decoder_max_length,
-                vocab_size=featurizer_state["embedding"].vocab_size,
+                vocab_size=hf_decoder.config.vocab_size,
                 alpha=config.beam_search_alpha,
                 states=states,
                 eos_id=text_encoder.end_token,

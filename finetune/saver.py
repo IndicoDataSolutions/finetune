@@ -280,6 +280,7 @@ class Saver:
                         saved_var = func(name, saved_var)
                     var_loader.add(var, saved_var)
                 else:
+                    print("Uninitialized Var: {}".format(name))
                     if name.startswith("model/featurizer"):
                         permitted = self.permit_uninitialized is not None and re.findall(self.permit_uninitialized, name)
                         if not permitted:

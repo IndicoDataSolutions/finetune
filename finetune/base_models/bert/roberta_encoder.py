@@ -23,7 +23,6 @@ class RoBERTaEncoder(GPT2Encoder):
     def __init__(
         self, encoder_path=gpt2_encoder.ENCODER_PATH, vocab_path=gpt2_encoder.VOCAB_PATH
     ):
-        BaseEncoder.__init__(self, encoder_path=encoder_path, vocab_path=vocab_path)
         self.freqs = {}
         index = 0
         with open(DICT_PATH, "r", encoding="utf-8") as freq_dict:
@@ -42,6 +41,8 @@ class RoBERTaEncoder(GPT2Encoder):
                     index + self.offset
                 )  # add 4 for the special tokens at beginning
                 index += 1
+        super().__init__(encoder_path=encoder_path, vocab_path=vocab_path)
+
 
     def _convert_to_embed_idx(self, idx):
         return self.freqs[idx]

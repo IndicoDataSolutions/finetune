@@ -74,6 +74,9 @@ class GPT2Encoder(BaseEncoder):
 
         self.decoder = {v: k for k, v in self.encoder.items()}
         self.errors = "replace"
+        self.init_encoders()
+        
+    def init_encoders(self):
         self.byte_encoder = bytes_to_unicode()
         self.byte_decoder = {v: k for k, v in self.byte_encoder.items()}
 

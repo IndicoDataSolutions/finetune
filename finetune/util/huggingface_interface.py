@@ -1,3 +1,5 @@
+from math import exp
+from multiprocessing.sharedctypes import Value
 import h5py
 import numpy as np
 import joblib as jl
@@ -18,9 +20,48 @@ from finetune.base_models import SourceModel
 from finetune.optimizers.recompute_grads import recompute_grads_w_kwargs
 from finetune.util.featurizer_fusion import fused_featurizer
 
-
 from tensorflow.python.util import tf_inspect
+from tensorflow.python.keras.utils import tf_utils
+from tensorflow.keras.layers import Embedding
 
+from transformers.models.longformer.modeling_tf_longformer import TFLongformerSelfAttention
+
+def transformer_patches(patches):
+    #TODO: Make this a context manager or something to limit the scope of these patches.
+    if patches is None:
+        return
+    if "longformer" in patches:
+        call_orig = TFLongformerSelfAttention.call
+        def new_call_longformer(self, inputs, training=False):
+            attention_mask = inputs[1]
+            orig_ne = attention_mask.__class__.__ne__
+            def custom_ne(a, b):
+                if isinstance(b, int):#a is attention_mask:
+                    return tf.math.not_equal(a, b)
+                return orig_ne(a, b)
+            attention_mask.__class__.__ne__ = custom_ne
+            output = call_orig(self, inputs=inputs, training=training)
+            attention_mask.__class__.__ne__ = orig_ne
+            return output
+        TFLongformerSelfAttention.call = new_call_longformer
+
+    if "t5" in patches:
+        @tf_utils.shape_type_conversion
+        def build(self, input_shape=None):
+            try:
+                weight_name = self.weight_name
+            except AttributeError:
+                weight_name = "embeddings"
+                
+            self.embeddings = self.add_weight(
+                shape=(self.input_dim, self.output_dim),
+                initializer=self.embeddings_initializer,
+                name=weight_name,
+                regularizer=self.embeddings_regularizer,
+                constraint=self.embeddings_constraint,
+                experimental_autocast=False)
+            self.built = True
+        Embedding.build = build 
 
 def preprocess_for_alignment(text):
     """
@@ -83,7 +124,9 @@ def finetune_model_from_huggingface(
     add_tokens=None,
     config_overrides=None,
     aggressive_token_alignment=True,
+    required_patches=None,
 ):
+    transformer_patches(required_patches)
     weights_url = archive_map[pretrained_weights]
     hf_tokenizer_instance = hf_tokenizer.from_pretrained(pretrained_weights)
 
@@ -114,10 +157,14 @@ def finetune_model_from_huggingface(
                 # Resize embeddings to account for newly added tokens
                 if add_tokens:
                     embedding = hf_model_original.get_input_embeddings()
-                    new_size = embedding.vocab_size + len(add_tokens)
-                    embedding.vocab_size = new_size
+                    new_size = embedding.input_dim + len(add_tokens)
+                    embedding.input_dim = new_size
                     hf_model_original.config.vocab_size = new_size
                     hf_model_original.vocab_size = new_size
+                    if hf_config_instance.is_encoder_decoder:
+                        hf_model_original.encoder.config.vocab_size = new_size
+                        hf_model_original.decoder.config.vocab_size = new_size
+
                 if config.low_memory_mode and train:
                     if hf_config_instance.is_encoder_decoder:
                         for layer in (
@@ -139,6 +186,8 @@ def finetune_model_from_huggingface(
 
             if hf_config_instance.is_encoder_decoder:
                 embedding = hf_model.shared
+                embedding.load_weight_prefix = "model/featurizer/shared"
+                embedding.weight_name = "weight"
             else:
                 embedding = hf_model.embeddings
 
@@ -364,6 +413,7 @@ def finetune_model_from_huggingface(
                     add_tokens,
                     config_overrides,
                     aggressive_token_alignment,
+                    required_patches,
                 ),
             )
 

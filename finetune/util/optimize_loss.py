@@ -75,6 +75,9 @@ def get_optimizer(
         )
     return opt
 
+def is_numerical_tensor(t):
+    return t.dtype != tf.string
+
 
 def optimize_loss(
     loss,
@@ -139,11 +142,10 @@ def optimize_loss(
             mixed_precision=mixed_precision,
         )
         variables = tf.compat.v1.trainable_variables()
+        variables = [v for v in variables if is_numerical_tensor(v)]
 
         # Compute gradients.
-        gradients = list(
-            zip(tf.gradients(ys=loss, xs=variables, name="gradients"), variables)
-        )
+        gradients = list(zip(tf.gradients(ys=loss, xs=variables, name="gradients"),variables))        
         tf.compat.v1.summary.scalar(
             "global_norm/gradient_norm",
             tf.linalg.global_norm([g[0] for g in gradients]),
