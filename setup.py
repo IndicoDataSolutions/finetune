@@ -25,10 +25,10 @@ REQUIREMENTS = [
     "sentencepiece>=0.1.83",
     "tabulate>=0.8.6,<0.9.0",
     "tensorflow-addons==0.16.1",
-    "tensorflow-estimator==2.7.0",
+    "tensorflow-estimator==2.11.0",
     "tqdl==0.0.4",
     "psutil==5.7.0",
-    "transformers==4.5.1",
+    "transformers==4.25.1",
 ]
 
 
@@ -51,8 +51,8 @@ setup(
     version="0.9.0",
     install_requires=REQUIREMENTS,
     extras_require={
-        "tf": ["tensorflow==2.7.1"],
-        "tf_gpu": ["tensorflow-gpu==2.7.1"],
+        "tf": ["tensorflow==2.11.0"],
+        "tf_gpu": ["tensorflow-gpu==2.11.0"],
     },
     zip_safe=False,
     cmdclass={"build_ext": OpsBuild},

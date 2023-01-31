@@ -1,7 +1,7 @@
 import logging
-import warnings
-
 logging.getLogger("transformers").setLevel(logging.ERROR)
+
+import tensorflow as tf
 
 from transformers import (
     ElectraTokenizerFast,
@@ -18,12 +18,15 @@ from transformers import (
     BertTokenizer,
     LongformerTokenizerFast,
     LongformerConfig,
+    DebertaV2Config,
+    DebertaV2TokenizerFast,
 )
 from transformers.models.t5.modeling_tf_t5 import TFT5Model
 from transformers.models.electra.modeling_tf_electra import TFElectraMainLayer
 from transformers.models.roberta.modeling_tf_roberta import TFRobertaMainLayer
 from transformers.models.albert.modeling_tf_albert import TFAlbertMainLayer
 from transformers.models.longformer.modeling_tf_longformer import TFLongformerMainLayer
+from transformers.models.deberta_v2.modeling_tf_deberta_v2 import TFDebertaV2MainLayer
 
 from transformers.models.xlm_roberta.tokenization_xlm_roberta import (
     VOCAB_FILES_NAMES,
@@ -33,6 +36,20 @@ from transformers.models.xlm_roberta.tokenization_xlm_roberta import (
 
 from finetune.util.huggingface_interface import finetune_model_from_huggingface
 
+HFDebertaV3Base = finetune_model_from_huggingface(
+    pretrained_weights="microsoft/deberta-v3-base",
+    archive_map={"microsoft/deberta-v3-base": "https://huggingface.co/microsoft/deberta-v3-base/resolve/main/tf_model.h5"},
+    hf_featurizer=TFDebertaV2MainLayer,
+    hf_tokenizer=DebertaV2TokenizerFast,
+    hf_config=DebertaV2Config,
+    config_overrides={"n_embed": 768, "n_epochs": 8, "lr": 1e-5, "batch_size": 2},
+    weights_replacement=[
+        ("tf_deberta_v2_model_4/deberta/embeddings", "model/featurizer/tf_deberta_v2_main_layer/embeddings"),
+        ("tf_deberta_v2_model_4/deberta/encoder", 'model/featurizer/tf_deberta_v2_main_layer/encoder'),
+        ("tf_deberta_v2_base_model/deberta", "model/featurizer/encoder"),
+
+    ]
+)
 
 HFXLMRoberta = finetune_model_from_huggingface(
     pretrained_weights="jplu/tf-xlm-roberta-base",
@@ -50,31 +67,39 @@ HFXLMRoberta = finetune_model_from_huggingface(
     ],
 )
 
+# FIXME: - Currently very broken. 
+# Variable scoping has changed in a very weird way internally to huggingface.
+# Note that this new variable scoping breaks out of our top level model/featurizer
+# scope so the Checks inside saver do not capture it.
+# Additionally, there are issues with != vs tf.math.not_equal that are possible to
+# patch on the forwards pass, but something strange happens on the backwards pass
+# And we hit what I believe is an equivalent error. Big sad :(
 
-HFLongformer = finetune_model_from_huggingface(
-    pretrained_weights="allenai/longformer-base-4096",
-    archive_map={
-        "allenai/longformer-base-4096": "https://cdn.huggingface.co/allenai/longformer-base-4096/tf_model.h5"
-    },
-    hf_featurizer=TFLongformerMainLayer,
-    hf_tokenizer=LongformerTokenizerFast,
-    hf_config=LongformerConfig,
-    weights_replacement=[
-        (
-            "tf_longformer_for_masked_lm/longformer",
-            "model/featurizer/tf_longformer_main_layer",
-        )
-    ],
-    config_overrides={
-        "low_memory_mode": True,
-        "batch_size": 2,
-        "n_epochs": 16,
-        "lr": 1.68e-3,
-        "max_grad_norm": 1.1,
-        "lr_warmup": 0.7,  # Not a typo - just weird.
-        "l2_reg": 0.194,
-    },
-)
+# HFLongformer = finetune_model_from_huggingface(
+#     pretrained_weights="allenai/longformer-base-4096",
+#     archive_map={
+#         "allenai/longformer-base-4096": "https://cdn.huggingface.co/allenai/longformer-base-4096/tf_model.h5"
+#     },
+#     hf_featurizer=TFLongformerMainLayer,
+#     hf_tokenizer=LongformerTokenizerFast,
+#     hf_config=LongformerConfig,
+#     weights_replacement=[
+#         (
+#             "tf_longformer_for_masked_lm/longformer",
+#             "model/featurizer/tf_longformer_main_layer",
+#         )
+#     ],
+#     config_overrides={
+#         "low_memory_mode": True,
+#         "batch_size": 2,
+#         "n_epochs": 16,
+#         "lr": 1.68e-3,
+#         "max_grad_norm": 1.1,
+#         "lr_warmup": 0.7,  # Not a typo - just weird.
+#         "l2_reg": 0.194,
+#     },
+#     required_patches=["longformer"]
+# )
 
 
 HFElectraGen = finetune_model_from_huggingface(
@@ -133,6 +158,7 @@ HFT5 = finetune_model_from_huggingface(
     ],
     include_bos_eos="eos",
     add_tokens=["{", "}", "<"],  # "[", "]"],
+    required_patches=["t5"]
 )
 
 HFT5Small = finetune_model_from_huggingface(
@@ -148,6 +174,7 @@ HFT5Small = finetune_model_from_huggingface(
     ],
     include_bos_eos="eos",
     add_tokens=["{", "}", "<"],  # "[", "]"],
+    required_patches=["t5"]
 )
 
 HFAlbert = finetune_model_from_huggingface(

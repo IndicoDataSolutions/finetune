@@ -3,6 +3,7 @@ import functools
 import tensorflow as tf
 from tensorflow.python.framework import function, ops
 
+from finetune.util.optimize_loss import is_numerical_tensor
 
 def fn_with_custom_grad(grad_fn, use_global_vars=False, use_entire_scope=False, train_vars=None):
     """Decorator to create a subgraph with a custom gradient function.
@@ -171,7 +172,8 @@ def _recompute_grad(fn, args, use_entire_scope, train_vars=None):
         if not isinstance(outputs, (list, tuple)):
             outputs = [outputs]
         outputs = [o for o in outputs if isinstance(o, tf.Tensor)]
-        input_vars = inputs + variables
+        input_vars = [v for v in inputs + variables if is_numerical_tensor]
+
         grads = tf.gradients(ys=outputs, xs=input_vars, grad_ys=output_grads)
 
         grad_inputs = grads[:len(inputs)]

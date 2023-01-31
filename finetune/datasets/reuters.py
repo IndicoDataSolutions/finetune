@@ -14,6 +14,7 @@ from sklearn.model_selection import train_test_split
 from finetune import SequenceLabeler
 from finetune.datasets import Dataset
 from finetune.base_models import GPT, GPT2, TCN, RoBERTa
+from finetune.base_models.huggingface.models import HFDebertaV3Base
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
 from finetune.util.metrics import annotation_report, sequence_labeling_token_confusion
 
@@ -78,7 +79,7 @@ if __name__ == "__main__":
         test_size=0.2,
         random_state=42
     )
-    model = SequenceLabeler(batch_size=1, n_epochs=3, val_size=0.0, max_length=512, chunk_long_sequences=True, subtoken_predictions=False, crf_sequence_labeling=True, multi_label_sequences=False)
+    model = SequenceLabeler(batch_size=1, n_epochs=3, val_size=0.0, max_length=512, chunk_long_sequences=True, subtoken_predictions=False, crf_sequence_labeling=True, multi_label_sequences=False, base_model=HFDebertaV3Base)
     model.fit(trainX, trainY)
     predictions = model.predict(testX)
     print(predictions)
