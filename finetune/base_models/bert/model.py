@@ -527,7 +527,9 @@ class TableRoBERTaTwinBert(_BaseBert):
     settings = {
         **BERT_BASE_PARAMS,
         "max_length": 2048,
-        "batch_size": 1,
+        "batch_size": 2,
+        "class_weights": None,
+        "n_epochs": 16,
         "epsilon": 1e-8,
         "lr": 1e-4,
         "context_injection": True,
