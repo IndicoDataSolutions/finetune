@@ -19,4 +19,4 @@ tabulate>=0.8.6,<0.9.0
 tensorflow-addons==0.16.1
 tensorflow-estimator==2.7.0
 psutil==5.7.0
-transformers==4.5.1
+transformers==4.26.1
