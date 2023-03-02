@@ -11,7 +11,7 @@ from setuptools.command.build_ext import build_ext
 REQUIREMENTS = [
     "pandas>=0.23.1",
     "tqdm>=4.0.0",
-    "numpy>=1.18.4",
+    "numpy>=1.18.4,<1.24.0",
     "scipy>=1.1.0",
     "scikit-learn>=1.0.2",
     "ftfy>=4.4.0",
