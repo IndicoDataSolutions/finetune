@@ -17,7 +17,7 @@ from finetune.base_models.huggingface.models import (
     HFT5,
     HFAlbert,
     HFLongformer,
-    HFDebertaV3Basem,
+    HFDebertaV3Base,
 )
 from finetune.target_models.seq2seq import HFS2S
 from sklearn.model_selection import train_test_split
