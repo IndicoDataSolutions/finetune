@@ -23,7 +23,8 @@ message("TF_LFLAGS " ${TF_LFLAGS})
 find_package(CUDA)
 
 # C++14 required for tensorflow
-set(CMAKE_CXX_FLAGS "-std=c++14 ${CMAKE_CXX_FLAGS}")
+#set(CMAKE_CXX_FLAGS "-std=c++14 ${CMAKE_CXX_FLAGS}")
+#set(CMAKE_CXX_FLAGS "-stdlib=libc++ ${CMAKE_CXX_FLAGS}")
 set(CMAKE_CXX_FLAGS "-O2 ${CMAKE_CXX_FLAGS}")
 set(CMAKE_CXX_FLAGS "-shared ${CMAKE_CXX_FLAGS}")
 set(CMAKE_CXX_FLAGS "-fPIC ${CMAKE_CXX_FLAGS}")
@@ -38,6 +39,8 @@ set( CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} --expt-relaxed-constexpr -v" )
 set( CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -gencode=arch=compute_70,\"code=sm_70,compute_70\" " )
 set( CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -gencode=arch=compute_62,\"code=sm_62,compute_62\" " )
 set( CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -gencode=arch=compute_35,\"code=sm_35,compute_35\" " )
+set( CUDA_NVCC_FLAGS "${TF_CFLAGS} ${CUDA_NVCC_FLAGS} -D GOOGLE_CUDA=1 -x cu -Xcompiler -fPIC")
+message("CUDA_NVCC_FLAGS " ${CUDA_NVCC_FLAGS})
 
 # build the actual operation which can be used directory
 include_directories(${Tensorflow_INCLUDE_DIRS}/)

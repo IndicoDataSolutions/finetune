@@ -537,55 +537,6 @@ class TestSequenceLabeler(unittest.TestCase):
         correct_label = [{"start": 1, "end": 7, "text": "I am a", "label": "entity"}]
         self.assertEqual(preds, correct_label)
 
-
-class TestSequenceMemoryLeak(unittest.TestCase):
-    @staticmethod
-    def is_wr(val):
-        return val is not None and not isinstance(val, (int, float, str))
-
-    @staticmethod
-    def get_weakrefs(dictionary):
-        weakrefs = []
-        for v in dictionary.values():
-            if hasattr(v, "__dict__"):
-                weakrefs += TestSequenceMemoryLeak.get_weakrefs(v.__dict__)
-            if isinstance(v, dict):
-                weakrefs += TestSequenceMemoryLeak.get_weakrefs(v)
-            elif isinstance(v, (list, tuple)):
-                for vi in v:
-                    if isinstance(vi, dict):
-                        weakrefs += TestSequenceMemoryLeak.get_weakrefs(vi)
-                    elif TestSequenceMemoryLeak.is_wr(vi):
-                        try:
-                            weakrefs.append(weakref.ref(vi))
-                        except Exception as e:
-                            print(e)
-            elif TestSequenceMemoryLeak.is_wr(v):
-                try:
-                    weakrefs.append(weakref.ref(v))
-                except Exception as e:
-                    print(e)
-        return weakrefs
-
-    def test_leaking_objects(self):
-        previous_model_wrs = None
-        for _ in range(10):
-            model = SequenceLabeler(n_epochs=1)
-            model.fit(["some text"], [[]])
-            wrs = self.get_weakrefs(model.__dict__)
-            del model
-            tf.compat.v1.reset_default_graph()
-            gc.collect()
-            if previous_model_wrs is None:
-                previous_model_wrs = [w for w in wrs if w() is not None]
-            else:
-                new_refs = [w() for w in wrs if w() is not None]
-                prevous_refs = [w() for w in previous_model_wrs]
-                for new in new_refs:
-                    # Assert that no new objects are introduced that cannot be cleaned up.
-                    print(new)
-                    self.assertTrue(any(new is old for old in prevous_refs))
-
     def test_pred_alignment(self):
         model = SequenceLabeler(subtoken_predictions=True)
         text = "John J Johnson"
@@ -662,7 +613,7 @@ class TestSequenceMemoryLeak(unittest.TestCase):
         previous_model_wrs = None
         for _ in range(10):
             model = SequenceLabeler(n_epochs=1)
-            model.fit(["some text"], [[]])
+            model.fit(["some text"] * 5, [[{"label": "A", "start": 5, "end": 9}]] * 5)
             wrs = self.get_weakrefs(model.__dict__)
             del model
             tf.compat.v1.reset_default_graph()

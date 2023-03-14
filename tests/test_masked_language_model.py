@@ -85,7 +85,7 @@ class TestMaskedLanguageModel(unittest.TestCase):
         """
         Ensure we can fit / save / re-load RoBERTa models trained with MLM objective
         """
-        model = MaskedLanguageModel(base_model=RoBERTa)
+        model = MaskedLanguageModel(base_model=RoBERTa, low_memory_mode=True, xla=False)
         save_file = "bert/test-mlm.jl"
         sample = self.dataset.sample(n=self.n_sample)
         model.fit(sample.Text)

@@ -62,7 +62,7 @@ def get_grad_accumulation_optimizer(optimizer_class, accum_steps):
                 return tf.cond(
                     pred=tf.equal(global_step % accum_steps, accum_steps - 1),
                     true_fn=apply_grads,
-                    false_fn=lambda: tf.no_op() if global_step_set else tf.group(global_step.assign_add(1))
+                    false_fn=lambda: tf.group(global_step.assign_add(1)) if global_step_set else tf.no_op()
                 )
 
     return GradAccumulationOptimizer

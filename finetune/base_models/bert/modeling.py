@@ -21,55 +21,62 @@ import numpy as np
 import tensorflow as tf
 import functools
 
+from transformers.activations_tf import gelu as hf_gelu
+
 from finetune.optimizers.recompute_grads import recompute_grad
 from finetune.nn.auxiliary import embed_position
+
 
 class BertConfig(object):
     """Configuration for `BertModel`."""
 
     def __init__(
-            self,
-            vocab_size,
-            low_memory_mode=False,
-            hidden_size=768,
-            num_hidden_layers=12,
-            num_attention_heads=12,
-            intermediate_size=3072,
-            hidden_act="gelu",
-            hidden_dropout_prob=0.1,
-            attention_probs_dropout_prob=0.1,
-            max_position_embeddings=512,
-            type_vocab_size=16,
-            initializer_range=0.02,
-            pos_injection=False,
-            reading_order_removed=False,
-            anneal_reading_order=False,
-            positional_channels=None,
+        self,
+        vocab_size,
+        low_memory_mode=False,
+        hidden_size=768,
+        num_hidden_layers=12,
+        num_attention_heads=12,
+        intermediate_size=3072,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=512,
+        type_vocab_size=16,
+        initializer_range=0.02,
+        pos_injection=False,
+        reading_order_removed=False,
+        anneal_reading_order=False,
+        positional_channels=None,
+        # For the table model only
+        table_position=False,
+        table_position_type="row_col",
+        max_row_col_embedding=1024,
     ):
         """Constructs BertConfig.
 
-    Args:
-        vocab_size: Vocabulary size of `inputs_ids` in `BertModel`.
-        hidden_size: Size of the encoder layers and the pooler layer.
-        num_hidden_layers: Number of hidden layers in the Transformer encoder.
-        num_attention_heads: Number of attention heads for each attention layer in
-            the Transformer encoder.
-        intermediate_size: The size of the "intermediate" (i.e., feed-forward)
-            layer in the Transformer encoder.
-        hidden_act: The non-linear activation function (function or string) in the
-            encoder and pooler.
-        hidden_dropout_prob: The dropout probability for all fully connected
-            layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob: The dropout ratio for the attention
-            probabilities.
-        max_position_embeddings: The maximum sequence length that this model might
-            ever be used with. Typically set this to something large just in case
-            (e.g., 512 or 1024 or 2048).
-        type_vocab_size: The vocabulary size of the `token_type_ids` passed into
-            `BertModel`.
-        initializer_range: The stdev of the truncated_normal_initializer for
-            initializing all weight matrices.
-    """
+        Args:
+            vocab_size: Vocabulary size of `inputs_ids` in `BertModel`.
+            hidden_size: Size of the encoder layers and the pooler layer.
+            num_hidden_layers: Number of hidden layers in the Transformer encoder.
+            num_attention_heads: Number of attention heads for each attention layer in
+                the Transformer encoder.
+            intermediate_size: The size of the "intermediate" (i.e., feed-forward)
+                layer in the Transformer encoder.
+            hidden_act: The non-linear activation function (function or string) in the
+                encoder and pooler.
+            hidden_dropout_prob: The dropout probability for all fully connected
+                layers in the embeddings, encoder, and pooler.
+            attention_probs_dropout_prob: The dropout ratio for the attention
+                probabilities.
+            max_position_embeddings: The maximum sequence length that this model might
+                ever be used with. Typically set this to something large just in case
+                (e.g., 512 or 1024 or 2048).
+            type_vocab_size: The vocabulary size of the `token_type_ids` passed into
+                `BertModel`.
+            initializer_range: The stdev of the truncated_normal_initializer for
+                initializing all weight matrices.
+        """
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -86,6 +93,9 @@ class BertConfig(object):
         self.reading_order_removed = reading_order_removed
         self.anneal_reading_order = anneal_reading_order
         self.positional_channels = positional_channels
+        self.table_position = table_position
+        self.table_position_type = table_position_type
+        self.max_row_col_embedding = max_row_col_embedding
 
     @classmethod
     def from_dict(cls, json_object):
@@ -115,41 +125,41 @@ class BertConfig(object):
 class _BertModel(object):
     """BERT model ("Bidirectional Encoder Representations from Transformers").
 
-        Example usage:
+    Example usage:
 
-            ```python
-            # Already been converted into WordPiece token ids
-            input_ids = tf.constant([[31, 51, 99], [15, 5, 0]])
-            input_mask = tf.constant([[1, 1, 1], [1, 1, 0]])
-            token_type_ids = tf.constant([[0, 0, 1], [0, 2, 0]])
+        ```python
+        # Already been converted into WordPiece token ids
+        input_ids = tf.constant([[31, 51, 99], [15, 5, 0]])
+        input_mask = tf.constant([[1, 1, 1], [1, 1, 0]])
+        token_type_ids = tf.constant([[0, 0, 1], [0, 2, 0]])
 
-            config = modeling.BertConfig(vocab_size=32000, hidden_size=512,
-            num_hidden_layers=8, num_attention_heads=6, intermediate_size=1024)
+        config = modeling.BertConfig(vocab_size=32000, hidden_size=512,
+        num_hidden_layers=8, num_attention_heads=6, intermediate_size=1024)
 
-            model = modeling.BertModel(config=config, is_training=True,
-            input_ids=input_ids, input_mask=input_mask, token_type_ids=token_type_ids)
+        model = modeling.BertModel(config=config, is_training=True,
+        input_ids=input_ids, input_mask=input_mask, token_type_ids=token_type_ids)
 
-            label_embeddings = tf.get_variable(...)
-            pooled_output = model.get_pooled_output()
-            logits = tf.matmul(pooled_output, label_embeddings)
-            ...
-            ```
+        label_embeddings = tf.get_variable(...)
+        pooled_output = model.get_pooled_output()
+        logits = tf.matmul(pooled_output, label_embeddings)
+        ...
+        ```
     """
 
     def __init__(
-            self,
-            config,
-            is_training,
-            input_ids,
-            input_mask=None,
-            input_context=None,
-            token_type_ids=None,
-            use_one_hot_embeddings=False,
-            scope=None,
-            use_pooler=True,
-            roberta=False,
-            use_token_type=True,
-            reading_order_decay_rate=None,
+        self,
+        config,
+        is_training,
+        input_ids,
+        input_mask=None,
+        input_context=None,
+        token_type_ids=None,
+        use_one_hot_embeddings=False,
+        scope=None,
+        use_pooler=True,
+        roberta=False,
+        use_token_type=True,
+        reading_order_decay_rate=None,
     ):
         """Constructor for BertModel.
 
@@ -234,7 +244,7 @@ class _BertModel(object):
                     attention_probs_dropout_prob=config.attention_probs_dropout_prob,
                     initializer_range=config.initializer_range,
                     do_return_all_layers=True,
-                    low_memory_mode=config.low_memory_mode and is_training
+                    low_memory_mode=config.low_memory_mode and is_training,
                 )
                 self.sequence_output = self.all_encoder_layers[-1]
 
@@ -247,18 +257,19 @@ class _BertModel(object):
                 # We "pool" the model by simply taking the hidden state corresponding
                 # to the first token. We assume that this has been pre-trained
                 output_shape = tf.shape(self.sequence_output)
+
                 def first_token():
                     return tf.squeeze(self.sequence_output[:, 0:1, :], axis=1)
+
                 def empty():
                     return tf.zeros(
-                        tf.concat(
-                            [[output_shape[0]], [config.hidden_size]],
-                            axis=0
-                        ),
-                        dtype=self.sequence_output.dtype
+                        tf.concat([[output_shape[0]], [config.hidden_size]], axis=0),
+                        dtype=self.sequence_output.dtype,
                     )
-                first_token_tensor = tf.cond(tf.equal(output_shape[1], 0),
-                                             true_fn=empty, false_fn=first_token)
+
+                first_token_tensor = tf.cond(
+                    tf.equal(output_shape[1], 0), true_fn=empty, false_fn=first_token
+                )
                 first_token_tensor.set_shape([None, config.hidden_size])
                 # first_token_tensor = tf.squeeze(self.sequence_output[:, 0:1, :], axis=1)
                 if use_pooler:
@@ -274,14 +285,16 @@ class _BertModel(object):
     def get_pooled_output(self):
         return self.pooled_output
 
-    def get_sequence_output(self):
+    def get_sequence_output(self, layer_num=None):
         """Gets final hidden layer of encoder.
 
         Returns:
             float Tensor of shape [batch_size, seq_length, hidden_size] corresponding
             to the final hidden of the transformer encoder.
         """
-        return self.sequence_output
+        if layer_num is None:
+            return self.sequence_output
+        return self.all_encoder_layers[layer_num]
 
     def get_all_encoder_layers(self):
         return self.all_encoder_layers
@@ -350,6 +363,8 @@ def get_activation(activation_string):
         return gelu
     elif act == "tanh":
         return tf.tanh
+    elif act == "hf_gelu":
+        return hf_gelu
     else:
         raise ValueError("Unsupported activation: %s" % act)
 
@@ -372,29 +387,29 @@ def dropout(input_tensor, dropout_prob):
 
 
 def layer_norm(input_tensor, name=None):
-    with tf.compat.v1.variable_scope(name, 'LayerNorm', [input_tensor]) as sc:
+    with tf.compat.v1.variable_scope(name, "LayerNorm", [input_tensor]) as sc:
         inputs_shape = input_tensor.shape
         inputs_rank = inputs_shape.ndims
 
         dtype = input_tensor.dtype.base_dtype
-        begin_norm_axis = inputs_rank -1
+        begin_norm_axis = inputs_rank - 1
 
         params_shape = inputs_shape[-1:]
 
         # Allocate parameters for the beta and gamma of the normalization.
         beta = tf.compat.v1.get_variable(
-            'beta',
+            "beta",
             shape=params_shape,
             dtype=dtype,
             initializer=tf.zeros_initializer(),
-            trainable=True
+            trainable=True,
         )
         gamma = tf.compat.v1.get_variable(
-            'gamma',
+            "gamma",
             shape=params_shape,
             dtype=dtype,
             initializer=tf.ones_initializer(),
-            trainable=True
+            trainable=True,
         )
         # Calculate the moments on the last axis (layer activations).
         norm_axes = list(range(begin_norm_axis, inputs_rank))
@@ -407,10 +422,10 @@ def layer_norm(input_tensor, name=None):
             variance,
             offset=beta,
             scale=gamma,
-            variance_epsilon=variance_epsilon)
+            variance_epsilon=variance_epsilon,
+        )
         outputs.set_shape(inputs_shape)
     return outputs
-
 
 
 def layer_norm_and_dropout(input_tensor, dropout_prob, name=None):
@@ -426,12 +441,12 @@ def create_initializer(initializer_range=0.02):
 
 
 def embedding_lookup(
-        input_ids,
-        vocab_size,
-        embedding_size=128,
-        initializer_range=0.02,
-        word_embedding_name="word_embeddings",
-        use_one_hot_embeddings=False,
+    input_ids,
+    vocab_size,
+    embedding_size=128,
+    initializer_range=0.02,
+    word_embedding_name="word_embeddings",
+    use_one_hot_embeddings=False,
 ):
     """Looks up words embeddings for id tensor.
 
@@ -476,14 +491,22 @@ def embedding_lookup(
 
 
 def docrep_pos_embed(input_context, positional_channels, batch_size, seq_length, width):
-    """ Embed 2D position DocRep-style, i.e. separate sinusoidal embeddings for each dim """
-    init = tf.compat.v1.variance_scaling_initializer(scale=0.02, mode="fan_avg", distribution="truncated_normal")
-    embedded_input_context = embed_position(input_context, positional_channels, batch_size, seq_length)
-    return tf.compat.v1.layers.dense(embedded_input_context, width, use_bias=False, kernel_initializer=init)
+    """Embed 2D position DocRep-style, i.e. separate sinusoidal embeddings for each dim"""
+    init = tf.compat.v1.variance_scaling_initializer(
+        scale=0.02, mode="fan_avg", distribution="truncated_normal"
+    )
+    embedded_input_context = embed_position(
+        input_context, positional_channels, batch_size, seq_length
+    )
+    return tf.compat.v1.layers.dense(
+        embedded_input_context, width, use_bias=False, kernel_initializer=init
+    )
 
 
-def layoutlm_pos_embed(input_context, positional_channels, batch_size, seq_length, width):
-    """ Embed 2D position LayoutLM-style, i.e. separate learned embeddings for each dim """
+def layoutlm_pos_embed(
+    input_context, positional_channels, batch_size, seq_length, width
+):
+    """Embed 2D position LayoutLM-style, i.e. separate learned embeddings for each dim"""
     # max 2d positional embeddings is 1024 even though max positional embeddings is 512
     max_2d_positional_embeddings = 1024
     x_position_embedding_table = tf.compat.v1.get_variable(
@@ -507,10 +530,10 @@ def layoutlm_pos_embed(input_context, positional_channels, batch_size, seq_lengt
         initializer=tf.compat.v1.random_normal_initializer(),
     )
     # context is in alphabetical order, so bottom, left, right, top
-    bottom_pos = tf.cast(input_context[:, :, 0], dtype='int32')
-    left_pos = tf.cast(input_context[:, :, 1], dtype='int32')
-    right_pos = tf.cast(input_context[:, :, 2], dtype='int32')
-    top_pos = tf.cast(input_context[:, :, 3], dtype='int32')
+    bottom_pos = tf.cast(input_context[:, :, 0], dtype="int32")
+    left_pos = tf.cast(input_context[:, :, 1], dtype="int32")
+    right_pos = tf.cast(input_context[:, :, 2], dtype="int32")
+    top_pos = tf.cast(input_context[:, :, 3], dtype="int32")
     left_position_embeddings = tf.gather(x_position_embedding_table, left_pos)
     upper_position_embeddings = tf.gather(y_position_embedding_table, top_pos)
     right_position_embeddings = tf.gather(x_position_embedding_table, right_pos)
@@ -523,29 +546,40 @@ def layoutlm_pos_embed(input_context, positional_channels, batch_size, seq_lengt
         right_position_embeddings,
         lower_position_embeddings,
         h_position_embeddings,
-        w_position_embeddings
+        w_position_embeddings,
     ]
     return tf.math.add_n(all_2d_pos_embeddings)
 
 
+def xdoc_pos_embed(input_context, positional_channels, batch_size, seq_length, width):
+    layoutlm_pos = layoutlm_pos_embed(
+        input_context, positional_channels, batch_size, seq_length, width
+    )
+    doc_layer1_out = tf.compat.v1.layers.dense(
+        layoutlm_pos, units=width, name="doc_linear1", activation=tf.nn.relu
+    )
+    return tf.compat.v1.layers.dense(doc_layer1_out, units=width, name="doc_linear2")
+
+
 def embedding_postprocessor(
-        input_tensor,
-        input_context=None,
-        use_token_type=False,
-        token_type_ids=None,
-        token_type_vocab_size=16,
-        token_type_embedding_name="token_type_embeddings",
-        use_position_embeddings=True,
-        position_embedding_name="position_embeddings",
-        initializer_range=0.02,
-        max_position_embeddings=512,
-        dropout_prob=0.1,
-        roberta=False,
-        pos_injection=False,
-        positional_channels=None,
-        reading_order_decay_rate=None,
-        anneal_reading_order=False,
-        pos2d_embedding_fn=docrep_pos_embed,
+    input_tensor,
+    input_context=None,
+    use_token_type=False,
+    token_type_ids=None,
+    position_ids=None,
+    token_type_vocab_size=16,
+    token_type_embedding_name="token_type_embeddings",
+    use_position_embeddings=True,
+    position_embedding_name="position_embeddings",
+    initializer_range=0.02,
+    max_position_embeddings=512,
+    dropout_prob=0.1,
+    roberta=False,
+    pos_injection=False,
+    positional_channels=None,
+    reading_order_decay_rate=None,
+    anneal_reading_order=False,
+    pos2d_embedding_fn=docrep_pos_embed,
 ):
     """Performs various post-processing on a word embedding tensor.
 
@@ -594,7 +628,11 @@ def embedding_postprocessor(
         # faster for a small vocabulary.
         token_type_table = tf.convert_to_tensor(value=token_type_table)
         flat_token_type_ids = tf.reshape(token_type_ids, [-1])
-        one_hot_ids = tf.one_hot(flat_token_type_ids, depth=token_type_vocab_size, dtype=token_type_table.dtype)
+        one_hot_ids = tf.one_hot(
+            flat_token_type_ids,
+            depth=token_type_vocab_size,
+            dtype=token_type_table.dtype,
+        )
         token_type_embeddings = tf.matmul(one_hot_ids, token_type_table)
         token_type_embeddings = tf.reshape(
             token_type_embeddings, [batch_size, seq_length, width]
@@ -612,11 +650,9 @@ def embedding_postprocessor(
 
             if anneal_reading_order:
                 full_position_embeddings *= tf.cast(
-                    tf.random.uniform(
-                        shape=tf.shape(input=full_position_embeddings
-                        )
-                    ) > reading_order_decay_rate,
-                    tf.float32
+                    tf.random.uniform(shape=tf.shape(input=full_position_embeddings))
+                    > reading_order_decay_rate,
+                    input_tensor.dtype,
                 )
 
             # Since the position embedding table is a learned variable, we create it
@@ -636,27 +672,30 @@ def embedding_postprocessor(
                 position_embeddings = tf.slice(
                     full_position_embeddings, [0, 0], [seq_length, -1]
                 )
-            num_dims = len(output.shape.as_list())
 
-            # Only the last two dimensions are relevant (`seq_length` and `width`), so
-            # we broadcast among the first dimensions, which is typically just
-            # the batch size.
-            position_broadcast_shape = []
-            for _ in range(num_dims - 2):
-                position_broadcast_shape.append(1)
-            position_broadcast_shape.extend([seq_length, width])
-            position_embeddings = tf.reshape(
-                position_embeddings, position_broadcast_shape
-            )
+            if position_ids is None:
+                num_dims = len(output.shape.as_list())
+                # Only the last two dimensions are relevant (`seq_length` and `width`), so
+                # we broadcast among the first dimensions, which is typically just
+                # the batch size.
+                position_broadcast_shape = []
+                for _ in range(num_dims - 2):
+                    position_broadcast_shape.append(1)
+                position_broadcast_shape.extend([seq_length, width])
+                position_embeddings = tf.reshape(
+                    position_embeddings, position_broadcast_shape
+                )
+            else:
+                position_embeddings = tf.gather(position_embeddings, position_ids)
             output += position_embeddings
-            
-    if pos_injection:
+
+    if pos_injection and input_context is not None:
         output += pos2d_embedding_fn(
             input_context=input_context,
             positional_channels=positional_channels,
             batch_size=batch_size,
             seq_length=seq_length,
-            width=width
+            width=width,
         )
 
     output = layer_norm_and_dropout(output, dropout_prob)
@@ -680,14 +719,18 @@ def create_attention_mask_from_input_mask(from_tensor, to_mask):
     to_shape = get_shape_list(to_mask, expected_rank=2)
     to_seq_length = to_shape[1]
 
-    to_mask = tf.cast(tf.reshape(to_mask, [batch_size, 1, to_seq_length]), dtype=to_mask.dtype)
+    to_mask = tf.cast(
+        tf.reshape(to_mask, [batch_size, 1, to_seq_length]), dtype=to_mask.dtype
+    )
 
     # We don't assume that `from_tensor` is a mask (although it could be). We
     # don't actually care if we attend *from* padding tokens (only *to* padding)
     # tokens so we create a tensor of all ones.
     #
     # `broadcast_ones` = [batch_size, from_seq_length, 1]
-    broadcast_ones = tf.ones(shape=[batch_size, from_seq_length, 1], dtype=to_mask.dtype)
+    broadcast_ones = tf.ones(
+        shape=[batch_size, from_seq_length, 1], dtype=to_mask.dtype
+    )
 
     # Here we broadcast along two dimensions to create the mask.
     mask = broadcast_ones * to_mask
@@ -696,20 +739,20 @@ def create_attention_mask_from_input_mask(from_tensor, to_mask):
 
 
 def attention_layer(
-        from_tensor,
-        to_tensor,
-        attention_mask=None,
-        num_attention_heads=1,
-        size_per_head=512,
-        query_act=None,
-        key_act=None,
-        value_act=None,
-        attention_probs_dropout_prob=0.0,
-        initializer_range=0.02,
-        do_return_2d_tensor=False,
-        batch_size=None,
-        from_seq_length=None,
-        to_seq_length=None,
+    from_tensor,
+    to_tensor,
+    attention_mask=None,
+    num_attention_heads=1,
+    size_per_head=512,
+    query_act=None,
+    key_act=None,
+    value_act=None,
+    attention_probs_dropout_prob=0.0,
+    initializer_range=0.02,
+    do_return_2d_tensor=False,
+    batch_size=None,
+    from_seq_length=None,
+    to_seq_length=None,
 ):
     """Performs multi-headed attention from `from_tensor` to `to_tensor`.
 
@@ -769,7 +812,7 @@ def attention_layer(
     """
 
     def transpose_for_scores(
-            input_tensor, batch_size, num_attention_heads, seq_length, width
+        input_tensor, batch_size, num_attention_heads, seq_length, width
     ):
         output_tensor = tf.reshape(
             input_tensor, [batch_size, seq_length, num_attention_heads, width]
@@ -906,19 +949,20 @@ def attention_layer(
 
 
 def full_block(
-        layer_input,
-        attention_head_size,
-        batch_size,
-        seq_length,
-        attention_mask=None,
-        hidden_size=768,
-        num_attention_heads=12,
-        intermediate_size=3072,
-        intermediate_act_fn=gelu,
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        initializer_range=0.02,
+    layer_input,
+    attention_head_size,
+    batch_size,
+    seq_length,
+    attention_mask=None,
+    hidden_size=768,
+    num_attention_heads=12,
+    intermediate_size=3072,
+    intermediate_act_fn=gelu,
+    hidden_dropout_prob=0.1,
+    attention_probs_dropout_prob=0.1,
+    initializer_range=0.02,
 ):
+
     with tf.compat.v1.variable_scope("attention"):
         attention_heads = []
         with tf.compat.v1.variable_scope("self"):
@@ -933,7 +977,7 @@ def full_block(
                 do_return_2d_tensor=True,
                 batch_size=batch_size,
                 from_seq_length=seq_length,
-                to_seq_length=seq_length
+                to_seq_length=seq_length,
             )
             attention_heads.append(attention_head)
 
@@ -943,14 +987,14 @@ def full_block(
             # In the case where we have other sequences, we just concatenate
             # them to the self-attention head before the projection.
             attention_output = tf.concat(attention_heads, axis=-1)
-
         # Run a linear projection of `hidden_size` then add a residual
         # with `layer_input`.
         with tf.compat.v1.variable_scope("output"):
             attention_output = tf.compat.v1.layers.dense(
                 attention_output,
                 hidden_size,
-                kernel_initializer=create_initializer(initializer_range))
+                kernel_initializer=create_initializer(initializer_range),
+            )
             attention_output = dropout(attention_output, hidden_dropout_prob)
             attention_output = layer_norm(attention_output + layer_input)
 
@@ -960,31 +1004,35 @@ def full_block(
             attention_output,
             intermediate_size,
             activation=intermediate_act_fn,
-            kernel_initializer=create_initializer(initializer_range))
+            kernel_initializer=create_initializer(initializer_range),
+        )
 
     # Down-project back to `hidden_size` then add the residual.
     with tf.compat.v1.variable_scope("output"):
         layer_output = tf.compat.v1.layers.dense(
             intermediate_output,
             hidden_size,
-            kernel_initializer=create_initializer(initializer_range))
+            kernel_initializer=create_initializer(initializer_range),
+        )
         layer_output = dropout(layer_output, hidden_dropout_prob)
         layer_output = layer_norm(layer_output + attention_output)
         return layer_output
 
 
-def transformer_model(input_tensor,
-                      attention_mask=None,
-                      hidden_size=768,
-                      num_hidden_layers=12,
-                      num_attention_heads=12,
-                      intermediate_size=3072,
-                      intermediate_act_fn=gelu,
-                      hidden_dropout_prob=0.1,
-                      attention_probs_dropout_prob=0.1,
-                      initializer_range=0.02,
-                      do_return_all_layers=False,
-                      low_memory_mode=False):
+def transformer_model(
+    input_tensor,
+    attention_mask=None,
+    hidden_size=768,
+    num_hidden_layers=12,
+    num_attention_heads=12,
+    intermediate_size=3072,
+    intermediate_act_fn=gelu,
+    hidden_dropout_prob=0.1,
+    attention_probs_dropout_prob=0.1,
+    initializer_range=0.02,
+    do_return_all_layers=False,
+    low_memory_mode=False,
+):
     """Multi-headed, multi-layer Transformer from "Attention is All You Need".
 
     This is almost an exact implementation of the original Transformer encoder.
@@ -1026,7 +1074,8 @@ def transformer_model(input_tensor,
     if hidden_size % num_attention_heads != 0:
         raise ValueError(
             "The hidden size (%d) is not a multiple of the number of attention "
-            "heads (%d)" % (hidden_size, num_attention_heads))
+            "heads (%d)" % (hidden_size, num_attention_heads)
+        )
 
     attention_head_size = int(hidden_size / num_attention_heads)
     input_shape = get_shape_list(input_tensor, expected_rank=3)
@@ -1037,8 +1086,10 @@ def transformer_model(input_tensor,
     # The Transformer performs sum residuals on all layers so the input needs
     # to be the same as the hidden size.
     if input_width != hidden_size:
-        raise ValueError("The width of the input tensor (%d) != hidden size (%d)" %
-                         (input_width, hidden_size))
+        raise ValueError(
+            "The width of the input tensor (%d) != hidden size (%d)"
+            % (input_width, hidden_size)
+        )
 
     # We keep the representation as a 2D tensor to avoid re-shaping it back and
     # forth from a 3D tensor to a 2D tensor. Re-shapes are normally free on
@@ -1051,18 +1102,19 @@ def transformer_model(input_tensor,
         with tf.compat.v1.variable_scope("layer_%d" % layer_idx):
             layer_input = prev_output
 
-            block_fn = functools.partial(full_block,
-                                         attention_head_size=attention_head_size,
-                                         batch_size=batch_size,
-                                         seq_length=seq_length,
-                                         attention_mask=attention_mask,
-                                         hidden_size=hidden_size,
-                                         num_attention_heads=num_attention_heads,
-                                         intermediate_size=intermediate_size,
-                                         intermediate_act_fn=intermediate_act_fn,
-                                         hidden_dropout_prob=hidden_dropout_prob,
-                                         attention_probs_dropout_prob=attention_probs_dropout_prob,
-                                         initializer_range=initializer_range,
+            block_fn = functools.partial(
+                full_block,
+                attention_head_size=attention_head_size,
+                batch_size=batch_size,
+                seq_length=seq_length,
+                attention_mask=attention_mask,
+                hidden_size=hidden_size,
+                num_attention_heads=num_attention_heads,
+                intermediate_size=intermediate_size,
+                intermediate_act_fn=intermediate_act_fn,
+                hidden_dropout_prob=hidden_dropout_prob,
+                attention_probs_dropout_prob=attention_probs_dropout_prob,
+                initializer_range=initializer_range,
             )
 
             if low_memory_mode:
@@ -1179,11 +1231,288 @@ def assert_rank(tensor, expected_rank, name=None):
         )
 
 
+def twin_transformer_model(
+    input_tensor_a,
+    input_tensor_b,
+    attention_mask_a=None,
+    attention_mask_b=None,
+    mixing_inputs=None,
+    mixing_fn=None,
+    hidden_size=768,
+    num_hidden_layers=12,
+    num_attention_heads=12,
+    intermediate_size=3072,
+    intermediate_act_fn=gelu,
+    hidden_dropout_prob=0.1,
+    attention_probs_dropout_prob=0.1,
+    initializer_range=0.02,
+    do_return_all_layers=False,
+    low_memory_mode=False,
+):
+    assert do_return_all_layers == False
+    if hidden_size % num_attention_heads != 0:
+        raise ValueError(
+            "The hidden size (%d) is not a multiple of the number of attention "
+            "heads (%d)" % (hidden_size, num_attention_heads)
+        )
+
+    if mixing_inputs is None:
+        mixing_inputs = dict()
+
+    attention_head_size = int(hidden_size / num_attention_heads)
+    input_shape_a = get_shape_list(input_tensor_a, expected_rank=3)
+    input_shape_b = get_shape_list(input_tensor_b, expected_rank=3)
+
+    input_width = input_shape_a[2]
+
+    # The Transformer performs sum residuals on all layers so the input needs
+    # to be the same as the hidden size.
+    if input_width != hidden_size:
+        raise ValueError(
+            "The width of the input tensor (%d) != hidden size (%d)"
+            % (input_width, hidden_size)
+        )
+
+    # We keep the representation as a 2D tensor to avoid re-shaping it back and
+    # forth from a 3D tensor to a 2D tensor. Re-shapes are normally free on
+    # the GPU/CPU but may not be free on the TPU, so we want to minimize them to
+    # help the optimizer.
+    prev_output_a = reshape_to_matrix(input_tensor_a)
+    prev_output_b = reshape_to_matrix(input_tensor_b)
+
+    for layer_idx in range(num_hidden_layers):
+        with tf.compat.v1.variable_scope("layer_a_%d" % layer_idx):
+            block_fn = functools.partial(
+                full_block,
+                attention_head_size=attention_head_size,
+                batch_size=input_shape_a[0],
+                seq_length=input_shape_a[1],
+                attention_mask=attention_mask_a,
+                hidden_size=hidden_size,
+                num_attention_heads=num_attention_heads,
+                intermediate_size=intermediate_size,
+                intermediate_act_fn=intermediate_act_fn,
+                hidden_dropout_prob=hidden_dropout_prob,
+                attention_probs_dropout_prob=attention_probs_dropout_prob,
+                initializer_range=initializer_range,
+            )
+
+            if low_memory_mode:
+                block_fn = recompute_grad(block_fn, use_entire_scope=True)
+            prev_output_a = block_fn(prev_output_a)
+
+        with tf.compat.v1.variable_scope("layer_b_%d" % layer_idx):
+            block_fn = functools.partial(
+                full_block,
+                attention_head_size=attention_head_size,
+                batch_size=input_shape_b[0],
+                seq_length=input_shape_b[1],
+                attention_mask=attention_mask_b,
+                hidden_size=hidden_size,
+                num_attention_heads=num_attention_heads,
+                intermediate_size=intermediate_size,
+                intermediate_act_fn=intermediate_act_fn,
+                hidden_dropout_prob=hidden_dropout_prob,
+                attention_probs_dropout_prob=attention_probs_dropout_prob,
+                initializer_range=initializer_range,
+            )
+
+            if low_memory_mode:
+                block_fn = recompute_grad(block_fn, use_entire_scope=True)
+            prev_output_b = block_fn(prev_output_b)
+
+        if mixing_fn is not None and layer_idx != num_attention_heads - 1:
+            # TODO: make this configurable - how many cross adaptors we include.
+            if layer_idx % 2 == 0:
+                with tf.compat.v1.variable_scope("mixing_fn_%d" % layer_idx):
+                    mix_output_a, mix_output_b = mixing_fn(
+                        reshape_from_matrix(prev_output_a, input_shape_a),
+                        reshape_from_matrix(prev_output_b, input_shape_b),
+                        **mixing_inputs
+                    )
+                    prev_output_a = reshape_to_matrix(mix_output_a)
+                    prev_output_b = reshape_to_matrix(mix_output_b)
+
+    final_output_a = reshape_from_matrix(prev_output_a, input_shape_a)
+    final_output_b = reshape_from_matrix(prev_output_b, input_shape_b)
+
+    return final_output_a, final_output_b
+
+
+class TwinBertModel(_BertModel):
+    def __init__(
+        self,
+        config,
+        is_training,
+        input_ids_a,
+        input_ids_b,
+        attention_mask_a=None,
+        attention_mask_b=None,
+        token_type_ids_a=None,
+        token_type_ids_b=None,
+        context_a=None,
+        context_b=None,
+        pos_ids_a=None,
+        pos_ids_b=None,
+        mixing_fn=None,
+        mixing_inputs=None,
+        use_one_hot_embeddings=False,
+        scope=None,
+        roberta=False,
+        use_token_type=True,
+        reading_order_decay_rate=None,
+    ):
+        """Constructor for BertModel.
+
+        Args:
+            config: `BertConfig` instance.
+            is_training: bool. true for training model, false for eval model. Controls
+            whether dropout will be applied.
+            input_ids: int32 Tensor of shape [batch_size, seq_length].
+            input_mask: (optional) int32 Tensor of shape [batch_size, seq_length].
+            token_type_ids: (optional) int32 Tensor of shape [batch_size, seq_length].
+            use_one_hot_embeddings: (optional) bool. Whether to use one-hot word
+            embeddings or tf.embedding_lookup() for the word embeddings.
+            scope: (optional) variable scope. Defaults to "bert".
+
+        Raises:
+            ValueError: The config is invalid or one of the input tensor shapes
+                is invalid.
+        """
+        self.table_position_type = config.table_position_type
+        self.max_row_col_embedding = config.max_row_col_embedding
+        config = copy.deepcopy(config)
+        if not is_training:
+            config.hidden_dropout_prob = 0.0
+            config.attention_probs_dropout_prob = 0.0
+
+        with tf.compat.v1.variable_scope(scope, default_name="bert"):
+            with tf.compat.v1.variable_scope("embeddings"):
+                # Perform embedding lookup on the word ids.
+                (self.embedding_output_a, self.embedding_table) = embedding_lookup(
+                    input_ids=input_ids_a,
+                    vocab_size=config.vocab_size,
+                    embedding_size=config.hidden_size,
+                    initializer_range=config.initializer_range,
+                    word_embedding_name="word_embeddings",
+                    use_one_hot_embeddings=use_one_hot_embeddings,
+                )
+                # Add positional embeddings and token type embeddings, then layer
+                # normalize and perform dropout.
+                self.embedding_output_a = self.embedding_postprocessor(
+                    input_tensor=self.embedding_output_a,
+                    input_context=context_a,
+                    use_token_type=use_token_type,
+                    token_type_ids=token_type_ids_a,
+                    position_ids=pos_ids_a,
+                    token_type_vocab_size=config.type_vocab_size,
+                    token_type_embedding_name="token_type_embeddings",
+                    use_position_embeddings=not config.reading_order_removed,
+                    position_embedding_name="position_embeddings",
+                    initializer_range=config.initializer_range,
+                    max_position_embeddings=config.max_position_embeddings,
+                    dropout_prob=config.hidden_dropout_prob,
+                    roberta=roberta,
+                    positional_channels=config.positional_channels,
+                    reading_order_decay_rate=reading_order_decay_rate,
+                    anneal_reading_order=config.anneal_reading_order,
+                    pos_injection=config.table_position,  # True,
+                )
+
+            with tf.compat.v1.variable_scope("embeddings", reuse=True):
+                # Perform embedding lookup on the word ids.
+                (self.embedding_output_b, _) = embedding_lookup(
+                    input_ids=input_ids_b,
+                    vocab_size=config.vocab_size,
+                    embedding_size=config.hidden_size,
+                    initializer_range=config.initializer_range,
+                    word_embedding_name="word_embeddings",
+                    use_one_hot_embeddings=use_one_hot_embeddings,
+                )
+                # Add positional embeddings and token type embeddings, then layer
+                # normalize and perform dropout.
+                self.embedding_output_b = self.embedding_postprocessor(
+                    input_tensor=self.embedding_output_b,
+                    input_context=context_b,
+                    use_token_type=use_token_type,
+                    token_type_ids=token_type_ids_b,
+                    position_ids=pos_ids_b,
+                    token_type_vocab_size=config.type_vocab_size,
+                    token_type_embedding_name="token_type_embeddings",
+                    use_position_embeddings=not config.reading_order_removed,
+                    position_embedding_name="position_embeddings",
+                    initializer_range=config.initializer_range,
+                    max_position_embeddings=config.max_position_embeddings,
+                    dropout_prob=config.hidden_dropout_prob,
+                    roberta=roberta,
+                    positional_channels=config.positional_channels,
+                    reading_order_decay_rate=reading_order_decay_rate,
+                    anneal_reading_order=config.anneal_reading_order,
+                    pos_injection=config.table_position,  # True,
+                )
+
+            with tf.compat.v1.variable_scope("encoder"):
+                # Run the stacked transformer.
+                # `sequence_output` shape = [batch_size, seq_length, hidden_size].
+                self.sequence_output = twin_transformer_model(
+                    input_tensor_a=self.embedding_output_a,
+                    input_tensor_b=self.embedding_output_b,
+                    attention_mask_a=attention_mask_a,
+                    attention_mask_b=attention_mask_b,
+                    mixing_inputs=mixing_inputs,
+                    mixing_fn=mixing_fn,
+                    hidden_size=config.hidden_size,
+                    num_hidden_layers=config.num_hidden_layers,
+                    num_attention_heads=config.num_attention_heads,
+                    intermediate_size=config.intermediate_size,
+                    intermediate_act_fn=get_activation(config.hidden_act),
+                    hidden_dropout_prob=config.hidden_dropout_prob,
+                    attention_probs_dropout_prob=config.attention_probs_dropout_prob,
+                    initializer_range=config.initializer_range,
+                    do_return_all_layers=False,
+                    low_memory_mode=config.low_memory_mode and is_training,
+                )
+                self.all_encoder_layers = None
+
+    def embedding_postprocessor(self, *args, **kwargs):
+        def table_pos_embed(
+            input_context, positional_channels, batch_size, seq_length, width
+        ):
+            output = []
+            for entry in (
+                [0, 1] if self.table_position_type == "row_col" else [0, 1, 2, 3]
+            ):
+                position_table = tf.compat.v1.get_variable(
+                    name="pos_{}".format(entry),
+                    shape=[self.max_row_col_embedding, width],
+                    initializer=tf.compat.v1.random_normal_initializer(stddev=1e-3),
+                )
+                position = tf.cast(input_context[:, :, entry], dtype="int32")
+                output.append(tf.gather(position_table, position))
+            return tf.math.add_n(output)
+
+        return embedding_postprocessor(
+            *args, pos2d_embedding_fn=table_pos_embed, **kwargs
+        )
+
+
 class BertModel(_BertModel):
     def embedding_postprocessor(self, *args, **kwargs):
-        return embedding_postprocessor(*args, pos2d_embedding_fn=docrep_pos_embed, **kwargs)
+        return embedding_postprocessor(
+            *args, pos2d_embedding_fn=docrep_pos_embed, **kwargs
+        )
 
 
 class LayoutLMModel(_BertModel):
     def embedding_postprocessor(self, *args, **kwargs):
-        return embedding_postprocessor(*args, pos2d_embedding_fn=layoutlm_pos_embed, **kwargs)
+        return embedding_postprocessor(
+            *args, pos2d_embedding_fn=layoutlm_pos_embed, **kwargs
+        )
+
+
+class XDocModel(_BertModel):
+    def embedding_postprocessor(self, *args, **kwargs):
+        kwargs["token_type_vocab_size"] = 1
+        return embedding_postprocessor(
+            *args, pos2d_embedding_fn=xdoc_pos_embed, **kwargs
+        )

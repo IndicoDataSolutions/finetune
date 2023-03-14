@@ -226,9 +226,9 @@ class BasePipeline(metaclass=ABCMeta):
                 "If you are using a callable as input you must provide config.dataset_size"
             )
 
-        if self.config.class_weights is not None or self.config.oversample:
+        if self.config.class_weights is not None:
             raise FinetuneError(
-                "Cannot use class weights or resampling in generator mode"
+                "Cannot use class weights in generator mode"
             )
 
         self.config.val_size, self.config.val_interval = validation_settings(
@@ -266,6 +266,7 @@ class BasePipeline(metaclass=ABCMeta):
                 batch_size=self.config.batch_size,
                 shapes=shapes,
                 n_epochs=self.config.n_epochs,
+                shuffle=self.config.reshuffle_chunks,
             ),
             "val_dataset": batch_dataset(
                 val_dataset, batch_size=self.config.batch_size, shapes=shapes
@@ -326,6 +327,11 @@ class BasePipeline(metaclass=ABCMeta):
             types = types[0]
             shapes = shapes[0]
 
+        if self.config.min_steps is not None:
+            self.config.n_epochs = max(
+                self.config.n_epochs, math.ceil(self.config.min_steps / self.config.dataset_size)
+            )
+    
         train_dataset_unbatched = self.make_dataset_fn(
             data_fn=lambda: tokenized_train_split,
             tqdm_mode="train",
@@ -346,6 +352,7 @@ class BasePipeline(metaclass=ABCMeta):
                 batch_size=self.config.batch_size,
                 shapes=shapes,
                 n_epochs=self.config.n_epochs,
+                shuffle=self.config.reshuffle_chunks,
             ),
             "val_dataset": batch_dataset(
                 val_dataset_unbatched, batch_size=self.config.batch_size, shapes=shapes
@@ -392,7 +399,7 @@ class BasePipeline(metaclass=ABCMeta):
             field_starts_and_ends = dict()
             for field in EncodedOutput._fields:
                 field_value = getattr(encoded, field)
-                if field_value is not None:
+                if field_value is not None and len(field_value):
                     field_starts_and_ends[field] = (field_value[0], field_value[-1])
             if self.config.chunk_context == 0 and self.config.add_eos_bos_to_chunk:
                 warnings.warn("""Chunk context of 0 will not capture the start

@@ -18,8 +18,8 @@ def bytes_to_meg(x):
 
 def scheduled(fn):
     @functools.wraps(fn)
-    def scheduled_predict(self, model_file, x, *args, config_overrides=None, **kwargs):
-        model = self._rotate_in_model(model_file, config_overrides=config_overrides)
+    def scheduled_predict(self, model_file, x, *args, key=None, config_overrides=None, **kwargs):
+        model = self._rotate_in_model(model_file, key=key, config_overrides=config_overrides)
         try:
             preds = fn(self, model_file=model_file, x=x, *args, model=model, **kwargs)
         except Exception as orig_except:
@@ -32,7 +32,7 @@ def scheduled(fn):
             self.close_all()
             try:
                 # Reload in preparation for prediction
-                model = self._rotate_in_model(model_file, config_overrides=config_overrides)
+                model = self._rotate_in_model(model_file, key=key, config_overrides=config_overrides)
                 preds = fn(
                     self, model_file=model_file, x=x, *args, model=model, **kwargs
                 )
@@ -108,8 +108,14 @@ class Scheduler:
         else:
             LOGGER.info("No models cached -- cannot remove oldest model.")
 
-    def _rotate_in_model(self, model, config_overrides=None):
-        if model not in self.loaded_models:
+    def model_cache_key(self, model, key):
+        if key is None:
+            return model
+        return f"{model}_key={key}"
+
+    def _rotate_in_model(self, model, key, config_overrides=None):
+        cache_key = self.model_cache_key(model, key=key)
+        if cache_key not in self.loaded_models:
             if (
                 (
                     self.max_models is not None
@@ -120,13 +126,13 @@ class Scheduler:
                 self._close_oldest_model()
             config_overrides = config_overrides or {}
             merged_config = {**self.config, **config_overrides}
-            out_model = BaseModel.load(model, **merged_config)
-            self.model_cache[model] = out_model
+            out_model = BaseModel.load(model, key=key, **merged_config)
+            self.model_cache[cache_key] = out_model
         else:
-            out_model = self.model_cache[model]
-            self.loaded_models.remove(model)  # put it back at the end of the queue
+            out_model = self.model_cache[cache_key]
+            self.loaded_models.remove(cache_key)  # put it back at the end of the queue
 
-        self.loaded_models.append(model)
+        self.loaded_models.append(cache_key)
         out_model._cached_predict = True
 
         return out_model
@@ -142,21 +148,21 @@ class Scheduler:
             self._close_oldest_model()
 
     @scheduled
-    def predict(self, model_file, x, *args, model=None, **kwargs):
+    def predict(self, model_file, x, *args, key=None, model=None, **kwargs):
         return model.predict(x, *args, **kwargs)
 
     @scheduled
-    def predict_proba(self, model_file, x, *args, model=None, **kwargs):
+    def predict_proba(self, model_file, x, *args, key=None, model=None, **kwargs):
         return model.predict_proba(x, *args, **kwargs)
 
     @scheduled
-    def attention_weights(self, model_file, x, *args, model=None, **kwargs):
+    def attention_weights(self, model_file, x, *args, key=None, model=None, **kwargs):
         return model.attention_weights(x, *args, **kwargs)
 
     @scheduled
-    def featurize(self, model_file, x, *args, model=None, **kwargs):
+    def featurize(self, model_file, x, *args, key=None, model=None, **kwargs):
         return model.featurize(x, *args, **kwargs)
 
     @scheduled
-    def featurize_sequence(self, model_file, x, *args, model=None, **kwargs):
+    def featurize_sequence(self, model_file, x, *args, key=None, model=None, **kwargs):
         return model.featurize_sequence(x, *args, **kwargs)

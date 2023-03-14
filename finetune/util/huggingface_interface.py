@@ -1,5 +1,3 @@
-from math import exp
-from multiprocessing.sharedctypes import Value
 import h5py
 import numpy as np
 import joblib as jl
