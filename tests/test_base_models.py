@@ -8,6 +8,8 @@ import codecs
 import json
 import random
 
+from finetune.base_models.huggingface.models import HFDebertaV3Base
+
 # prevent excessive warning logs
 warnings.filterwarnings("ignore")
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -43,15 +45,12 @@ from finetune.util.metrics import (
     sequence_labeling_overlap_precision,
     sequence_labeling_overlap_recall,
 )
-try:
-    from finetune.base_models.huggingface.models import HFBert, HFElectraGen, HFElectraDiscrim
-    HUGGINGFACE_MODELS = True
-except ImportError:
-    HFBert = None
-    HFElectraGen = None
-    HFElectraDiscrim = None
-    HUGGINGFACE_MODELS = False
-
+from finetune.base_models.huggingface.models import (
+    HFBert,
+    HFElectraGen,
+    HFElectraDiscrim,
+    HFDebertaV3Base,
+)
 
 SST_FILENAME = "SST-binary.csv"
 
@@ -76,6 +75,8 @@ class TestClassifierTextCNN(TestModelBase):
     n_sample = 20
     dataset_path = os.path.join("Data", "Classify", "SST-binary.csv")
     base_model = TextCNN
+    expected_file_size_fp32 = 500000000
+    expected_file_size_fp16 = 260000000
 
     @classmethod
     def _download_sst(cls):
@@ -209,7 +210,10 @@ class TestClassifierTextCNN(TestModelBase):
         model.fit(train_sample.Text.values, train_sample.Target.values)
         predictions = model.predict(valid_sample.Text.values)
         recall = recall_score(valid_sample.Target.values, predictions, pos_label=1)
-        model = Classifier(**self.default_config(class_weights={1: 100}))
+        model = Classifier(
+            **self.default_config(class_weights={1: 100}),
+            renorm_after_class_weights=False
+        )
         model.fit(train_sample.Text.values, train_sample.Target.values)
         predictions = model.predict(valid_sample.Text.values)
         new_recall = recall_score(valid_sample.Target.values, predictions, pos_label=1)
@@ -247,12 +251,12 @@ class TestClassifierTextCNN(TestModelBase):
 
         # testing file size reduction options
         model.save(save_file)
-        self.assertLess(os.stat(save_file).st_size, 500000000)
+        self.assertLess(os.stat(save_file).st_size, self.expected_file_size_fp32)
 
         # reducing floating point precision
         model.saver.save_dtype = np.float16
         model.save(save_file_fp16)
-        self.assertLess(os.stat(save_file_fp16).st_size, 260000000)
+        self.assertLess(os.stat(save_file_fp16).st_size, self.expected_file_size_fp16)
 
         model = Classifier.load(save_file_fp16)
         new_predictions = model.predict(valid_sample.Text)
@@ -275,7 +279,7 @@ class TestClassifierTextCNN(TestModelBase):
             if prediction != new_prediction:
                 errors += 1
         self.assertEqual(errors, 0)
-            
+
     def test_featurize(self):
         """
         Ensure featurization returns an array of the right shape
@@ -501,15 +505,17 @@ class TestSequenceLabelerTextCNN(TestModelBase):
 
 
 def _test_featurize_sequence(self, model_fn):
-    test_input = ["""Pirateipsum: Corsair bilge rat interloper. Nipperkin
+    test_input = [
+        """Pirateipsum: Corsair bilge rat interloper. Nipperkin
                   aye chase. Brigantine yard weigh anchor.  Jolly boat
                   American Main spirits. Letter of Marque reef sails cable.
                   Deadlights port nipper.  Fire ship gibbet American Main.
                   Jack Ketch cable fore.  Tack black jack draught.""",
-                  """Nipperkin aye chase. Brigantine yard weigh anchor.
+        """Nipperkin aye chase. Brigantine yard weigh anchor.
                   Jolly boat American Main spirits. Letter of Marque reef
                   sails cable.  Deadlights port nipper.  Fire ship gibbet
-                  American Main.  Jack Ketch cable fore."""]
+                  American Main.  Jack Ketch cable fore.""",
+    ]
     non_chunk_config = self.default_config()
     non_chunk_config["chunk_long_sequences"] = False
     non_chunk_config["max_length"] = 256
@@ -524,10 +530,9 @@ def _test_featurize_sequence(self, model_fn):
         model2 = model_fn(**chunk_config)
         chunk_features = model2.featurize_sequence(test_input)
 
-        for non_chunk,chunk,prev,X in zip(non_chunk_features,
-                                          chunk_features,
-                                          prev_features,
-                                          test_input):
+        for non_chunk, chunk, prev, X in zip(
+            non_chunk_features, chunk_features, prev_features, test_input
+        ):
             encoded = next(model.input_pipeline._text_to_ids(X))
             # subtract 2 to account for the start and end tokens
             encoded_len = len(encoded.token_ids) - 2
@@ -608,36 +613,30 @@ class TestClassifierOscar(TestClassifierTextCNN):
     base_model = OSCAR
 
 
-@unittest.skipIf(not HUGGINGFACE_MODELS, reason="Hugging face transformers could not be imported")
 class TestSequenceHuggingfaceElectraGen(TestSequenceLabelerTCN):
-    base_model = HFElectraGen        
+    base_model = HFElectraGen
 
 
-@unittest.skipIf(not HUGGINGFACE_MODELS, reason="Hugging face transformers could not be imported")
 class TestClassifierHuggingfaceElectraGen(TestClassifierTextCNN):
     base_model = HFElectraGen
 
 
-@unittest.skipIf(not HUGGINGFACE_MODELS, reason="Hugging face transformers could not be imported")
 class TestComparisonHuggingfaceElectraGen(TestComparisonTextCNN):
     base_model = HFElectraGen
 
-@unittest.skipIf(not HUGGINGFACE_MODELS, reason="Hugging face transformers could not be imported")
+
 class TestSequenceHuggingfaceElectraDiscrim(TestSequenceLabelerTCN):
-    base_model = HFElectraDiscrim        
+    base_model = HFElectraDiscrim
 
 
-@unittest.skipIf(not HUGGINGFACE_MODELS, reason="Hugging face transformers could not be imported")
 class TestClassifierHuggingfaceElectraDiscrim(TestClassifierTextCNN):
     base_model = HFElectraDiscrim
 
 
-@unittest.skipIf(not HUGGINGFACE_MODELS, reason="Hugging face transformers could not be imported")
 class TestComparisonHuggingfaceElectraDiscrim(TestComparisonTextCNN):
     base_model = HFElectraDiscrim
 
 
-@unittest.skipIf(not HUGGINGFACE_MODELS, reason="Hugging face transformers could not be imported")
 class TestSequenceHuggingfaceBERT(TestSequenceLabelerTCN):
     base_model = HFBert
 
@@ -654,3 +653,13 @@ class TestSequenceHuggingfaceBERT(TestSequenceLabelerTCN):
         self.model.config.batch_size = 32
 
         self.model.fit(train_texts * 10, train_annotations * 10)
+
+
+class TestSequenceHuggingfaceDeBERTa(TestSequenceLabelerTCN):
+    base_model = HFDebertaV3Base
+
+
+class TestClassifierHuggingfaceDeBERTa(TestClassifierTextCNN):
+    base_model = HFDebertaV3Base
+    expected_file_size_fp32 = 750000000
+    expected_file_size_fp16 = 380000000

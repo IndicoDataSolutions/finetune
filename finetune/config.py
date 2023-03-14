@@ -202,6 +202,7 @@ def get_default_config():
         predict_batch_size="auto",
         visible_gpus=None,  # defaults to all available
         n_epochs="auto",
+        min_steps=None,
         seed=42,
         max_length="auto",
         weight_stddev=0.02,
@@ -215,6 +216,8 @@ def get_default_config():
         collapse_whitespace=False,
         permit_uninitialized=None,
         max_training_hours=None,
+        feature_layer_num=None,
+
         #
         # Regularization
         embed_p_drop=0.1,
@@ -359,6 +362,18 @@ def get_default_config():
         group_attention_heads=12,
         group_n_layers=3,
         group_thresh=0.8,
+
+        # Table model
+        table_position=False,
+        table_position_type="row_col",
+        include_row_col_summaries=False,
+        down_project_feats=False,
+        renorm_after_class_weights=True,
+        max_row_col_embedding=1024,
+
+        #chunking_tweaks
+        reshuffle_chunks=False,
+        predict_chunk_markers=False,
         #
         # Serialize finetune version with model
         version=VERSION,

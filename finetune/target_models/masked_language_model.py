@@ -90,7 +90,7 @@ class MaskedLanguageModel(BaseModel):
     :param \**kwargs: key-value pairs of config items to override.
     """
 
-    defaults = dict(low_memory_mode=True, batch_size=48, xla=True)
+    defaults = dict(low_memory_mode=True, batch_size=48, xla=False)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -137,15 +137,4 @@ class MaskedLanguageModel(BaseModel):
     def _target_model(
         config, featurizer_state, n_outputs, train=False, reuse=None, **kwargs
     ):
-        return masked_language_model(
-            hidden=featurizer_state["sequence_features"],
-            targets=targets,
-            n_targets=n_outputs,
-            pad_id=config.pad_idx,
-            config=config,
-            train=train,
-            multilabel=config.multi_label_sequences,
-            reuse=reuse,
-            lengths=featurizer_state["lengths"],
-            **kwargs
-        )
+        raise ValueError("Target model is unused for MLM")

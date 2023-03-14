@@ -1,4 +1,5 @@
 import os
+import io
 import gc
 import random
 import weakref
@@ -14,7 +15,7 @@ import sys
 from contextlib import contextmanager
 import pathlib
 import logging
-from typing import Dict, List, Tuple
+from typing import Dict, List, Mapping, Tuple
 
 import numpy as np
 import tensorflow as tf
@@ -252,7 +253,7 @@ class BaseModel(object, metaclass=ABCMeta):
         steps = int(math.ceil(n_examples / (batch_size * n_gpus)))
         return steps
 
-    def finetune(self, Xs, Y=None, context=None, update_hook=None, log_hooks=None):
+    def finetune(self, Xs, Y=None, context=None, update_hook=None, log_hooks=None, force_build_lm=False):
         if callable(Xs):
             datasets = self.input_pipeline.get_dataset_from_generator(
                 Xs, input_mode=InputMode.TRAIN, update_hook=update_hook
@@ -273,7 +274,7 @@ class BaseModel(object, metaclass=ABCMeta):
                     )
                 )
 
-        force_build_lm = Y is None
+        force_build_lm = Y is None or force_build_lm
         estimator, hooks = self.get_estimator(force_build_lm=force_build_lm)
         train_hooks = hooks.copy()
 
@@ -747,6 +748,22 @@ class BaseModel(object, metaclass=ABCMeta):
             path = os.path.abspath(path)
         self.saver.save(self, path)
 
+    @classmethod
+    def save_multiple(cls, path: str, models: Mapping[str, "BaseModel"]):
+        def save_to_bytes(model):
+            f = io.BytesIO()
+            model.save(f)
+            f.seek(0)
+            return f.read()
+
+        joblib.dump(
+            {
+                k: save_to_bytes(model) for k, model in models.items()
+            },
+            path
+        )
+
+
     def create_base_model(self, filename, exists_ok=False):
         """
         Saves the current weights into the correct file format to be used as a base model.
@@ -774,7 +791,7 @@ class BaseModel(object, metaclass=ABCMeta):
         }
         joblib.dump(weights_stripped, base_model_path)
 
-    def load(path, *args, **kwargs):
+    def load(path, *args, key=None, **kwargs):
         """
         Load a saved fine-tuned model from disk.  Path provided should be a folder which contains .pkl and tf.Saver() files
 
@@ -788,6 +805,9 @@ class BaseModel(object, metaclass=ABCMeta):
                     instance.__class__.__name__, args[0]
                 )
             )
+
+        if key is not None:
+            path = io.BytesIO(joblib.load(path)[key])
 
         assert_valid_config(**kwargs)
 

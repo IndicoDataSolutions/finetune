@@ -307,7 +307,7 @@ class TestGroupingLabelers(unittest.TestCase):
             {'start': 61, 'end': 78, 'label': 'b', 'text': 'nine percent (9%)'},
             {'start': 81, 'end': 99, 'label': 'a', 'text': 'three percent (3%)'},
         ]
-        model.fit([text] * 30, [labels] * 30)
+        model.fit([text] * 100, [labels] * 100)
         preds = model.predict([text])[0]
         self.assertEqual(len(preds), 5)
         self.assertEqual(preds, labels)

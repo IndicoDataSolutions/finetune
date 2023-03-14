@@ -371,7 +371,7 @@ class TestClassifier(unittest.TestCase):
         # A dirty mock to make all model inferences output a hundred _classify_ tokens
         fake_estimator = MagicMock()
         model.get_estimator = lambda *args, **kwargs: (fake_estimator, [])
-        model.input_pipeline.text_encoder._lazy_init()
+        #model.input_pipeline.text_encoder._lazy_init()
         fake_estimator.predict = MagicMock(
             return_value=iter(
                 [{PredictMode.GENERATE_TEXT: 100 * [model.input_pipeline.text_encoder["_classify_"]]}]

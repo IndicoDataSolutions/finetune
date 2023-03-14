@@ -2,7 +2,7 @@
 #include "../ra/ra.h"
 #include "tensorflow/core/framework/op_kernel.h"
 #include "tensorflow/core/framework/tensor_shape.h"
-#include "tensorflow/core/platform/default/logging.h"
+#include "tensorflow/core/platform/logging.h"
 #include "tensorflow/core/framework/shape_inference.h"
 #include "tensorflow/core/framework/register_types.h"
 

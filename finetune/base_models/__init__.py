@@ -14,6 +14,7 @@ COMMON_SETTINGS = {
 
 class SourceModel(metaclass=ABCMeta):
     is_bidirectional = True
+    get_context_fn = None
 
     @classmethod
     def get_optimal_params(cls, config):
@@ -62,7 +63,9 @@ from finetune.base_models.bert.model import (
     DistilRoBERTa,
     DocRep,
     FusedDocRep,
-    LayoutLM
+    LayoutLM,
+    XDocBase,
+    TableRoBERTa,
 )
 from finetune.base_models.tcn.model import TCNModel
 from finetune.base_models.oscar.model import GPCModel

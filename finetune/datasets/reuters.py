@@ -79,7 +79,7 @@ if __name__ == "__main__":
         test_size=0.2,
         random_state=42
     )
-    model = SequenceLabeler(batch_size=1, n_epochs=3, val_size=0.0, max_length=512, chunk_long_sequences=True, subtoken_predictions=False, crf_sequence_labeling=True, multi_label_sequences=False, base_model=HFDebertaV3Base)
+    model = SequenceLabeler(batch_size=1, n_epochs=3, val_size=0.0, max_length=512, chunk_long_sequences=True, subtoken_predictions=False, crf_sequence_labeling=True, multi_label_sequences=False)
     model.fit(trainX, trainY)
     predictions = model.predict(testX)
     print(predictions)
