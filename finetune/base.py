@@ -750,19 +750,22 @@ class BaseModel(object, metaclass=ABCMeta):
 
     @classmethod
     def save_multiple(cls, path: str, models: Mapping[str, "BaseModel"]):
-        def save_to_bytes(model):
+        def save_to_bytes(model, k):
             f = io.BytesIO()
-            model.save(f)
+            if isinstance(model, BaseModel):
+                model.save(f)
+            else:
+                joblib.dump(model, f)
+                k = "__non_model__" + k
             f.seek(0)
-            return f.read()
+            return k, f.read()
 
         joblib.dump(
-            {
-                k: save_to_bytes(model) for k, model in models.items()
-            },
+            dict(
+                save_to_bytes(model, k) for k, model in models.items()
+            ),
             path
         )
-
 
     def create_base_model(self, filename, exists_ok=False):
         """
@@ -807,7 +810,14 @@ class BaseModel(object, metaclass=ABCMeta):
             )
 
         if key is not None:
-            path = io.BytesIO(joblib.load(path)[key])
+            model_package = joblib.load(path)
+            if key not in model_package:
+                nm_key = "__non_model__" + key 
+                if nm_key in model_package:
+                    return joblib.load(io.BytesIO(model_package[nm_key]))
+                else:
+                    raise ValueError("Key {} not found in file".format(key))
+            path = io.BytesIO(model_package[key])
 
         assert_valid_config(**kwargs)
 

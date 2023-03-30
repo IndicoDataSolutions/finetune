@@ -413,6 +413,22 @@ class TestSaveMultiple(unittest.TestCase):
         self.preds_equal(preds_a_1, preds_a_2)
         self.preds_equal(preds_b_1, preds_b_2)
 
+    
+    def test_save_mutliple_inc_non_model(self):
+        model_a = SequenceLabeler()
+        model_a.fit(["test text"] * 20, [[{"start": 0, "end": 4, "label": "test"}]] * 20)
+        preds_a_1 = model_a.predict(["test text"])
+    
+        SequenceLabeler.save_multiple("multiple_models.jl", {"a": model_a, "a_preds": preds_a_1})
+        
+        shed = Scheduler()
+        preds_a_2 = shed.predict("multiple_models.jl", ["test text"], key="a")
+        assert preds_a_1 == SequenceLabeler.load("multiple_models.jl", key="a_preds")
+        self.preds_equal(preds_a_1, preds_a_2)
+
+
+    
+
 
 if __name__ == "__main__":
     unittest.main()
