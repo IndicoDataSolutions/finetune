@@ -1,4 +1,3 @@
-from finetune import scheduler
 import pytest
 from finetune.util.table_labeler import TableLabeler, TableETL
 from finetune.scheduler import Scheduler
@@ -540,3 +539,70 @@ def test_table_text_chunks_and_context_split_vertical(
             },
         ]
     ]
+
+
+@pytest.mark.parametrize("drop_table_from_pred", [True, False])
+def test_resolve_preds_pred_spans_table(drop_table_from_pred, labeled_table_data):
+    text, labels, tables = labeled_table_data
+    etl = TableETL(drop_table_from_text_preds=drop_table_from_pred)
+    resolved_preds = etl.resolve_preds(
+        table_preds=[[{"text": "B", "start": 2, "end": 3, "label": "in-table"}]],
+        text_preds=[
+            [
+                {
+                    "text": "Some text before the table\nA",
+                    "start": 0,
+                    "end": 28,
+                    "label": "mixed",
+                }
+            ]
+        ],
+        table_chunks=[
+            [{"document": {"end": 38, "start": 27}, "table": {"end": 11, "start": 0}}]
+        ],
+        document_text=text,
+        table_doc_i=[0],
+    )[0]
+    if drop_table_from_pred:
+        assert resolved_preds == [
+            {
+                "text": "Some text before the table\n",
+                "start": 0,
+                "end": 27,
+                "label": "mixed",
+            },
+            {"text": "B", "start": 29, "end": 30, "label": "in-table"},
+        ]
+    else:
+        assert resolved_preds == [
+            {
+                "text": "Some text before the table\nA",
+                "start": 0,
+                "end": 28,
+                "label": "mixed",
+            },
+            {"text": "B", "start": 29, "end": 30, "label": "in-table"},
+        ]
+
+
+def test_subtract_spans():
+    etl = TableETL()
+    result = etl.subtract_spans(
+        {"start": 0, "end": 100, "some_attr": "abc"},
+        [{"start": 10, "end": 20}, {"start": 50, "end": 60}],
+    )
+    assert result == [
+        {"start": 0, "end": 10, "some_attr": "abc"},
+        {"start": 20, "end": 50, "some_attr": "abc"},
+        {"start": 60, "end": 100, "some_attr": "abc"},
+    ]
+
+    result = etl.subtract_spans(
+        {"start": 0, "end": 100, "some_attr": "abc"}, [{"start": 0, "end": 300}]
+    )
+    assert result == []
+
+    result = etl.subtract_spans(
+        {"start": 0, "end": 100, "some_attr": "abc"}, [{"start": 0, "end": 10}]
+    )
+    assert result == [{"start": 10, "end": 100, "some_attr": "abc"}]
