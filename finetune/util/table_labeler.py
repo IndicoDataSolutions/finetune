@@ -191,8 +191,6 @@ class TableETL:
     def remove_table_labels(
         self, doc_labels: DocumentSpans, doc_chunks: t.List[TableChunks], doc_text: str
     ):
-        assert isinstance(doc_chunks, list)
-        assert isinstance(doc_chunks[0], list)
         flat_doc_chunks = [ts["document"] for chunks in doc_chunks for ts in chunks]
         output_labels = []
         for l in doc_labels:
