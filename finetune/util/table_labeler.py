@@ -338,7 +338,7 @@ class TableLabeler:
     def __init__(
         self,
         table_model_config: t.Dict[str, t.Any] = None,
-        normal_model_config: t.Dict[str, t.Any] = None,
+        text_model_config: t.Dict[str, t.Any] = None,
         drop_table_from_text_labels: bool = False,
         drop_table_from_text_preds: bool = True,
     ):
@@ -349,9 +349,7 @@ class TableLabeler:
         self.table_model = SequenceLabeler(
             base_model=TableRoBERTa, **(table_model_config or {})
         )
-        self.text_model = SequenceLabeler(
-            base_model=RoBERTa, **(normal_model_config or {})
-        )
+        self.text_model = SequenceLabeler(**(text_model_config or {}))
 
     def fit(
         self,
@@ -386,6 +384,8 @@ class TableLabeler:
         tables: t.List[DocumentTables],
         model_file_path: str,
         scheduler: Scheduler,
+        return_negative_confidence=False,
+        config_overrides=None,
     ):
         etl = get_etl_from_file(model_file_path)
         model_inputs = etl.get_table_text_chunks_and_context(text=text, tables=tables)
@@ -394,9 +394,14 @@ class TableLabeler:
             model_inputs["table_text"],
             context=model_inputs["table_context"],
             key="table",
+            return_negative_confidence=return_negative_confidence,
         )
         text_preds = scheduler.predict(
-            model_file_path, model_inputs["doc_text"], key="text"
+            model_file_path,
+            model_inputs["doc_text"],
+            key="text",
+            config_overrides=config_overrides,
+            return_negative_confidence=return_negative_confidence,
         )
         return etl.resolve_preds(
             table_preds=table_preds,
