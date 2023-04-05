@@ -30,6 +30,8 @@ class TableETL:
         self.drop_table_from_text_preds = drop_table_from_text_preds
 
     def get_table_text(self, text: str, doc_offsets: t.List[t.Dict[str, int]]) -> str:
+        for c in doc_offsets:
+            assert c["end"] <= len(text), "Table offsets must exist within document."
         return "\n".join(text[c["start"] : c["end"]] for c in doc_offsets)
 
     def _adjust_span_to_chunk(
@@ -233,8 +235,11 @@ class TableETL:
             for page_tables in document_tables:
                 for table in page_tables:
                     table_doc_offsets = table["doc_offsets"]
-                    table_doc_index_output.append(i)
                     table_text_i = self.get_table_text(document_text, table_doc_offsets)
+                    if table_text_i.strip() == "":
+                        # Seems like the table model is occasionally outputting empty tables.
+                        continue
+                    table_doc_index_output.append(i)
                     table_text_output.append(table_text_i)
                     table_chunks_i = self.create_chunks_from_doc_offset(
                         table_doc_offsets
