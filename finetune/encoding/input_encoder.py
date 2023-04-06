@@ -310,7 +310,7 @@ def tokenize_context(context, encoded_output, config):
         if char_loc == -1:
             tokenized_context.append(default_context)
         else:
-            while token.strip() and char_loc > context_by_char_loc[current_char_loc][0]:
+            while token.strip().strip("Â") and char_loc > context_by_char_loc[current_char_loc][0]:
                 current_char_loc += 1
                 if current_char_loc >= len(context_by_char_loc):
                     raise ValueError(
@@ -323,7 +323,7 @@ def tokenize_context(context, encoded_output, config):
                 and token.strip() not in context_by_char_loc[current_char_loc][2]
             ):
                 warnings.warn(
-                    "subtoken: {} has matched up with the context for token: {}".format(
+                    "subtoken: {} has matched up with the context for: {}".format(
                         repr(token), repr(context_by_char_loc[current_char_loc][2])
                     )
                 )
