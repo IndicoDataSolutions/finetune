@@ -23,7 +23,6 @@ def _single_convert_to_finetune(*, document, dpi_norm=True, config={}):
         document, dpi_norm, base_model=config.get("base_model", DocRep)
     )
     texts = []
-    offsets = []
     last_end = -1
     num_pages = len(document)
     for i, page in enumerate(document):
