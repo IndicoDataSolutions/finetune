@@ -139,7 +139,7 @@ class TableETL:
     ) -> TableChunks:
         """
         Converts the offet list from the table into a Chunk object.
-        Storing the mapping from original document to the table-text 
+        Storing the mapping from original document to the table-text
         as output by get_table_text.
         """
         output = []
@@ -163,10 +163,10 @@ class TableETL:
     ) -> t.List[Span]:
         """
         If any item in to_remove overlaps with input span it is removed from the span
-        creating between 0 and to_remove + 1 spans as output. 
-        
+        creating between 0 and to_remove + 1 spans as output.
+
         For example
-        {"start" 0, "end": 10} - [{"start": 0, "end": 2}, {"start": 5, "end": 6}] 
+        {"start" 0, "end": 10} - [{"start": 0, "end": 2}, {"start": 5, "end": 6}]
         = [{"start": 2, "end": 5}, {"start": 6, "end": 10}]
         """
         output = [input_span]
@@ -212,7 +212,6 @@ class TableETL:
         tables: t.List[DocumentTables],
         labels: t.List[DocumentSpans] = None,
     ) -> t.Dict[str, dict]:
-
         # The following items are 1 entry per-table.
         table_chunks_output = []  # Chunk objects
         table_context_output = []  # Context, formatted for tinetune
@@ -308,7 +307,7 @@ class TableETL:
         for p, c, i in zip(table_preds, table_chunks, table_doc_i):
             table_pred_chunks[i].append((p, c))
 
-        for (i, (text_preds_i, document_text_i, doc_pred_chunks)) in enumerate(
+        for i, (text_preds_i, document_text_i, doc_pred_chunks) in enumerate(
             zip(text_preds, document_text, table_pred_chunks)
         ):
             output_doc_preds = []
@@ -389,6 +388,7 @@ class TableLabeler:
         scheduler: Scheduler,
         return_negative_confidence=False,
         config_overrides=None,
+        sobj_url=None,
     ):
         etl = get_etl_from_file(model_file_path)
         model_inputs = etl.get_table_text_chunks_and_context(text=text, tables=tables)
@@ -398,6 +398,7 @@ class TableLabeler:
             context=model_inputs["table_context"],
             key="table",
             return_negative_confidence=return_negative_confidence,
+            sobj_url=sobj_url,
         )
         text_preds = scheduler.predict(
             model_file_path,
@@ -405,6 +406,7 @@ class TableLabeler:
             key="text",
             config_overrides=config_overrides,
             return_negative_confidence=return_negative_confidence,
+            sobj_url=sobj_url,
         )
         return etl.resolve_preds(
             table_preds=table_preds,
