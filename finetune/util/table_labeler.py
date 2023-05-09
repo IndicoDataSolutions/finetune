@@ -388,9 +388,10 @@ class TableLabeler:
         scheduler: Scheduler,
         return_negative_confidence=False,
         config_overrides=None,
-        sobj_url=None,
+        cache_key=None,
     ):
-        etl = get_etl_from_file(model_file_path)
+        etl = scheduler.etl_cache(cache_key)
+        # etl = get_etl_from_file(model_file_path)
         model_inputs = etl.get_table_text_chunks_and_context(text=text, tables=tables)
         table_preds = scheduler.predict(
             model_file_path,
@@ -398,7 +399,7 @@ class TableLabeler:
             context=model_inputs["table_context"],
             key="table",
             return_negative_confidence=return_negative_confidence,
-            sobj_url=sobj_url,
+            cache_key=cache_key,
         )
         text_preds = scheduler.predict(
             model_file_path,
@@ -406,7 +407,7 @@ class TableLabeler:
             key="text",
             config_overrides=config_overrides,
             return_negative_confidence=return_negative_confidence,
-            sobj_url=sobj_url,
+            cache_key=cache_key,
         )
         return etl.resolve_preds(
             table_preds=table_preds,

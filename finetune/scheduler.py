@@ -3,6 +3,7 @@ import logging
 import functools
 
 import psutil
+from finetune.target_models.sequence_labeling import SequenceLabeler
 
 import tensorflow as tf
 from finetune.base import BaseModel
@@ -22,9 +23,9 @@ def scheduled(fn):
         self, model_file, x, *args, key=None, config_overrides=None, **kwargs
     ):
         # this is just for backwards compat, should always have a blob key going forward
-        blob_key = kwargs.get("sobj_url", None)
+        cache_key = kwargs.get("cache_key", None)
         model = self._rotate_in_model(
-            model_file, key=key, config_overrides=config_overrides, blob_key=blob_key
+            model_file, key=key, config_overrides=config_overrides, cache_key=cache_key
         )
         try:
             preds = fn(self, model_file=model_file, x=x, *args, model=model, **kwargs)
@@ -42,7 +43,7 @@ def scheduled(fn):
                     model_file,
                     key=key,
                     config_overrides=config_overrides,
-                    blob_key=blob_key,
+                    cache_key=cache_key,
                 )
                 preds = fn(
                     self, model_file=model_file, x=x, *args, model=model, **kwargs
@@ -119,15 +120,18 @@ class Scheduler:
         else:
             LOGGER.info("No models cached -- cannot remove oldest model.")
 
-    def model_cache_key(self, model, key, blob_key):
-        if blob_key:
-            return blob_key
-        if key is None:
+    def model_cache_key(self, model, key, cache_key):
+        if cache_key and key:
+            return f"{cache_key}_key={key}"
+        elif cache_key and not key:
+            return cache_key
+        elif key is None:
             return model
-        return f"{model}_key={key}"
+        else:
+            f"{model}_key={key}"
 
-    def _rotate_in_model(self, model, key, config_overrides=None, blob_key=None):
-        cache_key = self.model_cache_key(model, key=key, blob_key=blob_key)
+    def _rotate_in_model(self, model, key, config_overrides=None, cache_key=None):
+        cache_key = self.model_cache_key(model, key=key, cache_key=cache_key)
         if cache_key not in self.loaded_models:
             if (
                 self.max_models is not None
@@ -179,5 +183,15 @@ class Scheduler:
     def featurize_sequence(self, model_file, x, *args, key=None, model=None, **kwargs):
         return model.featurize_sequence(x, *args, **kwargs)
 
-    def in_cache(self, key):
-        return key in self.loaded_models
+    def in_cache(self, cache_key, key):
+        if key is None:
+            return cache_key in self.loaded_models
+        return f"{cache_key}_key={key}" in self.loaded_models
+
+    @functools.lru_cache
+    def etl_cache(self, model_file_path):
+        return SequenceLabeler.load(model_file_path, key="etl")
+
+    def etl_in_cache(self, cache_key, key="etl"):
+        cache_key = (cache_key, key)
+        return cache_key in self.etl_cache.cache
