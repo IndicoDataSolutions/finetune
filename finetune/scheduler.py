@@ -23,7 +23,7 @@ def scheduled(fn):
         self, model_file, x, *args, key=None, config_overrides=None, **kwargs
     ):
         # this is just for backwards compat, should always have a blob key going forward
-        cache_key = kwargs.get("cache_key", None)
+        cache_key = kwargs.pop("cache_key", None)
         model = self._rotate_in_model(
             model_file, key=key, config_overrides=config_overrides, cache_key=cache_key
         )
