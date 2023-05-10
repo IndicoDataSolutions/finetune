@@ -391,7 +391,6 @@ class TableLabeler:
         cache_key=None,
     ):
         etl = scheduler.etl_cache(cache_key)
-        # etl = get_etl_from_file(model_file_path)
         model_inputs = etl.get_table_text_chunks_and_context(text=text, tables=tables)
         table_preds = scheduler.predict(
             model_file_path,
