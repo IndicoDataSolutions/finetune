@@ -3,6 +3,7 @@ import logging
 import functools
 
 import psutil
+from finetune.target_models.sequence_labeling import SequenceLabeler
 
 import tensorflow as tf
 from finetune.base import BaseModel
@@ -18,8 +19,14 @@ def bytes_to_meg(x):
 
 def scheduled(fn):
     @functools.wraps(fn)
-    def scheduled_predict(self, model_file, x, *args, key=None, config_overrides=None, **kwargs):
-        model = self._rotate_in_model(model_file, key=key, config_overrides=config_overrides)
+    def scheduled_predict(
+        self, model_file, x, *args, key=None, config_overrides=None, **kwargs
+    ):
+        # this is just for backwards compat, should always have a blob key going forward
+        cache_key = kwargs.pop("cache_key", None)
+        model = self._rotate_in_model(
+            model_file, key=key, config_overrides=config_overrides, cache_key=cache_key
+        )
         try:
             preds = fn(self, model_file=model_file, x=x, *args, model=model, **kwargs)
         except Exception as orig_except:
@@ -32,7 +39,12 @@ def scheduled(fn):
             self.close_all()
             try:
                 # Reload in preparation for prediction
-                model = self._rotate_in_model(model_file, key=key, config_overrides=config_overrides)
+                model = self._rotate_in_model(
+                    model_file,
+                    key=key,
+                    config_overrides=config_overrides,
+                    cache_key=cache_key,
+                )
                 preds = fn(
                     self, model_file=model_file, x=x, *args, model=model, **kwargs
                 )
@@ -65,7 +77,7 @@ class Scheduler:
 
     def _memory_for_one_more(self):
         if self.gpu_memory_limit is None:
-            return True # first run
+            return True  # first run
 
         in_use = BytesInUse()
         peak = MaxBytesInUse()
@@ -108,21 +120,23 @@ class Scheduler:
         else:
             LOGGER.info("No models cached -- cannot remove oldest model.")
 
-    def model_cache_key(self, model, key):
-        if key is None:
+    def model_cache_key(self, model, key, cache_key):
+        if cache_key and key:
+            return f"{cache_key}_key={key}"
+        elif cache_key and not key:
+            return cache_key
+        elif key is None:
             return model
-        return f"{model}_key={key}"
+        else:
+            f"{model}_key={key}"
 
-    def _rotate_in_model(self, model, key, config_overrides=None):
-        cache_key = self.model_cache_key(model, key=key)
+    def _rotate_in_model(self, model, key, config_overrides=None, cache_key=None):
+        cache_key = self.model_cache_key(model, key=key, cache_key=cache_key)
         if cache_key not in self.loaded_models:
             if (
-                (
-                    self.max_models is not None
-                    and len(self.loaded_models) + 1 > self.max_models
-                )
-                or not self._memory_for_one_more()
-            ):
+                self.max_models is not None
+                and len(self.loaded_models) + 1 > self.max_models
+            ) or not self._memory_for_one_more():
                 self._close_oldest_model()
             config_overrides = config_overrides or {}
             merged_config = {**self.config, **config_overrides}
@@ -141,7 +155,9 @@ class Scheduler:
         if hasattr(model.saver, "variables"):
             del model.saver.variables
             del model.saver.fallback_
-        self.gpu_memory_limit = BytesLimit() # delay this so that any options get applied from finetune.
+        self.gpu_memory_limit = (
+            BytesLimit()
+        )  # delay this so that any options get applied from finetune.
 
     def close_all(self):
         while self.loaded_models:
@@ -166,3 +182,16 @@ class Scheduler:
     @scheduled
     def featurize_sequence(self, model_file, x, *args, key=None, model=None, **kwargs):
         return model.featurize_sequence(x, *args, **kwargs)
+
+    def in_cache(self, cache_key, key):
+        if key is None:
+            return cache_key in self.loaded_models
+        return f"{cache_key}_key={key}" in self.loaded_models
+
+    @functools.lru_cache
+    def etl_cache(self, model_file_path):
+        return SequenceLabeler.load(model_file_path, key="etl")
+
+    def etl_in_cache(self, cache_key, key="etl"):
+        cache_key = (cache_key, key)
+        return cache_key in self.etl_cache.cache
