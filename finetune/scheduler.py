@@ -75,7 +75,7 @@ class Scheduler:
         self.config = config or {}
         self.reserved = reserved
         self.ram_max_frac = ram_max_frac
-        self.etl_in_cache = EtlCache()
+        self.etl_cache = EtlCache()
 
     def _memory_for_one_more(self):
         if self.gpu_memory_limit is None:
@@ -191,11 +191,11 @@ class Scheduler:
         return f"{cache_key}_key={key}" in self.loaded_models
 
     def load_etl(self, model_file_path, cache_key):
-        if cache_key in self.etl_in_cache:
-            etl = self.etl_in_cache.get(cache_key)
+        if cache_key in self.etl_cache:
+            etl = self.etl_cache.get(cache_key)
         else:
             etl = SequenceLabeler.load(model_file_path, key="etl")
-            self.etl_in_cache.add(cache_key, etl)
+            self.etl_cache.add(cache_key, etl)
         return etl
 
 
