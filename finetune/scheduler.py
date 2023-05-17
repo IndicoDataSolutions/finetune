@@ -192,10 +192,10 @@ class Scheduler:
 
     def load_etl(self, model_file_path, cache_key):
         if cache_key in self.etl_in_cache:
-            etl = self.etl_in_cache[cache_key]
+            etl = self.etl_in_cache.get(cache_key)
         else:
             etl = SequenceLabeler.load(model_file_path, key="etl")
-            self.etl_in_cache[cache_key] = etl
+            self.etl_in_cache.add(cache_key, etl)
         return etl
 
 

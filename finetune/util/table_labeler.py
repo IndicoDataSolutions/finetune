@@ -5,7 +5,7 @@ import copy
 import functools
 import typing as t
 
-from finetune.base_models import TableRoBERTa, RoBERTa
+from finetune.base_models import TableRoBERTa
 from finetune.util.metrics import sequences_overlap
 from finetune.scheduler import Scheduler
 
