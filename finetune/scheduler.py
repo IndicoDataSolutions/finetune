@@ -195,7 +195,7 @@ class Scheduler:
             etl = self.etl_cache.get(cache_key)
         else:
             etl = SequenceLabeler.load(model_file_path, key="etl")
-            self.etl_cache.add(cache_key, etl)
+            self.etl_cache[cache_key] = etl
         return etl
 
 
@@ -204,7 +204,7 @@ class EtlCache:
         self.cache = OrderedDict()
         self.maxsize = maxsize
 
-    def add(self, key, value):
+    def __set__(self, key, value):
         if len(self.cache) >= self.maxsize:
             self.cache.popitem(last=False)
         self.cache[key] = value
