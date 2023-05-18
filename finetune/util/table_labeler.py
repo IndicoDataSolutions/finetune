@@ -5,7 +5,7 @@ import copy
 import functools
 import typing as t
 
-from finetune.base_models import TableRoBERTa, RoBERTa
+from finetune.base_models import TableRoBERTa
 from finetune.util.metrics import sequences_overlap
 from finetune.scheduler import Scheduler
 
@@ -390,7 +390,7 @@ class TableLabeler:
         config_overrides=None,
         cache_key=None,
     ):
-        etl = scheduler.etl_cache(cache_key)
+        etl = scheduler.load_etl(model_file_path, cache_key)
         model_inputs = etl.get_table_text_chunks_and_context(text=text, tables=tables)
         table_preds = scheduler.predict(
             model_file_path,

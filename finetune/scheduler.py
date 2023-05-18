@@ -1,3 +1,4 @@
+from collections import OrderedDict
 import gc
 import logging
 import functools
@@ -74,6 +75,7 @@ class Scheduler:
         self.config = config or {}
         self.reserved = reserved
         self.ram_max_frac = ram_max_frac
+        self.etl_cache = EtlCache()
 
     def _memory_for_one_more(self):
         if self.gpu_memory_limit is None:
@@ -188,10 +190,27 @@ class Scheduler:
             return cache_key in self.loaded_models
         return f"{cache_key}_key={key}" in self.loaded_models
 
-    @functools.lru_cache
-    def etl_cache(self, model_file_path):
-        return SequenceLabeler.load(model_file_path, key="etl")
+    def load_etl(self, model_file_path, cache_key):
+        if cache_key in self.etl_cache:
+            etl = self.etl_cache.get(cache_key)
+        else:
+            etl = SequenceLabeler.load(model_file_path, key="etl")
+            self.etl_cache[cache_key] = etl
+        return etl
 
-    def etl_in_cache(self, cache_key, key="etl"):
-        cache_key = (cache_key, key)
-        return cache_key in self.etl_cache.cache
+
+class EtlCache:
+    def __init__(self, maxsize=128):
+        self.cache = OrderedDict()
+        self.maxsize = maxsize
+
+    def __set__(self, key, value):
+        if len(self.cache) >= self.maxsize:
+            self.cache.popitem(last=False)
+        self.cache[key] = value
+
+    def get(self, key):
+        return self.cache.get(key, None)
+
+    def __contains__(self, key):
+        return key in self.cache
