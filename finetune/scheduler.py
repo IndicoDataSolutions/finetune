@@ -204,7 +204,7 @@ class EtlCache:
         self.cache = OrderedDict()
         self.maxsize = maxsize
 
-    def __set__(self, key, value):
+    def __setitem__(self, key, value):
         if len(self.cache) >= self.maxsize:
             self.cache.popitem(last=False)
         self.cache[key] = value
