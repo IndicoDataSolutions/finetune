@@ -57,7 +57,7 @@ BERT_LARGE_PARAMS = {
     "lr": 1e-5,
     "l2_reg": 0.01,
     "bert_intermediate_size": 4096,
-    "max_length": 1024,
+    "max_length": 512,
 }
 
 DISTIL_BERT_PARAMS = {
