@@ -289,10 +289,14 @@ class SequenceLabeler(BaseModel):
             approx_chunks_per_doc = approx_max_tokens_per_doc / (
                 self.config.max_length - self.input_pipeline.chunker.total_context_width
             )
-            outer_batch_size = min(
-                max(int(self.config.predict_batch_size / approx_chunks_per_doc), 1),
-                self.config.predict_batch_size,
-            )
+
+            if self.config.low_memory_ans:
+                outer_batch_size = min(
+                    max(int(self.config.predict_batch_size / approx_chunks_per_doc), 1),
+                    self.config.predict_batch_size,
+                )
+            else:
+                outer_batch_size = len(Xs)
 
             with self.cached_predict():
                 for b_start in range(0, len(Xs), outer_batch_size):
