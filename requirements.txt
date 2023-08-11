@@ -17,6 +17,6 @@ tqdl==0.0.4
 sentencepiece>=0.1.83
 tabulate>=0.8.6,<0.9.0
 tensorflow-addons==0.16.1
-tensorflow-estimator==2.12.0
+tensorflow-estimator==2.11.1
 psutil==5.7.0
 transformers==4.25.1
