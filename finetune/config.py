@@ -371,6 +371,7 @@ def get_default_config():
         down_project_feats=False,
         renorm_after_class_weights=True,
         max_row_col_embedding=1024,
+        chunk_tables=False,
 
         #chunking_tweaks
         reshuffle_chunks=False,

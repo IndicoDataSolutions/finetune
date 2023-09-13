@@ -2,7 +2,7 @@ import tensorflow as tf
 from finetune.base_models.bert.modeling import gelu
 
 
-def get_gather_indices(X, sequence_lengths, start, end):
+def get_gather_indices(X, sequence_lengths, start, end, other_end, chunk_tables):
     """
     Given the tokens, sequence lengths and the range of each token in either rows or columns
     gets the values required for gathering the input tokens into row/column stack inputs and
@@ -56,7 +56,9 @@ def get_gather_indices(X, sequence_lengths, start, end):
         tf.convert_to_tensor([0, seq_len]),
         tf.convert_to_tensor([0, seq_len + 1]),
         pad_val=tf.convert_to_tensor([0, seq_len + 2]),
+        other_end=other_end,
         include_mask=True,
+        chunk_tables=chunk_tables,
     )
 
 
@@ -79,7 +81,7 @@ def batch_packing(ragged_input, include_mask=True):
 
     # If there is some fast way to sort the rows of a ragged tensor we might consider doing this first.
     col_seq_lens = ragged_input.row_lengths()
-    max_length = tf.reduce_max(col_seq_lens)
+    max_length = tf.minimum(tf.reduce_max(col_seq_lens), 512)
 
     def loop_body(l, i):
         temp_ragged = tf.RaggedTensor.from_row_lengths(
@@ -141,6 +143,98 @@ def batch_packing(ragged_input, include_mask=True):
     )
     return ragged, output_mask, pos_ids
 
+def chunk_ragged_tensor(
+    inputs: tf.RaggedTensor,
+    other_end: tf.Tensor,
+    include_n_rows: int =2,
+    max_length: int=512 - 2, # -2 to account for BOS and EOS tokens that will be added.
+):
+    """
+    Chunks up inputs, keeping the first include_n_rows in every chunk.
+    """
+    batch_size = inputs.bounding_shape()[0]
+
+    # Figure out which tokens are in the first include_n_rows rows of the column and split these off.
+
+    is_first_n_rows_orig = tf.gather_nd(
+        tf.math.less(other_end, include_n_rows),
+        inputs,
+        batch_dims=0
+    )
+    less_than_max_length_tokens = tf.math.less(tf.math.reduce_sum(tf.cast(is_first_n_rows_orig, tf.int64), axis=1), max_length)
+    # If first row tokens is more than 512 - do not use any first row context.
+    is_first_n_rows = tf.logical_and(tf.expand_dims(less_than_max_length_tokens, 1), is_first_n_rows_orig)
+    num_first_n_row_tokens = tf.math.reduce_sum(tf.cast(is_first_n_rows, tf.int64), axis=1)
+    
+    num_cols_per_col = tf.cast(
+        tf.maximum(
+            tf.math.ceil((inputs.row_lengths() - num_first_n_row_tokens) / (max_length - num_first_n_row_tokens)),
+            1, # Max(1 .) is to catch the case where all tokens are in the first n rows.
+        ),
+        tf.int64
+    )
+    first_n_rows = tf.ragged.boolean_mask(inputs, is_first_n_rows)
+    other_rows = tf.ragged.boolean_mask(inputs, tf.math.logical_not(is_first_n_rows))
+    other_rows_length_goals = max_length -  num_first_n_row_tokens # bs
+
+    # Reshape the rest of the columns to the per-column length_goal
+    new_row_breaks = tf.cast(
+        tf.minimum(
+            tf.ragged.range((num_cols_per_col + 1) * other_rows_length_goals, deltas=other_rows_length_goals, dtype=tf.int64),
+            tf.expand_dims(other_rows.row_lengths(), 1)
+        ),
+        tf.int64
+    )
+    new_row_lengths = new_row_breaks[:, 1:] - new_row_breaks[:, :-1]
+    
+    # with tf.compat.v1.control_dependencies(
+    #     [
+    #         tf.compat.v1.Print(
+    #         tf.zeros(
+    #             shape=[]
+    #         ),
+    #         [
+    #             "NEW ROW LENGTHS", new_row_lengths.flat_values,
+    #             "other_rows_length_goals", other_rows_length_goals,
+    #             "num_cols_per_col", num_cols_per_col,
+    #             "other_rows.row_lengths()", other_rows.row_lengths(),
+    #             "num_first_n_row_tokens", num_first_n_row_tokens
+    #         ],
+    #         summarize=1000,
+    #         )
+    #     ]
+    # ):
+    #     new_row_lengths = tf.identity(new_row_lengths)
+
+    other_rows_reshaped = tf.RaggedTensor.from_row_lengths(
+        values=other_rows.flat_values,
+        row_lengths=new_row_lengths.flat_values,
+    )
+
+    # Tile the first N rows so that they are duplicated for each chunk of the column
+
+    # a really gross way to get range broadcasted to num_cols_per_col - not sure of a better way to get this.
+    indexes = tf.ragged.range(num_cols_per_col) * 0 + tf.expand_dims(tf.range(batch_size), 1) 
+    first_n_rows_duped = tf.gather(first_n_rows, indexes).merge_dims(0, 1)
+
+    result = tf.concat([first_n_rows_duped, other_rows_reshaped], 1)
+    # with tf.compat.v1.control_dependencies(
+    #     [
+    #         tf.compat.v1.Print(
+    #             tf.zeros(
+    #                 shape=[]
+    #             ),
+    #             [
+    #                 "Result Shape", result.bounding_shape(),
+    #                 "input Shape", inputs.bounding_shape(),
+    #             ],
+    #             summarize=1000
+    #         )
+    #     ]
+    # ):
+    #     result = tf.identity(result)
+    return result
+
 
 def slice_by_table_indices(
     inp,
@@ -148,10 +242,12 @@ def slice_by_table_indices(
     eos_pad,
     bos_pad,
     pad_val,
+    other_end,
     max_length=512,
     max_tokens_per_batch=512 * 100,
-    check_len=False,
+    check_len=True,
     include_mask=False,
+    chunk_tables=True,
 ):
     """
     Used internally by get_gather_indices - assumes that any pre-processing of adding special tokens is already complete.
@@ -178,6 +274,8 @@ def slice_by_table_indices(
             values=inp_values_i.flat_values,
             row_lengths=tf.boolean_mask(inp_values_i.row_lengths(), batch_mask),
         )
+        if chunk_tables:
+            inp_values = chunk_ragged_tensor(inp_values, other_end=other_end, max_length=max_length - 2) # -2 for eos and bos
         col_bs = tf.shape(inp_values.row_lengths())[0]
         bos_expanded = tf.tile(bos_pad_ragged, [col_bs, 1, *(1 for _ in bos_pad.shape)])
         eos_expanded = tf.tile(eos_pad_ragged, [col_bs, 1, *(1 for _ in eos_pad.shape)])

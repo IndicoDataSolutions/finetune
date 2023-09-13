@@ -331,7 +331,7 @@ class TableETL:
         return output_preds
 
 
-@functools.lru_cache
+@functools.lru_cache(maxsize=None)
 def get_etl_from_file(model_file_path):
     return SequenceLabeler.load(model_file_path, key="etl")
 

@@ -526,7 +526,7 @@ class TableRoBERTa(_BaseBert):
     featurizer = table_roberta_featurizer_twinbert
     settings = {
         **BERT_BASE_PARAMS,
-        "max_length": 2048,
+        "max_length": 4096,
         "batch_size": 2,
         "class_weights": None,
         "n_epochs": 16,
