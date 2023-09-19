@@ -85,8 +85,7 @@ def batch_packing(ragged_input, include_mask=True):
 
     def loop_body(l, i):
         temp_ragged = tf.RaggedTensor.from_row_lengths(
-            values=col_seq_lens[:i],
-            row_lengths=l,
+            values=col_seq_lens[:i], row_lengths=l
         )
         return (
             tf.cond(
@@ -108,10 +107,7 @@ def batch_packing(ragged_input, include_mask=True):
         shape_invariants=(tf.TensorShape([None]), tf.TensorShape([])),
     )
 
-    lengths = tf.RaggedTensor.from_row_lengths(
-        values=col_seq_lens,
-        row_lengths=lengths,
-    )
+    lengths = tf.RaggedTensor.from_row_lengths(values=col_seq_lens, row_lengths=lengths)
     ragged = tf.RaggedTensor.from_row_lengths(
         values=ragged_input.flat_values, row_lengths=tf.reduce_sum(lengths, 1)
     )
@@ -143,11 +139,13 @@ def batch_packing(ragged_input, include_mask=True):
     )
     return ragged, output_mask, pos_ids
 
+
 def chunk_ragged_tensor(
     inputs: tf.RaggedTensor,
     other_end: tf.Tensor,
-    include_n_rows: int =2,
-    max_length: int=512 - 2, # -2 to account for BOS and EOS tokens that will be added.
+    include_n_rows: int = 2,
+    max_length: int = 512
+    - 2,  # -2 to account for BOS and EOS tokens that will be added.
 ):
     """
     Chunks up inputs, keeping the first include_n_rows in every chunk.
@@ -157,36 +155,47 @@ def chunk_ragged_tensor(
     # Figure out which tokens are in the first include_n_rows rows of the column and split these off.
 
     is_first_n_rows_orig = tf.gather_nd(
-        tf.math.less(other_end, include_n_rows),
-        inputs,
-        batch_dims=0
+        tf.math.less(other_end, include_n_rows), inputs, batch_dims=0
     )
-    less_than_max_length_tokens = tf.math.less(tf.math.reduce_sum(tf.cast(is_first_n_rows_orig, tf.int64), axis=1), max_length)
+    less_than_max_length_tokens = tf.math.less(
+        tf.math.reduce_sum(tf.cast(is_first_n_rows_orig, tf.int64), axis=1), max_length
+    )
     # If first row tokens is more than 512 - do not use any first row context.
-    is_first_n_rows = tf.logical_and(tf.expand_dims(less_than_max_length_tokens, 1), is_first_n_rows_orig)
-    num_first_n_row_tokens = tf.math.reduce_sum(tf.cast(is_first_n_rows, tf.int64), axis=1)
-    
+    is_first_n_rows = tf.logical_and(
+        tf.expand_dims(less_than_max_length_tokens, 1), is_first_n_rows_orig
+    )
+    num_first_n_row_tokens = tf.math.reduce_sum(
+        tf.cast(is_first_n_rows, tf.int64), axis=1
+    )
+
     num_cols_per_col = tf.cast(
         tf.maximum(
-            tf.math.ceil((inputs.row_lengths() - num_first_n_row_tokens) / (max_length - num_first_n_row_tokens)),
-            1, # Max(1 .) is to catch the case where all tokens are in the first n rows.
+            tf.math.ceil(
+                (inputs.row_lengths() - num_first_n_row_tokens)
+                / (max_length - num_first_n_row_tokens)
+            ),
+            1,  # Max(1 .) is to catch the case where all tokens are in the first n rows.
         ),
-        tf.int64
+        tf.int64,
     )
     first_n_rows = tf.ragged.boolean_mask(inputs, is_first_n_rows)
     other_rows = tf.ragged.boolean_mask(inputs, tf.math.logical_not(is_first_n_rows))
-    other_rows_length_goals = max_length -  num_first_n_row_tokens # bs
+    other_rows_length_goals = max_length - num_first_n_row_tokens  # bs
 
     # Reshape the rest of the columns to the per-column length_goal
     new_row_breaks = tf.cast(
         tf.minimum(
-            tf.ragged.range((num_cols_per_col + 1) * other_rows_length_goals, deltas=other_rows_length_goals, dtype=tf.int64),
-            tf.expand_dims(other_rows.row_lengths(), 1)
+            tf.ragged.range(
+                (num_cols_per_col + 1) * other_rows_length_goals,
+                deltas=other_rows_length_goals,
+                dtype=tf.int64,
+            ),
+            tf.expand_dims(other_rows.row_lengths(), 1),
         ),
-        tf.int64
+        tf.int64,
     )
     new_row_lengths = new_row_breaks[:, 1:] - new_row_breaks[:, :-1]
-    
+
     # with tf.compat.v1.control_dependencies(
     #     [
     #         tf.compat.v1.Print(
@@ -207,14 +216,15 @@ def chunk_ragged_tensor(
     #     new_row_lengths = tf.identity(new_row_lengths)
 
     other_rows_reshaped = tf.RaggedTensor.from_row_lengths(
-        values=other_rows.flat_values,
-        row_lengths=new_row_lengths.flat_values,
+        values=other_rows.flat_values, row_lengths=new_row_lengths.flat_values
     )
 
     # Tile the first N rows so that they are duplicated for each chunk of the column
 
     # a really gross way to get range broadcasted to num_cols_per_col - not sure of a better way to get this.
-    indexes = tf.ragged.range(num_cols_per_col) * 0 + tf.expand_dims(tf.range(batch_size), 1) 
+    indexes = tf.ragged.range(num_cols_per_col) * 0 + tf.expand_dims(
+        tf.range(batch_size), 1
+    )
     first_n_rows_duped = tf.gather(first_n_rows, indexes).merge_dims(0, 1)
 
     result = tf.concat([first_n_rows_duped, other_rows_reshaped], 1)
@@ -226,7 +236,9 @@ def chunk_ragged_tensor(
     #             ),
     #             [
     #                 "Result Shape", result.bounding_shape(),
-    #                 "input Shape", inputs.bounding_shape(),
+    #                 "Result Lengths", result.row_lengths(),
+    #                 "Input Shape", inputs.bounding_shape(),
+    #                 "Input Lengths", inputs.row_lengths(),
     #             ],
     #             summarize=1000
     #         )
@@ -269,35 +281,34 @@ def slice_by_table_indices(
             ),
             col_masks,
         ).merge_dims(0, 1)
+        # with tf.compat.v1.control_dependencies(
+        #     [tf.compat.v1.Print(tf.zeros(shape=()), ["Row Lengths by row index", inp_values_i.row_lengths()], summarize=1000)]
+        # ):
+        #     inp_values_i = tf.identity(inp_values_i)
         batch_mask = tf.math.not_equal(inp_values_i.row_lengths(), 0)
         inp_values = tf.RaggedTensor.from_row_lengths(
             values=inp_values_i.flat_values,
             row_lengths=tf.boolean_mask(inp_values_i.row_lengths(), batch_mask),
         )
         if chunk_tables:
-            inp_values = chunk_ragged_tensor(inp_values, other_end=other_end, max_length=max_length - 2) # -2 for eos and bos
+            inp_values = chunk_ragged_tensor(
+                inp_values, other_end=other_end, max_length=max_length - 2
+            )  # -2 for eos and bos
         col_bs = tf.shape(inp_values.row_lengths())[0]
         bos_expanded = tf.tile(bos_pad_ragged, [col_bs, 1, *(1 for _ in bos_pad.shape)])
         eos_expanded = tf.tile(eos_pad_ragged, [col_bs, 1, *(1 for _ in eos_pad.shape)])
-        output_ragged = tf.concat(
-            [
-                bos_expanded,
-                inp_values,
-                eos_expanded,
-            ],
-            axis=1,
-        )
+        output_ragged = tf.concat([bos_expanded, inp_values, eos_expanded], axis=1)
 
-        output_ragged, mask, pos_ids = batch_packing(output_ragged, include_mask=include_mask)
+        output_ragged, mask, pos_ids = batch_packing(
+            output_ragged, include_mask=include_mask
+        )
         col_seq_lens = output_ragged.row_lengths()
 
         # I don't think this default matters here as these are masked. Cannot be < 0
         col_values = output_ragged.to_tensor(
             default_value=pad_val, shape=[None, None] + inp.shape[2:]
         )
-        pos_ids = pos_ids.to_tensor(
-            default_value=0, shape=[None, None]
-        )
+        pos_ids = pos_ids.to_tensor(default_value=0, shape=[None, None])
     # This is to handle some edge cases where 0 length values are missing the final dim after conversion.
     col_values.set_shape([None, None] + list(inp.shape[2:]))
     max_length = tf.minimum(
@@ -337,13 +348,7 @@ def slice_by_table_indices(
     }
 
 
-def gather_col_vals(
-    inp,
-    gather_output,
-    eos_pad,
-    bos_pad,
-    pad_val,
-):
+def gather_col_vals(inp, gather_output, eos_pad, bos_pad, pad_val):
     """Used with the output of get_gather_indices to gather the input to the models.
 
     Args:
@@ -382,13 +387,7 @@ def gather_col_vals(
 
 
 def gather_tables(
-    X,
-    col_gather,
-    context,
-    bos_id,
-    eos_id,
-    table_position_type,
-    max_row_col_embedding,
+    X, col_gather, context, bos_id, eos_id, table_position_type, max_row_col_embedding
 ):
     """
     Prepares all the inputs required for initially feeding to one half of the table model.
@@ -413,13 +412,7 @@ def gather_tables(
         pos_eos = tf.constant([pad_id, pad_id, pad_id, pad_id])
 
     return {
-        **gather_col_vals(
-            X,
-            col_gather,
-            eos_id,
-            bos_id,
-            pad_val=1234,
-        ),
+        **gather_col_vals(X, col_gather, eos_id, bos_id, pad_val=1234),
         "scatter_vals": col_gather["values"],
         "positions": gather_col_vals(
             tf.cast(pos_raw, tf.int32), col_gather, pos_eos, pos_eos, pad_val=1
@@ -428,7 +421,14 @@ def gather_tables(
 
 
 def get_row_col_values(
-        X, context, row_gather, col_gather, bos_id, eos_id, table_position_type, max_row_col_embedding
+    X,
+    context,
+    row_gather,
+    col_gather,
+    bos_id,
+    eos_id,
+    table_position_type,
+    max_row_col_embedding,
 ):
     """
     Applys gather_tables on rows and columns and returns the output as a nested dict
