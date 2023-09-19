@@ -423,7 +423,7 @@ class TableChunker:
                 spans = self._make_chunks(combined_axis_spans)
                 for chunk_spans in spans:
                     if len(chunk_spans) == 0:
-                        raise ValueError()
+                        continue
                     new_chunk_mapping = self._create_chunk_mappings(chunk, chunk_spans)
                     chunk_text = "\n".join(
                         text[c["table"]["start"] : c["table"]["end"]]
