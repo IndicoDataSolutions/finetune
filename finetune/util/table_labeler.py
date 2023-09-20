@@ -98,13 +98,27 @@ def fix_spans(
 
 
 class TableETL:
+    # Overrides that maintain backwards compatibility when loading old models.
+    BACKWARDS_COMPAT_OVERRIDES = {
+        "split_preds_to_cells": False,
+        "chunk_tables": False,
+    }
+
     def __init__(
         self,
         drop_table_from_text_labels: bool = False,
         drop_table_from_text_preds: bool = True,
+        split_preds_to_cells: bool = True,
+        chunk_tables: bool = True
     ):
         self.drop_table_from_text_labels = drop_table_from_text_labels
         self.drop_table_from_text_preds = drop_table_from_text_preds
+        self.split_preds_to_cells = split_preds_to_cells
+        self.chunk_tables = chunk_tables
+
+    def __setstate__(self, state):
+        # A simple way so that we always pick up new default settings.
+        self.__dict__.update({**self.BACKWARDS_COMPAT_OVERRIDES, **state})
 
     def get_table_text(self, text: str, doc_offsets: t.List[t.Dict[str, int]]) -> str:
         for c in doc_offsets:
@@ -298,6 +312,35 @@ class TableETL:
             "doc_text": text,
         }
 
+    def cleanup_predictions(self, predictions, tables):
+        if self.split_preds_to_cells:
+            cell_bounded_predictions = []
+            for pred in predictions:
+                cell_bounds = []
+                for page_tables in tables:
+                    for table in page_tables:
+                        if not any(sequences_overlap(do, pred) for do in table["doc_offsets"]):
+                            # Optimization
+                            continue
+                        for cell in table["cells"]:
+                            for do in cell["doc_offsets"]:
+                                if sequences_overlap(do, pred):
+                                    cell_bounds.append(do)
+                for do in cell_bounds:
+                    cell_bounded_predictions.append({**pred, **do})
+                # Remove any spans that overlap the cells.
+                cell_bounded_predictions += self.subtract_spans(pred, cell_bounds)
+            predictions = cell_bounded_predictions
+
+        # Deduplicate / resolve overlap - Primarily comes from chunking.
+        deduplicated_preds = []
+        # Sorting from most confident to least confident so that we prioritise the most confident.
+        for pred in sorted(predictions, key=lambda x: -x["confidence"][x["label"]]):
+            if not any(sequences_overlap(pred, ddp) for ddp in deduplicated_preds):
+                deduplicated_preds.append(pred)
+        return sorted(predictions, key=lambda x: x["start"])
+        
+
     def resolve_preds(
         self,
         table_preds: t.List[DocumentSpans],
@@ -305,6 +348,7 @@ class TableETL:
         table_chunks: t.List[TableChunks],
         document_text: t.List[str],
         table_doc_i: t.List[int],
+        tables: t.List[DocumentTables],
     ) -> t.List[DocumentSpans]:
         output_preds = []
 
@@ -333,7 +377,7 @@ class TableETL:
                 )
             else:
                 output_doc_preds += text_preds_i
-            output_preds.append(sorted(output_doc_preds, key=lambda x: x["start"]))
+            output_preds.append(self.cleanup_predictions(output_doc_preds, tables=tables[i]))
         return output_preds
 
 
@@ -422,9 +466,9 @@ class TableChunker:
 
                 spans = self._make_chunks(combined_axis_spans)
                 for chunk_spans in spans:
-                    if len(chunk_spans) == 0:
-                        continue
                     new_chunk_mapping = self._create_chunk_mappings(chunk, chunk_spans)
+                    if len(chunk_spans) == 0 or len(new_chunk_mapping) == 0:
+                        continue
                     chunk_text = "\n".join(
                         text[c["table"]["start"] : c["table"]["end"]]
                         for c in new_chunk_mapping
@@ -602,17 +646,21 @@ class TableLabeler:
         text_model_config: t.Dict[str, t.Any] = None,
         drop_table_from_text_labels: bool = False,
         drop_table_from_text_preds: bool = True,
+        split_preds_to_cells: bool = True,
+        chunk_tables: bool = True
     ):
         self.etl = TableETL(
             drop_table_from_text_labels=drop_table_from_text_labels,
             drop_table_from_text_preds=drop_table_from_text_preds,
+            split_preds_to_cells=split_preds_to_cells,
+            chunk_tables=chunk_tables,
         )
         self.table_model = SequenceLabeler(
             base_model=TableRoBERTa, **(table_model_config or {})
         )
         self.text_model = SequenceLabeler(**(text_model_config or {}))
         self.table_chunker = TableChunker.from_table_model(self.table_model)
-
+        
     def fit(
         self,
         text: t.List[str],
@@ -640,12 +688,12 @@ class TableLabeler:
             },
         )
 
-    def predict(self, text, tables, **kwargs):
+    def predict(self, text, tables, model_path=None, **kwargs):
         # Please don't use this in production
         # it's just a shim for predict_from_file so we don't have 2 separate implementations.
         scheduler = Scheduler()
         with tempfile.TemporaryDirectory() as tmpdir:
-            model_path = os.path.join(tmpdir, "table_model.jl")
+            model_path = model_path or os.path.join(tmpdir, "table_model.jl")
             self.save(model_path)
             return self.predict_from_file(
                 text=text,
@@ -669,8 +717,9 @@ class TableLabeler:
         etl = scheduler.load_etl(model_file_path, cache_key)
         model_inputs = etl.get_table_text_chunks_and_context(text=text, tables=tables)
         table_model = scheduler.get_model(model_file_path, key="table")
-        table_chunker = TableChunker.from_table_model(table_model)
-        model_inputs = table_chunker.chunk(model_inputs)
+        if etl.chunk_tables:
+            table_chunker = TableChunker.from_table_model(table_model)
+            model_inputs = table_chunker.chunk(model_inputs)
         table_preds = scheduler.predict(
             model_file_path,
             model_inputs["table_text"],
@@ -678,9 +727,6 @@ class TableLabeler:
             key="table",
             return_negative_confidence=return_negative_confidence,
             cache_key=cache_key,
-        )
-        table_preds, table_doc_i, table_chunks = table_chunker.dechunk(
-            table_preds, model_inputs["table_doc_i"], model_inputs["table_chunks"]
         )
         text_preds = scheduler.predict(
             model_file_path,
@@ -694,7 +740,8 @@ class TableLabeler:
         return etl.resolve_preds(
             table_preds=table_preds,
             text_preds=text_preds,
-            table_chunks=table_chunks,
+            table_chunks=model_inputs["table_chunks"],
             document_text=model_inputs["doc_text"],
-            table_doc_i=table_doc_i,
+            table_doc_i=model_inputs["table_doc_i"],
+            tables=tables,
         )

@@ -558,7 +558,10 @@ class SequenceLabeler(BaseModel):
                 if label in classes:
                     label_idx = classes.index(label)
                     proba_seq_masked[il:, label_idx] = 0.0
-            doc_level_probas.append(np.max(proba_seq_masked, axis=0))
+            if proba_seq_masked.shape[0] == 0:
+                doc_level_probas.append(0)
+            else:
+                doc_level_probas.append(np.max(proba_seq_masked, axis=0))
 
             for label, start_idx, end_idx, proba in zip(
                 label_seq, start_of_token_seq, end_of_token_seq, proba_seq
