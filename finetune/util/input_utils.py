@@ -67,7 +67,7 @@ def batch_dataset(
         shapes = {**shapes, "length": tf.TensorShape([])}
 
     if table_batching:
-
+        assert isinstance(shapes, tuple), "You cannot use table batching to predict on tables as order is not guarenteed"
         def batched_dataset():
             return (
                 dataset()

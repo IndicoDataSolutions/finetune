@@ -366,7 +366,7 @@ class TableETL:
                     table_preds,
                     table_chunks=table_chunks,
                     output_space_text=document_text_i,
-                    input_space="table",
+                    input_space="chunk" if self.chunk_tables else "table",
                     output_space="document",
                 )
             if self.drop_table_from_text_preds:
@@ -442,59 +442,51 @@ class TableChunker:
                 {"start": s, "end": e}
                 for s, e in zip(tokens.token_starts, tokens.token_ends)
             ]
-            if len(token_bounds) <= self.max_length:
-                texts.append(text)
-                if labels is not None:
-                    labels.append(label)
-                contexts.append(context)
-                doc_is.append(doc_i)
-                chunks.append(chunk)
+            combined_row_spans = self.get_axis_spans(
+                context=context, token_bounds=token_bounds, context_key="start_row"
+            )
+            combined_col_spans = self.get_axis_spans(
+                context=context, token_bounds=token_bounds, context_key="start_col"
+            )
+            if max(r["num_effective_tokens"] for r in combined_row_spans) > max(
+                c["num_effective_tokens"] for c in combined_col_spans
+            ):
+                # Split along the narrowest axis.
+                combined_axis_spans = combined_col_spans
             else:
-                combined_row_spans = self.get_axis_spans(
-                    context=context, token_bounds=token_bounds, context_key="start_row"
-                )
-                combined_col_spans = self.get_axis_spans(
-                    context=context, token_bounds=token_bounds, context_key="start_col"
-                )
-                if max(r["num_effective_tokens"] for r in combined_row_spans) > max(
-                    c["num_effective_tokens"] for c in combined_col_spans
-                ):
-                    # Split along the narrowest axis.
-                    combined_axis_spans = combined_col_spans
-                else:
-                    combined_axis_spans = combined_row_spans
+                combined_axis_spans = combined_row_spans
 
-                spans = self._make_chunks(combined_axis_spans)
-                for chunk_spans in spans:
-                    new_chunk_mapping = self._create_chunk_mappings(chunk, chunk_spans)
-                    if len(chunk_spans) == 0 or len(new_chunk_mapping) == 0:
-                        continue
-                    chunk_text = "\n".join(
-                        text[c["table"]["start"] : c["table"]["end"]]
-                        for c in new_chunk_mapping
-                    )
-                    texts.append(chunk_text)
-                    if labels is not None:
-                        labels.append(
-                            fix_spans(
-                                label,
-                                new_chunk_mapping,
-                                output_space="chunk",
-                                input_space="table",
-                                output_space_text=chunk_text,
-                            )
-                        )
-                    contexts.append(
+            spans = self._make_chunks(combined_axis_spans)
+            for chunk_spans in spans:
+                new_chunk_mapping = self._create_chunk_mappings(chunk, chunk_spans)
+                if len(chunk_spans) == 0 or len(new_chunk_mapping) == 0:
+                    continue
+                chunk_text = "\n".join(
+                    text[c["table"]["start"] : c["table"]["end"]]
+                    for c in new_chunk_mapping
+                )
+                texts.append(chunk_text)
+                if labels is not None:
+                    labels.append(
                         fix_spans(
-                            context,
+                            label,
                             new_chunk_mapping,
                             output_space="chunk",
                             input_space="table",
                             output_space_text=chunk_text,
                         )
                     )
-                    doc_is.append(doc_i)
-                    chunks.append(new_chunk_mapping)
+                contexts.append(
+                    fix_spans(
+                        context,
+                        new_chunk_mapping,
+                        output_space="chunk",
+                        input_space="table",
+                        output_space_text=chunk_text,
+                    )
+                )
+                doc_is.append(doc_i)
+                chunks.append(new_chunk_mapping)
         if labels is not None:
             label_output = {"table_labels": labels}
         else:
@@ -624,12 +616,6 @@ class TableChunker:
             )
         assert len([t for t in token_spans if not t.get("used", False)]) == 0
         return combined_rows
-
-    @classmethod
-    def dechunk(cls, preds, doc_i, table_chunks):
-        # TODO: do we really need to do this? Or just allow these new sub-tables to be resolved by the table model
-        # Main diff here is resolving overlapping context on context rows. (but we currently are not tracking this)
-        return preds, doc_i, table_chunks
 
     @classmethod
     def from_table_model(cls, table_model):

@@ -211,7 +211,7 @@ class BasePipeline(metaclass=ABCMeta):
                 "predict_dataset": batch_dataset(
                     raw_dataset,
                     batch_size=self.config.predict_batch_size,
-                    table_batching=self.config.table_batching,
+                    table_batching=False, # We cannot use table batching here because the order of the outputs is impacted.
                     shapes=shapes,
                 )
             }
