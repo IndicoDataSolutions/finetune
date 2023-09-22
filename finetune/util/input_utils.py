@@ -59,7 +59,13 @@ def add_length(x, y=None):
 
 
 def batch_dataset(
-    dataset, batch_size, shapes, n_epochs=1, shuffle=False, table_batching=False
+    dataset,
+    batch_size,
+    shapes,
+    max_length,
+    n_epochs=1,
+    shuffle=False,
+    table_batching=False,
 ):
     if isinstance(shapes, tuple):
         shapes = ({**shapes[0], "length": tf.TensorShape([])}, shapes[1])
@@ -67,7 +73,10 @@ def batch_dataset(
         shapes = {**shapes, "length": tf.TensorShape([])}
 
     if table_batching:
-        assert isinstance(shapes, tuple), "You cannot use table batching to predict on tables as order is not guarenteed"
+        assert isinstance(
+            shapes, tuple
+        ), "You cannot use table batching to predict on tables as order is not guarenteed"
+
         def batched_dataset():
             return (
                 dataset()
@@ -93,13 +102,8 @@ def batch_dataset(
                                 tf.int32,
                             )
                         ),
-                        bucket_boundaries=[512, 1024, 2048],
-                        bucket_batch_sizes=[
-                            batch_size * 4,
-                            batch_size * 2,
-                            batch_size,
-                            1,
-                        ],
+                        bucket_boundaries=[max_length],
+                        bucket_batch_sizes=[batch_size, 1],
                         padded_shapes=shapes,
                         drop_remainder=False,
                     )

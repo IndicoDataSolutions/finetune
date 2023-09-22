@@ -211,7 +211,8 @@ class BasePipeline(metaclass=ABCMeta):
                 "predict_dataset": batch_dataset(
                     raw_dataset,
                     batch_size=self.config.predict_batch_size,
-                    table_batching=False, # We cannot use table batching here because the order of the outputs is impacted.
+                    max_length=self.config.max_length,
+                    table_batching=False,  # We cannot use table batching here because the order of the outputs is impacted.
                     shapes=shapes,
                 )
             }
@@ -262,6 +263,7 @@ class BasePipeline(metaclass=ABCMeta):
             "train_dataset": batch_dataset(
                 train_dataset,
                 batch_size=self.config.batch_size,
+                max_length=self.config.max_length,
                 shapes=shapes,
                 n_epochs=self.config.n_epochs,
                 shuffle=self.config.reshuffle_chunks,
@@ -270,6 +272,7 @@ class BasePipeline(metaclass=ABCMeta):
             "val_dataset": batch_dataset(
                 val_dataset,
                 batch_size=self.config.batch_size,
+                max_length=self.config.max_length,
                 shapes=shapes,
                 table_batching=self.config.table_batching,
             ),
@@ -353,6 +356,7 @@ class BasePipeline(metaclass=ABCMeta):
             "train_dataset": batch_dataset(
                 train_dataset_unbatched,
                 batch_size=self.config.batch_size,
+                max_length=self.config.max_length,
                 shapes=shapes,
                 n_epochs=self.config.n_epochs,
                 shuffle=self.config.reshuffle_chunks,
@@ -361,6 +365,7 @@ class BasePipeline(metaclass=ABCMeta):
             "val_dataset": batch_dataset(
                 val_dataset_unbatched,
                 batch_size=self.config.batch_size,
+                max_length=self.config.max_length,
                 shapes=shapes,
                 table_batching=self.config.table_batching,
             ),
