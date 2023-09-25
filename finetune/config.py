@@ -258,6 +258,7 @@ def get_default_config():
         lr_warmup=0.002,
         max_grad_norm=1.0,
         accum_steps=1,
+        acc_grads_on_cpu=True,
         #
         # Language Model Settings
         lm_loss_coef=0.0,

@@ -346,6 +346,7 @@ def get_model_fn(
                 vector_l2=params.vector_l2,
                 accumulate_steps=params.accum_steps,
                 max_training_hours=params.max_training_hours,
+                acc_grads_on_cpu=params.acc_grads_on_cpu,
             )
 
         if mode == tf.estimator.ModeKeys.PREDICT:

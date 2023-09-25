@@ -1,9 +1,16 @@
 import tensorflow as tf
+import contextlib
 
 from finetune.errors import FinetuneError
 
 
-def get_grad_accumulation_optimizer(optimizer_class, accum_steps):
+# contextlib.nullcontext is available in python >= 3.10
+@contextlib.contextmanager
+def nullcontext():
+    yield None
+
+
+def get_grad_accumulation_optimizer(optimizer_class, accum_steps, accumulate_on_cpu=False):
     """
     Adds gradient accumulation to an Optimizer.
 
@@ -30,18 +37,20 @@ def get_grad_accumulation_optimizer(optimizer_class, accum_steps):
                 if g is None:
                     continue
                 g = tf.convert_to_tensor(value=g)
-                accum_grad = tf.compat.v1.get_variable(
-                    name=v.name[:-2] + "_acc",
-                    shape=g.shape,
-                    dtype=g.dtype,
-                    initializer=tf.compat.v1.constant_initializer(0),
-                    use_resource=True,
-                    trainable=False
-                )
-                try:
-                    add_gradients_ops.append(accum_grad.assign_add(g))
-                except ValueError:
-                    raise FinetuneError("GradAccumulationOptimizer does not currently support multiple GPUs")
+
+                with tf.device("cpu") if accumulate_on_cpu else nullcontext():
+                    accum_grad = tf.compat.v1.get_variable(
+                        name=v.name[:-2] + "_acc",
+                        shape=g.shape,
+                        dtype=g.dtype,
+                        initializer=tf.compat.v1.constant_initializer(0),
+                        use_resource=True,
+                        trainable=False
+                    )
+                    try:
+                        add_gradients_ops.append(accum_grad.assign_add(g))
+                    except ValueError:
+                        raise FinetuneError("GradAccumulationOptimizer does not currently support multiple GPUs")
                 accumulation_vars.append(accum_grad)
 
                 grads_and_accumulated_vars.append((accum_grad, v))
