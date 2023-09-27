@@ -407,7 +407,7 @@ class TableChunker:
                     "start": c["start"],
                     "end": c["end"],
                     "max_cell_span": max(
-                        c["end_col"] - c["start_col"], c["end_row"] - c["start_col"]
+                        c["end_col"] - c["start_col"], c["end_row"] - c["start_row"]
                     )
                     + 1,
                 }
@@ -663,7 +663,8 @@ class TableLabeler:
         model_inputs = self.etl.get_table_text_chunks_and_context(
             text=text, tables=tables, labels=labels
         )
-        model_inputs = self.table_chunker.chunk(model_inputs)
+        if self.etl.chunk_tables:
+            model_inputs = self.table_chunker.chunk(model_inputs)
         self.table_model.fit(
             model_inputs["table_text"],
             model_inputs["table_labels"],

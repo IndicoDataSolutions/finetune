@@ -523,7 +523,7 @@ class TableRoBERTa(_BaseBert):
         "base_model_path": os.path.join("bert", "roberta-table-twinbert-v1.jl"),
         "bert_use_pooler": False,
         # This is undesirable but better than nothing in extreme cases where table chunking inside the table-labeler doesn't help enough
-        "chunk_long_sequences": True,
+        "chunk_long_sequences": False,
         "include_bos_eos": False,
         "permit_uninitialized": r"mixing_fn_|pos_|kernel|bias",  # TODO: this can be refined.
     }

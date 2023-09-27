@@ -332,12 +332,13 @@ def slice_by_table_indices(
         ]
     else:
         ctrl_dep = []
-    with tf.control_dependencies(ctrl_dep):
-        col_values = col_values[:, :max_length]
-        if include_mask:
-            mask = mask[:, :max_length, :max_length]
-            mask.set_shape([None, None, None])
-        pos_ids = pos_ids[:, :max_length]
+    if not chunk_tables:
+        with tf.control_dependencies(ctrl_dep):
+            col_values = col_values[:, :max_length]
+            if include_mask:
+                mask = mask[:, :max_length, :max_length]
+                mask.set_shape([None, None, None])
+            pos_ids = pos_ids[:, :max_length]
 
     col_values.set_shape([None, None] + list(inp.shape[2:]))
     return {
