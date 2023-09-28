@@ -215,7 +215,11 @@ class SequenceLabelingEncoder(BaseEncoder):
         # Don't run check if text wasn't provided
         if 'text' in label:
             if offset is not None:
-                strings_agree = input_text[label["start"] - offset: label["end"] - offset] == label["text"]
+                # offsets are present when we are using document labeler.
+                # In this case input_text is a page and offset is the char index of where that page starts.
+                label_text = label["text"][max(0, offset - label["start"]): len(input_text) + offset - label["start"]]
+                doc_text = input_text[max(0, label["start"] - offset): label["end"] - offset]
+                strings_agree = doc_text == label_text
             else:
                 strings_agree = input_text[label["start"]: label["end"]] == label["text"]
         else:
