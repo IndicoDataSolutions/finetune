@@ -268,6 +268,7 @@ class BasePipeline(metaclass=ABCMeta):
                 n_epochs=self.config.n_epochs,
                 shuffle=self.config.reshuffle_chunks,
                 table_batching=self.config.table_batching,
+                random_seed=self.config.seed,
             ),
             "val_dataset": batch_dataset(
                 val_dataset,
@@ -361,6 +362,7 @@ class BasePipeline(metaclass=ABCMeta):
                 n_epochs=self.config.n_epochs,
                 shuffle=self.config.reshuffle_chunks,
                 table_batching=self.config.table_batching,
+                random_seed=self.config.seed,
             ),
             "val_dataset": batch_dataset(
                 val_dataset_unbatched,

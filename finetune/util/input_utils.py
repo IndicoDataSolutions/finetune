@@ -66,6 +66,7 @@ def batch_dataset(
     n_epochs=1,
     shuffle=False,
     table_batching=False,
+    random_seed=42,
 ):
     if isinstance(shapes, tuple):
         shapes = ({**shapes[0], "length": tf.TensorShape([])}, shapes[1])
@@ -81,7 +82,7 @@ def batch_dataset(
             return (
                 dataset()
                 .map(add_length)
-                .shuffle(500 if shuffle else 1)
+                .shuffle(500 if shuffle else 1, seed=random_seed)
                 # When we update to tf.2.13 this will change to be a method on the dataset.
                 .apply(
                     tf.data.experimental.bucket_by_sequence_length(
@@ -118,7 +119,7 @@ def batch_dataset(
             return (
                 dataset()
                 .map(add_length)
-                .shuffle(500 if shuffle else 1)
+                .shuffle(500 if shuffle else 1, seed=random_seed)
                 .padded_batch(batch_size, padded_shapes=shapes, drop_remainder=False)
                 .repeat(n_epochs)
                 .prefetch(tf.data.experimental.AUTOTUNE)
