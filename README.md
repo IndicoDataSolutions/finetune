@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/137103159.svg)](https://zenodo.org/badge/latestdoi/137103159)
+
 <img src="https://i.imgur.com/kYL058E.png" width="100%">
 
 **Scikit-learn style model finetuning for NLP**
