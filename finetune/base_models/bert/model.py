@@ -504,9 +504,9 @@ class TableRoBERTa(_BaseBert):
         # Just incase all cells fall into the same buckets this -8 allows us to pack the batches much tighter once we add EOS and BOS
         "max_length": 2048 - 8,
         "table_batching": True,
-        "batch_size": 2,  # When table batching is true this becomes a nominal batch size - must be divisible by 2.
+        "batch_size": 2,  # When table batching is true this becomes a nominal batch size. Very long docs have batch size = 1
         "class_weights": None,
-        "n_epochs": 16,
+        "n_epochs": 24,
         "epsilon": 1e-8,
         "lr": 1e-4,
         "context_injection": True,
@@ -522,7 +522,6 @@ class TableRoBERTa(_BaseBert):
         "low_memory_mode": True,
         "base_model_path": os.path.join("bert", "roberta-table-twinbert-v1.jl"),
         "bert_use_pooler": False,
-        # This is undesirable but better than nothing in extreme cases where table chunking inside the table-labeler doesn't help enough
         "chunk_long_sequences": False,
         "include_bos_eos": False,
         "permit_uninitialized": r"mixing_fn_|pos_|kernel|bias",  # TODO: this can be refined.
