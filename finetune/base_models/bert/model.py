@@ -504,6 +504,7 @@ class TableRoBERTa(_BaseBert):
         # Just incase all cells fall into the same buckets this -8 allows us to pack the batches much tighter once we add EOS and BOS
         "max_length": 2048 - 8,
         "table_batching": True,
+        "chunk_tables": True,
         "batch_size": 2,  # When table batching is true this becomes a nominal batch size. Very long docs have batch size = 1
         "class_weights": None,
         "n_epochs": 24,
