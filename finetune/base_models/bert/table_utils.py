@@ -148,8 +148,8 @@ def chunk_ragged_tensor(
     inputs: tf.RaggedTensor,
     other_end: tf.Tensor,
     include_n_rows: int = 2,
-    base_model_max_length: int = 512
-    - 2,  # -2 to account for BOS and EOS tokens that will be added.
+    base_model_max_length: int = 512- 2,
+     # -2 to account for BOS and EOS tokens that will be added.
 ):
     """
     Chunks up inputs, keeping the first include_n_rows in every chunk.
@@ -255,8 +255,8 @@ def slice_by_table_indices(
         )
         if chunk_tables:
             inp_values = chunk_ragged_tensor(
-                inp_values, other_end=other_end, max_length=base_model_max_length - 2,
-                base_model_max_length=base_model_max_length
+                inp_values, other_end=other_end,
+                base_model_max_length=base_model_max_length - 2
             )  # -2 for eos and bos
         col_bs = tf.shape(inp_values.row_lengths())[0]
         bos_expanded = tf.tile(bos_pad_ragged, [col_bs, 1, *(1 for _ in bos_pad.shape)])
