@@ -120,7 +120,9 @@ def batch_packing(ragged_input, include_mask=True, base_model_max_length=512):
         raw_mask = tf.sequence_mask(
             lengths_ts,
             dtype=tf.float32,
-            maxlen=tf.minimum(base_model_max_length, tf.cast(tf.reduce_max(lengths_ts), tf.int32)),
+            maxlen=tf.minimum(
+                base_model_max_length, tf.cast(tf.reduce_max(lengths_ts), tf.int32)
+            ),
         )
         compound_mask = tf.reduce_sum(
             tf.expand_dims(raw_mask, 2) * tf.expand_dims(raw_mask, 3), 1
@@ -148,8 +150,8 @@ def chunk_ragged_tensor(
     inputs: tf.RaggedTensor,
     other_end: tf.Tensor,
     include_n_rows: int = 2,
-    base_model_max_length: int = 512- 2,
-     # -2 to account for BOS and EOS tokens that will be added.
+    base_model_max_length: int = 512 - 2,
+    # -2 to account for BOS and EOS tokens that will be added.
 ):
     """
     Chunks up inputs, keeping the first include_n_rows in every chunk.
@@ -162,7 +164,8 @@ def chunk_ragged_tensor(
         tf.math.less(other_end, include_n_rows), inputs, batch_dims=0
     )
     less_than_max_length_tokens = tf.math.less(
-        tf.math.reduce_sum(tf.cast(is_first_n_rows_orig, tf.int64), axis=1), base_model_max_length
+        tf.math.reduce_sum(tf.cast(is_first_n_rows_orig, tf.int64), axis=1),
+        base_model_max_length,
     )
     # If first row tokens is more than base_model_max_length - do not use any first row context.
     is_first_n_rows = tf.logical_and(
@@ -255,8 +258,9 @@ def slice_by_table_indices(
         )
         if chunk_tables:
             inp_values = chunk_ragged_tensor(
-                inp_values, other_end=other_end,
-                base_model_max_length=base_model_max_length - 2
+                inp_values,
+                other_end=other_end,
+                base_model_max_length=base_model_max_length - 2,
             )  # -2 for eos and bos
         col_bs = tf.shape(inp_values.row_lengths())[0]
         bos_expanded = tf.tile(bos_pad_ragged, [col_bs, 1, *(1 for _ in bos_pad.shape)])
@@ -264,7 +268,9 @@ def slice_by_table_indices(
         output_ragged = tf.concat([bos_expanded, inp_values, eos_expanded], axis=1)
 
         output_ragged, mask, pos_ids = batch_packing(
-            output_ragged, include_mask=include_mask, base_model_max_length=base_model_max_length
+            output_ragged,
+            include_mask=include_mask,
+            base_model_max_length=base_model_max_length,
         )
         col_seq_lens = output_ragged.row_lengths()
 
@@ -276,7 +282,8 @@ def slice_by_table_indices(
     # This is to handle some edge cases where 0 length values are missing the final dim after conversion.
     col_values.set_shape([None, None] + list(inp.shape[2:]))
     max_length = tf.minimum(
-        tf.math.floordiv(max_tokens_per_batch, tf.shape(col_values)[0]), base_model_max_length
+        tf.math.floordiv(max_tokens_per_batch, tf.shape(col_values)[0]),
+        base_model_max_length,
     )
     if check_len:
         ctrl_dep = [

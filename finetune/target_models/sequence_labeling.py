@@ -96,16 +96,7 @@ class SequencePipeline(BasePipeline):
         target_shape = (
             [None, self.label_encoder.target_dim] if self.multi_label else [None]
         )
-        return (
-            (
-                types,
-                tf.float32,
-            ),
-            (
-                shapes,
-                TS(target_shape),
-            ),
-        )
+        return ((types, tf.float32), (shapes, TS(target_shape)))
 
     def _target_encoder(self):
         if self.multi_label:
@@ -538,10 +529,7 @@ class SequenceLabeler(BaseModel):
                     chunk_start_char_idx = 0
                 # This is a 0 length span here.
                 chunk_spans.append(
-                    {
-                        "start": chunk_start_char_idx,
-                        "end": chunk_start_char_idx,
-                    }
+                    {"start": chunk_start_char_idx, "end": chunk_start_char_idx}
                 )
             else:
                 chunk_spans.append(
@@ -678,10 +666,7 @@ class SequenceLabeler(BaseModel):
                     )
                 elif self.config.predict_chunk_markers:
                     doc_annotations.append(
-                        {
-                            "prediction": doc_annotations_sample[0],
-                            "chunks": chunk_spans,
-                        }
+                        {"prediction": doc_annotations_sample[0], "chunks": chunk_spans}
                     )
                 else:
                     doc_annotations.append(doc_annotations_sample[0])

@@ -311,10 +311,7 @@ class TableETL:
         }
 
     def cleanup_predictions(
-        self,
-        predictions: DocumentSpans,
-        tables: DocumentTables,
-        doc_text: str
+        self, predictions: DocumentSpans, tables: DocumentTables, doc_text: str
     ):
         """Cleans up predictions, applying deduplication and optionally splitting on cell boundaries.
 
@@ -423,7 +420,10 @@ class TableChunker:
 
     There is no invese chunking as TableETL.resolve_preds will simply map directly from chunk to document if chunking is enabled.
     """
-    def __init__(self, max_length: str, tokenizer: BaseEncoder, n_rows_context: int=2):
+
+    def __init__(
+        self, max_length: str, tokenizer: BaseEncoder, n_rows_context: int = 2
+    ):
         self.max_length = max_length
         self.tokenizer = tokenizer
         self.n_rows_context = n_rows_context

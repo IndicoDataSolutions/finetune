@@ -235,10 +235,7 @@ def get_model_fn(
 
             if build_target_model:
                 target_model_state = target_model_op(
-                    featurizer_state=featurizer_state,
-                    Y=Y,
-                    params=params,
-                    mode=mode,
+                    featurizer_state=featurizer_state, Y=Y, params=params, mode=mode
                 )
                 if target_model_state is not None:
                     if (
@@ -251,7 +248,10 @@ def get_model_fn(
                         )
                         train_loss += (1 - lm_loss_coef) * target_loss
                         tf.compat.v1.summary.scalar("TargetModelLoss", target_loss)
-                    if mode == tf.estimator.ModeKeys.PREDICT or tf.estimator.ModeKeys.EVAL:
+                    if (
+                        mode == tf.estimator.ModeKeys.PREDICT
+                        or tf.estimator.ModeKeys.EVAL
+                    ):
                         logits = target_model_state["logits"]
                         predict_params = target_model_state.get("predict_params", {})
                         if "_threshold" in params:
