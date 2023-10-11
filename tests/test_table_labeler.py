@@ -1,4 +1,3 @@
-import chunk
 import pytest
 from finetune.util.table_labeler import TableLabeler, TableETL
 from finetune.scheduler import Scheduler

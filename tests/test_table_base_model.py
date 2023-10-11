@@ -1,4 +1,3 @@
-import chunk
 import os
 import unittest
 
@@ -366,7 +365,7 @@ class TestTableUtils:
             pad_val=tf.convert_to_tensor([0, 101]),
             include_mask=True,
             other_end=tf.constant([[0, 1, 2, 3, 4, 5, 6]]),
-            max_length=5,
+            base_model_max_length=5,
         )
         print(gi["values"].numpy())
         assert tf.reduce_all(
@@ -390,7 +389,7 @@ class TestTableUtils:
             pad_val=tf.convert_to_tensor([0, 101]),
             include_mask=True,
             other_end=tf.constant([[0, 0, 1, 1, 4, 5, 6]]),
-            max_length=5,
+            base_model_max_length=5,
         )
         print(gi["values"].numpy())
         assert tf.reduce_all(

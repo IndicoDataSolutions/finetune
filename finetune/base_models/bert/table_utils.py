@@ -13,11 +13,15 @@ def get_gather_indices(X, sequence_lengths, start, end, other_end, chunk_tables)
 
     Internally - Special tokens are appended to X before the gathers are applied.
 
+    Additionally, long rows / columns are chunked up, retaining 2 columns / rows of context (intended to be the headers) into every chunk.
+
     Args:
         X: Input tokens [batch, sequence]
         sequence_lengths: Number of tokens per sequence [batch]
         start: The start of the col/row range.
         end: The end of the col/row range.
+        other_end: The end of the row/col range. This is used to determine the first 2 rows / cols to retain in all chunks for context.
+        chunk_tables: a boolean. Whether to apply the chunking operation described above 
 
     Returns:
     A dict:
@@ -62,7 +66,7 @@ def get_gather_indices(X, sequence_lengths, start, end, other_end, chunk_tables)
     )
 
 
-def batch_packing(ragged_input, include_mask=True):
+def batch_packing(ragged_input, include_mask=True, base_model_max_length=512):
     """
     Takes a ragged tensor input and re-packs the batches to minimise the batch size without
     impacting the sequence length. Additionally returns a mask to use with self-attention so 
@@ -81,7 +85,7 @@ def batch_packing(ragged_input, include_mask=True):
 
     # If there is some fast way to sort the rows of a ragged tensor we might consider doing this first.
     col_seq_lens = ragged_input.row_lengths()
-    max_length = tf.minimum(tf.reduce_max(col_seq_lens), 512)
+    max_length = tf.minimum(tf.reduce_max(col_seq_lens), base_model_max_length)
 
     def loop_body(l, i):
         temp_ragged = tf.RaggedTensor.from_row_lengths(
@@ -90,7 +94,7 @@ def batch_packing(ragged_input, include_mask=True):
         return (
             tf.cond(
                 pred=tf.math.less_equal(
-                    tf.minimum(tf.reduce_sum(temp_ragged[-1]), 512),
+                    tf.minimum(tf.reduce_sum(temp_ragged[-1]), base_model_max_length),
                     max_length - col_seq_lens[i],
                 ),
                 true_fn=lambda: tf.concat((l[:-1], [l[-1] + 1]), axis=0),
@@ -116,7 +120,7 @@ def batch_packing(ragged_input, include_mask=True):
         raw_mask = tf.sequence_mask(
             lengths_ts,
             dtype=tf.float32,
-            maxlen=tf.minimum(512, tf.cast(tf.reduce_max(lengths_ts), tf.int32)),
+            maxlen=tf.minimum(base_model_max_length, tf.cast(tf.reduce_max(lengths_ts), tf.int32)),
         )
         compound_mask = tf.reduce_sum(
             tf.expand_dims(raw_mask, 2) * tf.expand_dims(raw_mask, 3), 1
@@ -144,7 +148,7 @@ def chunk_ragged_tensor(
     inputs: tf.RaggedTensor,
     other_end: tf.Tensor,
     include_n_rows: int = 2,
-    max_length: int = 512
+    base_model_max_length: int = 512
     - 2,  # -2 to account for BOS and EOS tokens that will be added.
 ):
     """
@@ -158,9 +162,9 @@ def chunk_ragged_tensor(
         tf.math.less(other_end, include_n_rows), inputs, batch_dims=0
     )
     less_than_max_length_tokens = tf.math.less(
-        tf.math.reduce_sum(tf.cast(is_first_n_rows_orig, tf.int64), axis=1), max_length
+        tf.math.reduce_sum(tf.cast(is_first_n_rows_orig, tf.int64), axis=1), base_model_max_length
     )
-    # If first row tokens is more than 512 - do not use any first row context.
+    # If first row tokens is more than base_model_max_length - do not use any first row context.
     is_first_n_rows = tf.logical_and(
         tf.expand_dims(less_than_max_length_tokens, 1), is_first_n_rows_orig
     )
@@ -172,7 +176,7 @@ def chunk_ragged_tensor(
         tf.maximum(
             tf.math.ceil(
                 (inputs.row_lengths() - num_first_n_row_tokens)
-                / (max_length - num_first_n_row_tokens)
+                / (base_model_max_length - num_first_n_row_tokens)
             ),
             1,  # Max(1 .) is to catch the case where all tokens are in the first n rows.
         ),
@@ -180,7 +184,7 @@ def chunk_ragged_tensor(
     )
     first_n_rows = tf.ragged.boolean_mask(inputs, is_first_n_rows)
     other_rows = tf.ragged.boolean_mask(inputs, tf.math.logical_not(is_first_n_rows))
-    other_rows_length_goals = max_length - num_first_n_row_tokens  # bs
+    other_rows_length_goals = base_model_max_length - num_first_n_row_tokens  # bs
 
     # Reshape the rest of the columns to the per-column length_goal
     new_row_breaks = tf.cast(
@@ -195,26 +199,6 @@ def chunk_ragged_tensor(
         tf.int64,
     )
     new_row_lengths = new_row_breaks[:, 1:] - new_row_breaks[:, :-1]
-
-    # with tf.compat.v1.control_dependencies(
-    #     [
-    #         tf.compat.v1.Print(
-    #         tf.zeros(
-    #             shape=[]
-    #         ),
-    #         [
-    #             "NEW ROW LENGTHS", new_row_lengths.flat_values,
-    #             "other_rows_length_goals", other_rows_length_goals,
-    #             "num_cols_per_col", num_cols_per_col,
-    #             "other_rows.row_lengths()", other_rows.row_lengths(),
-    #             "num_first_n_row_tokens", num_first_n_row_tokens
-    #         ],
-    #         summarize=1000,
-    #         )
-    #     ]
-    # ):
-    #     new_row_lengths = tf.identity(new_row_lengths)
-
     other_rows_reshaped = tf.RaggedTensor.from_row_lengths(
         values=other_rows.flat_values, row_lengths=new_row_lengths.flat_values
     )
@@ -228,23 +212,6 @@ def chunk_ragged_tensor(
     first_n_rows_duped = tf.gather(first_n_rows, indexes).merge_dims(0, 1)
 
     result = tf.concat([first_n_rows_duped, other_rows_reshaped], 1)
-    # with tf.compat.v1.control_dependencies(
-    #     [
-    #         tf.compat.v1.Print(
-    #             tf.zeros(
-    #                 shape=[]
-    #             ),
-    #             [
-    #                 "Result Shape", result.bounding_shape(),
-    #                 "Result Lengths", result.row_lengths(),
-    #                 "Input Shape", inputs.bounding_shape(),
-    #                 "Input Lengths", inputs.row_lengths(),
-    #             ],
-    #             summarize=1000
-    #         )
-    #     ]
-    # ):
-    #     result = tf.identity(result)
     return result
 
 
@@ -255,9 +222,9 @@ def slice_by_table_indices(
     bos_pad,
     pad_val,
     other_end,
-    max_length=512,
+    base_model_max_length=512,
     max_tokens_per_batch=512 * 100,
-    check_len=True,
+    check_len=False,
     include_mask=False,
     chunk_tables=True,
 ):
@@ -281,10 +248,6 @@ def slice_by_table_indices(
             ),
             col_masks,
         ).merge_dims(0, 1)
-        # with tf.compat.v1.control_dependencies(
-        #     [tf.compat.v1.Print(tf.zeros(shape=()), ["Row Lengths by row index", inp_values_i.row_lengths()], summarize=1000)]
-        # ):
-        #     inp_values_i = tf.identity(inp_values_i)
         batch_mask = tf.math.not_equal(inp_values_i.row_lengths(), 0)
         inp_values = tf.RaggedTensor.from_row_lengths(
             values=inp_values_i.flat_values,
@@ -292,7 +255,8 @@ def slice_by_table_indices(
         )
         if chunk_tables:
             inp_values = chunk_ragged_tensor(
-                inp_values, other_end=other_end, max_length=max_length - 2
+                inp_values, other_end=other_end, max_length=base_model_max_length - 2,
+                base_model_max_length=base_model_max_length
             )  # -2 for eos and bos
         col_bs = tf.shape(inp_values.row_lengths())[0]
         bos_expanded = tf.tile(bos_pad_ragged, [col_bs, 1, *(1 for _ in bos_pad.shape)])
@@ -300,7 +264,7 @@ def slice_by_table_indices(
         output_ragged = tf.concat([bos_expanded, inp_values, eos_expanded], axis=1)
 
         output_ragged, mask, pos_ids = batch_packing(
-            output_ragged, include_mask=include_mask
+            output_ragged, include_mask=include_mask, base_model_max_length=base_model_max_length
         )
         col_seq_lens = output_ragged.row_lengths()
 
@@ -312,7 +276,7 @@ def slice_by_table_indices(
     # This is to handle some edge cases where 0 length values are missing the final dim after conversion.
     col_values.set_shape([None, None] + list(inp.shape[2:]))
     max_length = tf.minimum(
-        tf.math.floordiv(max_tokens_per_batch, tf.shape(col_values)[0]), max_length
+        tf.math.floordiv(max_tokens_per_batch, tf.shape(col_values)[0]), base_model_max_length
     )
     if check_len:
         ctrl_dep = [
