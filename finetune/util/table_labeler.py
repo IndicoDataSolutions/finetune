@@ -11,6 +11,7 @@ import sys
 from finetune.base_models import TableRoBERTa
 from finetune.util.metrics import sequences_overlap
 from finetune.scheduler import Scheduler
+from finetune.encoding.input_encoder import BaseEncoder
 
 from finetune import SequenceLabeler
 
@@ -309,7 +310,22 @@ class TableETL:
             "doc_text": text,
         }
 
-    def cleanup_predictions(self, predictions, tables, doc_text):
+    def cleanup_predictions(
+        self,
+        predictions: DocumentSpans,
+        tables: DocumentTables,
+        doc_text: str
+    ):
+        """Cleans up predictions, applying deduplication and optionally splitting on cell boundaries.
+
+        Args:
+            predictions (DocumentSpans): Resolved model predictions.
+            tables (DocumentTables): document tables
+            doc_text (str): the text of the document.
+
+        Returns:
+            DocumentSpans: clean predictions
+        """
         if self.split_preds_to_cells:
             cell_bounded_predictions = []
             for pred in predictions:
@@ -394,7 +410,20 @@ def get_etl_from_file(model_file_path):
 
 
 class TableChunker:
-    def __init__(self, max_length, tokenizer, n_rows_context=2):
+    """
+    Handles chunking by adding a new set of offsets system keyed by "chunk"
+    Performs chunking based on the following rules
+
+    * Select longest axis of the table, rows or columns
+    * For this longest axis, chunk such that each chunk's effective num tokens is less than the defined max_length
+    * effective num tokens is the number of tokens you get if you duplicate tokens by the number of cells they span.
+    * Each chunk get's n_rows_context rows of context from the beginning of the opposite axis to the one being chunked (2 rows of context if columns are chunked)
+    * If n_rows_context takes up more than max_length / 2 effective tokens then this context is backed off until the amount of context is less than max_length / 2.
+
+
+    There is no invese chunking as TableETL.resolve_preds will simply map directly from chunk to document if chunking is enabled.
+    """
+    def __init__(self, max_length: str, tokenizer: BaseEncoder, n_rows_context: int=2):
         self.max_length = max_length
         self.tokenizer = tokenizer
         self.n_rows_context = n_rows_context
@@ -684,7 +713,7 @@ class TableLabeler:
 
     def predict(self, text, tables, model_path=None, **kwargs):
         # Please don't use this in production
-        # it's just a shim for predict_from_file so we don't have 2 separate implementations.
+        # it's just a shim for predict_from_file so we don't have 2 separate predict implementations.
         scheduler = Scheduler()
         with tempfile.TemporaryDirectory() as tmpdir:
             model_path = model_path or os.path.join(tmpdir, "table_model.jl")
