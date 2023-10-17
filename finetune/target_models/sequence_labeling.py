@@ -96,16 +96,7 @@ class SequencePipeline(BasePipeline):
         target_shape = (
             [None, self.label_encoder.target_dim] if self.multi_label else [None]
         )
-        return (
-            (
-                types,
-                tf.float32,
-            ),
-            (
-                shapes,
-                TS(target_shape),
-            ),
-        )
+        return ((types, tf.float32), (shapes, TS(target_shape)))
 
     def _target_encoder(self):
         if self.multi_label:
@@ -538,10 +529,7 @@ class SequenceLabeler(BaseModel):
                     chunk_start_char_idx = 0
                 # This is a 0 length span here.
                 chunk_spans.append(
-                    {
-                        "start": chunk_start_char_idx,
-                        "end": chunk_start_char_idx,
-                    }
+                    {"start": chunk_start_char_idx, "end": chunk_start_char_idx}
                 )
             else:
                 chunk_spans.append(
@@ -558,7 +546,10 @@ class SequenceLabeler(BaseModel):
                 if label in classes:
                     label_idx = classes.index(label)
                     proba_seq_masked[il:, label_idx] = 0.0
-            doc_level_probas.append(np.max(proba_seq_masked, axis=0))
+            if proba_seq_masked.shape[0] == 0:
+                doc_level_probas.append(0)
+            else:
+                doc_level_probas.append(np.max(proba_seq_masked, axis=0))
 
             for label, start_idx, end_idx, proba in zip(
                 label_seq, start_of_token_seq, end_of_token_seq, proba_seq
@@ -675,10 +666,7 @@ class SequenceLabeler(BaseModel):
                     )
                 elif self.config.predict_chunk_markers:
                     doc_annotations.append(
-                        {
-                            "prediction": doc_annotations_sample[0],
-                            "chunks": chunk_spans,
-                        }
+                        {"prediction": doc_annotations_sample[0], "chunks": chunk_spans}
                     )
                 else:
                     doc_annotations.append(doc_annotations_sample[0])

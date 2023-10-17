@@ -3,6 +3,13 @@ from finetune.util.table_labeler import TableLabeler, TableETL
 from finetune.scheduler import Scheduler
 
 
+def make_labels_predictions(labels):
+    for doc_labels in labels:
+        for label in doc_labels:
+            label["confidence"] = {label["label"]: 0.999999}
+    return labels
+
+
 @pytest.fixture
 def labeled_table_data():
     text = [
@@ -15,7 +22,8 @@ Some text after the table"""
     labels = [
         [
             {"text": "text", "start": 5, "end": 9, "label": "non-table"},
-            {"text": "A B", "start": 27, "end": 30, "label": "in-table"},
+            {"text": "A", "start": 27, "end": 28, "label": "in-table"},
+            {"text": "B", "start": 29, "end": 30, "label": "in-table"},
             {"text": "text", "start": 44, "end": 48, "label": "non-table"},
         ]
     ]
@@ -211,6 +219,7 @@ def test_fit_predict(labeled_table_data):
     preds = TableLabeler.predict_from_file(
         model_file_path=filename, text=text, tables=tables, scheduler=shed
     )
+    print([{**p, "confidence": None} for p in preds[0]])
     assert len(preds[0]) == len(labels[0])
     assert set((p["start"], p["end"], p["label"]) for p in preds[0]) == set(
         (l["start"], l["end"], l["label"]) for l in labels[0]
@@ -221,13 +230,16 @@ def test_fit_predict(labeled_table_data):
 @pytest.mark.parametrize("inc_labels", [True, False])
 def test_table_text_chunks_and_context(drop_labels, inc_labels, labeled_table_data):
     text, labels, tables = labeled_table_data
-    etl = TableETL(drop_table_from_text_labels=drop_labels)
+    etl = TableETL(drop_table_from_text_labels=drop_labels, chunk_tables=False)
     output = etl.get_table_text_chunks_and_context(
         text=text, tables=tables, **({"labels": labels} if inc_labels else {})
     )
     if inc_labels:
         assert output["table_labels"] == [
-            [{"text": "A B", "start": 0, "end": 3, "label": "in-table"}]
+            [
+                {"text": "A", "start": 0, "end": 1, "label": "in-table"},
+                {"text": "B", "start": 2, "end": 3, "label": "in-table"},
+            ]
         ]
         if drop_labels:
             assert output["doc_labels"] == [
@@ -240,7 +252,8 @@ def test_table_text_chunks_and_context(drop_labels, inc_labels, labeled_table_da
             assert output["doc_labels"] == [
                 [
                     {"text": "text", "start": 5, "end": 9, "label": "non-table"},
-                    {"text": "A B", "start": 27, "end": 30, "label": "in-table"},
+                    {"text": "A", "start": 27, "end": 28, "label": "in-table"},
+                    {"text": "B", "start": 29, "end": 30, "label": "in-table"},
                     {"text": "text", "start": 44, "end": 48, "label": "non-table"},
                 ]
             ]
@@ -312,30 +325,40 @@ def test_table_text_chunks_and_context(drop_labels, inc_labels, labeled_table_da
 @pytest.mark.parametrize("drop_table_from_pred", [True, False])
 def test_resolve_preds(drop_table_from_pred, labeled_table_data):
     text, labels, tables = labeled_table_data
-    etl = TableETL(drop_table_from_text_preds=drop_table_from_pred)
+    etl = TableETL(drop_table_from_text_preds=drop_table_from_pred, chunk_tables=False)
     resolved_preds = etl.resolve_preds(
-        table_preds=[[{"text": "A B", "start": 0, "end": 3, "label": "in-table"}]],
-        text_preds=[
+        table_preds=make_labels_predictions(
+            [[{"text": "A B", "start": 0, "end": 3, "label": "in-table"}]]
+        ),
+        text_preds=make_labels_predictions(
             [
-                {"text": "text", "start": 5, "end": 9, "label": "non-table"},
-                {"text": "1", "start": 31, "end": 32, "label": "in-table"},
-                {"text": "text", "start": 44, "end": 48, "label": "non-table"},
+                [
+                    {"text": "text", "start": 5, "end": 9, "label": "non-table"},
+                    {"text": "1", "start": 31, "end": 32, "label": "in-table"},
+                    {"text": "text", "start": 44, "end": 48, "label": "non-table"},
+                ]
             ]
-        ],
+        ),
         table_chunks=[
             [{"document": {"end": 38, "start": 27}, "table": {"end": 11, "start": 0}}]
         ],
         document_text=text,
         table_doc_i=[0],
-    )[0]
+        tables=tables,
+    )
     if drop_table_from_pred:
-        assert len(resolved_preds) == 3
-        assert resolved_preds == labels[0]
+        assert len(resolved_preds[0]) == 4
+        assert resolved_preds == make_labels_predictions(labels)
     else:
-        assert len(resolved_preds) == 4
-        assert resolved_preds == sorted(
-            labels[0] + [{"text": "1", "start": 31, "end": 32, "label": "in-table"}],
-            key=lambda x: x["start"],
+        assert len(resolved_preds[0]) == 5
+        assert resolved_preds == make_labels_predictions(
+            [
+                sorted(
+                    labels[0]
+                    + [{"text": "1", "start": 31, "end": 32, "label": "in-table"}],
+                    key=lambda x: x["start"],
+                )
+            ]
         )
 
 
@@ -345,7 +368,7 @@ def test_table_text_chunks_and_context_split_horizontal(
     drop_labels, inc_labels, labeled_table_data_split_table
 ):
     text, labels, tables = labeled_table_data_split_table
-    etl = TableETL(drop_table_from_text_labels=drop_labels)
+    etl = TableETL(drop_table_from_text_labels=drop_labels, chunk_tables=False)
     output = etl.get_table_text_chunks_and_context(
         text=text, tables=tables, **({"labels": labels} if inc_labels else {})
     )
@@ -448,7 +471,7 @@ def test_table_text_chunks_and_context_split_vertical(
     drop_labels, inc_labels, labeled_table_data_split_table_vertically
 ):
     text, labels, tables = labeled_table_data_split_table_vertically
-    etl = TableETL(drop_table_from_text_labels=drop_labels)
+    etl = TableETL(drop_table_from_text_labels=drop_labels, chunk_tables=False)
     output = etl.get_table_text_chunks_and_context(
         text=text, tables=tables, **({"labels": labels} if inc_labels else {})
     )
@@ -544,49 +567,63 @@ def test_table_text_chunks_and_context_split_vertical(
 @pytest.mark.parametrize("drop_table_from_pred", [True, False])
 def test_resolve_preds_pred_spans_table(drop_table_from_pred, labeled_table_data):
     text, labels, tables = labeled_table_data
-    etl = TableETL(drop_table_from_text_preds=drop_table_from_pred)
+    etl = TableETL(drop_table_from_text_preds=drop_table_from_pred, chunk_tables=False)
     resolved_preds = etl.resolve_preds(
-        table_preds=[[{"text": "B", "start": 2, "end": 3, "label": "in-table"}]],
-        text_preds=[
+        table_preds=make_labels_predictions(
+            [[{"text": "B", "start": 2, "end": 3, "label": "in-table"}]]
+        ),
+        text_preds=make_labels_predictions(
             [
-                {
-                    "text": "Some text before the table\nA",
-                    "start": 0,
-                    "end": 28,
-                    "label": "mixed",
-                }
+                [
+                    {
+                        "text": "Some text before the table\nA",
+                        "start": 0,
+                        "end": 28,
+                        "label": "mixed",
+                    }
+                ]
             ]
-        ],
+        ),
         table_chunks=[
             [{"document": {"end": 38, "start": 27}, "table": {"end": 11, "start": 0}}]
         ],
         document_text=text,
         table_doc_i=[0],
-    )[0]
+        tables=tables,
+    )
     if drop_table_from_pred:
-        assert resolved_preds == [
-            {
-                "text": "Some text before the table\n",
-                "start": 0,
-                "end": 27,
-                "label": "mixed",
-            },
-            {"text": "B", "start": 29, "end": 30, "label": "in-table"},
-        ]
+        assert resolved_preds == make_labels_predictions(
+            [
+                [
+                    {
+                        "text": "Some text before the table\n",
+                        "start": 0,
+                        "end": 27,
+                        "label": "mixed",
+                    },
+                    {"text": "B", "start": 29, "end": 30, "label": "in-table"},
+                ]
+            ]
+        )
     else:
-        assert resolved_preds == [
-            {
-                "text": "Some text before the table\nA",
-                "start": 0,
-                "end": 28,
-                "label": "mixed",
-            },
-            {"text": "B", "start": 29, "end": 30, "label": "in-table"},
-        ]
+        assert resolved_preds == make_labels_predictions(
+            [
+                [
+                    {
+                        "text": "Some text before the table\n",
+                        "start": 0,
+                        "end": 27,
+                        "label": "mixed",
+                    },
+                    {"text": "A", "start": 27, "end": 28, "label": "mixed"},
+                    {"text": "B", "start": 29, "end": 30, "label": "in-table"},
+                ]
+            ]
+        )
 
 
 def test_subtract_spans():
-    etl = TableETL()
+    etl = TableETL(chunk_tables=False)
     result = etl.subtract_spans(
         {"start": 0, "end": 100, "some_attr": "abc"},
         [{"start": 10, "end": 20}, {"start": 50, "end": 60}],

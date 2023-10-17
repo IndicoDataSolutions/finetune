@@ -198,6 +198,11 @@ class Scheduler:
             self.etl_cache[cache_key] = etl
         return etl
 
+    def get_model(self, model_file, key=None, config_overrides=None):
+        return self._rotate_in_model(
+            model_file, key=key, config_overrides=config_overrides
+        )
+
 
 class EtlCache:
     def __init__(self, maxsize=128):

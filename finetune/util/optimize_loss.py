@@ -38,6 +38,7 @@ def get_optimizer(
     vector_l2,
     accumulate_steps,
     mixed_precision,
+    acc_grads_on_cpu,
 ):
     Optimizer = OPTIMIZERS.get(optimizer_name, None)
     if Optimizer is None:
@@ -48,7 +49,9 @@ def get_optimizer(
         )
 
     if accumulate_steps > 1:
-        Optimizer = get_grad_accumulation_optimizer(Optimizer, accumulate_steps)
+        Optimizer = get_grad_accumulation_optimizer(
+            Optimizer, accumulate_steps, accumulate_on_cpu=acc_grads_on_cpu
+        )
 
     decay_var_list = [
         v
@@ -69,11 +72,10 @@ def get_optimizer(
         opt = tf.compat.v1.train.experimental.MixedPrecisionLossScaleOptimizer(
             # Default is 2k which is too high for some of our small datasets. May be sitting at underflowing gradients for large amounts of training.
             opt,
-            tf.compat.v1.train.experimental.DynamicLossScale(
-                increment_period=100
-            ),
+            tf.compat.v1.train.experimental.DynamicLossScale(increment_period=100),
         )
     return opt
+
 
 def is_numerical_tensor(t):
     return t.dtype != tf.string
@@ -97,6 +99,7 @@ def optimize_loss(
     accumulate_steps,
     max_training_hours=None,
     colocate_gradients_with_ops=True,
+    acc_grads_on_cpu=True,
 ):
     global_step = tf.compat.v1.train.get_or_create_global_step()
 
@@ -114,7 +117,10 @@ def optimize_loss(
             training_fraction = tf.minimum(
                 tf.maximum(
                     training_fraction,
-                    tf.cast((tf.timestamp() - start_time) / (max_training_hours * 3600), tf.float32),
+                    tf.cast(
+                        (tf.timestamp() - start_time) / (max_training_hours * 3600),
+                        tf.float32,
+                    ),
                 ),
                 1.0,
             )
@@ -140,6 +146,7 @@ def optimize_loss(
             vector_l2=vector_l2,
             accumulate_steps=accumulate_steps,
             mixed_precision=mixed_precision,
+            acc_grads_on_cpu=acc_grads_on_cpu,
         )
         variables = tf.compat.v1.trainable_variables()
         variables = [v for v in variables if is_numerical_tensor(v)]

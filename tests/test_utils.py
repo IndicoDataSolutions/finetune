@@ -1,19 +1,12 @@
 import unittest
-import os.path
-import random
-import json
 from collections import Counter
-import math
 import pytest
 
 import numpy as np
 import tensorflow as tf
-import pandas as pd
-import joblib as jl
 
 import unicodedata
 
-import finetune
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
 from finetune.optimizers.gradient_accumulation import get_grad_accumulation_optimizer
 from finetune.util.imbalance import compute_class_weights
@@ -21,7 +14,6 @@ from finetune.util.optimize_loss import OPTIMIZERS
 from finetune.util.timing import ProgressBar
 from finetune.errors import FinetuneError
 from finetune import Classifier, SequenceLabeler
-from finetune.base_models import GPT, GPT2, BERT
 from finetune.base_models.gpt.encoder import GPTEncoder
 from finetune.base_models.gpt2.encoder import GPT2Encoder
 from finetune.base_models.bert.roberta_encoder import (
@@ -289,50 +281,48 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
         self.assertEqual(weights[1], 1.0)
 
 
-class TestGradientAccumulation(unittest.TestCase):
-    def body_of_test_gradient_accumulating_optimizer(self, opt):
-        with tf.Graph().as_default():
-            loss = tf.compat.v1.get_variable("loss", shape=1)
-            lr = 0.1
-            opt = get_grad_accumulation_optimizer(opt, 2)(lr)
-            global_step = tf.compat.v1.train.get_or_create_global_step()
-            if isinstance(opt, tf.keras.optimizers.Optimizer):
-                with tf.control_dependencies(
-                    [opt.minimize(lambda: tf.abs(loss), [loss])]
-                ):
-                    train_op = global_step.assign_add(1)
-            else:
-                train_op = opt.minimize(tf.abs(loss), global_step=global_step)
+def body_of_test_gradient_accumulating_optimizer(opt, accumulate_on_cpu):
+    with tf.Graph().as_default():
+        loss = tf.compat.v1.get_variable("loss", shape=1)
+        lr = 0.1
+        opt = get_grad_accumulation_optimizer(opt, 2, accumulate_on_cpu=accumulate_on_cpu)(lr)
+        global_step = tf.compat.v1.train.get_or_create_global_step()
+        if isinstance(opt, tf.keras.optimizers.Optimizer):
+            with tf.control_dependencies(
+                [opt.minimize(lambda: tf.abs(loss), [loss])]
+            ):
+                train_op = global_step.assign_add(1)
+        else:
+            train_op = opt.minimize(tf.abs(loss), global_step=global_step)
 
-            sess = tf.compat.v1.Session()
-            sess.run(tf.compat.v1.global_variables_initializer())
-            for i in range(100):
-                val_before = sess.run(loss)
-                grad_before = np.sign(val_before)
-                sess.run(train_op)
+        sess = tf.compat.v1.Session()
+        sess.run(tf.compat.v1.global_variables_initializer())
+        for i in range(100):
+            val_before = sess.run(loss)
+            grad_before = np.sign(val_before)
+            sess.run(train_op)
 
-                val_after1 = sess.run(loss)
-                grad_after1 = np.sign(val_after1)
-                sess.run(train_op)
+            val_after1 = sess.run(loss)
+            grad_after1 = np.sign(val_after1)
+            sess.run(train_op)
 
-                val_after2 = sess.run(loss)
+            val_after2 = sess.run(loss)
 
-                gs = sess.run(global_step)
-                self.assertEqual(
-                    val_before, val_after1
-                )  # first step should not actually do anything
-                self.assertEqual(
-                    val_before - (grad_before + grad_after1) * lr, val_after2
-                )
-                self.assertEqual(gs, (i + 1) * 2)
+            gs = sess.run(global_step)
+            assert val_before == val_after1
+            assert val_before - (grad_before + grad_after1) * lr == val_after2
+            assert gs == (i + 1) * 2
 
-    def test_gradient_accumulating_optimizer_keras(self):
-        self.body_of_test_gradient_accumulating_optimizer(tf.keras.optimizers.SGD)
+@pytest.mark.parametrize("accumulate_on_cpu", [True, False])
+def test_gradient_accumulating_optimizer_keras(accumulate_on_cpu):
+    body_of_test_gradient_accumulating_optimizer(tf.keras.optimizers.SGD, accumulate_on_cpu)
 
-    def test_gradient_accumulating_optimizer_compat(self):
-        self.body_of_test_gradient_accumulating_optimizer(
-            tf.compat.v1.train.GradientDescentOptimizer
-        )
+@pytest.mark.parametrize("accumulate_on_cpu", [True, False])
+def test_gradient_accumulating_optimizer_compat(accumulate_on_cpu):
+    body_of_test_gradient_accumulating_optimizer(
+        tf.compat.v1.train.GradientDescentOptimizer,
+        accumulate_on_cpu=accumulate_on_cpu
+    )
 
 
 class TestProgressBar(unittest.TestCase):

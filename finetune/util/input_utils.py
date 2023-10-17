@@ -23,10 +23,7 @@ def validation_settings(
     Auto-select reasonable validation settings
     """
     if val_size is not None and val_interval is not None:
-        return (
-            _integer_val_size(val_size, dataset_size),
-            val_interval,
-        )
+        return (_integer_val_size(val_size, dataset_size), val_interval)
 
         # Auto-select reasonable validation size
     if val_size == "auto":
@@ -61,21 +58,72 @@ def add_length(x, y=None):
     return x
 
 
-def batch_dataset(dataset, batch_size, shapes, n_epochs=1, shuffle=False):
+def batch_dataset(
+    dataset,
+    batch_size,
+    shapes,
+    max_length,
+    n_epochs=1,
+    shuffle=False,
+    table_batching=False,
+    random_seed=42,
+):
     if isinstance(shapes, tuple):
         shapes = ({**shapes[0], "length": tf.TensorShape([])}, shapes[1])
     else:
         shapes = {**shapes, "length": tf.TensorShape([])}
 
-    def batched_dataset():
-        return (
-            dataset()
-            .map(add_length)
-            .shuffle(500 if shuffle else 1)
-            .padded_batch(batch_size, padded_shapes=shapes, drop_remainder=False)
-            .repeat(n_epochs)
-            .prefetch(tf.data.experimental.AUTOTUNE)
-        )
+    if table_batching:
+        assert isinstance(
+            shapes, tuple
+        ), "You cannot use table batching to predict on tables as order is not guarenteed"
+
+        def batched_dataset():
+            return (
+                dataset()
+                .map(add_length)
+                .shuffle(500 if shuffle else 1, seed=random_seed)
+                # When we update to tf.2.13 this will change to be a method on the dataset.
+                .apply(
+                    tf.data.experimental.bucket_by_sequence_length(
+                        element_length_func=(
+                            lambda item, *_: tf.cast(
+                                tf.maximum(
+                                    tf.reduce_sum(
+                                        item["context"][:, 0]
+                                        - item["context"][:, 2]
+                                        + 1
+                                    ),
+                                    tf.reduce_sum(
+                                        item["context"][:, 1]
+                                        - item["context"][:, 3]
+                                        + 1
+                                    ),
+                                ),
+                                tf.int32,
+                            )
+                        ),
+                        bucket_boundaries=[max_length],
+                        bucket_batch_sizes=[batch_size, 1],
+                        padded_shapes=shapes,
+                        drop_remainder=False,
+                    )
+                )
+                .repeat(n_epochs)
+                .prefetch(tf.data.experimental.AUTOTUNE)
+            )
+
+    else:
+
+        def batched_dataset():
+            return (
+                dataset()
+                .map(add_length)
+                .shuffle(500 if shuffle else 1, seed=random_seed)
+                .padded_batch(batch_size, padded_shapes=shapes, drop_remainder=False)
+                .repeat(n_epochs)
+                .prefetch(tf.data.experimental.AUTOTUNE)
+            )
 
     return batched_dataset
 

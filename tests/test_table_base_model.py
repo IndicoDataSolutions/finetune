@@ -10,6 +10,7 @@ from finetune.base_models.bert.table_utils import (
     gather_col_vals,
     scatter_feats,
     get_summary_values,
+    chunk_ragged_tensor,
 )
 
 import tensorflow as tf
@@ -141,13 +142,16 @@ class TestTableUtils:
                 ]
             )
         )
+
         assert tf.reduce_all(
-            output_ragged
-            == tf.ragged.constant(
-                [
-                    [1, 2, 3, 11, 14, 4, 5, 6, 7],
-                    [101, 102, 103, 104, 105, 106, 107, 108, 109],
-                ]
+            tf.equal(
+                output_ragged,
+                tf.ragged.constant(
+                    [
+                        [1, 2, 3, 11, 14, 4, 5, 6, 7],
+                        [101, 102, 103, 104, 105, 106, 107, 108, 109],
+                    ]
+                ),
             )
         )
         assert mask.shape == (2, 9, 9)
@@ -192,8 +196,10 @@ class TestTableUtils:
         gi = get_gather_indices(
             X=tf.constant([[0, 1, 2, 3, 4, 5, 6], [7, 8, 9, 10, 11, 12, -1]]),
             sequence_lengths=tf.constant([7, 6]),
-            start=tf.constant([[0, 1, 0, 1, 0, 1, 0], [0, 1, 2, 0, 1, 2, -1],]),
-            end=tf.constant([[0, 2, 0, 2, 0, 2, 0], [0, 1, 2, 0, 1, 2, -1],]),
+            start=tf.constant([[0, 1, 0, 1, 0, 1, 0], [0, 1, 2, 0, 1, 2, -1]]),
+            end=tf.constant([[0, 2, 0, 2, 0, 2, 0], [0, 1, 2, 0, 1, 2, -1]]),
+            other_end=tf.constant([[0, 2, 0, 2, 0, 2, 0], [0, 1, 2, 0, 1, 2, -1]]),
+            chunk_tables=False,
         )
         assert tf.reduce_all(
             gi["seq_lens"] == tf.constant([6, 4, 5, 4, 5, 4], dtype=tf.int64)
@@ -272,9 +278,9 @@ class TestTableUtils:
             summary_vals
             == tf.constant(
                 [
-                    [0, 0, 0, 0, 0, 0, 10, 10, 10, 10, 10, 10,],
-                    [20, 20, 20, 20, 20, 20, 30, 30, 30, 30, 30, 30,],
-                    [40, 40, 40, 40, 40, 40, 50, 50, 50, 50, 50, 50,],
+                    [0, 0, 0, 0, 0, 0, 10, 10, 10, 10, 10, 10],
+                    [20, 20, 20, 20, 20, 20, 30, 30, 30, 30, 30, 30],
+                    [40, 40, 40, 40, 40, 40, 50, 50, 50, 50, 50, 50],
                 ],
                 dtype=summary_vals.dtype,
             )
@@ -304,6 +310,7 @@ class TestTableUtils:
             eos_pad=tf.convert_to_tensor([0, 99]),
             bos_pad=tf.convert_to_tensor([0, 100]),
             pad_val=tf.convert_to_tensor([0, 101]),
+            other_end=tf.constant([[0, 1, 2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5, 6]]),
             include_mask=True,
         )
         assert tf.reduce_all(
@@ -348,9 +355,59 @@ class TestTableUtils:
             )
         )
 
+    def test_slice_by_table_indices_chunking(self):
+        gi = slice_by_table_indices(
+            tf.constant([[[0, 0], [0, 1], [0, 2], [0, 3], [0, 4], [0, 5], [0, 6]]]),
+            tf.constant(
+                [[[True, True, True, False, True, False, True]]], dtype=tf.bool
+            ),
+            eos_pad=tf.convert_to_tensor([0, 99]),
+            bos_pad=tf.convert_to_tensor([0, 100]),
+            pad_val=tf.convert_to_tensor([0, 101]),
+            include_mask=True,
+            other_end=tf.constant([[0, 1, 2, 3, 4, 5, 6]]),
+            base_model_max_length=5,
+        )
+        print(gi["values"].numpy())
+        assert tf.reduce_all(
+            gi["values"]
+            == tf.constant(
+                [
+                    [[0, 100], [0, 0], [0, 1], [0, 2], [0, 99]],
+                    [[0, 100], [0, 0], [0, 1], [0, 4], [0, 99]],
+                    [[0, 100], [0, 0], [0, 1], [0, 6], [0, 99]],
+                ],
+                dtype=gi["values"].dtype,
+            )
+        )
+
+    def test_slice_by_table_indices_chunking_length_fallback(self):
+        gi = slice_by_table_indices(
+            tf.constant([[[0, 0], [0, 1], [0, 2], [0, 3], [0, 4], [0, 5], [0, 6]]]),
+            tf.constant([[[True, True, True, True, True, True, True]]], dtype=tf.bool),
+            eos_pad=tf.convert_to_tensor([0, 99]),
+            bos_pad=tf.convert_to_tensor([0, 100]),
+            pad_val=tf.convert_to_tensor([0, 101]),
+            include_mask=True,
+            other_end=tf.constant([[0, 0, 1, 1, 4, 5, 6]]),
+            base_model_max_length=5,
+        )
+        print(gi["values"].numpy())
+        assert tf.reduce_all(
+            gi["values"]
+            == tf.constant(
+                [
+                    [[0, 100], [0, 0], [0, 1], [0, 2], [0, 99]],
+                    [[0, 100], [0, 3], [0, 4], [0, 5], [0, 99]],
+                    [[0, 100], [0, 6], [0, 99], [0, 101], [0, 101]],
+                ],
+                dtype=gi["values"].dtype,
+            )
+        )
+
     def test_gather_col_vals(self):
         output = gather_col_vals(
-            inp=tf.constant([[0, 1, 2, 3, 4, 5, 6], [10, 11, 12, 13, 14, 15, 16],]),
+            inp=tf.constant([[0, 1, 2, 3, 4, 5, 6], [10, 11, 12, 13, 14, 15, 16]]),
             gather_output={
                 "values": tf.constant(
                     [
@@ -414,7 +471,7 @@ class TestTableUtils:
         res = scatter_feats(
             output_shape=tf.constant([1, 3, 1]),
             sequence_feats=tf.constant(
-                [[[0.0], [1.0], [2.0], [3.0],], [[4.0], [5.0], [6.0], [7.0]],]
+                [[[0.0], [1.0], [2.0], [3.0]], [[4.0], [5.0], [6.0], [7.0]]]
             ),
             scatter_vals=tf.constant(
                 [
@@ -425,4 +482,136 @@ class TestTableUtils:
         )
         assert tf.reduce_all(
             res == tf.constant([[[0.0], [1.0], [(5 + 2) / 2]]], dtype=res.dtype)
+        )
+
+
+    def test_chunk_ragged_tensor(self):
+        result = chunk_ragged_tensor(
+            inputs=tf.ragged.constant(
+                [
+                    [[0, 1], [0, 2]],
+                    [[0, 3]],
+                    [[0, 8]],
+                    [[0, 9]],
+                    [[0, 4], [0, 5], [0, 6], [0, 7]],
+                ],
+                ragged_rank=1
+            ),
+            other_end=tf.constant(
+                [[0, 1, 2, 3, 0, 1, 2, 3, 4, 5, 6]]
+            ),
+            base_model_max_length=3,
+        )
+        assert tf.reduce_all(
+            tf.equal(
+                result,
+                tf.ragged.constant(
+                    [
+                        [[0, 1], [0, 2]], # Untouched as less than original length
+                        [[0, 3]],
+                        [[0, 8]],
+                        [[0, 9]],
+                        [[0, 4], [0, 5], [0, 6]], # Final 2 are chunked with rows 0 and 1 as context.
+                        [[0, 4], [0, 5], [0, 7]],
+                    ],
+                    ragged_rank=1
+                ),
+            )
+        )
+
+    def test_chunk_ragged_tensor_no_context_fallback(self):
+        result = chunk_ragged_tensor(
+            inputs=tf.ragged.constant(
+                [
+                    [[0, 1], [0, 2]],
+                    [[0, 3]],
+                    [[0, 8]],
+                    [[0, 9]],
+                    [[0, 4], [0, 5], [0, 6], [0, 7]],
+                ],
+                ragged_rank=1
+            ),
+            other_end=tf.constant(
+                [[0, 1, 2, 3, 0, 1, 2, 3, 4, 5, 6]]
+            ),
+            base_model_max_length=2,
+        )
+        assert tf.reduce_all(
+            tf.equal(
+                result,
+                tf.ragged.constant(
+                    [
+                        [[0, 1], [0, 2]], # Untouched as less than original length
+                        [[0, 3]],
+                        [[0, 8]],
+                        [[0, 9]],
+                        [[0, 4], [0, 5]], # Final 2 are chunked with no context as the max length == the amount of context.
+                        [[0, 6], [0, 7]],
+                    ],
+                    ragged_rank=1
+                ),
+            )
+        )
+
+    def test_chunk_ragged_tensor_full_length(self):
+        inputs = tf.ragged.constant(
+            [
+                [[0, 1], [0, 2]],
+                [[0, 3]],
+                [[0, 8]],
+                [[0, 9]],
+                [[0, 4], [0, 5], [0, 6], [0, 7]],
+            ],
+            ragged_rank=1
+        )
+        result = chunk_ragged_tensor(
+            inputs=inputs,
+            other_end=tf.constant(
+                [[0, 1, 2, 3, 0, 1, 2, 3, 4, 5, 6]]
+            ),
+            base_model_max_length=5,
+        )
+        print(result)
+        assert tf.reduce_all(
+            tf.equal(
+                result,
+                inputs
+            )
+        )
+
+    def test_chunk_ragged_tensor_length_1(self):
+        result = chunk_ragged_tensor(
+            inputs=tf.ragged.constant(
+                [
+                    [[0, 1], [0, 2]],
+                    [[0, 3]],
+                    [[0, 8]],
+                    [[0, 9]],
+                    [[0, 4], [0, 5], [0, 6], [0, 7]],
+                ],
+                ragged_rank=1
+            ),
+            other_end=tf.constant(
+                [[0, 1, 2, 3, 0, 1, 2, 3, 4, 5, 6]]
+            ),
+            base_model_max_length=1,
+        )
+        assert tf.reduce_all(
+            tf.equal(
+                result,
+                tf.ragged.constant(
+                    [
+                        [[0, 1]],
+                        [[0, 2]],
+                        [[0, 3]],
+                        [[0, 8]],
+                        [[0, 9]],
+                        [[0, 4]],
+                        [[0, 5]],
+                        [[0, 6]],
+                        [[0, 7]],
+                    ],
+                    ragged_rank=1
+                ),
+            )
         )

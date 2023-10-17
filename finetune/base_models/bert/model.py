@@ -269,11 +269,7 @@ class FusedRoBERTa(RoBERTa):
     featurizer = fused_featurizer(bert_featurizer)
     settings = dict(RoBERTa.settings)
     settings.update(
-        {
-            "max_length": 2048,
-            "num_fusion_shards": 4,
-            "chunk_long_sequences": False,
-        }
+        {"max_length": 2048, "num_fusion_shards": 4, "chunk_long_sequences": False}
     )
 
 
@@ -291,12 +287,7 @@ class DocRep(_BaseBert):
             "context_channels": 192,
             "crf_sequence_labeling": False,
             "context_dim": 4,
-            "default_context": {
-                "left": 0,
-                "right": 0,
-                "top": 0,
-                "bottom": 0,
-            },
+            "default_context": {"left": 0, "right": 0, "top": 0, "bottom": 0},
             "use_auxiliary_info": True,
             "low_memory_mode": True,
             "base_model_path": os.path.join("bert", "doc_rep_v1.jl"),
@@ -336,11 +327,7 @@ class FusedDocRep(DocRep):
     featurizer = fused_featurizer(bert_featurizer)
     settings = dict(DocRep.settings)
     settings.update(
-        {
-            "max_length": 2048,
-            "num_fusion_shards": 4,
-            "chunk_long_sequences": False,
-        }
+        {"max_length": 2048, "num_fusion_shards": 4, "chunk_long_sequences": False}
     )
 
 
@@ -440,12 +427,7 @@ class LayoutLM(_BaseBert):
         "context_injection": True,
         "crf_sequence_labeling": False,
         "context_dim": 4,
-        "default_context": {
-            "left": 0,
-            "right": 0,
-            "top": 0,
-            "bottom": 0,
-        },
+        "default_context": {"left": 0, "right": 0, "top": 0, "bottom": 0},
         "use_auxiliary_info": True,
         "low_memory_mode": True,
         "base_model_path": os.path.join("bert", "layoutlm-base-uncased.jl"),
@@ -479,12 +461,7 @@ class XDocBase(_BaseBert):
         "context_injection": True,
         "crf_sequence_labeling": False,
         "context_dim": 4,
-        "default_context": {
-            "left": 0,
-            "right": 0,
-            "top": 0,
-            "bottom": 0,
-        },
+        "default_context": {"left": 0, "right": 0, "top": 0, "bottom": 0},
         "use_auxiliary_info": True,
         "low_memory_mode": True,
         "base_model_path": os.path.join("bert", "XDoc.jl"),
@@ -492,9 +469,7 @@ class XDocBase(_BaseBert):
     }
     required_files = [
         {
-            "file": os.path.join(
-                FINETUNE_BASE_FOLDER, "model", "bert", "XDoc.jl"
-            ),
+            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "XDoc.jl"),
             "url": urljoin(ROBERTA_BASE_URL, "XDoc.jl"),
         },
         {
@@ -526,10 +501,13 @@ class TableRoBERTa(_BaseBert):
     featurizer = table_roberta_featurizer_twinbert
     settings = {
         **BERT_BASE_PARAMS,
-        "max_length": 2048,
-        "batch_size": 2,
+        # Just incase all cells fall into the same buckets this -8 allows us to pack the batches much tighter once we add EOS and BOS
+        "max_length": 2048 - 8,
+        "table_batching": True,
+        "chunk_tables": True,
+        "batch_size": 2,  # When table batching is true this becomes a nominal batch size. Very long docs have batch size = 1
         "class_weights": None,
-        "n_epochs": 16,
+        "n_epochs": 24,
         "epsilon": 1e-8,
         "lr": 1e-4,
         "context_injection": True,
@@ -545,7 +523,7 @@ class TableRoBERTa(_BaseBert):
         "low_memory_mode": True,
         "base_model_path": os.path.join("bert", "roberta-table-twinbert-v1.jl"),
         "bert_use_pooler": False,
-        "chunk_long_sequences": False,  # Technically possible but probably undesirable here.
+        "chunk_long_sequences": False,
         "include_bos_eos": False,
         "permit_uninitialized": r"mixing_fn_|pos_|kernel|bias",  # TODO: this can be refined.
     }

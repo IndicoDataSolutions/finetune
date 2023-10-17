@@ -194,7 +194,6 @@ def get_default_config():
         low_memory_mode=False,
         float_16_predict="auto",
         mixed_precision="auto",
-
         save_adam_vars=False,
         shuffle_buffer_size=100,
         dataset_size=None,
@@ -217,7 +216,6 @@ def get_default_config():
         permit_uninitialized=None,
         max_training_hours=None,
         feature_layer_num=None,
-
         #
         # Regularization
         embed_p_drop=0.1,
@@ -260,6 +258,7 @@ def get_default_config():
         lr_warmup=0.002,
         max_grad_norm=1.0,
         accum_steps=1,
+        acc_grads_on_cpu=False,
         #
         # Language Model Settings
         lm_loss_coef=0.0,
@@ -345,9 +344,8 @@ def get_default_config():
         delim_tokens="",
         s2s_decoder_max_length=512,
         num_fusion_shards=None,
-        chunk_pos_embed=None, 
+        chunk_pos_embed=None,
         fusion_low_memory=True,
-
         include_bos_eos=True,
         #
         # Line Items
@@ -357,13 +355,11 @@ def get_default_config():
         next_token_loss_weight=1,
         seq_loss_weight=1,
         group_loss_weight=200,
-
         n_groups=100,
         group_hidden_size=768,
         group_attention_heads=12,
         group_n_layers=3,
         group_thresh=0.8,
-
         # Table model
         table_position=False,
         table_position_type="row_col",
@@ -371,8 +367,9 @@ def get_default_config():
         down_project_feats=False,
         renorm_after_class_weights=True,
         max_row_col_embedding=1024,
-
-        #chunking_tweaks
+        chunk_tables=False,
+        table_batching=False,
+        # chunking_tweaks
         reshuffle_chunks=False,
         predict_chunk_markers=False,
         #

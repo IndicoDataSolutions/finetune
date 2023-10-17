@@ -83,14 +83,9 @@ class BasePipeline(metaclass=ABCMeta):
     def feed_shape_type_def(self):
         TS = tf.TensorShape
         types = {"tokens": tf.int32}
-        shapes = {
-            "tokens": TS([None]),
-        }
+        shapes = {"tokens": TS([None])}
         types, shapes = self._add_context_info_if_present(types, shapes)
-        return (
-            (types, tf.float32,),
-            (shapes, TS([self.target_dim]),),
-        )
+        return ((types, tf.float32), (shapes, TS([self.target_dim])))
 
     def zip_list_to_dict(self, X, Y=None, context=None):
         if Y is not None:
@@ -174,8 +169,12 @@ class BasePipeline(metaclass=ABCMeta):
                     skip_val=skip_val,
                     quiet=self.config.debugging_logs,
                     update_hook=update_hook,
-                    current_epoch_offset=self.current_epoch_offset if tqdm_mode == "train" else 0,
-                    total_epoch_offset=self.total_epoch_offset if tqdm_mode == "train" else 0,
+                    current_epoch_offset=self.current_epoch_offset
+                    if tqdm_mode == "train"
+                    else 0,
+                    total_epoch_offset=self.total_epoch_offset
+                    if tqdm_mode == "train"
+                    else 0,
                 ),
                 types,
                 shapes,
@@ -212,6 +211,8 @@ class BasePipeline(metaclass=ABCMeta):
                 "predict_dataset": batch_dataset(
                     raw_dataset,
                     batch_size=self.config.predict_batch_size,
+                    max_length=self.config.max_length,
+                    table_batching=False,  # We cannot use table batching here because the order of the outputs is impacted.
                     shapes=shapes,
                 )
             }
@@ -227,9 +228,7 @@ class BasePipeline(metaclass=ABCMeta):
             )
 
         if self.config.class_weights is not None:
-            raise FinetuneError(
-                "Cannot use class weights in generator mode"
-            )
+            raise FinetuneError("Cannot use class weights in generator mode")
 
         self.config.val_size, self.config.val_interval = validation_settings(
             dataset_size=self.config.dataset_size,
@@ -264,12 +263,19 @@ class BasePipeline(metaclass=ABCMeta):
             "train_dataset": batch_dataset(
                 train_dataset,
                 batch_size=self.config.batch_size,
+                max_length=self.config.max_length,
                 shapes=shapes,
                 n_epochs=self.config.n_epochs,
                 shuffle=self.config.reshuffle_chunks,
+                table_batching=self.config.table_batching,
+                random_seed=self.config.seed,
             ),
             "val_dataset": batch_dataset(
-                val_dataset, batch_size=self.config.batch_size, shapes=shapes
+                val_dataset,
+                batch_size=self.config.batch_size,
+                max_length=self.config.max_length,
+                shapes=shapes,
+                table_batching=self.config.table_batching,
             ),
         }
 
@@ -329,9 +335,10 @@ class BasePipeline(metaclass=ABCMeta):
 
         if self.config.min_steps is not None:
             self.config.n_epochs = max(
-                self.config.n_epochs, math.ceil(self.config.min_steps / self.config.dataset_size)
+                self.config.n_epochs,
+                math.ceil(self.config.min_steps / self.config.dataset_size),
             )
-    
+
         train_dataset_unbatched = self.make_dataset_fn(
             data_fn=lambda: tokenized_train_split,
             tqdm_mode="train",
@@ -350,12 +357,19 @@ class BasePipeline(metaclass=ABCMeta):
             "train_dataset": batch_dataset(
                 train_dataset_unbatched,
                 batch_size=self.config.batch_size,
+                max_length=self.config.max_length,
                 shapes=shapes,
                 n_epochs=self.config.n_epochs,
                 shuffle=self.config.reshuffle_chunks,
+                table_batching=self.config.table_batching,
+                random_seed=self.config.seed,
             ),
             "val_dataset": batch_dataset(
-                val_dataset_unbatched, batch_size=self.config.batch_size, shapes=shapes
+                val_dataset_unbatched,
+                batch_size=self.config.batch_size,
+                max_length=self.config.max_length,
+                shapes=shapes,
+                table_batching=self.config.table_batching,
             ),
         }
 
@@ -402,9 +416,13 @@ class BasePipeline(metaclass=ABCMeta):
                 if field_value is not None and len(field_value):
                     field_starts_and_ends[field] = (field_value[0], field_value[-1])
             if self.config.chunk_context == 0 and self.config.add_eos_bos_to_chunk:
-                warnings.warn("""Chunk context of 0 will not capture the start
-                              and end tokens added by add_eos_bos_to_chunk""")
-            for start, end, (useful_start, useful_end) in self.chunker.generate_chunks(length):
+                warnings.warn(
+                    """Chunk context of 0 will not capture the start
+                              and end tokens added by add_eos_bos_to_chunk"""
+                )
+            for start, end, (useful_start, useful_end) in self.chunker.generate_chunks(
+                length
+            ):
                 d = dict()
                 for field in EncodedOutput._fields:
                     field_value = getattr(encoded, field)
@@ -426,7 +444,8 @@ class BasePipeline(metaclass=ABCMeta):
                 )
         else:
             encoder_out = self.text_encoder.encode_multi_input(
-                Xs, max_length=self.config.max_length,
+                Xs,
+                max_length=self.config.max_length,
                 remove_repeated_whitespace=self.config.collapse_whitespace,
                 include_bos_eos=self.config.include_bos_eos,
             )
@@ -444,4 +463,3 @@ class BasePipeline(metaclass=ABCMeta):
         if "_text_encoder" in state:
             del state["_text_encoder"]
         return state
-

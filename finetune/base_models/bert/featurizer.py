@@ -240,8 +240,23 @@ def table_roberta_featurizer_twinbert(
     output_shape = tf.concat([tf.shape(X), [config.n_embed]], axis=0)
 
     end_col, end_row, start_col, start_row = tf.unstack(context, num=4, axis=2)
-    row_gather = get_gather_indices(X, lengths, start_row, end_row)
-    col_gather = get_gather_indices(X, lengths, start_col, end_col)
+
+    row_gather = get_gather_indices(
+        X,
+        lengths,
+        start_row,
+        end_row,
+        other_end=end_col,
+        chunk_tables=config.chunk_tables,
+    )
+    col_gather = get_gather_indices(
+        X,
+        lengths,
+        start_col,
+        end_col,
+        other_end=end_row,
+        chunk_tables=config.chunk_tables,
+    )
 
     with tf.compat.v1.variable_scope("model/featurizer", reuse=reuse):
         row_col_values = get_row_col_values(
@@ -252,7 +267,7 @@ def table_roberta_featurizer_twinbert(
             bos_id=encoder.start_token,
             eos_id=encoder.end_token,
             table_position_type=config.table_position_type,
-            max_row_col_embedding=config.max_row_col_embedding
+            max_row_col_embedding=config.max_row_col_embedding,
         )
         bert = underlying_model(
             mixing_fn=table_cross_row_col_mixing_fn,
@@ -286,7 +301,7 @@ def table_roberta_featurizer_twinbert(
             "features": tf.zeros(shape=[initial_shape[0], 768]),
             "sequence_features": reassemble_sequence_feats(
                 output_shape,
-                *bert.sequence_output, #row, col
+                *bert.sequence_output,  # row, col
                 row_col_values["row"]["scatter_vals"],
                 row_col_values["col"]["scatter_vals"],
                 include_row_col_summaries=config.include_row_col_summaries,
