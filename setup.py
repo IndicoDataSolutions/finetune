@@ -28,7 +28,7 @@ REQUIREMENTS = [
     "tensorflow-estimator==2.11.0",
     "tqdl==0.0.4",
     "psutil==5.7.0",
-    "transformers==4.25.1",
+    "transformers==4.36.2",
 ]
 
 
@@ -48,7 +48,7 @@ class OpsBuild(build_ext):
 setup(
     name="finetune",
     packages=find_packages(exclude=["tests", "tests.*"]),
-    version="0.10.0",
+    version="0.10.1",
     install_requires=REQUIREMENTS,
     extras_require={
         "tf": ["tensorflow==2.11.0"],
