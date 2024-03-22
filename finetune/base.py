@@ -25,8 +25,6 @@ from tensorflow.compat.v1 import logging as tf_logging
 from sklearn.model_selection import train_test_split
 import joblib
 
-from memory_profiler import profile
-
 
 from finetune.util import list_transpose
 from finetune.encoding.input_encoder import EncodedOutput
