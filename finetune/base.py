@@ -25,6 +25,9 @@ from tensorflow.compat.v1 import logging as tf_logging
 from sklearn.model_selection import train_test_split
 import joblib
 
+from memory_profiler import profile
+
+
 from finetune.util import list_transpose
 from finetune.encoding.input_encoder import EncodedOutput
 from finetune.config import all_gpus, assert_valid_config, get_default_config
@@ -754,6 +757,8 @@ class BaseModel(object, metaclass=ABCMeta):
             f = io.BytesIO()
             if isinstance(model, BaseModel):
                 model.save(f)
+            elif hasattr(model, "read"):
+                f = model
             else:
                 joblib.dump(model, f)
                 k = "__non_model__" + k
@@ -794,6 +799,7 @@ class BaseModel(object, metaclass=ABCMeta):
         }
         joblib.dump(weights_stripped, base_model_path)
 
+
     def load(path, *args, key=None, **kwargs):
         """
         Load a saved fine-tuned model from disk.  Path provided should be a folder which contains .pkl and tf.Saver() files
@@ -818,6 +824,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 else:
                     raise ValueError("Key {} not found in file".format(key))
             path = io.BytesIO(model_package[key])
+            del model_package
 
         assert_valid_config(**kwargs)
 

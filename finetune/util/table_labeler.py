@@ -7,6 +7,7 @@ import os
 import tempfile
 import typing as t
 import sys
+import contextlib
 
 from finetune.base_models import TableRoBERTa
 from finetune.util.metrics import sequences_overlap
@@ -677,11 +678,54 @@ class TableLabeler:
             split_preds_to_cells=split_preds_to_cells,
             chunk_tables=chunk_tables,
         )
-        self.table_model = SequenceLabeler(
-            base_model=TableRoBERTa, **(table_model_config or {})
+        # Delay construction of these models.
+        self._get_table_model = functools.partial(
+            SequenceLabeler, base_model=TableRoBERTa, **(table_model_config or {})
         )
-        self.text_model = SequenceLabeler(**(text_model_config or {}))
-        self.table_chunker = TableChunker.from_table_model(self.table_model)
+        self._get_text_model = functools.partial(
+            SequenceLabeler, **(text_model_config or {})
+        )
+
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.text_model_path = os.path.join(self.temp_dir.name, "text.jl")
+        self.table_model_path = os.path.join(self.temp_dir.name, "table.jl")
+
+    @property
+    @contextlib.contextmanager
+    def text_model(self):
+        if os.path.exists(self.text_model_path):
+            text_model = SequenceLabeler.load(self.text_model_path)
+        else:
+            text_model = self._get_text_model()
+        yield text_model
+        text_model.save(self.text_model_path)
+
+    @property
+    @contextlib.contextmanager
+    def table_model(self):
+        if os.path.exists(self.table_model_path):
+            table_model = SequenceLabeler.load(self.table_model_path)
+        else:
+            table_model = self._get_table_model()
+        yield table_model
+        table_model.save(self.table_model_path)
+
+    def _fit_table_model(self, model_inputs):
+        with self.table_model as table_model:
+            if self.etl.chunk_tables:
+                model_inputs = TableChunker.from_table_model(table_model).chunk(
+                    model_inputs
+                )
+            table_model.fit(
+                model_inputs["table_text"],
+                model_inputs["table_labels"],
+                context=model_inputs["table_context"],
+            )
+        return model_inputs
+
+    def _fit_text_model(self, model_inputs):
+        with self.text_model as text_model:
+            text_model.fit(model_inputs["doc_text"], model_inputs["doc_labels"])
 
     def fit(
         self,
@@ -692,24 +736,21 @@ class TableLabeler:
         model_inputs = self.etl.get_table_text_chunks_and_context(
             text=text, tables=tables, labels=labels
         )
-        if self.etl.chunk_tables:
-            model_inputs = self.table_chunker.chunk(model_inputs)
-        self.table_model.fit(
-            model_inputs["table_text"],
-            model_inputs["table_labels"],
-            context=model_inputs["table_context"],
-        )
-        self.text_model.fit(model_inputs["doc_text"], model_inputs["doc_labels"])
+        model_inputs = self._fit_table_model(model_inputs)
+        self._fit_text_model(model_inputs)
 
     def save(self, path: str) -> None:
-        SequenceLabeler.save_multiple(
-            path,
-            models={
-                "table": self.table_model,
-                "text": self.text_model,
-                "etl": self.etl,
-            },
-        )
+        with open(self.text_model_path, "rb") as text_model, open(
+            self.table_model_path, "rb"
+        ) as table_model:
+            SequenceLabeler.save_multiple(
+                path,
+                models={
+                    "table": table_model,
+                    "text": text_model,
+                    "etl": self.etl,
+                },
+            )
 
     def predict(self, text, tables, model_path=None, **kwargs):
         # Please don't use this in production
@@ -744,8 +785,9 @@ class TableLabeler:
             model_file_path, key="table", config_overrides=table_model_config_overrides
         )
         if etl.chunk_tables:
-            table_chunker = TableChunker.from_table_model(table_model)
-            model_inputs = table_chunker.chunk(model_inputs)
+            model_inputs = TableChunker.from_table_model(table_model).chunk(
+                model_inputs
+            )
         table_preds = scheduler.predict(
             model_file_path,
             model_inputs["table_text"],

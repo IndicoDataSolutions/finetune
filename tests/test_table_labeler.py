@@ -2,7 +2,6 @@ import pytest
 from finetune.util.table_labeler import TableLabeler, TableETL
 from finetune.scheduler import Scheduler
 
-
 def make_labels_predictions(labels):
     for doc_labels in labels:
         for label in doc_labels:
@@ -215,6 +214,7 @@ def test_fit_predict(labeled_table_data):
     tl = TableLabeler()
     tl.fit(text=text * 10, labels=labels * 10, tables=tables * 10)
     tl.save(filename)
+    del tl
     shed = Scheduler()
     preds = TableLabeler.predict_from_file(
         model_file_path=filename, text=text, tables=tables, scheduler=shed
