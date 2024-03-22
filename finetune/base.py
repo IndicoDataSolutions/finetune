@@ -254,7 +254,15 @@ class BaseModel(object, metaclass=ABCMeta):
         steps = int(math.ceil(n_examples / (batch_size * n_gpus)))
         return steps
 
-    def finetune(self, Xs, Y=None, context=None, update_hook=None, log_hooks=None, force_build_lm=False):
+    def finetune(
+        self,
+        Xs,
+        Y=None,
+        context=None,
+        update_hook=None,
+        log_hooks=None,
+        force_build_lm=False,
+    ):
         if callable(Xs):
             datasets = self.input_pipeline.get_dataset_from_generator(
                 Xs, input_mode=InputMode.TRAIN, update_hook=update_hook
@@ -350,8 +358,10 @@ class BaseModel(object, metaclass=ABCMeta):
                 if self.config.distribution_strategy.lower() == "mirrored":
                     distribute_strategy = tf.distribute.MirroredStrategy()
                 elif self.config.distribution_strategy.lower() == "central_storage":
-                    distribute_strategy = tf.distribute.experimental.CentralStorageStrategy(
-                        resolved_gpus_string or None
+                    distribute_strategy = (
+                        tf.distribute.experimental.CentralStorageStrategy(
+                            resolved_gpus_string or None
+                        )
                     )
                 else:
                     raise FinetuneError(
@@ -763,12 +773,7 @@ class BaseModel(object, metaclass=ABCMeta):
             f.seek(0)
             return k, f.read()
 
-        joblib.dump(
-            dict(
-                save_to_bytes(model, k) for k, model in models.items()
-            ),
-            path
-        )
+        joblib.dump(dict(save_to_bytes(model, k) for k, model in models.items()), path)
 
     def create_base_model(self, filename, exists_ok=False):
         """
@@ -797,7 +802,6 @@ class BaseModel(object, metaclass=ABCMeta):
         }
         joblib.dump(weights_stripped, base_model_path)
 
-
     def load(path, *args, key=None, **kwargs):
         """
         Load a saved fine-tuned model from disk.  Path provided should be a folder which contains .pkl and tf.Saver() files
@@ -816,7 +820,7 @@ class BaseModel(object, metaclass=ABCMeta):
         if key is not None:
             model_package = joblib.load(path)
             if key not in model_package:
-                nm_key = "__non_model__" + key 
+                nm_key = "__non_model__" + key
                 if nm_key in model_package:
                     return joblib.load(io.BytesIO(model_package[nm_key]))
                 else:

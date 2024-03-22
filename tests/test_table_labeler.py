@@ -2,6 +2,7 @@ import pytest
 from finetune.util.table_labeler import TableLabeler, TableETL
 from finetune.scheduler import Scheduler
 
+
 def make_labels_predictions(labels):
     for doc_labels in labels:
         for label in doc_labels:
