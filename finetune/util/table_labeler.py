@@ -688,6 +688,12 @@ class TableLabeler:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.text_model_path = os.path.join(self.temp_dir.name, "text.jl")
         self.table_model_path = os.path.join(self.temp_dir.name, "table.jl")
+        self.classes = set()
+
+    def add_class_names(self, model):
+        for class_name in model.input_pipeline.label_encoder.target_labels:
+            if class_name != model.config.pad_token:
+                self.classes.add(class_name)
 
     def _fit_table_model(self, model_inputs, update_hook):
         table_model = self._get_table_model()
@@ -701,6 +707,7 @@ class TableLabeler:
             context=model_inputs["table_context"],
             update_hook=update_hook,
         )
+        self.add_class_names(table_model)
         table_model.save(self.table_model_path)
         return model_inputs
 
@@ -711,6 +718,7 @@ class TableLabeler:
             model_inputs["doc_labels"],
             update_hook=update_hook,
         )
+        self.add_class_names(text_model)
         text_model.save(self.text_model_path)
 
     def fit(
