@@ -7,7 +7,6 @@ import os
 import tempfile
 import typing as t
 import sys
-import contextlib
 
 from finetune.base_models import TableRoBERTa
 from finetune.util.metrics import sequences_overlap
@@ -690,7 +689,7 @@ class TableLabeler:
         self.text_model_path = os.path.join(self.temp_dir.name, "text.jl")
         self.table_model_path = os.path.join(self.temp_dir.name, "table.jl")
 
-    def _fit_table_model(self, model_inputs):
+    def _fit_table_model(self, model_inputs, update_hook):
         table_model = self._get_table_model()
         if self.etl.chunk_tables:
             model_inputs = TableChunker.from_table_model(table_model).chunk(
@@ -700,13 +699,18 @@ class TableLabeler:
             model_inputs["table_text"],
             model_inputs["table_labels"],
             context=model_inputs["table_context"],
+            update_hook=update_hook,
         )
         table_model.save(self.table_model_path)
         return model_inputs
 
-    def _fit_text_model(self, model_inputs):
+    def _fit_text_model(self, model_inputs, update_hook):
         text_model = self._get_text_model()
-        text_model.fit(model_inputs["doc_text"], model_inputs["doc_labels"])
+        text_model.fit(
+            model_inputs["doc_text"],
+            model_inputs["doc_labels"],
+            update_hook=update_hook,
+        )
         text_model.save(self.text_model_path)
 
     def fit(
@@ -714,12 +718,16 @@ class TableLabeler:
         text: t.List[str],
         tables: t.List[DocumentTables],
         labels: t.List[DocumentSpans],
+        table_update_hook=None,
+        text_update_hook=None,
     ):
         model_inputs = self.etl.get_table_text_chunks_and_context(
             text=text, tables=tables, labels=labels
         )
-        model_inputs = self._fit_table_model(model_inputs)
-        self._fit_text_model(model_inputs)
+        model_inputs = self._fit_table_model(
+            model_inputs, update_hook=table_update_hook
+        )
+        self._fit_text_model(model_inputs, update_hook=text_update_hook)
 
     def save(self, path: str) -> None:
         with open(self.text_model_path, "rb") as text_model, open(
