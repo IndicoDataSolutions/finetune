@@ -690,42 +690,24 @@ class TableLabeler:
         self.text_model_path = os.path.join(self.temp_dir.name, "text.jl")
         self.table_model_path = os.path.join(self.temp_dir.name, "table.jl")
 
-    @property
-    @contextlib.contextmanager
-    def text_model(self):
-        if os.path.exists(self.text_model_path):
-            text_model = SequenceLabeler.load(self.text_model_path)
-        else:
-            text_model = self._get_text_model()
-        yield text_model
-        text_model.save(self.text_model_path)
-
-    @property
-    @contextlib.contextmanager
-    def table_model(self):
-        if os.path.exists(self.table_model_path):
-            table_model = SequenceLabeler.load(self.table_model_path)
-        else:
-            table_model = self._get_table_model()
-        yield table_model
-        table_model.save(self.table_model_path)
-
     def _fit_table_model(self, model_inputs):
-        with self.table_model as table_model:
-            if self.etl.chunk_tables:
-                model_inputs = TableChunker.from_table_model(table_model).chunk(
-                    model_inputs
-                )
-            table_model.fit(
-                model_inputs["table_text"],
-                model_inputs["table_labels"],
-                context=model_inputs["table_context"],
+        table_model = self._get_table_model()
+        if self.etl.chunk_tables:
+            model_inputs = TableChunker.from_table_model(table_model).chunk(
+                model_inputs
             )
+        table_model.fit(
+            model_inputs["table_text"],
+            model_inputs["table_labels"],
+            context=model_inputs["table_context"],
+        )
+        table_model.save(self.table_model_path)
         return model_inputs
 
     def _fit_text_model(self, model_inputs):
-        with self.text_model as text_model:
-            text_model.fit(model_inputs["doc_text"], model_inputs["doc_labels"])
+        text_model = self._get_text_model()
+        text_model.fit(model_inputs["doc_text"], model_inputs["doc_labels"])
+        text_model.save(self.text_model_path)
 
     def fit(
         self,
@@ -779,10 +761,13 @@ class TableLabeler:
         cache_key=None,
         table_model_config_overrides=None,
     ):
-        etl = scheduler.load_etl(model_file_path, cache_key)
+        etl = scheduler.load_etl(model_file_path, cache_key=cache_key)
         model_inputs = etl.get_table_text_chunks_and_context(text=text, tables=tables)
         table_model = scheduler.get_model(
-            model_file_path, key="table", config_overrides=table_model_config_overrides
+            model_file_path,
+            key="table",
+            config_overrides=table_model_config_overrides,
+            cache_key=cache_key,
         )
         if etl.chunk_tables:
             model_inputs = TableChunker.from_table_model(table_model).chunk(

@@ -123,14 +123,17 @@ class Scheduler:
             LOGGER.info("No models cached -- cannot remove oldest model.")
 
     def model_cache_key(self, model, key, cache_key):
-        if cache_key and key:
-            return f"{cache_key}_key={key}"
-        elif cache_key and not key:
+        if cache_key is None:
+            if not isinstance(model, str):
+                raise ValueError(
+                    "To schedule a model with a file handle or BytesIO model you must provide a cache_key"
+                )
+            cache_key = f"model={model}"
+
+        if key is None:
             return cache_key
-        elif key is None:
-            return model
         else:
-            f"{model}_key={key}"
+            return f"{cache_key}_key={key}"
 
     def _rotate_in_model(self, model, key, config_overrides=None, cache_key=None):
         cache_key = self.model_cache_key(model, key=key, cache_key=cache_key)
@@ -191,16 +194,17 @@ class Scheduler:
         return f"{cache_key}_key={key}" in self.loaded_models
 
     def load_etl(self, model_file_path, cache_key):
-        if cache_key in self.etl_cache:
-            etl = self.etl_cache.get(cache_key)
+        etl_cache_key = self.model_cache_key(model_file_path, "etl", cache_key)
+        if etl_cache_key in self.etl_cache:
+            etl = self.etl_cache.get(etl_cache_key)
         else:
             etl = SequenceLabeler.load(model_file_path, key="etl")
-            self.etl_cache[cache_key] = etl
+            self.etl_cache[etl_cache_key] = etl
         return etl
 
-    def get_model(self, model_file, key=None, config_overrides=None):
+    def get_model(self, model_file, key=None, config_overrides=None, cache_key=None):
         return self._rotate_in_model(
-            model_file, key=key, config_overrides=config_overrides
+            model_file, key=key, config_overrides=config_overrides, cache_key=cache_key
         )
 
 

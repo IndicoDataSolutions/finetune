@@ -444,7 +444,7 @@ def scatter_feats(output_shape, sequence_feats, scatter_vals):
     """
     input_tensor = tf.zeros(shape=output_shape, dtype=tf.float32)
     mask = tf.math.less(
-        scatter_vals[:, :, 0], output_shape[1]
+        scatter_vals[:, :, 1], output_shape[1]
     )  # Special tokens were placed after the length of the shape.
     feats = tf.boolean_mask(sequence_feats, mask)
     scatter_idxs = tf.boolean_mask(scatter_vals, mask)
