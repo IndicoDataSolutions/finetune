@@ -660,15 +660,7 @@ class BaseModel(object, metaclass=ABCMeta):
     def classes(self):
         return [
             class_name
-            for class_name in finetune_model.input_pipeline.label_encoder.target_labels
-            if class_name != self.config.pad_token
-        ]
-
-    @property
-    def classes(self):
-        return [
-            class_name
-            for class_name in finetune_model.input_pipeline.label_encoder.target_labels
+            for class_name in self.input_pipeline.label_encoder.target_labels
             if class_name != self.config.pad_token
         ]
 

@@ -188,10 +188,13 @@ class Scheduler:
     def featurize_sequence(self, model_file, x, *args, key=None, model=None, **kwargs):
         return model.featurize_sequence(x, *args, **kwargs)
 
-    def in_cache(self, cache_key, key):
-        if key is None:
-            return cache_key in self.loaded_models
-        return f"{cache_key}_key={key}" in self.loaded_models
+    def in_cache(self, model, cache_key, key):
+        cache_key = self.model_cache_key(model, key=key, cache_key=cache_key)
+        return cache_key in self.loaded_models
+
+    def etl_in_cache(self, model, cache_key):
+        etl_cache_key = self.model_cache_key(model, "etl", cache_key)
+        return etl_cache_key in self.etl_cache
 
     def load_etl(self, model_file_path, cache_key):
         etl_cache_key = self.model_cache_key(model_file_path, "etl", cache_key)
