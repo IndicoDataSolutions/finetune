@@ -7,13 +7,18 @@ import os
 import tempfile
 import typing as t
 import sys
+import logging
 
 from finetune.base_models import TableRoBERTa
+from finetune.errors import FinetuneError
 from finetune.util.metrics import sequences_overlap
 from finetune.scheduler import Scheduler
 from finetune.encoding.input_encoder import BaseEncoder
 
 from finetune import SequenceLabeler
+
+LOGGER = logging.getLogger("finetune")
+
 
 Span = t.Dict[str, t.Any]  # Label or Pred
 Table = t.Dict[str, t.Any]
@@ -51,14 +56,8 @@ def _adjust_span_to_chunk(
         span["text"] = span["text"][
             adj_start - ideal_adj_start : adj_end - ideal_adj_start
         ]
-        if output_space_text is not None:
-            assert span["text"] == output_space_text[adj_start:adj_end], (
-                span["text"],
-                output_space_text[adj_start:adj_end],
-                orig_span,
-                ">>",
-                span,
-            )
+        if output_space_text is not None and span["text"] != output_space_text[adj_start:adj_end]:
+            LOGGER.warn("Span Text does not align with output space text")
     span["start"] = adj_start
     span["end"] = adj_end
     return span
@@ -83,7 +82,6 @@ def fix_spans(
         output_space_text: The text of the output space, used for validation.
         input_space: a key into chunks of the space the current spans are in.
         output_space: a key into chunks of the space to move the current spans
-        strict: bool, whether to assert that every span is matched by at least one chunk.
 
     """
     spans_out = []
@@ -120,7 +118,8 @@ class TableETL:
 
     def get_table_text(self, text: str, doc_offsets: t.List[t.Dict[str, int]]) -> str:
         for c in doc_offsets:
-            assert c["end"] <= len(text), "Table offsets must exist within document."
+            if c["end"] > len(text):
+                raise FinetuneError("Table offsets must exist within the document")
         return "\n".join(text[c["start"] : c["end"]] for c in doc_offsets)
 
     def get_table_context(
@@ -445,7 +444,6 @@ class TableChunker:
             ]
             for i in range(max_row + 1)
         ]
-        assert sum(len(rs) for rs in row_spans) == len(context)
         return self.combine_row_spans(row_spans, token_bounds)
 
     def chunk(self, table_text_chunks_and_context):
@@ -650,7 +648,9 @@ class TableChunker:
                     "spans": row_out,
                 }
             )
-        assert len([t for t in token_spans if not t.get("used", False)]) == 0
+        for t in token_spans:
+            if not t.get("used", False):
+                LOGGER.warn(f"Token {t} does not appear in any row spans")
         return combined_rows
 
     @classmethod
