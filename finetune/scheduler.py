@@ -136,8 +136,8 @@ class Scheduler:
             return f"{cache_key}_key={key}"
 
     def _rotate_in_model(self, model, key, config_overrides=None, cache_key=None):
-        cache_key = self.model_cache_key(model, key=key, cache_key=cache_key)
-        if cache_key not in self.loaded_models:
+        resolved_cache_key = self.model_cache_key(model, key=key, cache_key=cache_key)
+        if resolved_cache_key not in self.loaded_models:
             if (
                 self.max_models is not None
                 and len(self.loaded_models) + 1 > self.max_models
@@ -148,10 +148,10 @@ class Scheduler:
             out_model = BaseModel.load(model, key=key, **merged_config)
             self.model_cache[cache_key] = out_model
         else:
-            out_model = self.model_cache[cache_key]
-            self.loaded_models.remove(cache_key)  # put it back at the end of the queue
+            out_model = self.model_cache[resolved_cache_key]
+            self.loaded_models.remove(resolved_cache_key)  # put it back at the end of the queue
 
-        self.loaded_models.append(cache_key)
+        self.loaded_models.append(resolved_cache_key)
         out_model._cached_predict = True
 
         return out_model
@@ -189,20 +189,20 @@ class Scheduler:
         return model.featurize_sequence(x, *args, **kwargs)
 
     def in_cache(self, model, cache_key, key):
-        cache_key = self.model_cache_key(model, key=key, cache_key=cache_key)
-        return cache_key in self.loaded_models
+        resolved_cache_key = self.model_cache_key(model, key=key, cache_key=cache_key)
+        return resolved_cache_key in self.loaded_models
 
     def etl_in_cache(self, model, cache_key):
-        etl_cache_key = self.model_cache_key(model, "etl", cache_key)
-        return etl_cache_key in self.etl_cache
+        resolved_cache_key = self.model_cache_key(model, "etl", cache_key)
+        return resolved_cache_key in self.etl_cache
 
     def load_etl(self, model_file_path, cache_key):
-        etl_cache_key = self.model_cache_key(model_file_path, "etl", cache_key)
-        if etl_cache_key in self.etl_cache:
-            etl = self.etl_cache.get(etl_cache_key)
+        resolved_cache_key = self.model_cache_key(model_file_path, "etl", cache_key)
+        if resolved_cache_key in self.etl_cache:
+            etl = self.etl_cache.get(resolved_cache_key)
         else:
             etl = SequenceLabeler.load(model_file_path, key="etl")
-            self.etl_cache[etl_cache_key] = etl
+            self.etl_cache[resolved_cache_key] = etl
         return etl
 
     def get_model(self, model_file, key=None, config_overrides=None, cache_key=None):

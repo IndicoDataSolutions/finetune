@@ -21,7 +21,7 @@ def get_gather_indices(X, sequence_lengths, start, end, other_end, chunk_tables)
         start: The start of the col/row range.
         end: The end of the col/row range.
         other_end: The end of the row/col range. This is used to determine the first 2 rows / cols to retain in all chunks for context.
-        chunk_tables: a boolean. Whether to apply the chunking operation described above 
+        chunk_tables: a boolean. Whether to apply the chunking operation described above
 
     Returns:
     A dict:
@@ -69,7 +69,7 @@ def get_gather_indices(X, sequence_lengths, start, end, other_end, chunk_tables)
 def batch_packing(ragged_input, include_mask=True, base_model_max_length=512):
     """
     Takes a ragged tensor input and re-packs the batches to minimise the batch size without
-    impacting the sequence length. Additionally returns a mask to use with self-attention so 
+    impacting the sequence length. Additionally returns a mask to use with self-attention so
     that there is no change in output.
 
     Args:
@@ -331,7 +331,7 @@ def gather_col_vals(inp, gather_output, eos_pad, bos_pad, pad_val):
         pad_val A value to be used as the padding value - equal to the rank of inp - 2.
 
     Returns:
-        a dictionary 
+        a dictionary
         {
             "seq_lens": seq_lens from gather output unmodified,
             "values": the values inp rearraged to be ready as input to the model,
@@ -435,26 +435,27 @@ def scatter_feats(output_shape, sequence_feats, scatter_vals):
     0 is used as the default where no tokens in the input map to tokens in the output.
 
     Args:
-        output_shape: Expected shape of the output.
-        sequence_feats: features from either the row or col model.
-        scatter_vals: the scatter vals output from gather_tables - the indices of the original positions of each token.
+        output_shape: Expected shape of the output, representing (text_batch, text_seq, feat_dim)
+        sequence_feats: features from either the row or col model. Shape (table_batch, table_seq, feat_dim)
+        scatter_vals: the scatter vals output from gather_tables - the indices of the original positions of each token. (table_batch, table_seq, 2)
 
     Returns:
         The reformatted features.
     """
-    input_tensor = tf.zeros(shape=output_shape, dtype=tf.float32)
+    input_tensor = tf.zeros(shape=output_shape, dtype=tf.float32) # [text_batch, text_seq, feat_dim]
     mask = tf.math.less(
         scatter_vals[:, :, 1], output_shape[1]
-    )  # Special tokens were placed after the length of the shape.
-    feats = tf.boolean_mask(sequence_feats, mask)
-    scatter_idxs = tf.boolean_mask(scatter_vals, mask)
+    )  # Mask any tokens mapped outside of the input_tensor shape [text_batch, text_seq]
+    # Special tokens were placed after the length of the shape.
+    feats = tf.boolean_mask(sequence_feats, mask) # [None, feat_dim]
+    scatter_idxs = tf.boolean_mask(scatter_vals, mask) # [None, 2]
     # Averages any cases where tokens are in multiple cells - for example when cells span multiple rows / cols.
     divide_by = tf.tensor_scatter_nd_add(
         input_tensor, scatter_idxs, tf.ones_like(feats)
-    )
+    ) # [text_batch, text_seq, feat_dim]
     return tf.math.divide_no_nan(
         tf.tensor_scatter_nd_add(input_tensor, scatter_idxs, feats), divide_by
-    )
+    ) # [text_batch, text_seq, feat_dim]
 
 
 def get_summary_values(inp, gather_vals, input_seq_len):
