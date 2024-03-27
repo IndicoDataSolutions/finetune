@@ -146,7 +146,7 @@ class Scheduler:
             config_overrides = config_overrides or {}
             merged_config = {**self.config, **config_overrides}
             out_model = BaseModel.load(model, key=key, **merged_config)
-            self.model_cache[cache_key] = out_model
+            self.model_cache[resolved_cache_key] = out_model
         else:
             out_model = self.model_cache[resolved_cache_key]
             self.loaded_models.remove(resolved_cache_key)  # put it back at the end of the queue
