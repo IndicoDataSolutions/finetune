@@ -123,18 +123,21 @@ class Scheduler:
             LOGGER.info("No models cached -- cannot remove oldest model.")
 
     def model_cache_key(self, model, key, cache_key):
-        if cache_key and key:
-            return f"{cache_key}_key={key}"
-        elif cache_key and not key:
+        if cache_key is None:
+            if not isinstance(model, str):
+                raise ValueError(
+                    "To schedule a model with a file handle or BytesIO model you must provide a cache_key"
+                )
+            cache_key = f"model={model}"
+
+        if key is None:
             return cache_key
-        elif key is None:
-            return model
         else:
-            f"{model}_key={key}"
+            return f"{cache_key}_key={key}"
 
     def _rotate_in_model(self, model, key, config_overrides=None, cache_key=None):
-        cache_key = self.model_cache_key(model, key=key, cache_key=cache_key)
-        if cache_key not in self.loaded_models:
+        resolved_cache_key = self.model_cache_key(model, key=key, cache_key=cache_key)
+        if resolved_cache_key not in self.loaded_models:
             if (
                 self.max_models is not None
                 and len(self.loaded_models) + 1 > self.max_models
@@ -145,10 +148,10 @@ class Scheduler:
             out_model = BaseModel.load(model, key=key, **merged_config)
             self.model_cache[cache_key] = out_model
         else:
-            out_model = self.model_cache[cache_key]
-            self.loaded_models.remove(cache_key)  # put it back at the end of the queue
+            out_model = self.model_cache[resolved_cache_key]
+            self.loaded_models.remove(resolved_cache_key)  # put it back at the end of the queue
 
-        self.loaded_models.append(cache_key)
+        self.loaded_models.append(resolved_cache_key)
         out_model._cached_predict = True
 
         return out_model
@@ -185,22 +188,26 @@ class Scheduler:
     def featurize_sequence(self, model_file, x, *args, key=None, model=None, **kwargs):
         return model.featurize_sequence(x, *args, **kwargs)
 
-    def in_cache(self, cache_key, key):
-        if key is None:
-            return cache_key in self.loaded_models
-        return f"{cache_key}_key={key}" in self.loaded_models
+    def in_cache(self, model, cache_key, key):
+        resolved_cache_key = self.model_cache_key(model, key=key, cache_key=cache_key)
+        return resolved_cache_key in self.loaded_models
+
+    def etl_in_cache(self, model, cache_key):
+        resolved_cache_key = self.model_cache_key(model, "etl", cache_key)
+        return resolved_cache_key in self.etl_cache
 
     def load_etl(self, model_file_path, cache_key):
-        if cache_key in self.etl_cache:
-            etl = self.etl_cache.get(cache_key)
+        resolved_cache_key = self.model_cache_key(model_file_path, "etl", cache_key)
+        if resolved_cache_key in self.etl_cache:
+            etl = self.etl_cache.get(resolved_cache_key)
         else:
             etl = SequenceLabeler.load(model_file_path, key="etl")
-            self.etl_cache[cache_key] = etl
+            self.etl_cache[resolved_cache_key] = etl
         return etl
 
-    def get_model(self, model_file, key=None, config_overrides=None):
+    def get_model(self, model_file, key=None, config_overrides=None, cache_key=None):
         return self._rotate_in_model(
-            model_file, key=key, config_overrides=config_overrides
+            model_file, key=key, config_overrides=config_overrides, cache_key=cache_key
         )
 
 

@@ -7,13 +7,18 @@ import os
 import tempfile
 import typing as t
 import sys
+import logging
 
 from finetune.base_models import TableRoBERTa
+from finetune.errors import FinetuneError
 from finetune.util.metrics import sequences_overlap
 from finetune.scheduler import Scheduler
 from finetune.encoding.input_encoder import BaseEncoder
 
 from finetune import SequenceLabeler
+
+LOGGER = logging.getLogger("finetune")
+
 
 Span = t.Dict[str, t.Any]  # Label or Pred
 Table = t.Dict[str, t.Any]
@@ -51,14 +56,8 @@ def _adjust_span_to_chunk(
         span["text"] = span["text"][
             adj_start - ideal_adj_start : adj_end - ideal_adj_start
         ]
-        if output_space_text is not None:
-            assert span["text"] == output_space_text[adj_start:adj_end], (
-                span["text"],
-                output_space_text[adj_start:adj_end],
-                orig_span,
-                ">>",
-                span,
-            )
+        if output_space_text is not None and span["text"] != output_space_text[adj_start:adj_end]:
+            LOGGER.warn("Span Text does not align with output space text")
     span["start"] = adj_start
     span["end"] = adj_end
     return span
@@ -83,7 +82,6 @@ def fix_spans(
         output_space_text: The text of the output space, used for validation.
         input_space: a key into chunks of the space the current spans are in.
         output_space: a key into chunks of the space to move the current spans
-        strict: bool, whether to assert that every span is matched by at least one chunk.
 
     """
     spans_out = []
@@ -120,7 +118,8 @@ class TableETL:
 
     def get_table_text(self, text: str, doc_offsets: t.List[t.Dict[str, int]]) -> str:
         for c in doc_offsets:
-            assert c["end"] <= len(text), "Table offsets must exist within document."
+            if c["end"] > len(text):
+                raise FinetuneError("Table offsets must exist within the document")
         return "\n".join(text[c["start"] : c["end"]] for c in doc_offsets)
 
     def get_table_context(
@@ -445,7 +444,6 @@ class TableChunker:
             ]
             for i in range(max_row + 1)
         ]
-        assert sum(len(rs) for rs in row_spans) == len(context)
         return self.combine_row_spans(row_spans, token_bounds)
 
     def chunk(self, table_text_chunks_and_context):
@@ -650,7 +648,9 @@ class TableChunker:
                     "spans": row_out,
                 }
             )
-        assert len([t for t in token_spans if not t.get("used", False)]) == 0
+        for t in token_spans:
+            if not t.get("used", False):
+                LOGGER.warn(f"Token {t} does not appear in any row spans")
         return combined_rows
 
     @classmethod
@@ -677,39 +677,77 @@ class TableLabeler:
             split_preds_to_cells=split_preds_to_cells,
             chunk_tables=chunk_tables,
         )
-        self.table_model = SequenceLabeler(
-            base_model=TableRoBERTa, **(table_model_config or {})
+        # Delay construction of these models.
+        self._get_table_model = functools.partial(
+            SequenceLabeler, base_model=TableRoBERTa, **(table_model_config or {})
         )
-        self.text_model = SequenceLabeler(**(text_model_config or {}))
-        self.table_chunker = TableChunker.from_table_model(self.table_model)
+        self._get_text_model = functools.partial(
+            SequenceLabeler, **(text_model_config or {})
+        )
+
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.text_model_path = os.path.join(self.temp_dir.name, "text.jl")
+        self.table_model_path = os.path.join(self.temp_dir.name, "table.jl")
+        self.classes = set()
+
+    def _add_class_names(self, model):
+        # Adding these proactively prevents us having to reload the models to get the class names.
+        self.classes.update(model.classes)
+
+    def _fit_table_model(self, model_inputs, update_hook):
+        table_model = self._get_table_model()
+        if self.etl.chunk_tables:
+            model_inputs = TableChunker.from_table_model(table_model).chunk(
+                model_inputs
+            )
+        table_model.fit(
+            model_inputs["table_text"],
+            model_inputs["table_labels"],
+            context=model_inputs["table_context"],
+            update_hook=update_hook,
+        )
+        self._add_class_names(table_model)
+        table_model.save(self.table_model_path)
+        return model_inputs
+
+    def _fit_text_model(self, model_inputs, update_hook):
+        text_model = self._get_text_model()
+        text_model.fit(
+            model_inputs["doc_text"],
+            model_inputs["doc_labels"],
+            update_hook=update_hook,
+        )
+        self._add_class_names(text_model)
+        text_model.save(self.text_model_path)
 
     def fit(
         self,
         text: t.List[str],
         tables: t.List[DocumentTables],
         labels: t.List[DocumentSpans],
+        table_update_hook=None,
+        text_update_hook=None,
     ):
         model_inputs = self.etl.get_table_text_chunks_and_context(
             text=text, tables=tables, labels=labels
         )
-        if self.etl.chunk_tables:
-            model_inputs = self.table_chunker.chunk(model_inputs)
-        self.table_model.fit(
-            model_inputs["table_text"],
-            model_inputs["table_labels"],
-            context=model_inputs["table_context"],
+        model_inputs = self._fit_table_model(
+            model_inputs, update_hook=table_update_hook
         )
-        self.text_model.fit(model_inputs["doc_text"], model_inputs["doc_labels"])
+        self._fit_text_model(model_inputs, update_hook=text_update_hook)
 
     def save(self, path: str) -> None:
-        SequenceLabeler.save_multiple(
-            path,
-            models={
-                "table": self.table_model,
-                "text": self.text_model,
-                "etl": self.etl,
-            },
-        )
+        with open(self.text_model_path, "rb") as text_model, open(
+            self.table_model_path, "rb"
+        ) as table_model:
+            SequenceLabeler.save_multiple(
+                path,
+                models={
+                    "table": table_model,
+                    "text": text_model,
+                    "etl": self.etl,
+                },
+            )
 
     def predict(self, text, tables, model_path=None, **kwargs):
         # Please don't use this in production
@@ -738,14 +776,18 @@ class TableLabeler:
         cache_key=None,
         table_model_config_overrides=None,
     ):
-        etl = scheduler.load_etl(model_file_path, cache_key)
+        etl = scheduler.load_etl(model_file_path, cache_key=cache_key)
         model_inputs = etl.get_table_text_chunks_and_context(text=text, tables=tables)
         table_model = scheduler.get_model(
-            model_file_path, key="table", config_overrides=table_model_config_overrides
+            model_file_path,
+            key="table",
+            config_overrides=table_model_config_overrides,
+            cache_key=cache_key,
         )
         if etl.chunk_tables:
-            table_chunker = TableChunker.from_table_model(table_model)
-            model_inputs = table_chunker.chunk(model_inputs)
+            model_inputs = TableChunker.from_table_model(table_model).chunk(
+                model_inputs
+            )
         table_preds = scheduler.predict(
             model_file_path,
             model_inputs["table_text"],

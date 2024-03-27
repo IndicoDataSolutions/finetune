@@ -1,4 +1,5 @@
 import pytest
+import io
 from finetune.util.table_labeler import TableLabeler, TableETL
 from finetune.scheduler import Scheduler
 
@@ -215,6 +216,7 @@ def test_fit_predict(labeled_table_data):
     tl = TableLabeler()
     tl.fit(text=text * 10, labels=labels * 10, tables=tables * 10)
     tl.save(filename)
+    del tl
     shed = Scheduler()
     preds = TableLabeler.predict_from_file(
         model_file_path=filename, text=text, tables=tables, scheduler=shed
@@ -224,6 +226,26 @@ def test_fit_predict(labeled_table_data):
     assert set((p["start"], p["end"], p["label"]) for p in preds[0]) == set(
         (l["start"], l["end"], l["label"]) for l in labels[0]
     )
+
+
+def test_fit_predict_bytes_io(labeled_table_data):
+    bytes_io = io.BytesIO()
+    text, labels, tables = labeled_table_data
+    tl = TableLabeler()
+    tl.fit(text=text * 10, labels=labels * 10, tables=tables * 10)
+    tl.save(bytes_io)
+    bytes_io.seek(0)
+    del tl
+    shed = Scheduler()
+    preds = TableLabeler.predict_from_file(
+        model_file_path=bytes_io, text=text, tables=tables, scheduler=shed, cache_key="test_fit_predict_bytes_io"
+    )
+    print([{**p, "confidence": None} for p in preds[0]])
+    assert len(preds[0]) == len(labels[0])
+    assert set((p["start"], p["end"], p["label"]) for p in preds[0]) == set(
+        (l["start"], l["end"], l["label"]) for l in labels[0]
+    )
+
 
 
 @pytest.mark.parametrize("drop_labels", [True, False])

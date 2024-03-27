@@ -25,6 +25,7 @@ from tensorflow.compat.v1 import logging as tf_logging
 from sklearn.model_selection import train_test_split
 import joblib
 
+
 from finetune.util import list_transpose
 from finetune.encoding.input_encoder import EncodedOutput
 from finetune.config import all_gpus, assert_valid_config, get_default_config
@@ -253,7 +254,15 @@ class BaseModel(object, metaclass=ABCMeta):
         steps = int(math.ceil(n_examples / (batch_size * n_gpus)))
         return steps
 
-    def finetune(self, Xs, Y=None, context=None, update_hook=None, log_hooks=None, force_build_lm=False):
+    def finetune(
+        self,
+        Xs,
+        Y=None,
+        context=None,
+        update_hook=None,
+        log_hooks=None,
+        force_build_lm=False,
+    ):
         if callable(Xs):
             datasets = self.input_pipeline.get_dataset_from_generator(
                 Xs, input_mode=InputMode.TRAIN, update_hook=update_hook
@@ -349,8 +358,10 @@ class BaseModel(object, metaclass=ABCMeta):
                 if self.config.distribution_strategy.lower() == "mirrored":
                     distribute_strategy = tf.distribute.MirroredStrategy()
                 elif self.config.distribution_strategy.lower() == "central_storage":
-                    distribute_strategy = tf.distribute.experimental.CentralStorageStrategy(
-                        resolved_gpus_string or None
+                    distribute_strategy = (
+                        tf.distribute.experimental.CentralStorageStrategy(
+                            resolved_gpus_string or None
+                        )
                     )
                 else:
                     raise FinetuneError(
@@ -649,15 +660,7 @@ class BaseModel(object, metaclass=ABCMeta):
     def classes(self):
         return [
             class_name
-            for class_name in finetune_model.input_pipeline.label_encoder.target_labels
-            if class_name != self.config.pad_token
-        ]
-
-    @property
-    def classes(self):
-        return [
-            class_name
-            for class_name in finetune_model.input_pipeline.label_encoder.target_labels
+            for class_name in self.input_pipeline.label_encoder.target_labels
             if class_name != self.config.pad_token
         ]
 
@@ -754,18 +757,15 @@ class BaseModel(object, metaclass=ABCMeta):
             f = io.BytesIO()
             if isinstance(model, BaseModel):
                 model.save(f)
+            elif hasattr(model, "read"):
+                f = model
             else:
                 joblib.dump(model, f)
                 k = "__non_model__" + k
             f.seek(0)
             return k, f.read()
 
-        joblib.dump(
-            dict(
-                save_to_bytes(model, k) for k, model in models.items()
-            ),
-            path
-        )
+        joblib.dump(dict(save_to_bytes(model, k) for k, model in models.items()), path)
 
     def create_base_model(self, filename, exists_ok=False):
         """
@@ -812,12 +812,13 @@ class BaseModel(object, metaclass=ABCMeta):
         if key is not None:
             model_package = joblib.load(path)
             if key not in model_package:
-                nm_key = "__non_model__" + key 
+                nm_key = "__non_model__" + key
                 if nm_key in model_package:
                     return joblib.load(io.BytesIO(model_package[nm_key]))
                 else:
                     raise ValueError("Key {} not found in file".format(key))
             path = io.BytesIO(model_package[key])
+            del model_package
 
         assert_valid_config(**kwargs)
 
