@@ -1,0 +1,17 @@
+version: "2.3"
+
+services:
+  finetune:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.gpu
+    volumes:
+      - .:/Finetune
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["0"]
+              capabilities: [gpu]
+

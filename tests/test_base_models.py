@@ -186,7 +186,7 @@ class TestClassifierTextCNN(TestModelBase):
 
         predictions = model.predict(valid_sample.Text.values)
         for prediction in predictions:
-            self.assertIsInstance(prediction, (np.int, np.int64))
+            self.assertIsInstance(prediction, (int, np.int64))
 
         probabilities = model.predict_proba(valid_sample.Text.values)
         for proba in probabilities:
