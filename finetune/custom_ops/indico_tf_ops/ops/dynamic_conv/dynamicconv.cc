@@ -19,7 +19,7 @@ REGISTER_OP("DynamicConvolution")
     shape_inference::ShapeHandle input_shape;
     TF_RETURN_IF_ERROR(c->WithRank(c->input(0), 3, &input_shape));
     c->set_output(0, input_shape);
-    return Status::OK();
+    return Status();
     });
 
 /*
