@@ -36,9 +36,11 @@ SET(CUDA_PROPAGATE_HOST_FLAGS ON)
 
 find_package( CUDA REQUIRED )
 set( CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} --expt-relaxed-constexpr -v" )
+set( CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -gencode=arch=compute_75,\"code=sm_75,compute_75\" " )
 set( CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -gencode=arch=compute_70,\"code=sm_70,compute_70\" " )
 set( CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -gencode=arch=compute_62,\"code=sm_62,compute_62\" " )
-set( CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -gencode=arch=compute_35,\"code=sm_35,compute_35\" " )
+# Lowest supported by cuda 12 - get as broad a support as possible.
+set( CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -gencode=arch=compute_60,\"code=sm_60,compute_60\" " )
 set( CUDA_NVCC_FLAGS "${TF_CFLAGS} ${CUDA_NVCC_FLAGS} -D GOOGLE_CUDA=1 -x cu -Xcompiler -fPIC")
 message("CUDA_NVCC_FLAGS " ${CUDA_NVCC_FLAGS})
 
