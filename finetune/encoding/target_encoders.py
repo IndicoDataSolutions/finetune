@@ -59,7 +59,7 @@ class RegressionEncoder(BaseEncoder):
 class OneHotLabelEncoder(LabelEncoder, BaseEncoder):
 
     def _make_one_hot(self, labels):
-        output = np.zeros([len(labels), len(self.classes_)], dtype=np.float)
+        output = np.zeros([len(labels), len(self.classes_)], dtype=float)
         output[np.arange(len(labels)), labels] = 1
         return output
 
@@ -93,7 +93,7 @@ class NoisyLabelEncoder(LabelEncoder, BaseEncoder):
         return self
 
     def transform(self, y):
-        return pd.DataFrame(y, columns=self.classes_, dtype=np.float).values
+        return pd.DataFrame(y, columns=self.classes_, dtype=float).values
 
     #TODO: Make output dataframe consistent with self.target_labels
     # and self.classes_
