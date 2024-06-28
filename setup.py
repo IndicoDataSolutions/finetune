@@ -25,7 +25,7 @@ REQUIREMENTS = [
     "sentencepiece>=0.1.83",
     "tabulate>=0.8.6,<0.9.0",
     "tensorflow-addons==0.16.1",
-    "tensorflow-estimator==2.11.0",
+    "tensorflow-estimator==2.12.0",
     "tqdl==0.0.4",
     "psutil==5.7.0",
     "transformers==4.36.2",
@@ -48,11 +48,11 @@ class OpsBuild(build_ext):
 setup(
     name="finetune",
     packages=find_packages(exclude=["tests", "tests.*"]),
-    version="0.10.1",
+    version="0.10.2",
     install_requires=REQUIREMENTS,
     extras_require={
-        "tf": ["tensorflow==2.11.0"],
-        "tf_gpu": ["tensorflow-gpu==2.11.0"],
+        "tf": ["tensorflow==2.12.0"],
+        "tf_gpu": ["tensorflow-gpu==2.12.0"],
     },
     zip_safe=False,
     cmdclass={"build_ext": OpsBuild},
