@@ -526,6 +526,7 @@ class TableRoBERTa(_BaseBert):
         "chunk_long_sequences": False,
         "include_bos_eos": False,
         "permit_uninitialized": r"mixing_fn_|pos_|kernel|bias",  # TODO: this can be refined.
+        "predict_batch_size": 1,
     }
     required_files = [
         {

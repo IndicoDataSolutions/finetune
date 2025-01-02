@@ -318,9 +318,11 @@ def tokenize_context(context, encoded_output, config):
                             token
                         )
                     )
+            cleaned_token = token.strip().strip("Âĉ")
             if (
-                context_by_char_loc[current_char_loc][2]
-                and token.strip().strip("Â") not in context_by_char_loc[current_char_loc][2]
+                cleaned_token
+                and context_by_char_loc[current_char_loc][2]
+                and cleaned_token not in context_by_char_loc[current_char_loc][2]
             ):
                 warnings.warn(
                     "subtoken: {} has matched up with the context for: {}".format(
