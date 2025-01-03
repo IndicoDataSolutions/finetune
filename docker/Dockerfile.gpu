@@ -3,11 +3,11 @@ LABEL Author="Ben Townsend, Madison May"
 
 # tensorboard
 EXPOSE 6006
-
 RUN apt-get update && mkdir /Finetune
 ADD requirements.txt /Finetune/requirements.txt
 RUN pip3 install -r /Finetune/requirements.txt && \
     python3 -m spacy download en
+RUN bash /Finetune/finetune/custom_ops/build.sh
 
 WORKDIR /Finetune
 COPY docker/bashrc /etc/bash.bashrc

@@ -473,7 +473,7 @@ class TableChunker:
                 include_bos_eos=False,
             )
             token_bounds = [
-                {"start": s, "end": e}
+                {"start": s, "end": e, "ws": text[s:e].strip() == ""}
                 for s, e in zip(tokens.token_starts, tokens.token_ends)
             ]
             combined_row_spans = self.get_axis_spans(
@@ -649,7 +649,7 @@ class TableChunker:
                 }
             )
         for t in token_spans:
-            if not t.get("used", False):
+            if not t.get("used", False) and not t.get("ws", False):
                 LOGGER.warn(f"Token {t} does not appear in any row spans")
         return combined_rows
 
