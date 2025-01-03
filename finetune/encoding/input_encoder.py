@@ -1,14 +1,15 @@
 """
 Convert plain text to format accepted by model (token idxs + special tokens).
 """
-import warnings
+import logging
 import functools
-from collections import namedtuple, Counter, OrderedDict
+from collections import namedtuple, OrderedDict
 
 import spacy
 import numpy as np
 
 NLP = None
+LOGGER = logging.getLogger("finetune")
 
 
 def get_spacy():
@@ -198,7 +199,7 @@ class BaseEncoder(metaclass=SingletonMeta):
         if spare >= 0:
             cut_len = None
         else:
-            warnings.warn(
+            LOGGER.warning(
                 "Document is longer than max length of the model, trimming document from {} to {} tokens. Try chunk_long_sequences=True".format(
                     -spare + max_length, max_length
                 )
@@ -324,7 +325,7 @@ def tokenize_context(context, encoded_output, config):
                 and context_by_char_loc[current_char_loc][2]
                 and cleaned_token not in context_by_char_loc[current_char_loc][2]
             ):
-                warnings.warn(
+                LOGGER.warning(
                     "subtoken: {} has matched up with the context for: {}".format(
                         repr(token), repr(context_by_char_loc[current_char_loc][2])
                     )
