@@ -1,5 +1,6 @@
 import pytest
 import io
+import logging
 from finetune.util.table_labeler import TableLabeler, TableETL
 from finetune.scheduler import Scheduler
 
@@ -210,6 +211,73 @@ def labeled_table_data_split_table_vertically():
     return text, labels, tables
 
 
+@pytest.fixture
+def labeled_table_data_with_tabs():
+    text = [
+        """Some text before the table
+A\tB
+1\t2
+3\t4\t
+Some text after the table"""
+    ]
+    labels = [
+        [
+            {"text": "text", "start": 5, "end": 9, "label": "non-table"},
+            {"text": "A", "start": 27, "end": 28, "label": "in-table"},
+            {"text": "B", "start": 29, "end": 30, "label": "in-table"},
+            {"text": "text", "start": 45, "end": 49, "label": "non-table"},
+        ]
+    ]
+    tables = [  # Documents
+        [  # Pages (unused but included by OCR)
+            [  # Tables
+                {
+                    "cells": [
+                        {
+                            "text": "A",
+                            "rows": [0],
+                            "columns": [0],
+                            "doc_offsets": [{"start": 27, "end": 28}],
+                        },
+                        {
+                            "text": "B",
+                            "rows": [0],
+                            "columns": [1],
+                            "doc_offsets": [{"start": 29, "end": 30}],
+                        },
+                        {
+                            "text": "1",
+                            "rows": [1],
+                            "columns": [0],
+                            "doc_offsets": [{"start": 31, "end": 32}],
+                        },
+                        {
+                            "text": "2",
+                            "rows": [1],
+                            "columns": [1],
+                            "doc_offsets": [{"start": 33, "end": 34}],
+                        },
+                        {
+                            "text": "3",
+                            "rows": [2],
+                            "columns": [0],
+                            "doc_offsets": [{"start": 35, "end": 36}],
+                        },
+                        {
+                            "text": "4",
+                            "rows": [2],
+                            "columns": [1],
+                            "doc_offsets": [{"start": 37, "end": 38}],
+                        },
+                    ],
+                    "doc_offsets": [{"start": 27, "end": 39}],
+                }
+            ]
+        ]
+    ]
+    return text, labels, tables
+
+
 def test_fit_predict(labeled_table_data):
     filename = "tl.jl"
     text, labels, tables = labeled_table_data
@@ -226,6 +294,27 @@ def test_fit_predict(labeled_table_data):
     assert set((p["start"], p["end"], p["label"]) for p in preds[0]) == set(
         (l["start"], l["end"], l["label"]) for l in labels[0]
     )
+
+
+def test_fit_predict_with_tabs(labeled_table_data_with_tabs, caplog):
+    filename = "tl.jl"
+    text, labels, tables = labeled_table_data_with_tabs
+    tl = TableLabeler()
+    with caplog.at_level(logging.WARNING):
+        tl.fit(text=text * 10, labels=labels * 10, tables=tables * 10)
+        tl.save(filename)
+        del tl
+        shed = Scheduler()
+        TableLabeler.predict_from_file(
+            model_file_path=filename, text=text, tables=tables, scheduler=shed
+        )
+        assert "does not appear in any row span" not in caplog.text
+        assert "has matched up with the context for" not in caplog.text
+
+
+def test_assert_predict_batch_size():
+    tl = TableLabeler()
+    assert tl._get_table_model().config.predict_batch_size == 1
 
 
 def test_fit_predict_bytes_io(labeled_table_data):

@@ -86,6 +86,7 @@ class _BaseBert(SourceModel):
         base_n_epochs = config.base_model.settings.get("n_epochs", 8)
         base_batch_size = config.base_model.settings.get("batch_size", 2)
         base_learning_rate = config.base_model.settings.get("lr", 1e-5)
+        base_predict_batch_size = config.base_model.settings.get("predict_batch_size", 20)
         if config.optimize_for.lower() == "speed":
             overrides = {
                 "max_length": 128 if config.chunk_long_sequences else base_max_length,
@@ -104,7 +105,7 @@ class _BaseBert(SourceModel):
                 "n_epochs": base_n_epochs,
                 "batch_size": base_batch_size,
                 "chunk_context": None,
-                "predict_batch_size": 20,
+                "predict_batch_size": base_predict_batch_size,
                 "mixed_precision": False,
                 "float_16_predict": False,
                 "lr": base_learning_rate,
@@ -127,7 +128,7 @@ class _BaseBert(SourceModel):
                 "n_epochs": base_n_epochs,
                 "batch_size": 12,
                 "chunk_context": None,
-                "predict_batch_size": 40,
+                "predict_batch_size": base_predict_batch_size * 2,
                 "mixed_precision": True,
                 "float_16_predict": True,
                 "lr": base_learning_rate * 6,
