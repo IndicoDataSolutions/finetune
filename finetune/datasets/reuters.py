@@ -1,10 +1,6 @@
 import os
 import requests
-import codecs
 import json
-import hashlib
-import io
-from pathlib import Path
 
 import pandas as pd
 from bs4 import BeautifulSoup as bs
@@ -13,10 +9,10 @@ from sklearn.model_selection import train_test_split
 
 from finetune import SequenceLabeler
 from finetune.datasets import Dataset
-from finetune.base_models import GPT, GPT2, TCN, RoBERTa
-from finetune.base_models.huggingface.models import HFDebertaV3Base
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
 from finetune.util.metrics import annotation_report, sequence_labeling_token_confusion
+from finetune.base_models.modern_bert.model import ModernBertModel
+from finetune.base_models.bert.model import RoBERTa
 
 XML_PATH = os.path.join("Data", "Sequence", "reuters.xml")
 DATA_PATH = os.path.join("Data", "Sequence", "reuters.json")
@@ -79,8 +75,9 @@ if __name__ == "__main__":
         test_size=0.2,
         random_state=42
     )
-    model = SequenceLabeler(batch_size=1, n_epochs=3, val_size=0.0, max_length=512, chunk_long_sequences=True, subtoken_predictions=False, crf_sequence_labeling=True, multi_label_sequences=False)
+    model = SequenceLabeler(base_model=ModernBertModel, batch_size=4, n_epochs=5, val_size=0.0, max_length=512, chunk_long_sequences=True, subtoken_predictions=False, crf_sequence_labeling=True, multi_label_sequences=False)
     model.fit(trainX, trainY)
+    # print({k: v.shape for k, v in model.saver.variables.items()})
     predictions = model.predict(testX)
     print(predictions)
     print(annotation_report(testY, predictions))
