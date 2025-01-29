@@ -348,6 +348,14 @@ def get_default_config():
         fusion_low_memory=True,
         include_bos_eos=True,
         #
+        # ModernBERT
+        norm_eps=1e-5,
+        mlp_p_drop=0.0,
+        global_attn_every_n_layers=3,
+        local_rope_theta=10000.0,
+        global_rope_theta=160000.0,
+        local_attention_window=128,
+        #
         # Line Items
         group_bio_tagging=False,
         relation_hidden_size=256,

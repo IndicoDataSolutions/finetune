@@ -10,10 +10,14 @@ TOKENIZER_PATH = os.path.join(FINETUNE_FOLDER, "model", "modern_bert", "tokenize
 
 LOGGER = logging.getLogger("finetune")
 
+
 class ModernBertEncoder(BaseEncoder):
     def __init__(self):
         self.tokenizer = Tokenizer.from_file(TOKENIZER_PATH)
-        special_tokens_map = {tok.content: k for k, tok in self.tokenizer.get_added_tokens_decoder().items()}
+        special_tokens_map = {
+            tok.content: k
+            for k, tok in self.tokenizer.get_added_tokens_decoder().items()
+        }
         self.start_token = special_tokens_map["[CLS]"]
         self.delimiter_token = special_tokens_map["[SEP]"]
         self.mask_token = special_tokens_map["[MASK]"]
