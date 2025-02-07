@@ -7,7 +7,6 @@ services:
       dockerfile: docker/Dockerfile.gpu
     volumes:
       - .:/Finetune
-      - ../project_fruitfly/datasets:/datasets
     deploy:
       resources:
         reservations:
