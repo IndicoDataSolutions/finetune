@@ -14,7 +14,10 @@ def featurizer(X, encoder, config, train=False, reuse=None, lengths=None, **kwar
     seq_length = tf.shape(input=delimiters)[1]
     mask = tf.sequence_mask(lengths, maxlen=seq_length, dtype=tf.float32)
     with tf.compat.v1.variable_scope("model/featurizer", reuse=reuse):
-        model = ModernBert(config=config, vocab_size=encoder.vocab_size)
+        model = ModernBert(
+            config=config,
+            vocab_size=encoder.vocab_size,
+        )
         embedding = model.embeddings
         sequence_out = model(
             input_ids=X, attention_mask=mask, training=train, seq_len=seq_length
@@ -42,21 +45,13 @@ def featurizer(X, encoder, config, train=False, reuse=None, lengths=None, **kwar
 
         return output_state
 
-SETTINGS = {
-    "lr": 1.5e-4,
-    "n_epochs": 6,
-    "predict_batch_size": 4,
-    "max_grad_norm": 3.0,
-    "l2_reg": 5e-4,
-    "lr_warmup": 0.25, # this seems high but is what the sweep ended up with.
-    "lr_schedule": "warmup_linear",
-    "low_memory_mode": True,
-}
 
 class ModernBertModel(SourceModel):
     encoder = ModernBertEncoder
     featurizer = featurizer
     max_length = 512
+    is_bidirectional = True
+
 
     settings = {
         "base_model_path": os.path.join("modern_bert", "modern_bert.jl"),
@@ -68,15 +63,55 @@ class ModernBertModel(SourceModel):
         "include_bos_eos": True,
         "n_heads": 12,
         "batch_size": 8,
-#        "accum_steps": 8,
         "bert_intermediate_size": 1152,
-        **SETTINGS
+        "lr": 3e-4, # previously 1.5e-4
+        "n_epochs": 12, # previously 6
+        "max_grad_norm": 3.0,
+        "l2_reg": 5e-4,
+        "lr_warmup": 0.25, # this seems high but is what the sweep ended up with.
+        "lr_schedule": "warmup_linear",
+        "low_memory_mode": True,
     }
     required_files = []
 
+    @classmethod
+    def get_optimal_params(cls, config):
+        base_n_epochs = config.base_model.settings["n_epochs"]
+        base_learning_rate = config.base_model.settings["lr"]
+        if config.optimize_for.lower() in ["accuracy", "accuracy_fp16"]:
+            overrides = {
+                "max_length": 2048,
+                "n_epochs": base_n_epochs,
+                "batch_size": 8,
+                "chunk_context": None,
+                "predict_batch_size": 8,
+                "mixed_precision": True,
+                "float_16_predict": True,
+                "lr": base_learning_rate,
+            }
+
+        elif config.optimize_for.lower() in ["predict_speed", "predict_speed_fp16"]:
+            overrides = {
+                "max_length": 512,
+                "n_epochs": base_n_epochs,
+                "batch_size": 24,
+                "chunk_context": 16,
+                "predict_batch_size": 8, # Lower actually seems to be faster - should run some benchmarks at some point
+                "mixed_precision": True,
+                "float_16_predict": True,
+                "lr": base_learning_rate,
+            }
+        else:
+            raise ValueError(
+                "Cannot optimise hyperparams for {}, must be either 'speed', 'predict_speed' or 'accuracy'".format(
+                    config.optimize_for
+                )
+            )
+        return overrides
 
 
 class ModernBertLargeModel(SourceModel):
+    is_bidirectional = True
     encoder = ModernBertEncoder
     featurizer = featurizer
     max_length = 512
@@ -93,6 +128,12 @@ class ModernBertLargeModel(SourceModel):
         "bert_intermediate_size": 2624,
         "batch_size": 4,
  #       "accum_steps": 16,
-        **SETTINGS
+        "lr": 5e-4, # previously 1.5e-4
+        "n_epochs": 8, # previously 6
+        "max_grad_norm": 3.0,
+        "l2_reg": 5e-4,
+        "lr_warmup": 0.25, # this seems high but is what the sweep ended up with.
+        "lr_schedule": "warmup_linear",
+        "low_memory_mode": True,
     }
     required_files = []

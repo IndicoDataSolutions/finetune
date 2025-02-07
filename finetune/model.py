@@ -132,6 +132,8 @@ def get_variable_getter(estimator_mode, features, fp16_predict, mixed_precision)
             else feat,
             features,
         )
+        # becomes the more correctly named tf.keras.config.set_dtype_policy in 2.17
+        tf.keras.mixed_precision.set_global_policy("mixed_float16")
     elif estimator_mode == tf.estimator.ModeKeys.PREDICT and fp16_predict:
         custom_getter = fp16_variable_getter
         features = tf.nest.map_structure(
@@ -140,7 +142,9 @@ def get_variable_getter(estimator_mode, features, fp16_predict, mixed_precision)
             else feat,
             features,
         )
+        tf.keras.mixed_precision.set_global_policy("float16")
     else:
+        tf.keras.mixed_precision.set_global_policy("float32")
         custom_getter = None
     return custom_getter, features
 
@@ -234,6 +238,7 @@ def get_model_fn(
                 ]
 
             if build_target_model:
+                print("Featurizer state: ", featurizer_state)
                 target_model_state = target_model_op(
                     featurizer_state=featurizer_state, Y=Y, params=params, mode=mode
                 )

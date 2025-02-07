@@ -74,12 +74,12 @@ class ModernBertRotaryEmbedding(tf.keras.layers.Layer):
         # 1, 1, seq_len
         position_ids_expanded = position_ids[:, None, :]
         freqs = tf.transpose(
-            tf.matmul(inv_freq_expanded, position_ids_expanded), perm=[0, 2, 1]
+            tf.matmul(inv_freq_expanded, tf.cast(position_ids_expanded, tf.float32)), perm=[0, 2, 1]
         )
         emb = tf.concat([freqs, freqs], axis=-1)
         cos = tf.cos(emb)
         sin = tf.sin(emb)
-        return cos, sin
+        return tf.cast(cos, self.compute_dtype), tf.cast(sin, self.compute_dtype)
 
 
 def rotate_half(x):
@@ -304,6 +304,7 @@ class ModernBert(tf.keras.layers.Layer):
 
         hidden_states = self.embeddings(input_ids=input_ids, training=training)
         for encoder_layer in self.layers:
+            print("Hidden States: ", hidden_states)
             if self.config.low_memory_mode and training:
                 encoder_layer.call = recompute_grads_w_kwargs(
                     encoder_layer.call,
@@ -323,11 +324,12 @@ class ModernBert(tf.keras.layers.Layer):
         return hidden_states
 
     def _update_attention_mask(self, attention_mask: tf.Tensor) -> tf.Tensor:
+        attention_mask = tf.cast(attention_mask, self.compute_dtype)
         expanded_mask = tf.tile(
             attention_mask[:, None, None, :], [1, 1, tf.shape(attention_mask)[1], 1]
         )
         inverted_mask = 1.0 - expanded_mask
-        ignore_value = tf.fill(tf.shape(inverted_mask), tf.float32.min)
+        ignore_value = tf.fill(tf.shape(inverted_mask), tf.cast(tf.float16.min, self.compute_dtype))
 
         global_attention_mask = tf.where(
             inverted_mask > 0.5, ignore_value, inverted_mask
