@@ -238,7 +238,6 @@ def get_model_fn(
                 ]
 
             if build_target_model:
-                print("Featurizer state: ", featurizer_state)
                 target_model_state = target_model_op(
                     featurizer_state=featurizer_state, Y=Y, params=params, mode=mode
                 )

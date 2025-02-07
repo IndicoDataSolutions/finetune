@@ -84,7 +84,7 @@ class ModernBertModel(SourceModel):
                 "n_epochs": base_n_epochs,
                 "batch_size": 8,
                 "chunk_context": None,
-                "predict_batch_size": 8,
+                "predict_batch_size": 16,
                 "mixed_precision": True,
                 "float_16_predict": True,
                 "lr": base_learning_rate,
@@ -96,7 +96,7 @@ class ModernBertModel(SourceModel):
                 "n_epochs": base_n_epochs,
                 "batch_size": 24,
                 "chunk_context": 16,
-                "predict_batch_size": 8, # Lower actually seems to be faster - should run some benchmarks at some point
+                "predict_batch_size": 32, # We can fit a lot more in memory but 32 seems most efficient.
                 "mixed_precision": True,
                 "float_16_predict": True,
                 "lr": base_learning_rate,
