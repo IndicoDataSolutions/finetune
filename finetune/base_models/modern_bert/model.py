@@ -1,9 +1,10 @@
 import os
+from urllib.parse import urljoin
 import tensorflow as tf
 from finetune.base_models.modern_bert.modelling import ModernBert
 from finetune.base_models.modern_bert.encoding import ModernBertEncoder
 from finetune.base_models import SourceModel
-
+from finetune.util.download import MODERN_BERT_BASE_URL, FINETUNE_BASE_FOLDER
 
 def featurizer(X, encoder, config, train=False, reuse=None, lengths=None, **kwargs):
     initial_shape = tf.shape(input=X)
@@ -72,7 +73,13 @@ class ModernBertModel(SourceModel):
         "lr_schedule": "warmup_linear",
         "low_memory_mode": True,
     }
-    required_files = []
+    required_files = [
+        {
+            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "modern_bert", filename),
+            "url": urljoin(MODERN_BERT_BASE_URL, filename),
+        }
+        for filename in ["modern_bert.jl", "tokenizer.json"]
+    ]
 
     @classmethod
     def get_optimal_params(cls, config):
@@ -136,4 +143,10 @@ class ModernBertLargeModel(SourceModel):
         "lr_schedule": "warmup_linear",
         "low_memory_mode": True,
     }
-    required_files = []
+    required_files = [
+        {
+            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "modern_bert", filename),
+            "url": urljoin(MODERN_BERT_BASE_URL, filename),
+        }
+        for filename in ["modern_bert_large.jl", "tokenizer.json"]
+    ]

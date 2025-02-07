@@ -13,6 +13,8 @@ BERT_BASE_URL    = "https://s3.amazonaws.com/bendropbox/bert/"
 ROBERTA_BASE_URL = "https://s3.amazonaws.com/bendropbox/roberta/"
 OSCAR_BASE_URL   = "https://s3.amazonaws.com/bendropbox/oscar/"
 LAYOUTLM_BASE_URL   = "https://s3.amazonaws.com/bendropbox/layoutlm/"
+MODERN_BERT_BASE_URL   = "https://s3.amazonaws.com/bendropbox/modern_bert/"
+
 
 def download_data_if_required(base_model):
     """ Pulls the pre-trained model weights from Github if required. """
