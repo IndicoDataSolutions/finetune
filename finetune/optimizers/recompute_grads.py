@@ -213,5 +213,7 @@ def recompute_grads_w_kwargs(fn, use_entire_scope=False, train_vars=None, name=N
         out = _recompute_grad(remapped_fn, tensor_args_kwargs, use_entire_scope=use_entire_scope, train_vars=train_vars)
         if output_keywords is not None:
             return {**{k: v for k, v in zip(output_keywords, out)}, **output_local}
+        if isinstance(out, tuple) and len(out) == 1:
+            return out[0]
         return out
     return inner_recompute_grads_w_kwargs

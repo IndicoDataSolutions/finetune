@@ -114,7 +114,6 @@ def batch_dataset(
             )
 
     else:
-
         def batched_dataset():
             return (
                 dataset()

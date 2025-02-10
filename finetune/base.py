@@ -346,7 +346,7 @@ class BaseModel(object, metaclass=ABCMeta):
             resolved_gpus = all_gpus()
 
         resolved_gpus_string = ["/gpu:{}".format(gpu) for gpu in resolved_gpus]
-        if len(resolved_gpus_string) == 1:
+        if len(resolved_gpus_string) <= 1:
             distribute_strategy = None
         else:
             if self.config.per_process_gpu_memory_fraction is not None:

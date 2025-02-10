@@ -69,7 +69,7 @@ from finetune.base_models.bert.model import (
 )
 from finetune.base_models.tcn.model import TCNModel
 from finetune.base_models.oscar.model import GPCModel
-
+from finetune.base_models.modern_bert.model import ModernBertModel, ModernBertLargeModel
 # Aliases
 GPT = GPTModel
 GPT2 = GPT2Small = GPT2Model
@@ -85,3 +85,5 @@ ROBERTALarge = RoBERTaLarge
 DistilROBERTA = DistilRoBERTa
 TCN = TCNModel
 OSCAR = GPCModel
+ModernBert = ModernBertModel
+ModernBertLarge = ModernBertLargeModel

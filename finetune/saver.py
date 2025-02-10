@@ -259,7 +259,6 @@ class Saver:
             all_vars = tf.compat.v1.global_variables()
 
             global_step_var = tf.compat.v1.train.get_global_step()
-
             for var in all_vars:
                 if self.restart_global_step and global_step_var is not None and global_step_var.name == var.name:
                     continue
