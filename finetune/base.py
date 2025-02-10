@@ -40,6 +40,7 @@ from finetune.util.indico_estimator import IndicoEstimator
 from finetune.util.gpu_info import gpu_info
 
 from finetune.base_models.bert.model import _BaseBert
+from finetune.base_models.modern_bert.model import _ModernBertBase
 from finetune.base_models.bert.roberta_encoder import RoBERTaEncoderV2
 from finetune.base_models import GPTModel, GPTModelSmall
 
@@ -128,8 +129,9 @@ class BaseModel(object, metaclass=ABCMeta):
             elif k in config.base_model.settings:
                 config[k] = config.base_model.settings[k]
 
+        model_supports_fp16 = issubclass_or_instance(config.base_model, (_BaseBert, _ModernBertBase))
         # This has to be here before optimal_params are derived because some are dependant on these values.
-        if (not issubclass_or_instance(config.base_model, _BaseBert) or no_fp16) and (
+        if (not model_supports_fp16 or no_fp16) and (
             config.float_16_predict == True or config.mixed_precision == True
         ):
             LOGGER.warning(
@@ -138,9 +140,7 @@ class BaseModel(object, metaclass=ABCMeta):
             config.float_16_predict = False
             config.mixed_precision = False
 
-        if (
-            not issubclass_or_instance(config.base_model, _BaseBert) or no_fp16
-        ) and "fp16" in config.optimize_for:
+        if (not model_supports_fp16 or no_fp16) and "fp16" in config.optimize_for:
             new_optimize_for = config.optimize_for.replace("_fp16", "")
             LOGGER.warning(
                 "optimize_for was set to {} but fp16 is not supported by this gpu so falling back to {}".format(
