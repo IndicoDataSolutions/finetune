@@ -46,21 +46,21 @@ def featurizer(X, encoder, config, train=False, reuse=None, lengths=None, **kwar
 
         return output_state
 
-
-class ModernBertModel(SourceModel):
+class _ModernBertBase(SourceModel):
     encoder = ModernBertEncoder
     featurizer = featurizer
-    max_length = 512
     is_bidirectional = True
+    max_length = 2048
 
 
+class ModernBertModel(_ModernBertBase):
     settings = {
         "base_model_path": os.path.join("modern_bert", "modern_bert.jl"),
         "n_layer": 22,
         "train_embeddings": True,
         "num_layers_trained": 22,
         "n_embed": 768,
-        "max_length": max_length,
+        "max_length": 2048,
         "include_bos_eos": True,
         "n_heads": 12,
         "batch_size": 8,
@@ -117,19 +117,14 @@ class ModernBertModel(SourceModel):
         return overrides
 
 
-class ModernBertLargeModel(SourceModel):
-    is_bidirectional = True
-    encoder = ModernBertEncoder
-    featurizer = featurizer
-    max_length = 512
-
+class ModernBertLargeModel(_ModernBertBase):
     settings = {
         "base_model_path": os.path.join("modern_bert", "modern_bert_large.jl"),
         "n_layer": 28,
         "train_embeddings": True,
         "num_layers_trained": 28,
         "n_embed": 1024,
-        "max_length": max_length,
+        "max_length": 2048,
         "include_bos_eos": True,
         "n_heads": 16,
         "bert_intermediate_size": 2624,
