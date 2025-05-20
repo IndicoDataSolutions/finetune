@@ -4,6 +4,7 @@ from collections import Counter, defaultdict
 import math
 from typing import Dict, List, Tuple, Union
 
+from finetune.util.memory import cleanup_sessions
 import tensorflow as tf
 import numpy as np
 
@@ -272,6 +273,7 @@ class SequenceLabeler(BaseModel):
             # Cannot have anything that changes pred format here.
             model_copy.config.predict_chunk_markers = False
             model_copy.finetune(Xs, Y=Y, context=context, update_hook=update_hook)
+            cleanup_sessions()
             initial_run_preds = []
 
             # Heuristic to select batch size for prediction to limit memory consumption.
@@ -295,7 +297,7 @@ class SequenceLabeler(BaseModel):
                         Xs[b_start : b_start + outer_batch_size]
                     )
             del model_copy
-
+            cleanup_sessions()
             # Tag negative predictions with <PAD> label and add to label set
             Y_with_neg_samples = negative_samples(
                 initial_run_preds, Y, pad=self.config.pad_token
