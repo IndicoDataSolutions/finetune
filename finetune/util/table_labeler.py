@@ -14,8 +14,8 @@ from finetune.errors import FinetuneError
 from finetune.util.metrics import sequences_overlap
 from finetune.scheduler import Scheduler
 from finetune.encoding.input_encoder import BaseEncoder
-
 from finetune import SequenceLabeler
+from finetune.util.memory import cleanup_sessions
 
 LOGGER = logging.getLogger("finetune")
 
@@ -706,8 +706,14 @@ class TableLabeler:
             context=model_inputs["table_context"],
             update_hook=update_hook,
         )
+        # We don't need these anymore.
+        del model_inputs["table_text"]
+        del model_inputs["table_labels"]
+        del model_inputs["table_context"]
         self._add_class_names(table_model)
         table_model.save(self.table_model_path)
+        del table_model
+        cleanup_sessions()
         return model_inputs
 
     def _fit_text_model(self, model_inputs, update_hook):
@@ -717,8 +723,14 @@ class TableLabeler:
             model_inputs["doc_labels"],
             update_hook=update_hook,
         )
+        # We don't need these anymore.
+        del model_inputs["doc_text"]
+        del model_inputs["doc_labels"]
         self._add_class_names(text_model)
         text_model.save(self.text_model_path)
+        del text_model
+        cleanup_sessions()
+        return model_inputs
 
     def fit(
         self,
@@ -814,3 +826,5 @@ class TableLabeler:
             table_doc_i=model_inputs["table_doc_i"],
             tables=tables,
         )
+
+
