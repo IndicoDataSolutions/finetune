@@ -4,7 +4,7 @@ services:
   finetune:
     build:
       context: .
-      dockerfile: docker/Dockerfile.gpu
+      dockerfile: Dockerfile
     volumes:
       - .:/Finetune
     deploy:

@@ -1,154 +1,20 @@
-import functools
+from finetune.nn.crf import CRF
 import tensorflow as tf
-from tensorflow_addons.text.crf import crf_log_likelihood
-
-from finetune.base_models.gpt.featurizer import attn, dropout, norm
-from finetune.util.shapes import shape_list, merge_leading_dims
-from finetune.optimizers.recompute_grads import recompute_grad
-from finetune.errors import FinetuneError
-from finetune.nn.activations import act_fns
-from finetune.nn.nn_utils import norm
-from tensorflow.python.framework import function
 
 
-def perceptron(x, ny, config, w_init=None, b_init=None):
-    """
-    A very standard linear Perceptron model.
-    :param x: Input tensor.
-    :param ny: Number of outputs.
-    :param config: A config object.
-    :param w_init: Weight initializer.
-    :param b_init: Bias initializer.
-    :return: The output of the perceptron model.
-    """
-    w_init = w_init or tf.compat.v1.random_normal_initializer(
-        stddev=config.weight_stddev
-    )
-    b_init = b_init or tf.compat.v1.constant_initializer(0)
 
-    with tf.compat.v1.variable_scope("perceptron"):
-        nx = config.n_embed
-        w = tf.compat.v1.get_variable("w", [nx, ny], initializer=w_init)
-        b = tf.compat.v1.get_variable("b", [ny], initializer=b_init)
-        return tf.matmul(x, w) + b
+class Perceptron(tf.keras.layers.Layer):
+    def __init__(self, n_targets, n_inputs, **kwargs):
+        super().__init__(**kwargs)
+        self.n_targets = n_targets
+        self.w = self.add_weight(shape=(n_inputs, n_targets), initializer="random_normal", trainable=True)
+        self.b = self.add_weight(shape=(n_targets), initializer="zeros", trainable=True)
 
-
-def masked_language_model(
-    *,
-    X,
-    mlm_weights,
-    mlm_ids,
-    mlm_positions,
-    embed_weights,
-    hidden,
-    config,
-    reuse=None,
-    train=False
-):
-
-    with tf.compat.v1.variable_scope("model/masked-language-model"):
-        batch, seq, feats = shape_list(hidden)
-        flat_offsets = tf.reshape(tf.range(0, batch, dtype=tf.int32) * seq, [-1, 1])
-
-        not_padding = tf.reshape(mlm_weights, [-1]) > 1e-9
-        flat_positions = tf.boolean_mask(
-            tensor=tf.reshape(mlm_positions + flat_offsets, [-1]), mask=not_padding
-        )  # take off the padding entirely
-        gathered_hidden = tf.gather(
-            tf.reshape(hidden, [batch * seq, feats]), flat_positions
-        )
-        mlm_ids = tf.boolean_mask(tensor=tf.reshape(mlm_ids, [-1]), mask=not_padding)
-
-        final_proj_w = tf.compat.v1.get_variable(
-            "dense/kernel",
-            [config.n_embed, config.n_embed],
-            initializer=tf.compat.v1.random_normal_initializer(
-                stddev=config.weight_stddev
-            ),
-        )
-        final_proj_b = tf.compat.v1.get_variable(
-            "dense/bias", [config.n_embed], initializer=tf.compat.v1.zeros_initializer
-        )
-        final_proj = act_fns[config.act_fn](
-            tf.matmul(gathered_hidden, final_proj_w, transpose_b=True) + final_proj_b
-        )
-
-        normed_proj = norm(final_proj, "LayerNorm")
-        n_vocab = shape_list(embed_weights)[0]
-        output_bias = tf.compat.v1.get_variable(
-            "output_bias", shape=[n_vocab], initializer=tf.compat.v1.zeros_initializer()
-        )
-
-        logits = tf.matmul(normed_proj, embed_weights, transpose_b=True)
-        logits = tf.nn.bias_add(logits, output_bias)
-
-        mlm_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(
-            logits=logits,
-            labels=mlm_ids,
-        )  # No weights needed as there is no padding.
-        logits = tf.scatter_nd(
-            indices=flat_positions, updates=logits, shape=[batch * seq, n_vocab]
-        )
-
-        return {
-            "logits": logits,
-            "losses": mlm_loss,
-        }
-
-
-def language_model(
-    *, X, sequence_lengths, embed_weights, hidden, config, reuse=None, train=False
-):
-    """
-    A language model output and loss for the language modelling objective described in the original finetune paper.
-    This language model uses weights that are tied to the input embedding.
-    :param X: The raw token ids fed to the featurizer.
-    :param M: A loss mask, with 1's where losses should be counted and 0's elsewhere.
-    :param embed_weights: The word embedding matrix, normally the one returned by the featurizer.
-    :param hidden: Output of the featurizer.
-    :param config: A config object.
-    :param reuse: A Flag passed through to the tf.variable_scope context manager.
-    :return: A dict containing:
-        logits: The un-normalised log-probabilities over each word in the vocabulary.
-        loss: The masked language modelling loss.
-
-    """
-    X = merge_leading_dims(X, 2)
-    M = tf.sequence_mask(sequence_lengths, dtype=tf.float32)
-    hidden = merge_leading_dims(hidden, 3)
-
-    batch, seq = shape_list(X)
-    vocab_size, hidden_dim = shape_list(embed_weights)
-
-    with tf.compat.v1.variable_scope("model/language-model", reuse=reuse):
-        # language model ignores last hidden state because we don't have a target
-        lm_h = tf.reshape(
-            hidden, [-1, config.n_embed]
-        )  # [batch, seq_len, embed] --> [batch * seq_len, embed]
-        lm_logits = tf.matmul(lm_h, embed_weights, transpose_b=True)  # tied weights
-        lm_logits = tf.cast(lm_logits, tf.float32)
-        hidden_shape = tf.shape(input=hidden)
-        logits = tf.reshape(
-            lm_logits, shape=tf.concat([hidden_shape[:-1], [vocab_size]], axis=0)
-        )
-        lm_logits_offset = tf.reshape(logits[:, :-1], [-1, vocab_size])
-
-        lm_losses = tf.compat.v1.losses.sparse_softmax_cross_entropy(
-            logits=lm_logits_offset,
-            labels=tf.reshape(X[:, 1:], [-1]),
-            weights=tf.reshape(M[:, 1:], [-1]),
-        )
-
-        perplexity = tf.math.divide_no_nan(
-            tf.reduce_sum(input_tensor=tf.exp(lm_losses) * M[:, 1:], axis=1),
-            tf.reduce_sum(input_tensor=M[:, 1:], axis=1),
-        )
-
-        return {
-            "logits": logits,
-            "losses": lm_losses,
-            "perplexity": perplexity,
-        }
+    def call(self, inputs):
+        return tf.matmul(inputs, self.w) + self.b
+    
+    def compute_loss(self, inputs, targets):
+        raise NotImplementedError("Perceptron does not support compute_loss")
 
 
 def _apply_class_weight(losses, targets, class_weights=None, norm_grads=True):
@@ -192,523 +58,108 @@ def _apply_multilabel_class_weight(
         losses *= weights
     return losses
 
-
-def classifier(hidden, targets, n_targets, config, train=False, reuse=None, **kwargs):
-    """
-    A simple linear classifier.
-
-    :param hidden: The output of the featurizer. [batch_size, embed_dim]
-    :param targets: One hot encoded target ids. [batch_size, n_classes]
-    :param n_targets: A python int containing the number of classes that the model should be learning to predict over.
-    :param dropout_placeholder:
-    :param config: A config object, containing all parameters for the featurizer.
-    :param train: If this flag is true, dropout and losses are added to the graph.
-    :param reuse: Should reuse be set within this scope.
-    :param kwargs: Spare arguments.
-    :return: dict containing:
-        logits: The unnormalised log probabilities of each class.
-        losses: The loss for the classifier.
-    """
-    with tf.compat.v1.variable_scope("classifier", reuse=reuse):
-        hidden = dropout(hidden, config.clf_p_drop, train)
-        clf_logits = perceptron(hidden, n_targets, config)
-        if targets is None:
-            clf_losses = None
-        else:
-            clf_losses = tf.nn.softmax_cross_entropy_with_logits(
-                logits=clf_logits, labels=tf.stop_gradient(targets)
-            )
-
-            clf_losses = _apply_class_weight(
-                clf_losses,
-                targets,
-                kwargs.get("class_weights"),
-                norm_grads=config.renorm_after_class_weights,
-            )
-
-        return {"logits": clf_logits, "losses": clf_losses}
-
-
-def multi_choice_question(
-    hidden, targets, n_targets, config, train=False, reuse=None, **kwargs
-):
-    with tf.compat.v1.variable_scope("model", reuse=reuse):
-        if targets is not None:
-            targets = tf.cast(targets, tf.int32)
-        hidden = dropout(hidden, config.clf_p_drop, train)
-        hidden = tf.unstack(hidden, num=n_targets, axis=1)
-        hidden = tf.concat(hidden, axis=0)
-
-        clf_out = perceptron(hidden, 1, config)
-        clf_out = tf.split(clf_out, n_targets, axis=0)
-        clf_out = tf.concat(clf_out, 1)
-
-        if targets is None:
-            clf_losses = None
-        else:
-            clf_losses = tf.nn.sparse_softmax_cross_entropy_with_logits(
-                logits=clf_out, labels=tf.stop_gradient(targets)
-            )
-
-            clf_losses = _apply_class_weight(
-                clf_losses,
-                targets,
-                kwargs.get("class_weights"),
-                norm_grads=config.renorm_after_class_weights,
-            )
-
-        return {"logits": clf_out, "losses": clf_losses}
-
-
-def multi_classifier(
-    hidden, targets, n_targets, config, train=False, reuse=None, **kwargs
-):
-    """
-    A simple linear classifier.
-
-    :param hidden: The output of the featurizer. [batch_size, embed_dim]
-    :param targets: The placeholder representing the sparse targets [batch_size, n_targets]
-    :param n_targets: A python int containing the number of classes that the model should be learning to predict over.
-    :param config: A config object, containing all parameters for the featurizer.
-    :param train: If this flag is true, dropout and losses are added to the graph.
-    :param reuse: Should reuse be set within this scope.
-    :param kwargs: Spare arguments.
-    :return: dict containing:
-        logits: The unnormalised log probabilities of each class.
-        losses: The loss for the classifier.
-    """
-    with tf.compat.v1.variable_scope("model", reuse=reuse):
-        hidden = dropout(hidden, config.clf_p_drop, train)
-        clf_logits = perceptron(hidden, n_targets, config)
-        if targets is None:
-            clf_losses = None
-        else:
-            clf_losses = tf.nn.sigmoid_cross_entropy_with_logits(
-                logits=clf_logits, labels=tf.stop_gradient(targets)
-            )
-            clf_losses = _apply_multilabel_class_weight(
-                clf_losses,
-                targets,
-                kwargs.get("class_weights"),
-                norm_grads=config.renorm_after_class_weights,
-            )
-        return {"logits": clf_logits, "losses": clf_losses}
-
-
-def regressor(hidden, targets, n_targets, config, train=False, reuse=None, **kwargs):
-    """
-    A simple linear regressor.
-
-    :param hidden: The output of the featurizer. [batch_size, embed_dim]
-    :param targets: The placeholder representing the regression targets. [batch_size]
-    :param n_targets: A python int containing the number of outputs that the model should be learning to predict over.
-    :param dropout_placeholder:
-    :param config: A config object, containing all parameters for the featurizer.
-    :param train: If this flag is true, dropout and losses are added to the graph.
-    :param reuse: Should reuse be set within this scope.
-    :param kwargs: Spare arguments.
-    :return: dict containing:
-        logits: The regression outputs.
-        losses: L2 Loss for the regression targets.
-    """
-    with tf.compat.v1.variable_scope("regressor", reuse=reuse):
-        hidden = dropout(hidden, config.clf_p_drop, train)
-        outputs = perceptron(hidden, n_targets, config)
-        if targets is None:
-            loss = None
-        else:
-            if config.regression_loss.upper() == "L2":
-                loss = tf.nn.l2_loss(outputs - targets)
-            elif config.regression_loss.upper() == "L1":
-                loss = tf.abs(outputs - targets)
-            else:
-                raise FinetuneError(
-                    "regression_loss needs to be either L1 or L2, instead it is {}".format(
-                        config.regression_loss
-                    )
-                )
-        return {"logits": outputs, "losses": loss}
-
-
-def ordinal_regressor(
-    hidden,
-    targets,
-    n_targets,
-    config,
-    shared_threshold_weights=True,
-    train=False,
-    reuse=None,
-    **kwargs
-):
-    """
-    Ordinal Regressor using all-threshold loss.
-
-    :param hidden: The output of the featurizer. [batch_size, embed_dim]
-    :param targets: The placeholder representing the regression targets (binary threshold values). [batch_size]
-    :param n_targets: A python int containing the number of thresholds that the model should be learning to predict over.
-    :param dropout_placeholder:
-    :param config: A config object, containing all parameters for the featurizer.
-    :param train: If this flag is true, dropout and losses are added to the graph.
-    :param reuse: Should reuse be set within this scope.
-    :param kwargs: Spare arguments.
-    :return: dict containing:
-        logits: The regression outputs.
-        losses: All-threshold Loss for the regression targets.
-    """
-    with tf.compat.v1.variable_scope("ordinalregressor", reuse=reuse):
-        hidden = dropout(hidden, config.clf_p_drop, train)
-        if shared_threshold_weights:
-            w_init = tf.compat.v1.random_normal_initializer(stddev=config.weight_stddev)
-            b_init = tf.compat.v1.random_normal_initializer(0)
-            nx = config.n_embed
-            w = tf.compat.v1.get_variable("w", [nx, 1], initializer=w_init)
-            b = tf.compat.v1.get_variable("b", [n_targets], initializer=b_init)
-            logits = tf.matmul(hidden, w) + b
-        else:
-            logits = perceptron(hidden, n_targets, config)
-
-        if targets is None:
-            outputs = tf.sigmoid(logits)
-            loss = None
-        else:
-            outputs = logits
-            loss = tf.nn.sigmoid_cross_entropy_with_logits(
-                logits=logits, labels=tf.stop_gradient(targets)
-            )
-        return {"logits": outputs, "losses": loss}
-
-
-def class_reweighted_grad(
-    logits, class_weights, norm_grads=True, name="class_reweighted_grad"
-):
-    def custom_grad_fn(op, g):
-        new_g = g * class_weights
-        if norm_grads:
-            ratio = tf.math.divide_no_nan(tf.norm(g), tf.norm(new_g))
-        else:
-            ratio = 1.0
-        return [new_g * ratio]
-
-    @function.Defun(
-        logits.dtype,
-        func_name=name,
-        python_grad_func=custom_grad_fn,
-        shape_func=lambda _: [logits.get_shape()],
-    )
-    def identity(l):
-        return tf.identity(l)
-
-    return identity(logits)
-
-
-def sequence_labeler(
-    hidden,
-    targets,
-    n_targets,
-    config,
-    pad_id,
-    multilabel=False,
-    train=False,
-    reuse=None,
-    lengths=None,
-    use_crf=True,
-    **kwargs
-):
-    """
-    An Attention based sequence labeler model.
-
-    In the case of unidirectional base models such as GPT this model takes the output of the pre-trained model,
-    applies an additional randomly initialised multihead attention block, with residuals on top.
-    The extra attention is not future masked to allow the model to label sequences based on context in both directions.
-    The representations fed into this model are necessarily future masked because a language modelling loss is the
-    original objective of the featurizer.
-
-    For bidirectional base models we apply the crf model directly to the output of the base model.
-
-    :param hidden: The output of the featurizer. [batch_size, sequence_length, embed_dim]
-    :param targets: The placeholder representing the sequence labeling targets. [batch_size, sequence_length]
-    :param n_targets: A python int containing the number of classes that the model should be learning to predict over.
-    :param config: A config object, containing all parameters for the featurizer.
-    :param train: If this flag is true, dropout and losses are added to the graph.
-    :param reuse: Should reuse be set within this scope.
-    :param lengths: The number of non-padding tokens in the input.
-    :param kwargs: Spare arguments.
-    :return: dict containing:
-        "logits": The un-normalised log probabilities of each class being in each location. For usable predictions,
-            sampling from this distribution is not sufficient and a viterbi decoding method should be used.
-        "losses": The negative log likelihood for the sequence targets.
-        "predict_params": A dictionary of params to be fed to the viterbi decode function.
-    """
-    with tf.compat.v1.variable_scope("sequence-labeler", reuse=reuse):
-
-        if targets is not None:
-            targets = tf.cast(targets, dtype=tf.int32)
-
-        nx = config.n_embed
-
-        def seq_lab_internal(hidden):
-            if config.base_model.is_bidirectional:
-                n = hidden
-            else:
-                attn_fn = functools.partial(
-                    attn,
-                    scope="seq_label_attn",
-                    n_state=nx,
-                    n_head=config.seq_num_heads,
-                    resid_pdrop=config.resid_p_drop,
-                    attn_pdrop=config.attn_p_drop,
-                    train=train,
-                    scale=False,
-                    mask=False,
-                )
-                n = norm(attn_fn(hidden) + hidden, "seq_label_residual")
-
-            flat_logits = tf.compat.v1.layers.dense(n, n_targets)
-            logits = tf.reshape(
-                flat_logits, tf.concat([tf.shape(input=hidden)[:2], [n_targets]], 0)
-            )
-            return logits
-
-        with tf.compat.v1.variable_scope("seq_lab_attn"):
-            if config.low_memory_mode and train:
-                seq_lab_internal = recompute_grad(
-                    seq_lab_internal, use_entire_scope=True
-                )
-            logits = seq_lab_internal(hidden)
-            logits = tf.cast(logits, tf.float32)  # always run the crf in float32
-
-        loss = 0.0
-
-        default_lengths = tf.shape(input=hidden)[1] * tf.ones(
-            tf.shape(input=hidden)[0], dtype=tf.int32
-        )
-        if lengths is None:
-            lengths = default_lengths
-
-        class_weights = kwargs.get("class_weights")
-
-        with tf.device("CPU:0" if train else logits.device):
-            if multilabel:
-                transition_params = []
-                logits_individual = tf.unstack(logits, n_targets, axis=-1)
-                if targets is not None:
-                    targets_individual = tf.unstack(targets, n_targets, axis=-1)
-                logits = []
-                for i in range(n_targets):
-                    transition_params.append(
-                        tf.cast(
-                            tf.compat.v1.get_variable(
-                                "Transition_matrix_{}".format(i), shape=[2, 2]
-                            ),
-                            tf.float32,
-                        )
-                    )
-                    logits.append(
-                        tf.stack(
-                            (logits_individual[pad_id], logits_individual[i]), axis=-1
-                        )
-                    )
-                    if targets is not None and i != pad_id:
-                        if class_weights is not None:
-                            is_pos_cls = tf.cast(
-                                targets_individual[i], dtype=tf.float32
-                            )
-                            class_weight = tf.expand_dims(
-                                class_weights[i] * is_pos_cls
-                                + class_weights[pad_id] * (1.0 - is_pos_cls),
-                                -1,
-                            )
-                            logits_i = class_reweighted_grad(
-                                logits[-1],
-                                class_weight,
-                                norm_grads=config.renorm_after_class_weights,
-                            )
-                        else:
-                            logits_i = logits[i]
-                        if use_crf:
-                            loss -= crf_log_likelihood(
-                                logits_i,
-                                targets_individual[i],
-                                lengths,
-                                transition_params=transition_params[-1],
-                            )[0]
-                        else:
-                            weights = tf.math.divide_no_nan(
-                                tf.sequence_mask(
-                                    lengths,
-                                    maxlen=tf.shape(input=targets_individual[i])[1],
-                                    dtype=tf.float32,
-                                ),
-                                tf.expand_dims(tf.cast(lengths, tf.float32), -1),
-                            )
-                            loss += tf.compat.v1.losses.sparse_softmax_cross_entropy(
-                                targets_individual[i], logits_i, weights=weights
-                            )
-                logits = tf.stack(logits, axis=-1)
-            else:
-                if class_weights is not None and train:
-                    class_weights = tf.reshape(class_weights, [1, 1, -1])
-                    one_hot_class_weights = class_weights * tf.one_hot(
-                        targets, depth=n_targets
-                    )
-                    per_token_weights = tf.reduce_sum(
-                        input_tensor=one_hot_class_weights, axis=-1, keepdims=True
-                    )
-                    logits = class_reweighted_grad(
-                        logits,
-                        per_token_weights,
-                        norm_grads=config.renorm_after_class_weights,
-                    )
-
-                transition_params = tf.cast(
-                    tf.compat.v1.get_variable(
-                        "Transition_matrix", shape=[n_targets, n_targets]
-                    ),
-                    tf.float32,
-                )
-                if targets is not None:
-                    if use_crf:
-                        log_likelihood, _ = crf_log_likelihood(
-                            logits,
-                            targets,
-                            lengths,
-                            transition_params=transition_params,
-                        )
-                        loss = -log_likelihood
-                    else:
-                        weights = tf.math.divide_no_nan(
-                            tf.sequence_mask(
-                                lengths,
-                                maxlen=tf.shape(input=targets)[1],
-                                dtype=tf.float32,
-                            ),
-                            tf.expand_dims(tf.cast(lengths, tf.float32), -1),
-                        )
-                        loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(
-                            targets, logits, weights=weights
-                        )
-
+class MultiClassifier(tf.keras.layers.Layer):
+    def __init__(self, n_targets, n_inputs, dropout_rate, renorm_after_class_weights, threshold=0.5, **kwargs):
+        super().__init__(**kwargs)
+        self.dropout = tf.keras.layers.Dropout(dropout_rate)
+        self.perceptron = Perceptron(n_targets, n_inputs)
+        self.renorm_after_class_weights = renorm_after_class_weights
+        self.threshold = threshold
+    def call(self, inputs, training=False):
+        inputs = self.dropout(inputs, training=training)
+        logits = self.perceptron(inputs)
         return {
             "logits": logits,
-            "losses": loss,
-            "predict_params": {
-                "transition_matrix": transition_params,
-                "sequence_length": lengths,
-            },
+            "probas": tf.nn.sigmoid(logits),
+            "preds": tf.cast(tf.nn.sigmoid(logits) > self.threshold, tf.int32)
         }
-
-
-def association(
-    hidden, lengths, targets, n_targets, config, train=False, reuse=None, **kwargs
-):
-    """
-    An Attention based sequence labeler model with association.
-
-    :param hidden: The output of the featurizer. [batch_size, sequence_length, embed_dim]
-    :param lengths: The number of non-padding tokens in the input.
-    :param targets: A dict containing:
-     'labels': The sequence labeling targets. [batch_size, sequence_length],
-     'associations': A matrix of class ids for the associations [batch_size, sequence_length, seqence_length]
-    :param n_targets: A python int containing the number of classes that the model should be learning to predict over.
-    :param config: A config object, containing all parameters for the featurizer.
-    :param train: If this flag is true, dropout and losses are added to the graph.
-    :param reuse: Should reuse be set within this scope.
-    :param kwargs: Spare arguments.
-    :return: dict containing:
-        "logits": The un-normalised log probabilities of each class being in each location. For usable predictions,
-            sampling from this distrobution is not sufficiant and a viterbi decoding method should be used.
-        "losses": The negative log likelihood for the sequence targets.
-        "predict_params": A dictionary of params to be fed to the viterbi decode function.
-    """
-    with tf.compat.v1.variable_scope("sequence-labeler", reuse=reuse):
-        nx = config.n_embed
-        length = config.max_length
-        num_associations = len(config.association_types) + 1
-
-        def seq_lab_internal(hidden):
-            attn_fn = functools.partial(
-                attn,
-                scope="seq_label_attn",
-                n_state=nx,
-                n_head=config.seq_num_heads,
-                resid_pdrop=config.resid_p_drop,
-                attn_pdrop=config.attn_p_drop,
-                train=train,
-                scale=False,
-                mask=False,
-                lengths=lengths,
+                
+    def compute_loss(self, layer_output, targets, class_weights):
+        clf_losses = tf.nn.sigmoid_cross_entropy_with_logits(
+                logits=layer_output["logits"], labels=tf.stop_gradient(targets)
             )
-            n = norm(attn_fn(hidden) + hidden, "seq_label_residual")
-            flat_logits = tf.compat.v1.layers.dense(n, n_targets)
-            logits = tf.reshape(
-                flat_logits, tf.concat([tf.shape(input=hidden)[:2], [n_targets]], 0)
-            )
-
-            association_head = tf.compat.v1.layers.dense(n, nx)
-            association_head = tf.reshape(
-                association_head, tf.concat([tf.shape(input=hidden)[:2], [nx]], 0)
-            )
-
-            a = tf.expand_dims(association_head, 1)
-            b = tf.expand_dims(association_head, 2)
-
-            features = tf.concat(
-                [
-                    a - b,
-                    a * b,
-                    tf.tile(a, [1, length, 1, 1]),
-                    tf.tile(b, [1, 1, length, 1]),
-                    # TODO: Think about using prediction as a feature for associations.
-                ],
-                axis=-1,
-            )
-            associations_flat = tf.compat.v1.layers.dense(
-                tf.reshape(features, shape=[-1, nx * 4]), num_associations
-            )
-            associations = tf.reshape(
-                associations_flat, [-1, length, length, num_associations]
-            )
-
-            return logits, associations_flat, associations
-
-        with tf.compat.v1.variable_scope("seq_lab_attn"):
-            if config.low_memory_mode and train:
-                seq_lab_internal = recompute_grad(
-                    seq_lab_internal, use_entire_scope=True
-                )
-
-            logits, associations_flat, associations = seq_lab_internal(hidden)
-
-        log_likelihood = 0.0
-        association_loss = 0.0
-        class_weights = kwargs.get("class_weights")
-        if class_weights is not None:
-            logits = class_reweighting(class_weights)(logits)
-
-        transition_params = tf.compat.v1.get_variable(
-            "Transition_matrix", shape=[n_targets, n_targets]
+        clf_losses = _apply_multilabel_class_weight(
+            clf_losses,
+            targets,
+            class_weights,
+            norm_grads=self.renorm_after_class_weights,
         )
-        if targets is not None:
-            log_likelihood, _ = crf_log_likelihood(
-                logits,
-                targets["labels"],
-                kwargs.get("max_length")
-                * tf.ones(tf.shape(input=targets["labels"])[0]),
-                transition_params=transition_params,
-            )
-            sequence_mask = tf.sequence_mask(lengths, maxlen=length, dtype=tf.float32)
-            mask = tf.expand_dims(sequence_mask, 1) * tf.expand_dims(sequence_mask, 2)
+        return clf_losses
+    
+class Classifier(tf.keras.layers.Layer):
+    def __init__(self, n_targets, n_inputs, dropout_rate, renorm_after_class_weights, **kwargs):
+        super().__init__(**kwargs)
+        self.dropout = tf.keras.layers.Dropout(dropout_rate)
+        self.perceptron = Perceptron(n_targets, n_inputs)
+        self.renorm_after_class_weights = renorm_after_class_weights
 
-            association_loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(
-                logits=associations_flat,
-                labels=tf.reshape(targets["associations"], shape=[-1]),
-                weights=tf.reshape(mask, shape=[-1]),
-            )
-
+    def call(self, inputs, training=False):
+        inputs = self.dropout(inputs, training=training)
+        logits = self.perceptron(inputs)
         return {
-            "logits": {"sequence": logits, "association": associations},
-            "losses": -log_likelihood
-            + config.assocation_loss_weight
-            * association_loss,  # TODO: think about weighting.
-            "predict_params": {"transition_matrix": transition_params},
+            "logits": logits,
+            "probas": tf.nn.softmax(logits, -1),
+            "preds": tf.argmax(logits, -1)
         }
+    
+    def compute_loss(self, layer_output, targets, class_weights):
+        clf_losses = tf.nn.softmax_cross_entropy_with_logits(
+                logits=layer_output["logits"], labels=tf.stop_gradient(targets)
+            )
+        clf_losses = _apply_class_weight(
+            clf_losses,
+            targets,
+            class_weights,
+            norm_grads=self.renorm_after_class_weights,
+        )
+        return clf_losses
+
+
+# TODO; historically custom_gradient had very poor performance compared to using a defun - double check this isn't still the case.
+@tf.custom_gradient
+def class_reweighted_grad(
+    logits, class_weights, norm_grads_multiplier
+):
+    def custom_grad_fn(g):
+        new_g = g * class_weights
+        # This gets really badly autographed so we just need to use a float to cover these cases for now.
+        ratio = tf.math.divide_no_nan(tf.norm(g), tf.norm(new_g)) * norm_grads_multiplier + (1 - norm_grads_multiplier)
+        return [new_g * ratio]
+
+    return tf.identity(logits), custom_grad_fn
+
+class SequenceLabeler(tf.keras.layers.Layer):
+    def __init__(self, n_targets, dropout_rate, use_crf, renorm_after_class_weights, **kwargs):
+        super().__init__(**kwargs)
+        self.n_targets = n_targets
+        self.dropout = tf.keras.layers.Dropout(dropout_rate)
+        # TODO: This one is going to be awkward for variable naming
+        self.dense = tf.keras.layers.Dense(n_targets)
+        self.crf = CRF(num_classes=n_targets, use_crf=use_crf)
+        self.renorm_after_class_weights = renorm_after_class_weights
+
+    def call(self, inputs):
+        logits = self.dense(inputs["sequence_features"])
+        logits = tf.cast(logits, tf.float32)
+        # CRF already outputs the format we need including probs, logits preds etc.
+        return self.crf(logits=logits, sequence_lengths=inputs["length"])
+
+    def compute_loss(self, layer_output, targets, class_weights):
+        # For some reason, all finetune targets are floats. I think we get more type flexibility 
+        # now so we should look at switching this to int when helpful.
+        targets = tf.cast(targets, dtype=tf.int32)
+        if class_weights is not None:
+            class_weights = tf.reshape(class_weights, [1, 1, -1])
+            one_hot_class_weights = class_weights * tf.one_hot(
+                targets, depth=self.n_targets
+            )
+            per_token_weights = tf.reduce_sum(
+                input_tensor=one_hot_class_weights, axis=-1, keepdims=True
+            )
+            layer_output["logits"] = class_reweighted_grad(
+                # You cannot use keyword arguments here. But the error message is horribly written.
+                layer_output["logits"],
+                per_token_weights,
+                1.0 if self.renorm_after_class_weights else 0.0
+            )
+        return self.crf.compute_loss(layer_output, targets)

@@ -3,7 +3,7 @@ import numpy as np
 
 from finetune.base import BaseModel
 from finetune.encoding.target_encoders import MultilabelClassificationEncoder
-from finetune.nn.target_blocks import multi_classifier
+from finetune.nn.target_blocks import MultiClassifier as MultiClassifierBlock
 from finetune.util.imbalance import compute_class_weights
 from finetune.input_pipeline import BasePipeline
 
@@ -34,7 +34,6 @@ class MultiLabelClassifier(BaseModel):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.threshold_placeholder = None
 
     def _get_input_pipeline(self):
         return MultilabelClassificationPipeline(self.config)
@@ -94,20 +93,11 @@ class MultiLabelClassifier(BaseModel):
         """
         return super().finetune(X, Y=Y, context=context, **kwargs)
 
-    def _target_model(self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs):
-        return multi_classifier(
-            hidden=featurizer_state['features'],
-            targets=targets,
+    def target_block(self, *, config, n_outputs, **kwargs):
+        return MultiClassifierBlock(
             n_targets=n_outputs,
-            config=config,
-            train=train,
-            reuse=reuse,
+            dropout_rate=config.clf_p_drop,
+            renorm_after_class_weights=config.renorm_after_class_weights,
+            threshold=config.multi_label_threshold,
             **kwargs
         )
-
-    def _predict_op(self, logits, **kwargs):
-        threshold = self._get_threshold(kwargs.get("threshold", None))
-        return tf.cast(tf.nn.sigmoid(logits) > threshold, tf.int32)
-
-    def _predict_proba_op(self, logits, **kwargs):
-        return tf.nn.sigmoid(logits)

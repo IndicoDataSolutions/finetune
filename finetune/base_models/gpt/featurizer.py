@@ -1,12 +1,9 @@
-import functools
-
 import numpy as np
 import tensorflow as tf
 
-from finetune.optimizers.recompute_grads import recompute_grad
-from finetune.util.shapes import shape_list, lengths_from_eos_idx
+from finetune.util.shapes import shape_list
 from finetune.nn.activations import act_fns
-from finetune.nn.nn_utils import dropout, norm
+from finetune.nn.nn_utils import Norm, ExtraScope
 
 
 def mask_attn_weights(w):
@@ -88,243 +85,148 @@ def split_heads(x, n, k=False):
 def merge_heads(x):
     return merge_states(tf.transpose(a=x, perm=[0, 2, 1, 3]))
 
+class Conv1D(tf.keras.layers.Layer):
+    def __init__(self, num_features, num_filters, kernel_size, pad="VALID", **kwargs):
+        super().__init__(**kwargs)
+        self.w = self.add_weight(
+            shape=(kernel_size, num_features, num_filters),
+            initializer="random_normal",
+            trainable=True,
+            name="w"
+        )
+        self.b = self.add_weight(
+            shape=(num_filters,),
+            initializer="zeros",
+            trainable=True,
+            name="b"
+        )
+        self.pad = pad
+        self.kernel_size = kernel_size
+        self.num_filters = num_filters
 
-def conv1d(
-    x,
-    scope,
-    nf,
-    rf,
-    w_init=tf.compat.v1.random_normal_initializer(stddev=0.02),
-    b_init=tf.compat.v1.constant_initializer(0),
-    pad="VALID",
-    train=False,
-):
-    with tf.compat.v1.variable_scope(scope):
+    def call(self, x):
         nx = shape_list(x)[-1]
-        w = tf.compat.v1.get_variable("w", [rf, nx, nf], initializer=w_init)
-        b = tf.compat.v1.get_variable("b", [nf], initializer=b_init)
-        if rf == 1:  # faster 1x1 conv
+        print("COnv1d input shape", x.shape)
+        if self.kernel_size == 1:  # faster 1x1 conv
             c = tf.reshape(
-                tf.matmul(tf.reshape(x, [-1, nx]), tf.reshape(w, [-1, nf])) + b,
-                shape_list(x)[:-1] + [nf],
+                tf.matmul(tf.reshape(x, [-1, nx]), tf.reshape(self.w, [-1, self.num_filters])) + self.b,
+                shape_list(x)[:-1] + [self.num_filters],
             )
         else:  # was used to train LM
-            c = tf.nn.conv1d(input=x, filters=w, stride=1, padding=pad) + b
+            c = tf.nn.conv1d(input=x, filters=self.w, stride=1, padding=self.pad) + self.b
+        print("COnv1d output shape", c.shape)
         return c
+       
 
+class Attn(tf.keras.layers.Layer):
+    def __init__(self, num_features, num_heads, attn_pdrop, **kwargs):
+        super().__init__(**kwargs)
+        self.num_heads = num_heads
+        self.c_attn = Conv1D(num_features, num_features * 3, 1, name="c_attn")
+        self.dropout = tf.keras.layers.Dropout(attn_pdrop)
+        self.c_proj = Conv1D(num_features, num_features, 1, name="c_proj")
 
-def multihead_qkv(x, n_state, n_head, train, explain=False):
-    c = conv1d(x, "c_attn", n_state * 3, 1, train=train)
-    q, k, v = tf.split(c, 3, 2)
-    q = split_heads(q, n_head)
-    k = split_heads(k, n_head, k=True)
-    v = split_heads(v, n_head)
-    return q, k, v
-
-
-def attn(
-    x,
-    scope,
-    n_state,
-    n_head,
-    resid_pdrop,
-    attn_pdrop,
-    train=False,
-    scale=False,
-    mask=True,
-    explain=False,
-    lengths=None,
-):
-    assert n_state % n_head == 0
-    with tf.compat.v1.variable_scope(scope):
-        q, k, v = multihead_qkv(x, n_state, n_head, train, explain)
-        w = attn_weights(q, k, v, scale=scale, mask=mask, explain=explain, lengths=lengths)
-        w = dropout(w, attn_pdrop, train)
+    def call(self, x):
+        c = self.c_attn(x)
+        q, k, v = tf.split(c, 3, 2)
+        q = split_heads(q, self.num_heads)
+        k = split_heads(k, self.num_heads, k=True)
+        v = split_heads(v, self.num_heads)
+        w = attn_weights(q, k, v)
+        w = self.dropout(w)
         a = tf.matmul(w, v)
         a = merge_heads(a)
-        a = conv1d(a, "c_proj", n_state, 1, train=train)
-        a = dropout(a, resid_pdrop, train)
-        return a
+        a = self.c_proj(a)
+        a = self.dropout(a)
+        return a    
 
+class MLP(tf.keras.layers.Layer):
+    def __init__(self, num_features, n_state, resid_pdrop, act_fn, **kwargs):
+        super().__init__(**kwargs)
+        self.act_fn = act_fn
+        self.c_fc = Conv1D(num_features, n_state, 1, name="c_fc")
+        self.c_proj = Conv1D(n_state, num_features, 1, name="c_proj")
+        self.dropout = tf.keras.layers.Dropout(resid_pdrop)
 
-def mlp(x, scope, n_state, act_fn, resid_pdrop, train=False):
-    with tf.compat.v1.variable_scope(scope):
-        nx = shape_list(x)[-1]
-        act = act_fns[act_fn]
-        h = act(conv1d(x, "c_fc", n_state, 1, train=train))
-        h2 = conv1d(h, "c_proj", nx, 1, train=train)
-        h2 = dropout(h2, resid_pdrop, train)
-        return h2
-
-
-def create_initializer(initializer_range=0.001):
-    """Creates a `truncated_normal_initializer` with the given range."""
-    return tf.compat.v1.truncated_normal_initializer(stddev=initializer_range)
-
-
-def block(
-    x,
-    n_head,
-    act_fn,
-    resid_pdrop,
-    attn_pdrop,
-    scope,
-    train=False,
-    scale=False,
-    explain=False,
-):
-    with tf.compat.v1.variable_scope(scope):
-        nx = shape_list(x)[-1]
-        a = attn(
-            x,
-            "attn",
-            nx,
-            n_head,
-            resid_pdrop,
-            attn_pdrop,
-            train=train,
-            scale=scale,
-            explain=explain,
-        )
-        n = norm(x + a, "ln_1")
-        m = mlp(n, "mlp", nx * 4, act_fn, resid_pdrop, train=train)
-        h = norm(n + m, "ln_2")
+    def call(self, x):
+        h = self.c_fc(x)
+        h = act_fns[self.act_fn](h)
+        h = self.c_proj(h)
+        h = self.dropout(h)
         return h
+
+class Block(tf.keras.layers.Layer):
+    def __init__(self, num_features, n_head, act_fn, resid_pdrop, attn_pdrop, **kwargs):
+        super().__init__(**kwargs)
+        self.ln_1 = Norm(num_features, name="ln_1")
+        self.attn = Attn(num_features, n_head, attn_pdrop, name="attn")
+        self.ln_2 = Norm(num_features, name="ln_2")
+        self.mlp = MLP(num_features, num_features * 4, resid_pdrop, act_fn, name="mlp")
+
+    def call(self, x):
+        print("Block input shape", x.shape)
+        a = self.attn(x)
+        print("Block attn output shape", a.shape)
+        n = self.ln_1(x + a)
+        print("Block ln_1 output shape", n.shape)
+        m = self.mlp(n)
+        print("Block mlp output shape", m.shape)
+        return self.ln_2(n + m)
 
 
 def embed(X, we):
     return tf.reduce_sum(input_tensor=tf.gather(we, X), axis=2)
 
 
-def add_explain_tokens(X, max_length, pool_idx):
-    flat_x = tf.reshape(X[:, :, :1], [-1, 1])
-    flat_pos = tf.minimum(
-        X[:, :, 1:] + 1, max_length - 1
-    )  # + 1 to offset for start token
-    clf_tok = tf.gather(
-        flat_x, tf.range(shape_list(X)[0], dtype=tf.int32) * max_length + pool_idx
-    )
-    clf_tok_x_seq = tf.tile(tf.expand_dims(clf_tok, 1), [1, max_length, 1])
-    clf_tok_x_seq_w_pos = tf.concat((clf_tok_x_seq, flat_pos), -1)
-    return tf.concat((X, clf_tok_x_seq_w_pos), 1)
-
 def get_pos_values(seq_len, vocab_size):
     return tf.expand_dims(vocab_size + tf.range(seq_len), 0)
 
-def gpt_featurizer(
-    X,
-    encoder,
-    config,
-    train=False,
-    reuse=None,
-    explain=False,
-    **kwargs
-):
-    """
-    The transformer element of the finetuning model. Maps from tokens ids to a dense, embedding of the sequence.
-
-    :param X: A tensor of token indexes with shape [batch_size, sequence_length, token_idx]
-    :param encoder: A TextEncoder object.
-    :param config: A config object, containing all parameters for the featurizer.
-    :param train: If this flag is true, dropout and losses are added to the graph.
-    :param reuse: Should reuse be set within this scope.
-    :return: A dict containing;
-        embed_weights: the word embedding matrix.
-        features: The output of the featurizer_final state.
-        sequence_features: The output of the featurizer at each timestep.
-    """
-    initial_shape = tf.shape(input=X)
-    X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-1:]), 0))
-    x_shape = tf.shape(input=X)
-    sequence_length = x_shape[1]
-    pos_values = get_pos_values(sequence_length, encoder.vocab_size)
-    X = tf.stack((X, tf.tile(pos_values, [x_shape[0], 1])), 2)
-
-    with tf.compat.v1.variable_scope("model/featurizer", reuse=reuse):
-        embed_weights = tf.compat.v1.get_variable(
-            name="we",
+class GPTFeaturizer(tf.keras.layers.Layer):
+    def __init__(self, encoder, config, **kwargs):
+        super().__init__(**kwargs)
+        self.embed_weights = self.add_weight(
             shape=[encoder.vocab_size + config.max_length, config.n_embed],
-            initializer=tf.compat.v1.random_normal_initializer(stddev=config.weight_stddev),
+            initializer=tf.keras.initializers.RandomNormal(stddev=config.weight_stddev),
+            trainable=True,
+            name="we"
         )
-        if config.train_embeddings:
-            embed_weights = dropout(embed_weights, config.embed_p_drop, train)
-        else:
-            embed_weights = tf.stop_gradient(embed_weights)
+        self.blocks = [
+            ExtraScope(
+                layer=Block(
+                    config.n_embed, config.n_heads, config.act_fn, config.resid_p_drop, config.attn_p_drop,
+                    name=f"h{i}"
+                ),
+                name=f"h{i}_"
+            ) 
+            for i in range(config.n_layer)
+        ]
+        self.embed_dropout = tf.keras.layers.Dropout(config.embed_p_drop)
+        self.vocab_size = encoder.vocab_size
+        self.max_length = config.max_length
+        self.n_embed = config.n_embed
+        self.clf_token = encoder.end_token
+        
+    def call(self, tokens, context, sequence_lengths):
+        tokens_shape = tf.shape(tokens)
+        batch_size, seq_dim = tokens_shape[0], tokens_shape[1]
+        pos_values = get_pos_values(seq_dim, self.vocab_size)
+        pool_idx = tf.cast(tf.argmax(input=tf.cast(tf.equal(tokens[:,  0], self.clf_token), tf.float32), axis=1), tf.int32)
+        tokens_with_pos = tf.stack((tokens, tf.tile(pos_values, [batch_size, 1])), 2)
 
-        clf_token = encoder.end_token
-        pool_idx = tf.cast(tf.argmax(input=tf.cast(tf.equal(X[:, :, 0], clf_token), tf.float32), axis=1), tf.int32)
-
-        if explain:
-            X = add_explain_tokens(X, sequence_length, pool_idx)
-
-        h = embed(X, embed_weights)
-        for layer in range(config.n_layer):
-            if (
-                (config.n_layer - layer) == config.num_layers_trained
-                and config.num_layers_trained != config.n_layer
-            ):
-                h = tf.stop_gradient(h)
-                train_layer = False
-            else:
-                train_layer = train
-
-            with tf.compat.v1.variable_scope("h%d_" % layer):
-                block_fn = functools.partial(
-                    block,
-                    n_head=config.n_heads,
-                    act_fn=config.act_fn,
-                    resid_pdrop=config.resid_p_drop,
-                    attn_pdrop=config.attn_p_drop,
-                    scope="h%d" % layer,
-                    train=train_layer,
-                    scale=True,
-                    explain=explain,
-                )
-                if config.low_memory_mode and train_layer:
-                    block_fn = recompute_grad(block_fn, use_entire_scope=True)
-                if layer < config.n_layer - 1:
-                    h = block_fn(h)
-                else:
-                    h_out = block_fn(h)
-
-            # get the attention weights from the last layer
-            if layer == config.n_layer - 1:
-                with tf.compat.v1.variable_scope("h%d_/h%d/attn" % (layer, layer), reuse=True):
-                    q, k, v = multihead_qkv(
-                        h, n_state=shape_list(h)[-1], n_head=config.n_heads, train=train
-                    )
-                    w = attn_weights(q, k, v, scale=True)
-
-        if explain:
-            explain_out = h_out[:, initial_shape[1] :]
-            explain_out = tf.reshape(
-                explain_out, shape=tf.concat((initial_shape, [config.n_embed]), 0)
-            )
-            h_out = h_out[:, : initial_shape[1]]
-
-        # Use hidden state at classifier token as input to final proj. + softmax
-        clf_h = tf.reshape(h_out, [-1, config.n_embed])  # [batch * seq_len, embed]
+        embed_weights = self.embed_dropout(self.embed_weights)
+        print("tokens shape", tokens.shape)
+        print("pos_values shape", pos_values.shape)
+        print("embed_weights shape", embed_weights.shape)
+        h = embed(tokens_with_pos, embed_weights)
+        print("Embed output shape", h.shape)
+        for block in self.blocks:
+            h = block(h)
+        clf_h = tf.reshape(h, [-1, self.n_embed])  # [batch * seq_len, embed]
         clf_h = tf.gather(
             clf_h,
-            tf.range(shape_list(X)[0], dtype=tf.int32) * sequence_length + pool_idx,
+            tf.range(batch_size, dtype=tf.int32) * sequence_lengths + pool_idx,
         )
-        clf_h = tf.reshape(
-            clf_h, shape=tf.concat((initial_shape[:-1], [config.n_embed]), 0)
-        )
-        seq_feats = tf.reshape(
-            h_out, shape=tf.concat((initial_shape, [config.n_embed]), 0)
-        )
-
-        lengths = lengths_from_eos_idx(eos_idx=pool_idx, max_length=sequence_length)
-
-        out = {
-            "embed_weights": embed_weights,
+        return {
             "features": clf_h,
-            "sequence_features": seq_feats,
-            "eos_idx": pool_idx,
-            "lengths": lengths,
-            "attention_weights": w,  # [n_heads, seq_len, seq_len]
+            "sequence_features": h,
         }
-        if explain:
-            out["explain_out"] = explain_out
-        return out

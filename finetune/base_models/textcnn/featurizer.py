@@ -1,8 +1,6 @@
 import tensorflow as tf
 
 from finetune.util.shapes import lengths_from_eos_idx
-from finetune.base_models.gpt.featurizer import dropout, embed
-
 
 def textcnn_featurizer(X, encoder, config, train=False, reuse=None, **kwargs):
     """

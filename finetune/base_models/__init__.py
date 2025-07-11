@@ -42,8 +42,8 @@ class SourceModel(metaclass=ABCMeta):
         return cls.encoder(**kwargs)
 
     @classmethod
-    def get_featurizer(cls, X, encoder, config, train=False, reuse=None, **kwargs):
-        return cls.featurizer(X, encoder, config, train=train, reuse=reuse, **kwargs)
+    def get_featurizer(cls, *args, **kwargs):
+        return cls.featurizer(*args, **kwargs)
 
     @classmethod
     def translate_base_model_format(cls):
@@ -57,12 +57,10 @@ from finetune.base_models.bert.model import (
     BERTModelCased,
     BERTModelLargeCased,
     RoBERTa,
-    FusedRoBERTa,
     RoBERTaLarge,
     DistilBERT,
     DistilRoBERTa,
     DocRep,
-    FusedDocRep,
     LayoutLM,
     XDocBase,
     TableRoBERTa,

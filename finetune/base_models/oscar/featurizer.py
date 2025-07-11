@@ -1,5 +1,5 @@
 import tensorflow as tf
-from finetune.base_models.gpt.featurizer import dropout, embed, split_heads, merge_heads
+from finetune.base_models.gpt.featurizer import split_heads, merge_heads
 from finetune.util.shapes import shape_list, lengths_from_eos_idx
 from finetune.custom_ops import recursive_agg
 from finetune.base_models.gpt.featurizer import get_pos_values

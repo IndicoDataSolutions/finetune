@@ -5,7 +5,8 @@ import tensorflow as tf
 from finetune.util.shapes import shape_list, lengths_from_eos_idx
 from finetune.optimizers.recompute_grads import recompute_grad
 from finetune.nn.activations import gelu
-from finetune.base_models.gpt.featurizer import norm, dropout, get_pos_values
+from finetune.base_models.gpt.featurizer import get_pos_values
+from finetune.nn.nn_utils import Norm
 
 
 def softmax(x, axis=-1):

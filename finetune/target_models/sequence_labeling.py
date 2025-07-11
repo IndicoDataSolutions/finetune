@@ -13,8 +13,7 @@ from finetune.encoding.target_encoders import (
     SequenceLabelingEncoder,
     SequenceMultiLabelingEncoder,
 )
-from finetune.nn.target_blocks import sequence_labeler
-from finetune.nn.crf import sequence_decode
+from finetune.nn.target_blocks import SequenceLabeler as SequenceLabelerBlock
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
 from finetune.encoding.input_encoder import get_spacy
 from finetune.input_pipeline import BasePipeline
@@ -699,64 +698,16 @@ class SequenceLabeler(BaseModel):
             **kwargs
         )
 
-    def _target_model(
+    def target_block(
         self,
         *,
         config,
-        featurizer_state,
-        targets,
         n_outputs,
-        train=False,
-        reuse=None,
         **kwargs
     ):
-        return sequence_labeler(
-            hidden=featurizer_state["sequence_features"],
-            targets=targets,
+        return SequenceLabelerBlock(
             n_targets=n_outputs,
-            pad_id=config.pad_idx,
-            config=config,
-            train=train,
-            multilabel=config.multi_label_sequences,
-            reuse=reuse,
-            lengths=featurizer_state["lengths"],
-            use_crf=self.config.crf_sequence_labeling,
-            **kwargs
+            dropout_rate=config.clf_p_drop,
+            use_crf=config.crf_sequence_labeling,
+            renorm_after_class_weights=config.renorm_after_class_weights,
         )
-
-    def _predict_op(self, logits, **kwargs):
-        trans_mats = kwargs.get("transition_matrix")
-        sequence_length = kwargs.get("sequence_length")
-        if self.config.use_gpu_crf_predict.lower() == "auto":
-            use_gpu_op = self.multi_label
-        else:
-            use_gpu_op = self.config.use_gpu_crf_predict
-
-        if self.multi_label:
-            logits = tf.unstack(logits, axis=-1)
-            label_idxs = []
-            label_probas = []
-            for logits_i, trans_mat_i in zip(logits, trans_mats):
-                idx, prob = sequence_decode(
-                    logits_i,
-                    trans_mat_i,
-                    sequence_length,
-                    use_gpu_op=True,
-                    use_crf=self.config.crf_sequence_labeling,
-                )
-                label_idxs.append(idx)
-                label_probas.append(prob[:, :, 1:])
-            label_idxs = tf.stack(label_idxs, axis=-1)
-            label_probas = tf.stack(label_probas, axis=-1)
-        else:
-            label_idxs, label_probas = sequence_decode(
-                logits,
-                trans_mats,
-                sequence_length,
-                use_gpu_op=False,
-                use_crf=self.config.crf_sequence_labeling,
-            )
-        return label_idxs, label_probas
-
-    def _predict_proba_op(self, logits, **kwargs):
-        return tf.no_op()

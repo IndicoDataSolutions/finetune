@@ -57,7 +57,7 @@ def add_length(x, y=None):
         return x, y
     return x
 
-
+# TODO: we no longer need the dataset as a function, we can simplify this considerably.
 def batch_dataset(
     dataset,
     batch_size,

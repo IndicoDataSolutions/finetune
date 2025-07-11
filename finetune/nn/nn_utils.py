@@ -1,20 +1,35 @@
 import tensorflow as tf
-from finetune.util.shapes import shape_list
 
+class Norm(tf.keras.layers.Layer):
+    def __init__(self, feature_size: int, axis=[-1], e=1e-5, **kwargs):
+        super().__init__(**kwargs)
+        self.axis = axis
+        self.e = e
+        self.g = self.add_weight(
+            name="g",
+            shape=[feature_size],
+            initializer=tf.compat.v1.constant_initializer(1),
+            trainable=True,
+        )
+        self.b = self.add_weight(
+            name="b",
+            shape=[feature_size],
+            initializer=tf.compat.v1.constant_initializer(0),
+            trainable=True,
+        )
 
-def norm(x, scope, axis=[-1], e=1e-5):
-    with tf.compat.v1.variable_scope(scope):
-        n_state = shape_list(x)[-1]
-        g = tf.compat.v1.get_variable('g', [n_state], initializer=tf.compat.v1.constant_initializer(1))
-        b = tf.compat.v1.get_variable('b', [n_state], initializer=tf.compat.v1.constant_initializer(0))
-        u = tf.reduce_mean(input_tensor=x, axis=axis, keepdims=True)
-        s = tf.reduce_mean(input_tensor=tf.square(x - u), axis=axis, keepdims=True)
-        x = (x - u) * tf.math.rsqrt(s + e)
-        x = x * g + b
+    def call(self, x):
+        u = tf.reduce_mean(input_tensor=x, axis=self.axis, keepdims=True)
+        s = tf.reduce_mean(input_tensor=tf.square(x - u), axis=self.axis, keepdims=True)
+        x = (x - u) * tf.math.rsqrt(s + self.e)
+        x = x * self.g + self.b
         return x
 
 
-def dropout(x, pdrop, train):
-    if train and pdrop > 0:
-        x = tf.nn.dropout(x, 1 - (1 - pdrop))
-    return x
+class ExtraScope(tf.keras.layers.Layer):
+    def __init__(self, layer, name, **kwargs):
+        super().__init__(**kwargs, name=name)
+        self.layer = layer
+
+    def call(self, *args, **kwargs):
+        return self.layer(*args, **kwargs)

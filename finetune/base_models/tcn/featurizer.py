@@ -1,8 +1,6 @@
 import tensorflow as tf
 
 from finetune.util.shapes import lengths_from_eos_idx
-from finetune.base_models.gpt.featurizer import dropout, embed
-
 
 class TemporalBlock:
     def __init__(self, n_filters, kernel_size, dilation_rate, rate, scope):
