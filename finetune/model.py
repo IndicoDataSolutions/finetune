@@ -1,5 +1,6 @@
 import logging
 
+from finetune.nn.nn_utils import ExtraScope
 import tensorflow as tf
 
 from finetune.util.imbalance import class_weight_tensor
@@ -23,9 +24,10 @@ def get_keras_model(
         def __init__(self, *args, name="model", **kwargs):
             super().__init__(*args, name=name, **kwargs)
             self.featurizer = config.base_model.get_featurizer(encoder=encoder, config=config, name="featurizer")
-            self.target_block = target_block
+            self.target_block = ExtraScope(target_block, "target")
             
         def call(self, data, **kwargs):
+            print(data)
             features: dict[str, tf.Tensor] = self.featurizer(
                 tokens=data["tokens"],
                 context=data.get("context", None),
@@ -34,10 +36,13 @@ def get_keras_model(
             )
             # Unpack to include things like lengths
             target_output: dict[str, tf.Tensor] = self.target_block({**features, **data})
-            return {
+            output = {
                 **features,
                 **target_output,
             }
+            # Certain keras calls assert that there is no None output.
+            # We will just need to assume downstream that any missing values were None
+            return {k: v for k, v in output.items() if v is not None}
         
         def compute_loss(self, y, y_pred):
             weighted_tensor = None
@@ -51,16 +56,15 @@ def get_keras_model(
         
         def train_step(self, data):
             x, y = data
-            tf.print("Y", y)
 
             with tf.GradientTape() as tape:
                 y_pred = self(x, training=True)
                 loss = self.compute_loss(y=y, y_pred=y_pred)
-
             # Compute gradients
             trainable_vars = self.trainable_variables
             gradients = tape.gradient(loss, trainable_vars)
             # Update weights
             self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+            return {"loss": loss}
             
     return FinetuneModel(**kwargs)

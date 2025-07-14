@@ -1,6 +1,5 @@
 import os
 import io
-import gc
 import random
 import weakref
 import warnings
@@ -12,11 +11,10 @@ import time
 import pathlib
 import logging
 from typing import Dict, List, Mapping, Tuple
+import typing as t
 
 import numpy as np
 import tensorflow as tf
-from tensorflow.compat.v1 import logging as tf_logging
-
 import joblib
 
 
@@ -31,7 +29,7 @@ from finetune.util.gpu_info import gpu_info
 from finetune.base_models.bert.model import _BaseBert
 from finetune.base_models.modern_bert.model import _ModernBertBase
 from finetune.base_models.bert.roberta_encoder import RoBERTaEncoderV2
-
+from finetune.optimizers.learning_rate_schedules import FinetuneKerasLRSchedule
 from finetune.input_pipeline import InputMode
 
 LOGGER = logging.getLogger("finetune")
@@ -91,7 +89,6 @@ class BaseModel(object, metaclass=ABCMeta):
         self._initialize()
         if self.config.debugging_logs:
             os.environ["TF_CPP_MIN_LOG_LEVEL"] = "0"
-            tf_logging.set_verbosity(tf_logging.DEBUG)
         self.check_gpu_for_fp16()
         self._model = None
 
@@ -199,14 +196,6 @@ class BaseModel(object, metaclass=ABCMeta):
             permit_uninitialized=self.config.permit_uninitialized,
         )
 
-    def init_from_checkpoint(self, checkpoint_path):
-        if self._trained:
-            raise FinetuneError("Cannot reinitialize trained model from checkpoint")
-        self.saver = Saver(
-            fallback_filename=checkpoint_path,
-            save_dtype=self.config.save_dtype,
-        )
-
     @abstractmethod
     def target_block(
         self,
@@ -260,7 +249,23 @@ class BaseModel(object, metaclass=ABCMeta):
             n_gpus=1,
         )
         num_steps = steps_per_epoch * self.config.n_epochs
-        self.model.compile(optimizer=self.config.optimizer)
+        # TODO: figure out of vector L2 is necessary and create a subclass optimizer if it is.
+        self.model.compile(
+            optimizer=tf.keras.optimizers.AdamW(
+                learning_rate=FinetuneKerasLRSchedule(
+                    schedule=self.config.lr_schedule,
+                    base_lr=self.config.lr,
+                    total_steps=num_steps,
+                    warmup=self.config.lr_warmup,
+                ),
+                weight_decay=self.config.l2_reg,
+                beta_1=self.config.b1,
+                beta_2=self.config.b2,
+                epsilon=self.config.epsilon,
+            ),
+            jit_compile=False,
+            run_eagerly=False
+        )
         self.model.fit(datasets["train_dataset"](), epochs=self.config.n_epochs)
         self._trained = True
 
@@ -268,7 +273,10 @@ class BaseModel(object, metaclass=ABCMeta):
     def model(self) -> tf.keras.Model:
         if self._model is None:
             self._model = self._get_keras_model()
-            self._model.build(self.input_pipeline.feed_shape_type_def()[1])
+            # Does a symbolic first pass to build the model and give us variables we can initialize.
+            # Keras does not have a post-build hook option because it can be run in eager and shapes are calculated alongside the first
+            # call. Therefore we need to pass either a real tensor or this symbolic tensor to get variables.
+            self._model(self.input_pipeline.keras_input_def())
             self.saver.initialize_model(self._model)
         return self._model
 
@@ -277,7 +285,6 @@ class BaseModel(object, metaclass=ABCMeta):
             target_block=self.target_block(
                 config=self.config,
                 n_outputs=self.input_pipeline.target_dim,
-                name='target_block' # TODO: make sure the scopes of the target block match old save files.
             ),
             encoder=self.input_pipeline.text_encoder,
             target_dim=self.input_pipeline.target_dim,
@@ -311,12 +318,12 @@ class BaseModel(object, metaclass=ABCMeta):
     def _inference(
         self,
         zipped_data,
-        predict_keys=None,
         context=None,
         update_hook=None,
         chunked_length=None,
         list_output=True,
-    ):
+    ) -> t.Union[List[Dict[str, np.ndarray]], t.Iterator[Dict[str, np.ndarray]]]:
+        # TODO: I assume context is handled by subclasses - verify this and make sure this is compatible with new pattern.
         def get_zipped_data():
             return iter(zipped_data)
 
@@ -324,47 +331,31 @@ class BaseModel(object, metaclass=ABCMeta):
             get_zipped_data, input_mode=InputMode.PREDICT, update_hook=update_hook
         )["predict_dataset"]
 
-        estimator, hooks = self.get_estimator(
-            build_explain=PredictMode.EXPLAIN in predict_keys,
-            cache=self._cached_predict,
-        )
+        model = self.model
+
         length = chunked_length if chunked_length is not None else len(zipped_data)
 
-        if self._cached_predict:
-            # Add commonly used (cheap) predict keys to the graph to prevent having to rebuild
-            required_predict_keys = list(
-                {
-                    PredictMode.FEATURIZE,
-                    PredictMode.SEQUENCE,
-                    PredictMode.NORMAL,
-                    PredictMode.PROBAS,
-                }
-                | set(predict_keys or {})
-            )
-            prediction_iterator = estimator.cached_predict(
-                input_fn=input_fn, predict_keys=required_predict_keys, hooks=hooks
-            )
-        else:
-            prediction_iterator = estimator.predict(
-                input_fn=input_fn, predict_keys=predict_keys, hooks=hooks
-            )
-
-        predictions = ProgressBar(
-            prediction_iterator, total=length, desc="Inference", update_hook=update_hook
+        progress = ProgressBar(
+            total=length, desc="Inference", update_hook=update_hook
         )
-        try:
-            outputs = (
-                pred[predict_keys[0]] if len(predict_keys) == 1 else pred
-                for pred in predictions
-            )
-            if list_output:
-                return list(outputs)
-            return outputs
+        output_list = []
+        for batch in input_fn():
+            preds = model(batch, training=False)
+            pred_numpy = {k: v.numpy() for k, v in preds.items()}
+            batch_size = batch["tokens"].shape[0]
+            # Items without a batch dim we include in all pred batches. In practice this is limited to just transition params
+            # but we can use it for anything we like going forwards.
+            not_batched = {k for k, v in pred_numpy.items() if v.shape[0] != batch_size}
+            for i in range(batch_size):
+                progress.update(i)
+                step_value = {k: pred_numpy[k] if k in not_batched else pred_numpy[k][i] for k in pred_numpy}
+                if list_output:
+                    output_list.append(step_value)
+                else:
+                    yield step_value
+        if list_output:
+            return output_list
 
-        except ValueError:
-            raise FinetuneError(
-                "Cannot call `predict()` on a model that has not been fit."
-            )
 
     def fit(self, *args, **kwargs):
         """An alias for finetune."""
@@ -423,8 +414,9 @@ class BaseModel(object, metaclass=ABCMeta):
             )
         zipped_data = self.input_pipeline.zip_list_to_dict(X=Xs, context=context)
         raw_preds = self._inference(
-            zipped_data, predict_keys=[PredictMode.FEATURIZE], **kwargs
+            zipped_data, **kwargs
         )
+        raw_preds = [pred["features"] for pred in raw_preds]
         return np.asarray(raw_preds)
 
     def featurize_sequence(self, Xs, context=None, **kwargs):
@@ -434,8 +426,9 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         zipped_data = self.input_pipeline.zip_list_to_dict(X=Xs, context=context)
         raw_preds = self._inference(
-            zipped_data, predict_keys=[PredictMode.SEQUENCE], **kwargs
+            zipped_data, **kwargs
         )
+        raw_preds = [pred["sequence_features"] for pred in raw_preds]
         chunk_gens = [self.input_pipeline._text_to_ids(d["X"]) for d in zipped_data]
 
         chunks = []
@@ -457,12 +450,6 @@ class BaseModel(object, metaclass=ABCMeta):
 
         processed_preds = [np.asarray(pred) for pred in processed_preds]
         return processed_preds
-
-    @classmethod
-    def get_eval_fn(cls):
-        raise NotImplementedError(
-            "No default eval function is given, please pass an explicit eval fn to grid_search"
-        )
 
     def transform(self, *args, **kwargs):
         """
@@ -626,12 +613,9 @@ class BaseModel(object, metaclass=ABCMeta):
         return model
 
     def process_long_sequence(self, zipped_data):
-        labels, batch_probas = [], []
-
         # outputs predictions for each chunk of each document.
         pred_iterator = self._inference(
             zipped_data,
-            predict_keys=[PredictMode.PROBAS, PredictMode.NORMAL],
             chunked_length=0,
             list_output=False,
         )
@@ -656,13 +640,17 @@ class BaseModel(object, metaclass=ABCMeta):
         for pred, (arr_enc, start_of_doc, end_of_doc) in zip(
             pred_iterator, chunk_alignment_iterator
         ):
-            normal_pred = pred[PredictMode.NORMAL]
+            normal_pred = pred["preds"]
             if not hasattr(self, "multi_label"):
                 normal_pred = np.expand_dims(normal_pred, 0)
             label_seq = self.input_pipeline.label_encoder.inverse_transform(normal_pred)
-            proba_seq = pred[PredictMode.PROBAS]
+            proba_seq = pred["probas"]
             token_end_idx = arr_enc.token_ends
             token_start_idx = arr_enc.token_starts
             useful_start = arr_enc.useful_start
             useful_end = arr_enc.useful_end
             yield token_start_idx, token_end_idx, start_of_doc, end_of_doc, label_seq, proba_seq, useful_start, useful_end
+
+    def close(self):
+        del self._model
+        self._model = None

@@ -177,6 +177,7 @@ class TestSequenceLabeler(unittest.TestCase):
         for pred, pred_with_prob in zip(predictions, with_doc_probas):
             self.assertEqual(pred, pred_with_prob["prediction"])
             self.assertIsInstance(pred_with_prob["negative_confidence"], dict)
+        import pdb; pdb.set_trace()
 
         self.assertIsInstance(probas, list)
         self.assertIsInstance(probas[0], list)

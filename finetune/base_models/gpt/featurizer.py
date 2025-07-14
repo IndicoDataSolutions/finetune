@@ -3,7 +3,7 @@ import tensorflow as tf
 
 from finetune.util.shapes import shape_list
 from finetune.nn.activations import act_fns
-from finetune.nn.nn_utils import Norm, ExtraScope
+from finetune.nn.nn_utils import Norm, ExtraScope, maybe_recompute
 
 
 def mask_attn_weights(w):
@@ -86,27 +86,14 @@ def merge_heads(x):
     return merge_states(tf.transpose(a=x, perm=[0, 2, 1, 3]))
 
 class Conv1D(tf.keras.layers.Layer):
-    def __init__(self, num_features, num_filters, kernel_size, pad="VALID", **kwargs):
+    def __init__(self, *,  num_filters: int | None, kernel_size: int, pad="VALID", **kwargs):
         super().__init__(**kwargs)
-        self.w = self.add_weight(
-            shape=(kernel_size, num_features, num_filters),
-            initializer="random_normal",
-            trainable=True,
-            name="w"
-        )
-        self.b = self.add_weight(
-            shape=(num_filters,),
-            initializer="zeros",
-            trainable=True,
-            name="b"
-        )
         self.pad = pad
         self.kernel_size = kernel_size
         self.num_filters = num_filters
 
     def call(self, x):
         nx = shape_list(x)[-1]
-        print("COnv1d input shape", x.shape)
         if self.kernel_size == 1:  # faster 1x1 conv
             c = tf.reshape(
                 tf.matmul(tf.reshape(x, [-1, nx]), tf.reshape(self.w, [-1, self.num_filters])) + self.b,
@@ -114,17 +101,31 @@ class Conv1D(tf.keras.layers.Layer):
             )
         else:  # was used to train LM
             c = tf.nn.conv1d(input=x, filters=self.w, stride=1, padding=self.pad) + self.b
-        print("COnv1d output shape", c.shape)
         return c
-       
+
+    def build(self, input_shape):
+        if self.num_filters is None:
+            self.num_filters = input_shape[-1]
+        self.w = self.add_weight(
+            shape=(self.kernel_size, input_shape[-1], self.num_filters),
+            initializer="random_normal",
+            trainable=True,
+            name="w"
+        )
+        self.b = self.add_weight(
+            shape=(self.num_filters,),
+            initializer="zeros",
+            trainable=True,
+            name="b"
+        )
+        super().build(input_shape)
+
 
 class Attn(tf.keras.layers.Layer):
-    def __init__(self, num_features, num_heads, attn_pdrop, **kwargs):
+    def __init__(self, *, num_heads, attn_pdrop, **kwargs):
         super().__init__(**kwargs)
         self.num_heads = num_heads
-        self.c_attn = Conv1D(num_features, num_features * 3, 1, name="c_attn")
         self.dropout = tf.keras.layers.Dropout(attn_pdrop)
-        self.c_proj = Conv1D(num_features, num_features, 1, name="c_proj")
 
     def call(self, x):
         c = self.c_attn(x)
@@ -138,15 +139,27 @@ class Attn(tf.keras.layers.Layer):
         a = merge_heads(a)
         a = self.c_proj(a)
         a = self.dropout(a)
-        return a    
+        return a
+    
+    def build(self, input_shape):
+        # Unfortunate to put these in build but with the *3 we are dependent on the input shape
+        self.c_attn = Conv1D(num_filters=input_shape[-1] * 3, kernel_size=1, name="c_attn")
+        self.c_proj = Conv1D(num_filters=input_shape[-1], kernel_size=1, name="c_proj")
+        super().build(input_shape)
+
+
+
 
 class MLP(tf.keras.layers.Layer):
-    def __init__(self, num_features, n_state, resid_pdrop, act_fn, **kwargs):
+    def __init__(self, *, n_state, resid_pdrop, act_fn, **kwargs):
         super().__init__(**kwargs)
         self.act_fn = act_fn
-        self.c_fc = Conv1D(num_features, n_state, 1, name="c_fc")
-        self.c_proj = Conv1D(n_state, num_features, 1, name="c_proj")
+        self.c_fc = Conv1D(num_filters=n_state, kernel_size=1, name="c_fc")
         self.dropout = tf.keras.layers.Dropout(resid_pdrop)
+
+    def build(self, input_shape):
+        self.c_proj = Conv1D(num_filters=input_shape[-1], kernel_size=1, name="c_proj")
+        super().build(input_shape)
 
     def call(self, x):
         h = self.c_fc(x)
@@ -156,21 +169,23 @@ class MLP(tf.keras.layers.Layer):
         return h
 
 class Block(tf.keras.layers.Layer):
-    def __init__(self, num_features, n_head, act_fn, resid_pdrop, attn_pdrop, **kwargs):
+    def __init__(self, *, n_head, act_fn, resid_pdrop, attn_pdrop, **kwargs):
         super().__init__(**kwargs)
-        self.ln_1 = Norm(num_features, name="ln_1")
-        self.attn = Attn(num_features, n_head, attn_pdrop, name="attn")
-        self.ln_2 = Norm(num_features, name="ln_2")
-        self.mlp = MLP(num_features, num_features * 4, resid_pdrop, act_fn, name="mlp")
+        self.ln_1 = Norm(name="ln_1")
+        self.attn = Attn(num_heads=n_head, attn_pdrop=attn_pdrop, name="attn")
+        self.ln_2 = Norm(name="ln_2")
+        self.resid_pdrop = resid_pdrop
+        self.act_fn = act_fn
+
+    def build(self, input_shape):
+        self.mlp = MLP(n_state=input_shape[-1] * 4, resid_pdrop=self.resid_pdrop, act_fn=self.act_fn, name="mlp")
+        super().build(input_shape)
+
 
     def call(self, x):
-        print("Block input shape", x.shape)
         a = self.attn(x)
-        print("Block attn output shape", a.shape)
         n = self.ln_1(x + a)
-        print("Block ln_1 output shape", n.shape)
         m = self.mlp(n)
-        print("Block mlp output shape", m.shape)
         return self.ln_2(n + m)
 
 
@@ -184,16 +199,14 @@ def get_pos_values(seq_len, vocab_size):
 class GPTFeaturizer(tf.keras.layers.Layer):
     def __init__(self, encoder, config, **kwargs):
         super().__init__(**kwargs)
-        self.embed_weights = self.add_weight(
-            shape=[encoder.vocab_size + config.max_length, config.n_embed],
-            initializer=tf.keras.initializers.RandomNormal(stddev=config.weight_stddev),
-            trainable=True,
-            name="we"
-        )
+        
         self.blocks = [
             ExtraScope(
                 layer=Block(
-                    config.n_embed, config.n_heads, config.act_fn, config.resid_p_drop, config.attn_p_drop,
+                    n_head=config.n_heads,
+                    act_fn=config.act_fn,
+                    resid_pdrop=config.resid_p_drop,
+                    attn_pdrop=config.attn_p_drop,
                     name=f"h{i}"
                 ),
                 name=f"h{i}_"
@@ -205,22 +218,29 @@ class GPTFeaturizer(tf.keras.layers.Layer):
         self.max_length = config.max_length
         self.n_embed = config.n_embed
         self.clf_token = encoder.end_token
+        self.weight_stddev = config.weight_stddev
+        self.do_recompute = config.low_memory_mode
+
+    def build(self, input_shape):
+        self.embed_weights = self.add_weight(
+            shape=[self.vocab_size + self.max_length, self.n_embed],
+            initializer=tf.keras.initializers.RandomNormal(stddev=self.weight_stddev),
+            trainable=True,
+            name="we"
+        )
+        super().build(input_shape)
         
-    def call(self, tokens, context, sequence_lengths):
+    def call(self, tokens, context, sequence_lengths, training=True):
         tokens_shape = tf.shape(tokens)
         batch_size, seq_dim = tokens_shape[0], tokens_shape[1]
         pos_values = get_pos_values(seq_dim, self.vocab_size)
-        pool_idx = tf.cast(tf.argmax(input=tf.cast(tf.equal(tokens[:,  0], self.clf_token), tf.float32), axis=1), tf.int32)
+        pool_idx = tf.cast(tf.argmax(input=tf.cast(tf.equal(tokens, self.clf_token), tf.float32), axis=1), tf.int32)
         tokens_with_pos = tf.stack((tokens, tf.tile(pos_values, [batch_size, 1])), 2)
 
         embed_weights = self.embed_dropout(self.embed_weights)
-        print("tokens shape", tokens.shape)
-        print("pos_values shape", pos_values.shape)
-        print("embed_weights shape", embed_weights.shape)
         h = embed(tokens_with_pos, embed_weights)
-        print("Embed output shape", h.shape)
         for block in self.blocks:
-            h = block(h)
+            h = maybe_recompute(block, do_recompute=self.do_recompute, training=training)(h)
         clf_h = tf.reshape(h, [-1, self.n_embed])  # [batch * seq_len, embed]
         clf_h = tf.gather(
             clf_h,

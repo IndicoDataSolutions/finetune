@@ -87,6 +87,12 @@ class BasePipeline(metaclass=ABCMeta):
         types, shapes = self._add_context_info_if_present(types, shapes)
         return ((types, tf.float32), (shapes, TS([self.target_dim])))
 
+    def keras_input_def(self):
+        types, shapes = self.feed_shape_type_def()
+        input_types = {**types[0], "length": tf.int32}
+        input_shapes = {**shapes[0], "length": tf.TensorShape([])}
+        return tf.nest.map_structure(lambda dtype, shape: tf.keras.Input(shape=shape, dtype=dtype), input_types, input_shapes)
+
     def zip_list_to_dict(self, X, Y=None, context=None):
         if Y is not None:
             Y = list(Y)

@@ -1,11 +1,5 @@
 import math
 import tensorflow as tf
-from itertools import zip_longest
-
-import tensorflow as tf
-from tensorflow.python.framework import ops
-from tensorflow.python.ops import math_ops
-from tensorflow.python.eager import context
 
 
 def warmup_cosine(x, warmup=0.002, *args):
@@ -32,3 +26,13 @@ schedules = {
     'none': lambda x, *args, **kwargs: x
 }
 
+class FinetuneKerasLRSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
+    def __init__(self, schedule: str, base_lr: float, total_steps: int, warmup: float=None):
+        self.schedule = schedules[schedule]
+        self.base_lr = base_lr
+        self.total_steps = total_steps
+        self.warmup = warmup
+        self.kwargs = {"warmup": warmup} if warmup is not None else {}
+
+    def __call__(self, step):
+        return self.base_lr * self.schedule(step / self.total_steps, **self.kwargs)

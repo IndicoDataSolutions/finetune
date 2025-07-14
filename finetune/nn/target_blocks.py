@@ -1,14 +1,19 @@
-from finetune.nn.crf import CRF
+from finetune.nn.crf import crf_log_likelihood, sequence_decode
 import tensorflow as tf
+from finetune.nn.nn_utils import ExtraScope
 
 
 
 class Perceptron(tf.keras.layers.Layer):
-    def __init__(self, n_targets, n_inputs, **kwargs):
+    def __init__(self, n_targets, **kwargs):
         super().__init__(**kwargs)
         self.n_targets = n_targets
-        self.w = self.add_weight(shape=(n_inputs, n_targets), initializer="random_normal", trainable=True)
-        self.b = self.add_weight(shape=(n_targets), initializer="zeros", trainable=True)
+
+    def build(self, input_shape):
+        self.w = self.add_weight(shape=(input_shape[-1], self.n_targets), initializer="random_normal", trainable=True)
+        self.b = self.add_weight(shape=(self.n_targets), initializer="zeros", trainable=True)
+        super().build(input_shape)
+
 
     def call(self, inputs):
         return tf.matmul(inputs, self.w) + self.b
@@ -124,29 +129,55 @@ def class_reweighted_grad(
         new_g = g * class_weights
         # This gets really badly autographed so we just need to use a float to cover these cases for now.
         ratio = tf.math.divide_no_nan(tf.norm(g), tf.norm(new_g)) * norm_grads_multiplier + (1 - norm_grads_multiplier)
-        return [new_g * ratio]
+        return [new_g * ratio, None, None]
 
     return tf.identity(logits), custom_grad_fn
 
 class SequenceLabeler(tf.keras.layers.Layer):
-    def __init__(self, n_targets, dropout_rate, use_crf, renorm_after_class_weights, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, n_targets, dropout_rate, use_crf, renorm_after_class_weights, name="sequence-labeler", **kwargs):
+        super().__init__(**kwargs, name=name)
         self.n_targets = n_targets
         self.dropout = tf.keras.layers.Dropout(dropout_rate)
-        # TODO: This one is going to be awkward for variable naming
-        self.dense = tf.keras.layers.Dense(n_targets)
-        self.crf = CRF(num_classes=n_targets, use_crf=use_crf)
+        # This extra scope is an unfortunate holdover from GPT when we had an extra bidirectional attention block.
+        self.dense = ExtraScope(tf.keras.layers.Dense(n_targets), "seq_lab_attn")
+        self.use_crf = use_crf
         self.renorm_after_class_weights = renorm_after_class_weights
 
-    def call(self, inputs):
+    def build(self, input_shape):
+        if self.use_crf:
+            self.transition_params = self.add_weight(
+                shape=(self.n_targets, self.n_targets),
+                # TODO: need to check what we have previously called this to make mapping easier
+                # And likely move it into target blocks to get the scopes right.
+                name="transition_matrix",
+                initializer="orthogonal",
+                trainable=True,
+                dtype=tf.float32
+            )
+        else:
+            self.transition_params = None
+        super().build(input_shape)
+
+    def call(self, inputs, training=False):
         logits = self.dense(inputs["sequence_features"])
         logits = tf.cast(logits, tf.float32)
         # CRF already outputs the format we need including probs, logits preds etc.
-        return self.crf(logits=logits, sequence_lengths=inputs["length"])
+        preds = None
+        probs = None
+        if not training:
+            preds, probs = sequence_decode(logits, self.transition_params, self.use_crf)
+        return {
+            "preds": preds,
+            "probas": probs,
+            "logits": logits,
+            "length": inputs["length"],
+            "transition_params": self.transition_params
+        }
 
     def compute_loss(self, layer_output, targets, class_weights):
         # For some reason, all finetune targets are floats. I think we get more type flexibility 
         # now so we should look at switching this to int when helpful.
+        logits = layer_output["logits"]
         targets = tf.cast(targets, dtype=tf.int32)
         if class_weights is not None:
             class_weights = tf.reshape(class_weights, [1, 1, -1])
@@ -156,10 +187,30 @@ class SequenceLabeler(tf.keras.layers.Layer):
             per_token_weights = tf.reduce_sum(
                 input_tensor=one_hot_class_weights, axis=-1, keepdims=True
             )
-            layer_output["logits"] = class_reweighted_grad(
+            logits = class_reweighted_grad(
                 # You cannot use keyword arguments here. But the error message is horribly written.
-                layer_output["logits"],
+                logits,
                 per_token_weights,
                 1.0 if self.renorm_after_class_weights else 0.0
             )
-        return self.crf.compute_loss(layer_output, targets)
+
+        if self.use_crf:
+            return tf.reduce_mean(
+                crf_log_likelihood(
+                    logits,
+                    targets,
+                    layer_output["length"],
+                    layer_output["transition_params"]
+                )
+            )
+        weights = tf.math.divide_no_nan(
+            tf.sequence_mask(
+                layer_output["length"],
+                maxlen=tf.shape(input=targets)[1],
+                dtype=tf.float32,
+            ),
+            tf.expand_dims(tf.cast(layer_output["length"], tf.float32), -1),
+        )
+        return tf.compat.v1.losses.sparse_softmax_cross_entropy(
+            targets, logits, weights=weights
+        )

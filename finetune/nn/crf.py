@@ -13,84 +13,52 @@ def viterbi_decode(score, transition_params):
             indices.
         viterbi_score: A float containing the score for the Viterbi sequence.
     """
-    trellis = tf.zeros_like(score)
-    backpointers = tf.zeros_like(score, dtype=tf.int32)
-    trellis[0] = score[0]
+    seq_len  = tf.shape(score)[0]
+    num_tags = tf.shape(score)[1]
+    trellis_ta = tf.TensorArray(dtype=score.dtype, size=seq_len)
+    backptrs_ta = tf.TensorArray(dtype=tf.int32,     size=seq_len)
+    trellis_ta  = trellis_ta.write(0, score[0])
+    backptrs_ta = backptrs_ta.write(0, tf.zeros([num_tags], tf.int32))
 
-    for t in range(1, score.shape[0]):
-        v = tf.expand_dims(trellis[t - 1], 1) + transition_params
-        trellis[t] = score[t] + tf.reduce_max(v, 0)
-        backpointers[t] = tf.argmax(v, 0)
+    for t in tf.range(1, seq_len):
+        prev = trellis_ta.read(t - 1)
+        v = tf.expand_dims(prev, 1) + transition_params
+        best_prev = tf.reduce_max(v, axis=0)
+        bp = tf.argmax(v, axis=0, output_type=tf.int32)
+        trellis_ta = trellis_ta.write(t, best_prev + score[t])
+        backptrs_ta = backptrs_ta.write(t, bp)
 
-    viterbi = [tf.argmax(trellis[-1])]
-    for bp in reversed(backpointers[1:]):
-        viterbi.append(bp[viterbi[-1]])
-    viterbi = tf.reverse(viterbi, axis=[0])
+    trellis = trellis_ta.stack()
+    backpointers = backptrs_ta.stack()
+    last_tag = tf.argmax(trellis[-1], axis=0, output_type=tf.int32)
+    path_ta = tf.TensorArray(tf.int32, size=seq_len)
+    tag = last_tag
+    for i in tf.range(seq_len - 1, -1, delta=-1):
+        path_ta = path_ta.write(i, tag)
+        tag = backpointers[i, tag]
+    viterbi_path = path_ta.stack()
+    return viterbi_path, tf.nn.softmax(trellis, axis=-1)
 
-    return viterbi, tf.nn.softmax(trellis, axis=-1)
-
+@tf.function
 def batch_viterbi_decode(logits, transition_matrix):
-    all_predictions = []
-    all_logits = []
-    for logit in logits:
-        viterbi_sequence, viterbi_logits = viterbi_decode(logit, transition_matrix)
-        all_predictions.append(viterbi_sequence)
-        all_logits.append(viterbi_logits)
-    return tf.stack(all_predictions, axis=0), tf.stack(all_logits, axis=0)
+    print("Logit type inside call", type(logits))
+    batch_size = tf.shape(logits)[0]
 
-def sequence_decode(logits, transition_matrix, sequence_length, use_crf):
+    paths_ta = tf.TensorArray(tf.int32,      size=batch_size)
+    probs_ta = tf.TensorArray(logits.dtype,  size=batch_size)
+
+    for b in tf.range(batch_size):
+        path, probs = viterbi_decode(logits[b], transition_matrix)
+        paths_ta = paths_ta.write(b, path)
+        probs_ta = probs_ta.write(b, probs)
+
+    return paths_ta.stack(), probs_ta.stack()
+
+def sequence_decode(logits, transition_matrix, use_crf):
     if not use_crf:
         return tf.argmax(input=logits, axis=-1), tf.nn.softmax(logits, -1)
-    return batch_viterbi_decode(logits, transition_matrix, sequence_length)
+    return batch_viterbi_decode(logits, tf.convert_to_tensor(transition_matrix))
         
-    
-class CRF(tf.keras.layers.Layer):
-    def __init__(self, num_classes: int, use_crf: bool = True, **kwargs):
-        super().__init__(**kwargs)
-        self.num_classes = num_classes
-        self.use_crf = use_crf
-        self.transition_params = self.add_weight(
-            shape=(self.num_classes, self.num_classes),
-            # TODO: need to check what we have previously called this to make mapping easier
-            # And likely move it into target blocks to get the scopes right.
-            name="transition_matrix",
-            initializer="orthogonal",
-        )
-
-    def call(self, logits: tf.Tensor, sequence_lengths: tf.Tensor, training: bool = False) -> dict[str, tf.Tensor]:
-        preds = None
-        probs = None
-        if not training:
-            preds, probs = sequence_decode(logits, self.transition_params, sequence_lengths, self.use_crf)
-        
-        return {
-            "preds": preds,
-            "probas": probs,
-            "logits": logits,
-            "sequence_lengths": sequence_lengths,
-            "transition_params": self.transition_params
-        }
-    
-    def compute_loss(self, layer_output: dict[str, tf.Tensor], targets: tf.Tensor) -> tf.Tensor:
-        if self.use_crf:
-            return crf_log_likelihood(
-                layer_output["logits"],
-                targets,
-                layer_output["sequence_lengths"],
-                layer_output["transition_params"]
-            )
-        weights = tf.math.divide_no_nan(
-            tf.sequence_mask(
-                layer_output["sequence_lengths"],
-                maxlen=tf.shape(input=targets)[1],
-                dtype=tf.float32,
-            ),
-            tf.expand_dims(tf.cast(layer_output["sequence_lengths"], tf.float32), -1),
-        )
-        return tf.compat.v1.losses.sparse_softmax_cross_entropy(
-            targets, layer_output["logits"], weights=weights
-        )
-
 
 # Everything below here is basically verbatim from tf_addons - If we find someone is maintaining this then we should use that instead 
 def crf_log_likelihood(
@@ -112,8 +80,6 @@ def crf_log_likelihood(
     Returns:
       log_likelihood: A [batch_size] `Tensor` containing the log-likelihood of
         each example, given the sequence of tag indices.
-      transition_params: A [num_tags, num_tags] transition matrix. This is
-          either provided by the caller or created in this function.
     """
     inputs = tf.convert_to_tensor(inputs)
     # cast type to handle different types
@@ -128,7 +94,7 @@ def crf_log_likelihood(
 
     # Normalize the scores to get the log-likelihood per example.
     log_likelihood = sequence_scores - log_norm
-    return log_likelihood, transition_params
+    return log_likelihood
 
 def crf_sequence_score(
     inputs: tf.Tensor,

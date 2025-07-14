@@ -22,12 +22,14 @@ def set_weights(model: tf.keras.Model, weights: dict[str, np.ndarray], all_vars:
             np_weight = np_weight[:all_vars[name].shape[0]]
         all_vars[name].assign(np_weight)
 
+
 def own_variables(layer):
     """Return weights that belong *directly* to `layer`."""
     children_weights = []
     for child in layer._layers:
         children_weights.extend(child.weights)
     return [v for v in layer.weights if not any(v is child_weight for child_weight in children_weights)]
+
 
 def get_fully_qualified_variable_paths(root: tf.keras.layers.Layer) -> dict[str, tf.Variable]:
     root_name = root.name
@@ -97,8 +99,6 @@ class Saver:
             variables_sv = dict()
 
         all_vars = get_fully_qualified_variable_paths(model)
-        print({k: v.shape for k, v in sorted(self.fallback.items())})
-        print({k: v.shape for k, v in sorted(all_vars.items())})
         for var_name in all_vars.keys():
             saved_var = None
             if var_name in variables_sv.keys():
@@ -111,9 +111,14 @@ class Saver:
                     saved_var = func(var_name, saved_var)
                 transformed_weights[var_name] = saved_var
             else:
+                print(f"Using default initializer for variable: {var_name}")
                 if var_name.startswith("model/featurizer"):
                     permitted = self.permit_uninitialized is not None and re.findall(self.permit_uninitialized, var_name)
                     if not permitted:
                         raise ValueError("Uninitialized featurizer variable {}".format(var_name))
+        for var_name in {**self.fallback, **variables_sv}.keys():
+            if var_name not in all_vars:
+                print(f"Variable {var_name} not found in all_vars")
+        print(f"loading {len(transformed_weights)} variables")
         set_weights(model, transformed_weights, all_vars)
 
