@@ -3,7 +3,7 @@ from finetune.base_models.gpt.featurizer import split_heads, merge_heads
 from finetune.util.shapes import shape_list, lengths_from_eos_idx
 from finetune.custom_ops import recursive_agg
 from finetune.base_models.gpt.featurizer import get_pos_values
-from finetune.optimizers.recompute_grads import recompute_grad
+#from finetune.optimizers.recompute_grads import recompute_grad
 
 import functools
 

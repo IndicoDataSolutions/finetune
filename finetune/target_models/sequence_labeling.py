@@ -11,14 +11,15 @@ import numpy as np
 from finetune.base import BaseModel
 from finetune.encoding.target_encoders import (
     SequenceLabelingEncoder,
-    SequenceMultiLabelingEncoder,
 )
 from finetune.nn.target_blocks import SequenceLabeler as SequenceLabelerBlock
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
 from finetune.encoding.input_encoder import get_spacy
 from finetune.input_pipeline import BasePipeline
-from finetune.util.metrics import sequences_overlap
 from finetune.encoding.input_encoder import tokenize_context
+
+def sequences_overlap(seq1: dict, seq2: dict):
+    return seq1["start"] <= seq2["end"] and seq1["end"] >= seq2["start"]
 
 
 class SequencePipeline(BasePipeline):
@@ -550,20 +551,10 @@ class SequenceLabeler(BaseModel):
                     start_idx, last_end
                 )
                 last_end = end_idx
-
-                if self.config.group_bio_tagging:
-                    group_prefix = ""
-                    if label[:3] == "BG-" or label[:3] == "IG-":
-                        group_prefix, label = label[:3], label[3:]
                 if self.config.bio_tagging:
                     bio_prefix = None
                     if label != self.config.pad_token:
                         bio_prefix, label = label[:2], label[2:]
-                if self.config.group_bio_tagging and label != self.config.pad_token:
-                    # Save the group prefix so the grouping target models can
-                    # extract grouping information down the line
-                    label = group_prefix + label
-
                 def _get_label(label):
                     if label[:3] == "BG-" or label[:3] == "IG-":
                         return label[3:]
@@ -576,17 +567,9 @@ class SequenceLabeler(BaseModel):
                     not doc_subseqs
                     or per_token
                     or (self.config.bio_tagging and bio_prefix == "B-")
-                    or (self.config.group_bio_tagging and group_prefix == "BG-")
                     or (
                         label != doc_labels[-1]
-                        and (
-                            # Merge spans if the labels are the same,
-                            # disregarding group BIO tags
-                            # This is safe as we already hard break on BG-, so
-                            # we will only be merging IG- tags
-                            not self.config.group_bio_tagging
-                            or _get_label(label) != _get_label(doc_labels[-1])
-                        )
+                        and _get_label(label) != _get_label(doc_labels[-1])
                     )
                 ):
                     assert start_idx <= end_idx, "Start: {}, End: {}".format(
@@ -627,7 +610,6 @@ class SequenceLabeler(BaseModel):
                     none_value=self.config.pad_token,
                     subtoken_predictions=self.config.subtoken_predictions,
                     bio_tagging=self.config.bio_tagging
-                    or self.config.group_bio_tagging,
                 )
                 if per_token:
                     doc_annotations.append(

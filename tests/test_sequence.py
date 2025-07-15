@@ -1,7 +1,6 @@
 import os
 import unittest
-import logging
-from copy import copy, deepcopy
+from copy import deepcopy
 from pathlib import Path
 import codecs
 import json
@@ -13,12 +12,10 @@ import gc
 # required for tensorflow logging control
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
-import pytest
 from pytest import approx
 
 import tensorflow as tf
 import numpy as np
-from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
 import requests
 from bs4 import BeautifulSoup as bs
@@ -26,9 +23,8 @@ from bs4.element import Tag
 
 from finetune import SequenceLabeler
 from finetune.base_models import GPT
-from finetune.config import get_config
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
-from finetune.util.metrics import (
+from sequence_metrics.metrics import (
     sequence_labeling_token_precision,
     sequence_labeling_token_recall,
     sequence_labeling_overlap_precision,
@@ -223,6 +219,7 @@ class TestSequenceLabeler(unittest.TestCase):
         self.model.fit(text * 10, labels * 10)
 
         predictions = self.model.predict(test_sequence)
+        print(predictions)
         self.assertTrue(1 <= len(predictions[0]) <= 3)
         self.assertTrue(any(pred["text"].strip() == "dog" for pred in predictions[0]))
 

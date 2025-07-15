@@ -4,26 +4,6 @@ import numpy as np
 
 from finetune.encoding.input_encoder import get_spacy
 
-
-def assign_associations(associations, none_value, idx_lookup):
-    candidates = dict()
-    for association in associations:
-        for bpe_idx, candidate_idx, candidate_label, candidate_prob in association:
-            if candidate_label == none_value:
-                continue
-            if idx_lookup[bpe_idx] not in candidates:
-                candidates[idx_lookup[bpe_idx]] = []
-            candidates[idx_lookup[bpe_idx]].append(
-                (idx_lookup[candidate_idx], candidate_label, candidate_prob)
-            )
-
-    # TODO some how sample these candidates eg maximum probabilities, to fit some schema
-    candidates = {
-        k: max(v, key=lambda x: x[2]) for k, v in candidates.items()
-    }  # for now just pick maximum prob
-    return candidates
-
-
 def _merge_confidences(annotation):
     """
     Collapse list of confidences down to a single mean confidence.
@@ -60,7 +40,6 @@ def finetune_to_indico_sequence(
     probs=None,
     none_value=None,
     subtoken_predictions=False,
-    associations=None,
     bio_tagging=False,
 ):
     """
@@ -95,7 +74,7 @@ def finetune_to_indico_sequence(
     else:
         spacy_docs = [None] * len(raw_texts)
     loop_vals = zip(raw_texts, spacy_docs, subseqs, labels, probs or [None] * len(raw_texts))
-    for doc_idx, (raw_text, spacy_tokens, doc_seq, label_seq, prob_seq) in enumerate(loop_vals):
+    for raw_text, spacy_tokens, doc_seq, label_seq, prob_seq in loop_vals:
         if not subtoken_predictions:
             spacy_token_starts = np.asarray([token.idx for token in spacy_tokens])
             spacy_token_ends = np.asarray([token.idx + len(token.text) for token in spacy_tokens])
@@ -104,9 +83,7 @@ def finetune_to_indico_sequence(
         raw_annotation_end = 0
         raw_annotation_start = 0
         subtoken_to_label_idx = []
-        for i, (sub_str, raw_label, confidences) in enumerate(
-            zip(doc_seq, label_seq, prob_seq or [None] * len(doc_seq))
-        ):
+        for sub_str, raw_label, confidences in zip(doc_seq, label_seq, prob_seq or [None] * len(doc_seq)):
             subtoken_to_label_idx.append(len(doc_annotations))
             if not isinstance(raw_label, tuple):
                 multilabel = False

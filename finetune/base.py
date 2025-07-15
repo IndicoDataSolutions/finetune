@@ -115,19 +115,8 @@ class BaseModel(object, metaclass=ABCMeta):
                 continue
             elif k in config.base_model.settings:
                 config[k] = config.base_model.settings[k]
-
-        model_supports_fp16 = issubclass_or_instance(config.base_model, (_BaseBert, _ModernBertBase))
-        # This has to be here before optimal_params are derived because some are dependant on these values.
-        if (not model_supports_fp16 or no_fp16) and (
-            config.float_16_predict == True or config.mixed_precision == True
-        ):
-            LOGGER.warning(
-                "float_16_predict and mixed_precision only supported by bert based models and Volta or newer GPUs"
-            )
-            config.float_16_predict = False
-            config.mixed_precision = False
-
-        if (not model_supports_fp16 or no_fp16) and "fp16" in config.optimize_for:
+ 
+        if no_fp16 and "fp16" in config.optimize_for:
             new_optimize_for = config.optimize_for.replace("_fp16", "")
             LOGGER.warning(
                 "optimize_for was set to {} but fp16 is not supported by this gpu so falling back to {}".format(
@@ -253,21 +242,39 @@ class BaseModel(object, metaclass=ABCMeta):
                     }
                 }
             ),
-            jit_compile=self.config.xla,
-            run_eagerly=False
+            jit_compile=self.config.xla, # TODO: look into why this is slow.
+            run_eagerly=False,
+            auto_scale_loss=True
         )
-        self.model.fit(datasets["train_dataset"], epochs=self.config.n_epochs)
+        # Because the dataset is already repeated n_epoch times, we need to pass steps_per_epoch to the fit method.
+        self.model.fit(
+            datasets["train_dataset"],
+            epochs=self.config.n_epochs,
+            steps_per_epoch=steps_per_epoch
+        )
         self._trained = True
+
+
 
     @property
     def model(self) -> tf.keras.Model:
+        
         if self._model is None:
+            # We either need to explictly handle the dtype policies in every layer or deal with this hack to set and unset
+            # our desired policy. Setting dtype policy on the model does not seem to cascade to lower layers.
+            initial_dtype_policy = tf.keras.config.dtype_policy()
+            dtype_policy = "float32"
+            if self.config.float_16_predict or self.config.mixed_precision:
+                # Technically this is a behaviour change but mixed precision should be generally fine.
+                dtype_policy = "mixed_float16"    
+            tf.keras.config.set_dtype_policy(dtype_policy)
             self._model = self._get_keras_model()
             # Does a symbolic first pass to build the model and give us variables we can initialize.
             # Keras does not have a post-build hook option because it can be run in eager and shapes are calculated alongside the first
             # call. Therefore we need to pass either a real tensor or this symbolic tensor to get variables.
             self._model(self.input_pipeline.keras_input_def())
             self.saver.initialize_model(self._model)
+            tf.keras.config.set_dtype_policy(initial_dtype_policy)
         return self._model
 
     def _get_keras_model(self):
@@ -631,8 +638,6 @@ class BaseModel(object, metaclass=ABCMeta):
             pred_iterator, chunk_alignment_iterator
         ):
             normal_pred = pred["preds"]
-            if not hasattr(self, "multi_label"):
-                normal_pred = np.expand_dims(normal_pred, 0)
             label_seq = self.input_pipeline.label_encoder.inverse_transform(normal_pred)
             proba_seq = pred["probas"]
             token_end_idx = arr_enc.token_ends

@@ -35,4 +35,6 @@ class FinetuneKerasLRSchedule(tf.keras.optimizers.schedules.LearningRateSchedule
         self.kwargs = {"warmup": warmup} if warmup is not None else {}
 
     def __call__(self, step):
-        return self.base_lr * self.schedule(step / self.total_steps, **self.kwargs)
+        lr = self.base_lr * self.schedule(step / self.total_steps, **self.kwargs)
+        tf.print("lr", lr, step, step / self.total_steps)
+        return tf.maximum(lr, 0.0)

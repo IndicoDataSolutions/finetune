@@ -16,9 +16,8 @@ def get_keras_model(
     target_dim: int,
     label_encoder: BaseTargetEncoder,
     config: Settings,
-    **kwargs
+    **model_kwargs
 ):
-    
     
     class FinetuneModel(tf.keras.Model):
         def __init__(self, *args, name="model", **kwargs):
@@ -57,14 +56,19 @@ def get_keras_model(
         def train_step(self, data):
             x, y = data
 
+            tf.print("Train x", x)
+            tf.print("Train y", y)
+
             with tf.GradientTape() as tape:
                 y_pred = self(x, training=True)
                 loss = self.compute_loss(y=y, y_pred=y_pred)
             # Compute gradients
             trainable_vars = self.trainable_variables
+            # This is automatically stubbed out for default optimizers without scaling.
+            loss = self.optimizer.scale_loss(loss)
             gradients = tape.gradient(loss, trainable_vars)
             # Update weights
             self.optimizer.apply_gradients(zip(gradients, trainable_vars))
             return {"loss": loss}
             
-    return FinetuneModel(**kwargs)
+    return FinetuneModel(**model_kwargs)

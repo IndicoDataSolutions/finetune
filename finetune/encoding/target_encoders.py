@@ -1,10 +1,8 @@
 from abc import ABCMeta
 import logging
-import json
 
-import pandas as pd
 import numpy as np
-from sklearn.preprocessing import LabelEncoder, MultiLabelBinarizer, OrdinalEncoder
+from sklearn.preprocessing import LabelEncoder, MultiLabelBinarizer
 
 LOGGER = logging.getLogger("finetune")
 
@@ -17,43 +15,6 @@ class BaseEncoder(metaclass=ABCMeta):
     def target_dim(self):
         return len(self.target_labels) if self.target_labels is not None else None
 
-
-class RegressionEncoder(BaseEncoder):
-    def __init__(self):
-        self.num_outputs = None
-
-    def fit(self, x):
-        self.fit_transform(x)
-        return self
-
-    def transform(self, x):
-        output = np.array(x)
-        rank = len(output.shape)
-        if rank == 1:
-            return np.expand_dims(output, 1)  # for single output value regression.
-        if rank == 2:
-            return output
-        raise ValueError("Unresolvable shape: {}. Must be able to fit a format [batch, n_outputs]".format(output.shape))
-
-    def fit_transform(self, x):
-        output = self.transform(x)
-        self.num_outputs = output.shape[1]
-        return output
-
-    def inverse_transform(self, y):
-        y = np.array(y)
-        if y.shape[1] == 1:
-            return np.squeeze(y, 1)
-        else:
-            return y
-
-    @property
-    def target_dim(self):
-        return self.num_outputs
-
-    @property
-    def target_labels(self):
-        raise ValueError
 
 
 class OneHotLabelEncoder(LabelEncoder, BaseEncoder):
@@ -81,106 +42,6 @@ class OneHotLabelEncoder(LabelEncoder, BaseEncoder):
                     break
         return ys
 
-
-class NoisyLabelEncoder(LabelEncoder, BaseEncoder):
-
-    # Overriding the fit method...
-    # Fit method may not be necessary at all if pandas is
-    # consistent about how it chooses columns
-    # TODO: Check
-    def fit(self, y):
-        self.classes_ = list(pd.DataFrame(y[:1]).columns)
-        return self
-
-    def transform(self, y):
-        return pd.DataFrame(y, columns=self.classes_, dtype=float).values
-
-    #TODO: Make output dataframe consistent with self.target_labels
-    # and self.classes_
-    def fit_transform(self, labels):
-        self.fit(labels)
-        return self.transform(labels)
-
-    def inverse_transform(self, probabilities):
-        dataframe = pd.DataFrame(probabilities, columns=self.classes_)
-        return list(dataframe.T.to_dict().values())
-
-class Seq2SeqLabelEncoder(BaseEncoder):
-    def __init__(self, input_pipeline, max_len, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.input_pipeline = input_pipeline
-        self.max_len = max_len
-
-    def fit(self, y):
-        return
-
-    @property
-    def encoder(self):
-        return self.input_pipeline.text_encoder
-
-    @property
-    def target_dim(self):
-        return self.encoder.vocab_size
-
-    def fit_transform(self, y):
-        return self.transform(y)
-
-    def transform(self, y):
-        output = []
-        for y_i in y:
-            out = self.encoder.encode_multi_input([y_i], max_length=self.max_len, include_bos_eos=True).token_ids
-            output.append((out, len(out)))
-        return output
-
-    def inverse_transform(self, y):
-        return [self.encoder.decode(y_i.tolist()) for y_i in y]
-
-class OrdinalRegressionEncoder(OrdinalEncoder, BaseEncoder):
-
-    def __init__(self):
-        self.num_outputs = None
-        super().__init__()
-
-    def _force_2d(self, x):
-        return np.array(x, dtype=np.int32).reshape(-1, 1)
-
-    def fit(self, x):
-        super().fit(self._force_2d(x))
-        self.num_outputs = len(self.categories_[0]) - 1
-        return self
-
-    def transform(self, x):
-        labels = super().transform(self._force_2d(x)).astype(np.int32)
-        labels = self.rank_to_one_hot(labels)
-        return labels
-
-    def fit_transform(self, x):
-        self.fit(x)
-        return self.transform(x)
-
-    def rank_to_one_hot(self, x):
-        # changes a one-variable rank into an array of 1s and 0s defining the target output of each threshold
-        one_hot = np.zeros((len(x), self.num_outputs), dtype=np.float32)
-        for i, (rank,) in enumerate(x):
-            one_hot[i, :rank] = 1
-        return one_hot
-
-    def inverse_transform(self, y):
-        y = np.array(y)
-        y = y > 0.5
-        rank = np.sum(y, axis=1)
-        rank = np.expand_dims(rank, 1)
-        y = super().inverse_transform(rank)
-        y = np.squeeze(y)
-        return y
-
-    @property
-    def target_dim(self):
-        return self.num_outputs
-
-    @property
-    def target_labels(self):
-        raise ValueError
 
 class SequenceLabelingEncoder(BaseEncoder):
     def __init__(self, pad_token, bio_tagging=False, group_tagging=False):
@@ -284,44 +145,6 @@ class SequenceLabelingEncoder(BaseEncoder):
         # TODO: update when finetune_to_indico is removed
         return [self.classes_[l] for l in y]
 
-class SequenceMultiLabelingEncoder(SequenceLabelingEncoder):
-    def transform(self, out, labels):
-        labels, _ = self.pre_process_label(out, labels)
-        labels_out = [[0 for _ in self.classes_] for _ in out.tokens]
-        for i, (start, end) in enumerate(zip(out.token_starts, out.token_ends)):
-            for label in labels:
-                if label["start"] <= start < label["end"] or label["start"] < end <= label["end"]:
-                    if label["label"] not in self.lookup:
-                        LOGGER.warning(
-                            "Attempting to encode unknown labels, ignoring for now but this will likely not "
-                            "result in desirable behaviour"
-                        )
-                    else:
-                        labels_out[i][self.lookup[label["label"]]] = 1
-        return labels_out
-
-    def inverse_transform(self, y):
-        # TODO: update when finetune_to_indico is removed
-        return [tuple(c for c, l_i in zip(self.classes_, l) if l_i) for l in y]
-
-
 class MultilabelClassificationEncoder(MultiLabelBinarizer, BaseEncoder):
     pass
 
-
-class IDEncoder(BaseEncoder):
-
-    def __init__(self):
-        self.classes_ = [0]
-
-    def transform(self, x):
-        return x
-
-    def fit(self, x):
-        return x
-
-    def fit_transform(self, x):
-        return x
-
-    def inverse_transform(self, x):
-        return x

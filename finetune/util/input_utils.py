@@ -1,5 +1,3 @@
-import math
-
 import tensorflow as tf
 
 from finetune.util.timing import ProgressBar
@@ -85,8 +83,6 @@ def batch_dataset(
             .repeat(n_epochs)
             .prefetch(tf.data.experimental.AUTOTUNE)
         )
-
-    return batched_dataset
 
 
 def wrap_tqdm(

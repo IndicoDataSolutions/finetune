@@ -1,11 +1,9 @@
 """
 Utilities for dealing with class imbalance
 """
-import tensorflow as tf
 import numpy as np
 from collections import Counter
 
-from finetune.encoding.target_encoders import LabelEncoder
 from finetune.errors import FinetuneError
 
 

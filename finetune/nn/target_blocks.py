@@ -196,8 +196,10 @@ class SequenceLabeler(tf.keras.layers.Layer):
             )
 
         if self.use_crf:
+            tf.print("targets", targets)
+            tf.print("logits", logits)
             return tf.reduce_mean(
-                crf_log_likelihood(
+                -crf_log_likelihood(
                     logits,
                     targets,
                     layer_output["length"],
@@ -212,6 +214,7 @@ class SequenceLabeler(tf.keras.layers.Layer):
             ),
             tf.expand_dims(tf.cast(layer_output["length"], tf.float32), -1),
         )
+
         return tf.compat.v1.losses.sparse_softmax_cross_entropy(
             targets, logits, weights=weights
         )
