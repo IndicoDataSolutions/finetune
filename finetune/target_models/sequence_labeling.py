@@ -22,9 +22,8 @@ from finetune.encoding.input_encoder import tokenize_context
 
 
 class SequencePipeline(BasePipeline):
-    def __init__(self, config, multi_label):
+    def __init__(self, config):
         super(SequencePipeline, self).__init__(config)
-        self.multi_label = multi_label
         self.empty_counts = {"empty": 0, "labeled": 0}
 
     def _update_empty_ratio(self, empty):
@@ -47,9 +46,7 @@ class SequencePipeline(BasePipeline):
         If Y is provided, filter out chunks that do not contain any positive
         examples (labels) at a ratio determined by self.config.max_empty_chunk_ratio
         """
-        pad_token = (
-            [self.config.pad_token] if self.multi_label else self.config.pad_token
-        )
+        pad_token = self.config.pad_token
         out_gen = self._text_to_ids(X, pad_token=pad_token)
 
         for out in out_gen:
@@ -70,6 +67,7 @@ class SequencePipeline(BasePipeline):
                 empty = len(filtered_labels) == 0
                 if (
                     self.config.filter_empty_examples
+
                     or self.empty_ratio > self.config.max_empty_chunk_ratio
                 ) and empty:
                     continue
@@ -81,11 +79,7 @@ class SequencePipeline(BasePipeline):
         for doc, target_arr in encoded_dataset:
             target_arr = np.asarray(target_arr)
             decoded_targets = self.label_encoder.inverse_transform(target_arr)
-            if self.multi_label:
-                for label in decoded_targets:
-                    counter.update(label)
-            else:
-                counter.update(decoded_targets)
+            counter.update(decoded_targets)
         return counter
 
     def feed_shape_type_def(self):
@@ -93,14 +87,9 @@ class SequencePipeline(BasePipeline):
         types = {"tokens": tf.int32}
         shapes = {"tokens": TS([None])}
         types, shapes = self._add_context_info_if_present(types, shapes)
-        target_shape = (
-            [None, self.label_encoder.target_dim] if self.multi_label else [None]
-        )
-        return ((types, tf.float32), (shapes, TS(target_shape)))
+        return ((types, tf.float32), (shapes, TS([None])))
 
     def _target_encoder(self):
-        if self.multi_label:
-            return SequenceMultiLabelingEncoder(pad_token=self.config.pad_token)
         return SequenceLabelingEncoder(
             pad_token=self.config.pad_token, bio_tagging=self.config.bio_tagging
         )
@@ -224,11 +213,10 @@ class SequenceLabeler(BaseModel):
 
     def _get_input_pipeline(self):
         return SequencePipeline(
-            config=self.config, multi_label=self.config.multi_label_sequences
+            config=self.config
         )
 
     def _initialize(self):
-        self.multi_label = self.config.multi_label_sequences
         return super()._initialize()
 
     def finetune(
@@ -237,7 +225,6 @@ class SequenceLabeler(BaseModel):
         Y=None,
         context=None,
         update_hook=None,
-        log_hooks=None,
         X_partial=None,
         Y_partial=None,
     ):
@@ -271,7 +258,7 @@ class SequenceLabeler(BaseModel):
             model_copy.config.auto_negative_sampling = False
             # Cannot have anything that changes pred format here.
             model_copy.config.predict_chunk_markers = False
-            model_copy.finetune(Xs, Y=Y, context=context, update_hook=update_hook)
+            model_copy.finetune(Xs, Y=Y, context=context)
             cleanup_sessions()
             initial_run_preds = []
 
@@ -323,7 +310,7 @@ class SequenceLabeler(BaseModel):
                 self.config.max_empty_chunk_ratio = 0.0
 
         return super().finetune(
-            Xs, Y=Y, context=context, update_hook=update_hook, log_hooks=log_hooks
+            Xs, Y=Y, context=context, update_hook=update_hook
         )
 
     def _pre_chunk_document(
@@ -631,8 +618,6 @@ class SequenceLabeler(BaseModel):
                     prob_dicts.append(
                         dict(zip(self.input_pipeline.label_encoder.classes_, probs))
                     )
-                    if self.multi_label:
-                        del prob_dicts[-1][self.config.pad_token]
 
                 _, doc_annotations_sample = finetune_to_indico_sequence(
                     raw_texts=[raw_text[doc_idx]],

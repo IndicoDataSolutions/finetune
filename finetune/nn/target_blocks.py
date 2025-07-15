@@ -177,6 +177,7 @@ class SequenceLabeler(tf.keras.layers.Layer):
     def compute_loss(self, layer_output, targets, class_weights):
         # For some reason, all finetune targets are floats. I think we get more type flexibility 
         # now so we should look at switching this to int when helpful.
+        print("output", layer_output["logits"].shape, layer_output["length"].shape, "targets", targets.shape)
         logits = layer_output["logits"]
         targets = tf.cast(targets, dtype=tf.int32)
         if class_weights is not None:

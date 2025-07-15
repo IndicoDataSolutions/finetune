@@ -35,8 +35,6 @@ from finetune.util.metrics import (
     sequence_labeling_overlap_recall,
 )
 
-SKIP_LM_TESTS = get_config().base_model.is_bidirectional
-
 
 class TestSequenceLabeler(unittest.TestCase):
 
@@ -90,7 +88,7 @@ class TestSequenceLabeler(unittest.TestCase):
 
     def default_config(self, **kwargs):
         d = dict(
-            base_model=GPT, batch_size=2, max_length=256, lm_loss_coef=0.0, val_size=0
+            base_model=GPT, batch_size=2, max_length=256
         )
         d.update(**kwargs)
         return d
@@ -103,45 +101,6 @@ class TestSequenceLabeler(unittest.TestCase):
             self.texts, self.labels = json.load(fp)
 
         self.model = SequenceLabeler(**self.default_config())
-
-    @pytest.mark.skipif(
-        SKIP_LM_TESTS, reason="Bidirectional models do not yet support LM functions"
-    )
-    def test_fit_lm_only(self):
-        """
-        Ensure model training does not error out
-        Ensure model returns predictions
-        """
-        raw_docs = ["".join(text) for text in self.texts]
-        texts, annotations = finetune_to_indico_sequence(
-            raw_docs, self.texts, self.labels, none_value=self.model.config.pad_token
-        )
-        train_texts, test_texts, train_annotations, test_annotations = train_test_split(
-            texts, annotations, test_size=0.1
-        )
-        self.model.fit(train_texts)
-        self.model.fit(train_texts, train_annotations)
-        predictions = self.model.predict(test_texts)
-        probas = self.model.predict_proba(test_texts)
-        self.assertIsInstance(probas, list)
-        self.assertIsInstance(probas[0], list)
-        self.assertIsInstance(probas[0][0], dict)
-        self.assertIsInstance(probas[0][0]["confidence"], dict)
-        token_precision = sequence_labeling_token_precision(
-            test_annotations, predictions
-        )
-        token_recall = sequence_labeling_token_recall(test_annotations, predictions)
-        overlap_precision = sequence_labeling_overlap_precision(
-            test_annotations, predictions
-        )
-        overlap_recall = sequence_labeling_overlap_recall(test_annotations, predictions)
-        self.assertIn("Named Entity", token_precision)
-        self.assertIn("Named Entity", token_recall)
-        self.assertIn("Named Entity", overlap_precision)
-        self.assertIn("Named Entity", overlap_recall)
-        self.model.save(self.save_file)
-        model = SequenceLabeler.load(self.save_file)
-        predictions = model.predict(test_texts)
 
     def test_fit_predict(self):
         """
@@ -307,32 +266,6 @@ class TestSequenceLabeler(unittest.TestCase):
         predictions = self.model.predict(test_sequence)
         self.assertEqual(len(predictions[0]), 20)
         self.assertTrue(any(pred["text"].strip() == "dog" for pred in predictions[0]))
-
-    def test_fit_predict_multi_model(self):
-        """
-        Ensure model training does not error out
-        Ensure model returns predictions
-        """
-        self.model = SequenceLabeler(
-            batch_size=2, max_length=256, lm_loss_coef=0.0, multi_label_sequences=True
-        )
-        raw_docs = ["".join(text) for text in self.texts]
-        texts, annotations = finetune_to_indico_sequence(
-            raw_docs, self.texts, self.labels, none_value=self.model.config.pad_token
-        )
-        train_texts, test_texts, train_annotations, _ = train_test_split(
-            texts, annotations, test_size=0.1
-        )
-        self.model.fit(train_texts, train_annotations)
-        self.model.predict(test_texts)
-        probas = self.model.predict_proba(test_texts)
-        self.assertIsInstance(probas, list)
-        self.assertIsInstance(probas[0], list)
-        self.assertIsInstance(probas[0][0], dict)
-        self.assertIsInstance(probas[0][0]["confidence"], dict)
-        self.model.save(self.save_file)
-        model = SequenceLabeler.load(self.save_file)
-        model.predict(test_texts)
 
     def test_pred_alignment(self):
         model = SequenceLabeler(subtoken_predictions=True)
@@ -636,8 +569,6 @@ class TestSequenceLabelerNoCRF(TestSequenceLabeler):
             base_model=GPT,
             batch_size=2,
             max_length=256,
-            lm_loss_coef=0.0,
-            val_size=0,
             crf_sequence_labeling=False,
         )
         d.update(**kwargs)

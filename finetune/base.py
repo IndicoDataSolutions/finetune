@@ -138,8 +138,6 @@ class BaseModel(object, metaclass=ABCMeta):
 
         overrides = config.base_model.get_optimal_params(config)
         for ak in auto_keys:
-            if ak in ["val_size", "use_gpu_crf_predict"]:
-                continue  # this auto is resolved after data is provided.
             if ak not in overrides:
                 raise ValueError("There is no auto setting for {}".format(ak))
             config[ak] = overrides[ak]
@@ -159,13 +157,7 @@ class BaseModel(object, metaclass=ABCMeta):
         return config
 
     def validate_config(self):
-        if (
-            self.config.num_layers_trained != self.config.n_layer
-            and self.config.train_embeddings
-        ):
-            raise ValueError(
-                "If you are only finetuning a subset of the layers, you cannot finetune embeddings."
-            )
+        pass
 
     @abstractmethod
     def _get_input_pipeline(self):
@@ -218,7 +210,6 @@ class BaseModel(object, metaclass=ABCMeta):
         Y=None,
         context=None,
         update_hook=None,
-        log_hooks=None,
         force_build_lm=False,
     ):
         if callable(Xs):
@@ -233,14 +224,6 @@ class BaseModel(object, metaclass=ABCMeta):
                 zipped_data_list, input_mode=InputMode.TRAIN, update_hook=update_hook
             )
 
-        if self.config.keep_best_model:
-            if self.config.val_size <= 10:
-                tf.compat.v1.logging.warning(
-                    "Early stopping / keeping best model with a validation size of {} is likely to case undesired results".format(
-                        self.config.val_size
-                    )
-                )
-
         force_build_lm = Y is None or force_build_lm
 
         steps_per_epoch = self._n_steps(
@@ -251,22 +234,29 @@ class BaseModel(object, metaclass=ABCMeta):
         num_steps = steps_per_epoch * self.config.n_epochs
         # TODO: figure out of vector L2 is necessary and create a subclass optimizer if it is.
         self.model.compile(
-            optimizer=tf.keras.optimizers.AdamW(
-                learning_rate=FinetuneKerasLRSchedule(
-                    schedule=self.config.lr_schedule,
-                    base_lr=self.config.lr,
-                    total_steps=num_steps,
-                    warmup=self.config.lr_warmup,
-                ),
-                weight_decay=self.config.l2_reg,
-                beta_1=self.config.b1,
-                beta_2=self.config.b2,
-                epsilon=self.config.epsilon,
+            optimizer=tf.keras.optimizers.get(
+                {
+                    "class_name": self.config.optimizer,
+                    "config": {
+                        "learning_rate": FinetuneKerasLRSchedule(
+                            schedule=self.config.lr_schedule,
+                            base_lr=self.config.lr,
+                            total_steps=num_steps,
+                            warmup=self.config.lr_warmup,
+                        ),
+                        "weight_decay": self.config.l2_reg,
+                        "beta_1": self.config.b1,
+                        "beta_2": self.config.b2,
+                        "epsilon": self.config.epsilon,
+                        "clipnorm": self.config.max_grad_norm,
+                        "gradient_accumulation_steps": self.config.accum_steps if self.config.accum_steps > 1 else None,
+                    }
+                }
             ),
-            jit_compile=False,
+            jit_compile=self.config.xla,
             run_eagerly=False
         )
-        self.model.fit(datasets["train_dataset"](), epochs=self.config.n_epochs)
+        self.model.fit(datasets["train_dataset"], epochs=self.config.n_epochs)
         self._trained = True
 
     @property
@@ -339,13 +329,13 @@ class BaseModel(object, metaclass=ABCMeta):
             total=length, desc="Inference", update_hook=update_hook
         )
         output_list = []
-        for batch in input_fn():
+        for batch in input_fn:
             preds = model(batch, training=False)
             pred_numpy = {k: v.numpy() for k, v in preds.items()}
             batch_size = batch["tokens"].shape[0]
             # Items without a batch dim we include in all pred batches. In practice this is limited to just transition params
-            # but we can use it for anything we like going forwards.
-            not_batched = {k for k, v in pred_numpy.items() if v.shape[0] != batch_size}
+            # but we include the shape check just to prevent errors if anything else sneaks through.
+            not_batched = {k for k, v in pred_numpy.items() if v.shape[0] != batch_size or k == "transition_params"}
             for i in range(batch_size):
                 progress.update(i)
                 step_value = {k: pred_numpy[k] if k in not_batched else pred_numpy[k][i] for k in pred_numpy}

@@ -10,42 +10,6 @@ class InputMode:
     TRAIN = "train"
 
 
-def _integer_val_size(val_size, dataset_size):
-    if isinstance(val_size, float):
-        return int(val_size * dataset_size)
-    return val_size
-
-
-def validation_settings(
-    dataset_size, batch_size, val_size, val_interval, keep_best_model
-):
-    """
-    Auto-select reasonable validation settings
-    """
-    if val_size is not None and val_interval is not None:
-        return (_integer_val_size(val_size, dataset_size), val_interval)
-
-        # Auto-select reasonable validation size
-    if val_size == "auto":
-        if dataset_size < 50 and not keep_best_model:
-            val_size = 0
-        else:
-            val_size = max(5, int(0.05 * dataset_size))
-            val_size = min(100, val_size)
-    else:
-        val_size = _integer_val_size(val_size, dataset_size)
-
-        # Auto-select reasonable validation interval
-    if val_interval is None:
-        # sys.maxsize corresponds to never running validation
-        # and is used when val_size is set to 0
-        val_interval = 4 * int(math.ceil(val_size / batch_size)) or None
-    else:
-        val_interval = int(val_interval)
-
-    return int(val_size), val_interval
-
-
 def has_targets(generator):
     sample = next(iter(generator()))
     return isinstance(sample, tuple) and len(sample) == 2
@@ -59,14 +23,14 @@ def add_length(x, y=None):
 
 # TODO: we no longer need the dataset as a function, we can simplify this considerably.
 def batch_dataset(
-    dataset,
-    batch_size,
-    shapes,
-    max_length,
-    n_epochs=1,
-    shuffle=False,
-    table_batching=False,
-    random_seed=42,
+    dataset: tf.data.Dataset,
+    batch_size: int,
+    shapes: dict[str, tf.TensorShape] | tuple[dict[str, tf.TensorShape], dict[str, tf.TensorShape]],
+    max_length: int,
+    n_epochs: int = 1,
+    shuffle: bool = False,
+    table_batching: bool = False,
+    random_seed: int = 42,
 ):
     if isinstance(shapes, tuple):
         shapes = ({**shapes[0], "length": tf.TensorShape([])}, shapes[1])
@@ -78,51 +42,49 @@ def batch_dataset(
             shapes, tuple
         ), "You cannot use table batching to predict on tables as order is not guarenteed"
 
-        def batched_dataset():
-            return (
-                dataset()
-                .map(add_length)
-                .shuffle(500 if shuffle else 1, seed=random_seed)
-                # When we update to tf.2.13 this will change to be a method on the dataset.
-                .apply(
-                    tf.data.experimental.bucket_by_sequence_length(
-                        element_length_func=(
-                            lambda item, *_: tf.cast(
-                                tf.maximum(
-                                    tf.reduce_sum(
-                                        item["context"][:, 0]
-                                        - item["context"][:, 2]
-                                        + 1
-                                    ),
-                                    tf.reduce_sum(
-                                        item["context"][:, 1]
-                                        - item["context"][:, 3]
-                                        + 1
-                                    ),
+        return (
+            dataset
+            .map(add_length)
+            .shuffle(500 if shuffle else 1, seed=random_seed)
+            # When we update to tf.2.13 this will change to be a method on the dataset.
+            .apply(
+                tf.data.experimental.bucket_by_sequence_length(
+                    element_length_func=(
+                        lambda item, *_: tf.cast(
+                            tf.maximum(
+                                tf.reduce_sum(
+                                    item["context"][:, 0]
+                                    - item["context"][:, 2]
+                                    + 1
                                 ),
-                                tf.int32,
-                            )
-                        ),
-                        bucket_boundaries=[max_length],
-                        bucket_batch_sizes=[batch_size, 1],
-                        padded_shapes=shapes,
-                        drop_remainder=False,
-                    )
+                                tf.reduce_sum(
+                                    item["context"][:, 1]
+                                    - item["context"][:, 3]
+                                    + 1
+                                ),
+                            ),
+                            tf.int32,
+                        )
+                    ),
+                    bucket_boundaries=[max_length],
+                    bucket_batch_sizes=[batch_size, 1],
+                    padded_shapes=shapes,
+                    drop_remainder=False,
                 )
-                .repeat(n_epochs)
-                .prefetch(tf.data.experimental.AUTOTUNE)
             )
+            .repeat(n_epochs)
+            .prefetch(tf.data.experimental.AUTOTUNE)
+        )
 
     else:
-        def batched_dataset():
-            return (
-                dataset()
-                .map(add_length)
-                .shuffle(500 if shuffle else 1, seed=random_seed)
-                .padded_batch(batch_size, padded_shapes=shapes, drop_remainder=False)
-                .repeat(n_epochs)
-                .prefetch(tf.data.experimental.AUTOTUNE)
-            )
+        return (
+            dataset
+            .map(add_length)
+            .shuffle(500 if shuffle else 1, seed=random_seed)
+            .padded_batch(batch_size, padded_shapes=shapes, drop_remainder=False)
+            .repeat(n_epochs)
+            .prefetch(tf.data.experimental.AUTOTUNE)
+        )
 
     return batched_dataset
 
@@ -131,41 +93,29 @@ def wrap_tqdm(
     gen,
     mode,
     n_epochs,
-    val_size,
     dataset_size,
     current_epoch_offset=0,
     total_epoch_offset=0,
-    skip_val=False,
     quiet=False,
     update_hook=None,
 ):
-    assert mode in {"train", "predict", "evaluate"}
+    assert mode in {"train", "predict"}
     if mode == "predict":
         return gen  # tqdm is handled elsewhere (not sure why)
 
     try:
         total = len(gen)
     except:
-        if mode == "train":
-            total = dataset_size
-        else:
-            total = val_size
-
+        total = dataset_size
     epoch = 1
 
     def internal_gen():
         nonlocal epoch
         current_epoch = (epoch - 1) % n_epochs + 1
         it = iter(gen())
-        if mode == "train":
-            desc = "Epoch {}/{}".format(
-                current_epoch + current_epoch_offset, n_epochs + total_epoch_offset
-            )
-        else:
-            desc = "Validation"
-        if skip_val:
-            for _, i in zip(range(val_size), it):
-                yield i
+        desc = "Epoch {}/{}".format(
+            current_epoch + current_epoch_offset, n_epochs + total_epoch_offset
+        )
         for i in ProgressBar(
             it,
             desc=desc,

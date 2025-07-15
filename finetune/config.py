@@ -48,94 +48,112 @@ def all_gpus(visible_gpus=None):
     return device_ids
 
 
-GridSearchable = namedtuple("GridSearchable", "default iterator")
-
-
 class Settings(dict):
     """
     Model configuration options
 
-    :param base_model: Which base model to use - one of {GPT, GPT2, RoBERTa, BERT, TextCNN, TCN}, imported from finetune.base_models. Defaults to `GPT`.
-    :param batch_size: Number of examples per batch, defaults to `2`.
+    :param base_model: Which base model to use - one of {GPT, GPT2, RoBERTa, BERT, TextCNN, TCN}, imported from finetune.base_models. Defaults to `RoBERTa`.
+    :param batch_size: Number of examples per batch, defaults to `"auto"`.
+    :param predict_batch_size: Batch size for prediction, defaults to `"auto"`.
     :param visible_gpus: List of integer GPU ids to spread out computation across, defaults to all available GPUs.
-    :param n_epochs: Number of iterations through training data, defaults to `3`.
+    :param n_epochs: Number of iterations through training data, defaults to `"auto"`.
+    :param min_steps: Minimum number of steps a model will take when trained. Overrides n_epochs if epochs would result in a lower number of steps. Defaults to `None`.
     :param seed: Random seed to use for repeatability purposes, defaults to `42`.
-    :param max_length:  Maximum number of subtokens per sequence. Examples longer than this number will be truncated
-        (unless `chunk_long_sequences=True` for SequenceLabeler models). Defaults to `512`.
-    :param weight_stddev: Standard deviation of initial weights.  Defaults to `0.02`.
-    :param chunk_long_sequences: When True, use a sliding window approach to predict on
-        examples that are longer than max length.  The progress bar will display the number of chunks processed rather than the number of examples. Defaults to `True`.
-    :param use_gpu_crf_predict: Use GPU op for crf predictions. Defaults to `auto`.
-        examples that are longer than max length.  The progress bar will display the number of chunks processed rather than the number of examples. Defaults to `True`.
-    :param chunk_context: How much context to include arround chunked text.
-    :param chunk_alignment: Alignment of the active section of the chunks "left", "right", "center".
+    :param max_length: Maximum number of subtokens per sequence. Examples longer than this number will be truncated
+        (unless `chunk_long_sequences=True` for SequenceLabeler models). Defaults to `"auto"`.
+    :param weight_stddev: Standard deviation of initial weights. Defaults to `0.02`.
+    :param save_dtype: Specifies what precision to save model weights with. Defaults to `None`.
+    :param per_process_gpu_memory_fraction: Fraction of the overall amount of memory that each visible GPU should be allocated, defaults to `None`.
+    :param xla: Uses TensorFlow XLA for compilation. Defaults to `False`.
+    :param optimize_for: Optimize auto parameters for either `accuracy`, `speed`, or `predict_speed`. Defaults to `"accuracy"`.
+    :param sort_by_length: Order the chunks by length to optimize padding usage. Defaults to `True`.
+    :param collapse_whitespace: Any multiple adjacent spaces or tabs will be collapsed into one to improve token efficiency. Defaults to `False`.
+    :param permit_uninitialized: Takes a regex to match to param paths that may be uninitialized. Usually set by the base model. Unlikely a user would need to override. Defaults to `None`.
+    :param max_training_hours: Targets a maximum number of hours for the model to train rather than a number of steps. When set, learning rate as a function of time or steps whichever is running faster. Defaults to `None`.
     :param low_memory_mode: When True, only store partial gradients on forward pass
-        and recompute remaining gradients incrementally in order to save memory.  Defaults to `False`.
-    :param float_16_predict: Whether to run prediction in float 16 mode, this is only available for bert based models and will likely only yield performance improvements on GPUs with native float16 support such as Volta and Tesla.
-    :param optimize_for: Optimize auto parameters for either `accuracy`, `speed`, or `predict_speed` Defaults to `accuracy`
-    :param embed_p_drop: Embedding dropout probability.  Defaults to `0.1`.
-    :param attn_p_drop: Attention dropout probability.  Defaults to `0.1`.
-    :param resid_p_drop: Residual layer fully connected network dropout probability.  Defaults to `0.1`.
-    :param clf_p_drop: Classifier dropout probability.  Defaults to `0.1`.
-    :param l2_reg: L2 regularization coefficient. Defaults to `0.01`.
-    :param vector_l2: Whether to apply weight decay regularization to vectors (biases, normalization etc..). Defaults to False.
-    :param optimizer: Optimizer to use, current options include AdamW or AdamaxW.
-    :param b1: Adam b1 parameter.  Defaults to `0.9`.
-    :param b2: Adam b2 parameter.  Defaults to `0.999`.
-    :param epsilon: Adam epsilon parameter: Defaults to `1e-8`.
-    :param lr_schedule: Learning rate schedule -- see `finetune/optimizers.py` for more options.
-    :param lr: Learning rate.  Defaults to `6.25e-5`.
-    :param lr_warmup: Learning rate warmup (percentage of all batches to warmup for).  Defaults to `0.002`.
-    :param max_grad_norm: Clip gradients larger than this norm. Defaults to `1.0`.
+        and recompute remaining gradients incrementally in order to save memory. Defaults to `False`.
+    :param float_16_predict: Whether to run prediction in float 16 mode, this is only available for bert based models and will likely only yield performance improvements on GPUs with native float16 support such as Volta and Tesla. Defaults to `"auto"`.
+    :param mixed_precision: Whether to train in float16/32 mixed precision. Defaults to `"auto"`.
     :param shuffle_buffer_size: How many examples to load into a buffer before shuffling. Defaults to `100`.
-    :param dataset_size: Must be specified in order to calculate the learning rate schedule when the inputs provided are generators rather than static datasets.
-    :param accum_steps: Number of updates to accumulate before applying. This is used to simulate a higher batch size.
-    :param lm_loss_coef: Language modeling loss coefficient -- a value between `0.0` - `1.0`
-        that indicates how to trade off between language modeling loss
-        and target model loss.  Usually not beneficial to turn on unless
-        dataset size exceeds a few thousand examples.  Defaults to `0.0`.
-    :param summarize_grads: Include gradient summary information in tensorboard.  Defaults to `False`.
-    :param val_size: Validation set size if int. Validation set size as percentage of all training data if float.  Defaults to 0.  If value "auto" is provided, validation will not be run by default if n_examples < 50.
-        If n_examples > 50, defaults to max(5, min(100, 0.05 * n_examples))
-    :param val_interval: Evaluate on validation set after `val_interval` batches.
-        Defaults to 4 * val_size / batch_size to ensure that too much time is not spent on validation.
-    :param lm_temp: Language model temperature -- a value of `0.0` corresponds to greedy maximum likelihood predictions
-        while a value of `1.0` corresponds to random predictions. Defaults to `0.6`.
-    :param seq_num_heads: Number of attention heads of final attention layer. Defaults to `16`.
-    :param keep_best_model: Whether or not to keep the highest-performing model weights throughout the train. Defaults to `False`.
-    :param early_stopping_steps: How many steps to continue with no loss improvement before early stopping. Defaults to `None`.
-    :param subtoken_predictions: Return predictions at subtoken granularity or token granularity?  Defaults to `False`.
-    :param multi_label_sequences: Use a multi-labeling approach to sequence labeling to allow overlapping labels.
-    :param multi_label_threshold: Threshold of sigmoid unit in multi label classifier.
-        Can be increased or lowered to trade off precision / recall. Defaults to `0.5`.
+    :param dataset_size: Must be specified in order to calculate the learning rate schedule when the inputs provided are generators rather than static datasets. Defaults to `None`.
+    :param embed_p_drop: Embedding dropout probability. Defaults to `0.1`.
+    :param attn_p_drop: Attention dropout probability. Defaults to `0.1`.
+    :param resid_p_drop: Residual layer fully connected network dropout probability. Defaults to `0.1`.
+    :param clf_p_drop: Classifier dropout probability. Defaults to `0.1`.
+    :param l2_reg: L2 regularization coefficient. Defaults to `0.01`.
+    :param vector_l2: Whether to apply weight decay regularization to vectors (biases, normalization etc..). Defaults to `False`.
     :param tensorboard_folder: Directory for tensorboard logs. Tensorboard logs will not be written
         unless tensorboard_folder is explicitly provided. Defaults to `None`.
-    :param log_device_placement: Log which device each operation is placed on for debugging purposes.  Defaults to `False`.
-    :param allow_soft_placement: Allow tf to allocate an operation to a different device if a device is unavailable.  Defaults to `True`.
-    :param save_adam_vars: Save adam parameters when calling `model.save()`.  Defaults to `True`.
-    :param num_layers_trained: How many layers to finetune.  Specifying a value less than model's number of layers will train layers starting from model output. Defaults to `12`.
-    :param train_embeddings: Should embedding layer be finetuned? Defaults to `True`.
-    :param class_weights: One of 'log', 'linear', or 'sqrt'. Auto-scales gradient updates based on class frequency.  Can also be a dictionary that maps from true class name to loss coefficient. Defaults to `None`.
-    :param eval_acc: if True, calculates accuracy and writes it to the tensorboard summary files for valudation runs.
-    :param save_dtype: specifies what precision to save model weights with.  Defaults to `np.float32`.
-    :param regression_loss: the loss to use for regression models. One of `L1` or `L2`, defaults to `L2`.
-    :param debugging_logs: if True, output tensorflow logs and turn off TQDM logging. Defaults to `False`.
-    :param val_set: Where it is neccessary to use an explicit validation set, provide it here as a tuple (text, labels)
-    :param per_process_gpu_memory_fraction: fraction of the overall amount of memory that each visible GPU should be allocated, defaults to `1.0`.
-    :param max_empty_chunk_ratio: Controls the maximum ratio of empty to labeled chunks for sequence labeling. None includes all chunks, defaults to 1.0.
+    :param debugging_logs: If True, output tensorflow logs and turn off TQDM logging. Defaults to `False`.
+    :param class_weights: One of 'log', 'linear', or 'sqrt'. Auto-scales gradient updates based on class frequency.
+        Can also be a dictionary that maps from true class name to loss coefficient. Defaults to `None`.
+    :param optimizer: Optimizer to use, current options include AdamW or AdamaxW. Defaults to `"AdamW"`.
+    :param b1: Adam b1 parameter. Defaults to `0.9`.
+    :param b2: Adam b2 parameter. Defaults to `0.999`.
+    :param epsilon: Adam epsilon parameter. Defaults to `1e-8`.
+    :param lr_schedule: Learning rate schedule -- see `finetune/optimizers.py` for more options. Defaults to `"warmup_linear"`.
+    :param lr: Learning rate. Defaults to `"auto"`.
+    :param lr_warmup: Learning rate warmup (percentage of all batches to warmup for). Defaults to `0.002`.
+    :param max_grad_norm: Clip gradients larger than this norm. Defaults to `1.0`.
+    :param accum_steps: Number of updates to accumulate before applying. This is used to simulate a higher batch size. Defaults to `1`.
+    :param seq_num_heads: Number of attention heads of final attention layer. Defaults to `16`.
+    :param pad_token: Set by the base models. Defaults to `"<PAD>"`.
+    :param pad_idx: Set by the base models. Defaults to `None`.
+    :param subtoken_predictions: Return predictions at subtoken granularity or token granularity? Defaults to `True`.
+    :param chunk_long_sequences: When True, use a sliding window approach to predict on
+        examples that are longer than max length. The progress bar will display the number of chunks processed rather than the number of examples. Defaults to `True`.
+    :param chunk_context: How much context to include around chunked text. Defaults to `"auto"`.
+    :param chunk_alignment: Alignment of the active section of the chunks "left", "right", "center". Defaults to `"center"`.
+    :param add_eos_bos_to_chunk: Set by the base model and corresponds to whether we should have EOS and BOS tokens when we chunk long sequences. Defaults to `True`.
+    :param filter_empty_examples: Only impacts training. Pretty self explanatory. Defaults to `False`.
+    :param crf_sequence_labeling: Whether to use a CRF or not. If not we just use per-token softmax cross entropy. Defaults to `True`.
+    :param max_empty_chunk_ratio: Controls the maximum ratio of empty to labeled chunks for sequence labeling. None includes all chunks, defaults to `1.0`.
     :param auto_negative_sampling: Method to use with long sparse documents to cut down on training
-        time and limit false positives. Defaults to False
+        time and limit false positives. Defaults to `False`.
+    :param low_memory_ans: Trade off speed and memory when auto negative sampling is enabled. Defaults to `True`.
     :param max_document_chars: Maximum number of characters in a document before splitting into
         len(document) / max_document_chars "sub documents" for prediction to avoid memory issues
-        during creation of the input pipeline. Defaults to None (no splitting)
+        during creation of the input pipeline. Defaults to `None` (no splitting).
+    :param bio_tagging: Whether to use BIO tagging or not for sequence labeling. Defaults to `False`.
+    :param base_model_path: Set by the base model. Defaults to `None`.
+    :param n_heads: Base model specific parameter that controls the model construction. Defaults to `None`.
+    :param n_layer: Base model specific parameter that controls the model construction. Defaults to `None`.
+    :param act_fn: Base model specific parameter that controls the model construction. Defaults to `None`.
+    :param n_embed: Base model specific parameter that controls the model construction. Defaults to `None`.
+    :param n_filter: For TCN SourceModel only. Defaults to `None`.
+    :param kernel_size: For TCN SourceModel only. Defaults to `None`.
+    :param kernel_sizes: For TextCNN SourceModel only. Defaults to `None`.
+    :param num_filters_per_size: For TextCNN SourceModel only. Defaults to `None`.
+    :param n_embed_featurizer: Needed because the dimensions CNN output are different from the embedding dimensions. Defaults to `None`.
+    :param bert_intermediate_size: BERT only. Defaults to `None`.
+    :param bert_use_pooler: BERT only. Defaults to `True`.
+    :param bert_use_type_embed: BERT only. Defaults to `True`.
+    :param default_context: The default context to use for the model when no context is provided for a token. Defaults to `None`.
+    :param context_dim: Number of context dimensions to be inserted. Defaults to `None`.
+    :param context_injection: Whether to inject context into the model. Defaults to `False`.
+    :param reading_order_removed: Set by the base model if the reading order is removed. Defaults to `False`.
+    :param context_channels: Set by the base model, the number of channels used for doc rep X/Y position embeddings.
+    :param norm_eps: ModernBERT parameter. Defaults to `1e-5`.
+    :param mlp_p_drop: ModernBERT parameter. Defaults to `0.0`.
+    :param global_attn_every_n_layers: ModernBERT parameter. Defaults to `3`.
+    :param local_rope_theta: ModernBERT parameter. Defaults to `10000.0`.
+    :param global_rope_theta: ModernBERT parameter. Defaults to `160000.0`.
+    :param local_attention_window: ModernBERT parameter. Defaults to `128`.
+    :param table_position: Whether to use absolute position encoding for cells in the TableModel. Defaults to `False`.
+    :param table_position_type: Determines which types of position to use: "row_col" or "all". Defaults to `"row_col"`.
+    :param include_row_col_summaries: Whether to include row-column summary representations that are distributed. Helpful in some cases when rows and columns are consistent. Defaults to `False`.
+    :param down_project_feats: Whether to use a projection to bring the features back to the model size or not. Results in non-linear relationships between rows and columns when the target model is linear. Defaults to `False`.
+    :param renorm_after_class_weights: Whether to reset the norm of the gradients or loss to be equivalent to what it was before class weights was applied. Renorming reduces the effectiveness of class weights especially with small batch sizes but improves stability and reduces likelihood of one bad sample blowing up the model. Defaults to `True`.
+    :param max_row_col_embedding: Determines the maximum number of items in each row or column of the table. Defaults to `1024`.
+    :param chunk_tables: Whether to chunk up tables within the featurizer when they exceed the max sizes of the featurizers. This is different from the Table Chunker within the TableLabeler util classes. Defaults to `False`.
+    :param table_batching: Whether to use a table model specific batching approach that buckets by the size of the rows and columns. Results in more uniform GPU memory performance when using the table model. Defaults to `False`.
+    :param reshuffle_chunks: At train time shuffles again after chunking so that for long documents the model does not see many batches from the same document. Defaults to `False`.
+    :param predict_chunk_markers: Injects special prediction objects at sequence labeling prediction which outputs info on how the data was chunked up for the model. Defaults to `False`.
+    :param version: Serialize finetune version with model. Defaults to `VERSION`.
     """
-
-    def get_grid_searchable(self):
-        return self.grid_searchable
 
     def __init__(self, **kwargs):
         super().__init__()
-        self.grid_searchable = {}
         for key, value in kwargs.items():
             self[key] = value
 
@@ -149,12 +167,6 @@ class Settings(dict):
                 return full_path
 
         return self[attr]
-
-    def __setitem__(self, key, value):
-        if isinstance(value, GridSearchable):
-            self.grid_searchable[key] = value.iterator
-            value = value.default
-        return super().__setitem__(key, value)
 
     def __setattr__(self, k, v):
         return self.__setitem__(k, v)
@@ -194,7 +206,6 @@ def get_default_config():
         low_memory_mode=False,
         float_16_predict="auto",
         mixed_precision="auto",
-        save_adam_vars=False,
         shuffle_buffer_size=100,
         dataset_size=None,
         batch_size="auto",
@@ -206,44 +217,26 @@ def get_default_config():
         max_length="auto",
         weight_stddev=0.02,
         save_dtype=None,
-        val_set=None,
         per_process_gpu_memory_fraction=None,
-        distribution_strategy="central_storage",
         xla=False,
         optimize_for="accuracy",
         sort_by_length=True,
         collapse_whitespace=False,
         permit_uninitialized=None,
-        max_training_hours=None,
-        feature_layer_num=None,
+        max_training_hours=None, # TODO: maybe we want to keep this?
+        include_bos_eos=True,
         #
         # Regularization
         embed_p_drop=0.1,
         attn_p_drop=0.1,
         resid_p_drop=0.1,
         clf_p_drop=0.1,
-        l2_reg=GridSearchable(0.01, [0.0, 0.1, 0.01, 0.001]),
+        l2_reg=0.01,
         vector_l2=False,
-        #
-        # Early Stopping and Validation
-        keep_best_model=False,
-        early_stopping_steps=None,
-        eval_acc=False,
-        val_size=0.0,
-        val_interval=None,
-        in_memory_finetune=None,
-        #
+        #        #
         # Debugging
-        log_device_placement=False,
-        soft_device_placement=True,
         tensorboard_folder=None,
-        summarize_grads=False,
         debugging_logs=False,
-        cache_weights_to_file=False,
-        #
-        # Partial Fitting
-        num_layers_trained=12,
-        train_embeddings=True,
         #
         # Class Imbalance
         class_weights=None,
@@ -258,50 +251,23 @@ def get_default_config():
         lr_warmup=0.002,
         max_grad_norm=1.0,
         accum_steps=1,
-        acc_grads_on_cpu=False,
-        #
-        # Language Model Settings
-        lm_loss_coef=0.0,
-        lm_temp=0.6,
-        lm_type="lm",
-        mask_proba=0.15,
-        #
-        # Masked Language Model Settings
-        max_masked_tokens=128,
-        #
+        #        #
         # Sequence Labeling
         seq_num_heads=16,
         pad_token="<PAD>",
         pad_idx=None,
         subtoken_predictions=True,
-        multi_label_sequences=False,
-        multi_label_threshold=0.5,
         chunk_long_sequences=True,
         chunk_context="auto",
         chunk_alignment="center",
         add_eos_bos_to_chunk=True,
         filter_empty_examples=False,
         crf_sequence_labeling=True,
-        use_gpu_crf_predict="auto",
         max_empty_chunk_ratio=1.0,
         auto_negative_sampling=False,
         low_memory_ans=True,
         max_document_chars=None,
         bio_tagging=False,
-        #
-        # Regression Params
-        regression_loss="L2",
-        #
-        # Association Params
-        viable_edges=None,
-        association_types=None,
-        assocation_loss_weight=100.0,
-        #
-        # Oscar only
-        oscar_use_fp16=False,
-        oscar_use_timing=True,
-        oscar_feat_mode="final_state",
-        oscar_use_fused_kernel=False,
         #
         # Location of model weights
         base_model=RoBERTa,
@@ -338,16 +304,6 @@ def get_default_config():
         anneal_reading_order=False,
         context_channels=None,
         #
-        # T5
-        beam_size=1,
-        beam_search_alpha=0.2,
-        delim_tokens="",
-        s2s_decoder_max_length=512,
-        num_fusion_shards=None,
-        chunk_pos_embed=None,
-        fusion_low_memory=True,
-        include_bos_eos=True,
-        #
         # ModernBERT
         norm_eps=1e-5,
         mlp_p_drop=0.0,
@@ -355,19 +311,6 @@ def get_default_config():
         local_rope_theta=10000.0,
         global_rope_theta=160000.0,
         local_attention_window=128,
-        #
-        # Line Items
-        group_bio_tagging=False,
-        relation_hidden_size=256,
-        start_token_loss_weight=1,
-        next_token_loss_weight=1,
-        seq_loss_weight=1,
-        group_loss_weight=200,
-        n_groups=100,
-        group_hidden_size=768,
-        group_attention_heads=12,
-        group_n_layers=3,
-        group_thresh=0.8,
         # Table model
         table_position=False,
         table_position_type="row_col",
