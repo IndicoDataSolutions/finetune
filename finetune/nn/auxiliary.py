@@ -35,27 +35,26 @@ def add_timing_signal_from_position(x, position, timescales):
     return x
 
 def embed_position(context, context_channels, batch, seq):
-    with tf.compat.v1.variable_scope("context_embedding"):
-        context_dim = shape_list(context)[-1]
-        if context_channels is None:
-            raise ValueError("context_channels is not set but you are trying to embed context")
-        x = tf.zeros(shape=(batch, seq, context_channels))
+    context_dim = shape_list(context)[-1]
+    if context_channels is None:
+        raise ValueError("context_channels is not set but you are trying to embed context")
+    x = tf.zeros(shape=(batch, seq, context_channels))
 
-        def get_pos_embed():
-            return add_timing_signal_from_position(
-                x,
-                context,
-                timescales = [
-                    [
-                        (math.pi / 2) * (1 / 2500),
-                        (25 * math.pi) * (1 / 2500)
-                    ]
-                ] * context_dim
-            ) / (float(context_channels) / 32)
-        def identity():
-            return x
-        pos_embed = tf.cond(
-            tf.equal(seq, 0), true_fn=identity, false_fn=get_pos_embed
-        )
+    def get_pos_embed():
+        return add_timing_signal_from_position(
+            x,
+            context,
+            timescales = [
+                [
+                    (math.pi / 2) * (1 / 2500),
+                    (25 * math.pi) * (1 / 2500)
+                ]
+            ] * context_dim
+        ) / (float(context_channels) / 32)
+    def identity():
+        return x
+    pos_embed = tf.cond(
+        tf.equal(seq, 0), true_fn=identity, false_fn=get_pos_embed
+    )
     return pos_embed
 

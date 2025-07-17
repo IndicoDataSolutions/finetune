@@ -45,6 +45,16 @@ class ExtraScope(tf.keras.layers.Layer):
         # Pass this through so we can wrap target model without running into issues.
         return self.layer.compute_loss(*args, **kwargs)
 
+
+def saver_ignore_scope(cls: tf.keras.layers.Layer):
+    """
+    Helper decorator to mark layers that should not be considered scopes.
+    Just allows us to structure layers more nicely when we're porting models that had a flat structure.
+    """
+    # Might want to do somethign different here long term but for now this is good enough.
+    cls._saver_ignore_scope = True
+    return cls
+
 def maybe_recompute(fn, do_recompute, training):
     if do_recompute and training:
         return tf.recompute_grad(fn)

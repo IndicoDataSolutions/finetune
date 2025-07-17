@@ -149,7 +149,7 @@ class SequenceLabeler(tf.keras.layers.Layer):
                 shape=(self.n_targets, self.n_targets),
                 # TODO: need to check what we have previously called this to make mapping easier
                 # And likely move it into target blocks to get the scopes right.
-                name="transition_matrix",
+                name="Transition_matrix",
                 initializer="orthogonal",
                 trainable=True,
                 dtype=tf.float32
@@ -177,7 +177,6 @@ class SequenceLabeler(tf.keras.layers.Layer):
     def compute_loss(self, layer_output, targets, class_weights):
         # For some reason, all finetune targets are floats. I think we get more type flexibility 
         # now so we should look at switching this to int when helpful.
-        print("output", layer_output["logits"].shape, layer_output["length"].shape, "targets", targets.shape)
         logits = layer_output["logits"]
         targets = tf.cast(targets, dtype=tf.int32)
         if class_weights is not None:
@@ -196,8 +195,6 @@ class SequenceLabeler(tf.keras.layers.Layer):
             )
 
         if self.use_crf:
-            tf.print("targets", targets)
-            tf.print("logits", logits)
             return tf.reduce_mean(
                 -crf_log_likelihood(
                     logits,

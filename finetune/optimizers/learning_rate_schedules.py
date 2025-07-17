@@ -36,5 +36,4 @@ class FinetuneKerasLRSchedule(tf.keras.optimizers.schedules.LearningRateSchedule
 
     def __call__(self, step):
         lr = self.base_lr * self.schedule(step / self.total_steps, **self.kwargs)
-        tf.print("lr", lr, step, step / self.total_steps)
         return tf.maximum(lr, 0.0)

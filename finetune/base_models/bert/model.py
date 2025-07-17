@@ -16,10 +16,12 @@ from finetune.base_models.bert.roberta_encoder import (
     RoBERTaEncoderXDoc,
 )
 from finetune.base_models.bert.featurizer import (
-    bert_featurizer,
-    layoutlm_featurizer,
-    xdoc_featurizer,
     table_roberta_featurizer_twinbert,
+)
+from finetune.base_models.bert.modeling import (
+    BertModel,
+    LayoutLMModel,
+    XDocModel,
 )
 
 from finetune.util.context_utils import get_context_layoutlm, get_context_doc_rep
@@ -155,7 +157,7 @@ class _BaseBert(SourceModel):
 
 class BERTModelCased(_BaseBert):
     encoder = BERTEncoder
-    featurizer = bert_featurizer
+    featurizer = BertModel
     settings = {
         **BERT_BASE_PARAMS,
         "base_model_path": os.path.join("bert", "bert_small_cased-v2.jl"),
@@ -171,7 +173,7 @@ class BERTModelCased(_BaseBert):
 
 class BERTModelLargeCased(_BaseBert):
     encoder = BERTEncoderLarge
-    featurizer = bert_featurizer
+    featurizer = BertModel
     settings = {
         **BERT_LARGE_PARAMS,
         "base_model_path": os.path.join("bert", "bert_large_cased-v2.jl"),
@@ -187,7 +189,7 @@ class BERTModelLargeCased(_BaseBert):
 
 class BERTModelLargeWWMCased(_BaseBert):
     encoder = BERTEncoderLarge
-    featurizer = bert_featurizer
+    featurizer = BertModel
     settings = {
         **BERT_LARGE_PARAMS,
         "base_model_path": os.path.join("bert", "bert_wwm_large_cased-v2.jl"),
@@ -203,7 +205,7 @@ class BERTModelLargeWWMCased(_BaseBert):
 
 class BERTModelMultilingualCased(_BaseBert):
     encoder = BERTEncoderMultuilingal
-    featurizer = bert_featurizer
+    featurizer = BertModel
     settings = {
         **BERT_BASE_PARAMS,
         "base_model_path": os.path.join("bert", "bert_small_multi_cased-v2.jl"),
@@ -219,7 +221,7 @@ class BERTModelMultilingualCased(_BaseBert):
 
 class RoBERTa(_BaseBert):
     encoder = RoBERTaEncoderV2
-    featurizer = bert_featurizer
+    featurizer = BertModel
     is_roberta = True
     settings = {
         **BERT_BASE_PARAMS,
@@ -267,7 +269,7 @@ class RoBERTa(_BaseBert):
 
 class DocRep(_BaseBert):
     encoder = RoBERTaEncoderV2
-    featurizer = bert_featurizer
+    featurizer = BertModel
     get_context_fn = get_context_doc_rep
     is_roberta = True
     settings = dict(RoBERTa.settings)
@@ -318,7 +320,7 @@ class DocRep(_BaseBert):
 class RoBERTaLarge(RoBERTa):
     encoder = RoBERTaEncoderV2
     is_roberta = True
-    featurizer = bert_featurizer
+    featurizer = BertModel
     settings = {
         **BERT_LARGE_PARAMS,
         "bert_use_pooler": False,
@@ -355,7 +357,7 @@ ZuckerBERT = RoBERTa
 
 class DistilBERT(_BaseBert):
     encoder = DistilBERTEncoder
-    featurizer = bert_featurizer
+    featurizer = BertModel
     settings = {
         **DISTIL_BERT_PARAMS,
         "base_model_path": os.path.join("bert", "distillbert.jl"),
@@ -371,7 +373,7 @@ class DistilBERT(_BaseBert):
 
 class DistilRoBERTa(_BaseBert):
     encoder = RoBERTaEncoder
-    featurizer = bert_featurizer
+    featurizer = BertModel
     is_roberta = True
 
     settings = {
@@ -402,7 +404,7 @@ class DistilRoBERTa(_BaseBert):
 
 class LayoutLM(_BaseBert):
     encoder = LayoutLMEncoder
-    featurizer = layoutlm_featurizer
+    featurizer = LayoutLMModel
     get_context_fn = get_context_layoutlm
     settings = {
         **BERT_BASE_PARAMS,
@@ -434,7 +436,7 @@ class LayoutLM(_BaseBert):
 
 
 class XDocBase(_BaseBert):
-    featurizer = xdoc_featurizer
+    featurizer = XDocModel
     encoder = RoBERTaEncoderXDoc
     get_context_fn = get_context_layoutlm
     is_roberta = False

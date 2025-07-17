@@ -4,7 +4,6 @@ import tensorflow as tf
 from finetune.util.shapes import lengths_from_eos_idx
 from finetune.base_models.bert.roberta_encoder import RoBERTaEncoder
 from finetune.base_models.bert.modeling import (
-    BertConfig,
     BertModel,
     LayoutLMModel,
     XDocModel,
@@ -55,29 +54,11 @@ def bert_featurizer(
     """
 
     is_roberta = config.base_model.is_roberta
-    model_filename = config.base_model_path.rpartition("/")[-1]
     is_roberta_v1 = is_roberta and config.base_model.encoder == RoBERTaEncoder
 
     if max_length is None:
         max_length = config.max_length
-    bert_config = BertConfig(
-        vocab_size=encoder.vocab_size,
-        hidden_size=config.n_embed,
-        num_hidden_layers=config.n_layer,
-        num_attention_heads=config.n_heads,
-        intermediate_size=config.bert_intermediate_size,
-        hidden_act=config.act_fn,
-        hidden_dropout_prob=config.resid_p_drop,
-        attention_probs_dropout_prob=config.attn_p_drop,
-        max_position_embeddings=max_length,
-        type_vocab_size=2,
-        initializer_range=config.weight_stddev,
-        low_memory_mode=config.low_memory_mode,
-        pos_injection=config.context_injection,
-        reading_order_removed=config.reading_order_removed,
-        anneal_reading_order=config.anneal_reading_order,
-        positional_channels=config.context_channels,
-    )
+   
 
     initial_shape = tf.shape(input=X)
     X = tf.reshape(X, shape=tf.concat(([-1], initial_shape[-1:]), 0))
@@ -115,16 +96,6 @@ def bert_featurizer(
 
     mask = tf.sequence_mask(lengths, maxlen=seq_length, dtype=tf.float32)
 
-    if config.num_layers_trained not in [config.n_layer, 0]:
-        raise ValueError(
-            "Bert base model does not support num_layers_trained not equal to 0 or n_layer"
-        )
-
-    if config.anneal_reading_order:
-        reading_order_decay_rate = get_decay_for_half(total_num_steps)
-    else:
-        reading_order_decay_rate = None
-
     with tf.compat.v1.variable_scope("model/featurizer", reuse=reuse):
         bert = underlying_model(
             config=bert_config,
@@ -138,7 +109,6 @@ def bert_featurizer(
             use_pooler=config.bert_use_pooler,
             use_token_type=config.bert_use_type_embed,
             roberta=is_roberta,
-            reading_order_decay_rate=reading_order_decay_rate,
         )
 
         embed_weights = bert.get_embedding_table()

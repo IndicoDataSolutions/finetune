@@ -34,12 +34,17 @@ def own_variables(layer):
 def get_fully_qualified_variable_paths(root: tf.keras.layers.Layer) -> dict[str, tf.Variable]:
     root_name = root.name
     results = {}
+    if hasattr(root, "_saver_ignore_scope") and root._saver_ignore_scope:
+        root_prefix = ""
+    else:
+        root_prefix = root_name + "/"
     for variable in own_variables(root):
-        results[f"{root_name}/{variable.name}:0"] = variable
+        results[f"{root_prefix}{variable.name}:0"] = variable
     for layer in root._layers:
         for k, v in get_fully_qualified_variable_paths(layer).items():
-            results[f"{root_name}/{k}"] = v
+            results[f"{root_prefix}{k}"] = v
     return results
+
 
 class Saver:
     def __init__(
@@ -117,7 +122,7 @@ class Saver:
                     if not permitted:
                         raise ValueError("Uninitialized featurizer variable {}".format(var_name))
         for var_name in {**self.fallback, **variables_sv}.keys():
-            if var_name not in all_vars:
+            if var_name not in all_vars and var_name.startswith("model"):
                 print(f"Variable {var_name} not found in all_vars")
         print(f"loading {len(transformed_weights)} variables")
         set_weights(model, transformed_weights, all_vars)

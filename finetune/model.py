@@ -26,7 +26,6 @@ def get_keras_model(
             self.target_block = ExtraScope(target_block, "target")
             
         def call(self, data, **kwargs):
-            print(data)
             features: dict[str, tf.Tensor] = self.featurizer(
                 tokens=data["tokens"],
                 context=data.get("context", None),
@@ -55,10 +54,6 @@ def get_keras_model(
         
         def train_step(self, data):
             x, y = data
-
-            tf.print("Train x", x)
-            tf.print("Train y", y)
-
             with tf.GradientTape() as tape:
                 y_pred = self(x, training=True)
                 loss = self.compute_loss(y=y, y_pred=y_pred)
