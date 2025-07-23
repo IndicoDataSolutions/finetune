@@ -31,7 +31,7 @@ class TestBackwardsCompatibility(unittest.TestCase):
                 * 10
             ]
         )
-        self.assertTrue(len(preds[0]) == 30)
+        assert len(preds[0]) == 30
         acceptable_preds = set(["Microsoft Corp", "Apple Inc", "Indico Data Solutions"])
         for pred in preds[0]:
             self.assertIn(pred["text"], acceptable_preds)

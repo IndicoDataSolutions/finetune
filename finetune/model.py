@@ -41,6 +41,9 @@ def get_keras_model(
             # Certain keras calls assert that there is no None output.
             # We will just need to assume downstream that any missing values were None
             return {k: v for k, v in output.items() if v is not None}
+
+        def build(self, input_shape):
+            pass
         
         def compute_loss(self, y, y_pred):
             weighted_tensor = None

@@ -68,7 +68,6 @@ class DocRepPosEmbed(tf.keras.layers.Layer):
         self.width = width
         self.dense1 = tf.keras.layers.Dense(
             width,
-            activation=tf.nn.relu,
             use_bias=False,
             kernel_initializer=tf.keras.initializers.VarianceScaling(
                 scale=0.02, mode="fan_avg", distribution="truncated_normal"
@@ -779,6 +778,7 @@ class Attention(tf.keras.layers.Layer):
             num_attention_heads=num_attention_heads,
             attention_probs_dropout_prob=attention_probs_dropout_prob,
             initializer_range=initializer_range,
+            do_return_2d_tensor=True,
         )
 
         self.output_dropout = tf.keras.layers.Dropout(rate=hidden_dropout_prob)
@@ -804,7 +804,7 @@ class Attention(tf.keras.layers.Layer):
         )
         attention_output = self.output_layer(attention_output)
         attention_output = self.output_dropout(attention_output)
-        attention_output = self.output_layer_norm(attention_output)
+        attention_output = self.output_layer_norm(attention_output + layer_input)
         return attention_output
 
 class FullBlock(tf.keras.layers.Layer):
@@ -813,7 +813,7 @@ class FullBlock(tf.keras.layers.Layer):
         attention_head_size,
         num_attention_heads=12,
         intermediate_size=3072,
-        intermediate_act_fn=gelu,
+        intermediate_act_fn=tf.nn.gelu,
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         initializer_range=0.02,
@@ -916,7 +916,7 @@ class TransformerModel(tf.keras.layers.Layer):
         input_shape = get_shape_list(layer_input, expected_rank=3)
         prev_output = reshape_to_matrix(layer_input)
 
-        for block in self.blocks:
+        for i, block in enumerate(self.blocks):
             if self.recompute_grad and training:
                 block = tf.recompute_grad(block)
             prev_output = block(layer_input=prev_output, batch_size=batch_size, seq_length=seq_length, attention_mask=attention_mask)
