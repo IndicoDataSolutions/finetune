@@ -6,13 +6,12 @@ from collections import namedtuple
 from functools import lru_cache
 
 import numpy as np
+import tensorflow as tf
 from nltk.metrics.distance import edit_distance
 
 import finetune
-from finetune.errors import FinetuneError
 from finetune.base_models import RoBERTa
-
-import tensorflow as tf
+from finetune.errors import FinetuneError
 
 LOGGER = logging.getLogger("finetune")
 
@@ -223,7 +222,7 @@ def get_default_config():
         sort_by_length=True,
         collapse_whitespace=False,
         permit_uninitialized=None,
-        max_training_hours=None, # TODO: maybe we want to keep this?
+        max_training_hours=None,  # TODO: maybe we want to keep this?
         include_bos_eos=True,
         #
         # Regularization

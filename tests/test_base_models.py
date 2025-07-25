@@ -1,12 +1,12 @@
-import os
-import shutil
-import time
-import warnings
-import unittest
-from pathlib import Path
 import codecs
 import json
+import os
 import random
+import shutil
+import time
+import unittest
+import warnings
+from pathlib import Path
 
 from finetune.base_models.huggingface.models import HFDebertaV3Base
 
@@ -14,42 +14,41 @@ from finetune.base_models.huggingface.models import HFDebertaV3Base
 warnings.filterwarnings("ignore")
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
-import pandas as pd
 import numpy as np
-from sklearn.metrics import recall_score
-from sklearn.model_selection import train_test_split
+import pandas as pd
 import requests
 from bs4 import BeautifulSoup as bs
 from bs4.element import Tag
+from sklearn.metrics import recall_score
+from sklearn.model_selection import train_test_split
 
+from finetune import Classifier, Comparison, SequenceLabeler
 from finetune.base_models import (
-    TextCNN,
-    FastTextCNN,
+    OSCAR,
     BERTModelCased,
+    DistilBERT,
+    FastTextCNN,
     GPT2Model,
     GPTModel,
     RoBERTa,
-    OSCAR,
     TCNModel,
-    DistilBERT,
-)
-
-from finetune import Classifier, Comparison, SequenceLabeler
-from finetune.datasets import generic_download
-from finetune.config import get_config
-from finetune.errors import FinetuneError
-from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
-from finetune.util.metrics import (
-    sequence_labeling_token_precision,
-    sequence_labeling_token_recall,
-    sequence_labeling_overlap_precision,
-    sequence_labeling_overlap_recall,
+    TextCNN,
 )
 from finetune.base_models.huggingface.models import (
     HFBert,
-    HFElectraGen,
-    HFElectraDiscrim,
     HFDebertaV3Base,
+    HFElectraDiscrim,
+    HFElectraGen,
+)
+from finetune.config import get_config
+from finetune.datasets import generic_download
+from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
+from finetune.errors import FinetuneError
+from finetune.util.metrics import (
+    sequence_labeling_overlap_precision,
+    sequence_labeling_overlap_recall,
+    sequence_labeling_token_precision,
+    sequence_labeling_token_recall,
 )
 
 SST_FILENAME = "SST-binary.csv"

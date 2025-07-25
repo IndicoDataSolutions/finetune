@@ -1,11 +1,12 @@
-import pandas as pd
-import os
 import json
+import os
 import time
-from finetune.base_models import RoBERTa, ModernBert, ModernBertLarge, BERTLarge
-from finetune import SequenceLabeler
 
+import pandas as pd
 from sequence_metrics import metrics
+
+from finetune import SequenceLabeler
+from finetune.base_models import BERTLarge, ModernBert, ModernBertLarge, RoBERTa
 
 MODELS = {
     "modern_bert": ModernBert,
@@ -14,6 +15,7 @@ MODELS = {
     "bert_large": BERTLarge,
 }
 
+
 def get_model(model_name, **model_kwargs):
     return SequenceLabeler(
         base_model=MODELS[model_name],
@@ -21,7 +23,7 @@ def get_model(model_name, **model_kwargs):
         low_memory_mode=True,
         class_weights="sqrt",
         collapse_whitespace=True,
-        **model_kwargs
+        **model_kwargs,
     )
 
 
@@ -41,22 +43,29 @@ def train_model(model_name, dataset_path, **model_kwargs):
     model.fit(x, y)
     return model
 
+
 def evaluate_model(model: SequenceLabeler, dataset_path):
     x, y = get_dataset_split(dataset_path, "test")
     preds = model.predict(x)
     return metrics.get_all_metrics(preds, y)
 
+
 if __name__ == "__main__":
     for dataset in ["/datasets/charities", "/datasets/fcc_invoices", "/datasets/nda"]:
         print(f"Evaluating {dataset}")
-        for model_name, version in [("modern_bert", 4), ("roberta", 3)]: #, "modern_bert_large", "bert_large"]:
+        for model_name, version in [
+            ("modern_bert", 4),
+            ("roberta", 3),
+        ]:  # , "modern_bert_large", "bert_large"]:
             for optimize_for in ["predict_speed", "accuracy"]:
                 results_path = f"results/{dataset.split('/')[-1]}_{model_name}_{optimize_for}_v{version}.json"
                 if model_name == "roberta" and optimize_for == "accuracy":
                     # This has already been run.
                     continue
                 if os.path.exists(results_path):
-                    print(f"Skipping {model_name} for {dataset} because results already exist")
+                    print(
+                        f"Skipping {model_name} for {dataset} because results already exist"
+                    )
                     continue
                 print(f"Model: {model_name}")
                 start_time = time.time()

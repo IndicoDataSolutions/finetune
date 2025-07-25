@@ -1,5 +1,21 @@
+import numpy as np
 import tensorflow as tf
-from finetune.base_models.bert.modeling import gelu
+
+
+# TODO: remove this.
+def gelu(x):
+    """Gaussian Error Linear Unit.
+
+    This is a smoother version of the RELU.
+    Original paper: https://arxiv.org/abs/1606.08415
+    Args:
+        x: float Tensor to perform activation.
+
+    Returns:
+        `x` with the GELU activation applied.
+    """
+    cdf = 0.5 * (1.0 + tf.tanh((np.sqrt(2 / np.pi) * (x + 0.044715 * tf.pow(x, 3)))))
+    return x * cdf
 
 
 def get_gather_indices(X, sequence_lengths, start, end, other_end, chunk_tables):
@@ -442,20 +458,22 @@ def scatter_feats(output_shape, sequence_feats, scatter_vals):
     Returns:
         The reformatted features.
     """
-    input_tensor = tf.zeros(shape=output_shape, dtype=tf.float32) # [text_batch, text_seq, feat_dim]
+    input_tensor = tf.zeros(
+        shape=output_shape, dtype=tf.float32
+    )  # [text_batch, text_seq, feat_dim]
     mask = tf.math.less(
         scatter_vals[:, :, 1], output_shape[1]
     )  # Mask any tokens mapped outside of the input_tensor shape [text_batch, text_seq]
     # Special tokens were placed after the length of the shape.
-    feats = tf.boolean_mask(sequence_feats, mask) # [None, feat_dim]
-    scatter_idxs = tf.boolean_mask(scatter_vals, mask) # [None, 2]
+    feats = tf.boolean_mask(sequence_feats, mask)  # [None, feat_dim]
+    scatter_idxs = tf.boolean_mask(scatter_vals, mask)  # [None, 2]
     # Averages any cases where tokens are in multiple cells - for example when cells span multiple rows / cols.
     divide_by = tf.tensor_scatter_nd_add(
         input_tensor, scatter_idxs, tf.ones_like(feats)
-    ) # [text_batch, text_seq, feat_dim]
+    )  # [text_batch, text_seq, feat_dim]
     return tf.math.divide_no_nan(
         tf.tensor_scatter_nd_add(input_tensor, scatter_idxs, feats), divide_by
-    ) # [text_batch, text_seq, feat_dim]
+    )  # [text_batch, text_seq, feat_dim]
 
 
 def get_summary_values(inp, gather_vals, input_seq_len):
@@ -512,60 +530,3 @@ def reassemble_sequence_feats(
         feats = tf.compat.v1.layers.dense(feats, 768, activation=gelu)
 
     return feats
-
-
-def adaptor_block(inp, hidden_dim):
-    # Note - no residual in here as the residual connection will be from the original stack and not the mixed stack.
-    hidden = tf.compat.v1.layers.dense(
-        inp,
-        hidden_dim,
-        activation=gelu,
-        kernel_initializer=tf.compat.v1.truncated_normal_initializer(stddev=1e-3),
-    )
-    return tf.compat.v1.layers.dense(
-        hidden,
-        inp.shape[-1],
-        activation=None,
-        kernel_initializer=tf.compat.v1.truncated_normal_initializer(stddev=1e-3),
-    )
-
-
-def table_cross_row_col_mixing_fn(
-    row_feats, col_feats, *, row_gather, col_gather, output_shape, row_col_values
-):
-    bos_var = tf.compat.v1.get_variable(
-        "bos",
-        shape=[768],
-        dtype=tf.float32,
-        initializer=tf.compat.v1.truncated_normal_initializer(),
-        trainable=True,
-    )
-    eos_var = tf.compat.v1.get_variable(
-        "eos",
-        shape=[768],
-        dtype=tf.float32,
-        initializer=tf.compat.v1.truncated_normal_initializer(),
-        trainable=True,
-    )
-
-    col_feats_orig_shape = scatter_feats(
-        output_shape, col_feats, row_col_values["col"]["scatter_vals"]
-    )
-    row_feats_orig_shape = scatter_feats(
-        output_shape, row_feats, row_col_values["row"]["scatter_vals"]
-    )
-
-    # Scatter col feats into rows arrangement
-    col_feats_reshaped = gather_col_vals(
-        col_feats_orig_shape, row_gather, bos_pad=bos_var, eos_pad=eos_var, pad_val=1234
-    )["values"]
-
-    # Scatter row feats into cols arrangement.
-    row_feats_reshaped = gather_col_vals(
-        row_feats_orig_shape, col_gather, bos_pad=bos_var, eos_pad=eos_var, pad_val=1234
-    )["values"]
-
-    return (
-        adaptor_block(col_feats_reshaped, 64) + row_feats,
-        adaptor_block(row_feats_reshaped, 64) + col_feats,
-    )

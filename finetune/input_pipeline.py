@@ -1,26 +1,26 @@
 import itertools
 import logging
-import sys
 import math
+import sys
 import warnings
-from collections.abc import Iterable
-from collections import Counter
-
 from abc import ABCMeta, abstractmethod
+from collections import Counter
+from collections.abc import Iterable
 
 import numpy as np
 import tensorflow as tf
-from tensorflow.python.data import Dataset
 from sklearn.utils import shuffle as dataset_shuffle
-from finetune.errors import FinetuneError
+from tensorflow.python.data import Dataset
+
 from finetune.encoding.input_encoder import EncodedOutput, tokenize_context
+from finetune.errors import FinetuneError
 from finetune.util.imbalance import compute_class_weights
 from finetune.util.input_utils import (
-    InputMode,
-    wrap_tqdm,
     Chunker,
-    has_targets,
+    InputMode,
     batch_dataset,
+    has_targets,
+    wrap_tqdm,
 )
 
 LOGGER = logging.getLogger("finetune")
@@ -84,7 +84,11 @@ class BasePipeline(metaclass=ABCMeta):
         types, shapes = self.feed_shape_type_def()
         input_types = {**types[0], "length": tf.int32}
         input_shapes = {**shapes[0], "length": tf.TensorShape([])}
-        return tf.nest.map_structure(lambda dtype, shape: tf.keras.Input(shape=shape, dtype=dtype), input_types, input_shapes)
+        return tf.nest.map_structure(
+            lambda dtype, shape: tf.keras.Input(shape=shape, dtype=dtype),
+            input_types,
+            input_shapes,
+        )
 
     def zip_list_to_dict(self, X, Y=None, context=None):
         if Y is not None:
@@ -151,9 +155,7 @@ class BasePipeline(metaclass=ABCMeta):
             class_weights=class_weights, class_counts=class_counts
         )
 
-    def make_dataset_fn(
-        self, data_fn, tqdm_mode, shapes, types, update_hook=None
-    ):
+    def make_dataset_fn(self, data_fn, tqdm_mode, shapes, types, update_hook=None):
         return Dataset.from_generator(
             wrap_tqdm(
                 gen=data_fn,
@@ -220,12 +222,10 @@ class BasePipeline(metaclass=ABCMeta):
         if self.config.class_weights is not None:
             raise FinetuneError("Cannot use class weights in generator mode")
 
-        train_dataset = (
-            raw_dataset.shuffle(
-                self.config.shuffle_buffer_size,
-                seed=self.config.seed,
-                reshuffle_each_iteration=False,
-            )
+        train_dataset = raw_dataset.shuffle(
+            self.config.shuffle_buffer_size,
+            seed=self.config.seed,
+            reshuffle_each_iteration=False,
         )
 
         return {

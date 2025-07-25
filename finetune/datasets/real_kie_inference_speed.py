@@ -1,11 +1,12 @@
-import pandas as pd
-import os
 import json
+import os
 import time
-from finetune.base_models import RoBERTa, ModernBert, ModernBertLarge, BERTLarge
-from finetune import SequenceLabeler
 
+import pandas as pd
 from sequence_metrics import metrics
+
+from finetune import SequenceLabeler
+from finetune.base_models import BERTLarge, ModernBert, ModernBertLarge, RoBERTa
 
 MODELS = {
     "modern_bert": ModernBert,
@@ -14,6 +15,7 @@ MODELS = {
     "bert_large": BERTLarge,
 }
 
+
 def get_model(model_name, **model_kwargs):
     return SequenceLabeler(
         base_model=MODELS[model_name],
@@ -21,7 +23,7 @@ def get_model(model_name, **model_kwargs):
         low_memory_mode=True,
         class_weights="sqrt",
         collapse_whitespace=True,
-        **model_kwargs
+        **model_kwargs,
     )
 
 
@@ -44,10 +46,12 @@ def train_model(model_name, dataset_path, max_data=None, **model_kwargs):
     model.fit(x, y)
     return model
 
+
 def evaluate_model(model: SequenceLabeler, dataset_path):
     x, y = get_dataset_split(dataset_path, "test")
     preds = model.predict(x)
     return metrics.get_all_metrics(preds, y)
+
 
 if __name__ == "__main__":
     for dataset in ["/datasets/charities"]:
@@ -55,7 +59,13 @@ if __name__ == "__main__":
         results_path = f"{dataset}_accuracy.json"
         for optimize_for in ["accuracy"]:
             start_time = time.time()
-            model = train_model("modern_bert", dataset, optimize_for=optimize_for, n_epochs=1, max_data=5)
+            model = train_model(
+                "modern_bert",
+                dataset,
+                optimize_for=optimize_for,
+                n_epochs=1,
+                max_data=5,
+            )
             x, y = get_dataset_split(dataset, "test")
             for predict_batch_size in range(1, 100):
                 model.config.predict_batch_size = predict_batch_size

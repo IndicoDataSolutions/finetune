@@ -1,22 +1,20 @@
 import copy
+import math
 import os
 from collections import Counter, defaultdict
-import math
 from typing import Dict, List, Tuple, Union
 
-from finetune.util.memory import cleanup_sessions
-import tensorflow as tf
 import numpy as np
+import tensorflow as tf
 
 from finetune.base import BaseModel
-from finetune.encoding.target_encoders import (
-    SequenceLabelingEncoder,
-)
-from finetune.nn.target_blocks import SequenceLabeler as SequenceLabelerBlock
+from finetune.encoding.input_encoder import get_spacy, tokenize_context
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
-from finetune.encoding.input_encoder import get_spacy
+from finetune.encoding.target_encoders import SequenceLabelingEncoder
 from finetune.input_pipeline import BasePipeline
-from finetune.encoding.input_encoder import tokenize_context
+from finetune.nn.target_blocks import SequenceLabeler as SequenceLabelerBlock
+from finetune.util.memory import cleanup_sessions
+
 
 def sequences_overlap(seq1: dict, seq2: dict):
     return seq1["start"] <= seq2["end"] and seq1["end"] >= seq2["start"]
@@ -68,7 +66,6 @@ class SequencePipeline(BasePipeline):
                 empty = len(filtered_labels) == 0
                 if (
                     self.config.filter_empty_examples
-
                     or self.empty_ratio > self.config.max_empty_chunk_ratio
                 ) and empty:
                     continue
@@ -213,9 +210,7 @@ class SequenceLabeler(BaseModel):
             setattr(self.config, key, value)
 
     def _get_input_pipeline(self):
-        return SequencePipeline(
-            config=self.config
-        )
+        return SequencePipeline(config=self.config)
 
     def _initialize(self):
         return super()._initialize()
@@ -310,9 +305,7 @@ class SequenceLabeler(BaseModel):
                 # TODO Determine if we need something more sophisticated for chunking
                 self.config.max_empty_chunk_ratio = 0.0
 
-        return super().finetune(
-            Xs, Y=Y, context=context, update_hook=update_hook
-        )
+        return super().finetune(Xs, Y=Y, context=context, update_hook=update_hook)
 
     def _pre_chunk_document(
         self, texts: List[str]
@@ -555,6 +548,7 @@ class SequenceLabeler(BaseModel):
                     bio_prefix = None
                     if label != self.config.pad_token:
                         bio_prefix, label = label[:2], label[2:]
+
                 def _get_label(label):
                     if label[:3] == "BG-" or label[:3] == "IG-":
                         return label[3:]
@@ -609,7 +603,7 @@ class SequenceLabeler(BaseModel):
                     probs=[prob_dicts],
                     none_value=self.config.pad_token,
                     subtoken_predictions=self.config.subtoken_predictions,
-                    bio_tagging=self.config.bio_tagging
+                    bio_tagging=self.config.bio_tagging,
                 )
                 if per_token:
                     doc_annotations.append(
@@ -665,13 +659,7 @@ class SequenceLabeler(BaseModel):
             **kwargs
         )
 
-    def target_block(
-        self,
-        *,
-        config,
-        n_outputs,
-        **kwargs
-    ):
+    def target_block(self, *, config, n_outputs, **kwargs):
         return SequenceLabelerBlock(
             n_targets=n_outputs,
             dropout_rate=config.clf_p_drop,

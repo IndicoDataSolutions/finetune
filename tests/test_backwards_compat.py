@@ -1,6 +1,7 @@
+import glob
+import os
 import unittest
 from pathlib import Path
-import os
 
 import pytest
 import tqdl
@@ -53,3 +54,55 @@ class TestConfig(unittest.TestCase):
         model.save("./test_model.jl")
         model = SequenceLabeler.load("./test_model.jl")
         assert model.config.collapse_whitespace == True
+
+
+# TODO: eventually clean this up and push these files to s3.
+BUNDLES = glob.glob(os.path.join("/Finetune/tests/backwards_compat_bundles/*.jl"))
+
+
+@pytest.mark.parametrize("bundle_path", BUNDLES)
+def test_backwards_compat_extreme(bundle_path):
+    model = SequenceLabeler.load(bundle_path, key="model")
+    texts = SequenceLabeler.load(bundle_path, key="texts")
+    contexts = SequenceLabeler.load(bundle_path, key="contexts")
+    expected_flat_features = SequenceLabeler.load(bundle_path, key="flat_features")
+    expected_sequence_features = SequenceLabeler.load(
+        bundle_path, key="sequence_features"
+    )
+    expected_preds = SequenceLabeler.load(bundle_path, key="preds")
+    expected_probs = SequenceLabeler.load(bundle_path, key="probs")
+
+    try:
+        flat_features = model.featurize(texts, context=contexts)
+    except:
+        if expected_flat_features is not None:
+            raise
+        flat_features = None
+    assert expected_flat_features is None or flat_features == expected_flat_features
+
+    try:
+        sequence_features = model.featurize_sequence(texts, context=contexts)
+    except:
+        if expected_sequence_features is not None:
+            raise
+        sequence_features = None
+    assert (
+        expected_sequence_features is None
+        or sequence_features == expected_sequence_features
+    )
+
+    try:
+        preds = model.predict(texts, context=contexts)
+    except:
+        if expected_preds is not None:
+            raise
+        preds = None
+    assert expected_preds is None or preds == expected_preds
+
+    try:
+        probs = model.predict_proba(texts, context=contexts)
+    except:
+        if expected_probs is not None:
+            raise
+        probs = None
+    assert expected_probs is None or probs == expected_probs

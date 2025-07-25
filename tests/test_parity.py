@@ -1,20 +1,19 @@
-import unittest
 import os.path
-import pytest
+import unittest
 
 import numpy as np
+import pytest
 from tensorflow.data import Dataset
 
+from finetune import Classifier, MultiFieldClassifier, SequenceLabeler
+from finetune.base_models import BERT, GPT, GPT2, RoBERTa, XDocBase
 from finetune.encoding.input_encoder import EncodedOutput
 from finetune.model import PredictMode
-from finetune.base_models import GPT, GPT2, BERT, RoBERTa, XDocBase
-from finetune import Classifier, MultiFieldClassifier, SequenceLabeler
 
 DIRECTORY = os.path.abspath(os.path.dirname(__file__))
 
 
 class TestActivationParity(unittest.TestCase):
-
     MULTIFIELD_TEST_DATA = [
         [
             "Rick grew up in a troubled household. He never found good support in family, "

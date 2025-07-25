@@ -1,29 +1,28 @@
+import unicodedata
 import unittest
 from collections import Counter
-import pytest
 
 import numpy as np
+import pytest
 import tensorflow as tf
 
-import unicodedata
-
+from finetune import Classifier, SequenceLabeler
+from finetune.base_models.bert.encoder import BERTEncoder, BERTEncoderMultuilingal
+from finetune.base_models.bert.roberta_encoder import (
+    RoBERTaEncoder,
+    RoBERTaEncoderSlow,
+    RoBERTaEncoderV2,
+)
+from finetune.base_models.gpt2.encoder import GPT2Encoder
+from finetune.base_models.gpt.encoder import GPTEncoder
+from finetune.base_models.oscar.encoder import GPCEncoder
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
+from finetune.errors import FinetuneError
 from finetune.optimizers.gradient_accumulation import get_grad_accumulation_optimizer
+from finetune.scheduler import Scheduler
 from finetune.util.imbalance import compute_class_weights
 from finetune.util.optimize_loss import OPTIMIZERS
 from finetune.util.timing import ProgressBar
-from finetune.errors import FinetuneError
-from finetune import Classifier, SequenceLabeler
-from finetune.base_models.gpt.encoder import GPTEncoder
-from finetune.base_models.gpt2.encoder import GPT2Encoder
-from finetune.base_models.bert.roberta_encoder import (
-    RoBERTaEncoderV2,
-    RoBERTaEncoder,
-    RoBERTaEncoderSlow,
-)
-from finetune.base_models.bert.encoder import BERTEncoderMultuilingal, BERTEncoder
-from finetune.base_models.oscar.encoder import GPCEncoder
-from finetune.scheduler import Scheduler
 
 
 class TestGPTEncoder(unittest.TestCase):
@@ -285,12 +284,12 @@ def body_of_test_gradient_accumulating_optimizer(opt, accumulate_on_cpu):
     with tf.Graph().as_default():
         loss = tf.compat.v1.get_variable("loss", shape=1)
         lr = 0.1
-        opt = get_grad_accumulation_optimizer(opt, 2, accumulate_on_cpu=accumulate_on_cpu)(lr)
+        opt = get_grad_accumulation_optimizer(
+            opt, 2, accumulate_on_cpu=accumulate_on_cpu
+        )(lr)
         global_step = tf.compat.v1.train.get_or_create_global_step()
         if isinstance(opt, tf.keras.optimizers.Optimizer):
-            with tf.control_dependencies(
-                [opt.minimize(lambda: tf.abs(loss), [loss])]
-            ):
+            with tf.control_dependencies([opt.minimize(lambda: tf.abs(loss), [loss])]):
                 train_op = global_step.assign_add(1)
         else:
             train_op = opt.minimize(tf.abs(loss), global_step=global_step)
@@ -313,15 +312,18 @@ def body_of_test_gradient_accumulating_optimizer(opt, accumulate_on_cpu):
             assert val_before - (grad_before + grad_after1) * lr == val_after2
             assert gs == (i + 1) * 2
 
+
 @pytest.mark.parametrize("accumulate_on_cpu", [True, False])
 def test_gradient_accumulating_optimizer_keras(accumulate_on_cpu):
-    body_of_test_gradient_accumulating_optimizer(tf.keras.optimizers.SGD, accumulate_on_cpu)
+    body_of_test_gradient_accumulating_optimizer(
+        tf.keras.optimizers.SGD, accumulate_on_cpu
+    )
+
 
 @pytest.mark.parametrize("accumulate_on_cpu", [True, False])
 def test_gradient_accumulating_optimizer_compat(accumulate_on_cpu):
     body_of_test_gradient_accumulating_optimizer(
-        tf.compat.v1.train.GradientDescentOptimizer,
-        accumulate_on_cpu=accumulate_on_cpu
+        tf.compat.v1.train.GradientDescentOptimizer, accumulate_on_cpu=accumulate_on_cpu
     )
 
 
@@ -360,7 +362,6 @@ class TestOptimizers(unittest.TestCase):
 
 
 class TestSaveMultiple(unittest.TestCase):
-    
     def preds_equal(self, a, b):
         assert len(a) == len(b)
         for ai, bi in zip(a, b):
@@ -390,34 +391,40 @@ class TestSaveMultiple(unittest.TestCase):
     def test_save_mutliple(self):
         model_a = SequenceLabeler()
         model_b = SequenceLabeler()
-        model_a.fit(["test text"] * 20, [[{"start": 0, "end": 4, "label": "test"}]] * 20)
-        model_b.fit(["test text"] * 20, [[{"start": 5, "end": 9, "label": "test"}]] * 20)
+        model_a.fit(
+            ["test text"] * 20, [[{"start": 0, "end": 4, "label": "test"}]] * 20
+        )
+        model_b.fit(
+            ["test text"] * 20, [[{"start": 5, "end": 9, "label": "test"}]] * 20
+        )
 
         preds_a_1 = model_a.predict(["test text"])
         preds_b_1 = model_b.predict(["test text"])
-        
-        SequenceLabeler.save_multiple("multiple_models.jl", {"a": model_a, "b": model_b})
+
+        SequenceLabeler.save_multiple(
+            "multiple_models.jl", {"a": model_a, "b": model_b}
+        )
         shed = Scheduler()
         preds_a_2 = shed.predict("multiple_models.jl", ["test text"], key="a")
         preds_b_2 = shed.predict("multiple_models.jl", ["test text"], key="b")
         self.preds_equal(preds_a_1, preds_a_2)
         self.preds_equal(preds_b_1, preds_b_2)
 
-    
     def test_save_mutliple_inc_non_model(self):
         model_a = SequenceLabeler()
-        model_a.fit(["test text"] * 20, [[{"start": 0, "end": 4, "label": "test"}]] * 20)
+        model_a.fit(
+            ["test text"] * 20, [[{"start": 0, "end": 4, "label": "test"}]] * 20
+        )
         preds_a_1 = model_a.predict(["test text"])
-    
-        SequenceLabeler.save_multiple("multiple_models.jl", {"a": model_a, "a_preds": preds_a_1})
-        
+
+        SequenceLabeler.save_multiple(
+            "multiple_models.jl", {"a": model_a, "a_preds": preds_a_1}
+        )
+
         shed = Scheduler()
         preds_a_2 = shed.predict("multiple_models.jl", ["test text"], key="a")
         assert preds_a_1 == SequenceLabeler.load("multiple_models.jl", key="a_preds")
         self.preds_equal(preds_a_1, preds_a_2)
-
-
-    
 
 
 if __name__ == "__main__":

@@ -3,19 +3,19 @@ Finetune-style interface for running a pipeline of table and non-table models.
 """
 import copy
 import functools
+import logging
 import os
+import sys
 import tempfile
 import typing as t
-import sys
-import logging
 
-from finetune.base_models import TableRoBERTa
-from finetune.errors import FinetuneError
-from finetune.util.metrics import sequences_overlap
-from finetune.scheduler import Scheduler
-from finetune.encoding.input_encoder import BaseEncoder
 from finetune import SequenceLabeler
+from finetune.base_models import TableRoBERTa
+from finetune.encoding.input_encoder import BaseEncoder
+from finetune.errors import FinetuneError
+from finetune.scheduler import Scheduler
 from finetune.util.memory import cleanup_sessions
+from finetune.util.metrics import sequences_overlap
 
 LOGGER = logging.getLogger("finetune")
 
@@ -56,7 +56,10 @@ def _adjust_span_to_chunk(
         span["text"] = span["text"][
             adj_start - ideal_adj_start : adj_end - ideal_adj_start
         ]
-        if output_space_text is not None and span["text"] != output_space_text[adj_start:adj_end]:
+        if (
+            output_space_text is not None
+            and span["text"] != output_space_text[adj_start:adj_end]
+        ):
             LOGGER.warn("Span Text does not align with output space text")
     span["start"] = adj_start
     span["end"] = adj_end
@@ -773,7 +776,7 @@ class TableLabeler:
                 tables=tables,
                 model_file_path=model_path,
                 scheduler=scheduler,
-                **kwargs
+                **kwargs,
             )
 
     @classmethod
@@ -826,5 +829,3 @@ class TableLabeler:
             table_doc_i=model_inputs["table_doc_i"],
             tables=tables,
         )
-
-

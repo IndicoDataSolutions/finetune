@@ -1,39 +1,37 @@
-import os
-import unittest
-from copy import deepcopy
-from pathlib import Path
 import codecs
+import gc
 import json
+import os
 import random
 import time
+import unittest
 import weakref
-import gc
+from copy import deepcopy
+from pathlib import Path
 
 # required for tensorflow logging control
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
-from pytest import approx
-
-import tensorflow as tf
 import numpy as np
-from sklearn.model_selection import train_test_split
 import requests
+import tensorflow as tf
 from bs4 import BeautifulSoup as bs
 from bs4.element import Tag
+from pytest import approx
+from sequence_metrics.metrics import (
+    sequence_labeling_overlap_precision,
+    sequence_labeling_overlap_recall,
+    sequence_labeling_token_precision,
+    sequence_labeling_token_recall,
+)
+from sklearn.model_selection import train_test_split
 
 from finetune import SequenceLabeler
 from finetune.base_models import GPT
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
-from sequence_metrics.metrics import (
-    sequence_labeling_token_precision,
-    sequence_labeling_token_recall,
-    sequence_labeling_overlap_precision,
-    sequence_labeling_overlap_recall,
-)
 
 
 class TestSequenceLabeler(unittest.TestCase):
-
     n_sample = 100
     dataset_path = os.path.join("Data", "Sequence", "reuters.xml")
     processed_path = os.path.join("Data", "Sequence", "reuters.json")
@@ -83,9 +81,7 @@ class TestSequenceLabeler(unittest.TestCase):
         cls._download_reuters()
 
     def default_config(self, **kwargs):
-        d = dict(
-            base_model=GPT, batch_size=2, max_length=256
-        )
+        d = dict(base_model=GPT, batch_size=2, max_length=256)
         d.update(**kwargs)
         return d
 
@@ -132,7 +128,9 @@ class TestSequenceLabeler(unittest.TestCase):
         for pred, pred_with_prob in zip(predictions, with_doc_probas):
             self.assertEqual(pred, pred_with_prob["prediction"])
             self.assertIsInstance(pred_with_prob["negative_confidence"], dict)
-        import pdb; pdb.set_trace()
+        import pdb
+
+        pdb.set_trace()
 
         self.assertIsInstance(probas, list)
         self.assertIsInstance(probas[0], list)

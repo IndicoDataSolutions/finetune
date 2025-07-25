@@ -1,11 +1,11 @@
 from abc import ABCMeta, abstractmethod
 
 COMMON_SETTINGS = {
-    'max_length': 512,
-    'batch_size': 2,
-    'n_epochs': 3,
-    'predict_batch_size': 20,
-    'chunk_context': None,
+    "max_length": 512,
+    "batch_size": 2,
+    "n_epochs": 3,
+    "predict_batch_size": 20,
+    "chunk_context": None,
     "mixed_precision": False,
     "float_16_predict": False,
     "lr": 6.25e-5,
@@ -50,24 +50,29 @@ class SourceModel(metaclass=ABCMeta):
         pass
 
 
-from finetune.base_models.gpt.model import GPTModel, GPTModelSmall
-from finetune.base_models.gpt2.model import GPT2Model, GPT2Model345, GPT2Model762, GPT2Model1558
-from finetune.base_models.textcnn.model import TextCNNModel, FastTextCNNModel
 from finetune.base_models.bert.model import (
     BERTModelCased,
     BERTModelLargeCased,
-    RoBERTa,
-    RoBERTaLarge,
     DistilBERT,
     DistilRoBERTa,
     DocRep,
     LayoutLM,
-    XDocBase,
+    RoBERTa,
+    RoBERTaLarge,
     TableRoBERTa,
+    XDocBase,
 )
+from finetune.base_models.gpt2.model import (
+    GPT2Model,
+    GPT2Model345,
+    GPT2Model762,
+    GPT2Model1558,
+)
+from finetune.base_models.gpt.model import GPTModel, GPTModelSmall
+from finetune.base_models.modern_bert.model import ModernBertLargeModel, ModernBertModel
 from finetune.base_models.tcn.model import TCNModel
-from finetune.base_models.oscar.model import GPCModel
-from finetune.base_models.modern_bert.model import ModernBertModel, ModernBertLargeModel
+from finetune.base_models.textcnn.model import FastTextCNNModel, TextCNNModel
+
 # Aliases
 GPT = GPTModel
 GPT2 = GPT2Small = GPT2Model
@@ -82,6 +87,5 @@ ROBERTA = RoBERTa
 ROBERTALarge = RoBERTaLarge
 DistilROBERTA = DistilRoBERTa
 TCN = TCNModel
-OSCAR = GPCModel
 ModernBert = ModernBertModel
 ModernBertLarge = ModernBertLargeModel

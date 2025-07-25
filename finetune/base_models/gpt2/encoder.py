@@ -1,10 +1,10 @@
-import os
 import json
+import os
 import traceback
-import regex as re
 from functools import lru_cache
 
 import numpy as np
+import regex as re
 
 import finetune
 from finetune.encoding.input_encoder import BaseEncoder, EncodedOutput, get_pairs
@@ -32,10 +32,10 @@ def bytes_to_unicode():
     )
     cs = bs[:]
     n = 0
-    for b in range(2 ** 8):
+    for b in range(2**8):
         if b not in bs:
             bs.append(b)
-            cs.append(2 ** 8 + n)
+            cs.append(2**8 + n)
             n += 1
     cs = [chr(n) for n in cs]
     return dict(zip(bs, cs))
@@ -75,7 +75,7 @@ class GPT2Encoder(BaseEncoder):
         self.decoder = {v: k for k, v in self.encoder.items()}
         self.errors = "replace"
         self.init_encoders()
-        
+
     def init_encoders(self):
         self.byte_encoder = bytes_to_unicode()
         self.byte_decoder = {v: k for k, v in self.byte_encoder.items()}

@@ -1,10 +1,12 @@
 import unittest
+
 import pytest
+
 from finetune.util.metrics import (
-    seq_recall,
-    seq_precision,
     get_seq_count_fn,
     micro_f1,
+    seq_precision,
+    seq_recall,
     sequence_f1,
     sequences_overlap,
 )
@@ -13,19 +15,31 @@ from finetune.util.metrics import (
 @pytest.mark.parametrize(
     "a,b,expected",
     [
-        ({"start": 0, "end": 1}, {"start": 2, "end": 3}, False,),  # Non-overlapping
+        (
+            {"start": 0, "end": 1},
+            {"start": 2, "end": 3},
+            False,
+        ),  # Non-overlapping
         (
             {"start": 0, "end": 1},
             {"start": 1, "end": 2},
             False,
         ),  # Flush against each other, True expected rather than false for frontend
-        ({"start": 0, "end": 2}, {"start": 1, "end": 3}, True,),  # Overlapping
+        (
+            {"start": 0, "end": 2},
+            {"start": 1, "end": 3},
+            True,
+        ),  # Overlapping
         (
             {"start": 0, "end": 2},
             {"start": 1, "end": 2},
             True,
         ),  # Contained but flush against end
-        ({"start": 0, "end": 3}, {"start": 1, "end": 2}, True,),  # Full contained
+        (
+            {"start": 0, "end": 3},
+            {"start": 1, "end": 2},
+            True,
+        ),  # Full contained
         (
             {"start": 0, "end": 1},
             {"start": 0, "end": 2},
@@ -248,7 +262,10 @@ class TestMetrics(unittest.TestCase):
         }
 
         self.check_metrics(
-            self.Y_true, Y_mixed, expected, span_type="token",
+            self.Y_true,
+            Y_mixed,
+            expected,
+            span_type="token",
         )
 
         # Move some predictions from correct to false negative
@@ -267,11 +284,13 @@ class TestMetrics(unittest.TestCase):
         expected["macro-f1"] = 0.437
         expected["weighted-f1"] = 0.392
         self.check_metrics(
-            self.Y_true, Y_mixed_false_negs, expected, span_type="token",
+            self.Y_true,
+            Y_mixed_false_negs,
+            expected,
+            span_type="token",
         )
 
     def test_seq_correct(self):
-
         # Overlaps
         for y_set in [self.Y_true, self.Y_overlap, self.Y_extra_overlap]:
             self.check_metrics(
@@ -412,7 +431,10 @@ class TestMetrics(unittest.TestCase):
             "weighted-f1": 1.0,  # because there is no support for class2
         }
         self.check_metrics(
-            [y_true], [y_pred], expected=expected, span_type="overlap",
+            [y_true],
+            [y_pred],
+            expected=expected,
+            span_type="overlap",
         )
 
     def test_overlapping_2_class_swapped(self):
@@ -444,7 +466,10 @@ class TestMetrics(unittest.TestCase):
             "weighted-f1": 1.0,  # because there is no support for class2
         }
         self.check_metrics(
-            [y_true], [y_pred], expected=expected, span_type="overlap",
+            [y_true],
+            [y_pred],
+            expected=expected,
+            span_type="overlap",
         )
 
     def test_overlapping_1_class(self):
@@ -468,7 +493,10 @@ class TestMetrics(unittest.TestCase):
             "weighted-f1": 1.0,
         }
         self.check_metrics(
-            [y_true], [y_pred], expected=expected, span_type="overlap",
+            [y_true],
+            [y_pred],
+            expected=expected,
+            span_type="overlap",
         )
 
     def test_2_class(self):
@@ -495,7 +523,10 @@ class TestMetrics(unittest.TestCase):
         }
         for span_type in ["overlap", "superset"]:
             self.check_metrics(
-                [y_true], [y_pred], expected=expected, span_type=span_type,
+                [y_true],
+                [y_pred],
+                expected=expected,
+                span_type=span_type,
             )
 
     def test_whitespace(self):
@@ -519,6 +550,8 @@ class TestMetrics(unittest.TestCase):
         }
         for span_type in ["superset", "overlap", "exact"]:
             self.check_metrics(
-                [y_true], [y_pred], expected=expected, span_type=span_type,
+                [y_true],
+                [y_pred],
+                expected=expected,
+                span_type=span_type,
             )
-

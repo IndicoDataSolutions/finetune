@@ -19,11 +19,13 @@ def add_length(x, y=None):
         return x, y
     return x
 
+
 # TODO: we no longer need the dataset as a function, we can simplify this considerably.
 def batch_dataset(
     dataset: tf.data.Dataset,
     batch_size: int,
-    shapes: dict[str, tf.TensorShape] | tuple[dict[str, tf.TensorShape], dict[str, tf.TensorShape]],
+    shapes: dict[str, tf.TensorShape]
+    | tuple[dict[str, tf.TensorShape], dict[str, tf.TensorShape]],
     max_length: int,
     n_epochs: int = 1,
     shuffle: bool = False,
@@ -41,8 +43,7 @@ def batch_dataset(
         ), "You cannot use table batching to predict on tables as order is not guarenteed"
 
         return (
-            dataset
-            .map(add_length)
+            dataset.map(add_length)
             .shuffle(500 if shuffle else 1, seed=random_seed)
             # When we update to tf.2.13 this will change to be a method on the dataset.
             .apply(
@@ -51,14 +52,10 @@ def batch_dataset(
                         lambda item, *_: tf.cast(
                             tf.maximum(
                                 tf.reduce_sum(
-                                    item["context"][:, 0]
-                                    - item["context"][:, 2]
-                                    + 1
+                                    item["context"][:, 0] - item["context"][:, 2] + 1
                                 ),
                                 tf.reduce_sum(
-                                    item["context"][:, 1]
-                                    - item["context"][:, 3]
-                                    + 1
+                                    item["context"][:, 1] - item["context"][:, 3] + 1
                                 ),
                             ),
                             tf.int32,
@@ -76,8 +73,7 @@ def batch_dataset(
 
     else:
         return (
-            dataset
-            .map(add_length)
+            dataset.map(add_length)
             .shuffle(500 if shuffle else 1, seed=random_seed)
             .padded_batch(batch_size, padded_shapes=shapes, drop_remainder=False)
             .repeat(n_epochs)

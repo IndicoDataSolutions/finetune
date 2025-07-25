@@ -1,24 +1,23 @@
-from abc import ABCMeta
 import logging
+from abc import ABCMeta
 
 import numpy as np
 from sklearn.preprocessing import LabelEncoder, MultiLabelBinarizer
 
 LOGGER = logging.getLogger("finetune")
 
+
 class BaseEncoder(metaclass=ABCMeta):
     @property
     def target_labels(self):
-        return getattr(self, 'classes_', None)
+        return getattr(self, "classes_", None)
 
     @property
     def target_dim(self):
         return len(self.target_labels) if self.target_labels is not None else None
 
 
-
 class OneHotLabelEncoder(LabelEncoder, BaseEncoder):
-
     def _make_one_hot(self, labels):
         output = np.zeros([len(labels), len(self.classes_)], dtype=float)
         output[np.arange(len(labels)), labels] = 1
@@ -52,11 +51,19 @@ class SequenceLabelingEncoder(BaseEncoder):
         self.group_tagging = group_tagging
 
     def fit(self, labels):
-        self.classes_ = sorted(list(set(lab_i["label"] for lab in labels for lab_i in lab) | {self.pad_token}))
+        self.classes_ = sorted(
+            list(
+                set(lab_i["label"] for lab in labels for lab_i in lab)
+                | {self.pad_token}
+            )
+        )
         if self.bio_tagging:
             # <PAD> is duplicated here, removed in the set() call
-            self.classes_ = [pre + c if c != self.pad_token else c
-                             for c in self.classes_ for pre in ("B-", "I-")]
+            self.classes_ = [
+                pre + c if c != self.pad_token else c
+                for c in self.classes_
+                for pre in ("B-", "I-")
+            ]
             self.classes_ = sorted(list(set(self.classes_)))
         self.lookup = {c: i for i, c in enumerate(self.classes_)}
 
@@ -67,22 +74,30 @@ class SequenceLabelingEncoder(BaseEncoder):
     @staticmethod
     def overlaps(label, tok_start, tok_end, tok_text, input_text, offset=None):
         does_overlap = (
-            label["start"] < tok_end <= label["end"] or
-            tok_start < label["end"] <= tok_end
+            label["start"] < tok_end <= label["end"]
+            or tok_start < label["end"] <= tok_end
         )
         if not does_overlap:
             return False, False
 
         # Don't run check if text wasn't provided
-        if 'text' in label:
+        if "text" in label:
             if offset is not None:
                 # offsets are present when we are using document labeler.
                 # In this case input_text is a page and offset is the char index of where that page starts.
-                label_text = label["text"][max(0, offset - label["start"]): len(input_text) + offset - label["start"]]
-                doc_text = input_text[max(0, label["start"] - offset): label["end"] - offset]
+                label_text = label["text"][
+                    max(0, offset - label["start"]) : len(input_text)
+                    + offset
+                    - label["start"]
+                ]
+                doc_text = input_text[
+                    max(0, label["start"] - offset) : label["end"] - offset
+                ]
                 strings_agree = doc_text == label_text
             else:
-                strings_agree = input_text[label["start"]: label["end"]] == label["text"]
+                strings_agree = (
+                    input_text[label["start"] : label["end"]] == label["text"]
+                )
         else:
             strings_agree = True
 
@@ -111,25 +126,38 @@ class SequenceLabelingEncoder(BaseEncoder):
                         group_pre = "IG-"
                 current_label = f"{group_pre}{bio_pre}{current_tag}"
 
-            for i, (start, end, text) in enumerate(zip(out.token_starts, out.token_ends, out.tokens)):
+            for i, (start, end, text) in enumerate(
+                zip(out.token_starts, out.token_ends, out.tokens)
+            ):
                 # Label extends less than halfway through token
                 if label["end"] < (start + end + 1) // 2:
                     break
-                overlap, agree = self.overlaps(label, start, end, text, input_text, offset=offset)
+                overlap, agree = self.overlaps(
+                    label, start, end, text, input_text, offset=offset
+                )
                 if overlap:
                     if not agree:
                         raise ValueError(
                             "Tokens and labels do not align. {} matches with {}".format(
                                 label,
-                                input_text[label["start"] - offset: label["end"] - offset]
+                                input_text[
+                                    label["start"] - offset : label["end"] - offset
+                                ],
                             )
                         )
-                    if labels_out[i] != pad_idx and self.lookup[current_label] != labels_out[i]:
-                        LOGGER.warning("Overlapping labels were found, consider multilabel_sequence=True")
+                    if (
+                        labels_out[i] != pad_idx
+                        and self.lookup[current_label] != labels_out[i]
+                    ):
+                        LOGGER.warning(
+                            "Overlapping labels were found, consider multilabel_sequence=True"
+                        )
                     if current_label not in self.lookup:
                         LOGGER.warning(
                             "Attempting to encode unknown labels : {}, ignoring for now but this will likely not "
-                            "result in desirable behaviour. Available labels are {}".format(current_label, self.lookup.keys())
+                            "result in desirable behaviour. Available labels are {}".format(
+                                current_label, self.lookup.keys()
+                            )
                         )
                     else:
                         labels_out[i] = self.lookup[current_label]
@@ -145,6 +173,6 @@ class SequenceLabelingEncoder(BaseEncoder):
         # TODO: update when finetune_to_indico is removed
         return [self.classes_[l] for l in y]
 
+
 class MultilabelClassificationEncoder(MultiLabelBinarizer, BaseEncoder):
     pass
-

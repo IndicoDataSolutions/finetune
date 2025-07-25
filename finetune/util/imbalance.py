@@ -1,8 +1,9 @@
 """
 Utilities for dealing with class imbalance
 """
-import numpy as np
 from collections import Counter
+
+import numpy as np
 
 from finetune.errors import FinetuneError
 
@@ -49,7 +50,7 @@ def _compute_ratios(counts, n_total, multilabel=False):
         else:
             ratio = ratio = max_count / count
         computed_ratios[class_name] = ratio
-    return computed_ratios 
+    return computed_ratios
 
 
 def class_weight_tensor(class_weights, target_dim, label_encoder):

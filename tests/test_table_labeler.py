@@ -1,8 +1,10 @@
-import pytest
 import io
 import logging
-from finetune.util.table_labeler import TableLabeler, TableETL
+
+import pytest
+
 from finetune.scheduler import Scheduler
+from finetune.util.table_labeler import TableETL, TableLabeler
 
 
 def make_labels_predictions(labels):
@@ -327,14 +329,17 @@ def test_fit_predict_bytes_io(labeled_table_data):
     del tl
     shed = Scheduler()
     preds = TableLabeler.predict_from_file(
-        model_file_path=bytes_io, text=text, tables=tables, scheduler=shed, cache_key="test_fit_predict_bytes_io"
+        model_file_path=bytes_io,
+        text=text,
+        tables=tables,
+        scheduler=shed,
+        cache_key="test_fit_predict_bytes_io",
     )
     print([{**p, "confidence": None} for p in preds[0]])
     assert len(preds[0]) == len(labels[0])
     assert set((p["start"], p["end"], p["label"]) for p in preds[0]) == set(
         (l["start"], l["end"], l["label"]) for l in labels[0]
     )
-
 
 
 @pytest.mark.parametrize("drop_labels", [True, False])

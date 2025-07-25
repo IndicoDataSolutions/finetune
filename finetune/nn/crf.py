@@ -1,4 +1,5 @@
 import typing as t
+
 import tensorflow as tf
 
 
@@ -13,11 +14,11 @@ def viterbi_decode(score, transition_params):
             indices.
         viterbi_score: A float containing the score for the Viterbi sequence.
     """
-    seq_len  = tf.shape(score)[0]
+    seq_len = tf.shape(score)[0]
     num_tags = tf.shape(score)[1]
     trellis_ta = tf.TensorArray(dtype=score.dtype, size=seq_len)
-    backptrs_ta = tf.TensorArray(dtype=tf.int32,     size=seq_len)
-    trellis_ta  = trellis_ta.write(0, score[0])
+    backptrs_ta = tf.TensorArray(dtype=tf.int32, size=seq_len)
+    trellis_ta = trellis_ta.write(0, score[0])
     backptrs_ta = backptrs_ta.write(0, tf.zeros([num_tags], tf.int32))
 
     for t in tf.range(1, seq_len):
@@ -39,13 +40,14 @@ def viterbi_decode(score, transition_params):
     viterbi_path = path_ta.stack()
     return viterbi_path, tf.nn.softmax(trellis, axis=-1)
 
+
 @tf.function
 def batch_viterbi_decode(logits, transition_matrix):
     print("Logit type inside call", type(logits))
     batch_size = tf.shape(logits)[0]
 
-    paths_ta = tf.TensorArray(tf.int32,      size=batch_size)
-    probs_ta = tf.TensorArray(logits.dtype,  size=batch_size)
+    paths_ta = tf.TensorArray(tf.int32, size=batch_size)
+    probs_ta = tf.TensorArray(logits.dtype, size=batch_size)
 
     for b in tf.range(batch_size):
         path, probs = viterbi_decode(logits[b], transition_matrix)
@@ -54,13 +56,14 @@ def batch_viterbi_decode(logits, transition_matrix):
 
     return paths_ta.stack(), probs_ta.stack()
 
+
 def sequence_decode(logits, transition_matrix, use_crf):
     if not use_crf:
         return tf.argmax(input=logits, axis=-1), tf.nn.softmax(logits, -1)
     return batch_viterbi_decode(logits, tf.convert_to_tensor(transition_matrix))
-        
 
-# Everything below here is basically verbatim from tf_addons - If we find someone is maintaining this then we should use that instead 
+
+# Everything below here is basically verbatim from tf_addons - If we find someone is maintaining this then we should use that instead
 def crf_log_likelihood(
     inputs: tf.Tensor,
     tag_indices: tf.Tensor,
@@ -95,6 +98,7 @@ def crf_log_likelihood(
     # Normalize the scores to get the log-likelihood per example.
     log_likelihood = sequence_scores - log_norm
     return log_likelihood
+
 
 def crf_sequence_score(
     inputs: tf.Tensor,
@@ -148,6 +152,7 @@ def crf_sequence_score(
 
     return tf.cond(tf.equal(tf.shape(inputs)[1], 1), _single_seq_fn, _multi_seq_fn)
 
+
 def crf_log_norm(
     inputs: tf.Tensor, sequence_lengths: tf.Tensor, transition_params: tf.Tensor
 ) -> tf.Tensor:
@@ -194,6 +199,7 @@ def crf_log_norm(
         return log_norm
 
     return tf.cond(tf.equal(tf.shape(inputs)[1], 1), _single_seq_fn, _multi_seq_fn)
+
 
 def crf_unary_score(
     tag_indices: tf.Tensor, sequence_lengths: tf.Tensor, inputs: tf.Tensor

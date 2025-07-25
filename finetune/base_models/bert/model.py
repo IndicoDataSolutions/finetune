@@ -4,33 +4,29 @@ from urllib.parse import urljoin
 from finetune.base_models import SourceModel
 from finetune.base_models.bert.encoder import (
     BERTEncoder,
-    BERTEncoderMultuilingal,
     BERTEncoderLarge,
+    BERTEncoderMultuilingal,
     DistilBERTEncoder,
     LayoutLMEncoder,
 )
-
+from finetune.base_models.bert.modeling import (
+    BertModel,
+    LayoutLMModel,
+    TwinBertFeaturizer,
+    XDocModel,
+)
 from finetune.base_models.bert.roberta_encoder import (
     RoBERTaEncoder,
     RoBERTaEncoderV2,
     RoBERTaEncoderXDoc,
 )
-from finetune.base_models.bert.featurizer import (
-    table_roberta_featurizer_twinbert,
-)
-from finetune.base_models.bert.modeling import (
-    BertModel,
-    LayoutLMModel,
-    XDocModel,
-)
-
-from finetune.util.context_utils import get_context_layoutlm, get_context_doc_rep
+from finetune.util.context_utils import get_context_doc_rep, get_context_layoutlm
 from finetune.util.download import (
     BERT_BASE_URL,
-    GPT2_BASE_URL,
-    ROBERTA_BASE_URL,
-    LAYOUTLM_BASE_URL,
     FINETUNE_BASE_FOLDER,
+    GPT2_BASE_URL,
+    LAYOUTLM_BASE_URL,
+    ROBERTA_BASE_URL,
 )
 
 BERT_BASE_PARAMS = {
@@ -87,7 +83,9 @@ class _BaseBert(SourceModel):
         base_n_epochs = config.base_model.settings.get("n_epochs", 8)
         base_batch_size = config.base_model.settings.get("batch_size", 2)
         base_learning_rate = config.base_model.settings.get("lr", 1e-5)
-        base_predict_batch_size = config.base_model.settings.get("predict_batch_size", 20)
+        base_predict_batch_size = config.base_model.settings.get(
+            "predict_batch_size", 20
+        )
         if config.optimize_for.lower() == "speed":
             overrides = {
                 "max_length": 128 if config.chunk_long_sequences else base_max_length,
@@ -484,7 +482,7 @@ class XDocBase(_BaseBert):
 class TableRoBERTa(_BaseBert):
     encoder = RoBERTaEncoderV2
     is_roberta = True
-    featurizer = table_roberta_featurizer_twinbert
+    featurizer = TwinBertFeaturizer
     settings = {
         **BERT_BASE_PARAMS,
         # Just incase all cells fall into the same buckets this -8 allows us to pack the batches much tighter once we add EOS and BOS

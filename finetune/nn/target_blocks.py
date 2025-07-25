@@ -1,7 +1,7 @@
-from finetune.nn.crf import crf_log_likelihood, sequence_decode
 import tensorflow as tf
-from finetune.nn.nn_utils import ExtraScope
 
+from finetune.nn.crf import crf_log_likelihood, sequence_decode
+from finetune.nn.nn_utils import ExtraScope
 
 
 class Perceptron(tf.keras.layers.Layer):
@@ -10,14 +10,19 @@ class Perceptron(tf.keras.layers.Layer):
         self.n_targets = n_targets
 
     def build(self, input_shape):
-        self.w = self.add_weight(shape=(input_shape[-1], self.n_targets), initializer="random_normal", trainable=True)
-        self.b = self.add_weight(shape=(self.n_targets), initializer="zeros", trainable=True)
+        self.w = self.add_weight(
+            shape=(input_shape[-1], self.n_targets),
+            initializer="random_normal",
+            trainable=True,
+        )
+        self.b = self.add_weight(
+            shape=(self.n_targets), initializer="zeros", trainable=True
+        )
         super().build(input_shape)
-
 
     def call(self, inputs):
         return tf.matmul(inputs, self.w) + self.b
-    
+
     def compute_loss(self, inputs, targets):
         raise NotImplementedError("Perceptron does not support compute_loss")
 
@@ -63,26 +68,36 @@ def _apply_multilabel_class_weight(
         losses *= weights
     return losses
 
+
 class MultiClassifier(tf.keras.layers.Layer):
-    def __init__(self, n_targets, n_inputs, dropout_rate, renorm_after_class_weights, threshold=0.5, **kwargs):
+    def __init__(
+        self,
+        n_targets,
+        n_inputs,
+        dropout_rate,
+        renorm_after_class_weights,
+        threshold=0.5,
+        **kwargs
+    ):
         super().__init__(**kwargs)
         self.dropout = tf.keras.layers.Dropout(dropout_rate)
         self.perceptron = Perceptron(n_targets, n_inputs)
         self.renorm_after_class_weights = renorm_after_class_weights
         self.threshold = threshold
+
     def call(self, inputs, training=False):
         inputs = self.dropout(inputs, training=training)
         logits = self.perceptron(inputs)
         return {
             "logits": logits,
             "probas": tf.nn.sigmoid(logits),
-            "preds": tf.cast(tf.nn.sigmoid(logits) > self.threshold, tf.int32)
+            "preds": tf.cast(tf.nn.sigmoid(logits) > self.threshold, tf.int32),
         }
-                
+
     def compute_loss(self, layer_output, targets, class_weights):
         clf_losses = tf.nn.sigmoid_cross_entropy_with_logits(
-                logits=layer_output["logits"], labels=tf.stop_gradient(targets)
-            )
+            logits=layer_output["logits"], labels=tf.stop_gradient(targets)
+        )
         clf_losses = _apply_multilabel_class_weight(
             clf_losses,
             targets,
@@ -90,9 +105,12 @@ class MultiClassifier(tf.keras.layers.Layer):
             norm_grads=self.renorm_after_class_weights,
         )
         return clf_losses
-    
+
+
 class Classifier(tf.keras.layers.Layer):
-    def __init__(self, n_targets, n_inputs, dropout_rate, renorm_after_class_weights, **kwargs):
+    def __init__(
+        self, n_targets, n_inputs, dropout_rate, renorm_after_class_weights, **kwargs
+    ):
         super().__init__(**kwargs)
         self.dropout = tf.keras.layers.Dropout(dropout_rate)
         self.perceptron = Perceptron(n_targets, n_inputs)
@@ -104,13 +122,13 @@ class Classifier(tf.keras.layers.Layer):
         return {
             "logits": logits,
             "probas": tf.nn.softmax(logits, -1),
-            "preds": tf.argmax(logits, -1)
+            "preds": tf.argmax(logits, -1),
         }
-    
+
     def compute_loss(self, layer_output, targets, class_weights):
         clf_losses = tf.nn.softmax_cross_entropy_with_logits(
-                logits=layer_output["logits"], labels=tf.stop_gradient(targets)
-            )
+            logits=layer_output["logits"], labels=tf.stop_gradient(targets)
+        )
         clf_losses = _apply_class_weight(
             clf_losses,
             targets,
@@ -122,19 +140,28 @@ class Classifier(tf.keras.layers.Layer):
 
 # TODO; historically custom_gradient had very poor performance compared to using a defun - double check this isn't still the case.
 @tf.custom_gradient
-def class_reweighted_grad(
-    logits, class_weights, norm_grads_multiplier
-):
+def class_reweighted_grad(logits, class_weights, norm_grads_multiplier):
     def custom_grad_fn(g):
         new_g = g * class_weights
         # This gets really badly autographed so we just need to use a float to cover these cases for now.
-        ratio = tf.math.divide_no_nan(tf.norm(g), tf.norm(new_g)) * norm_grads_multiplier + (1 - norm_grads_multiplier)
+        ratio = tf.math.divide_no_nan(
+            tf.norm(g), tf.norm(new_g)
+        ) * norm_grads_multiplier + (1 - norm_grads_multiplier)
         return [new_g * ratio, None, None]
 
     return tf.identity(logits), custom_grad_fn
 
+
 class SequenceLabeler(tf.keras.layers.Layer):
-    def __init__(self, n_targets, dropout_rate, use_crf, renorm_after_class_weights, name="sequence-labeler", **kwargs):
+    def __init__(
+        self,
+        n_targets,
+        dropout_rate,
+        use_crf,
+        renorm_after_class_weights,
+        name="sequence-labeler",
+        **kwargs
+    ):
         super().__init__(**kwargs, name=name)
         self.n_targets = n_targets
         self.dropout = tf.keras.layers.Dropout(dropout_rate)
@@ -152,7 +179,7 @@ class SequenceLabeler(tf.keras.layers.Layer):
                 name="Transition_matrix",
                 initializer="orthogonal",
                 trainable=True,
-                dtype=tf.float32
+                dtype=tf.float32,
             )
         else:
             self.transition_params = None
@@ -171,11 +198,11 @@ class SequenceLabeler(tf.keras.layers.Layer):
             "probas": probs,
             "logits": logits,
             "length": inputs["length"],
-            "transition_params": self.transition_params
+            "transition_params": self.transition_params,
         }
 
     def compute_loss(self, layer_output, targets, class_weights):
-        # For some reason, all finetune targets are floats. I think we get more type flexibility 
+        # For some reason, all finetune targets are floats. I think we get more type flexibility
         # now so we should look at switching this to int when helpful.
         logits = layer_output["logits"]
         targets = tf.cast(targets, dtype=tf.int32)
@@ -191,7 +218,7 @@ class SequenceLabeler(tf.keras.layers.Layer):
                 # You cannot use keyword arguments here. But the error message is horribly written.
                 logits,
                 per_token_weights,
-                1.0 if self.renorm_after_class_weights else 0.0
+                1.0 if self.renorm_after_class_weights else 0.0,
             )
 
         if self.use_crf:
@@ -200,7 +227,7 @@ class SequenceLabeler(tf.keras.layers.Layer):
                     logits,
                     targets,
                     layer_output["length"],
-                    layer_output["transition_params"]
+                    layer_output["transition_params"],
                 )
             )
         weights = tf.math.divide_no_nan(

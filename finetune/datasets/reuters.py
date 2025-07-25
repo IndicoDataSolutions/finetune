@@ -1,20 +1,20 @@
-import os
-import requests
 import codecs
-import json
 import hashlib
 import io
+import json
+import os
 from pathlib import Path
 
 import pandas as pd
+import requests
 from bs4 import BeautifulSoup as bs
 from bs4.element import Tag
 from sklearn.model_selection import train_test_split
 
 from finetune import SequenceLabeler
-from finetune.datasets import Dataset
 from finetune.base_models import GPT, GPT2, TCN, RoBERTa
 from finetune.base_models.huggingface.models import HFDebertaV3Base
+from finetune.datasets import Dataset
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
 from finetune.util.metrics import annotation_report, sequence_labeling_token_confusion
 
@@ -22,8 +22,8 @@ XML_PATH = os.path.join("Data", "Sequence", "reuters.xml")
 DATA_PATH = os.path.join("Data", "Sequence", "reuters.json")
 CHECKSUM = "a79cab99ed30b7932d46711ef8d662e0"
 
-class Reuters(Dataset):
 
+class Reuters(Dataset):
     def __init__(self, filename=None, **kwargs):
         super().__init__(filename=(filename or DATA_PATH), **kwargs)
 
@@ -32,11 +32,10 @@ class Reuters(Dataset):
         return CHECKSUM
 
     def download(self):
-
         url = "https://raw.githubusercontent.com/dice-group/n3-collection/master/reuters.xml"
         r = requests.get(url)
 
-        with open(XML_PATH, 'wb') as fd:
+        with open(XML_PATH, "wb") as fd:
             fd.write(r.content)
 
         fd = open(XML_PATH)
@@ -64,22 +63,36 @@ class Reuters(Dataset):
         os.remove(XML_PATH)
 
         raw_texts = ["".join(doc) for doc in docs]
-        texts, annotations = finetune_to_indico_sequence(raw_texts, docs, docs_labels, none_value="<PAD>",
-                                                         subtoken_predictions=True)
-        df = pd.DataFrame({'texts': texts, 'annotations': [json.dumps(annotation) for annotation in annotations]})
+        texts, annotations = finetune_to_indico_sequence(
+            raw_texts, docs, docs_labels, none_value="<PAD>", subtoken_predictions=True
+        )
+        df = pd.DataFrame(
+            {
+                "texts": texts,
+                "annotations": [json.dumps(annotation) for annotation in annotations],
+            }
+        )
         df.to_csv(DATA_PATH)
 
 
 if __name__ == "__main__":
     dataset = Reuters().dataframe
-    dataset['annotations'] = [json.loads(annotation) for annotation in dataset['annotations']]
+    dataset["annotations"] = [
+        json.loads(annotation) for annotation in dataset["annotations"]
+    ]
     trainX, testX, trainY, testY = train_test_split(
-        dataset.texts.values,
-        dataset.annotations.values,
-        test_size=0.2,
-        random_state=42
+        dataset.texts.values, dataset.annotations.values, test_size=0.2, random_state=42
     )
-    model = SequenceLabeler(batch_size=1, n_epochs=3, val_size=0.0, max_length=512, chunk_long_sequences=True, subtoken_predictions=False, crf_sequence_labeling=True, multi_label_sequences=False)
+    model = SequenceLabeler(
+        batch_size=1,
+        n_epochs=3,
+        val_size=0.0,
+        max_length=512,
+        chunk_long_sequences=True,
+        subtoken_predictions=False,
+        crf_sequence_labeling=True,
+        multi_label_sequences=False,
+    )
     model.fit(trainX, trainY)
     predictions = model.predict(testX)
     print(predictions)

@@ -1,20 +1,21 @@
-import tensorflow as tf
 import functools
-#from finetune.optimizers.recompute_grads import recompute_grads_w_kwargs
-
 from typing import Optional, Tuple, Union
+
+import tensorflow as tf
+
 
 class EmbeddingWithPadIdx(tf.keras.layers.Embedding):
     def __init__(self, *args, pad_idx=None, name="EmbeddingWithPadIdx", **kwargs):
         super().__init__(*args, **kwargs, name=name)
         self.pad_idx = pad_idx
 
+
 class ModernBertEmbeddings(tf.keras.layers.Layer):
     """
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
     """
 
-    def __init__(self, config: 'Settings', vocab_size: int, name="Embedding"):
+    def __init__(self, config: "Settings", vocab_size: int, name="Embedding"):
         super().__init__(name=name)
         self.config = config
         self.tok_embeddings = EmbeddingWithPadIdx(
@@ -43,7 +44,7 @@ class ModernBertMLP(tf.keras.layers.Layer):
     and :class:`~transformers.model.bert.modeling_bert.SelfOutput` with a single module that has similar functionality.
     """
 
-    def __init__(self, config: 'Settings', name="GLU"):
+    def __init__(self, config: "Settings", name="GLU"):
         super().__init__(name=name)
         self.config = config
         self.Wi = tf.keras.layers.Dense(
@@ -51,9 +52,7 @@ class ModernBertMLP(tf.keras.layers.Layer):
         )
         self.act = functools.partial(tf.keras.activations.gelu, approximate=False)
         self.drop = tf.keras.layers.Dropout(config.mlp_p_drop)
-        self.Wo = tf.keras.layers.Dense(
-            config.n_embed, use_bias=False, name="Wo"
-        )
+        self.Wo = tf.keras.layers.Dense(config.n_embed, use_bias=False, name="Wo")
 
     def call(self, hidden_states: tf.Tensor, training: bool) -> tf.Tensor:
         input, gate = tf.split(self.Wi(hidden_states), 2, axis=-1)
@@ -74,7 +73,8 @@ class ModernBertRotaryEmbedding(tf.keras.layers.Layer):
         # 1, 1, seq_len
         position_ids_expanded = position_ids[:, None, :]
         freqs = tf.transpose(
-            tf.matmul(inv_freq_expanded, tf.cast(position_ids_expanded, tf.float32)), perm=[0, 2, 1]
+            tf.matmul(inv_freq_expanded, tf.cast(position_ids_expanded, tf.float32)),
+            perm=[0, 2, 1],
         )
         emb = tf.concat([freqs, freqs], axis=-1)
         cos = tf.cos(emb)
@@ -123,7 +123,7 @@ class ModernBertAttention(tf.keras.layers.Layer):
     """
 
     def __init__(
-        self, config: 'Settings', layer_id: Optional[int] = None, name="Attention"
+        self, config: "Settings", layer_id: Optional[int] = None, name="Attention"
     ):
         super().__init__(name=name)
         self.config = config
@@ -157,9 +157,7 @@ class ModernBertAttention(tf.keras.layers.Layer):
 
         self.rotary_emb = ModernBertRotaryEmbedding(dim=self.head_dim, base=rope_theta)
 
-        self.Wo = tf.keras.layers.Dense(
-            config.n_embed, use_bias=False, name="Wo"
-        )
+        self.Wo = tf.keras.layers.Dense(config.n_embed, use_bias=False, name="Wo")
         self.out_drop = tf.keras.layers.Dropout(config.attn_p_drop)
         self.attn_drop = tf.keras.layers.Dropout(rate=self.attention_dropout)
         self.pruned_heads = set()
@@ -229,7 +227,7 @@ class ModernBertAttention(tf.keras.layers.Layer):
 class ModernBertEncoderLayer(tf.keras.layers.Layer):
     def __init__(
         self,
-        config: 'Settings',
+        config: "Settings",
         layer_id: Optional[int] = None,
         name="EncoderLayer",
     ):
@@ -305,11 +303,7 @@ class ModernBert(tf.keras.layers.Layer):
         hidden_states = self.embeddings(input_ids=input_ids, training=training)
         for encoder_layer in self.layers:
             if self.config.low_memory_mode and training:
-                encoder_layer.call = recompute_grads_w_kwargs(
-                    encoder_layer.call,
-                    train_vars=encoder_layer.trainable_weights,
-                    name=encoder_layer.name
-                )
+                encoder_layer = tf.recompute_grad(encoder_layer)
             layer_outputs = encoder_layer(
                 hidden_states,
                 attention_mask=attention_mask,
@@ -328,7 +322,9 @@ class ModernBert(tf.keras.layers.Layer):
             attention_mask[:, None, None, :], [1, 1, tf.shape(attention_mask)[1], 1]
         )
         inverted_mask = 1.0 - expanded_mask
-        ignore_value = tf.fill(tf.shape(inverted_mask), tf.cast(tf.float16.min, self.compute_dtype))
+        ignore_value = tf.fill(
+            tf.shape(inverted_mask), tf.cast(tf.float16.min, self.compute_dtype)
+        )
 
         global_attention_mask = tf.where(
             inverted_mask > 0.5, ignore_value, inverted_mask

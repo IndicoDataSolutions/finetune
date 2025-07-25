@@ -1,11 +1,11 @@
-import tensorflow as tf
 import numpy as np
+import tensorflow as tf
 
 from finetune.base import BaseModel
 from finetune.encoding.target_encoders import MultilabelClassificationEncoder
+from finetune.input_pipeline import BasePipeline
 from finetune.nn.target_blocks import MultiClassifier as MultiClassifierBlock
 from finetune.util.imbalance import compute_class_weights
-from finetune.input_pipeline import BasePipeline
 
 
 class MultilabelClassificationPipeline(BasePipeline):
@@ -14,7 +14,7 @@ class MultilabelClassificationPipeline(BasePipeline):
             class_weights=class_weights,
             class_counts=class_counts,
             n_total=self.config.dataset_size,
-            multilabel=True
+            multilabel=True,
         )
         return class_weights
 
@@ -23,11 +23,11 @@ class MultilabelClassificationPipeline(BasePipeline):
 
 
 class MultiLabelClassifier(BaseModel):
-    """ 
+    """
     Classifies a single document into up to N of N categories.
 
     Implemented via a sum of N sigmoid losses applied a linear projection of the base model's output representation.
-    
+
     :param config: A :py:class:`finetune.config.Settings` object or None (for default config).
     :param \**kwargs: key-value pairs of config items to override.
     """
@@ -64,7 +64,16 @@ class MultiLabelClassifier(BaseModel):
     def _predict(self, zipped_data, threshold=None, probas=False, **kwargs):
         threshold = self._get_threshold(threshold)
         all_labels = []
-        for _, _, start_of_doc, end_of_doc, _, proba, _, _ in self.process_long_sequence(zipped_data, **kwargs):
+        for (
+            _,
+            _,
+            start_of_doc,
+            end_of_doc,
+            _,
+            proba,
+            _,
+            _,
+        ) in self.process_long_sequence(zipped_data, **kwargs):
             if start_of_doc:
                 # if this is the first chunk in a document, start accumulating from scratch
                 doc_probs = []
@@ -77,7 +86,9 @@ class MultiLabelClassifier(BaseModel):
                 if probas:
                     all_labels.append(means)
                 else:
-                    label = self.input_pipeline.label_encoder.inverse_transform(np.expand_dims(means, 0) > threshold)[0]
+                    label = self.input_pipeline.label_encoder.inverse_transform(
+                        np.expand_dims(means, 0) > threshold
+                    )[0]
                     all_labels.append(list(label))
         return all_labels
 

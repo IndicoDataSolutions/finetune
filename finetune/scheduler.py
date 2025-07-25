@@ -1,17 +1,34 @@
-from collections import OrderedDict
+import functools
 import gc
 import logging
-import functools
+from collections import OrderedDict
 
 import psutil
+import pynvml
+import tensorflow as tf
+
+from finetune.base import BaseModel
+from finetune.errors import FinetuneSchedulerError
 from finetune.target_models.sequence_labeling import SequenceLabeler
 
-import tensorflow as tf
-from finetune.base import BaseModel
-from finetune.custom_ops import BytesInUse, BytesLimit, MaxBytesInUse
-from finetune.errors import FinetuneSchedulerError
-
 LOGGER = logging.getLogger("finetune")
+
+
+def BytesInUse():
+    """Generates an op that computes the current memory of a device."""
+    return tf.config.experimental.get_memory_info("GPU:0")["current"]
+
+
+def BytesLimit():
+    pynvml.nvmlInit()
+    handle = pynvml.nvmlDeviceGetHandleByIndex(0)  # GPU 0
+    info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+    return info.total
+
+
+def MaxBytesInUse():
+    """Generates an op that computes the peak memory of a device."""
+    return tf.config.experimental.get_memory_info("GPU:0")["peak"]
 
 
 def bytes_to_meg(x):
@@ -149,7 +166,9 @@ class Scheduler:
             self.model_cache[resolved_cache_key] = out_model
         else:
             out_model = self.model_cache[resolved_cache_key]
-            self.loaded_models.remove(resolved_cache_key)  # put it back at the end of the queue
+            self.loaded_models.remove(
+                resolved_cache_key
+            )  # put it back at the end of the queue
 
         self.loaded_models.append(resolved_cache_key)
         out_model._cached_predict = True

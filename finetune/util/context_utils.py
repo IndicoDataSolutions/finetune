@@ -1,4 +1,3 @@
-
 def get_context_layoutlm(document, dpi_norm):
     context = []
     for page in document:

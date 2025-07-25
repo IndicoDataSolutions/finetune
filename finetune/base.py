@@ -1,36 +1,34 @@
-import os
 import io
-import random
-import weakref
-import warnings
+import logging
 import math
-from abc import ABCMeta, abstractmethod
-from copy import deepcopy
+import os
+import pathlib
+import random
 import tempfile
 import time
-import pathlib
-import logging
-from typing import Dict, List, Mapping, Tuple
 import typing as t
+import warnings
+import weakref
+from abc import ABCMeta, abstractmethod
+from copy import deepcopy
+from typing import Dict, List, Mapping, Tuple
 
+import joblib
 import numpy as np
 import tensorflow as tf
-import joblib
-
-
-from finetune.config import assert_valid_config, get_default_config
-from finetune.saver import Saver
-from finetune.errors import FinetuneError
-from finetune.model import get_keras_model
-from finetune.util.download import download_data_if_required
-from finetune.util.timing import ProgressBar
-from finetune.util.gpu_info import gpu_info
 
 from finetune.base_models.bert.model import _BaseBert
-from finetune.base_models.modern_bert.model import _ModernBertBase
 from finetune.base_models.bert.roberta_encoder import RoBERTaEncoderV2
-from finetune.optimizers.learning_rate_schedules import FinetuneKerasLRSchedule
+from finetune.base_models.modern_bert.model import _ModernBertBase
+from finetune.config import assert_valid_config, get_default_config
+from finetune.errors import FinetuneError
 from finetune.input_pipeline import InputMode
+from finetune.model import get_keras_model
+from finetune.optimizers.learning_rate_schedules import FinetuneKerasLRSchedule
+from finetune.saver import Saver
+from finetune.util.download import download_data_if_required
+from finetune.util.gpu_info import gpu_info
+from finetune.util.timing import ProgressBar
 
 LOGGER = logging.getLogger("finetune")
 
@@ -75,9 +73,9 @@ class BaseModel(object, metaclass=ABCMeta):
         self._finalizer = weakref.finalize(
             self,
             lambda ws=weak_self: (
-                ws.close(),
-                getattr(ws, "_tmp_dir", None) and ws._tmp_dir.cleanup()
-            )
+                getattr(ws, "close", lambda: None)(),
+                getattr(ws, "_tmp_dir", None) and ws._tmp_dir.cleanup(),
+            ),
         )
         self.config_overrides = deepcopy(self.defaults)
         self.config_overrides.update(kwargs)
@@ -115,7 +113,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 continue
             elif k in config.base_model.settings:
                 config[k] = config.base_model.settings[k]
- 
+
         if no_fp16 and "fp16" in config.optimize_for:
             new_optimize_for = config.optimize_for.replace("_fp16", "")
             LOGGER.warning(
@@ -178,16 +176,9 @@ class BaseModel(object, metaclass=ABCMeta):
         )
 
     @abstractmethod
-    def target_block(
-        self,
-        *,
-        config,
-        n_outputs,
-        **kwargs
-    ):
+    def target_block(self, *, config, n_outputs, **kwargs):
         # Overridden by subclass to attach a target model onto the shared base featurizer.
         raise NotImplementedError
-
 
     def _n_steps(self, n_examples, batch_size, n_gpus):
         steps = int(math.ceil(n_examples / (batch_size * n_gpus)))
@@ -238,27 +229,26 @@ class BaseModel(object, metaclass=ABCMeta):
                         "beta_2": self.config.b2,
                         "epsilon": self.config.epsilon,
                         "clipnorm": self.config.max_grad_norm,
-                        "gradient_accumulation_steps": self.config.accum_steps if self.config.accum_steps > 1 else None,
-                    }
+                        "gradient_accumulation_steps": self.config.accum_steps
+                        if self.config.accum_steps > 1
+                        else None,
+                    },
                 }
             ),
-            jit_compile=self.config.xla, # TODO: look into why this is slow.
+            jit_compile=self.config.xla,  # TODO: look into why this is slow.
             run_eagerly=False,
-            auto_scale_loss=True
+            auto_scale_loss=True,
         )
         # Because the dataset is already repeated n_epoch times, we need to pass steps_per_epoch to the fit method.
         self.model.fit(
             datasets["train_dataset"],
             epochs=self.config.n_epochs,
-            steps_per_epoch=steps_per_epoch
+            steps_per_epoch=steps_per_epoch,
         )
         self._trained = True
 
-
-
     @property
     def model(self) -> tf.keras.Model:
-        
         if self._model is None:
             # We either need to explictly handle the dtype policies in every layer or deal with this hack to set and unset
             # our desired policy. Setting dtype policy on the model does not seem to cascade to lower layers.
@@ -266,7 +256,7 @@ class BaseModel(object, metaclass=ABCMeta):
             dtype_policy = "float32"
             if self.config.float_16_predict or self.config.mixed_precision:
                 # Technically this is a behaviour change but mixed precision should be generally fine.
-                dtype_policy = "mixed_float16"    
+                dtype_policy = "mixed_float16"
             tf.keras.config.set_dtype_policy(dtype_policy)
             self._model = self._get_keras_model()
             # Does a symbolic first pass to build the model and give us variables we can initialize.
@@ -332,9 +322,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         length = chunked_length if chunked_length is not None else len(zipped_data)
 
-        progress = ProgressBar(
-            total=length, desc="Inference", update_hook=update_hook
-        )
+        progress = ProgressBar(total=length, desc="Inference", update_hook=update_hook)
         output_list = []
         for batch in input_fn:
             preds = model(batch, training=False)
@@ -342,17 +330,23 @@ class BaseModel(object, metaclass=ABCMeta):
             batch_size = batch["tokens"].shape[0]
             # Items without a batch dim we include in all pred batches. In practice this is limited to just transition params
             # but we include the shape check just to prevent errors if anything else sneaks through.
-            not_batched = {k for k, v in pred_numpy.items() if v.shape[0] != batch_size or k == "transition_params"}
+            not_batched = {
+                k
+                for k, v in pred_numpy.items()
+                if v.shape[0] != batch_size or k == "transition_params"
+            }
             for i in range(batch_size):
                 progress.update(i)
-                step_value = {k: pred_numpy[k] if k in not_batched else pred_numpy[k][i] for k in pred_numpy}
+                step_value = {
+                    k: pred_numpy[k] if k in not_batched else pred_numpy[k][i]
+                    for k in pred_numpy
+                }
                 if list_output:
                     output_list.append(step_value)
                 else:
                     yield step_value
         if list_output:
             return output_list
-
 
     def fit(self, *args, **kwargs):
         """An alias for finetune."""
@@ -388,7 +382,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         if self.config.sort_by_length:
             zipped_data, invert_idxs = self._sort_by_length(zipped_data)
- 
+
         raw_probas = self._predict_proba(zipped_data)
         classes = self.input_pipeline.label_encoder.classes_
 
@@ -397,7 +391,7 @@ class BaseModel(object, metaclass=ABCMeta):
             formatted_predictions.append(dict(zip(classes, probas.tolist())))
         if self.config.sort_by_length:
             formatted_predictions = [formatted_predictions[i] for i in invert_idxs]
- 
+
         return formatted_predictions
 
     def featurize(self, Xs, context=None, **kwargs):
@@ -410,9 +404,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 "`chunk_long_sequences` is currently not compatible with featurize_sequence"
             )
         zipped_data = self.input_pipeline.zip_list_to_dict(X=Xs, context=context)
-        raw_preds = self._inference(
-            zipped_data, **kwargs
-        )
+        raw_preds = self._inference(zipped_data, **kwargs)
         raw_preds = [pred["features"] for pred in raw_preds]
         return np.asarray(raw_preds)
 
@@ -422,9 +414,7 @@ class BaseModel(object, metaclass=ABCMeta):
         These features are the same features that are fed into the target_model.
         """
         zipped_data = self.input_pipeline.zip_list_to_dict(X=Xs, context=context)
-        raw_preds = self._inference(
-            zipped_data, **kwargs
-        )
+        raw_preds = self._inference(zipped_data, **kwargs)
         raw_preds = [pred["sequence_features"] for pred in raw_preds]
         chunk_gens = [self.input_pipeline._text_to_ids(d["X"]) for d in zipped_data]
 

@@ -2,14 +2,10 @@ import os
 from urllib.parse import urljoin
 
 from finetune.base_models import SourceModel
-from finetune.base_models.gpt2.encoder import GPT2Encoder
 from finetune.base_models.bert.roberta_encoder import RoBERTaEncoderV2
-from finetune.base_models.textcnn.featurizer import textcnn_featurizer
-from finetune.util.download import (
-    GPT2_BASE_URL,
-    ROBERTA_BASE_URL,
-    FINETUNE_BASE_FOLDER,
-)
+from finetune.base_models.gpt2.encoder import GPT2Encoder
+from finetune.base_models.textcnn.featurizer import TextCNNFeaturizer
+from finetune.util.download import FINETUNE_BASE_FOLDER, GPT2_BASE_URL, ROBERTA_BASE_URL
 
 KERNEL_SIZES = [2, 4, 8]
 TEXTCNN_BASE_PARAMS = {
@@ -38,7 +34,7 @@ TEXTCNN_BASE_PARAMS = {
 class TextCNNModel(SourceModel):
     is_bidirectional = False
     encoder = GPT2Encoder
-    featurizer = textcnn_featurizer
+    featurizer = TextCNNFeaturizer
     settings = {
         **TEXTCNN_BASE_PARAMS,
         "base_model_path": os.path.join("gpt2", "model-sm.jl"),
@@ -54,16 +50,19 @@ class TextCNNModel(SourceModel):
 
 class FastTextCNNModel(SourceModel):
     """Uses RobertaEncoderV2 encoder for fast tokenization"""
+
     is_bidirectional = False
     encoder = RoBERTaEncoderV2
-    featurizer = textcnn_featurizer
+    featurizer = TextCNNFeaturizer
     settings = {
         **TEXTCNN_BASE_PARAMS,
         "base_model_path": os.path.join("bert", "roberta-model-sm-v2.jl"),
     }
     required_files = [
         {
-            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "roberta-model-sm-v2.jl"),
+            "file": os.path.join(
+                FINETUNE_BASE_FOLDER, "model", "bert", "roberta-model-sm-v2.jl"
+            ),
             "url": urljoin(ROBERTA_BASE_URL, "roberta-model-sm-v2.jl"),
         },
         {
@@ -71,11 +70,15 @@ class FastTextCNNModel(SourceModel):
             "url": urljoin(ROBERTA_BASE_URL, "dict.txt"),
         },
         {
-            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "roberta_vocab.bpe"),
+            "file": os.path.join(
+                FINETUNE_BASE_FOLDER, "model", "bert", "roberta_vocab.bpe"
+            ),
             "url": urljoin(ROBERTA_BASE_URL, "roberta_vocab.bpe"),
         },
         {
-            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "roberta_encoder.json"),
+            "file": os.path.join(
+                FINETUNE_BASE_FOLDER, "model", "bert", "roberta_encoder.json"
+            ),
             "url": urljoin(ROBERTA_BASE_URL, "roberta_encoder.json"),
         },
     ]

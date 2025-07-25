@@ -1,11 +1,12 @@
 import tensorflow as tf
 
+
 class Norm(tf.keras.layers.Layer):
     def __init__(self, axis=[-1], e=1e-5, **kwargs):
         super().__init__(**kwargs)
         self.axis = axis
         self.e = e
-    
+
     def build(self, input_shape):
         self.g = self.add_weight(
             name="g",
@@ -54,6 +55,7 @@ def saver_ignore_scope(cls: tf.keras.layers.Layer):
     # Might want to do somethign different here long term but for now this is good enough.
     cls._saver_ignore_scope = True
     return cls
+
 
 def maybe_recompute(fn, do_recompute, training):
     if do_recompute and training:

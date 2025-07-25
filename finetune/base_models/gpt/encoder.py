@@ -1,23 +1,22 @@
 """
 Convert plain text to format accepted by model (token idxs + special tokens).
 """
-import re
+import codecs
 import json
 import os
+import re
 import warnings
-import codecs
 
 import numpy as np
 from ftfy.fixes import uncurl_quotes
 
 import finetune
 from finetune.encoding.input_encoder import (
-    get_spacy,
-    EncodedOutput,
     BaseEncoder,
+    EncodedOutput,
     get_pairs,
+    get_spacy,
 )
-
 
 FINETUNE_FOLDER = os.path.dirname(finetune.__file__)
 ENCODER_PATH = os.path.join(FINETUNE_FOLDER, "model", "gpt", "encoder.json")
@@ -132,7 +131,6 @@ class GPTEncoder(BaseEncoder):
 
         batch_char_starts = []
         for i, text in enumerate(texts):
-
             raw_text = text.lower()
 
             # Only fine to apply this fix because it preserves character locations

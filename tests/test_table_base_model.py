@@ -1,19 +1,19 @@
 import os
 import unittest
 
+import tensorflow as tf
+
 from finetune import SequenceLabeler
 from finetune.base_models import TableRoBERTa
 from finetune.base_models.bert.table_utils import (
     batch_packing,
-    get_gather_indices,
-    slice_by_table_indices,
-    gather_col_vals,
-    scatter_feats,
-    get_summary_values,
     chunk_ragged_tensor,
+    gather_col_vals,
+    get_gather_indices,
+    get_summary_values,
+    scatter_feats,
+    slice_by_table_indices,
 )
-
-import tensorflow as tf
 
 DATA_PATH = os.path.join("tests", "data", "doc_rep_integration.csv")
 
@@ -484,7 +484,6 @@ class TestTableUtils:
             res == tf.constant([[[0.0], [1.0], [(5 + 2) / 2]]], dtype=res.dtype)
         )
 
-
     def test_chunk_ragged_tensor(self):
         result = chunk_ragged_tensor(
             inputs=tf.ragged.constant(
@@ -495,11 +494,9 @@ class TestTableUtils:
                     [[0, 9]],
                     [[0, 4], [0, 5], [0, 6], [0, 7]],
                 ],
-                ragged_rank=1
+                ragged_rank=1,
             ),
-            other_end=tf.constant(
-                [[0, 1, 2, 3, 0, 1, 2, 3, 4, 5, 6]]
-            ),
+            other_end=tf.constant([[0, 1, 2, 3, 0, 1, 2, 3, 4, 5, 6]]),
             base_model_max_length=3,
         )
         assert tf.reduce_all(
@@ -507,14 +504,18 @@ class TestTableUtils:
                 result,
                 tf.ragged.constant(
                     [
-                        [[0, 1], [0, 2]], # Untouched as less than original length
+                        [[0, 1], [0, 2]],  # Untouched as less than original length
                         [[0, 3]],
                         [[0, 8]],
                         [[0, 9]],
-                        [[0, 4], [0, 5], [0, 6]], # Final 2 are chunked with rows 0 and 1 as context.
+                        [
+                            [0, 4],
+                            [0, 5],
+                            [0, 6],
+                        ],  # Final 2 are chunked with rows 0 and 1 as context.
                         [[0, 4], [0, 5], [0, 7]],
                     ],
-                    ragged_rank=1
+                    ragged_rank=1,
                 ),
             )
         )
@@ -529,11 +530,9 @@ class TestTableUtils:
                     [[0, 9]],
                     [[0, 4], [0, 5], [0, 6], [0, 7]],
                 ],
-                ragged_rank=1
+                ragged_rank=1,
             ),
-            other_end=tf.constant(
-                [[0, 1, 2, 3, 0, 1, 2, 3, 4, 5, 6]]
-            ),
+            other_end=tf.constant([[0, 1, 2, 3, 0, 1, 2, 3, 4, 5, 6]]),
             base_model_max_length=2,
         )
         assert tf.reduce_all(
@@ -541,14 +540,17 @@ class TestTableUtils:
                 result,
                 tf.ragged.constant(
                     [
-                        [[0, 1], [0, 2]], # Untouched as less than original length
+                        [[0, 1], [0, 2]],  # Untouched as less than original length
                         [[0, 3]],
                         [[0, 8]],
                         [[0, 9]],
-                        [[0, 4], [0, 5]], # Final 2 are chunked with no context as the max length == the amount of context.
+                        [
+                            [0, 4],
+                            [0, 5],
+                        ],  # Final 2 are chunked with no context as the max length == the amount of context.
                         [[0, 6], [0, 7]],
                     ],
-                    ragged_rank=1
+                    ragged_rank=1,
                 ),
             )
         )
@@ -562,22 +564,15 @@ class TestTableUtils:
                 [[0, 9]],
                 [[0, 4], [0, 5], [0, 6], [0, 7]],
             ],
-            ragged_rank=1
+            ragged_rank=1,
         )
         result = chunk_ragged_tensor(
             inputs=inputs,
-            other_end=tf.constant(
-                [[0, 1, 2, 3, 0, 1, 2, 3, 4, 5, 6]]
-            ),
+            other_end=tf.constant([[0, 1, 2, 3, 0, 1, 2, 3, 4, 5, 6]]),
             base_model_max_length=5,
         )
         print(result)
-        assert tf.reduce_all(
-            tf.equal(
-                result,
-                inputs
-            )
-        )
+        assert tf.reduce_all(tf.equal(result, inputs))
 
     def test_chunk_ragged_tensor_length_1(self):
         result = chunk_ragged_tensor(
@@ -589,11 +584,9 @@ class TestTableUtils:
                     [[0, 9]],
                     [[0, 4], [0, 5], [0, 6], [0, 7]],
                 ],
-                ragged_rank=1
+                ragged_rank=1,
             ),
-            other_end=tf.constant(
-                [[0, 1, 2, 3, 0, 1, 2, 3, 4, 5, 6]]
-            ),
+            other_end=tf.constant([[0, 1, 2, 3, 0, 1, 2, 3, 4, 5, 6]]),
             base_model_max_length=1,
         )
         assert tf.reduce_all(
@@ -611,7 +604,7 @@ class TestTableUtils:
                         [[0, 6]],
                         [[0, 7]],
                     ],
-                    ragged_rank=1
+                    ragged_rank=1,
                 ),
             )
         )

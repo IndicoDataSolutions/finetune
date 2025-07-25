@@ -1,23 +1,23 @@
-import os
-import unittest
 import logging
+import os
 import shutil
 import string
+import unittest
+import warnings
 from pathlib import Path
 from unittest.mock import MagicMock
-import warnings
 
 # prevent excessive warning logs
 warnings.filterwarnings("ignore")
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
-import tensorflow as tf
-import pandas as pd
 import numpy as np
+import pandas as pd
+import tensorflow as tf
 
 from finetune import MultiLabelClassifier
-from finetune.datasets import generic_download
 from finetune.config import get_config
+from finetune.datasets import generic_download
 
 SST_FILENAME = "SST-binary.csv"
 
@@ -90,4 +90,3 @@ class TestMultiLabelClassifier(unittest.TestCase):
             self.assertIsInstance(prediction[0], (str, np.int, np.int64))
             self.assertIn(3, prediction)
             self.assertIn(6, prediction)
-

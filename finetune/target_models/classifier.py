@@ -1,17 +1,17 @@
-import tensorflow as tf
 import numpy as np
+import tensorflow as tf
 
 from finetune.base import BaseModel
-from finetune.encoding.target_encoders import OneHotLabelEncoder
-from finetune.nn.target_blocks import Classifier as ClassifierBlock
-from finetune.input_pipeline import BasePipeline
 from finetune.base_models.gpt.encoder import finetune_to_indico_explain
+from finetune.encoding.target_encoders import OneHotLabelEncoder
+from finetune.input_pipeline import BasePipeline
+from finetune.nn.target_blocks import Classifier as ClassifierBlock
 
 
 class ClassificationPipeline(BasePipeline):
-
     def _target_encoder(self):
         return OneHotLabelEncoder()
+
 
 class Classifier(BaseModel):
     """
@@ -49,7 +49,16 @@ class Classifier(BaseModel):
         all_labels = []
         all_probs = []
         doc_probs = []
-        for _,  _, start_of_doc, end_of_doc, _, proba, _, _ in self.process_long_sequence(zipped_data, **kwargs):
+        for (
+            _,
+            _,
+            start_of_doc,
+            end_of_doc,
+            _,
+            proba,
+            _,
+            _,
+        ) in self.process_long_sequence(zipped_data, **kwargs):
             start, end = 0, None
             doc_probs.append(proba)
 
@@ -99,5 +108,5 @@ class Classifier(BaseModel):
         return ClassifierBlock(
             n_targets=n_outputs,
             n_inputs=config.hidden_size,
-            dropout_rate=config.clf_p_drop
+            dropout_rate=config.clf_p_drop,
         )

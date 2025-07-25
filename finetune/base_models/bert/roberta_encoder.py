@@ -1,10 +1,11 @@
 import os
-import finetune
-from finetune.encoding.input_encoder import BaseEncoder, EncodedOutput
-from finetune.base_models.gpt2.encoder import GPT2Encoder, bytes_to_unicode
-from finetune.base_models.gpt2 import encoder as gpt2_encoder
 
 from transformers import RobertaTokenizerFast
+
+import finetune
+from finetune.base_models.gpt2 import encoder as gpt2_encoder
+from finetune.base_models.gpt2.encoder import GPT2Encoder, bytes_to_unicode
+from finetune.encoding.input_encoder import BaseEncoder, EncodedOutput
 
 FINETUNE_FOLDER = os.path.dirname(finetune.__file__)
 DICT_PATH = os.path.join(FINETUNE_FOLDER, "model", "bert", "dict.txt")
@@ -42,7 +43,6 @@ class RoBERTaEncoder(GPT2Encoder):
                 )  # add 4 for the special tokens at beginning
                 index += 1
         super().__init__(encoder_path=encoder_path, vocab_path=vocab_path)
-
 
     def _convert_to_embed_idx(self, idx):
         return self.freqs[idx]
@@ -143,7 +143,6 @@ class RoBERTaEncoderV2(BaseEncoder):
 
     def decode(self, ids):
         return self.tokenizer.decode(ids, skip_special_tokens=True)
-
 
 
 class RoBERTaEncoderXDoc(RoBERTaEncoderV2):

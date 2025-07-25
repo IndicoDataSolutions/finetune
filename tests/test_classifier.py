@@ -1,34 +1,34 @@
-import os
-import unittest
+import gc
 import logging
+import os
 import shutil
 import string
-import gc
-from copy import copy
 import time
+import unittest
+import warnings
+from copy import copy
 from pathlib import Path
 from unittest.mock import MagicMock
-import warnings
 
 # prevent excessive warning logs
 warnings.filterwarnings("ignore")
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
-import pytest
-
-import tensorflow as tf
-import pandas as pd
 import numpy as np
+import pandas as pd
+import pytest
+import tensorflow as tf
 from sklearn.metrics import accuracy_score, recall_score
 
 from finetune import Classifier
-from finetune.model import PredictMode
-from finetune.base_models import GPTModelSmall, GPT
-from finetune.datasets import generic_download
+from finetune.base_models import GPT, GPTModelSmall
 from finetune.config import get_config
+from finetune.datasets import generic_download
 from finetune.errors import FinetuneError
+from finetune.model import PredictMode
 
 SST_FILENAME = "SST-binary.csv"
+
 
 class TestClassifier(unittest.TestCase):
     n_sample = 20
@@ -307,16 +307,17 @@ class TestClassifier(unittest.TestCase):
         Ensure model converges to a reasonable solution for a trivial problem
         """
         model = Classifier(**self.default_config(n_epochs=5))
-        
+
         n_duplicates = 5
 
-        trX = (
-            ["cat", "kitten", "feline", "meow", "kitty"] * n_duplicates + 
-            ["finance", "investment", "investing", "dividends", "financial"] * n_duplicates
-        )
-        trY = (
-            ['cat'] * (len(trX) // 2) + ['finance'] * (len(trX) // 2)
-        )
+        trX = ["cat", "kitten", "feline", "meow", "kitty"] * n_duplicates + [
+            "finance",
+            "investment",
+            "investing",
+            "dividends",
+            "financial",
+        ] * n_duplicates
+        trY = ["cat"] * (len(trX) // 2) + ["finance"] * (len(trX) // 2)
         teX = ["furball", "fiduciary"]
         teY = ["cat"] + ["finance"]
         model.fit(trX, trY)
@@ -350,8 +351,10 @@ class TestClassifier(unittest.TestCase):
         lm_out = model.generate_text("The quick brown fox", 6)
         start_id = model.input_pipeline.text_encoder.start_token
         start_token = model.input_pipeline.text_encoder.decoder[start_id]
-        self.assertNotIn(start_token, lm_out) # Non finetuned models do not use extra tokens
-        
+        self.assertNotIn(
+            start_token, lm_out
+        )  # Non finetuned models do not use extra tokens
+
         train_sample = self.dataset.sample(n=self.n_sample)
         model.fit(train_sample.Text, train_sample.Target)
         lm_out = model.generate_text("", 5)
@@ -362,8 +365,10 @@ class TestClassifier(unittest.TestCase):
         model = Classifier.load(save_file)
         lm_out_2 = model.generate_text("Indico RULE")
         self.assertEqual(type(lm_out_2), str)
-        
-        self.assertIn("{}Indico RULE".format(start_token).lower(), lm_out_2.lower()) # Both of these models use extra toks
+
+        self.assertIn(
+            "{}Indico RULE".format(start_token).lower(), lm_out_2.lower()
+        )  # Both of these models use extra toks
 
     def test_generate_text_stop_early(self):
         model = Classifier(base_model=GPT)
@@ -371,10 +376,15 @@ class TestClassifier(unittest.TestCase):
         # A dirty mock to make all model inferences output a hundred _classify_ tokens
         fake_estimator = MagicMock()
         model.get_estimator = lambda *args, **kwargs: (fake_estimator, [])
-        #model.input_pipeline.text_encoder._lazy_init()
+        # model.input_pipeline.text_encoder._lazy_init()
         fake_estimator.predict = MagicMock(
             return_value=iter(
-                [{PredictMode.GENERATE_TEXT: 100 * [model.input_pipeline.text_encoder["_classify_"]]}]
+                [
+                    {
+                        PredictMode.GENERATE_TEXT: 100
+                        * [model.input_pipeline.text_encoder["_classify_"]]
+                    }
+                ]
             )
         )
         start_id = model.input_pipeline.text_encoder.start_token
@@ -421,4 +431,3 @@ class TestClassifier(unittest.TestCase):
         self.assertEqual(
             len(explanations[0]["token_ends"]), len(explanations[0]["explanation"][0])
         )
-

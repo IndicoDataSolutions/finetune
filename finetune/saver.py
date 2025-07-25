@@ -1,7 +1,7 @@
-import os
-from concurrent.futures import ThreadPoolExecutor
 import logging
+import os
 import re
+from concurrent.futures import ThreadPoolExecutor
 
 import joblib
 import numpy as np
@@ -16,10 +16,14 @@ def should_be_randomly_initialized(name):
     return "OptimizeLoss" in name or "global_step" in name
 
 
-def set_weights(model: tf.keras.Model, weights: dict[str, np.ndarray], all_vars: dict[str, tf.Variable]):
+def set_weights(
+    model: tf.keras.Model,
+    weights: dict[str, np.ndarray],
+    all_vars: dict[str, tf.Variable],
+):
     for name, np_weight in weights.items():
         if name.endswith("we:0") or "bert/embeddings/position_embedding" in name:
-            np_weight = np_weight[:all_vars[name].shape[0]]
+            np_weight = np_weight[: all_vars[name].shape[0]]
         all_vars[name].assign(np_weight)
 
 
@@ -28,10 +32,16 @@ def own_variables(layer):
     children_weights = []
     for child in layer._layers:
         children_weights.extend(child.weights)
-    return [v for v in layer.weights if not any(v is child_weight for child_weight in children_weights)]
+    return [
+        v
+        for v in layer.weights
+        if not any(v is child_weight for child_weight in children_weights)
+    ]
 
 
-def get_fully_qualified_variable_paths(root: tf.keras.layers.Layer) -> dict[str, tf.Variable]:
+def get_fully_qualified_variable_paths(
+    root: tf.keras.layers.Layer,
+) -> dict[str, tf.Variable]:
     root_name = root.name
     results = {}
     if hasattr(root, "_saver_ignore_scope") and root._saver_ignore_scope:
@@ -64,7 +74,11 @@ class Saver:
     def set_fallback(self, fallback_filename):
         self.tpe = ThreadPoolExecutor()
         if not os.path.exists(fallback_filename):
-            raise FileNotFoundError("Error loading base model {} - file not found.".format(fallback_filename))
+            raise FileNotFoundError(
+                "Error loading base model {} - file not found.".format(
+                    fallback_filename
+                )
+            )
         self.fallback_filename = fallback_filename
         self.fallback_future = self.tpe.submit(joblib.load, fallback_filename)
         self.fallback_ = None
@@ -90,8 +104,7 @@ class Saver:
     def load(self, path):
         self.variables, finetune_obj = joblib.load(path)
         finetune_obj.config = get_config(
-            error_on_invalid_keywords=False, 
-            **dict(finetune_obj.config)
+            error_on_invalid_keywords=False, **dict(finetune_obj.config)
         )
         return finetune_obj
 
@@ -102,7 +115,7 @@ class Saver:
             variables_sv = self.variables
         else:
             variables_sv = dict()
-
+        print("Base Model vars", self.fallback.keys())
         all_vars = get_fully_qualified_variable_paths(model)
         for var_name in all_vars.keys():
             saved_var = None
@@ -110,7 +123,7 @@ class Saver:
                 saved_var = variables_sv[var_name]
             elif var_name in self.fallback.keys():
                 saved_var = self.fallback[var_name]
-                            
+
             if saved_var is not None:
                 for func in self.variable_transforms:
                     saved_var = func(var_name, saved_var)
@@ -118,12 +131,15 @@ class Saver:
             else:
                 print(f"Using default initializer for variable: {var_name}")
                 if var_name.startswith("model/featurizer"):
-                    permitted = self.permit_uninitialized is not None and re.findall(self.permit_uninitialized, var_name)
+                    permitted = self.permit_uninitialized is not None and re.findall(
+                        self.permit_uninitialized, var_name
+                    )
                     if not permitted:
-                        raise ValueError("Uninitialized featurizer variable {}".format(var_name))
+                        raise ValueError(
+                            "Uninitialized featurizer variable {}".format(var_name)
+                        )
         for var_name in {**self.fallback, **variables_sv}.keys():
             if var_name not in all_vars and var_name.startswith("model"):
                 print(f"Variable {var_name} not found in all_vars")
         print(f"loading {len(transformed_weights)} variables")
         set_weights(model, transformed_weights, all_vars)
-

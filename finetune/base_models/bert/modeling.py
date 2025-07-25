@@ -15,16 +15,21 @@
 """The main BERT model and related functions."""
 
 import copy
-import math
-import numpy as np
-from finetune.nn.nn_utils import ExtraScope, saver_ignore_scope
-from finetune.base_models.bert.roberta_encoder import RoBERTaEncoder
-import tensorflow as tf
 import functools
+import math
 
+import numpy as np
+import tensorflow as tf
 from transformers.activations_tf import gelu as hf_gelu
 
+from finetune.base_models.bert.roberta_encoder import RoBERTaEncoder
+from finetune.base_models.bert.table_utils import (
+    get_gather_indices,
+    get_row_col_values,
+    reassemble_sequence_feats,
+)
 from finetune.nn.auxiliary import embed_position
+from finetune.nn.nn_utils import ExtraScope, saver_ignore_scope
 
 
 class Embedding(tf.keras.layers.Layer):
@@ -37,7 +42,7 @@ class Embedding(tf.keras.layers.Layer):
         embedding_post_processor,
         use_one_hot_embeddings=False,
         name="embeddings",
-        **kwargs
+        **kwargs,
     ):
         super().__init__(name=name, **kwargs)
         self.embedding = EmbeddingLookup(
@@ -60,7 +65,9 @@ class Embedding(tf.keras.layers.Layer):
 
 @saver_ignore_scope
 class DocRepPosEmbed(tf.keras.layers.Layer):
-    def __init__(self, positional_channels, width, max_2d_positional_embeddings=None,**kwargs):
+    def __init__(
+        self, positional_channels, width, max_2d_positional_embeddings=None, **kwargs
+    ):
         # max_2d_positional_embeddings is unused but needed to keep the APIs consistent
         # **kwargs needs to be sent to keras layer
         super().__init__(**kwargs)
@@ -71,7 +78,7 @@ class DocRepPosEmbed(tf.keras.layers.Layer):
             use_bias=False,
             kernel_initializer=tf.keras.initializers.VarianceScaling(
                 scale=0.02, mode="fan_avg", distribution="truncated_normal"
-            )
+            ),
         )
 
     def call(self, input_context):
@@ -82,18 +89,21 @@ class DocRepPosEmbed(tf.keras.layers.Layer):
                 self.positional_channels,
                 input_shape[0],
                 input_shape[1],
-                self.width
+                self.width,
             )
         )
 
+
 @saver_ignore_scope
 class LayoutLMPosEmbed(tf.keras.layers.Layer):
-    def __init__(self, positional_channels, width, max_2d_positional_embeddings=1024, **kwargs):
+    def __init__(
+        self, positional_channels, width, max_2d_positional_embeddings=1024, **kwargs
+    ):
         super().__init__(**kwargs)
         self.positional_channels = positional_channels
         self.width = width
         self.max_2d_positional_embeddings = max_2d_positional_embeddings
-        
+
     def build(self, input_shape):
         initializer = tf.keras.initializers.RandomNormal()
         self.x_position_embedding_table = self.add_weight(
@@ -122,13 +132,21 @@ class LayoutLMPosEmbed(tf.keras.layers.Layer):
         left_pos = tf.cast(input_context[:, :, 1], dtype=tf.int32)
         right_pos = tf.cast(input_context[:, :, 2], dtype=tf.int32)
         top_pos = tf.cast(input_context[:, :, 3], dtype=tf.int32)
-        
+
         left_position_embeddings = tf.gather(self.x_position_embedding_table, left_pos)
         upper_position_embeddings = tf.gather(self.y_position_embedding_table, top_pos)
-        right_position_embeddings = tf.gather(self.x_position_embedding_table, right_pos)
-        lower_position_embeddings = tf.gather(self.y_position_embedding_table, bottom_pos)
-        h_position_embeddings = tf.gather(self.h_position_embedding_table, bottom_pos - top_pos)
-        w_position_embeddings = tf.gather(self.w_position_embedding_table, right_pos - left_pos)
+        right_position_embeddings = tf.gather(
+            self.x_position_embedding_table, right_pos
+        )
+        lower_position_embeddings = tf.gather(
+            self.y_position_embedding_table, bottom_pos
+        )
+        h_position_embeddings = tf.gather(
+            self.h_position_embedding_table, bottom_pos - top_pos
+        )
+        w_position_embeddings = tf.gather(
+            self.w_position_embedding_table, right_pos - left_pos
+        )
         all_2d_pos_embeddings = [
             left_position_embeddings,
             upper_position_embeddings,
@@ -138,7 +156,8 @@ class LayoutLMPosEmbed(tf.keras.layers.Layer):
             w_position_embeddings,
         ]
         return tf.math.add_n(all_2d_pos_embeddings)
-        
+
+
 @saver_ignore_scope
 class XDocPosEmbed(tf.keras.layers.Layer):
     def __init__(self, positional_channels, width, **kwargs):
@@ -147,21 +166,18 @@ class XDocPosEmbed(tf.keras.layers.Layer):
         self.width = width
         self.layout_lm_pos_embed = LayoutLMPosEmbed(positional_channels, width)
         self.dense1 = tf.keras.layers.Dense(
-            width,
-            activation=tf.nn.relu,
-            name="doc_linear1"
+            width, activation=tf.nn.relu, name="doc_linear1"
         )
-        self.dense2 = tf.keras.layers.Dense(
-            width,
-            name="doc_linear2"
-        )
-        
+        self.dense2 = tf.keras.layers.Dense(width, name="doc_linear2")
+
     def call(self, input_context):
         layoutlm_pos = self.layout_lm_pos_embed(input_context)
         layoutlm_pos = self.dense1(layoutlm_pos)
         layoutlm_pos = self.dense2(layoutlm_pos)
         return layoutlm_pos
 
+
+@saver_ignore_scope
 class BaseBertModel(tf.keras.layers.Layer):
     """BERT model ("Bidirectional Encoder Representations from Transformers").
 
@@ -187,7 +203,12 @@ class BaseBertModel(tf.keras.layers.Layer):
     """
 
     def __init__(
-        self, encoder, config, pos2d_embedding_layer, token_type_vocab_size=None, name="bert", **kwargs,
+        self,
+        encoder,
+        config,
+        pos2d_embedding_layer,
+        token_type_vocab_size=None,
+        **kwargs,
     ):
         super().__init__(name=name, **kwargs)
         config = copy.deepcopy(config)
@@ -210,7 +231,8 @@ class BaseBertModel(tf.keras.layers.Layer):
             embedding_post_processor=EmbeddingPostprocessor(
                 feature_dim=self.embed_dim,
                 use_token_type=self.use_token_type,
-                token_type_vocab_size=2 or token_type_vocab_size, # Not sure why this is 2 but that's what finetune previously set it to.
+                token_type_vocab_size=2
+                or token_type_vocab_size,  # Not sure why this is 2 but that's what finetune previously set it to.
                 token_type_embedding_name="token_type_embeddings",
                 use_position_embeddings=not config.reading_order_removed,
                 position_embedding_name="position_embeddings",
@@ -220,7 +242,7 @@ class BaseBertModel(tf.keras.layers.Layer):
                 roberta=is_roberta,
                 pos_injection=config.context_injection,
                 positional_channels=config.context_channels,
-                pos2d_embedding_layer=pos2d_embedding_layer
+                pos2d_embedding_layer=pos2d_embedding_layer,
             ),
             use_one_hot_embeddings=False,
         )
@@ -242,26 +264,25 @@ class BaseBertModel(tf.keras.layers.Layer):
                 activation=tf.tanh,
                 kernel_initializer=create_initializer(config.initializer_range),
             )
-        
+
     def call(self, tokens, context, sequence_lengths, training=True):
-        
         delimiters = tf.cast(tf.equal(tokens, self.delimiter_token), tf.int32)
         token_type_ids = tf.cumsum(delimiters, exclusive=True, axis=1)
         input_shape = get_shape_list(tokens, expected_rank=2)
         batch_size = input_shape[0]
         seq_length = input_shape[1]
 
-        input_mask = tf.sequence_mask(sequence_lengths, maxlen=seq_length, dtype=tf.float32)
+        input_mask = tf.sequence_mask(
+            sequence_lengths, maxlen=seq_length, dtype=tf.float32
+        )
 
         embedding_output = self.embeddings(
             input_ids=tokens,
             input_context=context,
             token_type_ids=token_type_ids,
         )
-        
-        attention_mask = create_attention_mask_from_input_mask(
-            tokens, input_mask
-        )
+
+        attention_mask = create_attention_mask_from_input_mask(tokens, input_mask)
 
         sequence_output = self.transformer_model(
             layer_input=embedding_output,
@@ -292,7 +313,7 @@ class BaseBertModel(tf.keras.layers.Layer):
             "sequence_features": sequence_output,
             "features": pooled_output,
         }
-    
+
 
 def gelu(x):
     """Gaussian Error Linear Unit.
@@ -387,6 +408,7 @@ class LayerNorm(tf.keras.layers.Layer):
         outputs.set_shape(inputs_shape)
         return outputs
 
+
 @saver_ignore_scope
 class LayerNormAndDropout(tf.keras.layers.Layer):
     def __init__(self, dropout_prob, **kwargs):
@@ -405,7 +427,15 @@ def create_initializer(initializer_range=0.02):
 
 @saver_ignore_scope
 class EmbeddingLookup(tf.keras.layers.Layer):
-    def __init__(self, vocab_size, embedding_size=128, initializer_range=0.02, word_embedding_name="word_embeddings", use_one_hot_embeddings=False, **kwargs):
+    def __init__(
+        self,
+        vocab_size,
+        embedding_size=128,
+        initializer_range=0.02,
+        word_embedding_name="word_embeddings",
+        use_one_hot_embeddings=False,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         self.vocab_size = vocab_size
         self.embedding_size = embedding_size
@@ -433,30 +463,33 @@ class EmbeddingLookup(tf.keras.layers.Layer):
 
         input_shape = get_shape_list(input_ids)
 
-        output = tf.reshape(output, input_shape[0:-1] + [input_shape[-1] * self.embedding_size])
+        output = tf.reshape(
+            output, input_shape[0:-1] + [input_shape[-1] * self.embedding_size]
+        )
         return output
 
 
 @saver_ignore_scope
 class EmbeddingPostprocessor(tf.keras.layers.Layer):
     def __init__(
-            self,
-            *,
-            use_token_type=False,
-            token_type_vocab_size=16,
-            token_type_embedding_name="token_type_embeddings",
-            use_position_embeddings=True,
-            position_embedding_name="position_embeddings",
-            initializer_range=0.02,
-            max_position_embeddings=512,
-            dropout_prob=0.1,
-            roberta=False,
-            pos_injection=False,
-            positional_channels=None,
-            pos2d_embedding_layer=DocRepPosEmbed,
-            feature_dim=None,
-            max_2d_positional_embeddings=None,
-            **kwargs):
+        self,
+        *,
+        use_token_type=False,
+        token_type_vocab_size=16,
+        token_type_embedding_name="token_type_embeddings",
+        use_position_embeddings=True,
+        position_embedding_name="position_embeddings",
+        initializer_range=0.02,
+        max_position_embeddings=512,
+        dropout_prob=0.1,
+        roberta=False,
+        pos_injection=False,
+        positional_channels=None,
+        pos2d_embedding_layer=DocRepPosEmbed,
+        feature_dim=None,
+        max_2d_positional_embeddings=None,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         self.use_token_type = use_token_type
         self.token_type_vocab_size = token_type_vocab_size
@@ -475,10 +508,8 @@ class EmbeddingPostprocessor(tf.keras.layers.Layer):
             max_2d_positional_embeddings=max_2d_positional_embeddings,
         )
         self.layer_norm_and_dropout = LayerNormAndDropout(dropout_prob)
-        if self.pos_injection:
-            self.pos2d_embedding = self.pos2d_embedding_layer(self.positional_channels, feature_dim)
+        # Remove the incorrect call - pos2d_embedding_layer is already instantiated
 
-        
     def build(self, input_shape):
         if self.use_token_type:
             self.token_type_table = self.add_weight(
@@ -493,7 +524,6 @@ class EmbeddingPostprocessor(tf.keras.layers.Layer):
                 shape=[self.max_position_embeddings, self.feature_dim],
                 initializer=create_initializer(self.initializer_range),
             )
-
 
     def call(self, input_tensor, input_context, token_type_ids, position_ids=None):
         input_shape = get_shape_list(input_tensor, expected_rank=3)
@@ -533,7 +563,7 @@ class EmbeddingPostprocessor(tf.keras.layers.Layer):
             # sequence has positions [0, 1, 2, ... seq_length-1], so we can just
             # perform a slice.
             if self.roberta:
-                position_embeddings = self.position_embedding_table[2:seq_length + 2]
+                position_embeddings = self.position_embedding_table[2 : seq_length + 2]
             else:
                 position_embeddings = self.position_embedding_table[:seq_length]
 
@@ -554,12 +584,11 @@ class EmbeddingPostprocessor(tf.keras.layers.Layer):
             output += position_embeddings
 
         if self.pos_injection and input_context is not None:
-            output += self.pos2d_embedding(
+            output += self.pos2d_embedding_layer(
                 input_context=input_context,
             )
         output = self.layer_norm_and_dropout(output)
         return output
-
 
 
 def create_attention_mask_from_input_mask(from_tensor, to_mask):
@@ -597,6 +626,7 @@ def create_attention_mask_from_input_mask(from_tensor, to_mask):
 
     return mask
 
+
 class AttentionLayer(tf.keras.layers.Layer):
     def __init__(
         self,
@@ -610,7 +640,7 @@ class AttentionLayer(tf.keras.layers.Layer):
         initializer_range=0.02,
         do_return_2d_tensor=False,
         name="self",
-         **kwargs
+        **kwargs,
     ):
         super().__init__(name=name, **kwargs)
         self.num_attention_heads = num_attention_heads
@@ -638,9 +668,19 @@ class AttentionLayer(tf.keras.layers.Layer):
             kernel_initializer=create_initializer(initializer_range),
         )
 
-        self.attention_probs_dropout = tf.keras.layers.Dropout(attention_probs_dropout_prob)
+        self.attention_probs_dropout = tf.keras.layers.Dropout(
+            attention_probs_dropout_prob
+        )
 
-    def call(self, from_tensor, to_tensor, attention_mask=None, batch_size=None, from_seq_length=None, to_seq_length=None):
+    def call(
+        self,
+        from_tensor,
+        to_tensor,
+        attention_mask=None,
+        batch_size=None,
+        from_seq_length=None,
+        to_seq_length=None,
+    ):
         def transpose_for_scores(
             input_tensor, batch_size, num_attention_heads, seq_length, width
         ):
@@ -692,12 +732,20 @@ class AttentionLayer(tf.keras.layers.Layer):
 
         # `query_layer` = [B, N, F, H]
         query_layer = transpose_for_scores(
-            query_layer, batch_size, self.num_attention_heads, from_seq_length, self.size_per_head
+            query_layer,
+            batch_size,
+            self.num_attention_heads,
+            from_seq_length,
+            self.size_per_head,
         )
 
         # `key_layer` = [B, N, T, H]
         key_layer = transpose_for_scores(
-            key_layer, batch_size, self.num_attention_heads, to_seq_length, self.size_per_head
+            key_layer,
+            batch_size,
+            self.num_attention_heads,
+            to_seq_length,
+            self.size_per_head,
         )
 
         # Take the dot product between "query" and "key" to get the raw
@@ -732,7 +780,8 @@ class AttentionLayer(tf.keras.layers.Layer):
 
         # `value_layer` = [B, T, N, H]
         value_layer = tf.reshape(
-            value_layer, [batch_size, to_seq_length, self.num_attention_heads, self.size_per_head]
+            value_layer,
+            [batch_size, to_seq_length, self.num_attention_heads, self.size_per_head],
         )
 
         # `value_layer` = [B, N, T, H]
@@ -748,13 +797,20 @@ class AttentionLayer(tf.keras.layers.Layer):
             # `context_layer` = [B*F, N*H]
             context_layer = tf.reshape(
                 context_layer,
-                [batch_size * from_seq_length, self.num_attention_heads * self.size_per_head],
+                [
+                    batch_size * from_seq_length,
+                    self.num_attention_heads * self.size_per_head,
+                ],
             )
         else:
             # `context_layer` = [B, F, N*H]
             context_layer = tf.reshape(
                 context_layer,
-                [batch_size, from_seq_length, self.num_attention_heads * self.size_per_head],
+                [
+                    batch_size,
+                    from_seq_length,
+                    self.num_attention_heads * self.size_per_head,
+                ],
             )
 
         return context_layer
@@ -762,16 +818,16 @@ class AttentionLayer(tf.keras.layers.Layer):
 
 class Attention(tf.keras.layers.Layer):
     def __init__(
-            self,
-            *,
-            attention_head_size,
-            num_attention_heads=12,
-            hidden_dropout_prob=0.1,
-            attention_probs_dropout_prob=0.1,
-            initializer_range=0.02,
-            name="attention",
-            **kwargs
-        ):
+        self,
+        *,
+        attention_head_size,
+        num_attention_heads=12,
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        initializer_range=0.02,
+        name="attention",
+        **kwargs,
+    ):
         super().__init__(name=name, **kwargs)
         self.attention_layer = AttentionLayer(
             size_per_head=attention_head_size,
@@ -787,11 +843,14 @@ class Attention(tf.keras.layers.Layer):
 
     def build(self, input_shape):
         # We could clean this up by adding an output layer with this and the layernorm?
-        self.output_layer = ExtraScope(tf.keras.layers.Dense(
-            input_shape[-1],
-            name="dense",
-            kernel_initializer=create_initializer(self.initializer_range),
-        ), "output")
+        self.output_layer = ExtraScope(
+            tf.keras.layers.Dense(
+                input_shape[-1],
+                name="dense",
+                kernel_initializer=create_initializer(self.initializer_range),
+            ),
+            "output",
+        )
 
     def call(self, *, layer_input, batch_size, seq_length, attention_mask=None):
         attention_output = self.attention_layer(
@@ -807,8 +866,10 @@ class Attention(tf.keras.layers.Layer):
         attention_output = self.output_layer_norm(attention_output + layer_input)
         return attention_output
 
+
 class FullBlock(tf.keras.layers.Layer):
-    def __init__(self,
+    def __init__(
+        self,
         *,
         attention_head_size,
         num_attention_heads=12,
@@ -818,7 +879,7 @@ class FullBlock(tf.keras.layers.Layer):
         attention_probs_dropout_prob=0.1,
         initializer_range=0.02,
         name=None,
-        **kwargs
+        **kwargs,
     ):
         assert name is not None
         super().__init__(name=name, **kwargs)
@@ -836,12 +897,12 @@ class FullBlock(tf.keras.layers.Layer):
                 kernel_initializer=create_initializer(initializer_range),
                 name="dense",
             ),
-            "intermediate"
+            "intermediate",
         )
         self.output_dropout = tf.keras.layers.Dropout(rate=hidden_dropout_prob)
         self.output_layer_norm = ExtraScope(LayerNorm(), "output")
         self.initializer_range = initializer_range
-    
+
     def build(self, input_shape):
         self.output_layer = ExtraScope(
             tf.keras.layers.Dense(
@@ -849,7 +910,7 @@ class FullBlock(tf.keras.layers.Layer):
                 kernel_initializer=create_initializer(self.initializer_range),
                 name="dense",
             ),
-            "output"
+            "output",
         )
 
     def call(self, layer_input, batch_size, seq_length, attention_mask=None):
@@ -865,8 +926,10 @@ class FullBlock(tf.keras.layers.Layer):
         layer_output = self.output_layer_norm(layer_output + attention_output)
         return layer_output
 
+
 class TransformerModel(tf.keras.layers.Layer):
-    def __init__(self,
+    def __init__(
+        self,
         *,
         num_hidden_layers=12,
         num_attention_heads=12,
@@ -877,7 +940,7 @@ class TransformerModel(tf.keras.layers.Layer):
         initializer_range=0.02,
         recompute_grad=False,
         name="encoder",
-        **kwargs
+        **kwargs,
     ):
         super().__init__(name=name, **kwargs)
         self.recompute_grad = recompute_grad
@@ -895,7 +958,7 @@ class TransformerModel(tf.keras.layers.Layer):
             raise ValueError(
                 "The hidden size (%d) is not a multiple of the number of attention "
                 "heads (%d)" % (hidden_size, self.num_attention_heads)
-                )
+            )
 
         attention_head_size = int(hidden_size / self.num_attention_heads)
         self.blocks = [
@@ -912,17 +975,29 @@ class TransformerModel(tf.keras.layers.Layer):
             for i in range(self.num_hidden_layers)
         ]
 
-    def call(self, *, layer_input, batch_size, seq_length, attention_mask=None, training=False):
+    def call(
+        self,
+        *,
+        layer_input,
+        batch_size,
+        seq_length,
+        attention_mask=None,
+        training=False,
+    ):
         input_shape = get_shape_list(layer_input, expected_rank=3)
         prev_output = reshape_to_matrix(layer_input)
 
         for i, block in enumerate(self.blocks):
             if self.recompute_grad and training:
                 block = tf.recompute_grad(block)
-            prev_output = block(layer_input=prev_output, batch_size=batch_size, seq_length=seq_length, attention_mask=attention_mask)
+            prev_output = block(
+                layer_input=prev_output,
+                batch_size=batch_size,
+                seq_length=seq_length,
+                attention_mask=attention_mask,
+            )
         final_output = reshape_from_matrix(prev_output, input_shape)
         return final_output
-
 
 
 def get_shape_list(tensor, expected_rank=None, name=None):
@@ -944,7 +1019,7 @@ def get_shape_list(tensor, expected_rank=None, name=None):
     shape = tensor.shape.as_list()
 
     non_static_indexes = []
-    for (index, dim) in enumerate(shape):
+    for index, dim in enumerate(shape):
         if dim is None:
             non_static_indexes.append(index)
 
@@ -1082,7 +1157,7 @@ def twin_transformer_model(
                     mix_output_a, mix_output_b = mixing_fn(
                         reshape_from_matrix(prev_output_a, input_shape_a),
                         reshape_from_matrix(prev_output_b, input_shape_b),
-                        **mixing_inputs
+                        **mixing_inputs,
                     )
                     prev_output_a = reshape_to_matrix(mix_output_a)
                     prev_output_b = reshape_to_matrix(mix_output_b)
@@ -1093,7 +1168,7 @@ def twin_transformer_model(
     return final_output_a, final_output_b
 
 
-class TwinBertModel():#_BertModel):
+class TwinBertModel:  # _BertModel):
     def __init__(
         self,
         config,
@@ -1254,9 +1329,7 @@ class BertModel(tf.keras.layers.Layer):
     def __init__(self, encoder, config, **kwargs):
         super().__init__(**kwargs)
         self.base_bert = BaseBertModel(
-            encoder=encoder,
-            config=config,
-            pos2d_embedding_layer=DocRepPosEmbed
+            encoder=encoder, config=config, pos2d_embedding_layer=DocRepPosEmbed
         )
 
     def call(self, tokens, context, sequence_lengths):
@@ -1271,9 +1344,7 @@ class LayoutLMModel(tf.keras.layers.Layer):
     def __init__(self, encoder, config, **kwargs):
         super().__init__(**kwargs)
         self.base_bert = BaseBertModel(
-            encoder=encoder,
-            config=config,
-            pos2d_embedding_layer=LayoutLMPosEmbed
+            encoder=encoder, config=config, pos2d_embedding_layer=LayoutLMPosEmbed
         )
 
     def call(self, tokens, context, sequence_lengths):
@@ -1282,6 +1353,7 @@ class LayoutLMModel(tf.keras.layers.Layer):
             context=context,
             sequence_lengths=sequence_lengths,
         )
+
 
 class XDocModel(tf.keras.layers.Layer):
     def __init__(self, encoder, config, **kwargs):
@@ -1290,7 +1362,7 @@ class XDocModel(tf.keras.layers.Layer):
             encoder=encoder,
             config=config,
             token_type_vocab_size=1,
-            pos2d_embedding_layer=XDocPosEmbed
+            pos2d_embedding_layer=XDocPosEmbed,
         )
 
     def call(self, tokens, context, sequence_lengths):
@@ -1299,3 +1371,608 @@ class XDocModel(tf.keras.layers.Layer):
             context=context,
             sequence_lengths=sequence_lengths,
         )
+
+
+@saver_ignore_scope
+class TablePosEmbed(tf.keras.layers.Layer):
+    def __init__(
+        self,
+        positional_channels,
+        width,
+        table_position_type="row_col",
+        max_row_col_embedding=512,
+        max_2d_positional_embeddings=None,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.positional_channels = positional_channels
+        self.width = width
+        self.table_position_type = table_position_type
+        self.max_row_col_embedding = max_row_col_embedding
+        # Use max_2d_positional_embeddings if provided, otherwise use max_row_col_embedding
+        if max_2d_positional_embeddings is not None:
+            self.max_row_col_embedding = max_2d_positional_embeddings
+
+    def build(self, input_shape):
+        # Create position embedding tables for table positions
+        entries = [0, 1] if self.table_position_type == "row_col" else [0, 1, 2, 3]
+        self.position_tables = []
+        for entry in entries:
+            position_table = self.add_weight(
+                name=f"pos_{entry}",
+                shape=[self.max_row_col_embedding, self.width],
+                initializer=tf.keras.initializers.RandomNormal(stddev=1e-3),
+                trainable=True,
+            )
+            self.position_tables.append(position_table)
+
+    def call(self, input_context):
+        output = []
+        entries = [0, 1] if self.table_position_type == "row_col" else [0, 1, 2, 3]
+        for i, entry in enumerate(entries):
+            position = tf.cast(input_context[:, :, entry], dtype=tf.int32)
+            output.append(tf.gather(self.position_tables[i], position))
+        return tf.math.add_n(output)
+
+
+@saver_ignore_scope
+class TwinTransformerModel(tf.keras.layers.Layer):
+    def __init__(
+        self,
+        *,
+        num_hidden_layers=12,
+        num_attention_heads=12,
+        intermediate_size=3072,
+        intermediate_act_fn=gelu,
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        initializer_range=0.02,
+        recompute_grad=False,
+        get_mixing_layer=None,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.recompute_grad = recompute_grad
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.intermediate_act_fn = intermediate_act_fn
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.initializer_range = initializer_range
+        self.num_hidden_layers = num_hidden_layers
+        self.get_mixing_layer = get_mixing_layer
+
+    def build(self, input_shape):
+        # input_shape should be a tuple of (input_shape_a, input_shape_b, attention_mask_a, attention_mask_b)
+        input_shape_a, input_shape_b = input_shape[:2]
+        hidden_size_a = input_shape_a[-1]
+        hidden_size_b = input_shape_b[-1]
+
+        if hidden_size_a % self.num_attention_heads != 0:
+            raise ValueError(
+                f"The hidden size ({hidden_size_a}) is not a multiple of the number of attention "
+                f"heads ({self.num_attention_heads})"
+            )
+        if hidden_size_b % self.num_attention_heads != 0:
+            raise ValueError(
+                f"The hidden size ({hidden_size_b}) is not a multiple of the number of attention "
+                f"heads ({self.num_attention_heads})"
+            )
+
+        attention_head_size_a = int(hidden_size_a / self.num_attention_heads)
+        attention_head_size_b = int(hidden_size_b / self.num_attention_heads)
+
+        # Create transformer blocks for both streams
+        self.blocks_a = []
+        self.blocks_b = []
+        self.mixing_blocks = []
+
+        for i in range(self.num_hidden_layers):
+            block_a = FullBlock(
+                attention_head_size=attention_head_size_a,
+                num_attention_heads=self.num_attention_heads,
+                intermediate_size=self.intermediate_size,
+                intermediate_act_fn=self.intermediate_act_fn,
+                hidden_dropout_prob=self.hidden_dropout_prob,
+                attention_probs_dropout_prob=self.attention_probs_dropout_prob,
+                initializer_range=self.initializer_range,
+                name=f"layer_a_{i}",
+            )
+            self.blocks_a.append(block_a)
+
+            block_b = FullBlock(
+                attention_head_size=attention_head_size_b,
+                num_attention_heads=self.num_attention_heads,
+                intermediate_size=self.intermediate_size,
+                intermediate_act_fn=self.intermediate_act_fn,
+                hidden_dropout_prob=self.hidden_dropout_prob,
+                attention_probs_dropout_prob=self.attention_probs_dropout_prob,
+                initializer_range=self.initializer_range,
+                name=f"layer_b_{i}",
+            )
+            self.blocks_b.append(block_b)
+            if (
+                i % 2 == 0
+                and self.get_mixing_layer is not None
+                and i != self.num_hidden_layers - 1
+            ):
+                self.mixing_blocks.append(self.get_mixing_layer(name=f"mixing_fn_{i}"))
+            else:
+                self.mixing_blocks.append(None)
+
+    def call(self, inputs, *, mixing_inputs=None, training=False):
+        # Unpack inputs tuple
+        layer_input_a, layer_input_b, attention_mask_a, attention_mask_b = inputs
+        input_shape_a = get_shape_list(layer_input_a, expected_rank=3)
+        input_shape_b = get_shape_list(layer_input_b, expected_rank=3)
+        batch_size_a = input_shape_a[0]
+        seq_length_a = input_shape_a[1]
+        batch_size_b = input_shape_b[0]
+        seq_length_b = input_shape_b[1]
+
+        # Keep representations as 2D tensors to avoid re-shaping
+        prev_output_a = reshape_to_matrix(layer_input_a)
+        prev_output_b = reshape_to_matrix(layer_input_b)
+
+        for layer_idx in range(self.num_hidden_layers):
+            # Process stream A
+            block_a = self.blocks_a[layer_idx]
+            prev_output_a = block_a(
+                layer_input=prev_output_a,
+                batch_size=batch_size_a,
+                seq_length=seq_length_a,
+                attention_mask=attention_mask_a,
+            )
+            # Process stream B
+            block_b = self.blocks_b[layer_idx]
+            prev_output_b = block_b(
+                layer_input=prev_output_b,
+                batch_size=batch_size_b,
+                seq_length=seq_length_b,
+                attention_mask=attention_mask_b,
+            )
+            mixing_layer = self.mixing_blocks[layer_idx]
+            # Apply mixing function if provided
+            if mixing_layer is not None:
+                mix_output_a, mix_output_b = mixing_layer(
+                    reshape_from_matrix(prev_output_a, input_shape_a),
+                    reshape_from_matrix(prev_output_b, input_shape_b),
+                    **mixing_inputs,
+                )
+                prev_output_a = reshape_to_matrix(mix_output_a)
+                prev_output_b = reshape_to_matrix(mix_output_b)
+        final_output_a = reshape_from_matrix(prev_output_a, input_shape_a)
+        final_output_b = reshape_from_matrix(prev_output_b, input_shape_b)
+        return final_output_a, final_output_b
+
+
+@saver_ignore_scope
+class BaseTwinBertModel(tf.keras.layers.Layer):
+    """Twin BERT model for table processing with row and column streams."""
+
+    def __init__(
+        self,
+        encoder,
+        config,
+        pos2d_embedding_layer,
+        token_type_vocab_size=None,
+        name="bert",
+        **kwargs,
+    ):
+        super().__init__(name=name, **kwargs)
+        config = copy.deepcopy(config)
+        is_roberta = config.base_model.is_roberta
+        is_roberta_v1 = is_roberta and config.base_model.encoder == RoBERTaEncoder
+        self.max_position_embeddings = 512
+        self.vocab_size = encoder.vocab_size
+        if is_roberta:
+            self.max_position_embeddings += 2
+        if is_roberta_v1:
+            self.vocab_size += 1
+        self.delimiter_token = encoder.delimiter_token
+        self.use_token_type = config.bert_use_type_embed
+        self.use_pooler = config.bert_use_pooler
+        self.embed_dim = config.n_embed
+
+        # Create embeddings for both streams (shared embedding table) with correct scope
+        self.embeddings = Embedding(
+            hidden_size=self.embed_dim,
+            initializer_range=config.weight_stddev,
+            vocab_size=self.vocab_size,
+            embedding_post_processor=EmbeddingPostprocessor(
+                feature_dim=self.embed_dim,
+                use_token_type=self.use_token_type,
+                token_type_vocab_size=2 or token_type_vocab_size,
+                token_type_embedding_name="token_type_embeddings",
+                use_position_embeddings=not config.reading_order_removed,
+                position_embedding_name="position_embeddings",
+                initializer_range=config.weight_stddev,
+                max_position_embeddings=self.max_position_embeddings,
+                dropout_prob=config.resid_p_drop,
+                roberta=is_roberta,
+                pos_injection=config.context_injection,
+                positional_channels=config.context_channels,
+                pos2d_embedding_layer=pos2d_embedding_layer,
+            ),
+            use_one_hot_embeddings=False,
+        )
+
+        self.transformer_model = ExtraScope(
+            TwinTransformerModel(
+                num_hidden_layers=config.n_layer,
+                num_attention_heads=config.n_heads,
+                intermediate_size=config.bert_intermediate_size,
+                intermediate_act_fn=get_activation(config.act_fn),
+                hidden_dropout_prob=config.resid_p_drop,
+                attention_probs_dropout_prob=config.attn_p_drop,
+                initializer_range=config.weight_stddev,
+                recompute_grad=config.low_memory_mode,
+                get_mixing_layer=TableCrossRowColMixing,
+            ),
+            "encoder",
+        )
+
+        if self.use_pooler:
+            self.pooler = tf.keras.layers.Dense(
+                self.embed_dim,
+                activation=tf.tanh,
+                kernel_initializer=create_initializer(config.initializer_range),
+            )
+
+    def call(
+        self,
+        tokens_a,
+        tokens_b,
+        context_a,
+        context_b,
+        sequence_lengths_a,
+        sequence_lengths_b,
+        mixing_inputs=None,
+        **kwargs,
+    ):
+        """
+        Process twin BERT inputs for row and column streams.
+
+        Args:
+            tokens_a: Row tokens [batch_size, seq_length]
+            tokens_b: Column tokens [batch_size, seq_length]
+            context_a: Row context [batch_size, seq_length, 2]
+            context_b: Column context [batch_size, seq_length, 2]
+            sequence_lengths_a: Row sequence lengths [batch_size]
+            sequence_lengths_b: Column sequence lengths [batch_size]
+            mixing_inputs: Mixing inputs dictionary
+            **kwargs: Additional arguments
+
+        Returns:
+            Dictionary containing features and sequence features
+        """
+        # Process stream A
+        delimiters_a = tf.cast(tf.equal(tokens_a, self.delimiter_token), tf.int32)
+        token_type_ids_a = tf.cumsum(delimiters_a, exclusive=True, axis=1)
+        input_shape_a = get_shape_list(tokens_a, expected_rank=2)
+        batch_size_a = input_shape_a[0]
+        seq_length_a = input_shape_a[1]
+        input_mask_a = tf.sequence_mask(
+            sequence_lengths_a, maxlen=seq_length_a, dtype=tf.float32
+        )
+
+        embedding_output_a = self.embeddings(
+            input_ids=tokens_a,
+            input_context=context_a,
+            token_type_ids=token_type_ids_a,
+        )
+
+        attention_mask_a = create_attention_mask_from_input_mask(tokens_a, input_mask_a)
+
+        # Process stream B
+        delimiters_b = tf.cast(tf.equal(tokens_b, self.delimiter_token), tf.int32)
+        token_type_ids_b = tf.cumsum(delimiters_b, exclusive=True, axis=1)
+        input_shape_b = get_shape_list(tokens_b, expected_rank=2)
+        batch_size_b = input_shape_b[0]
+        seq_length_b = input_shape_b[1]
+        input_mask_b = tf.sequence_mask(
+            sequence_lengths_b, maxlen=seq_length_b, dtype=tf.float32
+        )
+
+        embedding_output_b = self.embeddings(
+            input_ids=tokens_b,
+            input_context=context_b,
+            token_type_ids=token_type_ids_b,
+        )
+
+        attention_mask_b = create_attention_mask_from_input_mask(tokens_b, input_mask_b)
+
+        # Run the twin transformer
+        sequence_output_a, sequence_output_b = self.transformer_model(
+            (
+                embedding_output_a,
+                embedding_output_b,
+                attention_mask_a,
+                attention_mask_b,
+            ),
+            mixing_inputs=mixing_inputs,
+            training=kwargs.get("training", True),
+        )
+
+        # Handle pooled output (using first token from stream A)
+        output_shape_a = tf.shape(sequence_output_a)
+
+        def first_token():
+            return tf.squeeze(sequence_output_a[:, 0:1, :], axis=1)
+
+        def empty():
+            return tf.zeros(
+                tf.concat([[output_shape_a[0]], [self.embed_dim]], axis=0),
+                dtype=sequence_output_a.dtype,
+            )
+
+        pooled_output = tf.cond(
+            tf.equal(output_shape_a[1], 0), true_fn=empty, false_fn=first_token
+        )
+        pooled_output.set_shape([None, self.embed_dim])
+        if self.use_pooler:
+            pooled_output = self.pooler(pooled_output)
+
+        return {
+            "sequence_features_a": sequence_output_a,
+            "sequence_features_b": sequence_output_b,
+            "features": pooled_output,
+        }
+
+
+class TwinBertModel(tf.keras.layers.Layer):
+    def __init__(self, encoder, config, **kwargs):
+        super().__init__(**kwargs)
+        self.base_twin_bert = BaseTwinBertModel(
+            encoder=encoder, config=config, pos2d_embedding_layer=TablePosEmbed
+        )
+
+    def call(
+        self,
+        tokens_a,
+        tokens_b,
+        context_a,
+        context_b,
+        sequence_lengths_a,
+        sequence_lengths_b,
+        mixing_inputs=None,
+        **kwargs,
+    ):
+        """
+        Call the base twin BERT model with the provided row/column streams.
+
+        Args:
+            tokens_a: Row tokens [batch_size, seq_length]
+            tokens_b: Column tokens [batch_size, seq_length]
+            context_a: Row context [batch_size, seq_length, 2]
+            context_b: Column context [batch_size, seq_length, 2]
+            sequence_lengths_a: Row sequence lengths [batch_size]
+            sequence_lengths_b: Column sequence lengths [batch_size]
+            mixing_inputs: Mixing inputs dictionary
+            **kwargs: Additional arguments
+
+        Returns:
+            Dictionary containing features and sequence features
+        """
+        return self.base_twin_bert(
+            tokens_a=tokens_a,
+            tokens_b=tokens_b,
+            context_a=context_a,
+            context_b=context_b,
+            sequence_lengths_a=sequence_lengths_a,
+            sequence_lengths_b=sequence_lengths_b,
+            mixing_inputs=mixing_inputs,
+            **kwargs,
+        )
+
+
+class TwinBertFeaturizer(tf.keras.layers.Layer):
+    """Keras layer wrapper for the twin BERT featurizer functionality."""
+
+    def __init__(self, encoder, config, name="bert", **kwargs):
+        super().__init__(name=name, **kwargs)
+        self.encoder = encoder
+        self.config = config
+        self.twin_bert = TwinBertModel(encoder=encoder, config=config, name="bert")
+
+    def call(self, tokens, context, sequence_lengths, **kwargs):
+        """
+        Main featurizer call that processes the input tokens and context.
+
+        Args:
+            tokens: Input tokens [batch_size, sequence_length]
+            context: Context information for table processing
+            sequence_lengths: Sequence lengths
+            **kwargs: Additional arguments
+
+        Returns:
+            Dictionary containing features and sequence features
+        """
+        batch_size = tf.shape(tokens)[0]
+        seq_length = tf.shape(tokens)[1]
+
+        # Extract row/column boundaries from context
+        end_col, end_row, start_col, start_row = tf.unstack(context, num=4, axis=2)
+
+        # Get gather indices for rows and columns
+        row_gather = get_gather_indices(
+            tokens,
+            sequence_lengths,
+            start_row,
+            end_row,
+            other_end=end_col,
+            chunk_tables=True,  # Default value
+        )
+        col_gather = get_gather_indices(
+            tokens,
+            sequence_lengths,
+            start_col,
+            end_col,
+            other_end=end_row,
+            chunk_tables=True,  # Default value
+        )
+
+        # Get row/column values for processing
+        row_col_values = get_row_col_values(
+            tokens,
+            context,
+            row_gather,
+            col_gather,
+            bos_id=self.encoder.start_token,
+            eos_id=self.encoder.end_token,
+            table_position_type="row_col",  # Default value
+            max_row_col_embedding=512,  # Default value
+        )
+
+        # Create output shape for reassembly
+        output_shape = tf.stack([batch_size, seq_length, 768])
+
+        # Create mixing inputs
+        mixing_inputs = {
+            "row_gather": row_gather,
+            "col_gather": col_gather,
+            "output_shape": output_shape,
+            "row_col_values": row_col_values,
+        }
+
+        # Get outputs from the twin BERT model
+        outputs = self.twin_bert(
+            tokens_a=row_col_values["row"]["values"],
+            tokens_b=row_col_values["col"]["values"],
+            context_a=row_col_values["row"]["positions"],
+            context_b=row_col_values["col"]["positions"],
+            sequence_lengths_a=row_col_values["row"]["seq_lens"],
+            sequence_lengths_b=row_col_values["col"]["seq_lens"],
+            mixing_inputs=mixing_inputs,
+        )
+
+        # Reassemble sequence features
+        sequence_features = reassemble_sequence_feats(
+            output_shape,
+            outputs["sequence_features_a"],  # row features
+            outputs["sequence_features_b"],  # col features
+            row_col_values["row"]["scatter_vals"],
+            row_col_values["col"]["scatter_vals"],
+            include_row_col_summaries=False,  # Default value
+            down_project_feats=False,  # Default value
+        )
+
+        # Return the expected format
+        return {
+            "embed_weights": self.twin_bert.base_twin_bert.embeddings.embedding.embedding_table,
+            "features": outputs["features"],
+            "sequence_features": sequence_features,
+            "lengths": sequence_lengths,
+            "eos_idx": tf.zeros(batch_size, dtype=tf.int64),
+        }
+
+
+@saver_ignore_scope
+class AdaptorBlock(tf.keras.layers.Layer):
+    """Keras version of the adaptor block for mixing row and column features."""
+
+    def __init__(self, hidden_dim, **kwargs):
+        super().__init__(**kwargs)
+        self.hidden_dim = hidden_dim
+
+    def build(self, input_shape):
+        self.dense1 = tf.keras.layers.Dense(
+            self.hidden_dim,
+            activation=gelu,
+            kernel_initializer=tf.keras.initializers.TruncatedNormal(stddev=1e-3),
+        )
+        self.dense2 = tf.keras.layers.Dense(
+            input_shape[-1],
+            activation=None,
+            kernel_initializer=tf.keras.initializers.TruncatedNormal(stddev=1e-3),
+        )
+
+    def call(self, inputs):
+        hidden = self.dense1(inputs)
+        return self.dense2(hidden)
+
+
+class TableCrossRowColMixing(tf.keras.layers.Layer):
+    """Keras version of the table cross row-column mixing function."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def build(self, input_shape):
+        # BOS and EOS variables for padding
+        self.bos_var = self.add_weight(
+            name="bos",
+            shape=[768],
+            dtype=tf.float32,
+            initializer=tf.keras.initializers.TruncatedNormal(),
+            trainable=True,
+        )
+        self.eos_var = self.add_weight(
+            name="eos",
+            shape=[768],
+            dtype=tf.float32,
+            initializer=tf.keras.initializers.TruncatedNormal(),
+            trainable=True,
+        )
+
+        # Adaptor blocks for mixing
+        self.adaptor_col = AdaptorBlock(64)
+        self.adaptor_row = AdaptorBlock(64)
+
+    def call(
+        self, row_feats, col_feats, row_gather, col_gather, output_shape, row_col_values
+    ):
+        # Scatter col feats into original shape
+        col_feats_orig_shape = self._scatter_feats(
+            output_shape, col_feats, row_col_values["col"]["scatter_vals"]
+        )
+
+        # Scatter row feats into original shape
+        row_feats_orig_shape = self._scatter_feats(
+            output_shape, row_feats, row_col_values["row"]["scatter_vals"]
+        )
+
+        # Gather col feats into rows arrangement
+        col_feats_reshaped = self._gather_col_vals(
+            col_feats_orig_shape, row_gather, self.bos_var, self.eos_var
+        )
+
+        # Gather row feats into cols arrangement
+        row_feats_reshaped = self._gather_col_vals(
+            row_feats_orig_shape, col_gather, self.bos_var, self.eos_var
+        )
+
+        return (
+            self.adaptor_col(col_feats_reshaped) + row_feats,
+            self.adaptor_row(row_feats_reshaped) + col_feats,
+        )
+
+    def _scatter_feats(self, output_shape, sequence_feats, scatter_vals):
+        """Scatter features back to original shape."""
+        input_tensor = tf.zeros(shape=output_shape, dtype=tf.float32)
+        mask = tf.math.less(scatter_vals[:, :, 1], output_shape[1])
+        feats = tf.boolean_mask(sequence_feats, mask)
+        scatter_idxs = tf.boolean_mask(scatter_vals, mask)
+        divide_by = tf.tensor_scatter_nd_add(
+            input_tensor, scatter_idxs, tf.ones_like(feats)
+        )
+        return tf.math.divide_no_nan(
+            tf.tensor_scatter_nd_add(input_tensor, scatter_idxs, feats), divide_by
+        )
+
+    def _gather_col_vals(self, inp, gather_output, bos_pad, eos_pad):
+        """Gather column values with BOS/EOS padding."""
+        bs = tf.shape(inp)[0]
+        bos_expanded = tf.tile(
+            tf.expand_dims(tf.expand_dims(bos_pad, 0), 0),
+            [bs, 1, *(1 for _ in bos_pad.shape)],
+        )
+        eos_expanded = tf.tile(
+            tf.expand_dims(tf.expand_dims(eos_pad, 0), 0),
+            [bs, 1, *(1 for _ in eos_pad.shape)],
+        )
+        inp_w_extra_toks = tf.concat(
+            [inp, bos_expanded, eos_expanded, tf.ones_like(eos_expanded) * 1234], axis=1
+        )
+        values = tf.gather_nd(indices=gather_output["values"], params=inp_w_extra_toks)
+        return values

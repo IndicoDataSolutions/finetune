@@ -1,48 +1,52 @@
 import unittest
 from copy import deepcopy
+
 from finetune.util.group_metrics import (
-    get_count_fn,
     calc_group_assignment,
     create_joint_groups,
+    get_count_fn,
     get_metrics,
     group_metrics,
     joint_metrics,
 )
 
+
 class TestGroupMetrics(unittest.TestCase):
     def setUp(self):
-        text = ("five percent (5%) \n " +
-                "fifty percent (50%) \n " +
-                "two percent (2%) \n " +
-                "nine percent (9%) \n " +
-                "three percent (3%) \n ")
+        text = (
+            "five percent (5%) \n "
+            + "fifty percent (50%) \n "
+            + "two percent (2%) \n "
+            + "nine percent (9%) \n "
+            + "three percent (3%) \n "
+        )
         self.base_groups = [
             {
                 "spans": [
                     {"start": 0, "end": 17, "text": "five percent (5%)"},
                     {"start": 61, "end": 78, "text": "nine percent (9%)"},
                 ],
-                "label": "class1"
+                "label": "class1",
             },
             {
                 "spans": [
                     {"start": 42, "end": 58, "text": "two percent (2%)"},
                 ],
-                "label": "class1"
+                "label": "class1",
             },
             {
                 "spans": [
                     {"start": 81, "end": 99, "text": "three percent (3%)"},
                 ],
-                "label": "class2"
-            }
+                "label": "class2",
+            },
         ]
         self.incorrect_groups = [
             {
                 "spans": [
                     {"start": 0, "end": 17, "text": "five percent (5%)"},
                 ],
-                "label": "class1"
+                "label": "class1",
             },
         ]
         # Overpredict one class
@@ -89,7 +93,7 @@ class TestGroupMetrics(unittest.TestCase):
                 "micro": 1,
                 "macro": 1,
                 "weighted": 1,
-            }
+            },
         }
 
         self.entities = [
@@ -109,10 +113,9 @@ class TestGroupMetrics(unittest.TestCase):
         self.joint_base_groups[1]["entities"] = [self.entities[3]]
         self.joint_base_groups[2]["entities"] = []
 
-
     def test_group_assignment(self):
         # Simple tests, since the heavy lifting is done by the count fns
-        
+
         count_fn = get_count_fn("group", "exact")
 
         correct_idxs = [(0, 0), (1, 1), (2, 2)]
@@ -122,20 +125,25 @@ class TestGroupMetrics(unittest.TestCase):
             [(0, 1, 1), (0, 1, 1), (1, 0, 0)],
         ]
         self.check_group_assignment(
-            count_fn, self.base_groups, self.base_groups,
-            correct_idxs, correct_counts
+            count_fn, self.base_groups, self.base_groups, correct_idxs, correct_counts
         )
 
         correct_idxs = [(0, 2), (1, 1), (2, 0)]
         correct_counts = correct_counts[::-1]
         self.check_group_assignment(
-            count_fn, self.base_groups, self.base_groups[::-1],
-            correct_idxs, correct_counts
+            count_fn,
+            self.base_groups,
+            self.base_groups[::-1],
+            correct_idxs,
+            correct_counts,
         )
         # Assign idxs are sorted by pred idx, so correct values are the same
         self.check_group_assignment(
-            count_fn, self.base_groups[::-1], self.base_groups,
-            correct_idxs, correct_counts
+            count_fn,
+            self.base_groups[::-1],
+            self.base_groups,
+            correct_idxs,
+            correct_counts,
         )
 
     def test_group_assignment_rectangle(self):
@@ -146,73 +154,66 @@ class TestGroupMetrics(unittest.TestCase):
         # Normal
         correct_idxs = [(0, 0), (1, 1)]
         correct_counts = [
-            [(1, 0, 0), (0, 1, 1)], 
-            [(0, 1, 1), (1, 0, 0)], 
+            [(1, 0, 0), (0, 1, 1)],
+            [(0, 1, 1), (1, 0, 0)],
             [(0, 1, 1), (0, 1, 1)],
         ]
         self.check_group_assignment(
-            count_fn, groups_a, groups_b,
-            correct_idxs, correct_counts
+            count_fn, groups_a, groups_b, correct_idxs, correct_counts
         )
 
         correct_counts = [
-            [(1, 0, 0), (0, 1, 1), (0, 1, 1)], 
-            [(0, 1, 1), (1, 0, 0), (0, 1, 1)], 
+            [(1, 0, 0), (0, 1, 1), (0, 1, 1)],
+            [(0, 1, 1), (1, 0, 0), (0, 1, 1)],
         ]
         self.check_group_assignment(
-            count_fn, groups_b, groups_a,
-            correct_idxs, correct_counts
+            count_fn, groups_b, groups_a, correct_idxs, correct_counts
         )
 
         # Group a inverted
         correct_idxs = [(1, 1), (2, 0)]
         correct_counts = [
             [(0, 1, 1), (0, 1, 1)],
-            [(0, 1, 1), (1, 0, 0)], 
-            [(1, 0, 0), (0, 1, 1)], 
+            [(0, 1, 1), (1, 0, 0)],
+            [(1, 0, 0), (0, 1, 1)],
         ]
         self.check_group_assignment(
-            count_fn, groups_a[::-1], groups_b,
-            correct_idxs, correct_counts
+            count_fn, groups_a[::-1], groups_b, correct_idxs, correct_counts
         )
 
         correct_idxs = [(0, 2), (1, 1)]
         correct_counts = [
             [(0, 1, 1), (0, 1, 1), (1, 0, 0)],
-            [(0, 1, 1), (1, 0, 0), (0, 1, 1)], 
+            [(0, 1, 1), (1, 0, 0), (0, 1, 1)],
         ]
         self.check_group_assignment(
-            count_fn, groups_b, groups_a[::-1],
-            correct_idxs, correct_counts
+            count_fn, groups_b, groups_a[::-1], correct_idxs, correct_counts
         )
 
         # Group b inverted
         correct_idxs = [(0, 1), (1, 0)]
         correct_counts = [
-            [(0, 1, 1), (1, 0, 0)], 
-            [(1, 0, 0), (0, 1, 1)], 
+            [(0, 1, 1), (1, 0, 0)],
+            [(1, 0, 0), (0, 1, 1)],
             [(0, 1, 1), (0, 1, 1)],
         ]
         self.check_group_assignment(
-            count_fn, groups_a, groups_b[::-1],
-            correct_idxs, correct_counts
+            count_fn, groups_a, groups_b[::-1], correct_idxs, correct_counts
         )
 
         correct_idxs = [(0, 1), (1, 0)]
         correct_counts = [
-            [(0, 1, 1), (1, 0, 0), (0, 1, 1)], 
+            [(0, 1, 1), (1, 0, 0), (0, 1, 1)],
             [(1, 0, 0), (0, 1, 1), (0, 1, 1)],
         ]
         self.check_group_assignment(
-            count_fn, groups_b[::-1], groups_a,
-            correct_idxs, correct_counts
+            count_fn, groups_b[::-1], groups_a, correct_idxs, correct_counts
         )
 
-    def check_group_assignment(self, count_fn, groups_a, groups_b,
-                               correct_idxs, correct_counts):
-        assign_idxs, counts = calc_group_assignment(
-            groups_a, groups_b, count_fn
-        )
+    def check_group_assignment(
+        self, count_fn, groups_a, groups_b, correct_idxs, correct_counts
+    ):
+        assign_idxs, counts = calc_group_assignment(groups_a, groups_b, count_fn)
         self.assertEqual(assign_idxs, correct_idxs)
         self.assertEqual(counts, correct_counts)
 
@@ -251,12 +252,12 @@ class TestGroupMetrics(unittest.TestCase):
                 "micro": 0,
                 "macro": 0,
                 "weighted": 0,
-            }
+            },
         }
         preds = [self.incorrect_groups] * 10
         labels = [self.base_groups] * 10
         self.check_metrics(preds, labels, expected, get_metrics)
-        
+
     def test_metrics_overpredict(self):
         expected = {
             "per_class_metrics": {
@@ -283,7 +284,7 @@ class TestGroupMetrics(unittest.TestCase):
                 "micro": 0.85714,
                 "macro": 0.9,
                 "weighted": 0.86666,
-            }
+            },
         }
         preds = [self.overpredict_groups] * 10
         labels = [self.base_groups] * 10
@@ -315,7 +316,7 @@ class TestGroupMetrics(unittest.TestCase):
                 "micro": 0.8,
                 "macro": 0.83333,
                 "weighted": 0.77777,
-            }
+            },
         }
         preds = [self.underpredict_groups] * 10
         labels = [self.base_groups] * 10
@@ -347,7 +348,7 @@ class TestGroupMetrics(unittest.TestCase):
                 "micro": 0.57143,
                 "macro": 0.58333,
                 "weighted": 0.61111,
-            }
+            },
         }
         preds = [self.under_over_predict_groups] * 10
         labels = [self.base_groups] * 10
@@ -379,7 +380,7 @@ class TestGroupMetrics(unittest.TestCase):
                 "micro": 0,
                 "macro": 0,
                 "weighted": 0,
-            }
+            },
         }
         preds = [self.incorrect_label_groups] * 10
         labels = [self.base_groups] * 10
@@ -420,7 +421,7 @@ class TestGroupMetrics(unittest.TestCase):
                 "micro": 0,
                 "macro": 0,
                 "weighted": 0,
-            }
+            },
         }
         preds = [self.new_label_groups] * 10
         labels = [self.base_groups] * 10
@@ -452,7 +453,7 @@ class TestGroupMetrics(unittest.TestCase):
                 "micro": 0.6,
                 "macro": 0.61905,
                 "weighted": 0.60317,
-            }
+            },
         }
         preds = [self.base_groups] * 5 + [self.incorrect_groups] * 5
         labels = [self.base_groups] * 10
@@ -484,7 +485,7 @@ class TestGroupMetrics(unittest.TestCase):
                 "micro": 0.5,
                 "macro": 0.48571,
                 "weighted": 0.51429,
-            }
+            },
         }
         preds = [self.base_groups] * 5 + [self.incorrect_label_groups] * 5
         labels = [self.base_groups] * 10
@@ -525,7 +526,7 @@ class TestGroupMetrics(unittest.TestCase):
                 "micro": 0.5,
                 "macro": 0.44444,
                 "weighted": 0.66666,
-            }
+            },
         }
         preds = [self.base_groups] * 5 + [self.new_label_groups] * 5
         labels = [self.base_groups] * 10
@@ -552,54 +553,66 @@ class TestGroupMetrics(unittest.TestCase):
             metrics = per_class_metrics[cls]
             for metric in ("precision", "recall", "f1-score"):
                 self.assertAlmostEqual(
-                    metrics[metric], correct_metrics[metric], places=3,
-                    msg=f"{metric} in {cls} is incorrect!"
+                    metrics[metric],
+                    correct_metrics[metric],
+                    places=3,
+                    msg=f"{metric} in {cls} is incorrect!",
                 )
             for metric in ("true_positives", "false_positives", "false_negatives"):
                 self.assertEqual(
-                    metrics[metric], correct_metrics[metric],
-                    msg=f"{metric} in {cls} is incorrect!"
+                    metrics[metric],
+                    correct_metrics[metric],
+                    msg=f"{metric} in {cls} is incorrect!",
                 )
 
         # Check average metrics
         for avg, correct_f1 in expected["avg_f1"].items():
             avg_f1 = metric_fn(preds, labels, average=avg)
             self.assertAlmostEqual(
-                avg_f1, correct_f1, places=3,
-                msg=f"{avg} f1 in is incorrect!"
+                avg_f1, correct_f1, places=3, msg=f"{avg} f1 in is incorrect!"
             )
 
 
 class TestGroupMetricCountFunctions(unittest.TestCase):
     def setUp(self):
         # Each line is 7 tokens, (x, percent, (, i, %, ), \n)
-        text = ("five percent (5%) \n " +
-                "fifty percent (50%) \n " +
-                "two percent (2%) \n " +
-                "nine percent (9%) \n " +
-                "three percent (3%) \n ")
+        text = (
+            "five percent (5%) \n "
+            + "fifty percent (50%) \n "
+            + "two percent (2%) \n "
+            + "nine percent (9%) \n "
+            + "three percent (3%) \n "
+        )
         group_a = {
             "spans": [
-                {"start": 0, "end": 39, "text": "five percent (5%) \n fifty percent (50%)"},
+                {
+                    "start": 0,
+                    "end": 39,
+                    "text": "five percent (5%) \n fifty percent (50%)",
+                },
                 {"start": 61, "end": 78, "text": "nine percent (9%)"},
             ],
-            "label": "class1"
+            "label": "class1",
         }
         group_b = {
             "spans": [
                 {"start": 42, "end": 58, "text": "two percent (2%)"},
                 {"start": 81, "end": 99, "text": "three percent (3%)"},
             ],
-            "label": "class1"
+            "label": "class1",
         }
         group_overlap = {
             "spans": [
-                {"start": 20, "end": 58, "text": "fifty percent (50%) \n two percent (2%)"},
+                {
+                    "start": 20,
+                    "end": 58,
+                    "text": "fifty percent (50%) \n two percent (2%)",
+                },
                 # Non overlapping span for joint metric tests
                 {"start": 42, "end": 58, "text": "two percent (2%)"},
                 {"start": 66, "end": 99, "text": "percent (9%) \n three percent (3%)"},
             ],
-            "label": "class1"
+            "label": "class1",
         }
         group_superset = {
             "spans": [
@@ -608,7 +621,7 @@ class TestGroupMetricCountFunctions(unittest.TestCase):
                 {"start": 42, "end": 58, "text": "two percent (2%)"},
                 {"start": 46, "end": 86, "text": text[46:86]},
             ],
-            "label": "class1"
+            "label": "class1",
         }
         group_tokens = {
             "spans": [
@@ -616,13 +629,13 @@ class TestGroupMetricCountFunctions(unittest.TestCase):
                 {"start": 54, "end": 58, "text": "(3%)"},
                 {"start": 74, "end": 78, "text": "(9%)"},
             ],
-            "label": "class1"
+            "label": "class1",
         }
         group_all = {
             "spans": [
                 {"start": 0, "end": 102, "text": text},
             ],
-            "label": "class1"
+            "label": "class1",
         }
         # Associate groups with keys so we can do set operations
         self.groups = {
@@ -677,17 +690,13 @@ class TestGroupMetricCountFunctions(unittest.TestCase):
         spans = deepcopy(group["spans"])
         group["entities"] = spans
         if len(spans) != len(labels):
-            raise ValueError(
-                "Number of labels and number of spans must match!"
-            )
+            raise ValueError("Number of labels and number of spans must match!")
         for span, label in zip(spans, labels):
             span["label"] = label
         return group
 
     def test_group_exact_counts(self):
-        match_groups = [
-            "group_a"
-        ]
+        match_groups = ["group_a"]
         self.check_group_counts("group_a", "exact", match_groups)
 
     def test_group_overlap_counts(self):
@@ -699,7 +708,7 @@ class TestGroupMetricCountFunctions(unittest.TestCase):
             "group_all",
         ]
         self.check_group_counts("group_a", "overlap", match_groups)
-    
+
     def test_group_superset_counts(self):
         match_groups = [
             "group_a",
@@ -707,14 +716,13 @@ class TestGroupMetricCountFunctions(unittest.TestCase):
             "group_all",
         ]
         # Superset matches don't go both ways, so we turn check_swap off
-        self.check_group_counts("group_a", "superset", match_groups,
-                                check_swap=False)
+        self.check_group_counts("group_a", "superset", match_groups, check_swap=False)
 
     def test_group_token_counts(self):
         # Count tuples are of the form (TP, FP, FN)
         # All pred tokens are false positives and all ground truth tokens are
         # false negatives when labels are mismatched
-        
+
         # The group to compare against
         base_group = "group_a"
 
@@ -741,31 +749,42 @@ class TestGroupMetricCountFunctions(unittest.TestCase):
         self.check_token_counts("group_all_nl", base_group, (0, 35, 19))
 
     def test_joint_exact_counts(self):
-        match_groups = [
-            "joint_a_cl"
-        ]
-        self.check_group_counts("joint_a_cl", "exact", match_groups,
-                                metric_type="joint")
-        
+        match_groups = ["joint_a_cl"]
+        self.check_group_counts(
+            "joint_a_cl", "exact", match_groups, metric_type="joint"
+        )
+
     def test_joint_overlap_counts(self):
         match_groups = [
-            "joint_a_cl", "joint_a_ml", "joint_a_mil",
-            "joint_overlap_cl", "joint_overlap_ml",
-            "joint_superset_cl", "joint_superset_ml",
-            "joint_tokens_cl", "joint_tokens_ml",
+            "joint_a_cl",
+            "joint_a_ml",
+            "joint_a_mil",
+            "joint_overlap_cl",
+            "joint_overlap_ml",
+            "joint_superset_cl",
+            "joint_superset_ml",
+            "joint_tokens_cl",
+            "joint_tokens_ml",
             "joint_all_cl",
         ]
-        self.check_group_counts("joint_a_cl", "overlap", match_groups,
-                                metric_type="joint")
+        self.check_group_counts(
+            "joint_a_cl", "overlap", match_groups, metric_type="joint"
+        )
 
     def test_joint_supset_counts(self):
         match_groups = [
             "joint_a_cl",
-            "joint_superset_cl", "joint_superset_ml",
+            "joint_superset_cl",
+            "joint_superset_ml",
             "joint_all_cl",
         ]
-        self.check_group_counts("joint_a_cl", "superset", match_groups,
-                                metric_type="joint", check_swap=False)
+        self.check_group_counts(
+            "joint_a_cl",
+            "superset",
+            match_groups,
+            metric_type="joint",
+            check_swap=False,
+        )
 
     def test_joint_token_counts(self):
         # Count tuples are of the form (TP, FP, FN)
@@ -780,23 +799,18 @@ class TestGroupMetricCountFunctions(unittest.TestCase):
         # The group to compare against
         base_group = "joint_a_cl"
 
-        
         check_token_counts("joint_a_cl", base_group, (19, 0, 0))
         check_token_counts("joint_a_icl", base_group, (0, 19, 19))
         check_token_counts("joint_a_ml", base_group, (13, 6, 6))
         check_token_counts("joint_a_mil", base_group, (6, 13, 13))
         # Always the same counts when group labels are mismatched
         for tl in ["cl", "icl", "ml", "mil"]:
-            check_token_counts(
-                "joint_a_nl_" + tl, base_group, (0, 19, 19)
-            )
+            check_token_counts("joint_a_nl_" + tl, base_group, (0, 19, 19))
 
         # Group b doesn't overlap with the base group
         for gl in ["", "nl_"]:
             for tl in ["cl", "icl", "ml", "mil"]:
-                check_token_counts(
-                    "joint_b_" + gl + tl, base_group, (0, 12, 19)
-                )
+                check_token_counts("joint_b_" + gl + tl, base_group, (0, 12, 19))
 
         # Note", the tokens "two percent" appear in several text spans of the
         # overlap and superset joints, and are therefore counted as false
@@ -807,37 +821,30 @@ class TestGroupMetricCountFunctions(unittest.TestCase):
         check_token_counts("joint_overlap_ml", base_group, (11, 20, 8))
         check_token_counts("joint_overlap_mil", base_group, (0, 31, 19))
         for tl in ["cl", "icl", "ml", "mil"]:
-            check_token_counts(
-                "joint_overlap_nl_" + tl, base_group, (0, 31, 19)
-            )
+            check_token_counts("joint_overlap_nl_" + tl, base_group, (0, 31, 19))
 
         check_token_counts("joint_superset_cl", base_group, (19, 17, 0))
         check_token_counts("joint_superset_icl", base_group, (0, 36, 19))
         check_token_counts("joint_superset_ml", base_group, (19, 17, 0))
         check_token_counts("joint_superset_mil", base_group, (0, 36, 19))
         for tl in ["cl", "icl", "ml", "mil"]:
-            check_token_counts(
-                "joint_superset_nl_" + tl, base_group, (0, 36, 19)
-            )
+            check_token_counts("joint_superset_nl_" + tl, base_group, (0, 36, 19))
 
         check_token_counts("joint_tokens_cl", base_group, (5, 4, 14))
         check_token_counts("joint_tokens_icl", base_group, (0, 9, 19))
         check_token_counts("joint_tokens_ml", base_group, (5, 4, 14))
         check_token_counts("joint_tokens_mil", base_group, (0, 9, 19))
         for tl in ["cl", "icl", "ml", "mil"]:
-            check_token_counts(
-                "joint_tokens_nl_" + tl, base_group, (0, 9, 19)
-            )
+            check_token_counts("joint_tokens_nl_" + tl, base_group, (0, 9, 19))
 
         check_token_counts("joint_all_cl", base_group, (19, 16, 0))
         check_token_counts("joint_all_icl", base_group, (0, 35, 19))
         for tl in ["cl", "icl"]:
-            check_token_counts(
-                "joint_all_nl_" + tl, base_group, (0, 35, 19)
-            )
+            check_token_counts("joint_all_nl_" + tl, base_group, (0, 35, 19))
 
-    def check_group_counts(self, group, span_type, match_groups,
-                           check_swap=True, metric_type="group"):
+    def check_group_counts(
+        self, group, span_type, match_groups, check_swap=True, metric_type="group"
+    ):
         """
         :param group: String, the ground truth group to check against
         :param span: String, the type of span to check
@@ -866,15 +873,18 @@ class TestGroupMetricCountFunctions(unittest.TestCase):
 
         for match_group in match_groups:
             # Correct matches should return 1 TP, 0 FP, 0 FN
-            self.check_counts(count_fn, match_group, group, (1, 0, 0),
-                              check_swap=check_swap)
+            self.check_counts(
+                count_fn, match_group, group, (1, 0, 0), check_swap=check_swap
+            )
         for dif_group in dif_groups:
             # Incorrect matches should return 0 TP, 1 FP, 1 FN
-            self.check_counts(count_fn, dif_group, group, (0, 1, 1),
-                              check_swap=check_swap)
+            self.check_counts(
+                count_fn, dif_group, group, (0, 1, 1), check_swap=check_swap
+            )
 
-    def check_token_counts(self, pred_group, label_group, correct_counts,
-                           metric_type="group"):
+    def check_token_counts(
+        self, pred_group, label_group, correct_counts, metric_type="group"
+    ):
         """
         :param pred_group, label_group: Strings, the groups to check
         :param correct_counts: Tuple of (TP, FP, FN), the expected counts
@@ -894,23 +904,30 @@ class TestGroupMetricCountFunctions(unittest.TestCase):
 
         self.check_counts(count_fn, pred_group, label_group, correct_counts)
 
-    def check_counts(self, count_fn, pred_group, label_group, correct_counts,
-                     check_swap=True):
+    def check_counts(
+        self, count_fn, pred_group, label_group, correct_counts, check_swap=True
+    ):
         counts = count_fn(pred_group, label_group)
         self.assertEqual(
-            counts, correct_counts,
-            f"\n{pred_group}\nand\n{label_group}\nmatch incorrectly!"
+            counts,
+            correct_counts,
+            f"\n{pred_group}\nand\n{label_group}\nmatch incorrectly!",
         )
 
         if check_swap:
             # Ensure consistent behavior with pred / label swapped
             # Swap false positives and false negatives
             inv_correct_counts = (
-                correct_counts[0], correct_counts[2], correct_counts[1]
+                correct_counts[0],
+                correct_counts[2],
+                correct_counts[1],
             )
             inv_counts = count_fn(label_group, pred_group)
             self.assertEqual(
-                inv_counts, inv_correct_counts,
-                (f"\n{pred_group}\nand\n{label_group}\ncounts are not consistent "
-                 f"when swapping pred / label!")
+                inv_counts,
+                inv_correct_counts,
+                (
+                    f"\n{pred_group}\nand\n{label_group}\ncounts are not consistent "
+                    f"when swapping pred / label!"
+                ),
             )
