@@ -2,6 +2,110 @@ import functools
 from typing import Optional, Tuple, Union
 
 import tensorflow as tf
+from finetune.nn.activations import modernbert_gelu as gelu
+
+class Keras2CompatLayerNorm(tf.keras.layers.Layer):
+    def __init__(
+        self,
+        axis,
+        epsilon=1e-3,
+        center=True,
+        scale=True,
+        beta_initializer="zeros",
+        gamma_initializer="ones",
+        **kwargs
+    ):
+        super().__init__(**kwargs)
+        assert axis >=1
+        self.axis = [axis]
+        self.epsilon = epsilon
+        self.center = center
+        self.scale = scale
+        self.beta_initializer = beta_initializer
+        self.gamma_initializer = gamma_initializer
+        self.supports_masking = True
+
+
+    def build(self, input_shape):
+        input_shape = tf.TensorShape(input_shape)
+
+        param_shape = [input_shape[dim] for dim in self.axis]
+        if self.scale:
+            self.gamma = self.add_weight(
+                name="gamma",
+                shape=param_shape,
+                initializer=self.gamma_initializer,
+                trainable=True,
+                autocast=True,
+            )
+        else:
+            self.gamma = None
+
+        if self.center:
+            self.beta = self.add_weight(
+                name="beta",
+                shape=param_shape,
+                initializer=self.beta_initializer,
+                trainable=True,
+                autocast=True,
+            )
+        else:
+            self.beta = None
+
+    def call(self, inputs, training=False):
+        inputs = tf.cast(inputs, self.compute_dtype)
+        # Compute the axes along which to reduce the mean / variance
+        input_shape = inputs.shape
+        ndims = len(input_shape)
+
+        # Broadcasting only necessary for norm when the axis is not just
+        # the last dimension
+        broadcast_shape = [1] * ndims
+        for dim in self.axis:
+            broadcast_shape[dim] = input_shape.dims[dim].value
+
+        def _broadcast(v):
+            if (
+                v is not None
+                and len(v.shape) != ndims
+                and self.axis != [ndims - 1]
+            ):
+                return tf.reshape(v, broadcast_shape)
+            return v
+
+        input_dtype = inputs.dtype
+        if (
+            input_dtype in ("float16", "bfloat16")
+            # This training gate here is added because in previous versions of finetune we used pure float16
+            # inference and so we never hit this stability branch.
+            # There is a very decent argument that we should do this, but it would result in a chance to inference
+            # behaviour...
+            and self.dtype == "float32" and training
+        ):
+            # If mixed precision is used, cast inputs to float32 so that
+            # this is at least as numerically stable as the fused version.
+            inputs = tf.cast(inputs, "float32")
+
+        # Calculate the moments on the last axis (layer activations).
+        mean, variance = tf.nn.moments(inputs, self.axis, keepdims=True)
+        scale, offset = _broadcast(self.gamma), _broadcast(self.beta)
+        # Compute layer normalization using the batch_normalization
+        # function.
+        outputs = tf.nn.batch_normalization(
+            inputs,
+            mean,
+            variance,
+            offset=offset,
+            scale=scale,
+            variance_epsilon=self.epsilon,
+        )
+        outputs = tf.cast(outputs, input_dtype)
+        # If some components of the shape got lost due to adjustments, fix that.
+        outputs.set_shape(input_shape)
+        return outputs
+
+    def compute_output_shape(self, input_shape):
+        return input_shape
 
 
 class EmbeddingWithPadIdx(tf.keras.layers.Embedding):
@@ -15,14 +119,14 @@ class ModernBertEmbeddings(tf.keras.layers.Layer):
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
     """
 
-    def __init__(self, config: "Settings", vocab_size: int, name="Embedding"):
-        super().__init__(name=name)
-        self.config = config
+    def __init__(self, config: "Settings", vocab_size: int, name="Embedding", **kwargs):
+        super().__init__(name=name, **kwargs)
         self.tok_embeddings = EmbeddingWithPadIdx(
-            vocab_size, config.n_embed, pad_idx=config.pad_idx
+            vocab_size, config.n_embed, pad_idx=config.pad_idx,
         )
-        self.norm = tf.keras.layers.LayerNormalization(
-            epsilon=config.norm_eps, center=False, name="EmbeddingNorm"
+        self.norm = Keras2CompatLayerNorm(
+            axis=2,
+            epsilon=config.norm_eps, center=False, name="EmbeddingNorm",
         )
         self.drop = tf.keras.layers.Dropout(config.embed_p_drop)
 
@@ -37,6 +141,7 @@ class ModernBertEmbeddings(tf.keras.layers.Layer):
         return dropped_embeddings
 
 
+
 class ModernBertMLP(tf.keras.layers.Layer):
     """Applies the GLU at the end of each ModernBERT layer.
 
@@ -46,17 +151,15 @@ class ModernBertMLP(tf.keras.layers.Layer):
 
     def __init__(self, config: "Settings", name="GLU"):
         super().__init__(name=name)
-        self.config = config
         self.Wi = tf.keras.layers.Dense(
             int(config.bert_intermediate_size) * 2, use_bias=False, name="Wi"
         )
-        self.act = functools.partial(tf.keras.activations.gelu, approximate=False)
         self.drop = tf.keras.layers.Dropout(config.mlp_p_drop)
         self.Wo = tf.keras.layers.Dense(config.n_embed, use_bias=False, name="Wo")
 
     def call(self, hidden_states: tf.Tensor, training: bool) -> tf.Tensor:
         input, gate = tf.split(self.Wi(hidden_states), 2, axis=-1)
-        result = self.Wo(self.drop(self.act(input) * gate, training=training))
+        result = self.Wo(self.drop(gelu(input) * gate, training=training))
         return result
 
 
@@ -126,7 +229,6 @@ class ModernBertAttention(tf.keras.layers.Layer):
         self, config: "Settings", layer_id: Optional[int] = None, name="Attention"
     ):
         super().__init__(name=name)
-        self.config = config
         self.layer_id = layer_id
 
         if config.n_embed % config.n_heads != 0:
@@ -191,7 +293,7 @@ class ModernBertAttention(tf.keras.layers.Layer):
         attn_weights = attn_weights + attention_mask
 
         # upcast attention to fp32
-        attn_weights = tf.keras.activations.softmax(attn_weights, axis=-1)
+        attn_weights = tf.nn.softmax(attn_weights, axis=-1)
         attn_weights = self.attn_drop(attn_weights, training=training)
         attn_output = tf.matmul(attn_weights, value)
         attn_output = tf.transpose(attn_output, perm=[0, 2, 1, 3])
@@ -232,16 +334,17 @@ class ModernBertEncoderLayer(tf.keras.layers.Layer):
         name="EncoderLayer",
     ):
         super().__init__(name=name)
-        self.config = config
         self.layer_id = layer_id
         if layer_id == 0:
             self.attn_norm = tf.keras.layers.Identity()
         else:
-            self.attn_norm = tf.keras.layers.LayerNormalization(
+            self.attn_norm = Keras2CompatLayerNorm(
+                axis=2,
                 epsilon=config.norm_eps, center=False, name="AttnNorm"
             )
         self.attn = ModernBertAttention(config=config, layer_id=layer_id)
-        self.mlp_norm = tf.keras.layers.LayerNormalization(
+        self.mlp_norm = Keras2CompatLayerNorm(
+            axis=2,
             epsilon=config.norm_eps, center=False, name="MLPNorm"
         )
         self.mlp = ModernBertMLP(config)
@@ -268,19 +371,25 @@ class ModernBertEncoderLayer(tf.keras.layers.Layer):
 
         return hidden_states
 
+def get_layer_name(base_name, layer_id):
+    if layer_id == 0:
+        return base_name
+    return f"{base_name}_{layer_id}"
 
 class ModernBert(tf.keras.layers.Layer):
     def __init__(self, config, vocab_size, name="ModernBert"):
         super().__init__(name=name)
-        self.config = config
         self.embeddings = ModernBertEmbeddings(config, vocab_size=vocab_size)
         self.layers = [
-            ModernBertEncoderLayer(config, layer_id)
+            ModernBertEncoderLayer(config, layer_id, name=get_layer_name("EncoderLayer", layer_id))
             for layer_id in range(config.n_layer)
         ]
-        self.final_norm = tf.keras.layers.LayerNormalization(
-            epsilon=config.norm_eps, center=False, name="FinalNorm"
+        self.final_norm = Keras2CompatLayerNorm(
+            axis=2,
+            epsilon=config.norm_eps, center=False, name="FinalNorm",
         )
+        self.local_attention_window = config.local_attention_window
+        self.low_memory_mode = config.low_memory_mode
 
     def get_input_embeddings(self):
         return self.embeddings.tok_embeddings
@@ -292,17 +401,17 @@ class ModernBert(tf.keras.layers.Layer):
         self,
         input_ids: tf.Tensor,
         attention_mask: tf.Tensor,
-        seq_len: int,
-        training: bool,
+        training: bool=False,
     ) -> Union[Tuple[tf.Tensor, ...], dict]:
-        position_ids = tf.expand_dims(tf.range(seq_len, dtype=tf.float32), 0)
+        position_ids = tf.expand_dims(tf.range(tf.shape(input_ids)[1], dtype=tf.float32), 0)
         attention_mask, sliding_window_mask = self._update_attention_mask(
             attention_mask
         )
 
         hidden_states = self.embeddings(input_ids=input_ids, training=training)
+        #tf.print(f"hidden_states shape: {hidden_states}")
         for encoder_layer in self.layers:
-            if self.config.low_memory_mode and training:
+            if self.low_memory_mode and training:
                 encoder_layer = tf.recompute_grad(encoder_layer)
             layer_outputs = encoder_layer(
                 hidden_states,
@@ -336,7 +445,7 @@ class ModernBert(tf.keras.layers.Layer):
 
         # Create sliding window mask (1 for positions within window, 0 outside)
         window_mask = tf.expand_dims(
-            tf.expand_dims(distance <= self.config.local_attention_window // 2, 0), 0
+            tf.expand_dims(distance <= self.local_attention_window // 2, 0), 0
         )
         # Combine with existing mask
         sliding_window_mask = tf.where(window_mask, global_attention_mask, ignore_value)

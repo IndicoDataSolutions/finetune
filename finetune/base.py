@@ -17,9 +17,7 @@ import joblib
 import numpy as np
 import tensorflow as tf
 
-from finetune.base_models.bert.model import _BaseBert
 from finetune.base_models.bert.roberta_encoder import RoBERTaEncoderV2
-from finetune.base_models.modern_bert.model import _ModernBertBase
 from finetune.config import assert_valid_config, get_default_config
 from finetune.errors import FinetuneError
 from finetune.input_pipeline import InputMode
@@ -308,7 +306,6 @@ class BaseModel(object, metaclass=ABCMeta):
         context=None,
         update_hook=None,
         chunked_length=None,
-        list_output=True,
     ) -> t.Union[List[Dict[str, np.ndarray]], t.Iterator[Dict[str, np.ndarray]]]:
         # TODO: I assume context is handled by subclasses - verify this and make sure this is compatible with new pattern.
         def get_zipped_data():
@@ -323,7 +320,6 @@ class BaseModel(object, metaclass=ABCMeta):
         length = chunked_length if chunked_length is not None else len(zipped_data)
 
         progress = ProgressBar(total=length, desc="Inference", update_hook=update_hook)
-        output_list = []
         for batch in input_fn:
             preds = model(batch, training=False)
             pred_numpy = {k: v.numpy() for k, v in preds.items()}
@@ -341,12 +337,7 @@ class BaseModel(object, metaclass=ABCMeta):
                     k: pred_numpy[k] if k in not_batched else pred_numpy[k][i]
                     for k in pred_numpy
                 }
-                if list_output:
-                    output_list.append(step_value)
-                else:
-                    yield step_value
-        if list_output:
-            return output_list
+                yield step_value
 
     def fit(self, *args, **kwargs):
         """An alias for finetune."""
@@ -406,7 +397,8 @@ class BaseModel(object, metaclass=ABCMeta):
         zipped_data = self.input_pipeline.zip_list_to_dict(X=Xs, context=context)
         raw_preds = self._inference(zipped_data, **kwargs)
         raw_preds = [pred["features"] for pred in raw_preds]
-        return np.asarray(raw_preds)
+        feats = np.asarray(raw_preds)
+        return feats
 
     def featurize_sequence(self, Xs, context=None, **kwargs):
         """
@@ -604,7 +596,6 @@ class BaseModel(object, metaclass=ABCMeta):
         pred_iterator = self._inference(
             zipped_data,
             chunked_length=0,
-            list_output=False,
         )
 
         # Outputs (probably chunked) Encoded outputs for each document
@@ -627,14 +618,19 @@ class BaseModel(object, metaclass=ABCMeta):
         for pred, (arr_enc, start_of_doc, end_of_doc) in zip(
             pred_iterator, chunk_alignment_iterator
         ):
-            normal_pred = pred["preds"]
-            label_seq = self.input_pipeline.label_encoder.inverse_transform(normal_pred)
-            proba_seq = pred["probas"]
             token_end_idx = arr_enc.token_ends
             token_start_idx = arr_enc.token_starts
             useful_start = arr_enc.useful_start
             useful_end = arr_enc.useful_end
-            yield token_start_idx, token_end_idx, start_of_doc, end_of_doc, label_seq, proba_seq, useful_start, useful_end
+            yield {
+                "token_start_idx": token_start_idx,
+                "token_end_idx": token_end_idx,
+                "start_of_doc": start_of_doc,
+                "end_of_doc": end_of_doc,
+                "useful_start": useful_start,
+                "useful_end": useful_end,
+                **pred, # Preds and probas
+            }
 
     def close(self):
         del self._model

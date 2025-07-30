@@ -92,7 +92,6 @@ class Block(tf.keras.layers.Layer):
         self.mlp = MLP(
             n_state=input_shape[-1] * 4,
             resid_pdrop=self.resid_p_drop,
-            act_fn="gelu",
             name="mlp",
         )
 

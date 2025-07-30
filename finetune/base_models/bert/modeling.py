@@ -21,16 +21,18 @@ import math
 import numpy as np
 import tensorflow as tf
 from transformers.activations_tf import gelu as hf_gelu
+from finetune.nn.activations import bert_gelu as gelu
 
 from finetune.base_models.bert.roberta_encoder import RoBERTaEncoder
 from finetune.base_models.bert.table_utils import (
     get_gather_indices,
     get_row_col_values,
     reassemble_sequence_feats,
+    gather_col_vals,
+    scatter_feats,
 )
 from finetune.nn.auxiliary import embed_position
 from finetune.nn.nn_utils import ExtraScope, saver_ignore_scope
-
 
 class Embedding(tf.keras.layers.Layer):
     def __init__(
@@ -54,12 +56,13 @@ class Embedding(tf.keras.layers.Layer):
         )
         self.embedding_post_processor = embedding_post_processor
 
-    def call(self, input_ids, input_context=None, token_type_ids=None):
+    def call(self, input_ids, input_context=None, token_type_ids=None, position_ids=None):
         embedding_output = self.embedding(input_ids)
         return self.embedding_post_processor(
             input_tensor=embedding_output,
             input_context=input_context,
             token_type_ids=token_type_ids,
+            position_ids=position_ids,
         )
 
 
@@ -177,7 +180,6 @@ class XDocPosEmbed(tf.keras.layers.Layer):
         return layoutlm_pos
 
 
-@saver_ignore_scope
 class BaseBertModel(tf.keras.layers.Layer):
     """BERT model ("Bidirectional Encoder Representations from Transformers").
 
@@ -208,6 +210,7 @@ class BaseBertModel(tf.keras.layers.Layer):
         config,
         pos2d_embedding_layer,
         token_type_vocab_size=None,
+        name="bert",
         **kwargs,
     ):
         super().__init__(name=name, **kwargs)
@@ -259,11 +262,12 @@ class BaseBertModel(tf.keras.layers.Layer):
         )
 
         if self.use_pooler:
-            self.pooler = tf.keras.layers.Dense(
+            self.pooler = ExtraScope(tf.keras.layers.Dense(
                 self.embed_dim,
                 activation=tf.tanh,
-                kernel_initializer=create_initializer(config.initializer_range),
-            )
+                kernel_initializer=create_initializer(config.weight_stddev),
+                name="dense",
+            ), "pooler")
 
     def call(self, tokens, context, sequence_lengths, training=True):
         delimiters = tf.cast(tf.equal(tokens, self.delimiter_token), tf.int32)
@@ -294,7 +298,7 @@ class BaseBertModel(tf.keras.layers.Layer):
         output_shape = tf.shape(sequence_output)
 
         def first_token():
-            return tf.squeeze(sequence_output[:, 0:1, :], axis=1)
+            return sequence_output[:, 0, :]
 
         def empty():
             return tf.zeros(
@@ -313,21 +317,6 @@ class BaseBertModel(tf.keras.layers.Layer):
             "sequence_features": sequence_output,
             "features": pooled_output,
         }
-
-
-def gelu(x):
-    """Gaussian Error Linear Unit.
-
-    This is a smoother version of the RELU.
-    Original paper: https://arxiv.org/abs/1606.08415
-    Args:
-        x: float Tensor to perform activation.
-
-    Returns:
-        `x` with the GELU activation applied.
-    """
-    cdf = 0.5 * (1.0 + tf.tanh((np.sqrt(2 / np.pi) * (x + 0.044715 * tf.pow(x, 3)))))
-    return x * cdf
 
 
 def get_activation(activation_string):
@@ -502,13 +491,13 @@ class EmbeddingPostprocessor(tf.keras.layers.Layer):
         self.pos_injection = pos_injection
         self.positional_channels = positional_channels
         self.feature_dim = feature_dim
-        self.pos2d_embedding_layer = pos2d_embedding_layer(
-            positional_channels=positional_channels,
-            width=feature_dim,
-            max_2d_positional_embeddings=max_2d_positional_embeddings,
-        )
+        if self.pos_injection:
+            self.pos2d_embedding_layer = pos2d_embedding_layer(
+                positional_channels=positional_channels,
+                width=feature_dim,
+                max_2d_positional_embeddings=max_2d_positional_embeddings,
+            )
         self.layer_norm_and_dropout = LayerNormAndDropout(dropout_prob)
-        # Remove the incorrect call - pos2d_embedding_layer is already instantiated
 
     def build(self, input_shape):
         if self.use_token_type:
@@ -874,7 +863,7 @@ class FullBlock(tf.keras.layers.Layer):
         attention_head_size,
         num_attention_heads=12,
         intermediate_size=3072,
-        intermediate_act_fn=tf.nn.gelu,
+        intermediate_act_fn=gelu,
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         initializer_range=0.02,
@@ -1060,269 +1049,6 @@ def reshape_from_matrix(output_tensor, orig_shape_list):
     return tf.reshape(output_tensor, orig_dims + [width])
 
 
-def twin_transformer_model(
-    input_tensor_a,
-    input_tensor_b,
-    attention_mask_a=None,
-    attention_mask_b=None,
-    mixing_inputs=None,
-    mixing_fn=None,
-    hidden_size=768,
-    num_hidden_layers=12,
-    num_attention_heads=12,
-    intermediate_size=3072,
-    intermediate_act_fn=gelu,
-    hidden_dropout_prob=0.1,
-    attention_probs_dropout_prob=0.1,
-    initializer_range=0.02,
-    do_return_all_layers=False,
-    low_memory_mode=False,
-):
-    assert do_return_all_layers == False
-    if hidden_size % num_attention_heads != 0:
-        raise ValueError(
-            "The hidden size (%d) is not a multiple of the number of attention "
-            "heads (%d)" % (hidden_size, num_attention_heads)
-        )
-
-    if mixing_inputs is None:
-        mixing_inputs = dict()
-
-    attention_head_size = int(hidden_size / num_attention_heads)
-    input_shape_a = get_shape_list(input_tensor_a, expected_rank=3)
-    input_shape_b = get_shape_list(input_tensor_b, expected_rank=3)
-
-    input_width = input_shape_a[2]
-
-    # The Transformer performs sum residuals on all layers so the input needs
-    # to be the same as the hidden size.
-    if input_width != hidden_size:
-        raise ValueError(
-            "The width of the input tensor (%d) != hidden size (%d)"
-            % (input_width, hidden_size)
-        )
-
-    # We keep the representation as a 2D tensor to avoid re-shaping it back and
-    # forth from a 3D tensor to a 2D tensor. Re-shapes are normally free on
-    # the GPU/CPU but may not be free on the TPU, so we want to minimize them to
-    # help the optimizer.
-    prev_output_a = reshape_to_matrix(input_tensor_a)
-    prev_output_b = reshape_to_matrix(input_tensor_b)
-
-    for layer_idx in range(num_hidden_layers):
-        with tf.compat.v1.variable_scope("layer_a_%d" % layer_idx):
-            block_fn = functools.partial(
-                full_block,
-                attention_head_size=attention_head_size,
-                batch_size=input_shape_a[0],
-                seq_length=input_shape_a[1],
-                attention_mask=attention_mask_a,
-                hidden_size=hidden_size,
-                num_attention_heads=num_attention_heads,
-                intermediate_size=intermediate_size,
-                intermediate_act_fn=intermediate_act_fn,
-                hidden_dropout_prob=hidden_dropout_prob,
-                attention_probs_dropout_prob=attention_probs_dropout_prob,
-                initializer_range=initializer_range,
-            )
-
-            if low_memory_mode:
-                block_fn = recompute_grad(block_fn, use_entire_scope=True)
-            prev_output_a = block_fn(prev_output_a)
-
-        with tf.compat.v1.variable_scope("layer_b_%d" % layer_idx):
-            block_fn = functools.partial(
-                full_block,
-                attention_head_size=attention_head_size,
-                batch_size=input_shape_b[0],
-                seq_length=input_shape_b[1],
-                attention_mask=attention_mask_b,
-                hidden_size=hidden_size,
-                num_attention_heads=num_attention_heads,
-                intermediate_size=intermediate_size,
-                intermediate_act_fn=intermediate_act_fn,
-                hidden_dropout_prob=hidden_dropout_prob,
-                attention_probs_dropout_prob=attention_probs_dropout_prob,
-                initializer_range=initializer_range,
-            )
-
-            if low_memory_mode:
-                block_fn = recompute_grad(block_fn, use_entire_scope=True)
-            prev_output_b = block_fn(prev_output_b)
-
-        if mixing_fn is not None and layer_idx != num_attention_heads - 1:
-            # TODO: make this configurable - how many cross adaptors we include.
-            if layer_idx % 2 == 0:
-                with tf.compat.v1.variable_scope("mixing_fn_%d" % layer_idx):
-                    mix_output_a, mix_output_b = mixing_fn(
-                        reshape_from_matrix(prev_output_a, input_shape_a),
-                        reshape_from_matrix(prev_output_b, input_shape_b),
-                        **mixing_inputs,
-                    )
-                    prev_output_a = reshape_to_matrix(mix_output_a)
-                    prev_output_b = reshape_to_matrix(mix_output_b)
-
-    final_output_a = reshape_from_matrix(prev_output_a, input_shape_a)
-    final_output_b = reshape_from_matrix(prev_output_b, input_shape_b)
-
-    return final_output_a, final_output_b
-
-
-class TwinBertModel:  # _BertModel):
-    def __init__(
-        self,
-        config,
-        is_training,
-        input_ids_a,
-        input_ids_b,
-        attention_mask_a=None,
-        attention_mask_b=None,
-        token_type_ids_a=None,
-        token_type_ids_b=None,
-        context_a=None,
-        context_b=None,
-        pos_ids_a=None,
-        pos_ids_b=None,
-        mixing_fn=None,
-        mixing_inputs=None,
-        use_one_hot_embeddings=False,
-        scope=None,
-        roberta=False,
-        use_token_type=True,
-        reading_order_decay_rate=None,
-    ):
-        """Constructor for BertModel.
-
-        Args:
-            config: `BertConfig` instance.
-            is_training: bool. true for training model, false for eval model. Controls
-            whether dropout will be applied.
-            input_ids: int32 Tensor of shape [batch_size, seq_length].
-            input_mask: (optional) int32 Tensor of shape [batch_size, seq_length].
-            token_type_ids: (optional) int32 Tensor of shape [batch_size, seq_length].
-            use_one_hot_embeddings: (optional) bool. Whether to use one-hot word
-            embeddings or tf.embedding_lookup() for the word embeddings.
-            scope: (optional) variable scope. Defaults to "bert".
-
-        Raises:
-            ValueError: The config is invalid or one of the input tensor shapes
-                is invalid.
-        """
-        self.table_position_type = config.table_position_type
-        self.max_row_col_embedding = config.max_row_col_embedding
-        config = copy.deepcopy(config)
-        if not is_training:
-            config.hidden_dropout_prob = 0.0
-            config.attention_probs_dropout_prob = 0.0
-
-        with tf.compat.v1.variable_scope(scope, default_name="bert"):
-            with tf.compat.v1.variable_scope("embeddings"):
-                # Perform embedding lookup on the word ids.
-                (self.embedding_output_a, self.embedding_table) = embedding_lookup(
-                    input_ids=input_ids_a,
-                    vocab_size=config.vocab_size,
-                    embedding_size=config.hidden_size,
-                    initializer_range=config.initializer_range,
-                    word_embedding_name="word_embeddings",
-                    use_one_hot_embeddings=use_one_hot_embeddings,
-                )
-                # Add positional embeddings and token type embeddings, then layer
-                # normalize and perform dropout.
-                self.embedding_output_a = self.embedding_postprocessor(
-                    input_tensor=self.embedding_output_a,
-                    input_context=context_a,
-                    use_token_type=use_token_type,
-                    token_type_ids=token_type_ids_a,
-                    position_ids=pos_ids_a,
-                    token_type_vocab_size=config.type_vocab_size,
-                    token_type_embedding_name="token_type_embeddings",
-                    use_position_embeddings=not config.reading_order_removed,
-                    position_embedding_name="position_embeddings",
-                    initializer_range=config.initializer_range,
-                    max_position_embeddings=config.max_position_embeddings,
-                    dropout_prob=config.hidden_dropout_prob,
-                    roberta=roberta,
-                    positional_channels=config.positional_channels,
-                    reading_order_decay_rate=reading_order_decay_rate,
-                    anneal_reading_order=config.anneal_reading_order,
-                    pos_injection=config.table_position,  # True,
-                )
-
-            with tf.compat.v1.variable_scope("embeddings", reuse=True):
-                # Perform embedding lookup on the word ids.
-                (self.embedding_output_b, _) = embedding_lookup(
-                    input_ids=input_ids_b,
-                    vocab_size=config.vocab_size,
-                    embedding_size=config.hidden_size,
-                    initializer_range=config.initializer_range,
-                    word_embedding_name="word_embeddings",
-                    use_one_hot_embeddings=use_one_hot_embeddings,
-                )
-                # Add positional embeddings and token type embeddings, then layer
-                # normalize and perform dropout.
-                self.embedding_output_b = self.embedding_postprocessor(
-                    input_tensor=self.embedding_output_b,
-                    input_context=context_b,
-                    use_token_type=use_token_type,
-                    token_type_ids=token_type_ids_b,
-                    position_ids=pos_ids_b,
-                    token_type_vocab_size=config.type_vocab_size,
-                    token_type_embedding_name="token_type_embeddings",
-                    use_position_embeddings=not config.reading_order_removed,
-                    position_embedding_name="position_embeddings",
-                    initializer_range=config.initializer_range,
-                    max_position_embeddings=config.max_position_embeddings,
-                    dropout_prob=config.hidden_dropout_prob,
-                    roberta=roberta,
-                    positional_channels=config.positional_channels,
-                    reading_order_decay_rate=reading_order_decay_rate,
-                    anneal_reading_order=config.anneal_reading_order,
-                    pos_injection=config.table_position,  # True,
-                )
-
-            with tf.compat.v1.variable_scope("encoder"):
-                # Run the stacked transformer.
-                # `sequence_output` shape = [batch_size, seq_length, hidden_size].
-                self.sequence_output = twin_transformer_model(
-                    input_tensor_a=self.embedding_output_a,
-                    input_tensor_b=self.embedding_output_b,
-                    attention_mask_a=attention_mask_a,
-                    attention_mask_b=attention_mask_b,
-                    mixing_inputs=mixing_inputs,
-                    mixing_fn=mixing_fn,
-                    hidden_size=config.hidden_size,
-                    num_hidden_layers=config.num_hidden_layers,
-                    num_attention_heads=config.num_attention_heads,
-                    intermediate_size=config.intermediate_size,
-                    intermediate_act_fn=get_activation(config.hidden_act),
-                    hidden_dropout_prob=config.hidden_dropout_prob,
-                    attention_probs_dropout_prob=config.attention_probs_dropout_prob,
-                    initializer_range=config.initializer_range,
-                    do_return_all_layers=False,
-                    low_memory_mode=config.low_memory_mode and is_training,
-                )
-                self.all_encoder_layers = None
-
-    def embedding_postprocessor(self, *args, **kwargs):
-        def table_pos_embed(
-            input_context, positional_channels, batch_size, seq_length, width
-        ):
-            output = []
-            for entry in (
-                [0, 1] if self.table_position_type == "row_col" else [0, 1, 2, 3]
-            ):
-                position_table = tf.compat.v1.get_variable(
-                    name="pos_{}".format(entry),
-                    shape=[self.max_row_col_embedding, width],
-                    initializer=tf.compat.v1.random_normal_initializer(stddev=1e-3),
-                )
-                position = tf.cast(input_context[:, :, entry], dtype="int32")
-                output.append(tf.gather(position_table, position))
-            return tf.math.add_n(output)
-
-        return embedding_postprocessor(
-            *args, pos2d_embedding_fn=table_pos_embed, **kwargs
-        )
 
 
 class BertModel(tf.keras.layers.Layer):
@@ -1443,24 +1169,16 @@ class TwinTransformerModel(tf.keras.layers.Layer):
         self.get_mixing_layer = get_mixing_layer
 
     def build(self, input_shape):
-        # input_shape should be a tuple of (input_shape_a, input_shape_b, attention_mask_a, attention_mask_b)
-        input_shape_a, input_shape_b = input_shape[:2]
-        hidden_size_a = input_shape_a[-1]
-        hidden_size_b = input_shape_b[-1]
+        hidden_size = input_shape[-1]
 
-        if hidden_size_a % self.num_attention_heads != 0:
+        if hidden_size % self.num_attention_heads != 0:
             raise ValueError(
-                f"The hidden size ({hidden_size_a}) is not a multiple of the number of attention "
-                f"heads ({self.num_attention_heads})"
-            )
-        if hidden_size_b % self.num_attention_heads != 0:
-            raise ValueError(
-                f"The hidden size ({hidden_size_b}) is not a multiple of the number of attention "
+                f"The hidden size ({hidden_size}) is not a multiple of the number of attention "
                 f"heads ({self.num_attention_heads})"
             )
 
-        attention_head_size_a = int(hidden_size_a / self.num_attention_heads)
-        attention_head_size_b = int(hidden_size_b / self.num_attention_heads)
+        attention_head_size_a = int(hidden_size / self.num_attention_heads)
+        attention_head_size_b = int(hidden_size / self.num_attention_heads)
 
         # Create transformer blocks for both streams
         self.blocks_a = []
@@ -1500,9 +1218,8 @@ class TwinTransformerModel(tf.keras.layers.Layer):
             else:
                 self.mixing_blocks.append(None)
 
-    def call(self, inputs, *, mixing_inputs=None, training=False):
+    def call(self, *, layer_input_a, layer_input_b, attention_mask_a, attention_mask_b, mixing_inputs=None, training=False):
         # Unpack inputs tuple
-        layer_input_a, layer_input_b, attention_mask_a, attention_mask_b = inputs
         input_shape_a = get_shape_list(layer_input_a, expected_rank=3)
         input_shape_b = get_shape_list(layer_input_b, expected_rank=3)
         batch_size_a = input_shape_a[0]
@@ -1517,14 +1234,17 @@ class TwinTransformerModel(tf.keras.layers.Layer):
         for layer_idx in range(self.num_hidden_layers):
             # Process stream A
             block_a = self.blocks_a[layer_idx]
+            block_b = self.blocks_b[layer_idx]
+            if training and self.recompute_grad:
+                block_a = tf.recompute_grad(block_a)
+                block_b = tf.recompute_grad(block_b)
+
             prev_output_a = block_a(
                 layer_input=prev_output_a,
                 batch_size=batch_size_a,
                 seq_length=seq_length_a,
                 attention_mask=attention_mask_a,
             )
-            # Process stream B
-            block_b = self.blocks_b[layer_idx]
             prev_output_b = block_b(
                 layer_input=prev_output_b,
                 batch_size=batch_size_b,
@@ -1590,7 +1310,7 @@ class BaseTwinBertModel(tf.keras.layers.Layer):
                 max_position_embeddings=self.max_position_embeddings,
                 dropout_prob=config.resid_p_drop,
                 roberta=is_roberta,
-                pos_injection=config.context_injection,
+                pos_injection=config.table_position,
                 positional_channels=config.context_channels,
                 pos2d_embedding_layer=pos2d_embedding_layer,
             ),
@@ -1613,11 +1333,12 @@ class BaseTwinBertModel(tf.keras.layers.Layer):
         )
 
         if self.use_pooler:
-            self.pooler = tf.keras.layers.Dense(
+            self.pooler = ExtraScope(tf.keras.layers.Dense(
                 self.embed_dim,
                 activation=tf.tanh,
-                kernel_initializer=create_initializer(config.initializer_range),
-            )
+                kernel_initializer=create_initializer(config.weight_stddev),
+                name="dense",
+            ), "pooler")
 
     def call(
         self,
@@ -1625,10 +1346,13 @@ class BaseTwinBertModel(tf.keras.layers.Layer):
         tokens_b,
         context_a,
         context_b,
-        sequence_lengths_a,
-        sequence_lengths_b,
+        attention_mask_a,
+        attention_mask_b,
+        token_type_ids_a,
+        token_type_ids_b,
+        pos_ids_a,
+        pos_ids_b,
         mixing_inputs=None,
-        **kwargs,
     ):
         """
         Process twin BERT inputs for row and column streams.
@@ -1647,76 +1371,32 @@ class BaseTwinBertModel(tf.keras.layers.Layer):
             Dictionary containing features and sequence features
         """
         # Process stream A
-        delimiters_a = tf.cast(tf.equal(tokens_a, self.delimiter_token), tf.int32)
-        token_type_ids_a = tf.cumsum(delimiters_a, exclusive=True, axis=1)
-        input_shape_a = get_shape_list(tokens_a, expected_rank=2)
-        batch_size_a = input_shape_a[0]
-        seq_length_a = input_shape_a[1]
-        input_mask_a = tf.sequence_mask(
-            sequence_lengths_a, maxlen=seq_length_a, dtype=tf.float32
-        )
-
         embedding_output_a = self.embeddings(
             input_ids=tokens_a,
             input_context=context_a,
             token_type_ids=token_type_ids_a,
+            position_ids=pos_ids_a,
         )
-
-        attention_mask_a = create_attention_mask_from_input_mask(tokens_a, input_mask_a)
-
         # Process stream B
-        delimiters_b = tf.cast(tf.equal(tokens_b, self.delimiter_token), tf.int32)
-        token_type_ids_b = tf.cumsum(delimiters_b, exclusive=True, axis=1)
-        input_shape_b = get_shape_list(tokens_b, expected_rank=2)
-        batch_size_b = input_shape_b[0]
-        seq_length_b = input_shape_b[1]
-        input_mask_b = tf.sequence_mask(
-            sequence_lengths_b, maxlen=seq_length_b, dtype=tf.float32
-        )
-
         embedding_output_b = self.embeddings(
             input_ids=tokens_b,
             input_context=context_b,
             token_type_ids=token_type_ids_b,
+            position_ids=pos_ids_b,
         )
-
-        attention_mask_b = create_attention_mask_from_input_mask(tokens_b, input_mask_b)
 
         # Run the twin transformer
-        sequence_output_a, sequence_output_b = self.transformer_model(
-            (
-                embedding_output_a,
-                embedding_output_b,
-                attention_mask_a,
-                attention_mask_b,
-            ),
+        sequence_output_a, sequence_output_b = self.transformer_model(            
+            layer_input_a=embedding_output_a,
+            layer_input_b=embedding_output_b,
+            attention_mask_a=attention_mask_a,
+            attention_mask_b=attention_mask_b,
             mixing_inputs=mixing_inputs,
-            training=kwargs.get("training", True),
         )
-
-        # Handle pooled output (using first token from stream A)
-        output_shape_a = tf.shape(sequence_output_a)
-
-        def first_token():
-            return tf.squeeze(sequence_output_a[:, 0:1, :], axis=1)
-
-        def empty():
-            return tf.zeros(
-                tf.concat([[output_shape_a[0]], [self.embed_dim]], axis=0),
-                dtype=sequence_output_a.dtype,
-            )
-
-        pooled_output = tf.cond(
-            tf.equal(output_shape_a[1], 0), true_fn=empty, false_fn=first_token
-        )
-        pooled_output.set_shape([None, self.embed_dim])
-        if self.use_pooler:
-            pooled_output = self.pooler(pooled_output)
 
         return {
             "sequence_features_a": sequence_output_a,
             "sequence_features_b": sequence_output_b,
-            "features": pooled_output,
         }
 
 
@@ -1733,8 +1413,12 @@ class TwinBertModel(tf.keras.layers.Layer):
         tokens_b,
         context_a,
         context_b,
-        sequence_lengths_a,
-        sequence_lengths_b,
+        attention_mask_a,
+        attention_mask_b,
+        token_type_ids_a,
+        token_type_ids_b,
+        pos_ids_a,
+        pos_ids_b,
         mixing_inputs=None,
         **kwargs,
     ):
@@ -1759,8 +1443,12 @@ class TwinBertModel(tf.keras.layers.Layer):
             tokens_b=tokens_b,
             context_a=context_a,
             context_b=context_b,
-            sequence_lengths_a=sequence_lengths_a,
-            sequence_lengths_b=sequence_lengths_b,
+            attention_mask_a=attention_mask_a,
+            attention_mask_b=attention_mask_b,
+            token_type_ids_a=token_type_ids_a,
+            token_type_ids_b=token_type_ids_b,
+            pos_ids_a=pos_ids_a,
+            pos_ids_b=pos_ids_b,
             mixing_inputs=mixing_inputs,
             **kwargs,
         )
@@ -1772,8 +1460,12 @@ class TwinBertFeaturizer(tf.keras.layers.Layer):
     def __init__(self, encoder, config, name="bert", **kwargs):
         super().__init__(name=name, **kwargs)
         self.encoder = encoder
-        self.config = config
         self.twin_bert = TwinBertModel(encoder=encoder, config=config, name="bert")
+        self.include_row_col_summaries = config.include_row_col_summaries
+        self.down_project_feats = config.down_project_feats
+        self.embed_dim = config.n_embed
+        self.chunk_tables = config.chunk_tables
+        self.table_position_type = config.table_position_type
 
     def call(self, tokens, context, sequence_lengths, **kwargs):
         """
@@ -1801,7 +1493,7 @@ class TwinBertFeaturizer(tf.keras.layers.Layer):
             start_row,
             end_row,
             other_end=end_col,
-            chunk_tables=True,  # Default value
+            chunk_tables=self.chunk_tables,
         )
         col_gather = get_gather_indices(
             tokens,
@@ -1809,7 +1501,7 @@ class TwinBertFeaturizer(tf.keras.layers.Layer):
             start_col,
             end_col,
             other_end=end_row,
-            chunk_tables=True,  # Default value
+            chunk_tables=self.chunk_tables,
         )
 
         # Get row/column values for processing
@@ -1820,12 +1512,12 @@ class TwinBertFeaturizer(tf.keras.layers.Layer):
             col_gather,
             bos_id=self.encoder.start_token,
             eos_id=self.encoder.end_token,
-            table_position_type="row_col",  # Default value
+            table_position_type=self.table_position_type,
             max_row_col_embedding=512,  # Default value
         )
 
         # Create output shape for reassembly
-        output_shape = tf.stack([batch_size, seq_length, 768])
+        output_shape = tf.stack([batch_size, seq_length, self.embed_dim])
 
         # Create mixing inputs
         mixing_inputs = {
@@ -1839,10 +1531,14 @@ class TwinBertFeaturizer(tf.keras.layers.Layer):
         outputs = self.twin_bert(
             tokens_a=row_col_values["row"]["values"],
             tokens_b=row_col_values["col"]["values"],
+            attention_mask_a=row_col_values["row"]["attn_mask"],
+            attention_mask_b=row_col_values["col"]["attn_mask"],
+            token_type_ids_a=tf.zeros_like(row_col_values["row"]["values"]),
+            token_type_ids_b=tf.zeros_like(row_col_values["col"]["values"]),
             context_a=row_col_values["row"]["positions"],
             context_b=row_col_values["col"]["positions"],
-            sequence_lengths_a=row_col_values["row"]["seq_lens"],
-            sequence_lengths_b=row_col_values["col"]["seq_lens"],
+            pos_ids_a=row_gather["pos_ids"],
+            pos_ids_b=col_gather["pos_ids"],
             mixing_inputs=mixing_inputs,
         )
 
@@ -1853,17 +1549,14 @@ class TwinBertFeaturizer(tf.keras.layers.Layer):
             outputs["sequence_features_b"],  # col features
             row_col_values["row"]["scatter_vals"],
             row_col_values["col"]["scatter_vals"],
-            include_row_col_summaries=False,  # Default value
-            down_project_feats=False,  # Default value
+            include_row_col_summaries=self.include_row_col_summaries,
+            down_project_feats=self.down_project_feats,
         )
 
         # Return the expected format
         return {
-            "embed_weights": self.twin_bert.base_twin_bert.embeddings.embedding.embedding_table,
-            "features": outputs["features"],
+            "features": tf.zeros(shape=[batch_size, 768]),
             "sequence_features": sequence_features,
-            "lengths": sequence_lengths,
-            "eos_idx": tf.zeros(batch_size, dtype=tf.int64),
         }
 
 
@@ -1871,20 +1564,24 @@ class TwinBertFeaturizer(tf.keras.layers.Layer):
 class AdaptorBlock(tf.keras.layers.Layer):
     """Keras version of the adaptor block for mixing row and column features."""
 
-    def __init__(self, hidden_dim, **kwargs):
+    def __init__(self, hidden_dim, down_proj_name, up_proj_name, **kwargs):
         super().__init__(**kwargs)
         self.hidden_dim = hidden_dim
+        self.down_proj_name = down_proj_name
+        self.up_proj_name = up_proj_name
 
     def build(self, input_shape):
         self.dense1 = tf.keras.layers.Dense(
             self.hidden_dim,
             activation=gelu,
             kernel_initializer=tf.keras.initializers.TruncatedNormal(stddev=1e-3),
+            name=self.down_proj_name,
         )
         self.dense2 = tf.keras.layers.Dense(
             input_shape[-1],
             activation=None,
             kernel_initializer=tf.keras.initializers.TruncatedNormal(stddev=1e-3),
+            name=self.up_proj_name,
         )
 
     def call(self, inputs):
@@ -1916,31 +1613,30 @@ class TableCrossRowColMixing(tf.keras.layers.Layer):
         )
 
         # Adaptor blocks for mixing
-        self.adaptor_col = AdaptorBlock(64)
-        self.adaptor_row = AdaptorBlock(64)
+        # Bad decisions were made...
+        self.adaptor_col = AdaptorBlock(64, down_proj_name="dense", up_proj_name="dense_1")
+        self.adaptor_row = AdaptorBlock(64, down_proj_name="dense_2", up_proj_name="dense_3")
 
     def call(
         self, row_feats, col_feats, row_gather, col_gather, output_shape, row_col_values
     ):
-        # Scatter col feats into original shape
-        col_feats_orig_shape = self._scatter_feats(
+        col_feats_orig_shape = scatter_feats(
             output_shape, col_feats, row_col_values["col"]["scatter_vals"]
         )
-
-        # Scatter row feats into original shape
-        row_feats_orig_shape = self._scatter_feats(
+        row_feats_orig_shape = scatter_feats(
             output_shape, row_feats, row_col_values["row"]["scatter_vals"]
         )
 
-        # Gather col feats into rows arrangement
-        col_feats_reshaped = self._gather_col_vals(
-            col_feats_orig_shape, row_gather, self.bos_var, self.eos_var
-        )
+        # Scatter col feats into rows arrangement
+        col_feats_reshaped = gather_col_vals(
+            col_feats_orig_shape, row_gather, bos_pad=self.bos_var, eos_pad=self.eos_var, pad_val=1234
+        )["values"]
 
-        # Gather row feats into cols arrangement
-        row_feats_reshaped = self._gather_col_vals(
-            row_feats_orig_shape, col_gather, self.bos_var, self.eos_var
-        )
+        # Scatter row feats into cols arrangement.
+        row_feats_reshaped = gather_col_vals(
+            row_feats_orig_shape, col_gather, bos_pad=self.bos_var, eos_pad=self.eos_var, pad_val=1234
+        )["values"]
+
 
         return (
             self.adaptor_col(col_feats_reshaped) + row_feats,
@@ -1959,20 +1655,3 @@ class TableCrossRowColMixing(tf.keras.layers.Layer):
         return tf.math.divide_no_nan(
             tf.tensor_scatter_nd_add(input_tensor, scatter_idxs, feats), divide_by
         )
-
-    def _gather_col_vals(self, inp, gather_output, bos_pad, eos_pad):
-        """Gather column values with BOS/EOS padding."""
-        bs = tf.shape(inp)[0]
-        bos_expanded = tf.tile(
-            tf.expand_dims(tf.expand_dims(bos_pad, 0), 0),
-            [bs, 1, *(1 for _ in bos_pad.shape)],
-        )
-        eos_expanded = tf.tile(
-            tf.expand_dims(tf.expand_dims(eos_pad, 0), 0),
-            [bs, 1, *(1 for _ in eos_pad.shape)],
-        )
-        inp_w_extra_toks = tf.concat(
-            [inp, bos_expanded, eos_expanded, tf.ones_like(eos_expanded) * 1234], axis=1
-        )
-        values = tf.gather_nd(indices=gather_output["values"], params=inp_w_extra_toks)
-        return values

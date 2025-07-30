@@ -1,12 +1,13 @@
 import tensorflow as tf
 
 from finetune.nn.crf import crf_log_likelihood, sequence_decode
-from finetune.nn.nn_utils import ExtraScope
+from finetune.nn.nn_utils import ExtraScope, Norm
+from finetune.base_models.gpt.featurizer import Attn
 
 
 class Perceptron(tf.keras.layers.Layer):
-    def __init__(self, n_targets, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, n_targets, name="perceptron", **kwargs):
+        super().__init__(name=name, **kwargs)
         self.n_targets = n_targets
 
     def build(self, input_shape):
@@ -14,9 +15,10 @@ class Perceptron(tf.keras.layers.Layer):
             shape=(input_shape[-1], self.n_targets),
             initializer="random_normal",
             trainable=True,
+            name="w",
         )
         self.b = self.add_weight(
-            shape=(self.n_targets), initializer="zeros", trainable=True
+            shape=(self.n_targets,), initializer="zeros", trainable=True, name="b"
         )
         super().build(input_shape)
 
@@ -73,7 +75,6 @@ class MultiClassifier(tf.keras.layers.Layer):
     def __init__(
         self,
         n_targets,
-        n_inputs,
         dropout_rate,
         renorm_after_class_weights,
         threshold=0.5,
@@ -81,12 +82,12 @@ class MultiClassifier(tf.keras.layers.Layer):
     ):
         super().__init__(**kwargs)
         self.dropout = tf.keras.layers.Dropout(dropout_rate)
-        self.perceptron = Perceptron(n_targets, n_inputs)
+        self.perceptron = Perceptron(n_targets)
         self.renorm_after_class_weights = renorm_after_class_weights
         self.threshold = threshold
 
     def call(self, inputs, training=False):
-        inputs = self.dropout(inputs, training=training)
+        inputs = self.dropout(inputs["features"], training=training)
         logits = self.perceptron(inputs)
         return {
             "logits": logits,
@@ -109,15 +110,15 @@ class MultiClassifier(tf.keras.layers.Layer):
 
 class Classifier(tf.keras.layers.Layer):
     def __init__(
-        self, n_targets, n_inputs, dropout_rate, renorm_after_class_weights, **kwargs
+        self, n_targets, dropout_rate, renorm_after_class_weights, **kwargs
     ):
         super().__init__(**kwargs)
         self.dropout = tf.keras.layers.Dropout(dropout_rate)
-        self.perceptron = Perceptron(n_targets, n_inputs)
+        self.perceptron = Perceptron(n_targets)
         self.renorm_after_class_weights = renorm_after_class_weights
 
     def call(self, inputs, training=False):
-        inputs = self.dropout(inputs, training=training)
+        inputs = self.dropout(inputs["features"], training=training)
         logits = self.perceptron(inputs)
         return {
             "logits": logits,
@@ -151,6 +152,18 @@ def class_reweighted_grad(logits, class_weights, norm_grads_multiplier):
 
     return tf.identity(logits), custom_grad_fn
 
+class SequenceLabelerAttn(tf.keras.layers.Layer):
+    def __init__(self, n_targets, num_heads, name="seq_lab_attn", **kwargs):
+        super().__init__(name=name, **kwargs)
+        self.dense = tf.keras.layers.Dense(n_targets, name="dense")
+        self.block = Attn(num_heads=num_heads, attn_pdrop=0.2, mask=False, name="seq_label_attn")
+        self.norm = Norm(name="seq_label_residual")
+
+    def call(self, features):
+        x = self.block(features)
+        x = self.norm(x + features)
+        x = self.dense(x)
+        return x
 
 class SequenceLabeler(tf.keras.layers.Layer):
     def __init__(
@@ -159,14 +172,20 @@ class SequenceLabeler(tf.keras.layers.Layer):
         dropout_rate,
         use_crf,
         renorm_after_class_weights,
+        include_attn,
+        num_attn_heads,
         name="sequence-labeler",
+        dtype=tf.float32,
         **kwargs
     ):
-        super().__init__(**kwargs, name=name)
+        super().__init__(**kwargs, name=name, dtype=dtype)
         self.n_targets = n_targets
         self.dropout = tf.keras.layers.Dropout(dropout_rate)
         # This extra scope is an unfortunate holdover from GPT when we had an extra bidirectional attention block.
-        self.dense = ExtraScope(tf.keras.layers.Dense(n_targets), "seq_lab_attn")
+        if include_attn:
+            self.transform = SequenceLabelerAttn(n_targets, num_attn_heads, name="seq_lab_attn")
+        else:
+            self.transform = ExtraScope(tf.keras.layers.Dense(n_targets, name="dense"), "seq_lab_attn")
         self.use_crf = use_crf
         self.renorm_after_class_weights = renorm_after_class_weights
 
@@ -180,13 +199,14 @@ class SequenceLabeler(tf.keras.layers.Layer):
                 initializer="orthogonal",
                 trainable=True,
                 dtype=tf.float32,
+                autocast=False,
             )
         else:
             self.transition_params = None
         super().build(input_shape)
 
     def call(self, inputs, training=False):
-        logits = self.dense(inputs["sequence_features"])
+        logits = self.transform(inputs["sequence_features"])
         logits = tf.cast(logits, tf.float32)
         # CRF already outputs the format we need including probs, logits preds etc.
         preds = None

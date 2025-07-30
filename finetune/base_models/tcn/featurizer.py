@@ -83,6 +83,7 @@ class TCNStack(tf.keras.layers.Layer):
     def __init__(
         self, n_blocks, n_filters, kernel_size, dropout_rate, name="tcn_stack", **kwargs
     ):
+        super().__init__(name=name, **kwargs)
         self.blocks = [
             TemporalBlockWithResiduals(
                 n_filters=n_filters,
@@ -112,6 +113,9 @@ class TCNFeaturizer(tf.keras.layers.Layer):
         self.weight_stddev = config.weight_stddev
         self.embedding_dropout = tf.keras.layers.Dropout(config.embed_p_drop)
         self.clf_token = encoder["_classify_"]
+        self.max_length = config.max_length
+        self.vocab_size = encoder.vocab_size
+        self.n_embed = config.n_embed_featurizer
 
     def build(self, input_shape):
         self.embed_weights = self.add_weight(
@@ -123,7 +127,7 @@ class TCNFeaturizer(tf.keras.layers.Layer):
         )
 
     def call(self, tokens, context, sequence_lengths, training=True):
-        embed_weights = self.embed_dropout(self.embed_weights)
+        embed_weights = self.embedding_dropout(self.embed_weights)
         h = tf.gather(embed_weights, tokens)
         seq_feats = self.tcn_stack(h)
         # Mask padding and max reduce.

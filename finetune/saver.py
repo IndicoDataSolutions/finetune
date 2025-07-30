@@ -115,8 +115,9 @@ class Saver:
             variables_sv = self.variables
         else:
             variables_sv = dict()
-        print("Base Model vars", self.fallback.keys())
+        print("Saved Model vars", variables_sv.keys())
         all_vars = get_fully_qualified_variable_paths(model)
+        print("Model variables", all_vars.keys())
         for var_name in all_vars.keys():
             saved_var = None
             if var_name in variables_sv.keys():
@@ -129,6 +130,10 @@ class Saver:
                     saved_var = func(var_name, saved_var)
                 transformed_weights[var_name] = saved_var
             else:
+                if self.variables is not None:
+                    # If we are loading from a saved model we have a hard assertion that every single
+                    # model variable must be loaded.
+                    raise ValueError(f"Variable {var_name} not found in saved model")
                 print(f"Using default initializer for variable: {var_name}")
                 if var_name.startswith("model/featurizer"):
                     permitted = self.permit_uninitialized is not None and re.findall(
@@ -140,6 +145,6 @@ class Saver:
                         )
         for var_name in {**self.fallback, **variables_sv}.keys():
             if var_name not in all_vars and var_name.startswith("model"):
-                print(f"Variable {var_name} not found in all_vars")
+                print(f"Variable {var_name} in the saved file but not in the current model")
         print(f"loading {len(transformed_weights)} variables")
         set_weights(model, transformed_weights, all_vars)

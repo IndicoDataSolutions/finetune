@@ -17,11 +17,11 @@ class ModernBertFeaturizer(tf.keras.layers.Layer):
             vocab_size=encoder.vocab_size,
         )
 
-    def call(self, tokens, context, sequence_lengths, training=True):
+    def call(self, tokens, context, sequence_lengths):
         seq_len = tokens.shape[1]
         mask = tf.sequence_mask(sequence_lengths, maxlen=seq_len, dtype=tf.float32)
         sequence_out = self.model(
-            input_ids=tokens, attention_mask=mask, seq_len=seq_len
+            input_ids=tokens, attention_mask=mask
         )
         pooled_out = sequence_out[:, 0, :]
         return {

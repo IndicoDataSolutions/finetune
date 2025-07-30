@@ -267,6 +267,9 @@ def get_default_config():
         low_memory_ans=True,
         max_document_chars=None,
         bio_tagging=False,
+        # 
+        # Multi Label Classification
+        multi_label_threshold=0.5,
         #
         # Location of model weights
         base_model=RoBERTa,

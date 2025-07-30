@@ -29,7 +29,7 @@ class TextCNNFeaturizer(tf.keras.layers.Layer):
     def __init__(self, encoder, config, **kwargs):
         super().__init__(**kwargs)
         self.convs = [
-            tf.keras.layers.Conv1d(
+            tf.keras.layers.Conv1D(
                 filters=config.num_filters_per_size,
                 kernel_size=kernel_size,
                 padding="same",
@@ -41,7 +41,7 @@ class TextCNNFeaturizer(tf.keras.layers.Layer):
         ]
         # Why do we have space for pos embeddings here? Can we safely drop this and let the saver handle the slicing?
         if "roberta" in config.base_model_path:
-            embed_name = "bert/embeddings/word_embeddings"
+            embed_name = "word_embeddings"
             embed_extra_scopes = ["bert", "embeddings"]
             self.clf_token = encoder.delimiter_token
         else:
@@ -50,7 +50,7 @@ class TextCNNFeaturizer(tf.keras.layers.Layer):
             self.clf_token = encoder["_classify_"]
 
         embedding = Embedding(
-            shape=[self.vocab_size + self.max_length, self.n_embed],
+            shape=[encoder.vocab_size, config.n_embed],
             stddev=config.weight_stddev,
             embed_p_drop=config.embed_p_drop,
             weight_name=embed_name,

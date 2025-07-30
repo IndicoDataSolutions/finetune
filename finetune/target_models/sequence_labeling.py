@@ -476,17 +476,9 @@ class SequenceLabeler(BaseModel):
         doc_idx = -1
         doc_annotations = []
         raw_text = [data.get("raw_text", data["X"]) for data in zipped_data]
-        for (
-            token_start_idx,
-            token_end_idx,
-            start_of_doc,
-            end_of_doc,
-            label_seq,
-            proba_seq,
-            start,
-            end,
-        ) in predictions:
-            if start_of_doc:
+        for pred_bundle in predictions:
+            label_seq = self.input_pipeline.label_encoder.inverse_transform(pred_bundle["preds"])
+            if pred_bundle["start_of_doc"]:
                 # if this is the first chunk in a document, start accumulating from scratch
                 doc_subseqs = []
                 doc_labels = []
@@ -497,6 +489,13 @@ class SequenceLabeler(BaseModel):
                 last_end = 0
                 doc_level_probas = []
                 chunk_spans = []
+    
+             # This is the index of the start and end of the focused section of the chunk relative to the chunk tokens
+            start = pred_bundle["useful_start"]
+            end = pred_bundle["useful_end"]
+            token_start_idx = pred_bundle["token_start_idx"]
+            token_end_idx = pred_bundle["token_end_idx"]
+            proba_seq = pred_bundle["probas"]
 
             label_seq = label_seq[start:end]
             end_of_token_seq = token_end_idx[start:end]
@@ -586,7 +585,7 @@ class SequenceLabeler(BaseModel):
                     doc_subseqs[-1] = raw_text[doc_idx][doc_starts[-1] : end_idx]
                     doc_probs[-1].append(proba)
 
-            if end_of_doc:
+            if pred_bundle["end_of_doc"]:
                 # last chunk in a document
                 prob_dicts = []
                 for prob_seq in doc_probs:
@@ -665,4 +664,6 @@ class SequenceLabeler(BaseModel):
             dropout_rate=config.clf_p_drop,
             use_crf=config.crf_sequence_labeling,
             renorm_after_class_weights=config.renorm_after_class_weights,
+            include_attn=not config.base_model.is_bidirectional,
+            num_attn_heads=config.seq_num_heads,
         )

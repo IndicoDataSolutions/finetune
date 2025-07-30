@@ -71,8 +71,9 @@ def attn_weights(q, k, v, scale=False, mask=True, explain=False, lengths=None):
 
 
 class Attn(tf.keras.layers.Layer):
-    def __init__(self, *, num_heads, attn_pdrop, **kwargs):
+    def __init__(self, *, num_heads, attn_pdrop, mask=True, **kwargs):
         super().__init__(**kwargs)
+        self.mask = mask
         self.num_heads = num_heads
         self.dropout = tf.keras.layers.Dropout(attn_pdrop)
 
@@ -82,7 +83,7 @@ class Attn(tf.keras.layers.Layer):
         q = split_heads(q, self.num_heads)
         k = split_heads(k, self.num_heads, k=True)
         v = split_heads(v, self.num_heads)
-        w = attn_weights(q, k, v)
+        w = attn_weights(q, k, v, mask=self.mask)
         w = self.dropout(w)
         a = tf.matmul(w, v)
         a = merge_heads(a)
@@ -112,7 +113,6 @@ class Block(tf.keras.layers.Layer):
         self.mlp = MLP(
             n_state=input_shape[-1] * 4,
             resid_pdrop=self.resid_pdrop,
-            act_fn=self.act_fn,
             name="mlp",
         )
         super().build(input_shape)
