@@ -15,13 +15,10 @@ from finetune.base_models.bert.roberta_encoder import (
 )
 from finetune.base_models.gpt2.encoder import GPT2Encoder
 from finetune.base_models.gpt.encoder import GPTEncoder
-from finetune.base_models.oscar.encoder import GPCEncoder
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
 from finetune.errors import FinetuneError
-from finetune.optimizers.gradient_accumulation import get_grad_accumulation_optimizer
 from finetune.scheduler import Scheduler
 from finetune.util.imbalance import compute_class_weights
-from finetune.util.optimize_loss import OPTIMIZERS
 from finetune.util.timing import ProgressBar
 
 
@@ -313,20 +310,6 @@ def body_of_test_gradient_accumulating_optimizer(opt, accumulate_on_cpu):
             assert gs == (i + 1) * 2
 
 
-@pytest.mark.parametrize("accumulate_on_cpu", [True, False])
-def test_gradient_accumulating_optimizer_keras(accumulate_on_cpu):
-    body_of_test_gradient_accumulating_optimizer(
-        tf.keras.optimizers.SGD, accumulate_on_cpu
-    )
-
-
-@pytest.mark.parametrize("accumulate_on_cpu", [True, False])
-def test_gradient_accumulating_optimizer_compat(accumulate_on_cpu):
-    body_of_test_gradient_accumulating_optimizer(
-        tf.compat.v1.train.GradientDescentOptimizer, accumulate_on_cpu=accumulate_on_cpu
-    )
-
-
 class TestProgressBar(unittest.TestCase):
     def test_progress_bar(self):
         state = {"hook_run": False}
@@ -337,28 +320,6 @@ class TestProgressBar(unittest.TestCase):
 
         pbar = ProgressBar(range(1000), update_hook=update_state)
         assert state["hook_run"]
-
-
-class TestOptimizers(unittest.TestCase):
-    @tf.function
-    def test_optimizers(self):
-        for opt_class in OPTIMIZERS.values():
-            with tf.Graph().as_default():
-                loss_var = tf.compat.v1.get_variable("loss", shape=1)
-                loss = tf.abs(loss_var)
-                lr = 0.1
-                opt = opt_class(lr, weight_decay=1e-10, decay_var_list=[loss_var])
-                if isinstance(opt, tf.keras.optimizers.Optimizer):
-                    train_op = opt.minimize(lambda: loss, [loss_var])
-                else:
-                    train_op = opt.minimize(loss)
-
-                sess = tf.compat.v1.Session()
-                sess.run(tf.compat.v1.global_variables_initializer())
-                original_loss = sess.run(loss)
-                for i in range(10):
-                    sess.run(train_op)
-            self.assertLess(sess.run(loss), original_loss)
 
 
 class TestSaveMultiple(unittest.TestCase):

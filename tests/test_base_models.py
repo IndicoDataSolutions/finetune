@@ -8,8 +8,6 @@ import unittest
 import warnings
 from pathlib import Path
 
-from finetune.base_models.huggingface.models import HFDebertaV3Base
-
 # prevent excessive warning logs
 warnings.filterwarnings("ignore")
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -22,25 +20,15 @@ from bs4.element import Tag
 from sklearn.metrics import recall_score
 from sklearn.model_selection import train_test_split
 
-from finetune import Classifier, Comparison, SequenceLabeler
+from finetune import Classifier, SequenceLabeler
 from finetune.base_models import (
-    OSCAR,
     BERTModelCased,
-    DistilBERT,
     FastTextCNN,
-    GPT2Model,
-    GPTModel,
     RoBERTa,
     TCNModel,
     TextCNN,
+    ModernBert,
 )
-from finetune.base_models.huggingface.models import (
-    HFBert,
-    HFDebertaV3Base,
-    HFElectraDiscrim,
-    HFElectraGen,
-)
-from finetune.config import get_config
 from finetune.datasets import generic_download
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
 from finetune.errors import FinetuneError
@@ -63,7 +51,6 @@ class TestModelBase(unittest.TestCase):
             base_model=cls.base_model,
             batch_size=2,
             max_length=128,
-            lm_loss_coef=0.0,
             **cls.model_specific_config
         )
         defaults.update(kwargs)
@@ -191,16 +178,6 @@ class TestClassifierTextCNN(TestModelBase):
         for proba in probabilities:
             self.assertIsInstance(proba, dict)
 
-    def test_oversample(self):
-        """
-        Ensure model training does not error out when oversampling is set to True
-        """
-
-        model = Classifier(**self.default_config())
-        model.config.oversample = True
-        train_sample = self.dataset.sample(n=self.n_sample)
-        model.fit(train_sample.Text.values, train_sample.Target.values)
-
     def test_class_weights(self):
         # testing class weights
         train_sample = self.dataset.sample(n=self.n_sample * 3)
@@ -295,59 +272,6 @@ class TestClassifierTextCNN(TestModelBase):
     def test_featurize_sequence(self):
         _test_featurize_sequence(self, model_fn=Classifier)
 
-    def test_validation(self):
-        """
-        Ensure validation settings do not result in an error
-        """
-        config = self.default_config()
-        config.update({"val_interval": 10, "val_size": 0})
-        model = Classifier(**config)
-        train_sample = self.dataset.sample(n=20)
-        model.fit(train_sample.Text, train_sample.Target)
-
-
-class TestComparisonTextCNN(TestModelBase):
-    n_sample = 20
-    dataset_path = os.path.join("Data", "Classify", "SST-binary.csv")
-    base_model = TextCNN
-
-    def setUp(self):
-        random.seed(42)
-        np.random.seed(42)
-
-    def test_fit_predict(self):
-        """
-        Ensure model training does not error out
-        Ensure model returns predictions of the right type
-        """
-
-        model = Comparison(**self.default_config())
-        n_samples = 10
-        model.fit(
-            [
-                [
-                    "Transformers was a terrible movie but a great model",
-                    "Transformers are a great model but a terrible movie",
-                ]
-            ]
-            * n_samples,
-            ["yes"] * n_samples,
-        )
-
-        test_data = [
-            [
-                "Transformers was a terrible movie but a great model",
-                "Transformers are a great model but a terrible movie",
-            ]
-        ]
-
-        predictions = model.predict(test_data)
-        for prediction in predictions:
-            self.assertIsInstance(prediction, (str, bytes))
-
-        probabilities = model.predict_proba(test_data)
-        for proba in probabilities:
-            self.assertIsInstance(proba, dict)
 
 
 class TestSequenceLabelerTextCNN(TestModelBase):
@@ -476,8 +400,6 @@ class TestSequenceLabelerTextCNN(TestModelBase):
             **self.default_config(
                 batch_size=2,
                 max_length=256,
-                lm_loss_coef=0.0,
-                multi_label_sequences=True,
             )
         )
         raw_docs = ["".join(text) for text in self.texts]
@@ -551,21 +473,12 @@ class TestClassifierFastTextCNN(TestClassifierTextCNN):
     base_model = FastTextCNN
 
 
-class TestComparisonFastTextCNN(TestComparisonTextCNN):
-    base_model = FastTextCNN
-
-
 class TestSequenceLabelerBert(TestSequenceLabelerTextCNN):
     model_specific_config = {"n_epochs": 2, "lr": 1e-4}
     base_model = BERTModelCased
 
 
 class TestClassifierBert(TestClassifierTextCNN):
-    model_specific_config = {"n_epochs": 2, "lr": 1e-4}
-    base_model = BERTModelCased
-
-
-class TestComparisonBert(TestComparisonTextCNN):
     model_specific_config = {"n_epochs": 2, "lr": 1e-4}
     base_model = BERTModelCased
 
@@ -580,11 +493,6 @@ class TestClassifierRoberta(TestClassifierTextCNN):
     base_model = RoBERTa
 
 
-class TestComparisonRoberta(TestComparisonTextCNN):
-    model_specific_config = {"n_epochs": 2, "lr": 1e-4}
-    base_model = RoBERTa
-
-
 class TestClassifierTCN(TestClassifierTextCNN):
     base_model = TCNModel
 
@@ -593,72 +501,9 @@ class TestSequenceLabelerTCN(TestSequenceLabelerTextCNN):
     base_model = TCNModel
 
 
-class TestClassifierDistilBERT(TestClassifierTextCNN):
-    model_specific_config = {"n_epochs": 2, "lr": 1e-2}
-    base_model = DistilBERT
+class TestClassifierModernBert(TestClassifierTextCNN):
+    base_model = ModernBert
 
 
-class TestSequenceLabelerDistilBERT(TestSequenceLabelerTextCNN):
-    base_model = DistilBERT
-
-
-class TestSequenceLabelerOscar(TestSequenceLabelerTextCNN):
-    model_specific_config = {"n_epochs": 2, "lr": 1e-4}
-    base_model = OSCAR
-
-
-class TestClassifierOscar(TestClassifierTextCNN):
-    model_specific_config = {"n_epochs": 2, "lr": 1e-4}
-    base_model = OSCAR
-
-
-class TestSequenceHuggingfaceElectraGen(TestSequenceLabelerTCN):
-    base_model = HFElectraGen
-
-
-class TestClassifierHuggingfaceElectraGen(TestClassifierTextCNN):
-    base_model = HFElectraGen
-
-
-class TestComparisonHuggingfaceElectraGen(TestComparisonTextCNN):
-    base_model = HFElectraGen
-
-
-class TestSequenceHuggingfaceElectraDiscrim(TestSequenceLabelerTCN):
-    base_model = HFElectraDiscrim
-
-
-class TestClassifierHuggingfaceElectraDiscrim(TestClassifierTextCNN):
-    base_model = HFElectraDiscrim
-
-
-class TestComparisonHuggingfaceElectraDiscrim(TestComparisonTextCNN):
-    base_model = HFElectraDiscrim
-
-
-class TestSequenceHuggingfaceBERT(TestSequenceLabelerTCN):
-    base_model = HFBert
-
-    def test_low_memory_mode(self):
-        raw_docs = ["".join(text) for text in self.texts]
-        texts, annotations = finetune_to_indico_sequence(
-            raw_docs, self.texts, self.labels, none_value=self.model.config.pad_token
-        )
-        train_texts, test_texts, train_annotations, test_annotations = train_test_split(
-            texts, annotations, test_size=0.1
-        )
-        train_texts = [t * 10 for t in train_texts]
-        self.model.config.low_memory_mode = True
-        self.model.config.batch_size = 32
-
-        self.model.fit(train_texts * 10, train_annotations * 10)
-
-
-class TestSequenceHuggingfaceDeBERTa(TestSequenceLabelerTCN):
-    base_model = HFDebertaV3Base
-
-
-class TestClassifierHuggingfaceDeBERTa(TestClassifierTextCNN):
-    base_model = HFDebertaV3Base
-    expected_file_size_fp32 = 750000000
-    expected_file_size_fp16 = 380000000
+class TestSequenceLabelerModernBert(TestSequenceLabelerTextCNN):
+    base_model = ModernBert

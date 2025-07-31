@@ -75,17 +75,16 @@ class TestInputFns(unittest.TestCase):
     @patch("finetune.input_pipeline.batch_dataset")
     def test_input_fns(self, mock_batch_dataset):
         for setting in [
-            {"val_size": 0.3, "chunk": True, "train_len": 407, "val_len": 147},
-            {"val_size": 0.3, "chunk": False, "train_len": 70, "val_len": 30},
-            {"val_size": 0.0, "chunk": True, "train_len": 554, "val_len": 0},
-            {"val_size": 0.0, "chunk": False, "train_len": 100, "val_len": 0},
+            {"chunk": True, "train_len": 407,},
+            {"chunk": False, "train_len": 70,},
+            {"chunk": True, "train_len": 554,},
+            {"chunk": False, "train_len": 100,},
         ]:
             model = Classifier(
                 max_length=10,
                 chunk_long_sequences=setting["chunk"],
                 batch_size=3,
                 n_epochs=7,
-                val_size=setting["val_size"],
             )
             model.input_pipeline.make_dataset_fn = dummy_make_dataset_fn
             train_sample = self.dataset.sample(n=100)

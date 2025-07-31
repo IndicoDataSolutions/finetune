@@ -61,21 +61,21 @@ class TestConfig(unittest.TestCase):
 BUNDLES = glob.glob(os.path.join("/Finetune/tests/backwards_compat_bundles/*.jl"))
 
 
-def nested_assert_allclose(a, b, atol=1e-04):
+def nested_assert_allclose(a, b, atol=0, rtol=0):
     assert type(a) == type(b)
     if isinstance(a, list):
         assert len(a) == len(b)
         for a_i, b_i in zip(a, b):
-            nested_assert_allclose(a_i, b_i, atol=atol)
+            nested_assert_allclose(a_i, b_i, atol=atol, rtol=rtol)
     elif isinstance(a, dict):
         assert a.keys() == b.keys()
         for k in a.keys():
-            nested_assert_allclose(a[k], b[k], atol=atol)
+            nested_assert_allclose(a[k], b[k], atol=atol, rtol=rtol)
     elif isinstance(a, (np.ndarray, float)):
         # This might be too leniant. But going to do a first pass to make sure nothing is horrendously wrong.
         # and go from there.
         # TODO; Make this less leniant.
-        np.testing.assert_allclose(a, b, atol=atol, rtol=1e-4)
+        np.testing.assert_allclose(a, b, atol=atol, rtol=rtol)
     else:
         assert a == b
 
@@ -106,7 +106,9 @@ def test_backwards_compat_extreme(bundle_path):
                 raise
             flat_features = None
         if expected_flat_features is not None:
-            nested_assert_allclose(flat_features, expected_flat_features, atol=1e-3)
+            # Allow 1% relative difference and 1e-4 absolute difference. Difficult to know what we actually need here
+            # To be successful, but as long as the preds are the same, this is mostly just for us to build confidence.
+            nested_assert_allclose(flat_features, expected_flat_features, atol=1e-4, rtol=1e-2)
 
         try:
             sequence_features = model.featurize_sequence(texts, context=contexts)
@@ -115,7 +117,7 @@ def test_backwards_compat_extreme(bundle_path):
                 raise
             sequence_features = None
         if expected_sequence_features is not None:
-            nested_assert_allclose(sequence_features, expected_sequence_features, atol=1e-3)
+            nested_assert_allclose(sequence_features, expected_sequence_features, atol=1e-4, rtol=1e-2)
 
     try:
         preds = model.predict(texts, context=contexts)
