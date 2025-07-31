@@ -16,6 +16,7 @@ from typing import Dict, List, Mapping, Tuple
 import joblib
 import numpy as np
 import tensorflow as tf
+from tensorflow.python.keras.backend import reset_uids as keras_reset_uids
 
 from finetune.base_models.bert.roberta_encoder import RoBERTaEncoderV2
 from finetune.config import assert_valid_config, get_default_config
@@ -248,6 +249,11 @@ class BaseModel(object, metaclass=ABCMeta):
     @property
     def model(self) -> tf.keras.Model:
         if self._model is None:
+            # Keras holds a global state of layer names and anything without an explicit name gets a name with a 
+            # uid suffix. When multiple models are created in the same process these names can conflict causing issues
+            # with saving and loading.
+            # Reset Uids before and after build to keep the naming isolated.
+            keras_reset_uids()
             # We either need to explictly handle the dtype policies in every layer or deal with this hack to set and unset
             # our desired policy. Setting dtype policy on the model does not seem to cascade to lower layers.
             initial_dtype_policy = tf.keras.config.dtype_policy()
@@ -263,6 +269,7 @@ class BaseModel(object, metaclass=ABCMeta):
             self._model(self.input_pipeline.keras_input_def())
             self.saver.initialize_model(self._model)
             tf.keras.config.set_dtype_policy(initial_dtype_policy)
+            keras_reset_uids()
         return self._model
 
     def _get_keras_model(self):

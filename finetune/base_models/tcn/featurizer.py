@@ -52,7 +52,7 @@ class TemporalBlockWithResiduals(tf.keras.layers.Layer):
         # It looks like a mistake that we are passing name to block and not to this. But we are ignoring
         # this scope and on the original the scope only wrapped the block and not the downsample. So we've gone
         # with this to achieve the same in keras. Weird but should be fine.
-        super().__init__(**kwargs)
+        super().__init__(name="TemporalBlockWithResiduals", **kwargs)
         self.block = TemporalBlock(
             n_filters=n_filters,
             kernel_size=kernel_size,
@@ -65,7 +65,7 @@ class TemporalBlockWithResiduals(tf.keras.layers.Layer):
     def build(self, input_shape):
         if input_shape[-1] != self.n_filters:
             self.downsample = tf.keras.layers.Conv1D(
-                filters=self.n_filters, kernel_size=1, padding="same"
+                filters=self.n_filters, kernel_size=1, padding="same", name="conv1d"
             )
         else:
             self.downsample = None
