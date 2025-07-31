@@ -1613,9 +1613,10 @@ class TableCrossRowColMixing(tf.keras.layers.Layer):
         )
 
         # Adaptor blocks for mixing
-        # Bad decisions were made...
-        self.adaptor_col = AdaptorBlock(64, down_proj_name="dense", up_proj_name="dense_1")
-        self.adaptor_row = AdaptorBlock(64, down_proj_name="dense_2", up_proj_name="dense_3")
+        # I don't know why but we need to name these layers even when we are using saver_ignore_scope
+        # Otherwise the row adaptor block vars don't show up in the saver..
+        self.adaptor_col = AdaptorBlock(64, down_proj_name="dense", up_proj_name="dense_1", name="adaptor_col")
+        self.adaptor_row = AdaptorBlock(64, down_proj_name="dense_2", up_proj_name="dense_3", name="adaptor_row")
 
     def call(
         self, row_feats, col_feats, row_gather, col_gather, output_shape, row_col_values
