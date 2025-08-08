@@ -10,7 +10,7 @@ pytest>=3.6.3
 h5py>=2.8.0
 joblib>=0.12.0
 bs4>=0.0.1
-nltk>=3.2.4
+nltk>=3.8.2
 regex>=2019.03.12
 lxml>=4.3.3
 tqdl==0.0.4
