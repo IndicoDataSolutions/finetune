@@ -1,11 +1,14 @@
 import os
 
-from transformers import RobertaTokenizerFast
+from tokenizers import Tokenizer
+from tokenizers.models import BPE
+from tokenizers.pre_tokenizers import ByteLevel
 
 import finetune
 from finetune.base_models.gpt2 import encoder as gpt2_encoder
-from finetune.base_models.gpt2.encoder import GPT2Encoder, bytes_to_unicode
+from finetune.base_models.gpt2.encoder import GPT2Encoder
 from finetune.encoding.input_encoder import BaseEncoder, EncodedOutput
+
 
 FINETUNE_FOLDER = os.path.dirname(finetune.__file__)
 DICT_PATH = os.path.join(FINETUNE_FOLDER, "model", "bert", "dict.txt")
@@ -82,9 +85,11 @@ class RoBERTaEncoderV2(BaseEncoder):
     offset = 4
 
     def __init__(self, encoder_path=ENCODER_PATH, vocab_path=VOCAB_PATH):
-        self.tokenizer = RobertaTokenizerFast(
-            merges_file=vocab_path, vocab_file=encoder_path
-        )
+
+        model = BPE.from_files(vocab_path, encoder_path, unk_token="<unk>")
+        self.tokenizer = Tokenizer(model)
+        self.tokenizer.pre_tokenizer = ByteLevel(add_prefix_space=True)
+
         self.start_token = 0  # bos from roberta
         self.delimiter_token = 2  # eos from roberta
         self.end_token = 2  # eos from roberta

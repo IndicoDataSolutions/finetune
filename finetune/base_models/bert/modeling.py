@@ -20,8 +20,8 @@ import math
 
 import numpy as np
 import tensorflow as tf
-from transformers.activations_tf import gelu as hf_gelu
 from finetune.nn.activations import bert_gelu as gelu
+from finetune.nn.activations import hf_gelu
 
 from finetune.base_models.bert.roberta_encoder import RoBERTaEncoder
 from finetune.base_models.bert.table_utils import (

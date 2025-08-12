@@ -60,17 +60,33 @@ class TestConfig(unittest.TestCase):
 # TODO: eventually clean this up and push these files to s3.
 BUNDLES = glob.glob(os.path.join("/Finetune/tests/backwards_compat_bundles/*.jl"))
 
+def handle_length_mismatch(a, b, atol=0, rtol=0):
+    if len(b) > len(a):
+        # Swap a and b so that a is the longer list.
+        a, b = b, a
+    for i, ai in enumerate(a):
+        if i >= len(b):
+            raise ValueError(f"Length mismatch - First differing element: {ai} does not have a corresponding element in b")
+        try:
+            nested_assert_allclose(ai, b[i], atol=atol, rtol=rtol)
+        except AssertionError:
+            raise ValueError(f"Length mismatch - First differing element: {ai} and {b[i]}")
+    raise ValueError("The lists are not the same length.. and also there is a problem with handle length mismatch function. ")
 
 def nested_assert_allclose(a, b, atol=0, rtol=0):
     assert type(a) == type(b)
     if isinstance(a, list):
-        assert len(a) == len(b)
+        if len(a) != len(b):
+            handle_length_mismatch(a, b, atol=atol, rtol=rtol)
         for a_i, b_i in zip(a, b):
             nested_assert_allclose(a_i, b_i, atol=atol, rtol=rtol)
     elif isinstance(a, dict):
         assert a.keys() == b.keys()
-        for k in a.keys():
-            nested_assert_allclose(a[k], b[k], atol=atol, rtol=rtol)
+        try:
+            for k in a.keys():
+                nested_assert_allclose(a[k], b[k], atol=atol, rtol=rtol)
+        except AssertionError:
+            raise ValueError(f"Dict mismatch: {a} != {b}")
     elif isinstance(a, (np.ndarray, float)):
         # This might be too leniant. But going to do a first pass to make sure nothing is horrendously wrong.
         # and go from there.
@@ -82,23 +98,30 @@ def nested_assert_allclose(a, b, atol=0, rtol=0):
 @pytest.mark.parametrize("bundle_path", BUNDLES)
 def test_backwards_compat_extreme(bundle_path):
     model = SequenceLabeler.load(bundle_path, key="model")
-    if model.config.float_16_predict:
-        # TODO: remove this once the fp32 versions are all working.
-        return
     texts = SequenceLabeler.load(bundle_path, key="texts")
     contexts = SequenceLabeler.load(bundle_path, key="contexts")
-    expected_flat_features = SequenceLabeler.load(bundle_path, key="flat_features")
-    expected_sequence_features = SequenceLabeler.load(
-        bundle_path, key="sequence_features"
-    )
-    expected_preds = SequenceLabeler.load(bundle_path, key="preds")
-    expected_probs = SequenceLabeler.load(bundle_path, key="probs")
 
-    if not (model.config.float_16_predict or model.config.mixed_precision):
-        # We skip these for modern bert on float 16 modes. 
-        # As long as predictions match we call it good enough.
-        # Not ideal, but it seems to be hundreds of very tiny changes to op implementations
-        # Rather than any single major issue.
+    if model.config.float_16_predict:
+        # For float16 models we test that predictions do not vary between float16 and float32 loaded models.
+        # Preds differ subtly from the old version to the new version but features match the original models well.
+        # and the float32 models work well.
+        model_fp32 = SequenceLabeler.load(bundle_path, key="model", float_16_predict=False, mixed_precision=False, predict_batch_size=4)
+        nested_assert_allclose(
+            model.predict(texts, context=contexts),
+            model_fp32.predict(texts, context=contexts), atol=1e-2
+        )
+        nested_assert_allclose(
+            model.predict_proba(texts, context=contexts),
+            model_fp32.predict_proba(texts, context=contexts), atol=1e-2
+        )
+    else:
+        expected_flat_features = SequenceLabeler.load(bundle_path, key="flat_features")
+        expected_sequence_features = SequenceLabeler.load(
+            bundle_path, key="sequence_features"
+        )
+        expected_preds = SequenceLabeler.load(bundle_path, key="preds")
+        expected_probs = SequenceLabeler.load(bundle_path, key="probs")
+
         try:
             flat_features = model.featurize(texts, context=contexts)
         except:
@@ -119,22 +142,22 @@ def test_backwards_compat_extreme(bundle_path):
         if expected_sequence_features is not None:
             nested_assert_allclose(sequence_features, expected_sequence_features, atol=1e-4, rtol=1e-2)
 
-    try:
-        preds = model.predict(texts, context=contexts)
-    except:
+        try:
+            preds = model.predict(texts, context=contexts)
+        except:
+            if expected_preds is not None:
+                raise
+            preds = None
         if expected_preds is not None:
-            raise
-        preds = None
-    if expected_preds is not None:
-        # Slightly looser atol on here, but as long as the preds are the same nobody is going to care about
-        # 1% change in probas.
-        nested_assert_allclose(preds, expected_preds, atol=1e-2)
+            # Slightly looser atol on here, but as long as the preds are the same nobody is going to care about
+            # 1% change in probas.
+            nested_assert_allclose(preds, expected_preds, atol=1e-2)
 
-    try:
-        probs = model.predict_proba(texts, context=contexts)
-    except:
+        try:
+            probs = model.predict_proba(texts, context=contexts)
+        except:
+            if expected_probs is not None:
+                raise
+            probs = None
         if expected_probs is not None:
-            raise
-        probs = None
-    if expected_probs is not None:
-        nested_assert_allclose(probs, expected_probs, atol=1e-2)
+            nested_assert_allclose(probs, expected_probs, atol=1e-2)

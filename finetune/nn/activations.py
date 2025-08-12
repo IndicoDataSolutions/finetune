@@ -7,7 +7,6 @@ import numpy as np
 import tensorflow as tf
 
 
-
 def swish(x):
     return x * tf.nn.sigmoid(x)
 
@@ -34,3 +33,6 @@ def gpt_gelu(x):
 def modernbert_gelu(x):
     # This matches the old tensorflow exact implementation
     return 0.5 * x * (1.0 + tf.math.erf(x / tf.cast(1.4142135623730951, x.dtype)))
+
+
+hf_gelu = tf.keras.activations.gelu

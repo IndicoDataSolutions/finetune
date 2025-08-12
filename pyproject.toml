@@ -1,33 +1,23 @@
 [build-system]
 requires = ["setuptools>=61", "wheel"]
-build-backend = "setuptools.build_meta"
 
 [project]
 name = "finetune"
 version = "0.10.1"
 description = "Finetune API"
 dependencies = [
-    "pandas>=0.23.1",
     "tqdm>=4.0.0",
     "numpy>=2.0.0",
-    "scipy>=1.1.0",
     "scikit-learn>=1.0.2",
     "ftfy>=4.4.0",
     "spacy>=3.0.0",
-    "h5py>=2.8.0",
     "joblib>=0.12.0",
-    "bs4>=0.0.1",
     "nltk>=3.2.4",
-    "regex>=2019.03.12",
-    "lxml>=4.3.3",
-    "sentencepiece>=0.1.83",
-    "tabulate>=0.8.6,<0.9.0",
-    "tensorflow-estimator",
     "tqdl>=0.0.4",
     "psutil>=5.7.0",
-    "transformers==4.53.0",
     "tf-keras==2.19.0",
-    "sequence-metrics"
+    "sequence-metrics",
+    "tokenizers"
 ]
 
 [project.optional-dependencies]
@@ -39,6 +29,3 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 exclude = ["tests", "tests.*"]
-
-[tool.setuptools.cmdclass]
-build_ext = "finetune.custom_ops.build.OpsBuild"

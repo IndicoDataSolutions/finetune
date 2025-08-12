@@ -153,11 +153,11 @@ def class_reweighted_grad(logits, class_weights, norm_grads_multiplier):
     return tf.identity(logits), custom_grad_fn
 
 class SequenceLabelerAttn(tf.keras.layers.Layer):
-    def __init__(self, n_targets, num_heads, name="seq_lab_attn", **kwargs):
-        super().__init__(name=name, **kwargs)
-        self.dense = tf.keras.layers.Dense(n_targets, name="dense")
-        self.block = Attn(num_heads=num_heads, attn_pdrop=0.2, mask=False, name="seq_label_attn")
-        self.norm = Norm(name="seq_label_residual")
+    def __init__(self, n_targets, num_heads, name="seq_lab_attn", dtype=tf.float32, **kwargs):
+        super().__init__(name=name, **kwargs, dtype=dtype)
+        self.dense = tf.keras.layers.Dense(n_targets, name="dense", dtype=dtype)
+        self.block = Attn(num_heads=num_heads, attn_pdrop=0.2, mask=False, name="seq_label_attn", dtype=dtype)
+        self.norm = Norm(name="seq_label_residual", dtype=dtype)
 
     def call(self, features):
         x = self.block(features)
@@ -183,9 +183,9 @@ class SequenceLabeler(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(dropout_rate)
         # This extra scope is an unfortunate holdover from GPT when we had an extra bidirectional attention block.
         if include_attn:
-            self.transform = SequenceLabelerAttn(n_targets, num_attn_heads, name="seq_lab_attn")
+            self.transform = SequenceLabelerAttn(n_targets, num_attn_heads, name="seq_lab_attn", dtype=dtype)
         else:
-            self.transform = ExtraScope(tf.keras.layers.Dense(n_targets, name="dense"), "seq_lab_attn")
+            self.transform = ExtraScope(tf.keras.layers.Dense(n_targets, name="dense", dtype=dtype), "seq_lab_attn")
         self.use_crf = use_crf
         self.renorm_after_class_weights = renorm_after_class_weights
 

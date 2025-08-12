@@ -273,11 +273,15 @@ class BaseModel(object, metaclass=ABCMeta):
         return self._model
 
     def _get_keras_model(self):
-        model = get_keras_model(
-            target_block=self.target_block(
+        if self.input_pipeline.target_dim is None:
+            target_block = None
+        else:
+            target_block = self.target_block(
                 config=self.config,
                 n_outputs=self.input_pipeline.target_dim,
-            ),
+            )
+        model = get_keras_model(
+            target_block=target_block,
             encoder=self.input_pipeline.text_encoder,
             target_dim=self.input_pipeline.target_dim,
             label_encoder=self.input_pipeline.label_encoder,

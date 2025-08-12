@@ -25,7 +25,10 @@ def get_keras_model(
             self.featurizer = config.base_model.get_featurizer(
                 encoder=encoder, config=config, name="featurizer"
             )
-            self.target_block = ExtraScope(target_block, "target")
+            if target_block is not None:
+                self.target_block = ExtraScope(target_block, "target")
+            else:
+                self.target_block = None
 
         def call(self, data, **kwargs):
             features: dict[str, tf.Tensor] = self.featurizer(
@@ -35,9 +38,12 @@ def get_keras_model(
                 **kwargs
             )
             # Unpack to include things like lengths
-            target_output: dict[str, tf.Tensor] = self.target_block(
-                {**features, **data}
-            )
+            if self.target_block is not None:
+                target_output: dict[str, tf.Tensor] = self.target_block(
+                    {**features, **data}
+                )
+            else:
+                target_output = {}
             output = {
                 **features,
                 **target_output,
