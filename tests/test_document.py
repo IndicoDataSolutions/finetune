@@ -3,11 +3,11 @@ import os
 import unittest
 
 import pandas as pd
+from sequence_metrics.metrics import sequence_labeling_micro_token_f1
 from sklearn.model_selection import train_test_split
 
 from finetune import DocumentLabeler
 from finetune.base_models import DocRep
-from finetune.util.metrics import sequence_labeling_micro_token_f1
 
 DATA_PATH = os.path.join("tests", "data", "doc_rep_integration.csv")
 

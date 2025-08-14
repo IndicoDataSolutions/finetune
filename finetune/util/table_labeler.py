@@ -9,13 +9,14 @@ import sys
 import tempfile
 import typing as t
 
+from sequence_metrics.metrics import sequences_overlap
+
 from finetune import SequenceLabeler
 from finetune.base_models import TableRoBERTa
 from finetune.encoding.input_encoder import BaseEncoder
 from finetune.errors import FinetuneError
 from finetune.scheduler import Scheduler
 from finetune.util.memory import cleanup_sessions
-from finetune.util.metrics import sequences_overlap
 
 LOGGER = logging.getLogger("finetune")
 

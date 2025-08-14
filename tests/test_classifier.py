@@ -1,14 +1,10 @@
-import gc
-import logging
 import os
 import shutil
-import string
 import time
 import unittest
 import warnings
 from copy import copy
 from pathlib import Path
-from unittest.mock import MagicMock
 
 # prevent excessive warning logs
 warnings.filterwarnings("ignore")
@@ -16,8 +12,6 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 import numpy as np
 import pandas as pd
-import pytest
-import tensorflow as tf
 from sklearn.metrics import accuracy_score, recall_score
 
 from finetune import Classifier
@@ -25,7 +19,6 @@ from finetune.base_models import GPT, GPTModelSmall
 from finetune.config import get_config
 from finetune.datasets import generic_download
 from finetune.errors import FinetuneError
-from finetune.model import PredictMode
 
 SST_FILENAME = "SST-binary.csv"
 
@@ -72,7 +65,6 @@ class TestClassifier(unittest.TestCase):
         defaults = {"batch_size": 2, "max_length": 128, "n_epochs": 1}
         defaults.update(kwargs)
         return dict(get_config(**defaults))
-
 
     def test_multiple_models_fit_predict(self):
         """

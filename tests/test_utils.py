@@ -92,10 +92,6 @@ class TestBertEncoder(TestGPTEncoder):
     Encoder = BERTEncoder
 
 
-class TestOscarEncoder(TestGPTEncoder):
-    Encoder = GPCEncoder
-
-
 class TestFinetuneIndicoConverters(unittest.TestCase):
     def test_invalid_keyword(self):
         with self.assertRaises(FinetuneError):
@@ -277,39 +273,6 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
         self.assertEqual(weights[1], 1.0)
 
 
-def body_of_test_gradient_accumulating_optimizer(opt, accumulate_on_cpu):
-    with tf.Graph().as_default():
-        loss = tf.compat.v1.get_variable("loss", shape=1)
-        lr = 0.1
-        opt = get_grad_accumulation_optimizer(
-            opt, 2, accumulate_on_cpu=accumulate_on_cpu
-        )(lr)
-        global_step = tf.compat.v1.train.get_or_create_global_step()
-        if isinstance(opt, tf.keras.optimizers.Optimizer):
-            with tf.control_dependencies([opt.minimize(lambda: tf.abs(loss), [loss])]):
-                train_op = global_step.assign_add(1)
-        else:
-            train_op = opt.minimize(tf.abs(loss), global_step=global_step)
-
-        sess = tf.compat.v1.Session()
-        sess.run(tf.compat.v1.global_variables_initializer())
-        for i in range(100):
-            val_before = sess.run(loss)
-            grad_before = np.sign(val_before)
-            sess.run(train_op)
-
-            val_after1 = sess.run(loss)
-            grad_after1 = np.sign(val_after1)
-            sess.run(train_op)
-
-            val_after2 = sess.run(loss)
-
-            gs = sess.run(global_step)
-            assert val_before == val_after1
-            assert val_before - (grad_before + grad_after1) * lr == val_after2
-            assert gs == (i + 1) * 2
-
-
 class TestProgressBar(unittest.TestCase):
     def test_progress_bar(self):
         state = {"hook_run": False}
@@ -386,7 +349,3 @@ class TestSaveMultiple(unittest.TestCase):
         preds_a_2 = shed.predict("multiple_models.jl", ["test text"], key="a")
         assert preds_a_1 == SequenceLabeler.load("multiple_models.jl", key="a_preds")
         self.preds_equal(preds_a_1, preds_a_2)
-
-
-if __name__ == "__main__":
-    unittest.main()

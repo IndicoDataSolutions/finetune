@@ -249,7 +249,7 @@ class BaseModel(object, metaclass=ABCMeta):
     @property
     def model(self) -> tf.keras.Model:
         if self._model is None:
-            # Keras holds a global state of layer names and anything without an explicit name gets a name with a 
+            # Keras holds a global state of layer names and anything without an explicit name gets a name with a
             # uid suffix. When multiple models are created in the same process these names can conflict causing issues
             # with saving and loading.
             # Reset Uids before and after build to keep the naming isolated.
@@ -259,8 +259,12 @@ class BaseModel(object, metaclass=ABCMeta):
             initial_dtype_policy = tf.keras.config.dtype_policy()
             dtype_policy = "float32"
             if self.config.float_16_predict or self.config.mixed_precision:
-                # Technically this is a behaviour change but mixed precision should be generally fine.
-                dtype_policy = "mixed_float16"
+                if self.config.version == "0.10.0":
+                    # Assumption is if we're loading old float16 models we're not going to further train them.
+                    dtype_policy = "float16"
+                else:
+                    # Just use mixed float16 going forwards.
+                    dtype_policy = "mixed_float16"
             tf.keras.config.set_dtype_policy(dtype_policy)
             self._model = self._get_keras_model()
             # Does a symbolic first pass to build the model and give us variables we can initialize.
@@ -640,7 +644,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 "end_of_doc": end_of_doc,
                 "useful_start": useful_start,
                 "useful_end": useful_end,
-                **pred, # Preds and probas
+                **pred,  # Preds and probas
             }
 
     def close(self):

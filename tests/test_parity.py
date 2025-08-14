@@ -3,12 +3,9 @@ import unittest
 
 import numpy as np
 import pytest
-from tensorflow.data import Dataset
 
-from finetune import Classifier, MultiFieldClassifier, SequenceLabeler
+from finetune import Classifier, SequenceLabeler
 from finetune.base_models import BERT, GPT, GPT2, RoBERTa, XDocBase
-from finetune.encoding.input_encoder import EncodedOutput
-from finetune.model import PredictMode
 
 DIRECTORY = os.path.abspath(os.path.dirname(__file__))
 
@@ -23,16 +20,6 @@ class TestActivationParity(unittest.TestCase):
         ]
     ]
     TEST_DATA = ["this is a test"]
-
-    def test_gpt_multifield_parity(self):
-        model = MultiFieldClassifier(base_model=GPT)
-        np.testing.assert_allclose(
-            model.featurize(self.MULTIFIELD_TEST_DATA)[0],
-            np.load(
-                os.path.join(DIRECTORY, "data/test-gpt-multifield-activations.npy")
-            ),
-            atol=1e-1,
-        )
 
     @pytest.mark.xfail
     def test_gpt2_featurize(self):

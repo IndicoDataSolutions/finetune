@@ -145,6 +145,8 @@ class Saver:
                         )
         for var_name in {**self.fallback, **variables_sv}.keys():
             if var_name not in all_vars and var_name.startswith("model"):
-                print(f"Variable {var_name} in the saved file but not in the current model")
+                print(
+                    f"Variable {var_name} in the saved file but not in the current model"
+                )
         print(f"loading {len(transformed_weights)} variables")
         set_weights(model, transformed_weights, all_vars)

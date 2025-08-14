@@ -20,19 +20,20 @@ import math
 
 import numpy as np
 import tensorflow as tf
-from finetune.nn.activations import bert_gelu as gelu
-from finetune.nn.activations import hf_gelu
 
 from finetune.base_models.bert.roberta_encoder import RoBERTaEncoder
 from finetune.base_models.bert.table_utils import (
+    gather_col_vals,
     get_gather_indices,
     get_row_col_values,
     reassemble_sequence_feats,
-    gather_col_vals,
     scatter_feats,
 )
+from finetune.nn.activations import bert_gelu as gelu
+from finetune.nn.activations import hf_gelu
 from finetune.nn.auxiliary import embed_position
 from finetune.nn.nn_utils import ExtraScope, saver_ignore_scope
+
 
 class Embedding(tf.keras.layers.Layer):
     def __init__(
@@ -56,7 +57,9 @@ class Embedding(tf.keras.layers.Layer):
         )
         self.embedding_post_processor = embedding_post_processor
 
-    def call(self, input_ids, input_context=None, token_type_ids=None, position_ids=None):
+    def call(
+        self, input_ids, input_context=None, token_type_ids=None, position_ids=None
+    ):
         embedding_output = self.embedding(input_ids)
         return self.embedding_post_processor(
             input_tensor=embedding_output,
@@ -262,12 +265,15 @@ class BaseBertModel(tf.keras.layers.Layer):
         )
 
         if self.use_pooler:
-            self.pooler = ExtraScope(tf.keras.layers.Dense(
-                self.embed_dim,
-                activation=tf.tanh,
-                kernel_initializer=create_initializer(config.weight_stddev),
-                name="dense",
-            ), "pooler")
+            self.pooler = ExtraScope(
+                tf.keras.layers.Dense(
+                    self.embed_dim,
+                    activation=tf.tanh,
+                    kernel_initializer=create_initializer(config.weight_stddev),
+                    name="dense",
+                ),
+                "pooler",
+            )
 
     def call(self, tokens, context, sequence_lengths, training=True):
         delimiters = tf.cast(tf.equal(tokens, self.delimiter_token), tf.int32)
@@ -1049,8 +1055,6 @@ def reshape_from_matrix(output_tensor, orig_shape_list):
     return tf.reshape(output_tensor, orig_dims + [width])
 
 
-
-
 class BertModel(tf.keras.layers.Layer):
     def __init__(self, encoder, config, **kwargs):
         super().__init__(**kwargs)
@@ -1218,14 +1222,25 @@ class TwinTransformerModel(tf.keras.layers.Layer):
             else:
                 self.mixing_blocks.append(None)
 
-    def call(self, *, layer_input_a, layer_input_b, attention_mask_a, attention_mask_b, mixing_inputs=None, training=False):
+    def call(
+        self,
+        *,
+        layer_input_a,
+        layer_input_b,
+        attention_mask_a,
+        attention_mask_b,
+        mixing_inputs=None,
+        training=False,
+    ):
         # Unpack inputs tuple
         input_shape_a = get_shape_list(layer_input_a, expected_rank=3)
         input_shape_b = get_shape_list(layer_input_b, expected_rank=3)
-        batch_size_a = input_shape_a[0]
-        seq_length_a = input_shape_a[1]
-        batch_size_b = input_shape_b[0]
-        seq_length_b = input_shape_b[1]
+
+        # These need to be tensors to keep recompute_grad happy.
+        batch_size_a = tf.shape(layer_input_a)[0]
+        seq_length_a = tf.shape(layer_input_a)[1]
+        batch_size_b = tf.shape(layer_input_b)[0]
+        seq_length_b = tf.shape(layer_input_b)[1]
 
         # Keep representations as 2D tensors to avoid re-shaping
         prev_output_a = reshape_to_matrix(layer_input_a)
@@ -1240,16 +1255,16 @@ class TwinTransformerModel(tf.keras.layers.Layer):
                 block_b = tf.recompute_grad(block_b)
 
             prev_output_a = block_a(
-                layer_input=prev_output_a,
-                batch_size=batch_size_a,
-                seq_length=seq_length_a,
-                attention_mask=attention_mask_a,
+                prev_output_a,
+                batch_size_a,
+                seq_length_a,
+                attention_mask_a,
             )
             prev_output_b = block_b(
-                layer_input=prev_output_b,
-                batch_size=batch_size_b,
-                seq_length=seq_length_b,
-                attention_mask=attention_mask_b,
+                prev_output_b,
+                batch_size_b,
+                seq_length_b,
+                attention_mask_b,
             )
             mixing_layer = self.mixing_blocks[layer_idx]
             # Apply mixing function if provided
@@ -1333,12 +1348,15 @@ class BaseTwinBertModel(tf.keras.layers.Layer):
         )
 
         if self.use_pooler:
-            self.pooler = ExtraScope(tf.keras.layers.Dense(
-                self.embed_dim,
-                activation=tf.tanh,
-                kernel_initializer=create_initializer(config.weight_stddev),
-                name="dense",
-            ), "pooler")
+            self.pooler = ExtraScope(
+                tf.keras.layers.Dense(
+                    self.embed_dim,
+                    activation=tf.tanh,
+                    kernel_initializer=create_initializer(config.weight_stddev),
+                    name="dense",
+                ),
+                "pooler",
+            )
 
     def call(
         self,
@@ -1386,7 +1404,7 @@ class BaseTwinBertModel(tf.keras.layers.Layer):
         )
 
         # Run the twin transformer
-        sequence_output_a, sequence_output_b = self.transformer_model(            
+        sequence_output_a, sequence_output_b = self.transformer_model(
             layer_input_a=embedding_output_a,
             layer_input_b=embedding_output_b,
             attention_mask_a=attention_mask_a,
@@ -1615,8 +1633,12 @@ class TableCrossRowColMixing(tf.keras.layers.Layer):
         # Adaptor blocks for mixing
         # I don't know why but we need to name these layers even when we are using saver_ignore_scope
         # Otherwise the row adaptor block vars don't show up in the saver..
-        self.adaptor_col = AdaptorBlock(64, down_proj_name="dense", up_proj_name="dense_1", name="adaptor_col")
-        self.adaptor_row = AdaptorBlock(64, down_proj_name="dense_2", up_proj_name="dense_3", name="adaptor_row")
+        self.adaptor_col = AdaptorBlock(
+            64, down_proj_name="dense", up_proj_name="dense_1", name="adaptor_col"
+        )
+        self.adaptor_row = AdaptorBlock(
+            64, down_proj_name="dense_2", up_proj_name="dense_3", name="adaptor_row"
+        )
 
     def call(
         self, row_feats, col_feats, row_gather, col_gather, output_shape, row_col_values
@@ -1630,14 +1652,21 @@ class TableCrossRowColMixing(tf.keras.layers.Layer):
 
         # Scatter col feats into rows arrangement
         col_feats_reshaped = gather_col_vals(
-            col_feats_orig_shape, row_gather, bos_pad=self.bos_var, eos_pad=self.eos_var, pad_val=1234
+            col_feats_orig_shape,
+            row_gather,
+            bos_pad=self.bos_var,
+            eos_pad=self.eos_var,
+            pad_val=1234,
         )["values"]
 
         # Scatter row feats into cols arrangement.
         row_feats_reshaped = gather_col_vals(
-            row_feats_orig_shape, col_gather, bos_pad=self.bos_var, eos_pad=self.eos_var, pad_val=1234
+            row_feats_orig_shape,
+            col_gather,
+            bos_pad=self.bos_var,
+            eos_pad=self.eos_var,
+            pad_val=1234,
         )["values"]
-
 
         return (
             self.adaptor_col(col_feats_reshaped) + row_feats,

@@ -1,40 +1,11 @@
-import copy
-import json
 import os
-import random
-import shutil
 import unittest
 import warnings
 
 import numpy as np
-import pandas as pd
-import spacy
-import tensorflow as tf
-from sklearn.metrics import accuracy_score, recall_score
-from sklearn.model_selection import train_test_split
 
-from finetune import (
-    Classifier,
-    Comparison,
-    ComparisonRegressor,
-    MultipleChoice,
-    SequenceLabeler,
-)
-from finetune.base_models import (
-    GPT,
-    BERTModelCased,
-    GPT2Model,
-    GPTModel,
-    RoBERTa,
-    TextCNN,
-)
 from finetune.config import get_config
-from finetune.datasets.reuters import Reuters
 from finetune.encoding.input_encoder import EncodedOutput, tokenize_context
-from finetune.util.metrics import (
-    sequence_labeling_token_precision,
-    sequence_labeling_token_recall,
-)
 
 # prevent excessive warning logs
 warnings.filterwarnings("ignore")

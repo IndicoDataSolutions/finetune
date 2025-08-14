@@ -17,6 +17,12 @@ import pandas as pd
 import requests
 from bs4 import BeautifulSoup as bs
 from bs4.element import Tag
+from sequence_metrics.metrics import (
+    sequence_labeling_overlap_precision,
+    sequence_labeling_overlap_recall,
+    sequence_labeling_token_precision,
+    sequence_labeling_token_recall,
+)
 from sklearn.metrics import recall_score
 from sklearn.model_selection import train_test_split
 
@@ -24,20 +30,14 @@ from finetune import Classifier, SequenceLabeler
 from finetune.base_models import (
     BERTModelCased,
     FastTextCNN,
+    ModernBert,
     RoBERTa,
     TCNModel,
     TextCNN,
-    ModernBert,
 )
 from finetune.datasets import generic_download
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
 from finetune.errors import FinetuneError
-from finetune.util.metrics import (
-    sequence_labeling_overlap_precision,
-    sequence_labeling_overlap_recall,
-    sequence_labeling_token_precision,
-    sequence_labeling_token_recall,
-)
 
 SST_FILENAME = "SST-binary.csv"
 
@@ -271,7 +271,6 @@ class TestClassifierTextCNN(TestModelBase):
 
     def test_featurize_sequence(self):
         _test_featurize_sequence(self, model_fn=Classifier)
-
 
 
 class TestSequenceLabelerTextCNN(TestModelBase):
