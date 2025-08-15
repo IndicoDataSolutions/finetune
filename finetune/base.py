@@ -11,6 +11,7 @@ import warnings
 import weakref
 from abc import ABCMeta, abstractmethod
 from copy import deepcopy
+from datetime import datetime
 from typing import Dict, List, Mapping, Tuple
 
 import joblib
@@ -72,8 +73,8 @@ class BaseModel(object, metaclass=ABCMeta):
         self._finalizer = weakref.finalize(
             self,
             lambda ws=weak_self: (
-                getattr(ws, "close", lambda: None)(),
-                getattr(ws, "_tmp_dir", None) and ws._tmp_dir.cleanup(),
+                # No reason to grab the variables here, we're just going to delete the model.
+                getattr(ws, "close", lambda *args, **kwargs: None)(update_saver=False),
             ),
         )
         self.config_overrides = deepcopy(self.defaults)
@@ -86,6 +87,7 @@ class BaseModel(object, metaclass=ABCMeta):
         self._initialize()
         if self.config.debugging_logs:
             os.environ["TF_CPP_MIN_LOG_LEVEL"] = "0"
+            LOGGER.setLevel(logging.DEBUG)
         self.check_gpu_for_fp16()
         self._model = None
 
@@ -153,21 +155,6 @@ class BaseModel(object, metaclass=ABCMeta):
         # Initializes the non-serialized bits of the class.
         self._set_random_seed(self.config.seed)
         self._model = None
-
-        try:
-            self.estimator_dir = os.path.abspath(
-                os.path.join(self.config.tensorboard_folder, str(int(time.time())))
-            )
-            pathlib.Path(self.estimator_dir).mkdir(parents=True, exist_ok=True)
-            self._tmp_dir = None
-        except (TypeError, IOError):
-            # TypeError --> tensorboard_folder is None
-            # IOError --> user likely does not have permission to write to the tensorboard_folder directory
-            # Both cases we can resolve by
-            self._tmp_dir = tempfile.TemporaryDirectory(prefix="Finetune")
-            self.estimator_dir = self._tmp_dir.name
-            LOGGER.info("Saving tensorboard output to {}".format(self.estimator_dir))
-
         self.saver = Saver(
             fallback_filename=self.config.base_model_path,
             save_dtype=self.config.save_dtype,
@@ -186,24 +173,16 @@ class BaseModel(object, metaclass=ABCMeta):
     def finetune(
         self,
         Xs,
-        Y=None,
+        Y,
         context=None,
         update_hook=None,
-        force_build_lm=False,
     ):
-        if callable(Xs):
-            datasets = self.input_pipeline.get_dataset_from_generator(
-                Xs, input_mode=InputMode.TRAIN, update_hook=update_hook
-            )
-        else:
-            zipped_data_list = self.input_pipeline.zip_list_to_dict(
-                X=Xs, Y=Y, context=context
-            )
-            datasets = self.input_pipeline.get_dataset_from_list(
-                zipped_data_list, input_mode=InputMode.TRAIN, update_hook=update_hook
-            )
-
-        force_build_lm = Y is None or force_build_lm
+        zipped_data_list = self.input_pipeline.zip_list_to_dict(
+            X=Xs, Y=Y, context=context
+        )
+        datasets = self.input_pipeline.get_dataset_from_list(
+            zipped_data_list, input_mode=InputMode.TRAIN, update_hook=update_hook
+        )
 
         steps_per_epoch = self._n_steps(
             n_examples=self.input_pipeline.dataset_size,
@@ -211,7 +190,6 @@ class BaseModel(object, metaclass=ABCMeta):
             n_gpus=1,
         )
         num_steps = steps_per_epoch * self.config.n_epochs
-        # TODO: figure out of vector L2 is necessary and create a subclass optimizer if it is.
         self.model.compile(
             optimizer=tf.keras.optimizers.get(
                 {
@@ -234,16 +212,28 @@ class BaseModel(object, metaclass=ABCMeta):
                     },
                 }
             ),
-            jit_compile=self.config.xla,  # TODO: look into why this is slow.
+            jit_compile=False,  # Handled manually via tf.function wrappers.
             run_eagerly=False,
             auto_scale_loss=True,
+            steps_per_execution=1,
         )
+        LOGGER.debug("Fitting model")
         # Because the dataset is already repeated n_epoch times, we need to pass steps_per_epoch to the fit method.
+        train_dataset = datasets["train_dataset"]
+        if tf.test.is_gpu_available():
+            train_dataset = train_dataset.apply(
+                tf.data.experimental.prefetch_to_device(
+                    device="/gpu:0", buffer_size=None
+                )
+            )
+        # logs = "logs/" + datetime.now().strftime("%Y%m%d-%H%M%S")
+        # tf.profiler.experimental.start(logs)
         self.model.fit(
-            datasets["train_dataset"],
+            train_dataset,
             epochs=self.config.n_epochs,
             steps_per_epoch=steps_per_epoch,
         )
+        # tf.profiler.experimental.stop()
         self._trained = True
 
     @property
@@ -259,7 +249,7 @@ class BaseModel(object, metaclass=ABCMeta):
             initial_dtype_policy = tf.keras.config.dtype_policy()
             dtype_policy = "float32"
             if self.config.float_16_predict or self.config.mixed_precision:
-                if self.config.version == "0.10.0":
+                if self.config.version.split(".")[0] == "0":
                     # Assumption is if we're loading old float16 models we're not going to further train them.
                     dtype_policy = "float16"
                 else:
@@ -270,10 +260,12 @@ class BaseModel(object, metaclass=ABCMeta):
             # Does a symbolic first pass to build the model and give us variables we can initialize.
             # Keras does not have a post-build hook option because it can be run in eager and shapes are calculated alongside the first
             # call. Therefore we need to pass either a real tensor or this symbolic tensor to get variables.
+            LOGGER.debug("Building model")
             self._model(self.input_pipeline.keras_input_def())
             self.saver.initialize_model(self._model)
             tf.keras.config.set_dtype_policy(initial_dtype_policy)
             keras_reset_uids()
+            LOGGER.debug("Model built")
         return self._model
 
     def _get_keras_model(self):
@@ -290,6 +282,8 @@ class BaseModel(object, metaclass=ABCMeta):
             target_dim=self.input_pipeline.target_dim,
             label_encoder=self.input_pipeline.label_encoder,
             config=self.config,
+            input_signature=self.input_pipeline.keras_input_signature(),
+            use_xla=self.config.xla,
         )
         return model
 
@@ -322,7 +316,6 @@ class BaseModel(object, metaclass=ABCMeta):
         update_hook=None,
         chunked_length=None,
     ) -> t.Union[List[Dict[str, np.ndarray]], t.Iterator[Dict[str, np.ndarray]]]:
-        # TODO: I assume context is handled by subclasses - verify this and make sure this is compatible with new pattern.
         def get_zipped_data():
             return iter(zipped_data)
 
@@ -336,7 +329,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         progress = ProgressBar(total=length, desc="Inference", update_hook=update_hook)
         for batch in input_fn:
-            preds = model(batch, training=False)
+            preds = model.finetune_predict(batch)
             pred_numpy = {k: v.numpy() for k, v in preds.items()}
             batch_size = batch["tokens"].shape[0]
             # Items without a batch dim we include in all pred batches. In practice this is limited to just transition params
@@ -647,6 +640,8 @@ class BaseModel(object, metaclass=ABCMeta):
                 **pred,  # Preds and probas
             }
 
-    def close(self):
+    def close(self, update_saver=True):
+        if update_saver and self._model:
+            self.saver.update_variables(self._model)
         del self._model
         self._model = None

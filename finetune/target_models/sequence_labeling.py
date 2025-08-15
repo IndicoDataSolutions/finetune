@@ -1,4 +1,5 @@
 import copy
+import logging
 import math
 import os
 from collections import Counter, defaultdict
@@ -14,6 +15,8 @@ from finetune.encoding.target_encoders import SequenceLabelingEncoder
 from finetune.input_pipeline import BasePipeline
 from finetune.nn.target_blocks import SequenceLabeler as SequenceLabelerBlock
 from finetune.util.memory import cleanup_sessions
+
+LOGGER = logging.getLogger("finetune")
 
 
 def sequences_overlap(seq1: dict, seq2: dict):
@@ -80,12 +83,8 @@ class SequencePipeline(BasePipeline):
             counter.update(decoded_targets)
         return counter
 
-    def feed_shape_type_def(self):
-        TS = tf.TensorShape
-        types = {"tokens": tf.int32}
-        shapes = {"tokens": TS([None])}
-        types, shapes = self._add_context_info_if_present(types, shapes)
-        return ((types, tf.float32), (shapes, TS([None])))
+    def target_def(self):
+        return (tf.int32, tf.TensorShape([None]))
 
     def _target_encoder(self):
         return SequenceLabelingEncoder(
@@ -254,7 +253,9 @@ class SequenceLabeler(BaseModel):
             model_copy.config.auto_negative_sampling = False
             # Cannot have anything that changes pred format here.
             model_copy.config.predict_chunk_markers = False
+            LOGGER.debug("Starting Auto Negative Sampling Initial Train")
             model_copy.finetune(Xs, Y=Y, context=context)
+            LOGGER.debug("Completed Auto Negative Sampling Initial Train")
             cleanup_sessions()
             initial_run_preds = []
 
@@ -273,11 +274,13 @@ class SequenceLabeler(BaseModel):
             else:
                 outer_batch_size = len(Xs)
 
-            with self.cached_predict():
-                for b_start in range(0, len(Xs), outer_batch_size):
-                    initial_run_preds += model_copy.predict(
-                        Xs[b_start : b_start + outer_batch_size]
-                    )
+            LOGGER.debug("Starting Auto Negative Sampling Prediction")
+            for b_start in range(0, len(Xs), outer_batch_size):
+                initial_run_preds += model_copy.predict(
+                    Xs[b_start : b_start + outer_batch_size]
+                )
+            LOGGER.debug("Completed Auto Negative Sampling Prediction")
+            model_copy.close(update_saver=False)
             del model_copy
             cleanup_sessions()
             # Tag negative predictions with <PAD> label and add to label set
@@ -304,6 +307,7 @@ class SequenceLabeler(BaseModel):
                 # data, which will only have a sample of true labels
                 # TODO Determine if we need something more sophisticated for chunking
                 self.config.max_empty_chunk_ratio = 0.0
+            LOGGER.debug("Starting Final Model train")
 
         return super().finetune(Xs, Y=Y, context=context, update_hook=update_hook)
 
@@ -477,7 +481,9 @@ class SequenceLabeler(BaseModel):
         doc_annotations = []
         raw_text = [data.get("raw_text", data["X"]) for data in zipped_data]
         for pred_bundle in predictions:
-            label_seq = self.input_pipeline.label_encoder.inverse_transform(pred_bundle["preds"])
+            label_seq = self.input_pipeline.label_encoder.inverse_transform(
+                pred_bundle["preds"]
+            )
             if pred_bundle["start_of_doc"]:
                 # if this is the first chunk in a document, start accumulating from scratch
                 doc_subseqs = []
@@ -489,8 +495,8 @@ class SequenceLabeler(BaseModel):
                 last_end = 0
                 doc_level_probas = []
                 chunk_spans = []
-    
-             # This is the index of the start and end of the focused section of the chunk relative to the chunk tokens
+
+            # This is the index of the start and end of the focused section of the chunk relative to the chunk tokens
             start = pred_bundle["useful_start"]
             end = pred_bundle["useful_end"]
             token_start_idx = pred_bundle["token_start_idx"]

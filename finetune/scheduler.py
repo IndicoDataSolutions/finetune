@@ -133,7 +133,7 @@ class Scheduler:
     def _close_oldest_model(self):
         if len(self.loaded_models):
             name = self.loaded_models.pop(0)
-            self.model_cache[name].close()
+            self.model_cache[name].close(update_saver=False)
             del self.model_cache[name]
             gc.collect()
         else:

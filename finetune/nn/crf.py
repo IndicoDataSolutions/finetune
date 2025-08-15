@@ -43,7 +43,6 @@ def viterbi_decode(score, transition_params):
 
 @tf.function
 def batch_viterbi_decode(logits, transition_matrix):
-    print("Logit type inside call", type(logits))
     batch_size = tf.shape(logits)[0]
 
     paths_ta = tf.TensorArray(tf.int32, size=batch_size)
@@ -60,7 +59,9 @@ def batch_viterbi_decode(logits, transition_matrix):
 def sequence_decode(logits, transition_matrix, use_crf):
     if not use_crf:
         return tf.argmax(input=logits, axis=-1), tf.nn.softmax(logits, -1)
-    return batch_viterbi_decode(logits, tf.convert_to_tensor(transition_matrix, dtype=logits.dtype))
+    return batch_viterbi_decode(
+        logits, tf.convert_to_tensor(transition_matrix, dtype=logits.dtype)
+    )
 
 
 # Everything below here is basically verbatim from tf_addons - If we find someone is maintaining this then we should use that instead

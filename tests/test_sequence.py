@@ -128,9 +128,6 @@ class TestSequenceLabeler(unittest.TestCase):
         for pred, pred_with_prob in zip(predictions, with_doc_probas):
             self.assertEqual(pred, pred_with_prob["prediction"])
             self.assertIsInstance(pred_with_prob["negative_confidence"], dict)
-        import pdb
-
-        pdb.set_trace()
 
         self.assertIsInstance(probas, list)
         self.assertIsInstance(probas[0], list)
@@ -296,7 +293,10 @@ class TestSequenceLabeler(unittest.TestCase):
             texts, annotations, test_size=0.1, random_state=42
         )
         ans_model = SequenceLabeler(
-            max_length=5, chunk_context=0, auto_negative_sampling=True, n_epochs=1
+            max_length=5,
+            chunk_context=0,
+            auto_negative_sampling=True,
+            n_epochs=1,
         )
         ans_model.fit(train_texts, train_annotations)
         ans_predictions = ans_model.predict(test_texts)

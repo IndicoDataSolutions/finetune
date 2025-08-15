@@ -10,7 +10,6 @@ from collections.abc import Iterable
 import numpy as np
 import tensorflow as tf
 from sklearn.utils import shuffle as dataset_shuffle
-from tensorflow.python.data import Dataset
 
 from finetune.encoding.input_encoder import EncodedOutput, tokenize_context
 from finetune.errors import FinetuneError
@@ -73,19 +72,47 @@ class BasePipeline(metaclass=ABCMeta):
             shapes["context"] = TS([None, self.config.context_dim])
         return types, shapes
 
-    def feed_shape_type_def(self):
+    def target_def(self):
+        return (tf.int32, tf.TensorShape([self.target_dim]))
+
+    def input_spec(self, include_lengths=True, batched=True, include_targets=True):
         TS = tf.TensorShape
         types = {"tokens": tf.int32}
         shapes = {"tokens": TS([None])}
+        if include_lengths:
+            types["length"] = tf.int32
+            shapes["length"] = TS([])
         types, shapes = self._add_context_info_if_present(types, shapes)
-        return ((types, tf.float32), (shapes, TS([self.target_dim])))
+        target_type, target_shape = self.target_def()
+        if batched:
+            output = (
+                (types, target_type),
+                tf.nest.map_structure(
+                    lambda ts: tf.TensorShape([None, *ts.as_list()]),
+                    (shapes, target_shape),
+                ),
+            )
+        else:
+            output = ((types, target_type), (shapes, target_shape))
+        if not include_targets:
+            (types, _), (shapes, _) = output
+            output = (types, shapes)
+        return output
 
-    def keras_input_def(self):
-        types, shapes = self.feed_shape_type_def()
-        input_types = {**types[0], "length": tf.int32}
-        input_shapes = {**shapes[0], "length": tf.TensorShape([])}
+    def keras_input_def(self, include_targets=False):
+        input_types, input_shapes = self.input_spec(
+            include_targets=include_targets, batched=False
+        )
         return tf.nest.map_structure(
             lambda dtype, shape: tf.keras.Input(shape=shape, dtype=dtype),
+            input_types,
+            input_shapes,
+        )
+
+    def keras_input_signature(self):
+        input_types, input_shapes = self.input_spec()
+        return tf.nest.map_structure(
+            lambda dtype, shape: tf.TensorSpec(shape=shape, dtype=dtype),
             input_types,
             input_shapes,
         )
@@ -121,6 +148,7 @@ class BasePipeline(metaclass=ABCMeta):
             else:
                 tokenized_context = tokenize_context(context, out, self.config)
                 feats = {"tokens": out.token_ids, "context": tokenized_context}
+            LOGGER.debug("Outputting tokenized sequence")
             if Y is None:
                 yield feats
             else:
@@ -156,7 +184,7 @@ class BasePipeline(metaclass=ABCMeta):
         )
 
     def make_dataset_fn(self, data_fn, tqdm_mode, shapes, types, update_hook=None):
-        return Dataset.from_generator(
+        return tf.data.Dataset.from_generator(
             wrap_tqdm(
                 gen=data_fn,
                 mode=tqdm_mode,
@@ -176,20 +204,19 @@ class BasePipeline(metaclass=ABCMeta):
         )
 
     def get_dataset_from_generator(self, generator_fn, input_mode, update_hook=None):
+        if input_mode != InputMode.PREDICT:
+            raise ValueError(
+                "From generator does not support training. Use get_dataset_from_list"
+            )
+
         def chunked_and_tokenized_dataset():
             for d in generator_fn():
                 yield from self.text_to_tokens_mask(**d)
 
-        types, shapes = self.feed_shape_type_def()
-
-        if input_mode == InputMode.PREDICT:
-            tqdm_mode = "predict"
-        else:
-            tqdm_mode = "train"
-
-        if input_mode == InputMode.PREDICT or not has_targets(generator_fn):
-            types = types[0]
-            shapes = shapes[0]
+        types, shapes = self.input_spec(
+            include_lengths=False, batched=False, include_targets=False
+        )
+        tqdm_mode = "predict"
 
         raw_dataset = self.make_dataset_fn(
             data_fn=chunked_and_tokenized_dataset,
@@ -198,51 +225,21 @@ class BasePipeline(metaclass=ABCMeta):
             types=types,
             shapes=shapes,
         )
-        if input_mode == InputMode.PREDICT:
-            return {
-                "predict_dataset": batch_dataset(
-                    raw_dataset,
-                    batch_size=self.config.predict_batch_size,
-                    max_length=self.config.max_length,
-                    table_batching=False,  # We cannot use table batching here because the order of the outputs is impacted.
-                    shapes=shapes,
-                )
-            }
-
-        if self.config.chunk_long_sequences:
-            LOGGER.warning(
-                "The dataset size is not adjusted for chunk long sequences when training from a generator"
-            )
-
-        if self.config.dataset_size is None:
-            raise FinetuneError(
-                "If you are using a callable as input you must provide config.dataset_size"
-            )
-
-        if self.config.class_weights is not None:
-            raise FinetuneError("Cannot use class weights in generator mode")
-
-        train_dataset = raw_dataset.shuffle(
-            self.config.shuffle_buffer_size,
-            seed=self.config.seed,
-            reshuffle_each_iteration=False,
-        )
-
         return {
-            "train_dataset": batch_dataset(
-                train_dataset,
-                batch_size=self.config.batch_size,
+            "predict_dataset": batch_dataset(
+                raw_dataset,
+                batch_size=self.config.predict_batch_size,
                 max_length=self.config.max_length,
+                table_batching=False,  # We cannot use table batching here because the order of the outputs is impacted.
                 shapes=shapes,
-                n_epochs=self.config.n_epochs,
-                shuffle=self.config.reshuffle_chunks,
-                table_batching=self.config.table_batching,
-                random_seed=self.config.seed,
-            ),
+            )
         }
 
     def get_dataset_from_list(self, data_list, input_mode, update_hook=None):
-        assert input_mode == InputMode.TRAIN, "use the generator path for prediction"
+        if input_mode != InputMode.TRAIN:
+            raise ValueError(
+                "From list does not support prediction. Use get_dataset_from_generator"
+            )
 
         data_list = list(data_list)
         self._post_data_initialization(data_list)
@@ -263,7 +260,7 @@ class BasePipeline(metaclass=ABCMeta):
                 class_weights=self.config.class_weights, class_counts=class_counts
             )
 
-        types, shapes = self.feed_shape_type_def()
+        types, shapes = self.input_spec(include_lengths=False, batched=False)
         if not has_targets(lambda: tokenized_train_split):
             types = types[0]
             shapes = shapes[0]
@@ -361,6 +358,7 @@ class BasePipeline(metaclass=ABCMeta):
                             if fv[-1] != end_token:
                                 fv = np.concatenate((fv, [end_token]))
                         d[field] = fv
+                LOGGER.debug("Yielding tokenized sequence")
                 yield EncodedOutput(
                     useful_start=useful_start, useful_end=useful_end, input_text=Xs, **d
                 )

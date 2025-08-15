@@ -20,7 +20,6 @@ def add_length(x, y=None):
     return x
 
 
-# TODO: we no longer need the dataset as a function, we can simplify this considerably.
 def batch_dataset(
     dataset: tf.data.Dataset,
     batch_size: int,
@@ -68,7 +67,7 @@ def batch_dataset(
                 )
             )
             .repeat(n_epochs)
-            .prefetch(tf.data.experimental.AUTOTUNE)
+            .prefetch(tf.data.AUTOTUNE)
         )
 
     else:
@@ -77,7 +76,7 @@ def batch_dataset(
             .shuffle(500 if shuffle else 1, seed=random_seed)
             .padded_batch(batch_size, padded_shapes=shapes, drop_remainder=False)
             .repeat(n_epochs)
-            .prefetch(tf.data.experimental.AUTOTUNE)
+            .prefetch(tf.data.AUTOTUNE)
         )
 
 

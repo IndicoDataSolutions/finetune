@@ -1,4 +1,5 @@
 import logging
+import time
 
 import tensorflow as tf
 
@@ -17,6 +18,8 @@ def get_keras_model(
     target_dim: int,
     label_encoder: BaseTargetEncoder,
     config: Settings,
+    input_signature: tuple[dict[str, tf.TensorSpec], tf.TensorSpec],
+    use_xla: bool,
     **model_kwargs
 ):
     class FinetuneModel(tf.keras.Model):
@@ -31,6 +34,7 @@ def get_keras_model(
                 self.target_block = None
 
         def call(self, data, **kwargs):
+            LOGGER.debug("Tracing Model Function")
             features: dict[str, tf.Tensor] = self.featurizer(
                 tokens=data["tokens"],
                 context=data.get("context", None),
@@ -50,6 +54,7 @@ def get_keras_model(
             }
             # Certain keras calls assert that there is no None output.
             # We will just need to assume downstream that any missing values were None
+            LOGGER.debug("Model function completed")
             return {k: v for k, v in output.items() if v is not None}
 
         def build(self, input_shape):
@@ -67,18 +72,53 @@ def get_keras_model(
                 layer_output=y_pred, targets=y, class_weights=weighted_tensor
             )
 
+        @tf.function(
+            input_signature=[input_signature[0]], autograph=False, jit_compile=use_xla
+        )
+        def finetune_predict(self, data):
+            return self.call(data, training=False)
+
+        def fit(self, *args, **kwargs):
+            # Build this explicitly outside the tf.function so that we don't need to re-trace.
+            self.optimizer.build(self.trainable_variables)
+            return super().fit(*args, **kwargs)
+
+        @tf.function(
+            input_signature=[input_signature], autograph=False, jit_compile=use_xla
+        )
         def train_step(self, data):
+            tic = time.time()
+            LOGGER.debug("Tracing train step")
             x, y = data
             with tf.GradientTape() as tape:
                 y_pred = self(x, training=True)
+                compute_loss_tic = time.time()
                 loss = self.compute_loss(y=y, y_pred=y_pred)
+                LOGGER.debug(
+                    "Compute loss trace completed in %s seconds",
+                    time.time() - compute_loss_tic,
+                )
             # Compute gradients
             trainable_vars = self.trainable_variables
+            scale_loss_tic = time.time()
             # This is automatically stubbed out for default optimizers without scaling.
             loss = self.optimizer.scale_loss(loss)
+            LOGGER.debug(
+                "Scale loss trace completed in %s seconds", time.time() - scale_loss_tic
+            )
+            gradients_tic = time.time()
             gradients = tape.gradient(loss, trainable_vars)
+            LOGGER.debug(
+                "Gradient trace completed in %s seconds", time.time() - gradients_tic
+            )
+            apply_gradients_tic = time.time()
             # Update weights
             self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+            LOGGER.debug(
+                "Apply gradients trace completed in %s seconds",
+                time.time() - apply_gradients_tic,
+            )
+            LOGGER.debug("Train step trace completed in %s seconds", time.time() - tic)
             return {"loss": loss}
 
     return FinetuneModel(**model_kwargs)

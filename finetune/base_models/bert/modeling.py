@@ -15,7 +15,7 @@
 """The main BERT model and related functions."""
 
 import copy
-import functools
+import logging
 import math
 
 import numpy as np
@@ -33,6 +33,8 @@ from finetune.nn.activations import bert_gelu as gelu
 from finetune.nn.activations import hf_gelu
 from finetune.nn.auxiliary import embed_position
 from finetune.nn.nn_utils import ExtraScope, saver_ignore_scope
+
+LOGGER = logging.getLogger("finetune")
 
 
 class Embedding(tf.keras.layers.Layer):
@@ -909,6 +911,7 @@ class FullBlock(tf.keras.layers.Layer):
         )
 
     def call(self, layer_input, batch_size, seq_length, attention_mask=None):
+        LOGGER.debug("Tracing block")
         attention_output = self.attention(
             layer_input=layer_input,
             batch_size=batch_size,

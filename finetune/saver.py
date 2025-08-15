@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 import joblib
@@ -91,8 +92,15 @@ class Saver:
             self.tpe.shutdown()
         return self.fallback_
 
-    def save_model(self, model: tf.keras.Model, finetune_obj, path):
+    def get_variables_as_numpy(self, model: tf.keras.Model):
         variables = get_fully_qualified_variable_paths(model)
+        return {k: v.numpy() for k, v in variables.items()}
+
+    def update_variables(self, model: tf.keras.Model):
+        self.variables = self.get_variables_as_numpy(model)
+
+    def save_model(self, model: tf.keras.Model, finetune_obj, path):
+        variables = self.get_variables_as_numpy(model)
         if isinstance(path, str):
             folder = os.path.dirname(path)
             os.makedirs(folder, exist_ok=True)
@@ -115,9 +123,7 @@ class Saver:
             variables_sv = self.variables
         else:
             variables_sv = dict()
-        print("Saved Model vars", variables_sv.keys())
         all_vars = get_fully_qualified_variable_paths(model)
-        print("Model variables", all_vars.keys())
         for var_name in all_vars.keys():
             saved_var = None
             if var_name in variables_sv.keys():
@@ -134,7 +140,7 @@ class Saver:
                     # If we are loading from a saved model we have a hard assertion that every single
                     # model variable must be loaded.
                     raise ValueError(f"Variable {var_name} not found in saved model")
-                print(f"Using default initializer for variable: {var_name}")
+                LOGGER.info(f"Using default initializer for variable: {var_name}")
                 if var_name.startswith("model/featurizer"):
                     permitted = self.permit_uninitialized is not None and re.findall(
                         self.permit_uninitialized, var_name
@@ -145,8 +151,10 @@ class Saver:
                         )
         for var_name in {**self.fallback, **variables_sv}.keys():
             if var_name not in all_vars and var_name.startswith("model"):
-                print(
+                LOGGER.info(
                     f"Variable {var_name} in the saved file but not in the current model"
                 )
-        print(f"loading {len(transformed_weights)} variables")
+        LOGGER.info(f"loading {len(transformed_weights)} variables")
+        tic = time.time()
         set_weights(model, transformed_weights, all_vars)
+        LOGGER.info(f"Finished loading variables in {time.time() - tic} seconds")
