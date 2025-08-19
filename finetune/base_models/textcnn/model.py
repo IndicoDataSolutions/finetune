@@ -47,6 +47,26 @@ class TextCNNModel(SourceModel):
         for filename in ["encoder.json", "vocab.bpe", "model-sm.jl"]
     ]
 
+fast_model_files = [
+    {
+        "file": os.path.join(
+            FINETUNE_BASE_FOLDER, "model", "bert", "roberta-model-sm-v2.jl"
+        ),
+        "url": urljoin(ROBERTA_BASE_URL, "roberta-model-sm-v2.jl"),
+    },
+    {
+        "file": os.path.join(
+            FINETUNE_BASE_FOLDER, "model", "bert", "roberta_vocab.bpe"
+        ),
+        "url": urljoin(ROBERTA_BASE_URL, "roberta_vocab.bpe"),
+    },
+    {
+        "file": os.path.join(
+            FINETUNE_BASE_FOLDER, "model", "bert", "roberta_encoder.json"
+        ),
+        "url": urljoin(ROBERTA_BASE_URL, "roberta_encoder.json"),
+    },
+]
 
 class FastTextCNNModel(SourceModel):
     """Uses RobertaEncoderV2 encoder for fast tokenization"""
@@ -58,27 +78,15 @@ class FastTextCNNModel(SourceModel):
         **TEXTCNN_BASE_PARAMS,
         "base_model_path": os.path.join("bert", "roberta-model-sm-v2.jl"),
     }
-    required_files = [
-        {
-            "file": os.path.join(
-                FINETUNE_BASE_FOLDER, "model", "bert", "roberta-model-sm-v2.jl"
-            ),
-            "url": urljoin(ROBERTA_BASE_URL, "roberta-model-sm-v2.jl"),
-        },
-        {
-            "file": os.path.join(FINETUNE_BASE_FOLDER, "model", "bert", "dict.txt"),
-            "url": urljoin(ROBERTA_BASE_URL, "dict.txt"),
-        },
-        {
-            "file": os.path.join(
-                FINETUNE_BASE_FOLDER, "model", "bert", "roberta_vocab.bpe"
-            ),
-            "url": urljoin(ROBERTA_BASE_URL, "roberta_vocab.bpe"),
-        },
-        {
-            "file": os.path.join(
-                FINETUNE_BASE_FOLDER, "model", "bert", "roberta_encoder.json"
-            ),
-            "url": urljoin(ROBERTA_BASE_URL, "roberta_encoder.json"),
-        },
-    ]
+    required_files = fast_model_files
+
+class FastTestingModel(SourceModel):
+    is_bidirectional = True
+    encoder = RoBERTaEncoderV2
+    featurizer = TextCNNFeaturizer
+    settings = {
+        **TEXTCNN_BASE_PARAMS,
+        "max_length": 512,
+        "base_model_path": os.path.join("bert", "roberta-model-sm-v2.jl"),
+    }
+    required_files = fast_model_files

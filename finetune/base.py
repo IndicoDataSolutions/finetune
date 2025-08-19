@@ -362,8 +362,9 @@ class BaseModel(object, metaclass=ABCMeta):
         """An alias for finetune."""
         return self.finetune(*args, **kwargs)
 
+    @abstractmethod
     def _predict(self, zipped_data, **kwargs):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def predict(self, Xs, context=None, **kwargs):
         zipped_data = self.input_pipeline.zip_list_to_dict(X=Xs, context=context)
@@ -378,6 +379,7 @@ class BaseModel(object, metaclass=ABCMeta):
 
         return outputs
 
+    @abstractmethod
     def _predict_proba(self, zipped_data, **kwargs):
         """
         Produce raw numeric outputs for proba predictions

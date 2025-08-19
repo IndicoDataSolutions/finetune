@@ -71,7 +71,7 @@ from finetune.base_models.gpt2.model import (
 from finetune.base_models.gpt.model import GPTModel, GPTModelSmall
 from finetune.base_models.modern_bert.model import ModernBertLargeModel, ModernBertModel
 from finetune.base_models.tcn.model import TCNModel
-from finetune.base_models.textcnn.model import FastTextCNNModel, TextCNNModel
+from finetune.base_models.textcnn.model import FastTextCNNModel, FastTestingModel, TextCNNModel
 
 # Aliases
 GPT = GPTModel
@@ -89,3 +89,4 @@ DistilROBERTA = DistilRoBERTa
 TCN = TCNModel
 ModernBert = ModernBertModel
 ModernBertLarge = ModernBertLargeModel
+TestingModel = FastTestingModel
