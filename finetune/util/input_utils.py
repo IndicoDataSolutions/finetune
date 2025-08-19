@@ -20,6 +20,34 @@ def add_length(x, y=None):
     return x
 
 
+def expand_one(sequence, pad_to_mul=16):
+    x = tf.convert_to_tensor(sequence)
+    rank = tf.rank(x)
+
+    shape_vec = tf.shape(x, out_type=tf.int32)
+    first_dim = tf.reduce_sum(shape_vec[:1])
+
+    pad_first = (pad_to_mul - tf.math.floormod(first_dim, pad_to_mul)) % pad_to_mul
+
+    head = tf.cond(
+        rank > 0,
+        lambda: tf.reshape(tf.stack([0, pad_first]), [1, 2]),
+        lambda: tf.zeros([0, 2], tf.int32),
+    )
+    tail = tf.zeros(tf.stack([tf.maximum(rank - 1, 0), 2]), dtype=tf.int32)
+    paddings = tf.concat([head, tail], axis=0)
+
+    return tf.pad(x, paddings)
+
+
+def expand_seq_to_multiple_of_16(x, y=None):
+    x = tf.nest.map_structure(expand_one, x)
+    if y is None:
+        return x
+    y = tf.nest.map_structure(expand_one, y)
+    return x, y
+
+
 def batch_dataset(
     dataset: tf.data.Dataset,
     batch_size: int,
@@ -30,6 +58,7 @@ def batch_dataset(
     shuffle: bool = False,
     table_batching: bool = False,
     random_seed: int = 42,
+    drop_remainder: bool = False,
 ):
     if isinstance(shapes, tuple):
         shapes = ({**shapes[0], "length": tf.TensorShape([])}, shapes[1])
@@ -63,7 +92,7 @@ def batch_dataset(
                     bucket_boundaries=[max_length],
                     bucket_batch_sizes=[batch_size, 1],
                     padded_shapes=shapes,
-                    drop_remainder=False,
+                    drop_remainder=drop_remainder,
                 )
             )
             .repeat(n_epochs)
@@ -73,9 +102,12 @@ def batch_dataset(
     else:
         return (
             dataset.map(add_length)
+            #            .map(expand_seq_to_multiple_of_16)
             .shuffle(500 if shuffle else 1, seed=random_seed)
-            .padded_batch(batch_size, padded_shapes=shapes, drop_remainder=False)
             .repeat(n_epochs)
+            .padded_batch(
+                batch_size, padded_shapes=shapes, drop_remainder=drop_remainder
+            )
             .prefetch(tf.data.AUTOTUNE)
         )
 

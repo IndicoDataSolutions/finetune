@@ -7,16 +7,18 @@ from pathlib import Path
 
 import pandas as pd
 import requests
+import tensorflow as tf
 from bs4 import BeautifulSoup as bs
 from bs4.element import Tag
+from sequence_metrics.metrics import annotation_report
 from sklearn.model_selection import train_test_split
 
 from finetune import SequenceLabeler
-from finetune.base_models import GPT, GPT2, TCN, RoBERTa
-from finetune.base_models.huggingface.models import HFDebertaV3Base
+from finetune.base_models import GPT
 from finetune.datasets import Dataset
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
-from finetune.util.metrics import annotation_report, sequence_labeling_token_confusion
+
+# tf.debugging.set_log_device_placement(True)
 
 XML_PATH = os.path.join("Data", "Sequence", "reuters.xml")
 DATA_PATH = os.path.join("Data", "Sequence", "reuters.json")
@@ -83,18 +85,8 @@ if __name__ == "__main__":
     trainX, testX, trainY, testY = train_test_split(
         dataset.texts.values, dataset.annotations.values, test_size=0.2, random_state=42
     )
-    model = SequenceLabeler(
-        batch_size=1,
-        n_epochs=3,
-        val_size=0.0,
-        max_length=512,
-        chunk_long_sequences=True,
-        subtoken_predictions=False,
-        crf_sequence_labeling=True,
-        multi_label_sequences=False,
-    )
+    model = SequenceLabeler()
     model.fit(trainX, trainY)
     predictions = model.predict(testX)
     print(predictions)
-    print(annotation_report(testY, predictions))
-    sequence_labeling_token_confusion(testX, testY, predictions)
+#    print(annotation_report(testY, predictions))

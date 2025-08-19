@@ -65,6 +65,7 @@ def sequence_decode(logits, transition_matrix, use_crf):
 
 
 # Everything below here is basically verbatim from tf_addons - If we find someone is maintaining this then we should use that instead
+# We have removed the single item branches to so that XLA is able to optimize these.
 def crf_log_likelihood(
     inputs: tf.Tensor,
     tag_indices: tf.Tensor,
@@ -85,7 +86,6 @@ def crf_log_likelihood(
       log_likelihood: A [batch_size] `Tensor` containing the log-likelihood of
         each example, given the sequence of tag indices.
     """
-    inputs = tf.convert_to_tensor(inputs)
     # cast type to handle different types
     tag_indices = tf.cast(tag_indices, dtype=tf.int32)
     sequence_lengths = tf.cast(sequence_lengths, dtype=tf.int32)
@@ -94,6 +94,7 @@ def crf_log_likelihood(
     sequence_scores = crf_sequence_score(
         inputs, tag_indices, sequence_lengths, transition_params
     )
+
     log_norm = crf_log_norm(inputs, sequence_lengths, transition_params)
 
     # Normalize the scores to get the log-likelihood per example.
@@ -121,37 +122,11 @@ def crf_sequence_score(
     """
     tag_indices = tf.cast(tag_indices, dtype=tf.int32)
     sequence_lengths = tf.cast(sequence_lengths, dtype=tf.int32)
-
-    # If max_seq_len is 1, we skip the score calculation and simply gather the
-    # unary potentials of the single tag.
-    def _single_seq_fn():
-        batch_size = tf.shape(inputs, out_type=tf.int32)[0]
-        batch_inds = tf.reshape(tf.range(batch_size), [-1, 1])
-        indices = tf.concat([batch_inds, tf.zeros_like(batch_inds)], axis=1)
-
-        tag_inds = tf.gather_nd(tag_indices, indices)
-        tag_inds = tf.reshape(tag_inds, [-1, 1])
-        indices = tf.concat([indices, tag_inds], axis=1)
-
-        sequence_scores = tf.gather_nd(inputs, indices)
-
-        sequence_scores = tf.where(
-            tf.less_equal(sequence_lengths, 0),
-            tf.zeros_like(sequence_scores),
-            sequence_scores,
-        )
-        return sequence_scores
-
-    def _multi_seq_fn():
-        # Compute the scores of the given tag sequence.
-        unary_scores = crf_unary_score(tag_indices, sequence_lengths, inputs)
-        binary_scores = crf_binary_score(
-            tag_indices, sequence_lengths, transition_params
-        )
-        sequence_scores = unary_scores + binary_scores
-        return sequence_scores
-
-    return tf.cond(tf.equal(tf.shape(inputs)[1], 1), _single_seq_fn, _multi_seq_fn)
+    # Compute the scores of the given tag sequence.
+    unary_scores = crf_unary_score(tag_indices, sequence_lengths, inputs)
+    binary_scores = crf_binary_score(tag_indices, sequence_lengths, transition_params)
+    sequence_scores = unary_scores + binary_scores
+    return sequence_scores
 
 
 def crf_log_norm(
@@ -172,34 +147,19 @@ def crf_log_norm(
     # algorithm.
     first_input = tf.slice(inputs, [0, 0, 0], [-1, 1, -1])
     first_input = tf.squeeze(first_input, [1])
+    rest_of_input = tf.slice(inputs, [0, 1, 0], [-1, -1, -1])
+    # Compute the alpha values in the forward algorithm in order to get the
+    # partition function.
 
-    # If max_seq_len is 1, we skip the algorithm and simply reduce_logsumexp
-    # over the "initial state" (the unary potentials).
-    def _single_seq_fn():
-        log_norm = tf.reduce_logsumexp(first_input, [1])
-        # Mask `log_norm` of the sequences with length <= zero.
-        log_norm = tf.where(
-            tf.less_equal(sequence_lengths, 0), tf.zeros_like(log_norm), log_norm
-        )
-        return log_norm
-
-    def _multi_seq_fn():
-        """Forward computation of alpha values."""
-        rest_of_input = tf.slice(inputs, [0, 1, 0], [-1, -1, -1])
-        # Compute the alpha values in the forward algorithm in order to get the
-        # partition function.
-
-        alphas = crf_forward(
-            rest_of_input, first_input, transition_params, sequence_lengths
-        )
-        log_norm = tf.reduce_logsumexp(alphas, [1])
-        # Mask `log_norm` of the sequences with length <= zero.
-        log_norm = tf.where(
-            tf.less_equal(sequence_lengths, 0), tf.zeros_like(log_norm), log_norm
-        )
-        return log_norm
-
-    return tf.cond(tf.equal(tf.shape(inputs)[1], 1), _single_seq_fn, _multi_seq_fn)
+    alphas = crf_forward(
+        rest_of_input, first_input, transition_params, sequence_lengths
+    )
+    log_norm = tf.reduce_logsumexp(alphas, [1])
+    # Mask `log_norm` of the sequences with length <= zero.
+    log_norm = tf.where(
+        tf.less_equal(sequence_lengths, 0), tf.zeros_like(log_norm), log_norm
+    )
+    return log_norm
 
 
 def crf_unary_score(

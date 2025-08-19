@@ -83,8 +83,11 @@ class SequencePipeline(BasePipeline):
             counter.update(decoded_targets)
         return counter
 
-    def target_def(self):
-        return (tf.int32, tf.TensorShape([None]))
+    def target_def(self, *, concrete_dims):
+        return (
+            tf.int32,
+            tf.TensorShape([self.config.max_length if concrete_dims else None]),
+        )
 
     def _target_encoder(self):
         return SequenceLabelingEncoder(

@@ -18,7 +18,8 @@ def get_keras_model(
     target_dim: int,
     label_encoder: BaseTargetEncoder,
     config: Settings,
-    input_signature: tuple[dict[str, tf.TensorSpec], tf.TensorSpec],
+    train_input_signature: tuple[dict[str, tf.TensorSpec], tf.TensorSpec],
+    predict_input_signature: dict[str, tf.TensorSpec],
     use_xla: bool,
     **model_kwargs
 ):
@@ -44,7 +45,7 @@ def get_keras_model(
             # Unpack to include things like lengths
             if self.target_block is not None:
                 target_output: dict[str, tf.Tensor] = self.target_block(
-                    {**features, **data}
+                    {**features, "length": data["length"]}  # , **data}
                 )
             else:
                 target_output = {}
@@ -73,7 +74,9 @@ def get_keras_model(
             )
 
         @tf.function(
-            input_signature=[input_signature[0]], autograph=False, jit_compile=use_xla
+            input_signature=[predict_input_signature],
+            autograph=False,
+            jit_compile=use_xla,
         )
         def finetune_predict(self, data):
             return self.call(data, training=False)
@@ -83,9 +86,7 @@ def get_keras_model(
             self.optimizer.build(self.trainable_variables)
             return super().fit(*args, **kwargs)
 
-        @tf.function(
-            input_signature=[input_signature], autograph=False, jit_compile=use_xla
-        )
+        @tf.function(input_signature=[train_input_signature], autograph=False)
         def train_step(self, data):
             tic = time.time()
             LOGGER.debug("Tracing train step")

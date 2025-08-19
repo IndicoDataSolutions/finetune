@@ -69,26 +69,33 @@ class BasePipeline(metaclass=ABCMeta):
         if self.config.use_auxiliary_info:
             TS = tf.TensorShape
             types["context"] = tf.float32
-            shapes["context"] = TS([None, self.config.context_dim])
+            shapes["context"] = TS([self.config.batch_size, self.config.context_dim])
         return types, shapes
 
-    def target_def(self):
+    def target_def(self, concrete_dims):
         return (tf.int32, tf.TensorShape([self.target_dim]))
 
-    def input_spec(self, include_lengths=True, batched=True, include_targets=True):
+    def input_spec(
+        self, *, concrete_dims, include_lengths=True, batched=True, include_targets=True
+    ):
         TS = tf.TensorShape
         types = {"tokens": tf.int32}
-        shapes = {"tokens": TS([None])}
+        shapes = {"tokens": TS([self.config.max_length if concrete_dims else None])}
         if include_lengths:
             types["length"] = tf.int32
             shapes["length"] = TS([])
         types, shapes = self._add_context_info_if_present(types, shapes)
-        target_type, target_shape = self.target_def()
+        target_type, target_shape = self.target_def(concrete_dims=concrete_dims)
         if batched:
             output = (
                 (types, target_type),
                 tf.nest.map_structure(
-                    lambda ts: tf.TensorShape([None, *ts.as_list()]),
+                    lambda ts: tf.TensorShape(
+                        [
+                            self.config.batch_size if concrete_dims else None,
+                            *ts.as_list(),
+                        ]
+                    ),
                     (shapes, target_shape),
                 ),
             )
@@ -99,9 +106,9 @@ class BasePipeline(metaclass=ABCMeta):
             output = (types, shapes)
         return output
 
-    def keras_input_def(self, include_targets=False):
+    def keras_input_def(self, *, concrete_dims, include_targets=False):
         input_types, input_shapes = self.input_spec(
-            include_targets=include_targets, batched=False
+            concrete_dims=concrete_dims, include_targets=include_targets, batched=False
         )
         return tf.nest.map_structure(
             lambda dtype, shape: tf.keras.Input(shape=shape, dtype=dtype),
@@ -109,8 +116,10 @@ class BasePipeline(metaclass=ABCMeta):
             input_shapes,
         )
 
-    def keras_input_signature(self):
-        input_types, input_shapes = self.input_spec()
+    def keras_input_signature(self, *, concrete_dims, include_targets):
+        input_types, input_shapes = self.input_spec(
+            concrete_dims=concrete_dims, include_targets=include_targets
+        )
         return tf.nest.map_structure(
             lambda dtype, shape: tf.TensorSpec(shape=shape, dtype=dtype),
             input_types,
@@ -204,6 +213,7 @@ class BasePipeline(metaclass=ABCMeta):
         )
 
     def get_dataset_from_generator(self, generator_fn, input_mode, update_hook=None):
+        # Get from generator assumes no XLA, uses dynamic padding and batching etc.
         if input_mode != InputMode.PREDICT:
             raise ValueError(
                 "From generator does not support training. Use get_dataset_from_list"
@@ -214,7 +224,10 @@ class BasePipeline(metaclass=ABCMeta):
                 yield from self.text_to_tokens_mask(**d)
 
         types, shapes = self.input_spec(
-            include_lengths=False, batched=False, include_targets=False
+            concrete_dims=False,
+            include_lengths=False,
+            batched=False,
+            include_targets=False,
         )
         tqdm_mode = "predict"
 
@@ -232,10 +245,13 @@ class BasePipeline(metaclass=ABCMeta):
                 max_length=self.config.max_length,
                 table_batching=False,  # We cannot use table batching here because the order of the outputs is impacted.
                 shapes=shapes,
+                drop_remainder=False,
             )
         }
 
     def get_dataset_from_list(self, data_list, input_mode, update_hook=None):
+        # From list assumes we will be compiling with XLA, we used fixed batch_size batches and max_length sequences.
+        # We also drop up to batch_size - 1 items from the final batch of the final epoch. if that is necessary to maintain even batch sizes.
         if input_mode != InputMode.TRAIN:
             raise ValueError(
                 "From list does not support prediction. Use get_dataset_from_generator"
@@ -260,10 +276,12 @@ class BasePipeline(metaclass=ABCMeta):
                 class_weights=self.config.class_weights, class_counts=class_counts
             )
 
-        types, shapes = self.input_spec(include_lengths=False, batched=False)
-        if not has_targets(lambda: tokenized_train_split):
-            types = types[0]
-            shapes = shapes[0]
+        types, shapes = self.input_spec(
+            concrete_dims=False, include_lengths=False, batched=False
+        )
+        _, concrete_shapes = self.input_spec(
+            concrete_dims=True, include_lengths=False, batched=False
+        )
 
         if self.config.min_steps is not None:
             self.config.n_epochs = max(
@@ -278,18 +296,19 @@ class BasePipeline(metaclass=ABCMeta):
             types=types,
             shapes=shapes,
         )
-
+        batched_train_dataset = batch_dataset(
+            train_dataset_unbatched,
+            batch_size=self.config.batch_size,
+            max_length=self.config.max_length,
+            shapes=concrete_shapes,
+            n_epochs=self.config.n_epochs,
+            shuffle=self.config.reshuffle_chunks,
+            table_batching=self.config.table_batching,
+            random_seed=self.config.seed,
+            drop_remainder=True,
+        )
         return {
-            "train_dataset": batch_dataset(
-                train_dataset_unbatched,
-                batch_size=self.config.batch_size,
-                max_length=self.config.max_length,
-                shapes=shapes,
-                n_epochs=self.config.n_epochs,
-                shuffle=self.config.reshuffle_chunks,
-                table_batching=self.config.table_batching,
-                random_seed=self.config.seed,
-            ),
+            "train_dataset": batched_train_dataset,
         }
 
     def resampling(self, Xs, Y, context=None):

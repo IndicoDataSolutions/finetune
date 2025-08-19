@@ -1,8 +1,8 @@
 import tensorflow as tf
 
+from finetune.base_models.gpt.featurizer import Attn
 from finetune.nn.crf import crf_log_likelihood, sequence_decode
 from finetune.nn.nn_utils import ExtraScope, Norm
-from finetune.base_models.gpt.featurizer import Attn
 
 
 class Perceptron(tf.keras.layers.Layer):
@@ -109,9 +109,7 @@ class MultiClassifier(tf.keras.layers.Layer):
 
 
 class Classifier(tf.keras.layers.Layer):
-    def __init__(
-        self, n_targets, dropout_rate, renorm_after_class_weights, **kwargs
-    ):
+    def __init__(self, n_targets, dropout_rate, renorm_after_class_weights, **kwargs):
         super().__init__(**kwargs)
         self.dropout = tf.keras.layers.Dropout(dropout_rate)
         self.perceptron = Perceptron(n_targets)
@@ -139,7 +137,6 @@ class Classifier(tf.keras.layers.Layer):
         return clf_losses
 
 
-# TODO; historically custom_gradient had very poor performance compared to using a defun - double check this isn't still the case.
 @tf.custom_gradient
 def class_reweighted_grad(logits, class_weights, norm_grads_multiplier):
     def custom_grad_fn(g):
@@ -152,11 +149,20 @@ def class_reweighted_grad(logits, class_weights, norm_grads_multiplier):
 
     return tf.identity(logits), custom_grad_fn
 
+
 class SequenceLabelerAttn(tf.keras.layers.Layer):
-    def __init__(self, n_targets, num_heads, name="seq_lab_attn", dtype=tf.float32, **kwargs):
+    def __init__(
+        self, n_targets, num_heads, name="seq_lab_attn", dtype=tf.float32, **kwargs
+    ):
         super().__init__(name=name, **kwargs, dtype=dtype)
         self.dense = tf.keras.layers.Dense(n_targets, name="dense", dtype=dtype)
-        self.block = Attn(num_heads=num_heads, attn_pdrop=0.2, mask=False, name="seq_label_attn", dtype=dtype)
+        self.block = Attn(
+            num_heads=num_heads,
+            attn_pdrop=0.2,
+            mask=False,
+            name="seq_label_attn",
+            dtype=dtype,
+        )
         self.norm = Norm(name="seq_label_residual", dtype=dtype)
 
     def call(self, features):
@@ -164,6 +170,7 @@ class SequenceLabelerAttn(tf.keras.layers.Layer):
         x = self.norm(x + features)
         x = self.dense(x)
         return x
+
 
 class SequenceLabeler(tf.keras.layers.Layer):
     def __init__(
@@ -183,9 +190,14 @@ class SequenceLabeler(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(dropout_rate)
         # This extra scope is an unfortunate holdover from GPT when we had an extra bidirectional attention block.
         if include_attn:
-            self.transform = SequenceLabelerAttn(n_targets, num_attn_heads, name="seq_lab_attn", dtype=dtype)
+            self.transform = SequenceLabelerAttn(
+                n_targets, num_attn_heads, name="seq_lab_attn", dtype=dtype
+            )
         else:
-            self.transform = ExtraScope(tf.keras.layers.Dense(n_targets, name="dense", dtype=dtype), "seq_lab_attn")
+            self.transform = ExtraScope(
+                tf.keras.layers.Dense(n_targets, name="dense", dtype=dtype),
+                "seq_lab_attn",
+            )
         self.use_crf = use_crf
         self.renorm_after_class_weights = renorm_after_class_weights
 
@@ -193,8 +205,6 @@ class SequenceLabeler(tf.keras.layers.Layer):
         if self.use_crf:
             self.transition_params = self.add_weight(
                 shape=(self.n_targets, self.n_targets),
-                # TODO: need to check what we have previously called this to make mapping easier
-                # And likely move it into target blocks to get the scopes right.
                 name="Transition_matrix",
                 initializer="orthogonal",
                 trainable=True,

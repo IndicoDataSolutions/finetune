@@ -304,20 +304,8 @@ class BaseBertModel(tf.keras.layers.Layer):
         )
 
         output_shape = tf.shape(sequence_output)
+        pooled_output = sequence_output[:, 0, :]
 
-        def first_token():
-            return sequence_output[:, 0, :]
-
-        def empty():
-            return tf.zeros(
-                tf.concat([[output_shape[0]], [self.embed_dim]], axis=0),
-                dtype=sequence_output.dtype,
-            )
-
-        pooled_output = tf.cond(
-            tf.equal(output_shape[1], 0), true_fn=empty, false_fn=first_token
-        )
-        pooled_output.set_shape([None, self.embed_dim])
         if self.use_pooler:
             pooled_output = self.pooler(pooled_output)
 

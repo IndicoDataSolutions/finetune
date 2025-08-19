@@ -212,20 +212,21 @@ class BaseModel(object, metaclass=ABCMeta):
                     },
                 }
             ),
-            jit_compile=False,  # Handled manually via tf.function wrappers.
-            run_eagerly=False,
+            jit_compile=True,  # We always Jit compile the train step as it is required for efficient use of the optimizers.
             auto_scale_loss=True,
-            steps_per_execution=1,
+            steps_per_execution=1,  # Performance impact of rolling this is minor and setting to 1 minimises compile times
         )
+        exclude_from_l2 = []
+        if not self.config.vector_l2:
+            exclude_from_l2 += [v for v in self.model.variables if len(v.shape) <= 1]
+        exclude_from_l2 += [
+            v for v in self.model.variables if "Transition_matrix" not in v.name
+        ]
+        if exclude_from_l2:
+            self.model.optimizer.exclude_from_weight_decay(exclude_from_l2)
         LOGGER.debug("Fitting model")
         # Because the dataset is already repeated n_epoch times, we need to pass steps_per_epoch to the fit method.
         train_dataset = datasets["train_dataset"]
-        if tf.test.is_gpu_available():
-            train_dataset = train_dataset.apply(
-                tf.data.experimental.prefetch_to_device(
-                    device="/gpu:0", buffer_size=None
-                )
-            )
         # logs = "logs/" + datetime.now().strftime("%Y%m%d-%H%M%S")
         # tf.profiler.experimental.start(logs)
         self.model.fit(
@@ -261,8 +262,13 @@ class BaseModel(object, metaclass=ABCMeta):
             # Keras does not have a post-build hook option because it can be run in eager and shapes are calculated alongside the first
             # call. Therefore we need to pass either a real tensor or this symbolic tensor to get variables.
             LOGGER.debug("Building model")
-            self._model(self.input_pipeline.keras_input_def())
+            self._model(
+                self.input_pipeline.keras_input_def(
+                    concrete_dims=False, include_targets=False
+                )
+            )
             self.saver.initialize_model(self._model)
+
             tf.keras.config.set_dtype_policy(initial_dtype_policy)
             keras_reset_uids()
             LOGGER.debug("Model built")
@@ -282,7 +288,12 @@ class BaseModel(object, metaclass=ABCMeta):
             target_dim=self.input_pipeline.target_dim,
             label_encoder=self.input_pipeline.label_encoder,
             config=self.config,
-            input_signature=self.input_pipeline.keras_input_signature(),
+            train_input_signature=self.input_pipeline.keras_input_signature(
+                concrete_dims=True, include_targets=True
+            ),
+            predict_input_signature=self.input_pipeline.keras_input_signature(
+                concrete_dims=False, include_targets=False
+            ),
             use_xla=self.config.xla,
         )
         return model
