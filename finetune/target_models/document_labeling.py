@@ -42,8 +42,8 @@ def _single_convert_to_finetune(*, document, dpi_norm=True, config={}):
 
 
 class DocumentPipeline(SequencePipeline):
-    def __init__(self, config, multi_label):
-        super().__init__(config, multi_label)
+    def __init__(self, config):
+        super().__init__(config)
         self.config = config
 
     def text_to_tokens_mask(self, raw_text=None, **kwargs):
@@ -106,6 +106,4 @@ class DocumentLabeler(SequenceLabeler):
     """
 
     def _get_input_pipeline(self):
-        return DocumentPipeline(
-            config=self.config, multi_label=self.config.multi_label_sequences
-        )
+        return DocumentPipeline(config=self.config)

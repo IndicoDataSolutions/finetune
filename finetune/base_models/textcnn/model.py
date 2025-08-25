@@ -87,6 +87,7 @@ class FastTestingModel(SourceModel):
     settings = {
         **TEXTCNN_BASE_PARAMS,
         "max_length": 512,
+        "chunk_long_sequences": True,
         "base_model_path": os.path.join("bert", "roberta-model-sm-v2.jl"),
     }
     required_files = fast_model_files

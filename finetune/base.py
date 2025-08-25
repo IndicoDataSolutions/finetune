@@ -379,7 +379,6 @@ class BaseModel(object, metaclass=ABCMeta):
 
         return outputs
 
-    @abstractmethod
     def _predict_proba(self, zipped_data, **kwargs):
         """
         Produce raw numeric outputs for proba predictions
@@ -481,7 +480,7 @@ class BaseModel(object, metaclass=ABCMeta):
         }
         return serialized_state
 
-    def save(self, path):
+    def save(self, path: str | pathlib.Path | io.BytesIO):
         """
         Saves the state of the model to disk to the folder specific by `path`.  If `path` does not exist, it will be auto-created.
 
@@ -496,6 +495,8 @@ class BaseModel(object, metaclass=ABCMeta):
         if path is None:
             return
 
+        if isinstance(path, pathlib.Path):
+            path = str(path)
         if isinstance(path, str):
             path = os.path.abspath(path)
         if self._model is None:
@@ -545,14 +546,14 @@ class BaseModel(object, metaclass=ABCMeta):
         }
         joblib.dump(weights_stripped, base_model_path)
 
-    def load(path, *args, key=None, **kwargs):
+    def load(path: str | pathlib.Path | io.BytesIO, *args, key=None, **kwargs):
         """
         Load a saved fine-tuned model from disk.  Path provided should be a folder which contains .pkl and tf.Saver() files
 
         :param path: string path name to load model from.  Same value as previously provided to :meth:`save`. Must be a folder.
         :param **kwargs: key-value pairs of config items to override.
         """
-        if type(path) != str and not hasattr(path, "write"):
+        if not isinstance(path, (str, pathlib.Path, io.BytesIO)) and not hasattr(path, "write"):
             instance = path
             raise FinetuneError(
                 'The .load() method can only be called on the class, not on an instance. Try `{}.load("{}") instead.'.format(

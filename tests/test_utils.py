@@ -4,9 +4,8 @@ from collections import Counter
 
 import numpy as np
 import pytest
-import tensorflow as tf
 
-from finetune import Classifier, SequenceLabeler
+from finetune import Classifier
 from finetune.base_models.bert.encoder import BERTEncoder, BERTEncoderMultuilingal
 from finetune.base_models.bert.roberta_encoder import (
     RoBERTaEncoder,
@@ -273,79 +272,50 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
         self.assertEqual(weights[1], 1.0)
 
 
-class TestProgressBar(unittest.TestCase):
-    def test_progress_bar(self):
-        state = {"hook_run": False}
+def test_progress_bar():
+    state = {"hook_run": False}
 
-        def update_state(timing_dict):
-            nonlocal state
-            state["hook_run"] = True
+    def update_state(timing_dict):
+        nonlocal state
+        state["hook_run"] = True
 
-        pbar = ProgressBar(range(1000), update_hook=update_state)
-        assert state["hook_run"]
+    pbar = ProgressBar(range(1000), update_hook=update_state)
+    assert state["hook_run"]
 
 
-class TestSaveMultiple(unittest.TestCase):
-    def preds_equal(self, a, b):
-        assert len(a) == len(b)
-        for ai, bi in zip(a, b):
-            assert len(ai) == len(bi)
-            for aii, bii in zip(ai, bi):
-                assert aii["text"] == bii["text"]
-                assert aii["start"] == bii["start"]
-                assert aii["end"] == bii["end"]
-                assert len(aii["confidence"]) == len(bii["confidence"])
-                assert aii["confidence"].keys() == bii["confidence"].keys()
-                for k in aii["confidence"].keys():
-                    self.assertAlmostEqual(aii["confidence"][k], bii["confidence"][k])
+def test_save_single(pretrained_classifier, save_model_dir):
+    preds_a = pretrained_classifier.predict(["test text"])
+    pretrained_classifier.save(save_model_dir / "a.jl")
+    loaded_model = pretrained_classifier.load(save_model_dir / "a.jl")
+    preds_b = loaded_model.predict(["test text"])
+    shed = Scheduler()
+    preds_c = shed.predict(save_model_dir / "a.jl", ["test text"])
+    assert preds_a == preds_b == preds_c
 
-    def test_save_single(self):
-        model = SequenceLabeler()
-        model.fit(["test text"] * 20, [[{"start": 0, "end": 4, "label": "test"}]] * 20)
-        preds_a = model.predict(["test text"])
-        SequenceLabeler.save_multiple("multiple_models.jl", {"a": model})
-        loaded_model = SequenceLabeler.load("multiple_models.jl", key="a")
-        preds_b = loaded_model.predict(["test text"])
-        shed = Scheduler()
-        preds_c = shed.predict("multiple_models.jl", ["test text"], key="a")
-        assert preds_a[0]  # If this is empty it's not a good test that nothing changed.
-        self.preds_equal(preds_a, preds_b)
-        self.preds_equal(preds_b, preds_c)
+def test_save_mutliple(pretrained_sequence_labeler, pretrained_classifier, save_model_dir):
+    preds_a_1 = pretrained_sequence_labeler.predict(["test text"])
+    preds_b_1 = pretrained_classifier.predict(["test text"])
+    path = save_model_dir / "multiple_models.jl"
 
-    def test_save_mutliple(self):
-        model_a = SequenceLabeler()
-        model_b = SequenceLabeler()
-        model_a.fit(
-            ["test text"] * 20, [[{"start": 0, "end": 4, "label": "test"}]] * 20
-        )
-        model_b.fit(
-            ["test text"] * 20, [[{"start": 5, "end": 9, "label": "test"}]] * 20
-        )
+    Classifier.save_multiple(
+        path, {"a": pretrained_sequence_labeler, "b": pretrained_classifier}
+    )
+    shed = Scheduler()
+    preds_a_2 = shed.predict(path, ["test text"], key="a")
+    preds_b_2 = shed.predict(path, ["test text"], key="b")
+    assert preds_a_1 == preds_a_2
+    assert preds_b_1 == preds_b_2
 
-        preds_a_1 = model_a.predict(["test text"])
-        preds_b_1 = model_b.predict(["test text"])
+def test_save_mutliple_inc_non_model(pretrained_classifier, save_model_dir):
+    model_a = pretrained_classifier
+    preds_a_1 = model_a.predict(["test text"])
+    path = save_model_dir / "multiple_models.jl"
+    Classifier.save_multiple(
+        path, {"a": model_a, "a_preds": preds_a_1}
+    )
 
-        SequenceLabeler.save_multiple(
-            "multiple_models.jl", {"a": model_a, "b": model_b}
-        )
-        shed = Scheduler()
-        preds_a_2 = shed.predict("multiple_models.jl", ["test text"], key="a")
-        preds_b_2 = shed.predict("multiple_models.jl", ["test text"], key="b")
-        self.preds_equal(preds_a_1, preds_a_2)
-        self.preds_equal(preds_b_1, preds_b_2)
-
-    def test_save_mutliple_inc_non_model(self):
-        model_a = SequenceLabeler()
-        model_a.fit(
-            ["test text"] * 20, [[{"start": 0, "end": 4, "label": "test"}]] * 20
-        )
-        preds_a_1 = model_a.predict(["test text"])
-
-        SequenceLabeler.save_multiple(
-            "multiple_models.jl", {"a": model_a, "a_preds": preds_a_1}
-        )
-
-        shed = Scheduler()
-        preds_a_2 = shed.predict("multiple_models.jl", ["test text"], key="a")
-        assert preds_a_1 == SequenceLabeler.load("multiple_models.jl", key="a_preds")
-        self.preds_equal(preds_a_1, preds_a_2)
+    shed = Scheduler()
+    preds_a_2 = shed.predict(path, ["test text"], key="a")
+    assert preds_a_1 == preds_a_2
+    loaded_preds_a_1 = Classifier.load(path, key="a_preds")
+    assert preds_a_1 == loaded_preds_a_1

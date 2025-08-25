@@ -97,7 +97,7 @@ class MultiClassifier(tf.keras.layers.Layer):
 
     def compute_loss(self, layer_output, targets, class_weights):
         clf_losses = tf.nn.sigmoid_cross_entropy_with_logits(
-            logits=layer_output["logits"], labels=tf.stop_gradient(targets)
+            logits=layer_output["logits"], labels=tf.stop_gradient(tf.cast(targets, dtype=tf.float32))
         )
         clf_losses = _apply_multilabel_class_weight(
             clf_losses,

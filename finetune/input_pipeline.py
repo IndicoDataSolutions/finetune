@@ -65,11 +65,11 @@ class BasePipeline(metaclass=ABCMeta):
             )
         return self._chunker
 
-    def _add_context_info_if_present(self, types, shapes):
+    def _add_context_info_if_present(self, types, shapes, concrete_dims):
         if self.config.use_auxiliary_info:
             TS = tf.TensorShape
             types["context"] = tf.float32
-            shapes["context"] = TS([self.config.batch_size, self.config.context_dim])
+            shapes["context"] = TS([self.config.max_length if concrete_dims else None, self.config.context_dim])
         return types, shapes
 
     def target_def(self, concrete_dims):
@@ -84,7 +84,7 @@ class BasePipeline(metaclass=ABCMeta):
         if include_lengths:
             types["length"] = tf.int32
             shapes["length"] = TS([])
-        types, shapes = self._add_context_info_if_present(types, shapes)
+        types, shapes = self._add_context_info_if_present(types, shapes, concrete_dims=concrete_dims)
         target_type, target_shape = self.target_def(concrete_dims=concrete_dims)
         if batched:
             output = (

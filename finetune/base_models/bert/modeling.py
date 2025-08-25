@@ -17,7 +17,7 @@
 import copy
 import logging
 import math
-
+import functools
 import numpy as np
 import tensorflow as tf
 
@@ -63,12 +63,14 @@ class Embedding(tf.keras.layers.Layer):
         self, input_ids, input_context=None, token_type_ids=None, position_ids=None
     ):
         embedding_output = self.embedding(input_ids)
-        return self.embedding_post_processor(
+        post_processed = self.embedding_post_processor(
             input_tensor=embedding_output,
             input_context=input_context,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
         )
+        post_processed.set_shape(embedding_output.shape)
+        return post_processed
 
 
 @saver_ignore_scope
@@ -97,7 +99,6 @@ class DocRepPosEmbed(tf.keras.layers.Layer):
                 self.positional_channels,
                 input_shape[0],
                 input_shape[1],
-                self.width,
             )
         )
 
@@ -293,7 +294,6 @@ class BaseBertModel(tf.keras.layers.Layer):
             input_context=context,
             token_type_ids=token_type_ids,
         )
-
         attention_mask = create_attention_mask_from_input_mask(tokens, input_mask)
 
         sequence_output = self.transformer_model(
@@ -302,8 +302,6 @@ class BaseBertModel(tf.keras.layers.Layer):
             seq_length=seq_length,
             attention_mask=attention_mask,
         )
-
-        output_shape = tf.shape(sequence_output)
         pooled_output = sequence_output[:, 0, :]
 
         if self.use_pooler:
@@ -661,10 +659,10 @@ class AttentionLayer(tf.keras.layers.Layer):
         self,
         from_tensor,
         to_tensor,
-        attention_mask=None,
-        batch_size=None,
-        from_seq_length=None,
-        to_seq_length=None,
+        attention_mask,
+        batch_size,
+        from_seq_length,
+        to_seq_length,
     ):
         def transpose_for_scores(
             input_tensor, batch_size, num_attention_heads, seq_length, width
@@ -683,11 +681,6 @@ class AttentionLayer(tf.keras.layers.Layer):
             raise ValueError(
                 "The rank of `from_tensor` must match the rank of `to_tensor`."
             )
-
-        if len(from_shape) == 3:
-            batch_size = from_shape[0]
-            from_seq_length = from_shape[1]
-            to_seq_length = to_shape[1]
         elif len(from_shape) == 2:
             if batch_size is None or from_seq_length is None or to_seq_length is None:
                 raise ValueError(
@@ -973,15 +966,20 @@ class TransformerModel(tf.keras.layers.Layer):
         input_shape = get_shape_list(layer_input, expected_rank=3)
         prev_output = reshape_to_matrix(layer_input)
 
+        block_shape = prev_output.shape
+
         for i, block in enumerate(self.blocks):
-            if self.recompute_grad and training:
-                block = tf.recompute_grad(block)
-            prev_output = block(
-                layer_input=prev_output,
+            # Functools partial is required to avoid a strange interaction with the recompute_grad decorator and xla.
+            block = functools.partial(
+                block,
                 batch_size=batch_size,
                 seq_length=seq_length,
                 attention_mask=attention_mask,
             )
+            if self.recompute_grad and training:
+                block = tf.recompute_grad(block)
+            prev_output = block(prev_output)
+            prev_output.set_shape(block_shape)
         final_output = reshape_from_matrix(prev_output, input_shape)
         return final_output
 
@@ -1239,24 +1237,24 @@ class TwinTransformerModel(tf.keras.layers.Layer):
 
         for layer_idx in range(self.num_hidden_layers):
             # Process stream A
-            block_a = self.blocks_a[layer_idx]
-            block_b = self.blocks_b[layer_idx]
+            block_a = functools.partial(
+                self.blocks_a[layer_idx],
+                batch_size=batch_size_a,
+                seq_length=seq_length_a,
+                attention_mask=attention_mask_a,
+            )
+            block_b = functools.partial(
+                self.blocks_b[layer_idx],
+                batch_size=batch_size_b,
+                seq_length=seq_length_b,
+                attention_mask=attention_mask_b,
+            )
             if training and self.recompute_grad:
                 block_a = tf.recompute_grad(block_a)
                 block_b = tf.recompute_grad(block_b)
 
-            prev_output_a = block_a(
-                prev_output_a,
-                batch_size_a,
-                seq_length_a,
-                attention_mask_a,
-            )
-            prev_output_b = block_b(
-                prev_output_b,
-                batch_size_b,
-                seq_length_b,
-                attention_mask_b,
-            )
+            prev_output_a = block_a(prev_output_a)
+            prev_output_b = block_b(prev_output_b)
             mixing_layer = self.mixing_blocks[layer_idx]
             # Apply mixing function if provided
             if mixing_layer is not None:

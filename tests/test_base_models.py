@@ -15,7 +15,6 @@ def test_base_model_classifier(base_model, sst_dataset, save_model_dir):
     """
     A realistic test of the classifier on each base model.
     """
-    sst_dataset = sst_dataset.sample(n=100)
     allx = sst_dataset.Text.values
     ally = sst_dataset.Target.values
     trainx, testx, trainy, testy = train_test_split(allx, ally, test_size=0.1)
@@ -44,11 +43,11 @@ def test_base_model_classifier(base_model, sst_dataset, save_model_dir):
     assert np.all(np.sum(list(probas[0].values())) == 1)
 
 
-def test_base_model_sequence_labeler(base_model, reuters_dataset, save_model_dir):
+def test_base_model_sequence_labeler(base_model, reuters_indico_sequence, save_model_dir):
     """
     A realistic test of the sequence labeler on each base model.
     """
-    trainx, testx, trainy, testy = train_test_split(*reuters_dataset, test_size=0.1)
+    trainx, testx, trainy, testy = train_test_split(*reuters_indico_sequence, test_size=0.1)
     model = SequenceLabeler(base_model=base_model, class_weights="sqrt", low_memory_mode=True)
     model.fit(trainx, trainy)
     predictions = model.predict(testx)

@@ -1,86 +1,50 @@
 import os
-import shutil
 import time
-import unittest
-import warnings
+import pytest
 
-# prevent excessive warning logs
-warnings.filterwarnings("ignore")
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-
-from finetune import Classifier
-from finetune.base_models import GPT, RoBERTa
 from finetune.scheduler import Scheduler
 
+@pytest.fixture(scope="module")
+def models(saved_models_dir, trained_classifier, trained_annotation):
+    model1 = os.path.join(saved_models_dir, "1.jl")
+    model2 = os.path.join(saved_models_dir, "2.jl")
+    trained_classifier.save(model1)
+    trained_annotation.save(model2)
+    yield model1, model2
 
-class TestScheduler(unittest.TestCase):
-    folder = "tests/saved-models"
-    model1 = "1.jl"
-    model2 = "2.jl"
 
-    @classmethod
-    def setUpClass(cls):
-        try:
-            os.mkdir("tests/saved-models")
-        except FileExistsError:
-            warnings.warn(
-                "tests/saved-models still exists, it is possible that some test is not cleaning up properly."
-            )
-            pass
-        model = Classifier(base_model=RoBERTa)
-        model.fit(["A", "B"], ["a", "b"])
-        model.save(os.path.join(cls.folder, cls.model1))
+def test_scheduler(models):
+    model1, model2 = models
+    shed = Scheduler()
+    tic_1 = time.time()
+    preds_m1 = shed.predict(model1, ["A"])  # May need isolation
+    toc_1 = time.time()
+    assert len(preds_m1) == 1
+    assert isinstance(preds_m1[0], str) # classification
+    preds_m2 = shed.predict(model2, ["A"])
+    assert len(preds_m2) == 1
+    assert isinstance(preds_m2[0], list) # Annotation - can't realy expect any labels though.
+    tic_3 = time.time()
+    shed.predict(model1, ["something else"])
+    toc_3 = time.time()
+    assert toc_1 - tic_1 > toc_3 - tic_3
+    assert len(shed.loaded_models) == 2
+    shed.close_all()
+    assert len(shed.loaded_models) == 0
+    shed.predict_proba(model1, ["A"])
+    shed.featurize(model1, ["A"])
+    shed.featurize_sequence(model1, ["A"])
 
-        model = Classifier(base_model=GPT)
-        model.fit(["A", "B"], ["a", "b"])
-        model.save(os.path.join(cls.folder, cls.model2))
 
-    @classmethod
-    def tearDownClass(self):
-        shutil.rmtree("tests/saved-models/")
-
-    def test_scheduler(self):
-        m1 = os.path.join(self.folder, self.model1)
-        m2 = os.path.join(self.folder, self.model2)
-        shed = Scheduler()
-
-        # Checks model caching
-        time_pre = time.time()
-        pred1a = shed.predict(m1, ["A"])
-        time_mid = time.time()
-        pred1b = shed.predict(m1, ["A"])
-        time_end = time.time()
-        self.assertLess(
-            time_end - time_mid, time_mid - time_pre - 1
-        )  # Assert that it is at least 1 second quicker
-        self.assertEqual(pred1a, pred1b)
-        pred2a = shed.predict(m2, ["A"])  # Load another model.
-        self.assertEqual(len(shed.loaded_models), 2)
-        time2_start = time.time()
-        pred1b = shed.predict(m1, ["A"])
-        time2_end = time.time()
-        pred2b = shed.predict(m2, ["A"])
-        self.assertEqual(pred2a, pred2b)
-        self.assertLess(
-            time2_end - time2_start, time_mid - time_pre - 1
-        )  # Assert that it is still quicker.
-        shed.predict_proba(m1, ["A"])
-        shed.featurize(m1, ["A"])
-        shed.featurize(m1, ["A"])
-        shed.featurize_sequence(m1, ["A"])
-
-    def test_scheduler_max_models(self):
-        m1 = os.path.join(self.folder, self.model1)
-        m2 = os.path.join(self.folder, self.model2)
-        shed = Scheduler(max_models=1)
-        time_pre = time.time()
-        pred1a = shed.predict(m1, ["A"])
-        time_mid = time.time()
-        pred1b = shed.predict(m1, ["A"])
-        time_end = time.time()
-        self.assertLess(
-            time_end - time_mid, time_mid - time_pre - 1
-        )  # Assert that it is at least 1 second quicker
-        self.assertEqual(pred1a, pred1b)
-        pred2a = shed.predict(m2, ["A"])  # Load another model.
-        self.assertEqual(len(shed.loaded_models), 1)
+def test_scheduler_max_models(models):
+    model1, model2 = models
+    shed = Scheduler(max_models=1)
+    time_pre = time.time()
+    pred1a = shed.predict(model1, ["A"])
+    time_mid = time.time()
+    pred1b = shed.predict(model1, ["A"])
+    time_end = time.time()
+    assert time_end - time_mid < time_mid - time_pre - 1
+    assert pred1a == pred1b
+    shed.predict(model2, ["A"])  # Load another model.
+    assert len(shed.loaded_models) == 1
