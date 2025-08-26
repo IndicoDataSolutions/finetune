@@ -15,6 +15,7 @@ COMMON_SETTINGS = {
 class SourceModel(metaclass=ABCMeta):
     is_bidirectional = True
     get_context_fn = None
+    supports_xla = True
 
     @classmethod
     def get_optimal_params(cls, config):
@@ -71,7 +72,11 @@ from finetune.base_models.gpt2.model import (
 from finetune.base_models.gpt.model import GPTModel, GPTModelSmall
 from finetune.base_models.modern_bert.model import ModernBertLargeModel, ModernBertModel
 from finetune.base_models.tcn.model import TCNModel
-from finetune.base_models.textcnn.model import FastTextCNNModel, FastTestingModel, TextCNNModel
+from finetune.base_models.textcnn.model import (
+    FastTestingModel,
+    FastTextCNNModel,
+    TextCNNModel,
+)
 
 # Aliases
 GPT = GPTModel

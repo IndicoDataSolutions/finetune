@@ -43,7 +43,8 @@ def _apply_class_weight(losses, targets, class_weights=None, norm_grads=True):
                 ),
                 tf.reduce_sum(input_tensor=weights),
             )
-        losses *= tf.expand_dims(weights, 1)
+        weights = tf.cast(weights, dtype=losses.dtype)
+        return losses * weights
     return losses
 
 
@@ -97,7 +98,8 @@ class MultiClassifier(tf.keras.layers.Layer):
 
     def compute_loss(self, layer_output, targets, class_weights):
         clf_losses = tf.nn.sigmoid_cross_entropy_with_logits(
-            logits=layer_output["logits"], labels=tf.stop_gradient(tf.cast(targets, dtype=tf.float32))
+            logits=layer_output["logits"],
+            labels=tf.stop_gradient(tf.cast(targets, dtype=tf.float32)),
         )
         clf_losses = _apply_multilabel_class_weight(
             clf_losses,
@@ -234,7 +236,7 @@ class SequenceLabeler(tf.keras.layers.Layer):
     def compute_loss(self, layer_output, targets, class_weights):
         # For some reason, all finetune targets are floats. I think we get more type flexibility
         # now so we should look at switching this to int when helpful.
-        logits = layer_output["logits"]
+        logits = tf.cast(layer_output["logits"], tf.float32)
         targets = tf.cast(targets, dtype=tf.int32)
         if class_weights is not None:
             class_weights = tf.reshape(class_weights, [1, 1, -1])

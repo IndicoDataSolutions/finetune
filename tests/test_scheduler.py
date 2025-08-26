@@ -1,13 +1,15 @@
 import os
 import time
+
 import pytest
 
 from finetune.scheduler import Scheduler
 
-@pytest.fixture(scope="module")
-def models(saved_models_dir, trained_classifier, trained_annotation):
-    model1 = os.path.join(saved_models_dir, "1.jl")
-    model2 = os.path.join(saved_models_dir, "2.jl")
+
+@pytest.fixture
+def models(save_model_dir, trained_classifier, trained_annotation):
+    model1 = os.path.join(save_model_dir, "1.jl")
+    model2 = os.path.join(save_model_dir, "2.jl")
     trained_classifier.save(model1)
     trained_annotation.save(model2)
     yield model1, model2
@@ -20,10 +22,12 @@ def test_scheduler(models):
     preds_m1 = shed.predict(model1, ["A"])  # May need isolation
     toc_1 = time.time()
     assert len(preds_m1) == 1
-    assert isinstance(preds_m1[0], str) # classification
+    assert isinstance(preds_m1[0], str)  # classification
     preds_m2 = shed.predict(model2, ["A"])
     assert len(preds_m2) == 1
-    assert isinstance(preds_m2[0], list) # Annotation - can't realy expect any labels though.
+    assert isinstance(
+        preds_m2[0], list
+    )  # Annotation - can't realy expect any labels though.
     tic_3 = time.time()
     shed.predict(model1, ["something else"])
     toc_3 = time.time()

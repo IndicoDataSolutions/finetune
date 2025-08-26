@@ -86,6 +86,10 @@ def get_keras_model(
             self.optimizer.build(self.trainable_variables)
             return super().fit(*args, **kwargs)
 
+        @tf.function(jit_compile=True)
+        def apply_gradients(self, grads_and_vars):
+            return self.optimizer.apply_gradients(grads_and_vars)
+
         @tf.function(input_signature=[train_input_signature], autograph=False)
         def train_step(self, data):
             tic = time.time()
@@ -99,14 +103,10 @@ def get_keras_model(
                     "Compute loss trace completed in %s seconds",
                     time.time() - compute_loss_tic,
                 )
+                # This is automatically stubbed out for default optimizers without scaling.
+                loss = self.optimizer.scale_loss(loss)
             # Compute gradients
             trainable_vars = self.trainable_variables
-            scale_loss_tic = time.time()
-            # This is automatically stubbed out for default optimizers without scaling.
-            loss = self.optimizer.scale_loss(loss)
-            LOGGER.debug(
-                "Scale loss trace completed in %s seconds", time.time() - scale_loss_tic
-            )
             gradients_tic = time.time()
             gradients = tape.gradient(loss, trainable_vars)
             LOGGER.debug(
@@ -114,7 +114,7 @@ def get_keras_model(
             )
             apply_gradients_tic = time.time()
             # Update weights
-            self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+            self.apply_gradients(zip(gradients, trainable_vars))
             LOGGER.debug(
                 "Apply gradients trace completed in %s seconds",
                 time.time() - apply_gradients_tic,

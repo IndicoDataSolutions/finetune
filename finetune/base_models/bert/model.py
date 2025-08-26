@@ -483,6 +483,10 @@ class TableRoBERTa(_BaseBert):
     encoder = RoBERTaEncoderV2
     is_roberta = True
     featurizer = TwinBertFeaturizer
+    # Due to use of ragged tensors we cannot support XLA for this model.
+    # Wrapping the inner call method in a tf.function with jit_compile=False causes missing gradient errors that I don't understand.
+    # Longeer term we should try to refactor this to use a more XLA friendly approach.
+    supports_xla = False
     settings = {
         **BERT_BASE_PARAMS,
         # Just incase all cells fall into the same buckets this -8 allows us to pack the batches much tighter once we add EOS and BOS

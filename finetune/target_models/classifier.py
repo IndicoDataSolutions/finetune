@@ -57,17 +57,17 @@ class Classifier(BaseModel):
                 pred = np.argmax(mean_pool)
                 one_hot = np.zeros_like(mean_pool)
                 one_hot[pred] = 1
-                label = self.input_pipeline.label_encoder.inverse_transform([one_hot])
-                label = np.squeeze(label).tolist()
+                label = self.input_pipeline.label_encoder.inverse_transform([one_hot])[
+                    0
+                ]
                 all_labels.append(label)
                 all_probs.append(mean_pool)
                 doc_probs = []
 
         if probas:
             return all_probs
-        else:
-            assert len(all_labels) == len(zipped_data)
-            return np.asarray(all_labels)
+        assert len(all_labels) == len(zipped_data)
+        return all_labels
 
     def _predict_proba(self, zipped_data, **kwargs):
         """

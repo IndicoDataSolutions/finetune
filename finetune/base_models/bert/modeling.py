@@ -15,9 +15,10 @@
 """The main BERT model and related functions."""
 
 import copy
+import functools
 import logging
 import math
-import functools
+
 import numpy as np
 import tensorflow as tf
 
@@ -169,7 +170,9 @@ class LayoutLMPosEmbed(tf.keras.layers.Layer):
 
 @saver_ignore_scope
 class XDocPosEmbed(tf.keras.layers.Layer):
-    def __init__(self, positional_channels, width, **kwargs):
+    def __init__(
+        self, positional_channels, width, max_2d_positional_embeddings=None, **kwargs
+    ):
         super().__init__(**kwargs)
         self.positional_channels = positional_channels
         self.width = width
@@ -240,8 +243,8 @@ class BaseBertModel(tf.keras.layers.Layer):
             embedding_post_processor=EmbeddingPostprocessor(
                 feature_dim=self.embed_dim,
                 use_token_type=self.use_token_type,
-                token_type_vocab_size=2
-                or token_type_vocab_size,  # Not sure why this is 2 but that's what finetune previously set it to.
+                token_type_vocab_size=token_type_vocab_size
+                or 2,  # Not sure why this is 2 but that's what finetune previously set it to.
                 token_type_embedding_name="token_type_embeddings",
                 use_position_embeddings=not config.reading_order_removed,
                 position_embedding_name="position_embeddings",
@@ -1562,7 +1565,7 @@ class TwinBertFeaturizer(tf.keras.layers.Layer):
 
         # Return the expected format
         return {
-            "features": tf.zeros(shape=[batch_size, 768]),
+            # "features": tf.zeros(shape=[batch_size, 768]),
             "sequence_features": sequence_features,
         }
 

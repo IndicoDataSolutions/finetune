@@ -354,17 +354,16 @@ class ModernBert(tf.keras.layers.Layer):
         )
         hidden_states = self.embeddings(input_ids=input_ids, training=training)
         for encoder_layer in self.layers:
-            if self.low_memory_mode and training:
-                encoder_layer = tf.recompute_grad(encoder_layer)
-            layer_outputs = encoder_layer(
-                hidden_states,
+            encoder_layer = functools.partial(
+                encoder_layer,
                 attention_mask=attention_mask,
                 sliding_window_mask=sliding_window_mask,
                 position_ids=position_ids,
                 training=training,
             )
-            hidden_states = layer_outputs
-
+            if self.low_memory_mode and training:
+                encoder_layer = tf.recompute_grad(encoder_layer)
+            hidden_states = encoder_layer(hidden_states)
         hidden_states = self.final_norm(hidden_states)
         return hidden_states
 

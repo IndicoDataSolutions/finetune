@@ -212,7 +212,7 @@ class BaseModel(object, metaclass=ABCMeta):
                     },
                 }
             ),
-            jit_compile=True,  # We always Jit compile the train step as it is required for efficient use of the optimizers.
+            jit_compile=self.config.base_model.supports_xla,  # We always Jit compile the train step as it is required for efficient use of the optimizers.
             auto_scale_loss=True,
             steps_per_execution=1,  # Performance impact of rolling this is minor and setting to 1 minimises compile times
         )
@@ -553,7 +553,9 @@ class BaseModel(object, metaclass=ABCMeta):
         :param path: string path name to load model from.  Same value as previously provided to :meth:`save`. Must be a folder.
         :param **kwargs: key-value pairs of config items to override.
         """
-        if not isinstance(path, (str, pathlib.Path, io.BytesIO)) and not hasattr(path, "write"):
+        if not isinstance(path, (str, pathlib.Path, io.BytesIO)) and not hasattr(
+            path, "write"
+        ):
             instance = path
             raise FinetuneError(
                 'The .load() method can only be called on the class, not on an instance. Try `{}.load("{}") instead.'.format(
