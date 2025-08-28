@@ -283,7 +283,7 @@ def test_progress_bar():
     assert state["hook_run"]
 
 
-def test_save_single(pretrained_classifier, save_model_dir):
+def test_save_single(trained_classifier, save_model_dir):
     preds_a = pretrained_classifier.predict(["test text"])
     pretrained_classifier.save(save_model_dir / "a.jl")
     loaded_model = pretrained_classifier.load(save_model_dir / "a.jl")
@@ -292,13 +292,14 @@ def test_save_single(pretrained_classifier, save_model_dir):
     preds_c = shed.predict(save_model_dir / "a.jl", ["test text"])
     assert preds_a == preds_b == preds_c
 
-def test_save_mutliple(pretrained_sequence_labeler, pretrained_classifier, save_model_dir):
+
+def test_save_mutliple(trained_sequence_labeler, trained_classifier, save_model_dir):
     preds_a_1 = pretrained_sequence_labeler.predict(["test text"])
     preds_b_1 = pretrained_classifier.predict(["test text"])
     path = save_model_dir / "multiple_models.jl"
 
     Classifier.save_multiple(
-        path, {"a": pretrained_sequence_labeler, "b": pretrained_classifier}
+        path, {"a": trained_sequence_labeler, "b": trained_classifier}
     )
     shed = Scheduler()
     preds_a_2 = shed.predict(path, ["test text"], key="a")
@@ -306,13 +307,12 @@ def test_save_mutliple(pretrained_sequence_labeler, pretrained_classifier, save_
     assert preds_a_1 == preds_a_2
     assert preds_b_1 == preds_b_2
 
-def test_save_mutliple_inc_non_model(pretrained_classifier, save_model_dir):
-    model_a = pretrained_classifier
+
+def test_save_mutliple_inc_non_model(trained_classifier, save_model_dir):
+    model_a = trained_classifier
     preds_a_1 = model_a.predict(["test text"])
     path = save_model_dir / "multiple_models.jl"
-    Classifier.save_multiple(
-        path, {"a": model_a, "a_preds": preds_a_1}
-    )
+    Classifier.save_multiple(path, {"a": model_a, "a_preds": preds_a_1})
 
     shed = Scheduler()
     preds_a_2 = shed.predict(path, ["test text"], key="a")

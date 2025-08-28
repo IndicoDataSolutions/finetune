@@ -7,7 +7,7 @@ import psutil
 import pynvml
 import tensorflow as tf
 
-from finetune.base import BaseModel
+from finetune.base import MODEL_REGISTRY, BaseModel
 from finetune.errors import FinetuneSchedulerError
 from finetune.target_models.sequence_labeling import SequenceLabeler
 
@@ -186,6 +186,7 @@ class Scheduler:
     def close_all(self):
         while self.loaded_models:
             self._close_oldest_model()
+        MODEL_REGISTRY.cleanup()
 
     @scheduled
     def predict(self, model_file, x, *args, key=None, model=None, **kwargs):

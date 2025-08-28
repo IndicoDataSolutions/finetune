@@ -13,6 +13,7 @@ from bs4.element import Tag
 
 import finetune.base
 from finetune import Classifier, DocumentLabeler, MultiLabelClassifier, SequenceLabeler
+from finetune.base import MODEL_REGISTRY
 from finetune.base_models import (
     BERTModelCased,
     ModernBertModel,
@@ -26,6 +27,13 @@ from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
 from finetune.nn.target_blocks import Classifier as ClassifierBlock
 from finetune.nn.target_blocks import MultiClassifier as MultiLabelClassifierBlock
 from finetune.nn.target_blocks import SequenceLabeler as SequenceLabelerBlock
+
+
+@pytest.fixture(scope="session", autouse=True)
+def cleanup_models():
+    # After every test, close any open models and cleanup the keras session.
+    yield
+    MODEL_REGISTRY.cleanup()
 
 
 @pytest.fixture(scope="function")
@@ -99,6 +107,7 @@ def get_untrained_classifier():
 
 @pytest.fixture(scope="module")
 def get_untrained_sequence_labeler():
+    models = []
     base_config = {
         "batch_size": 2,
         "max_length": 256,
@@ -108,31 +117,45 @@ def get_untrained_sequence_labeler():
 
     def _get_model(**config_overrides):
         cfg = {**base_config, **config_overrides}
-        return SequenceLabeler(**cfg)
+        model = SequenceLabeler(**cfg)
+        models.append(model)
+        return model
 
-    return _get_model
+    yield _get_model
+    for model in models:
+        model.close()
 
 
 @pytest.fixture(scope="module")
 def get_untrained_document_labeler():
     base_config = {"n_epochs": 2, "base_model": TestingModel}
+    models = []
 
     def _get_model(**config_overrides):
         cfg = {**base_config, **config_overrides}
-        return DocumentLabeler(**cfg)
+        model = DocumentLabeler(**cfg)
+        models.append(model)
+        return model
 
-    return _get_model
+    yield _get_model
+    for model in models:
+        model.close()
 
 
 @pytest.fixture(scope="module")
 def get_untrained_multilabel_classifier():
     base_config = {"batch_size": 2, "max_length": 128, "n_epochs": 1}
+    models = []
 
     def _get_model(**config_overrides):
         cfg = {**base_config, **config_overrides}
-        return MultiLabelClassifier(**cfg)
+        model = MultiLabelClassifier(**cfg)
+        models.append(model)
+        return model
 
-    return _get_model
+    yield _get_model
+    for model in models:
+        model.close()
 
 
 @pytest.fixture(scope="module")
@@ -176,17 +199,6 @@ def tiny_classification_corpus():
     X = ["cat", "kitten", "purr", "finance", "stocks", "bonds"]
     y = ["cat", "cat", "cat", "finance", "finance", "finance"]
     return X, y
-
-
-@pytest.fixture(scope="module")
-def pretrained_classifier_testingmodel(tiny_classification_corpus, save_model_dir):
-    X, y = tiny_classification_corpus
-    model = Classifier(base_model=TestingModel, n_epochs=1, batch_size=2)
-    model.fit(X, y)
-    model_path = save_model_dir / "testingmodel_classifier.jl"
-    model.save(model_path)
-    yield model, str(model_path)
-    model.close()
 
 
 @pytest.fixture(scope="module")
@@ -244,15 +256,6 @@ def small_ocr_docs():
         ],
     ]
     return docs, labels
-
-
-@pytest.fixture(scope="module")
-def pretrained_document_labeler(small_ocr_docs):
-    docs, labels = small_ocr_docs
-    model = DocumentLabeler(base_model=TestingModel, n_epochs=1)
-    model.fit(docs, labels)
-    yield model
-    model.close()
 
 
 @pytest.fixture

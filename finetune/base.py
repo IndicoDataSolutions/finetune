@@ -5,6 +5,7 @@ import os
 import pathlib
 import random
 import tempfile
+import threading
 import time
 import typing as t
 import warnings
@@ -53,6 +54,49 @@ def start_end_gen(gen):
     yield previous, start, True
 
 
+class FinetuneRegistry:
+    """
+    Very thin global registry that tracks finetune models so that we can cleanup the keras session without breaking
+    any models. When cleanup is called any models loaded in the GPU will be closed and the keras session will be cleared.
+    """
+
+    def __init__(self):
+        self._refs = set()
+        self._refs_lock = threading.RLock()
+
+    def register(self, model: "BaseModel") -> None:
+        def _finalizer(wr: weakref.ref) -> None:
+            with self._refs_lock:
+                self._refs.discard(wr)
+
+        with self._refs_lock:
+            self._refs.add(weakref.ref(model, _finalizer))
+
+    def live_models(self) -> t.Iterator["BaseModel"]:
+        """
+        Iterate currently alive holder objects.
+        """
+        with self._refs_lock:
+            for wr in tuple(self._refs):
+                obj = wr()
+                if obj is None:
+                    self._refs.discard(wr)
+                else:
+                    yield obj
+
+    def cleanup(self):
+        """
+        Close all live models and clear dead weakrefs, then clear the Keras session.
+        """
+        with self._refs_lock:
+            for model in self.live_models():
+                model.close()
+        tf.keras.backend.clear_session()
+
+
+MODEL_REGISTRY = FinetuneRegistry()
+
+
 class BaseModel(object, metaclass=ABCMeta):
     """
     A sklearn-style task agnostic base class for finetuning a Transformer language model.
@@ -90,6 +134,7 @@ class BaseModel(object, metaclass=ABCMeta):
             LOGGER.setLevel(logging.DEBUG)
         self.check_gpu_for_fp16()
         self._model = None
+        MODEL_REGISTRY.register(self)
 
     def check_gpu_for_fp16(self):
         if not gpu_info()["fp16_inference"]:
@@ -500,7 +545,10 @@ class BaseModel(object, metaclass=ABCMeta):
         if isinstance(path, str):
             path = os.path.abspath(path)
         if self._model is None:
-            raise ValueError("Model has not been initialized. Call fit() first.")
+            if self.saver.variables:
+                self.model  # trigger reinitialization of the model only if there is custom state.
+            else:
+                raise ValueError("Model has not been initialized. Call fit() first.")
         self.saver.save_model(model=self._model, finetune_obj=self, path=path)
 
     @classmethod
