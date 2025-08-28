@@ -1,6 +1,7 @@
 import functools
 import gc
 import logging
+import sys
 from collections import OrderedDict
 
 import psutil
@@ -29,6 +30,10 @@ def BytesLimit():
 def MaxBytesInUse():
     """Generates an op that computes the peak memory of a device."""
     return tf.config.experimental.get_memory_info("GPU:0")["peak"]
+
+
+def is_gpu_available():
+    return len(tf.config.list_physical_devices("GPU")) > 0
 
 
 def bytes_to_meg(x):
@@ -97,19 +102,29 @@ class Scheduler:
     def _memory_for_one_more(self):
         if self.gpu_memory_limit is None:
             return True  # first run
+        if is_gpu_available():
+            in_use = BytesInUse()
+            peak = MaxBytesInUse()
+            if (
+                self.max_above_resting is None
+                or (peak - in_use) > self.max_above_resting
+            ):
+                self.max_above_resting = peak - in_use
 
-        in_use = BytesInUse()
-        peak = MaxBytesInUse()
-        if self.max_above_resting is None or (peak - in_use) > self.max_above_resting:
-            self.max_above_resting = peak - in_use
+            if (
+                self.max_model_size is None
+                or (in_use - self.previous_in_use) > self.max_model_size
+            ):
+                self.max_model_size = in_use - self.previous_in_use
 
-        if (
-            self.max_model_size is None
-            or (in_use - self.previous_in_use) > self.max_model_size
-        ):
-            self.max_model_size = in_use - self.previous_in_use
+            self.previous_in_use = in_use
+        else:
+            LOGGER.info("No GPU available, skipping GPU memory checks.")
+            self.max_above_resting = 0
+            self.max_model_size = 0
+            self.previous_in_use = 0
+            in_use = 0
 
-        self.previous_in_use = in_use
         cpu_percent = psutil.virtual_memory().percent
         LOGGER.info(
             (
@@ -179,9 +194,13 @@ class Scheduler:
         if hasattr(model.saver, "variables"):
             del model.saver.variables
             del model.saver.fallback_
-        self.gpu_memory_limit = (
-            BytesLimit()
-        )  # delay this so that any options get applied from finetune.
+        if is_gpu_available():
+            self.gpu_memory_limit = (
+                BytesLimit()
+            )  # delay this so that any options get applied from finetune.
+        else:
+            LOGGER.info("No GPU available, skipping GPU memory limit update.")
+            self.gpu_memory_limit = sys.maxsize
 
     def close_all(self):
         while self.loaded_models:
