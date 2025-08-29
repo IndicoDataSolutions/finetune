@@ -6,7 +6,8 @@ import pytest
 import tqdl
 
 from finetune import SequenceLabeler
-        
+
+
 def test_model_loads_and_preds(save_model_dir):
     path = save_model_dir / "ner_backwards_compatibility.jl"
     tqdl.download(
@@ -34,6 +35,7 @@ def test_roberta_collapse_whitespace_old_default(get_untrained_sequence_labeler)
     model = SequenceLabeler.load("./test_model.jl")
     assert model.config.collapse_whitespace == False
 
+
 def test_roberta_default_no_change(get_untrained_sequence_labeler):
     model = get_untrained_sequence_labeler(collapse_whitespace=True)
     assert model.config.collapse_whitespace == True
@@ -45,6 +47,7 @@ def test_roberta_default_no_change(get_untrained_sequence_labeler):
 
 # TODO: eventually clean this up and push these files to s3.
 BUNDLES = glob.glob(os.path.join("/Finetune/tests/backwards_compat_bundles/*.jl"))
+
 
 def handle_length_mismatch(a, b, atol=0, rtol=0):
     if len(b) > len(a):
@@ -88,102 +91,77 @@ def nested_assert_allclose(a, b, atol=0, rtol=0):
     else:
         assert a == b
 
-@pytest.mark.skip(reason="Skipping backwards compat tests. They are expensive but should be run manually as and when required.")
+
+@pytest.mark.skip(
+    reason="Skipping backwards compat tests. They are expensive but should be run manually as and when required."
+)
 @pytest.mark.parametrize("bundle_path", BUNDLES)
 def test_backwards_compat_extreme(bundle_path):
     model = SequenceLabeler.load(bundle_path, key="model")
     texts = SequenceLabeler.load(bundle_path, key="texts")
     contexts = SequenceLabeler.load(bundle_path, key="contexts")
 
-    if False and model.config.float_16_predict:
-        # For float16 models we test that predictions do not vary between float16 and float32 loaded models.
-        # Preds differ subtly from the old version to the new version but features match the original models well.
-        # and the float32 models work well.
-        model_fp32 = SequenceLabeler.load(
-            bundle_path,
-            key="model",
-            float_16_predict=False,
-            mixed_precision=False,
-            predict_batch_size=4,
-        )
+    expected_flat_features = SequenceLabeler.load(bundle_path, key="flat_features")
+    expected_sequence_features = SequenceLabeler.load(
+        bundle_path, key="sequence_features"
+    )
+    expected_preds = SequenceLabeler.load(bundle_path, key="preds")
+    expected_probs = SequenceLabeler.load(bundle_path, key="probs")
+
+    try:
+        flat_features = model.featurize(texts, context=contexts)
+    except:
+        if expected_flat_features is not None:
+            raise
+        flat_features = None
+    if expected_flat_features is not None:
+        # Allow 1% relative difference and 1e-4 absolute difference. Difficult to know what we actually need here
+        # To be successful, but as long as the preds are the same, this is mostly just for us to build confidence.
         nested_assert_allclose(
-            model.featurize_sequence(texts, context=contexts),
-            model_fp32.featurize_sequence(texts, context=contexts),
-            atol=5e-1,
+            flat_features,
+            expected_flat_features,
+            atol=5e-2 if model.config.float_16_predict else 1e-4,
             rtol=1e-2,
         )
-        nested_assert_allclose(
-            model.predict(texts, context=contexts),
-            model_fp32.predict(texts, context=contexts),
-            atol=1e-2,
-        )
-        nested_assert_allclose(
-            model.predict_proba(texts, context=contexts),
-            model_fp32.predict_proba(texts, context=contexts),
-            atol=1e-2,
-        )
-    else:
-        expected_flat_features = SequenceLabeler.load(bundle_path, key="flat_features")
-        expected_sequence_features = SequenceLabeler.load(
-            bundle_path, key="sequence_features"
-        )
-        expected_preds = SequenceLabeler.load(bundle_path, key="preds")
-        expected_probs = SequenceLabeler.load(bundle_path, key="probs")
 
-        try:
-            flat_features = model.featurize(texts, context=contexts)
-        except:
-            if expected_flat_features is not None:
-                raise
-            flat_features = None
-        if expected_flat_features is not None:
-            # Allow 1% relative difference and 1e-4 absolute difference. Difficult to know what we actually need here
-            # To be successful, but as long as the preds are the same, this is mostly just for us to build confidence.
-            nested_assert_allclose(
-                flat_features,
-                expected_flat_features,
-                atol=5e-2 if model.config.float_16_predict else 1e-4,
-                rtol=1e-2,
-            )
-
-        try:
-            sequence_features = model.featurize_sequence(texts, context=contexts)
-        except:
-            if expected_sequence_features is not None:
-                raise
-            sequence_features = None
+    try:
+        sequence_features = model.featurize_sequence(texts, context=contexts)
+    except:
         if expected_sequence_features is not None:
-            nested_assert_allclose(
-                sequence_features,
-                expected_sequence_features,
-                atol=5e-2 if model.config.float_16_predict else 1e-4,
-                rtol=1e-2,
-            )
+            raise
+        sequence_features = None
+    if expected_sequence_features is not None:
+        nested_assert_allclose(
+            sequence_features,
+            expected_sequence_features,
+            atol=5e-2 if model.config.float_16_predict else 1e-4,
+            rtol=1e-2,
+        )
 
-        try:
-            preds = model.predict(texts, context=contexts)
-        except:
-            if expected_preds is not None:
-                raise
-            preds = None
+    try:
+        preds = model.predict(texts, context=contexts)
+    except:
         if expected_preds is not None:
-            # Slightly looser atol on here, but as long as the preds are the same nobody is going to care about
-            # 1% change in probas.
-            nested_assert_allclose(
-                preds,
-                expected_preds,
-                atol=5e-2 if model.config.float_16_predict else 1e-2,
-            )
+            raise
+        preds = None
+    if expected_preds is not None:
+        # Slightly looser atol on here, but as long as the preds are the same nobody is going to care about
+        # 1% change in probas.
+        nested_assert_allclose(
+            preds,
+            expected_preds,
+            atol=5e-2 if model.config.float_16_predict else 1e-2,
+        )
 
-        try:
-            probs = model.predict_proba(texts, context=contexts)
-        except:
-            if expected_probs is not None:
-                raise
-            probs = None
+    try:
+        probs = model.predict_proba(texts, context=contexts)
+    except:
         if expected_probs is not None:
-            nested_assert_allclose(
-                probs,
-                expected_probs,
-                atol=5e-2 if model.config.float_16_predict else 1e-2,
-            )
+            raise
+        probs = None
+    if expected_probs is not None:
+        nested_assert_allclose(
+            probs,
+            expected_probs,
+            atol=5e-2 if model.config.float_16_predict else 1e-2,
+        )
