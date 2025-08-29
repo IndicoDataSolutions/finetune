@@ -1,10 +1,13 @@
+import json
 import os
-import finetune
-from finetune.encoding.input_encoder import BaseEncoder, EncodedOutput
-from finetune.base_models.gpt2.encoder import GPT2Encoder, bytes_to_unicode
-from finetune.base_models.gpt2 import encoder as gpt2_encoder
 
-from transformers import RobertaTokenizerFast
+from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
+from tokenizers.models import BPE
+
+import finetune
+from finetune.base_models.gpt2 import encoder as gpt2_encoder
+from finetune.base_models.gpt2.encoder import GPT2Encoder
+from finetune.encoding.input_encoder import BaseEncoder, EncodedOutput
 
 FINETUNE_FOLDER = os.path.dirname(finetune.__file__)
 DICT_PATH = os.path.join(FINETUNE_FOLDER, "model", "bert", "dict.txt")
@@ -42,7 +45,6 @@ class RoBERTaEncoder(GPT2Encoder):
                 )  # add 4 for the special tokens at beginning
                 index += 1
         super().__init__(encoder_path=encoder_path, vocab_path=vocab_path)
-
 
     def _convert_to_embed_idx(self, idx):
         return self.freqs[idx]
@@ -82,19 +84,41 @@ class RoBERTaEncoderV2(BaseEncoder):
     offset = 4
 
     def __init__(self, encoder_path=ENCODER_PATH, vocab_path=VOCAB_PATH):
-        self.tokenizer = RobertaTokenizerFast(
-            merges_file=vocab_path, vocab_file=encoder_path
+
+        with open(vocab_path, encoding="utf-8") as merges_handle:
+            bpe_merges = merges_handle.read().split("\n")[1:-1]
+        bpe_merges = [tuple(merge.split()) for merge in bpe_merges]
+        with open(encoder_path, "r", encoding="utf-8") as f:
+            vocab = json.load(f)
+        self.tokenizer = Tokenizer(
+            BPE(
+                vocab=vocab,
+                merges=bpe_merges,
+                dropout=None,
+                continuing_subword_prefix="",
+                end_of_word_suffix="",
+                fuse_unk=False,
+            )
         )
+
+        self.tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
+        self.tokenizer.decoder = decoders.ByteLevel()
+        self.tokenizer.post_processor = processors.RobertaProcessing(
+            sep=("</s>", vocab["</s>"]),
+            cls=("<s>", vocab["<s>"]),
+            add_prefix_space=False,
+            trim_offsets=True,  # True by default on Roberta (historical)
+        )
+
         self.start_token = 0  # bos from roberta
         self.delimiter_token = 2  # eos from roberta
         self.end_token = 2  # eos from roberta
         self.UNK_IDX = 3  # unk from roberta
         self.mask_token = 50264
         self.mapping = {
-            self.tokenizer.cls_token_id: 0,
-            self.tokenizer.eos_token_id: 2,
-            self.tokenizer.unk_token_id: 3,
-            self.tokenizer.sep_token_id: 2,
+            vocab["<s>"]: 0,
+            vocab["</s>"]: 2,
+            vocab["<unk>"]: 3,
         }
         self.initialized = True
 
@@ -108,7 +132,7 @@ class RoBERTaEncoderV2(BaseEncoder):
         batch_char_ends = []
         batch_char_starts = []
         for i, text in enumerate(texts):
-            encoded = self.tokenizer._tokenizer.encode(text, add_special_tokens=False)
+            encoded = self.tokenizer.encode(text, add_special_tokens=False)
             batch_token_idxs.append(
                 [
                     i + self.offset if i not in self.mapping else self.mapping[i]
@@ -143,7 +167,6 @@ class RoBERTaEncoderV2(BaseEncoder):
 
     def decode(self, ids):
         return self.tokenizer.decode(ids, skip_special_tokens=True)
-
 
 
 class RoBERTaEncoderXDoc(RoBERTaEncoderV2):

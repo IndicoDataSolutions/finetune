@@ -1,33 +1,25 @@
 import itertools
 import logging
-import sys
 import math
-import os
+import sys
 import warnings
-from collections.abc import Iterable
-from collections import Counter
-
 from abc import ABCMeta, abstractmethod
+from collections import Counter
+from collections.abc import Iterable
 
-import tqdm
 import numpy as np
-import pandas as pd
 import tensorflow as tf
-from tensorflow.python.data import Dataset
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelBinarizer
 from sklearn.utils import shuffle as dataset_shuffle
-import finetune
-from finetune.errors import FinetuneError
+
 from finetune.encoding.input_encoder import EncodedOutput, tokenize_context
+from finetune.errors import FinetuneError
 from finetune.util.imbalance import compute_class_weights
 from finetune.util.input_utils import (
-    InputMode,
-    validation_settings,
-    wrap_tqdm,
     Chunker,
-    has_targets,
+    InputMode,
     batch_dataset,
+    has_targets,
+    wrap_tqdm,
 )
 
 LOGGER = logging.getLogger("finetune")
@@ -73,19 +65,66 @@ class BasePipeline(metaclass=ABCMeta):
             )
         return self._chunker
 
-    def _add_context_info_if_present(self, types, shapes):
+    def _add_context_info_if_present(self, types, shapes, concrete_dims):
         if self.config.use_auxiliary_info:
             TS = tf.TensorShape
             types["context"] = tf.float32
-            shapes["context"] = TS([None, self.config.context_dim])
+            shapes["context"] = TS([self.config.max_length if concrete_dims else None, self.config.context_dim])
         return types, shapes
 
-    def feed_shape_type_def(self):
+    def target_def(self, concrete_dims):
+        return (tf.int32, tf.TensorShape([self.target_dim]))
+
+    def input_spec(
+        self, *, concrete_dims, include_lengths=True, batched=True, include_targets=True
+    ):
         TS = tf.TensorShape
         types = {"tokens": tf.int32}
-        shapes = {"tokens": TS([None])}
-        types, shapes = self._add_context_info_if_present(types, shapes)
-        return ((types, tf.float32), (shapes, TS([self.target_dim])))
+        shapes = {"tokens": TS([self.config.max_length if concrete_dims else None])}
+        if include_lengths:
+            types["length"] = tf.int32
+            shapes["length"] = TS([])
+        types, shapes = self._add_context_info_if_present(types, shapes, concrete_dims=concrete_dims)
+        target_type, target_shape = self.target_def(concrete_dims=concrete_dims)
+        if batched:
+            output = (
+                (types, target_type),
+                tf.nest.map_structure(
+                    lambda ts: tf.TensorShape(
+                        [
+                            self.config.batch_size if concrete_dims else None,
+                            *ts.as_list(),
+                        ]
+                    ),
+                    (shapes, target_shape),
+                ),
+            )
+        else:
+            output = ((types, target_type), (shapes, target_shape))
+        if not include_targets:
+            (types, _), (shapes, _) = output
+            output = (types, shapes)
+        return output
+
+    def keras_input_def(self, *, concrete_dims, include_targets=False):
+        input_types, input_shapes = self.input_spec(
+            concrete_dims=concrete_dims, include_targets=include_targets, batched=False
+        )
+        return tf.nest.map_structure(
+            lambda dtype, shape: tf.keras.Input(shape=shape, dtype=dtype),
+            input_types,
+            input_shapes,
+        )
+
+    def keras_input_signature(self, *, concrete_dims, include_targets):
+        input_types, input_shapes = self.input_spec(
+            concrete_dims=concrete_dims, include_targets=include_targets
+        )
+        return tf.nest.map_structure(
+            lambda dtype, shape: tf.TensorSpec(shape=shape, dtype=dtype),
+            input_types,
+            input_shapes,
+        )
 
     def zip_list_to_dict(self, X, Y=None, context=None):
         if Y is not None:
@@ -118,6 +157,7 @@ class BasePipeline(metaclass=ABCMeta):
             else:
                 tokenized_context = tokenize_context(context, out, self.config)
                 feats = {"tokens": out.token_ids, "context": tokenized_context}
+            LOGGER.debug("Outputting tokenized sequence")
             if Y is None:
                 yield feats
             else:
@@ -133,9 +173,6 @@ class BasePipeline(metaclass=ABCMeta):
             self.config.pad_idx = self.pad_idx
 
             target_dim = self.label_encoder.target_dim
-            self.lm_loss_coef = (
-                self.config.lm_loss_coef if target_dim is not None else 1.0
-            )
             self.target_dim = target_dim
 
     def _compute_class_counts(self, encoded_dataset):
@@ -155,48 +192,44 @@ class BasePipeline(metaclass=ABCMeta):
             class_weights=class_weights, class_counts=class_counts
         )
 
-    def make_dataset_fn(
-        self, data_fn, tqdm_mode, shapes, types, update_hook=None, skip_val=False
-    ):
-        def dataset_fn():
-            return Dataset.from_generator(
-                wrap_tqdm(
-                    gen=data_fn,
-                    mode=tqdm_mode,
-                    n_epochs=self.config.n_epochs,
-                    val_size=self.config.val_size,
-                    dataset_size=self.config.dataset_size,
-                    skip_val=skip_val,
-                    quiet=self.config.debugging_logs,
-                    update_hook=update_hook,
-                    current_epoch_offset=self.current_epoch_offset
-                    if tqdm_mode == "train"
-                    else 0,
-                    total_epoch_offset=self.total_epoch_offset
-                    if tqdm_mode == "train"
-                    else 0,
-                ),
-                types,
-                shapes,
-            )
-
-        return dataset_fn
+    def make_dataset_fn(self, data_fn, tqdm_mode, shapes, types, update_hook=None):
+        return tf.data.Dataset.from_generator(
+            wrap_tqdm(
+                gen=data_fn,
+                mode=tqdm_mode,
+                n_epochs=self.config.n_epochs,
+                dataset_size=self.config.dataset_size,
+                quiet=self.config.debugging_logs,
+                update_hook=update_hook,
+                current_epoch_offset=self.current_epoch_offset
+                if tqdm_mode == "train"
+                else 0,
+                total_epoch_offset=self.total_epoch_offset
+                if tqdm_mode == "train"
+                else 0,
+            ),
+            types,
+            shapes,
+        )
 
     def get_dataset_from_generator(self, generator_fn, input_mode, update_hook=None):
+        # Get from generator assumes no XLA, uses dynamic padding and batching etc.
+        if input_mode != InputMode.PREDICT:
+            raise ValueError(
+                "From generator does not support training. Use get_dataset_from_list"
+            )
+
         def chunked_and_tokenized_dataset():
             for d in generator_fn():
                 yield from self.text_to_tokens_mask(**d)
 
-        types, shapes = self.feed_shape_type_def()
-
-        if input_mode == InputMode.PREDICT:
-            tqdm_mode = "predict"
-        else:
-            tqdm_mode = "train"
-
-        if input_mode == InputMode.PREDICT or not has_targets(generator_fn):
-            types = types[0]
-            shapes = shapes[0]
+        types, shapes = self.input_spec(
+            concrete_dims=False,
+            include_lengths=False,
+            batched=False,
+            include_targets=False,
+        )
+        tqdm_mode = "predict"
 
         raw_dataset = self.make_dataset_fn(
             data_fn=chunked_and_tokenized_dataset,
@@ -204,102 +237,30 @@ class BasePipeline(metaclass=ABCMeta):
             update_hook=update_hook,
             types=types,
             shapes=shapes,
-            skip_val=input_mode == InputMode.TRAIN,
         )
-        if input_mode == InputMode.PREDICT:
-            return {
-                "predict_dataset": batch_dataset(
-                    raw_dataset,
-                    batch_size=self.config.predict_batch_size,
-                    max_length=self.config.max_length,
-                    table_batching=False,  # We cannot use table batching here because the order of the outputs is impacted.
-                    shapes=shapes,
-                )
-            }
-
-        if self.config.chunk_long_sequences:
-            LOGGER.warning(
-                "The dataset size is not adjusted for chunk long sequences when training from a generator"
-            )
-
-        if self.config.dataset_size is None:
-            raise FinetuneError(
-                "If you are using a callable as input you must provide config.dataset_size"
-            )
-
-        if self.config.class_weights is not None:
-            raise FinetuneError("Cannot use class weights in generator mode")
-
-        self.config.val_size, self.config.val_interval = validation_settings(
-            dataset_size=self.config.dataset_size,
-            batch_size=self.config.batch_size,
-            val_size=self.config.val_size,
-            val_interval=self.config.val_interval,
-            keep_best_model=self.config.keep_best_model,
-        )
-
-        self.config.dataset_size -= self.config.val_size
-
-        val_dataset = (
-            lambda: raw_dataset()
-            .shuffle(
-                self.config.shuffle_buffer_size,
-                seed=self.config.seed,
-                reshuffle_each_iteration=False,
-            )
-            .take(self.config.val_size)
-        )
-        train_dataset = (
-            lambda: raw_dataset()
-            .shuffle(
-                self.config.shuffle_buffer_size,
-                seed=self.config.seed,
-                reshuffle_each_iteration=False,
-            )
-            .skip(self.config.val_size)
-        )
-
         return {
-            "train_dataset": batch_dataset(
-                train_dataset,
-                batch_size=self.config.batch_size,
+            "predict_dataset": batch_dataset(
+                raw_dataset,
+                batch_size=self.config.predict_batch_size,
                 max_length=self.config.max_length,
+                table_batching=False,  # We cannot use table batching here because the order of the outputs is impacted.
                 shapes=shapes,
-                n_epochs=self.config.n_epochs,
-                shuffle=self.config.reshuffle_chunks,
-                table_batching=self.config.table_batching,
-                random_seed=self.config.seed,
-            ),
-            "val_dataset": batch_dataset(
-                val_dataset,
-                batch_size=self.config.batch_size,
-                max_length=self.config.max_length,
-                shapes=shapes,
-                table_batching=self.config.table_batching,
-            ),
+                drop_remainder=False,
+            )
         }
 
     def get_dataset_from_list(self, data_list, input_mode, update_hook=None):
-        assert input_mode == InputMode.TRAIN, "use the generator path for prediction"
+        # From list assumes we will be compiling with XLA, we used fixed batch_size batches and max_length sequences.
+        # We also drop up to batch_size - 1 items from the final batch of the final epoch. if that is necessary to maintain even batch sizes.
+        if input_mode != InputMode.TRAIN:
+            raise ValueError(
+                "From list does not support prediction. Use get_dataset_from_generator"
+            )
 
         data_list = list(data_list)
         self._post_data_initialization(data_list)
 
-        self.config.val_size, self.config.val_interval = validation_settings(
-            dataset_size=len(data_list),
-            batch_size=self.config.batch_size,
-            val_size=self.config.val_size,
-            val_interval=self.config.val_interval,
-            keep_best_model=self.config.keep_best_model,
-        )
-
-        if self.config.val_size > 0 and self.config.val_set is None:
-            train_split, val_split = train_test_split(
-                data_list, test_size=self.config.val_size, random_state=self.config.seed
-            )
-        else:
-            train_split = dataset_shuffle(data_list, random_state=self.config.seed)
-            val_split = self.config.val_set or []
+        train_split = dataset_shuffle(data_list, random_state=self.config.seed)
 
         tokenized_train_split = list(
             itertools.chain.from_iterable(
@@ -309,29 +270,18 @@ class BasePipeline(metaclass=ABCMeta):
 
         self.config.dataset_size = len(tokenized_train_split)
 
-        tokenized_val_split = list(
-            itertools.chain.from_iterable(
-                self.text_to_tokens_mask(**d) for d in val_split
-            )
-        )
-        if self.config.val_size != len(tokenized_val_split):
-            LOGGER.warning(
-                "Updating validation size from {} to {} this is possibly due to chunking but may cause issues with val frequency.".format(
-                    self.config.val_size, len(tokenized_val_split)
-                )
-            )
-            self.config.val_size = len(tokenized_val_split)
-
         if self.config.class_weights is not None:
             class_counts = self._compute_class_counts(tokenized_train_split)
             self.config.class_weights = self._compute_class_weights(
                 class_weights=self.config.class_weights, class_counts=class_counts
             )
 
-        types, shapes = self.feed_shape_type_def()
-        if not has_targets(lambda: tokenized_train_split):
-            types = types[0]
-            shapes = shapes[0]
+        types, shapes = self.input_spec(
+            concrete_dims=False, include_lengths=False, batched=False
+        )
+        _, concrete_shapes = self.input_spec(
+            concrete_dims=True, include_lengths=False, batched=False
+        )
 
         if self.config.min_steps is not None:
             self.config.n_epochs = max(
@@ -346,31 +296,19 @@ class BasePipeline(metaclass=ABCMeta):
             types=types,
             shapes=shapes,
         )
-        val_dataset_unbatched = self.make_dataset_fn(
-            data_fn=lambda: tokenized_val_split,
-            tqdm_mode="evaluate",
-            types=types,
-            shapes=shapes,
+        batched_train_dataset = batch_dataset(
+            train_dataset_unbatched,
+            batch_size=self.config.batch_size,
+            max_length=self.config.max_length,
+            shapes=concrete_shapes,
+            n_epochs=self.config.n_epochs,
+            shuffle=self.config.reshuffle_chunks,
+            table_batching=self.config.table_batching,
+            random_seed=self.config.seed,
+            drop_remainder=True,
         )
-
         return {
-            "train_dataset": batch_dataset(
-                train_dataset_unbatched,
-                batch_size=self.config.batch_size,
-                max_length=self.config.max_length,
-                shapes=shapes,
-                n_epochs=self.config.n_epochs,
-                shuffle=self.config.reshuffle_chunks,
-                table_batching=self.config.table_batching,
-                random_seed=self.config.seed,
-            ),
-            "val_dataset": batch_dataset(
-                val_dataset_unbatched,
-                batch_size=self.config.batch_size,
-                max_length=self.config.max_length,
-                shapes=shapes,
-                table_batching=self.config.table_batching,
-            ),
+            "train_dataset": batched_train_dataset,
         }
 
     def resampling(self, Xs, Y, context=None):
@@ -439,6 +377,7 @@ class BasePipeline(metaclass=ABCMeta):
                             if fv[-1] != end_token:
                                 fv = np.concatenate((fv, [end_token]))
                         d[field] = fv
+                LOGGER.debug("Yielding tokenized sequence")
                 yield EncodedOutput(
                     useful_start=useful_start, useful_end=useful_end, input_text=Xs, **d
                 )

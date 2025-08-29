@@ -1,9 +1,10 @@
 import logging
 import os
-import finetune
+
 from tokenizers import Tokenizer
-from finetune.encoding.input_encoder import BaseEncoder
-from finetune.encoding.input_encoder import EncodedOutput
+
+import finetune
+from finetune.encoding.input_encoder import BaseEncoder, EncodedOutput
 
 FINETUNE_FOLDER = os.path.dirname(finetune.__file__)
 TOKENIZER_PATH = os.path.join(FINETUNE_FOLDER, "model", "modern_bert", "tokenizer.json")

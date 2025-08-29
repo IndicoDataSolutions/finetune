@@ -4,33 +4,30 @@ from urllib.parse import urljoin
 from finetune.base_models import SourceModel
 from finetune.base_models.bert.encoder import (
     BERTEncoder,
-    BERTEncoderMultuilingal,
     BERTEncoderLarge,
+    BERTEncoderMultuilingal,
     DistilBERTEncoder,
     LayoutLMEncoder,
 )
-
+from finetune.base_models.bert.modeling import (
+    BertModel,
+    LayoutLMModel,
+    TwinBertFeaturizer,
+    XDocModel,
+)
 from finetune.base_models.bert.roberta_encoder import (
     RoBERTaEncoder,
     RoBERTaEncoderV2,
     RoBERTaEncoderXDoc,
 )
-from finetune.base_models.bert.featurizer import (
-    bert_featurizer,
-    layoutlm_featurizer,
-    xdoc_featurizer,
-    table_roberta_featurizer_twinbert,
-)
-
-from finetune.util.context_utils import get_context_layoutlm, get_context_doc_rep
+from finetune.util.context_utils import get_context_doc_rep, get_context_layoutlm
 from finetune.util.download import (
     BERT_BASE_URL,
-    GPT2_BASE_URL,
-    ROBERTA_BASE_URL,
-    LAYOUTLM_BASE_URL,
     FINETUNE_BASE_FOLDER,
+    GPT2_BASE_URL,
+    LAYOUTLM_BASE_URL,
+    ROBERTA_BASE_URL,
 )
-from finetune.util.featurizer_fusion import fused_featurizer
 
 BERT_BASE_PARAMS = {
     "lm_type": "mlm",
@@ -51,7 +48,6 @@ BERT_LARGE_PARAMS = {
     "n_epochs": 8,
     "n_heads": 16,
     "n_layer": 24,
-    "num_layers_trained": 24,
     "act_fn": "gelu",
     "lr_warmup": 0.1,
     "lr": 1e-5,
@@ -65,7 +61,6 @@ DISTIL_BERT_PARAMS = {
     "n_epochs": 8,
     "n_heads": 12,
     "n_layer": 6,
-    "num_layers_trained": 6,
     "act_fn": "gelu",
     "lr_warmup": 0.1,
     "lr": 1e-5,
@@ -86,7 +81,9 @@ class _BaseBert(SourceModel):
         base_n_epochs = config.base_model.settings.get("n_epochs", 8)
         base_batch_size = config.base_model.settings.get("batch_size", 2)
         base_learning_rate = config.base_model.settings.get("lr", 1e-5)
-        base_predict_batch_size = config.base_model.settings.get("predict_batch_size", 20)
+        base_predict_batch_size = config.base_model.settings.get(
+            "predict_batch_size", 20
+        )
         if config.optimize_for.lower() == "speed":
             overrides = {
                 "max_length": 128 if config.chunk_long_sequences else base_max_length,
@@ -156,7 +153,7 @@ class _BaseBert(SourceModel):
 
 class BERTModelCased(_BaseBert):
     encoder = BERTEncoder
-    featurizer = bert_featurizer
+    featurizer = BertModel
     settings = {
         **BERT_BASE_PARAMS,
         "base_model_path": os.path.join("bert", "bert_small_cased-v2.jl"),
@@ -172,7 +169,7 @@ class BERTModelCased(_BaseBert):
 
 class BERTModelLargeCased(_BaseBert):
     encoder = BERTEncoderLarge
-    featurizer = bert_featurizer
+    featurizer = BertModel
     settings = {
         **BERT_LARGE_PARAMS,
         "base_model_path": os.path.join("bert", "bert_large_cased-v2.jl"),
@@ -188,7 +185,7 @@ class BERTModelLargeCased(_BaseBert):
 
 class BERTModelLargeWWMCased(_BaseBert):
     encoder = BERTEncoderLarge
-    featurizer = bert_featurizer
+    featurizer = BertModel
     settings = {
         **BERT_LARGE_PARAMS,
         "base_model_path": os.path.join("bert", "bert_wwm_large_cased-v2.jl"),
@@ -204,7 +201,7 @@ class BERTModelLargeWWMCased(_BaseBert):
 
 class BERTModelMultilingualCased(_BaseBert):
     encoder = BERTEncoderMultuilingal
-    featurizer = bert_featurizer
+    featurizer = BertModel
     settings = {
         **BERT_BASE_PARAMS,
         "base_model_path": os.path.join("bert", "bert_small_multi_cased-v2.jl"),
@@ -220,7 +217,7 @@ class BERTModelMultilingualCased(_BaseBert):
 
 class RoBERTa(_BaseBert):
     encoder = RoBERTaEncoderV2
-    featurizer = bert_featurizer
+    featurizer = BertModel
     is_roberta = True
     settings = {
         **BERT_BASE_PARAMS,
@@ -266,17 +263,9 @@ class RoBERTa(_BaseBert):
             return RoBERTaEncoder(**kwargs)
 
 
-class FusedRoBERTa(RoBERTa):
-    featurizer = fused_featurizer(bert_featurizer)
-    settings = dict(RoBERTa.settings)
-    settings.update(
-        {"max_length": 2048, "num_fusion_shards": 4, "chunk_long_sequences": False}
-    )
-
-
 class DocRep(_BaseBert):
     encoder = RoBERTaEncoderV2
-    featurizer = bert_featurizer
+    featurizer = BertModel
     get_context_fn = get_context_doc_rep
     is_roberta = True
     settings = dict(RoBERTa.settings)
@@ -324,18 +313,10 @@ class DocRep(_BaseBert):
         return cls.encoder(**kwargs)
 
 
-class FusedDocRep(DocRep):
-    featurizer = fused_featurizer(bert_featurizer)
-    settings = dict(DocRep.settings)
-    settings.update(
-        {"max_length": 2048, "num_fusion_shards": 4, "chunk_long_sequences": False}
-    )
-
-
 class RoBERTaLarge(RoBERTa):
     encoder = RoBERTaEncoderV2
     is_roberta = True
-    featurizer = bert_featurizer
+    featurizer = BertModel
     settings = {
         **BERT_LARGE_PARAMS,
         "bert_use_pooler": False,
@@ -372,7 +353,7 @@ ZuckerBERT = RoBERTa
 
 class DistilBERT(_BaseBert):
     encoder = DistilBERTEncoder
-    featurizer = bert_featurizer
+    featurizer = BertModel
     settings = {
         **DISTIL_BERT_PARAMS,
         "base_model_path": os.path.join("bert", "distillbert.jl"),
@@ -388,7 +369,7 @@ class DistilBERT(_BaseBert):
 
 class DistilRoBERTa(_BaseBert):
     encoder = RoBERTaEncoder
-    featurizer = bert_featurizer
+    featurizer = BertModel
     is_roberta = True
 
     settings = {
@@ -419,7 +400,7 @@ class DistilRoBERTa(_BaseBert):
 
 class LayoutLM(_BaseBert):
     encoder = LayoutLMEncoder
-    featurizer = layoutlm_featurizer
+    featurizer = LayoutLMModel
     get_context_fn = get_context_layoutlm
     settings = {
         **BERT_BASE_PARAMS,
@@ -451,7 +432,7 @@ class LayoutLM(_BaseBert):
 
 
 class XDocBase(_BaseBert):
-    featurizer = xdoc_featurizer
+    featurizer = XDocModel
     encoder = RoBERTaEncoderXDoc
     get_context_fn = get_context_layoutlm
     is_roberta = False
@@ -499,7 +480,11 @@ class XDocBase(_BaseBert):
 class TableRoBERTa(_BaseBert):
     encoder = RoBERTaEncoderV2
     is_roberta = True
-    featurizer = table_roberta_featurizer_twinbert
+    featurizer = TwinBertFeaturizer
+    # Due to use of ragged tensors we cannot support XLA for this model.
+    # Wrapping the inner call method in a tf.function with jit_compile=False causes missing gradient errors that I don't understand.
+    # Longeer term we should try to refactor this to use a more XLA friendly approach.
+    supports_xla = False
     settings = {
         **BERT_BASE_PARAMS,
         # Just incase all cells fall into the same buckets this -8 allows us to pack the batches much tighter once we add EOS and BOS

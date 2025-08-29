@@ -1,48 +1,35 @@
-import os
 import io
-import gc
-import random
-import weakref
-import warnings
-import itertools
+import logging
 import math
+import os
+import pathlib
+import random
+import tempfile
+import threading
+import time
+import typing as t
+import warnings
+import weakref
 from abc import ABCMeta, abstractmethod
 from copy import deepcopy
-import tempfile
-import time
-import sys
-from contextlib import contextmanager
-import pathlib
-import logging
+from datetime import datetime
 from typing import Dict, List, Mapping, Tuple
 
+import joblib
 import numpy as np
 import tensorflow as tf
-from tensorflow.data import Dataset
-from tensorflow.compat.v1 import logging as tf_logging
+from tensorflow.python.keras.backend import reset_uids as keras_reset_uids
 
-from sklearn.model_selection import train_test_split
-import joblib
-
-
-from finetune.util import list_transpose
-from finetune.encoding.input_encoder import EncodedOutput
-from finetune.config import all_gpus, assert_valid_config, get_default_config
-from finetune.saver import Saver, InitializeHook
-from finetune.errors import FinetuneError
-from finetune.model import get_model_fn, PredictMode
-from finetune.util.download import download_data_if_required
-from finetune.util.timing import ProgressBar
-from finetune.util.in_memory_finetune import make_in_memory_finetune_hooks
-from finetune.util.indico_estimator import IndicoEstimator
-from finetune.util.gpu_info import gpu_info
-
-from finetune.base_models.bert.model import _BaseBert
-from finetune.base_models.modern_bert.model import _ModernBertBase
 from finetune.base_models.bert.roberta_encoder import RoBERTaEncoderV2
-from finetune.base_models import GPTModel, GPTModelSmall
-
+from finetune.config import assert_valid_config, get_default_config
+from finetune.errors import FinetuneError
 from finetune.input_pipeline import InputMode
+from finetune.model import get_keras_model
+from finetune.optimizers.learning_rate_schedules import FinetuneKerasLRSchedule
+from finetune.saver import Saver
+from finetune.util.download import download_data_if_required
+from finetune.util.gpu_info import gpu_info
+from finetune.util.timing import ProgressBar
 
 LOGGER = logging.getLogger("finetune")
 
@@ -67,6 +54,49 @@ def start_end_gen(gen):
     yield previous, start, True
 
 
+class FinetuneRegistry:
+    """
+    Very thin global registry that tracks finetune models so that we can cleanup the keras session without breaking
+    any models. When cleanup is called any models loaded in the GPU will be closed and the keras session will be cleared.
+    """
+
+    def __init__(self):
+        self._refs = set()
+        self._refs_lock = threading.RLock()
+
+    def register(self, model: "BaseModel") -> None:
+        def _finalizer(wr: weakref.ref) -> None:
+            with self._refs_lock:
+                self._refs.discard(wr)
+
+        with self._refs_lock:
+            self._refs.add(weakref.ref(model, _finalizer))
+
+    def live_models(self) -> t.Iterator["BaseModel"]:
+        """
+        Iterate currently alive holder objects.
+        """
+        with self._refs_lock:
+            for wr in tuple(self._refs):
+                obj = wr()
+                if obj is None:
+                    self._refs.discard(wr)
+                else:
+                    yield obj
+
+    def cleanup(self):
+        """
+        Close all live models and clear dead weakrefs, then clear the Keras session.
+        """
+        with self._refs_lock:
+            for model in self.live_models():
+                model.close()
+        tf.keras.backend.clear_session()
+
+
+MODEL_REGISTRY = FinetuneRegistry()
+
+
 class BaseModel(object, metaclass=ABCMeta):
     """
     A sklearn-style task agnostic base class for finetuning a Transformer language model.
@@ -83,18 +113,24 @@ class BaseModel(object, metaclass=ABCMeta):
         """
 
         # Finalizer runs at garbage collection and exit
-        weak_self = weakref.proxy(self)
+        def _finalizer_func(ws_ref):
+            try:
+                ws = ws_ref()
+                if ws is not None and hasattr(ws, "close"):
+                    ws.close(update_saver=False)
+            except ReferenceError:
+                # Suppress "Weakly referenced object no longer exists"
+                pass
+
+        self_ref = weakref.ref(self)
         self._finalizer = weakref.finalize(
             self,
-            lambda ws=weak_self: (
-                ws.close(),
-                getattr(ws, "_tmp_dir", None) and ws._tmp_dir.cleanup()
-            )
+            _finalizer_func,
+            self_ref,
         )
         self.config_overrides = deepcopy(self.defaults)
         self.config_overrides.update(kwargs)
         self.config = self.resolve_config()
-        self.resolved_gpus = None
         self.validate_config()
         download_data_if_required(self.config.base_model)
         self.input_pipeline = self._get_input_pipeline()
@@ -102,11 +138,11 @@ class BaseModel(object, metaclass=ABCMeta):
         self._initialize()
         if self.config.debugging_logs:
             os.environ["TF_CPP_MIN_LOG_LEVEL"] = "0"
-            tf_logging.set_verbosity(tf_logging.DEBUG)
         self.check_gpu_for_fp16()
+        self._model = None
 
     def check_gpu_for_fp16(self):
-        if not gpu_info(self._get_estimator_config().session_config)["fp16_inference"]:
+        if not gpu_info()["fp16_inference"]:
             if self.config.float_16_predict or self.config.mixed_precision:
                 LOGGER.warning(
                     "This GPU does not support float 16 ops but they were requested in the config. They are being turned off."
@@ -129,18 +165,7 @@ class BaseModel(object, metaclass=ABCMeta):
             elif k in config.base_model.settings:
                 config[k] = config.base_model.settings[k]
 
-        model_supports_fp16 = issubclass_or_instance(config.base_model, (_BaseBert, _ModernBertBase))
-        # This has to be here before optimal_params are derived because some are dependant on these values.
-        if (not model_supports_fp16 or no_fp16) and (
-            config.float_16_predict == True or config.mixed_precision == True
-        ):
-            LOGGER.warning(
-                "float_16_predict and mixed_precision only supported by bert based models and Volta or newer GPUs"
-            )
-            config.float_16_predict = False
-            config.mixed_precision = False
-
-        if (not model_supports_fp16 or no_fp16) and "fp16" in config.optimize_for:
+        if no_fp16 and "fp16" in config.optimize_for:
             new_optimize_for = config.optimize_for.replace("_fp16", "")
             LOGGER.warning(
                 "optimize_for was set to {} but fp16 is not supported by this gpu so falling back to {}".format(
@@ -151,8 +176,6 @@ class BaseModel(object, metaclass=ABCMeta):
 
         overrides = config.base_model.get_optimal_params(config)
         for ak in auto_keys:
-            if ak in ["val_size", "use_gpu_crf_predict"]:
-                continue  # this auto is resolved after data is provided.
             if ak not in overrides:
                 raise ValueError("There is no auto setting for {}".format(ak))
             config[ak] = overrides[ak]
@@ -172,13 +195,7 @@ class BaseModel(object, metaclass=ABCMeta):
         return config
 
     def validate_config(self):
-        if (
-            self.config.num_layers_trained != self.config.n_layer
-            and self.config.train_embeddings
-        ):
-            raise ValueError(
-                "If you are only finetuning a subset of the layers, you cannot finetune embeddings."
-            )
+        pass
 
     @abstractmethod
     def _get_input_pipeline(self):
@@ -187,271 +204,155 @@ class BaseModel(object, metaclass=ABCMeta):
     def _initialize(self):
         # Initializes the non-serialized bits of the class.
         self._set_random_seed(self.config.seed)
-
-        # state for prediction caching
-        self._cached_predict = False
-        self._cached_estimator = None
-
-        try:
-            self.estimator_dir = os.path.abspath(
-                os.path.join(self.config.tensorboard_folder, str(int(time.time())))
-            )
-            pathlib.Path(self.estimator_dir).mkdir(parents=True, exist_ok=True)
-            self._tmp_dir = None
-        except (TypeError, IOError):
-            # TypeError --> tensorboard_folder is None
-            # IOError --> user likely does not have permission to write to the tensorboard_folder directory
-            # Both cases we can resolve by
-            self._tmp_dir = tempfile.TemporaryDirectory(prefix="Finetune")
-            self.estimator_dir = self._tmp_dir.name
-            LOGGER.info("Saving tensorboard output to {}".format(self.estimator_dir))
-
+        self._model = None
         self.saver = Saver(
             fallback_filename=self.config.base_model_path,
-            exclude_matches=None if self.config.save_adam_vars else "OptimizeLoss",
             save_dtype=self.config.save_dtype,
             permit_uninitialized=self.config.permit_uninitialized,
-            add_tokens=getattr(self.config.base_model, "_add_tokens", None),
         )
-
-    def init_from_checkpoint(self, checkpoint_path):
-        if self._trained:
-            raise FinetuneError("Cannot reinitialize trained model from checkpoint")
-        self.saver = Saver(
-            fallback_filename=checkpoint_path,
-            exclude_matches=None if self.config.save_adam_vars else "OptimizeLoss",
-            save_dtype=self.config.save_dtype,
-            restart_global_step=False,
-        )
+        MODEL_REGISTRY.register(self)
 
     @abstractmethod
-    def _predict_op(self, logits, **kwargs):
-        raise NotImplementedError
-
-    @abstractmethod
-    def _predict_proba_op(self, logits, **kwargs):
-        raise NotImplementedError
-
-    @abstractmethod
-    def _target_model(
-        self,
-        *,
-        config,
-        featurizer_state,
-        targets,
-        n_outputs,
-        train=False,
-        reuse=None,
-        **kwargs
-    ):
+    def target_block(self, *, config, n_outputs, **kwargs):
         # Overridden by subclass to attach a target model onto the shared base featurizer.
         raise NotImplementedError
 
-    def _pre_target_model_hook(self, featurizer_state):
-        pass
-
     def _n_steps(self, n_examples, batch_size, n_gpus):
-        steps = int(math.ceil(n_examples / (batch_size * n_gpus)))
+        # Floor because we do drop the final elements of each batch if they don't make up a full batch.
+        steps = int(math.floor(n_examples / (batch_size * n_gpus)))
         return steps
 
     def finetune(
         self,
         Xs,
-        Y=None,
+        Y,
         context=None,
         update_hook=None,
-        log_hooks=None,
-        force_build_lm=False,
     ):
-        if callable(Xs):
-            datasets = self.input_pipeline.get_dataset_from_generator(
-                Xs, input_mode=InputMode.TRAIN, update_hook=update_hook
-            )
-        else:
-            zipped_data_list = self.input_pipeline.zip_list_to_dict(
-                X=Xs, Y=Y, context=context
-            )
-            datasets = self.input_pipeline.get_dataset_from_list(
-                zipped_data_list, input_mode=InputMode.TRAIN, update_hook=update_hook
-            )
-
-        if self.config.keep_best_model:
-            if self.config.val_size <= 10:
-                tf.compat.v1.logging.warning(
-                    "Early stopping / keeping best model with a validation size of {} is likely to case undesired results".format(
-                        self.config.val_size
-                    )
-                )
-
-        force_build_lm = Y is None or force_build_lm
-        estimator, hooks = self.get_estimator(force_build_lm=force_build_lm)
-        train_hooks = hooks.copy()
+        zipped_data_list = self.input_pipeline.zip_list_to_dict(
+            X=Xs, Y=Y, context=context
+        )
+        datasets = self.input_pipeline.get_dataset_from_list(
+            zipped_data_list, input_mode=InputMode.TRAIN, update_hook=update_hook
+        )
 
         steps_per_epoch = self._n_steps(
             n_examples=self.input_pipeline.dataset_size,
             batch_size=self.config.batch_size,
-            n_gpus=max(1, len(self.resolved_gpus)),
+            n_gpus=1,
         )
         num_steps = steps_per_epoch * self.config.n_epochs
-        if self.config.val_size > 0:
-            # Validation with all other tasks.
-            train_hooks.append(
-                tf.estimator.experimental.InMemoryEvaluatorHook(
-                    estimator,
-                    datasets["val_dataset"],
-                    every_n_iter=self.config.val_interval,
-                    steps=math.ceil(self.config.val_size / self.config.batch_size),
-                )
-            )
-            early_stopping_interval = self.config.val_interval
-        else:
-            early_stopping_interval = sys.maxsize
-
-        train_hooks.append(
-            self.saver.get_saver_hook(
-                estimator=estimator,
-                keep_best_model=self.config.keep_best_model,
-                steps_per_epoch=steps_per_epoch,
-                early_stopping_steps=self.config.early_stopping_steps,
-                eval_frequency=early_stopping_interval,
-                cache_weights_to_file=self.config.cache_weights_to_file,
-            )
+        self.model.compile(
+            optimizer=tf.keras.optimizers.get(
+                {
+                    "class_name": self.config.optimizer,
+                    "config": {
+                        "learning_rate": FinetuneKerasLRSchedule(
+                            schedule=self.config.lr_schedule,
+                            base_lr=self.config.lr,
+                            total_steps=num_steps,
+                            warmup=self.config.lr_warmup,
+                        ),
+                        "weight_decay": self.config.l2_reg,
+                        "beta_1": self.config.b1,
+                        "beta_2": self.config.b2,
+                        "epsilon": self.config.epsilon,
+                        "clipnorm": self.config.max_grad_norm,
+                        "gradient_accumulation_steps": self.config.accum_steps
+                        if self.config.accum_steps > 1
+                        else None,
+                    },
+                }
+            ),
+            jit_compile=self.config.base_model.supports_xla,  # We always Jit compile the train step as it is required for efficient use of the optimizers.
+            auto_scale_loss=True,
+            steps_per_execution=1,  # Performance impact of rolling this is minor and setting to 1 minimises compile times
         )
-
-        if self.config.in_memory_finetune is not None:
-            train_hooks.extend(make_in_memory_finetune_hooks(self, estimator))
-
-        if log_hooks:
-            train_hooks.extend(log_hooks)
-
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            train_input_fn_skipped = lambda: datasets["train_dataset"]().skip(
-                self.saver.get_initial_step() * max(len(self.resolved_gpus), 1)
-            )
-            estimator.train(train_input_fn_skipped, hooks=train_hooks, steps=num_steps)
-
+        exclude_from_l2 = []
+        if not self.config.vector_l2:
+            exclude_from_l2 += [v for v in self.model.variables if len(v.shape) <= 1]
+        exclude_from_l2 += [
+            v for v in self.model.variables if "Transition_matrix" not in v.name
+        ]
+        if exclude_from_l2:
+            self.model.optimizer.exclude_from_weight_decay(exclude_from_l2)
+        LOGGER.debug("Fitting model")
+        # Because the dataset is already repeated n_epoch times, we need to pass steps_per_epoch to the fit method.
+        train_dataset = datasets["train_dataset"]
+        # logs = "logs/" + datetime.now().strftime("%Y%m%d-%H%M%S")
+        # tf.profiler.experimental.start(logs)
+        self.model.fit(
+            train_dataset,
+            epochs=self.config.n_epochs,
+            steps_per_epoch=steps_per_epoch,
+            # verbose=2 results in one line logged per epoch. These are not always intuitive
+            # because their epoch numbers don't align with ours when we're using ANS.
+            # However, for now it's nice to get signs of life from keras.
+            verbose=2,
+        )
+        # tf.profiler.experimental.stop()
         self._trained = True
 
-    def _distribute_strategy(self, visible_gpus):
-        """
-        Select a distribution strategy based on available devices.
-
-        Side effect: sets self.resolved_gpus for future use in computing steps per epoch
-        """
-
-        if isinstance(visible_gpus, (list, tuple)):
-            resolved_gpus = all_gpus(visible_gpus=tuple(visible_gpus))
-        else:
-            resolved_gpus = all_gpus()
-
-        resolved_gpus_string = ["/gpu:{}".format(gpu) for gpu in resolved_gpus]
-        if len(resolved_gpus_string) <= 1:
-            distribute_strategy = None
-        else:
-            if self.config.per_process_gpu_memory_fraction is not None:
-                warnings.warn(
-                    "Setting `per_process_gpu_memory_fraction` is currently unsupported in multi-gpu environments."
-                )
-
-            if isinstance(self.config.distribution_strategy, str):
-                if self.config.distribution_strategy.lower() == "mirrored":
-                    distribute_strategy = tf.distribute.MirroredStrategy()
-                elif self.config.distribution_strategy.lower() == "central_storage":
-                    distribute_strategy = (
-                        tf.distribute.experimental.CentralStorageStrategy(
-                            resolved_gpus_string or None
-                        )
-                    )
+    @property
+    def model(self) -> tf.keras.Model:
+        if self._model is None:
+            # Keras holds a global state of layer names and anything without an explicit name gets a name with a
+            # uid suffix. When multiple models are created in the same process these names can conflict causing issues
+            # with saving and loading.
+            # Reset Uids before and after build to keep the naming isolated.
+            keras_reset_uids()
+            # We either need to explictly handle the dtype policies in every layer or deal with this hack to set and unset
+            # our desired policy. Setting dtype policy on the model does not seem to cascade to lower layers.
+            initial_dtype_policy = tf.keras.config.dtype_policy()
+            dtype_policy = "float32"
+            if self.config.float_16_predict or self.config.mixed_precision:
+                if self.config.version.split(".")[0] == "0":
+                    # Assumption is if we're loading old float16 models we're not going to further train them.
+                    dtype_policy = "float16"
                 else:
-                    raise FinetuneError(
-                        'Distribute strategy {} is not supported, please try "mirrored" or "central_storage" or an instance of tf.distribute.Strategy'
-                    )
-            elif isinstance(self.config.distribution_strategy, tf.distribute.Strategy):
-                distribute_strategy = self.config.distribution_strategy
-
-        self.resolved_gpus = resolved_gpus
-        return distribute_strategy
-
-    def _get_estimator_config(self):
-        conf = tf.compat.v1.ConfigProto(
-            allow_soft_placement=self.config.soft_device_placement,
-            log_device_placement=self.config.log_device_placement,
-        )
-        if self.config.per_process_gpu_memory_fraction is not None:
-            conf.gpu_options.per_process_gpu_memory_fraction = (
-                self.config.per_process_gpu_memory_fraction
+                    # Just use mixed float16 going forwards.
+                    dtype_policy = "mixed_float16"
+            tf.keras.config.set_dtype_policy(dtype_policy)
+            self._model = self._get_keras_model()
+            # Does a symbolic first pass to build the model and give us variables we can initialize.
+            # Keras does not have a post-build hook option because it can be run in eager and shapes are calculated alongside the first
+            # call. Therefore we need to pass either a real tensor or this symbolic tensor to get variables.
+            LOGGER.debug("Building model")
+            self._model(
+                self.input_pipeline.keras_input_def(
+                    concrete_dims=False, include_targets=False
+                )
             )
-        optimizer_options = conf.graph_options.optimizer_options
-        if self.config.xla:
-            optimizer_options.global_jit_level = tf.compat.v1.OptimizerOptions.ON_1
+            self.saver.initialize_model(self._model)
 
-        distribute_strategy = self._distribute_strategy(self.config.visible_gpus)
-        config = tf.estimator.RunConfig(
-            tf_random_seed=self.config.seed,
-            save_summary_steps=self.config.val_interval,
-            save_checkpoints_secs=None,
-            save_checkpoints_steps=None,
-            # disable auto summaries
-            session_config=conf,
-            log_step_count_steps=100,
-            train_distribute=distribute_strategy,
-            keep_checkpoint_max=1,
-        )
-        return config
+            tf.keras.config.set_dtype_policy(initial_dtype_policy)
+            keras_reset_uids()
+            LOGGER.debug("Model built")
+        return self._model
 
-    def get_estimator(self, force_build_lm=False, build_explain=False, cache=False):
-        if self._cached_estimator is not None:
-            est = self._cached_estimator
-            hooks = []
+    def _get_keras_model(self):
+        if self.input_pipeline.target_dim is None:
+            target_block = None
         else:
-            build_lm = force_build_lm or self.config.lm_loss_coef > 0.0
-            config = self._get_estimator_config()
-
-            model_fn = get_model_fn(
-                target_model_fn=self._target_model,
-                pre_target_model_hook=self._pre_target_model_hook,
-                predict_op=self._predict_op,
-                predict_proba_op=self._predict_proba_op,
-                build_target_model=self.input_pipeline.target_dim is not None,
-                lm_type=self.config.lm_type if build_lm else None,
-                encoder=self.input_pipeline.text_encoder,
-                target_dim=self.input_pipeline.target_dim,
-                label_encoder=self.input_pipeline.label_encoder,
-                build_explain=build_explain,
-                n_replicas=max(1, len(self.resolved_gpus)),
-                fp16_predict=self.config.float_16_predict,
-                mixed_precision=self.config.mixed_precision,
+            target_block = self.target_block(
+                config=self.config,
+                n_outputs=self.input_pipeline.target_dim,
             )
-            est = IndicoEstimator(
-                model_dir=self.estimator_dir,
-                model_fn=model_fn,
-                config=config,
-                params=self.config,
-            )
-
-            hooks = [InitializeHook(self.saver)]
-
-        if cache:
-            self._cached_estimator = est
-
-        return est, hooks
-
-    def close(self):
-        if getattr(self, "_cached_estimator", None) is not None:
-            self._cached_estimator.close_predict()
-            self._cached_estimator = None
-            gc.collect()
-
-    @contextmanager
-    def cached_predict(self):
-        """
-        Context manager that prevents the recreation of the tensorflow graph on every call to BaseModel.predict().
-        """
-        self._cached_predict = True
-        yield self
-        self._cached_predict = False
-        self.close()
+        model = get_keras_model(
+            target_block=target_block,
+            encoder=self.input_pipeline.text_encoder,
+            target_dim=self.input_pipeline.target_dim,
+            label_encoder=self.input_pipeline.label_encoder,
+            config=self.config,
+            train_input_signature=self.input_pipeline.keras_input_signature(
+                concrete_dims=True, include_targets=True
+            ),
+            predict_input_signature=self.input_pipeline.keras_input_signature(
+                concrete_dims=False, include_targets=False
+            ),
+            use_xla=self.config.xla,
+        )
+        return model
 
     def _sort_by_length(
         self, zipped_text: List[Dict[str, str]]
@@ -478,12 +379,10 @@ class BaseModel(object, metaclass=ABCMeta):
     def _inference(
         self,
         zipped_data,
-        predict_keys=None,
         context=None,
         update_hook=None,
         chunked_length=None,
-        list_output=True,
-    ):
+    ) -> t.Union[List[Dict[str, np.ndarray]], t.Iterator[Dict[str, np.ndarray]]]:
         def get_zipped_data():
             return iter(zipped_data)
 
@@ -491,54 +390,37 @@ class BaseModel(object, metaclass=ABCMeta):
             get_zipped_data, input_mode=InputMode.PREDICT, update_hook=update_hook
         )["predict_dataset"]
 
-        estimator, hooks = self.get_estimator(
-            build_explain=PredictMode.EXPLAIN in predict_keys,
-            cache=self._cached_predict,
-        )
+        model = self.model
+
         length = chunked_length if chunked_length is not None else len(zipped_data)
 
-        if self._cached_predict:
-            # Add commonly used (cheap) predict keys to the graph to prevent having to rebuild
-            required_predict_keys = list(
-                {
-                    PredictMode.FEATURIZE,
-                    PredictMode.SEQUENCE,
-                    PredictMode.NORMAL,
-                    PredictMode.PROBAS,
+        progress = ProgressBar(total=length, desc="Inference", update_hook=update_hook)
+        for batch in input_fn:
+            preds = model.finetune_predict(batch)
+            pred_numpy = {k: v.numpy() for k, v in preds.items()}
+            batch_size = batch["tokens"].shape[0]
+            # Items without a batch dim we include in all pred batches. In practice this is limited to just transition params
+            # but we include the shape check just to prevent errors if anything else sneaks through.
+            not_batched = {
+                k
+                for k, v in pred_numpy.items()
+                if v.shape[0] != batch_size or k == "transition_params"
+            }
+            for i in range(batch_size):
+                progress.update(i)
+                step_value = {
+                    k: pred_numpy[k] if k in not_batched else pred_numpy[k][i]
+                    for k in pred_numpy
                 }
-                | set(predict_keys or {})
-            )
-            prediction_iterator = estimator.cached_predict(
-                input_fn=input_fn, predict_keys=required_predict_keys, hooks=hooks
-            )
-        else:
-            prediction_iterator = estimator.predict(
-                input_fn=input_fn, predict_keys=predict_keys, hooks=hooks
-            )
-
-        predictions = ProgressBar(
-            prediction_iterator, total=length, desc="Inference", update_hook=update_hook
-        )
-        try:
-            outputs = (
-                pred[predict_keys[0]] if len(predict_keys) == 1 else pred
-                for pred in predictions
-            )
-            if list_output:
-                return list(outputs)
-            return outputs
-
-        except ValueError:
-            raise FinetuneError(
-                "Cannot call `predict()` on a model that has not been fit."
-            )
+                yield step_value
 
     def fit(self, *args, **kwargs):
         """An alias for finetune."""
         return self.finetune(*args, **kwargs)
 
+    @abstractmethod
     def _predict(self, zipped_data, **kwargs):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def predict(self, Xs, context=None, **kwargs):
         zipped_data = self.input_pipeline.zip_list_to_dict(X=Xs, context=context)
@@ -565,10 +447,8 @@ class BaseModel(object, metaclass=ABCMeta):
         """
         zipped_data = self.input_pipeline.zip_list_to_dict(X=Xs, context=context)
 
-        start_sort = time.time()
         if self.config.sort_by_length:
             zipped_data, invert_idxs = self._sort_by_length(zipped_data)
-        end_sort = time.time()
 
         raw_probas = self._predict_proba(zipped_data)
         classes = self.input_pipeline.label_encoder.classes_
@@ -576,21 +456,10 @@ class BaseModel(object, metaclass=ABCMeta):
         formatted_predictions = []
         for probas in raw_probas:
             formatted_predictions.append(dict(zip(classes, probas.tolist())))
-        start_sort = time.time()
         if self.config.sort_by_length:
             formatted_predictions = [formatted_predictions[i] for i in invert_idxs]
-        end_sort = time.time()
 
         return formatted_predictions
-
-    def attention_weights(self, Xs, context=None):
-        if self.config.base_model not in [GPTModel, GPTModelSmall]:
-            raise NotImplementedError(
-                "'attention_weights' only supported for GPTModel and GPTModelSmall base models."
-            )
-        zipped_data = self.input_pipeline.zip_list_to_dict(X=Xs, context=context)
-        raw_preds = self._inference(zipped_data, predict_keys=[PredictMode.ATTENTION])
-        return raw_preds
 
     def featurize(self, Xs, context=None, **kwargs):
         """
@@ -602,10 +471,10 @@ class BaseModel(object, metaclass=ABCMeta):
                 "`chunk_long_sequences` is currently not compatible with featurize_sequence"
             )
         zipped_data = self.input_pipeline.zip_list_to_dict(X=Xs, context=context)
-        raw_preds = self._inference(
-            zipped_data, predict_keys=[PredictMode.FEATURIZE], **kwargs
-        )
-        return np.asarray(raw_preds)
+        raw_preds = self._inference(zipped_data, **kwargs)
+        raw_preds = [pred["features"] for pred in raw_preds]
+        feats = np.asarray(raw_preds)
+        return feats
 
     def featurize_sequence(self, Xs, context=None, **kwargs):
         """
@@ -613,9 +482,8 @@ class BaseModel(object, metaclass=ABCMeta):
         These features are the same features that are fed into the target_model.
         """
         zipped_data = self.input_pipeline.zip_list_to_dict(X=Xs, context=context)
-        raw_preds = self._inference(
-            zipped_data, predict_keys=[PredictMode.SEQUENCE], **kwargs
-        )
+        raw_preds = self._inference(zipped_data, **kwargs)
+        raw_preds = [pred["sequence_features"] for pred in raw_preds]
         chunk_gens = [self.input_pipeline._text_to_ids(d["X"]) for d in zipped_data]
 
         chunks = []
@@ -638,12 +506,6 @@ class BaseModel(object, metaclass=ABCMeta):
         processed_preds = [np.asarray(pred) for pred in processed_preds]
         return processed_preds
 
-    @classmethod
-    def get_eval_fn(cls):
-        raise NotImplementedError(
-            "No default eval function is given, please pass an explicit eval fn to grid_search"
-        )
-
     def transform(self, *args, **kwargs):
         """
         An alias for `featurize`.
@@ -664,64 +526,6 @@ class BaseModel(object, metaclass=ABCMeta):
             if class_name != self.config.pad_token
         ]
 
-    def generate_text(self, seed_text="", max_length=None, use_extra_toks=None):
-        """
-        Performs a prediction on the Language modeling objective given some seed text. It uses a noisy greedy decoding.
-        Temperature parameter for decoding is set in the config.
-        :param max_length: The maximum length to decode to.
-        :param seed_text: Defaults to the empty string. This will form the starting point to begin modelling
-        :return: A string containing the generated text.
-        """
-        if use_extra_toks is None:
-            use_extra_toks = self._trained
-
-        def dataset_encoded():
-            while not dataset_encoded.finished:
-                yield {"tokens": encoded.token_ids, "length": len(encoded.token_ids)}
-
-        dataset_encoded.finished = False
-
-        def get_input_fn():
-            types, shapes = self.input_pipeline.feed_shape_type_def()
-            types[0]["length"] = tf.int32
-            shapes[0]["length"] = tf.TensorShape([])
-            tf_dataset = Dataset.from_generator(dataset_encoded, types[0], shapes[0])
-            return tf_dataset.batch(1)
-
-        self.config.use_extra_toks = use_extra_toks
-        encoded = self.input_pipeline.text_encoder._encode([seed_text])
-        if encoded.token_ids == [] and not use_extra_toks:
-            raise ValueError(
-                "If you are not using the extra tokens, you must provide some non-empty seed text"
-            )
-        start = [self.input_pipeline.text_encoder.start_token] if use_extra_toks else []
-        token_ids = start
-        if encoded.token_ids is not None and len(encoded.token_ids):
-            token_ids += encoded.token_ids[0]
-        encoded = EncodedOutput(token_ids=token_ids)
-
-        estimator, hooks = self.get_estimator(force_build_lm=True)
-
-        predict = estimator.predict(
-            input_fn=get_input_fn, predict_keys=[PredictMode.GENERATE_TEXT], hooks=hooks
-        )
-
-        EOS = self.input_pipeline.text_encoder.end_token
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore")
-            for i in range(
-                len(encoded.token_ids) - 1, (max_length or self.config.max_length) - 2
-            ):
-                class_idx = next(predict)[PredictMode.GENERATE_TEXT]
-                encoded.token_ids.append(class_idx[-1])
-                if encoded.token_ids[-1] == EOS:
-                    break
-            dataset_encoded.finished = True
-
-        del self.config["use_extra_toks"]
-
-        return self.input_pipeline.text_encoder.decode(encoded.token_ids)
-
     def __getstate__(self):
         """
         Leave serialization of all tf objects to tf
@@ -732,7 +536,7 @@ class BaseModel(object, metaclass=ABCMeta):
         }
         return serialized_state
 
-    def save(self, path):
+    def save(self, path: str | pathlib.Path | io.BytesIO):
         """
         Saves the state of the model to disk to the folder specific by `path`.  If `path` does not exist, it will be auto-created.
 
@@ -747,9 +551,16 @@ class BaseModel(object, metaclass=ABCMeta):
         if path is None:
             return
 
+        if isinstance(path, pathlib.Path):
+            path = str(path)
         if isinstance(path, str):
             path = os.path.abspath(path)
-        self.saver.save(self, path)
+        if self._model is None:
+            if self.saver.variables:
+                self.model  # trigger reinitialization of the model only if there is custom state.
+            else:
+                raise ValueError("Model has not been initialized. Call fit() first.")
+        self.saver.save_model(model=self._model, finetune_obj=self, path=path)
 
     @classmethod
     def save_multiple(cls, path: str, models: Mapping[str, "BaseModel"]):
@@ -794,14 +605,16 @@ class BaseModel(object, metaclass=ABCMeta):
         }
         joblib.dump(weights_stripped, base_model_path)
 
-    def load(path, *args, key=None, **kwargs):
+    def load(path: str | pathlib.Path | io.BytesIO, *args, key=None, **kwargs):
         """
         Load a saved fine-tuned model from disk.  Path provided should be a folder which contains .pkl and tf.Saver() files
 
         :param path: string path name to load model from.  Same value as previously provided to :meth:`save`. Must be a folder.
         :param **kwargs: key-value pairs of config items to override.
         """
-        if type(path) != str and not hasattr(path, "write"):
+        if not isinstance(path, (str, pathlib.Path, io.BytesIO)) and not hasattr(
+            path, "write"
+        ):
             instance = path
             raise FinetuneError(
                 'The .load() method can only be called on the class, not on an instance. Try `{}.load("{}") instead.'.format(
@@ -861,130 +674,11 @@ class BaseModel(object, metaclass=ABCMeta):
         model.check_gpu_for_fp16()
         return model
 
-    @classmethod
-    def finetune_grid_search(
-        cls, Xs, Y, *, test_size, eval_fn=None, probs=False, return_all=False, **kwargs
-    ):
-        """
-        Performs grid search over config items defined using "GridSearchable" objects and returns either full results or
-        the config object that relates to the best results. The default config contains grid searchable objects for the
-        most important parameters to search over.
-
-        :param Xs: Input text. Either [num_samples] or [sequence, num_samples] for single or multi input models respectively.
-        :param Y: Targets, A list of targets, [num_samples] that correspond to each sample in Xs.
-        :param test_size: Int or float. If an int is given this number of samples is used to validate, if a float is
-         given then that fraction of samples is used.
-        :param eval_fn: An eval function that takes 2 inputs (prediction, truth) and returns a float, with a max value being desired.
-        :param probs: If true, eval_fn is passed probability outputs from predict_proba, otherwise the output of predict is used.
-        :param return_all: If True, all results are returned, if False, only the best config is returned.
-        :param kwargs: Keyword arguments to pass to get_config()
-        :return: default is to return the best config object. If return_all is true, it returns a list of tuples of the
-            form [(config, eval_fn output), ... ]
-        """
-        if isinstance(Xs[0], str):
-            Xs = [Xs]
-        config = get_config(**kwargs)
-        config.val_size = 0.0
-        eval_fn = eval_fn or cls.get_eval_fn()
-
-        trainXs, testXs, trainY, testY = train_test_split(
-            list_transpose(Xs), Y, test_size=test_size, shuffle=True
-        )
-        trainXs = list_transpose(trainXs)
-        testXs = list_transpose(testXs)
-        gs = config.get_grid_searchable()
-        ranged_keys = gs.keys()
-        ranged_iterators = gs.values()
-        grid_gen = itertools.product(*ranged_iterators)
-        results = []
-        for grid_item in grid_gen:
-            config_ = deepcopy(config)
-            config_.update(dict(zip(ranged_keys, grid_item)))
-            instance = cls(config=config_)
-            instance.finetune(*trainXs, Y=trainY)
-            if probs:
-                res = instance.predict_proba(*testXs)
-            else:
-                res = instance.predict(*testXs)
-            results.append((config_, eval_fn(res, testY)))
-            del instance
-
-        if return_all:
-            return results
-        return max(results, key=lambda x: x[1])[0]
-
-    @classmethod
-    def finetune_grid_search_cv(
-        cls,
-        Xs,
-        Y,
-        *,
-        n_splits,
-        test_size,
-        eval_fn=None,
-        probs=False,
-        return_all=False,
-        **kwargs
-    ):
-        """
-        Performs cross validated grid search over config items defined using "GridSearchable" objects and returns either full results or
-        the config object that relates to the best results. The default config contains grid searchable objects for the
-        most important parameters to search over.
-
-        It should be noted that the cv splits are not guaranteed unique, but each split is given to each set of hparams.
-
-        :param Xs: Input text. Either [num_samples] or [sequence, num_samples] for single or multi input models respectively.
-        :param Y: Targets, A list of targets, [num_samples] that correspond to each sample in Xs.
-        :param n_splits: Number of CV splits to do.
-        :param test_size: Int or float. If an int is given this number of samples is used to validate, if a float is
-            given then that fraction of samples is used.
-        :param eval_fn: An eval function that takes 2 batches of outputs and returns a float, with a max value being
-            desired. An arithmetic mean must make sense for this metric.
-        :param probs: If true, eval_fn is passed probability outputs from predict_proba, otherwise the output of predict is used.
-        :param return_all: If True, all results are returned, if False, only the best config is returned.
-        :param kwargs: Keyword arguments to pass to get_config()
-        :return: default is to return the best config object. If return_all is true, it returns a list of tuples of the
-            form [(config, eval_fn output), ... ]
-        """
-        results = []
-        for _ in range(n_splits):
-            res = cls.finetune_grid_search(
-                Xs,
-                Y,
-                test_size=test_size,
-                probs=probs,
-                eval_fn=eval_fn,
-                return_all=True,
-                **kwargs
-            )
-            results.append(res)
-        results = list(zip(*results))
-        aggregated_results = []
-        for configuration in results:
-            config_common = None
-            sum_res = 0
-            n_res = 0
-            for config, result in configuration:
-                config_common = config_common or config
-                assert config == config_common
-                n_res += 1
-                sum_res += result
-            aggregated_results.append((config_common, sum_res / n_res))
-
-        if return_all:
-            return aggregated_results
-
-        return max(aggregated_results, key=lambda x: x[1])[0]
-
     def process_long_sequence(self, zipped_data):
-        labels, batch_probas = [], []
-
         # outputs predictions for each chunk of each document.
         pred_iterator = self._inference(
             zipped_data,
-            predict_keys=[PredictMode.PROBAS, PredictMode.NORMAL],
             chunked_length=0,
-            list_output=False,
         )
 
         # Outputs (probably chunked) Encoded outputs for each document
@@ -1007,13 +701,22 @@ class BaseModel(object, metaclass=ABCMeta):
         for pred, (arr_enc, start_of_doc, end_of_doc) in zip(
             pred_iterator, chunk_alignment_iterator
         ):
-            normal_pred = pred[PredictMode.NORMAL]
-            if not hasattr(self, "multi_label"):
-                normal_pred = np.expand_dims(normal_pred, 0)
-            label_seq = self.input_pipeline.label_encoder.inverse_transform(normal_pred)
-            proba_seq = pred[PredictMode.PROBAS]
             token_end_idx = arr_enc.token_ends
             token_start_idx = arr_enc.token_starts
             useful_start = arr_enc.useful_start
             useful_end = arr_enc.useful_end
-            yield token_start_idx, token_end_idx, start_of_doc, end_of_doc, label_seq, proba_seq, useful_start, useful_end
+            yield {
+                "token_start_idx": token_start_idx,
+                "token_end_idx": token_end_idx,
+                "start_of_doc": start_of_doc,
+                "end_of_doc": end_of_doc,
+                "useful_start": useful_start,
+                "useful_end": useful_end,
+                **pred,  # Preds and probas
+            }
+
+    def close(self, update_saver=True):
+        if update_saver and self._model:
+            self.saver.update_variables(self._model)
+        del self._model
+        self._model = None

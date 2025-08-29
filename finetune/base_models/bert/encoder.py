@@ -3,8 +3,8 @@ import os
 import numpy as np
 
 import finetune
-from finetune.encoding.input_encoder import EncodedOutput, BaseEncoder
 from finetune.base_models.bert.tokenizer import FullTokenizer
+from finetune.encoding.input_encoder import BaseEncoder, EncodedOutput
 
 FINETUNE_FOLDER = os.path.dirname(finetune.__file__)
 VOCAB_PATH = os.path.join(FINETUNE_FOLDER, "model", "bert", "vocab.txt")

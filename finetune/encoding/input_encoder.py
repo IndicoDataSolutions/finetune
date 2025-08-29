@@ -1,12 +1,12 @@
 """
 Convert plain text to format accepted by model (token idxs + special tokens).
 """
-import logging
 import functools
-from collections import namedtuple, OrderedDict
+import logging
+from collections import OrderedDict, namedtuple
 
-import spacy
 import numpy as np
+import spacy
 
 NLP = None
 LOGGER = logging.getLogger("finetune")
@@ -15,7 +15,9 @@ LOGGER = logging.getLogger("finetune")
 def get_spacy():
     global NLP
     if NLP is None:
-        NLP = spacy.load("en_core_web_sm", disable=["parser", "tagger", "ner", "textcat"])
+        NLP = spacy.load(
+            "en_core_web_sm", disable=["parser", "tagger", "ner", "textcat"]
+        )
         NLP.max_length = (
             800000000  # approximately one volume of the encyclopedia britannica.
         )
@@ -67,7 +69,8 @@ def _remove_repeated_whitespace(encoded):
         encoded.token_ids, encoded.tokens, encoded.token_ends, encoded.token_starts
     ):
         mask = [
-            i != 0 and token.strip(" ") == tokens[i - 1].strip(" ") == "" for i, token in enumerate(tokens)
+            i != 0 and token.strip(" ") == tokens[i - 1].strip(" ") == ""
+            for i, token in enumerate(tokens)
         ]
         batch_token_idxs.append([x for x, c in zip(token_ids, mask) if not c])
         batch_tokens.append([x for x, c in zip(tokens, mask) if not c])
@@ -286,7 +289,7 @@ class BaseEncoder(metaclass=SingletonMeta):
 
 
 def tokenize_context(context, encoded_output, config):
-    """ Tokenize the context corresponding to a single sequence of text """
+    """Tokenize the context corresponding to a single sequence of text"""
     # in the edge case where the chunk is just a single end token, we don't need to alter our context chunk
     seq_len = len(encoded_output.token_ids)
     context_keys = list(k for k in sorted(context[0].keys()) if k not in INFO_KEYS)

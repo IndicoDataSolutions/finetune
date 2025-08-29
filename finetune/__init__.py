@@ -1,5 +1,5 @@
-import os
 import logging
+import os
 
 try:
     import absl.logging
@@ -9,26 +9,14 @@ try:
 except ImportError:
     pass
 
-import tensorflow as tf
 from tensorflow.compat.v1 import logging as tf_logging
 
-from finetune.target_models.multifield import MultiFieldClassifier, MultiFieldRegressor
 from finetune.target_models.classifier import Classifier
-from finetune.target_models.regressor import Regressor
-from finetune.target_models.sequence_labeling import SequenceLabeler
-from finetune.target_models.comparison import Comparison
-from finetune.target_models.multi_label_classifier import MultiLabelClassifier
-from finetune.target_models.multiple_choice import MultipleChoice
-from finetune.target_models.comparison_regressor import ComparisonRegressor
-from finetune.target_models.ordinal_regressor import (
-    OrdinalRegressor,
-    ComparisonOrdinalRegressor,
-)
-from finetune.target_models.language_model import LanguageModel
-from finetune.target_models.masked_language_model import MaskedLanguageModel
 from finetune.target_models.document_labeling import DocumentLabeler
+from finetune.target_models.multi_label_classifier import MultiLabelClassifier
+from finetune.target_models.sequence_labeling import SequenceLabeler
 
-__version__, VERSION, version = ("0.10.0",) * 3
+__version__, VERSION, version = ("1.0.0",) * 3
 
 
 # Logging configuration
@@ -37,4 +25,8 @@ tf_logging.set_verbosity(tf_logging.ERROR)
 
 logging.basicConfig(level=logging.INFO)
 LOGGER = logging.getLogger("finetune")
-LOGGER.setLevel(logging.INFO)
+
+if os.environ.get("FINETUNE_DEBUG", "false").lower() == "true":
+    LOGGER.setLevel(logging.DEBUG)
+else:
+    LOGGER.setLevel(logging.INFO)

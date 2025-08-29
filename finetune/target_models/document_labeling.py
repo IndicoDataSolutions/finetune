@@ -1,10 +1,11 @@
 import warnings
 
-from finetune.target_models.sequence_labeling import SequenceLabeler, SequencePipeline
+from finetune.base_models import DocRep, LayoutLM, XDocBase
 from finetune.encoding.input_encoder import EncodedOutput
 from finetune.errors import FinetuneError
-from finetune.base_models import DocRep, LayoutLM, XDocBase
+from finetune.target_models.sequence_labeling import SequenceLabeler, SequencePipeline
 from finetune.util.context_utils import get_context_doc_rep
+
 
 def get_context(document, dpi_norm, base_model):
     """
@@ -17,6 +18,7 @@ def get_context(document, dpi_norm, base_model):
         "Running DocumentLabeler with a base model that doesn't utilize position info."
     )
     return get_context_doc_rep(document, dpi_norm)
+
 
 def _single_convert_to_finetune(*, document, dpi_norm=True, config={}):
     context = get_context(
@@ -40,8 +42,8 @@ def _single_convert_to_finetune(*, document, dpi_norm=True, config={}):
 
 
 class DocumentPipeline(SequencePipeline):
-    def __init__(self, config, multi_label):
-        super().__init__(config, multi_label)
+    def __init__(self, config):
+        super().__init__(config)
         self.config = config
 
     def text_to_tokens_mask(self, raw_text=None, **kwargs):
@@ -104,6 +106,4 @@ class DocumentLabeler(SequenceLabeler):
     """
 
     def _get_input_pipeline(self):
-        return DocumentPipeline(
-            config=self.config, multi_label=self.config.multi_label_sequences
-        )
+        return DocumentPipeline(config=self.config)

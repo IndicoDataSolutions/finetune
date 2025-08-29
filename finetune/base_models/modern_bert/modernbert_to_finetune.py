@@ -1,9 +1,11 @@
 if __name__ == "__main__":
-    import torch as nn
-    import numpy as np
     import joblib as jl
+    import numpy as np
+    import torch as nn
 
-    torch_model = nn.load("/Finetune/finetune/model/modern_bert/pytorch_model_large.bin")
+    torch_model = nn.load(
+        "/Finetune/finetune/model/modern_bert/pytorch_model_large.bin"
+    )
     finetune_model = dict()
     mapping = {
         "model.embeddings.tok_embeddings.weight": (
