@@ -12,6 +12,7 @@ import typing as t
 from sequence_metrics.metrics import sequences_overlap
 
 from finetune import SequenceLabeler
+from finetune.base import MODEL_REGISTRY
 from finetune.base_models import TableRoBERTa
 from finetune.encoding.input_encoder import BaseEncoder
 from finetune.errors import FinetuneError
@@ -716,8 +717,9 @@ class TableLabeler:
         del model_inputs["table_context"]
         self._add_class_names(table_model)
         table_model.save(self.table_model_path)
+        table_model.close(update_saver=False)
         del table_model
-        cleanup_sessions()
+        MODEL_REGISTRY.cleanup()
         return model_inputs
 
     def _fit_text_model(self, model_inputs, update_hook):
@@ -732,8 +734,9 @@ class TableLabeler:
         del model_inputs["doc_labels"]
         self._add_class_names(text_model)
         text_model.save(self.text_model_path)
+        text_model.close(update_saver=False)
         del text_model
-        cleanup_sessions()
+        MODEL_REGISTRY.cleanup()
         return model_inputs
 
     def fit(

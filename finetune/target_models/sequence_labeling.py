@@ -214,9 +214,6 @@ class SequenceLabeler(BaseModel):
     def _get_input_pipeline(self):
         return SequencePipeline(config=self.config)
 
-    def _initialize(self):
-        return super()._initialize()
-
     def finetune(
         self,
         Xs,

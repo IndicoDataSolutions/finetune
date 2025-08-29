@@ -113,13 +113,20 @@ class BaseModel(object, metaclass=ABCMeta):
         """
 
         # Finalizer runs at garbage collection and exit
-        weak_self = weakref.proxy(self)
+        def _finalizer_func(ws_ref):
+            try:
+                ws = ws_ref()
+                if ws is not None and hasattr(ws, "close"):
+                    ws.close(update_saver=False)
+            except ReferenceError:
+                # Suppress "Weakly referenced object no longer exists"
+                pass
+
+        self_ref = weakref.ref(self)
         self._finalizer = weakref.finalize(
             self,
-            lambda ws=weak_self: (
-                # No reason to grab the variables here, we're just going to delete the model.
-                getattr(ws, "close", lambda *args, **kwargs: None)(update_saver=False),
-            ),
+            _finalizer_func,
+            self_ref,
         )
         self.config_overrides = deepcopy(self.defaults)
         self.config_overrides.update(kwargs)
@@ -134,7 +141,6 @@ class BaseModel(object, metaclass=ABCMeta):
             LOGGER.setLevel(logging.DEBUG)
         self.check_gpu_for_fp16()
         self._model = None
-        MODEL_REGISTRY.register(self)
 
     def check_gpu_for_fp16(self):
         if not gpu_info()["fp16_inference"]:
@@ -205,6 +211,7 @@ class BaseModel(object, metaclass=ABCMeta):
             save_dtype=self.config.save_dtype,
             permit_uninitialized=self.config.permit_uninitialized,
         )
+        MODEL_REGISTRY.register(self)
 
     @abstractmethod
     def target_block(self, *, config, n_outputs, **kwargs):
@@ -212,7 +219,8 @@ class BaseModel(object, metaclass=ABCMeta):
         raise NotImplementedError
 
     def _n_steps(self, n_examples, batch_size, n_gpus):
-        steps = int(math.ceil(n_examples / (batch_size * n_gpus)))
+        # Floor because we do drop the final elements of each batch if they don't make up a full batch.
+        steps = int(math.floor(n_examples / (batch_size * n_gpus)))
         return steps
 
     def finetune(

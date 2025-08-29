@@ -1477,7 +1477,7 @@ class TwinBertFeaturizer(tf.keras.layers.Layer):
         self.chunk_tables = config.chunk_tables
         self.table_position_type = config.table_position_type
 
-    def call(self, tokens, context, sequence_lengths, **kwargs):
+    def call(self, tokens, context, sequence_lengths):
         """
         Main featurizer call that processes the input tokens and context.
 
@@ -1485,7 +1485,6 @@ class TwinBertFeaturizer(tf.keras.layers.Layer):
             tokens: Input tokens [batch_size, sequence_length]
             context: Context information for table processing
             sequence_lengths: Sequence lengths
-            **kwargs: Additional arguments
 
         Returns:
             Dictionary containing features and sequence features
