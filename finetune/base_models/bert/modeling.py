@@ -1350,6 +1350,10 @@ class BaseTwinBertModel(tf.keras.layers.Layer):
                 "pooler",
             )
 
+    def build(self, input_shape):
+        # Just needed to keep keras logs quiet as no variables are directly built on this layer
+        super().build(input_shape)
+
     def call(
         self,
         tokens_a,
@@ -1476,6 +1480,10 @@ class TwinBertFeaturizer(tf.keras.layers.Layer):
         self.embed_dim = config.n_embed
         self.chunk_tables = config.chunk_tables
         self.table_position_type = config.table_position_type
+
+    def build(self, input_shape):
+        # Just needed to keep keras logs quiet as no variables are directly built on this layer
+        super().build(input_shape)
 
     def call(self, tokens, context, sequence_lengths):
         """

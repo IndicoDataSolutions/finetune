@@ -34,7 +34,6 @@ class GPTModelSmall(GPTModel):
         "n_heads": 8,
         "n_layer": 6,
         "act_fn": "gelu",
-        "num_layers_trained": 6,
         "base_model_path": os.path.join("gpt", "model-sm.jl"),
     }
     required_files = [

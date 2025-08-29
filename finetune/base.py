@@ -285,6 +285,10 @@ class BaseModel(object, metaclass=ABCMeta):
             train_dataset,
             epochs=self.config.n_epochs,
             steps_per_epoch=steps_per_epoch,
+            # verbose=2 results in one line logged per epoch. These are not always intuitive
+            # because their epoch numbers don't align with ours when we're using ANS.
+            # However, for now it's nice to get signs of life from keras.
+            verbose=2,
         )
         # tf.profiler.experimental.stop()
         self._trained = True

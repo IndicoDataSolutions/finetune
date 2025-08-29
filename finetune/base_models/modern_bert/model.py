@@ -20,9 +20,7 @@ class ModernBertFeaturizer(tf.keras.layers.Layer):
     def call(self, tokens, context, sequence_lengths):
         seq_len = tokens.shape[1]
         mask = tf.sequence_mask(sequence_lengths, maxlen=seq_len, dtype=tf.float32)
-        sequence_out = self.model(
-            input_ids=tokens, attention_mask=mask
-        )
+        sequence_out = self.model(input_ids=tokens, attention_mask=mask)
         pooled_out = sequence_out[:, 0, :]
         return {
             "features": pooled_out,
@@ -41,8 +39,6 @@ class ModernBertModel(_ModernBertBase):
     settings = {
         "base_model_path": os.path.join("modern_bert", "modern_bert.jl"),
         "n_layer": 22,
-        "train_embeddings": True,
-        "num_layers_trained": 22,
         "n_embed": 768,
         "max_length": 2048,
         "include_bos_eos": True,
@@ -107,8 +103,6 @@ class ModernBertLargeModel(_ModernBertBase):
     settings = {
         "base_model_path": os.path.join("modern_bert", "modern_bert_large.jl"),
         "n_layer": 28,
-        "train_embeddings": True,
-        "num_layers_trained": 28,
         "n_embed": 1024,
         "max_length": 2048,
         "include_bos_eos": True,

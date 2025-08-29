@@ -16,12 +16,10 @@ TEXTCNN_BASE_PARAMS = {
     "early_stopping_steps": None,
     "val_size": 0,
     "chunk_long_sequences": False,
-    "num_layers_trained": 1,
     "kernel_sizes": KERNEL_SIZES,
     "num_filters_per_size": 256,
     "n_embed": len(KERNEL_SIZES) * 256,
     "act_fn": "gelu",
-    "train_embeddings": True,
     "lr": 2e-3,
     "seq_num_heads": len(KERNEL_SIZES) * 2,
     "permit_uninitialized": r"conv[0-9]+",
@@ -47,6 +45,7 @@ class TextCNNModel(SourceModel):
         for filename in ["encoder.json", "vocab.bpe", "model-sm.jl"]
     ]
 
+
 fast_model_files = [
     {
         "file": os.path.join(
@@ -68,6 +67,7 @@ fast_model_files = [
     },
 ]
 
+
 class FastTextCNNModel(SourceModel):
     """Uses RobertaEncoderV2 encoder for fast tokenization"""
 
@@ -79,6 +79,7 @@ class FastTextCNNModel(SourceModel):
         "base_model_path": os.path.join("bert", "roberta-model-sm-v2.jl"),
     }
     required_files = fast_model_files
+
 
 class FastTestingModel(SourceModel):
     is_bidirectional = True
