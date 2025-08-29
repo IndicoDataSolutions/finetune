@@ -138,7 +138,6 @@ class BaseModel(object, metaclass=ABCMeta):
         self._initialize()
         if self.config.debugging_logs:
             os.environ["TF_CPP_MIN_LOG_LEVEL"] = "0"
-            LOGGER.setLevel(logging.DEBUG)
         self.check_gpu_for_fp16()
         self._model = None
 

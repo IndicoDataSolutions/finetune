@@ -25,4 +25,8 @@ tf_logging.set_verbosity(tf_logging.ERROR)
 
 logging.basicConfig(level=logging.INFO)
 LOGGER = logging.getLogger("finetune")
-LOGGER.setLevel(logging.INFO)
+
+if os.environ.get("FINETUNE_DEBUG", "false").lower() == "true":
+    LOGGER.setLevel(logging.DEBUG)
+else:
+    LOGGER.setLevel(logging.INFO)
