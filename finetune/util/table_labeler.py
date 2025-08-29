@@ -699,6 +699,10 @@ class TableLabeler:
         # Adding these proactively prevents us having to reload the models to get the class names.
         self.classes.update(model.classes)
 
+    def close(self, update_saver=True):
+        # The models are closed by default. We just need this method to keep the API consistent.
+        pass
+
     def _fit_table_model(self, model_inputs, update_hook):
         table_model = self._get_table_model()
         if self.etl.chunk_tables:
