@@ -3,18 +3,20 @@ Finetune-style interface for running a pipeline of table and non-table models.
 """
 import copy
 import functools
+import logging
 import os
+import sys
 import tempfile
 import typing as t
-import sys
-import logging
 
-from finetune.base_models import TableRoBERTa
-from finetune.errors import FinetuneError
-from finetune.util.metrics import sequences_overlap
-from finetune.scheduler import Scheduler
-from finetune.encoding.input_encoder import BaseEncoder
+from sequence_metrics.metrics import sequences_overlap
+
 from finetune import SequenceLabeler
+from finetune.base import MODEL_REGISTRY
+from finetune.base_models import TableRoBERTa
+from finetune.encoding.input_encoder import BaseEncoder
+from finetune.errors import FinetuneError
+from finetune.scheduler import Scheduler
 from finetune.util.memory import cleanup_sessions
 
 LOGGER = logging.getLogger("finetune")
@@ -56,8 +58,11 @@ def _adjust_span_to_chunk(
         span["text"] = span["text"][
             adj_start - ideal_adj_start : adj_end - ideal_adj_start
         ]
-        if output_space_text is not None and span["text"] != output_space_text[adj_start:adj_end]:
-            LOGGER.warning("Span Text does not align with output space text")
+        if (
+            output_space_text is not None
+            and span["text"] != output_space_text[adj_start:adj_end]
+        ):
+            LOGGER.warn("Span Text does not align with output space text")
     span["start"] = adj_start
     span["end"] = adj_end
     return span
@@ -694,6 +699,10 @@ class TableLabeler:
         # Adding these proactively prevents us having to reload the models to get the class names.
         self.classes.update(model.classes)
 
+    def close(self, update_saver=True):
+        # The models are closed by default. We just need this method to keep the API consistent.
+        pass
+
     def _fit_table_model(self, model_inputs, update_hook):
         table_model = self._get_table_model()
         if self.etl.chunk_tables:
@@ -712,8 +721,9 @@ class TableLabeler:
         del model_inputs["table_context"]
         self._add_class_names(table_model)
         table_model.save(self.table_model_path)
+        table_model.close(update_saver=False)
         del table_model
-        cleanup_sessions()
+        MODEL_REGISTRY.cleanup()
         return model_inputs
 
     def _fit_text_model(self, model_inputs, update_hook):
@@ -728,8 +738,9 @@ class TableLabeler:
         del model_inputs["doc_labels"]
         self._add_class_names(text_model)
         text_model.save(self.text_model_path)
+        text_model.close(update_saver=False)
         del text_model
-        cleanup_sessions()
+        MODEL_REGISTRY.cleanup()
         return model_inputs
 
     def fit(
@@ -773,7 +784,7 @@ class TableLabeler:
                 tables=tables,
                 model_file_path=model_path,
                 scheduler=scheduler,
-                **kwargs
+                **kwargs,
             )
 
     @classmethod
@@ -826,5 +837,3 @@ class TableLabeler:
             table_doc_i=model_inputs["table_doc_i"],
             tables=tables,
         )
-
-

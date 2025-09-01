@@ -1,11 +1,10 @@
 """
 Utilities for dealing with class imbalance
 """
-import tensorflow as tf
-import numpy as np
 from collections import Counter
 
-from finetune.encoding.target_encoders import LabelEncoder
+import numpy as np
+
 from finetune.errors import FinetuneError
 
 
@@ -51,16 +50,14 @@ def _compute_ratios(counts, n_total, multilabel=False):
         else:
             ratio = ratio = max_count / count
         computed_ratios[class_name] = ratio
-    return computed_ratios 
+    return computed_ratios
 
 
 def class_weight_tensor(class_weights, target_dim, label_encoder):
     """
-    Convert from dictionary of class weights to tf tensor
+    Convert from dictionary of class weights to numpy array
     """
     class_weight_arr = np.ones(target_dim, dtype=np.float32)
     for i, cls in enumerate(label_encoder.target_labels):
         class_weight_arr[i] = class_weights.get(cls, 1.0)
-
-    class_weight_tensor = tf.convert_to_tensor(value=class_weight_arr)
-    return class_weight_tensor
+    return class_weight_arr

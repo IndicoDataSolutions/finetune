@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+
+[project]
+name = "finetune"
+version = "0.10.1"
+description = "Finetune API"
+dependencies = [
+    "tqdm>=4.0.0",
+    "numpy>=2.0.0",
+    "scikit-learn>=1.0.2",
+    "ftfy>=4.4.0",
+    "spacy>=3.0.0",
+    "joblib>=0.12.0",
+    "nltk>=3.2.4",
+    "tqdl>=0.0.4",
+    "psutil>=5.7.0",
+    "keras>=3.10.0",
+    "sequence-metrics",
+    "tokenizers>=0.21.1",
+    "pynvml>=12.0.0",
+]
+
+[project.optional-dependencies]
+tf = ["tensorflow==2.19.0"]
+tf_gpu = ["tensorflow-gpu==2.19.0"]
+test = [
+    "pytest",
+    "bs4",
+]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+exclude = ["tests", "tests.*"]

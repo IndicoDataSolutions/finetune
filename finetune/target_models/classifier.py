@@ -1,28 +1,16 @@
-from warnings import warn
-import itertools
-import copy
-import tensorflow as tf
-import tensorflow_addons as tfa
 import numpy as np
-from sklearn.utils import shuffle
+import tensorflow as tf
 
 from finetune.base import BaseModel
-from finetune.encoding.target_encoders import OneHotLabelEncoder, NoisyLabelEncoder
-from finetune.nn.target_blocks import classifier
+from finetune.encoding.target_encoders import OneHotLabelEncoder
 from finetune.input_pipeline import BasePipeline
-from finetune.model import PredictMode
-from finetune.base_models.gpt.encoder import finetune_to_indico_explain
+from finetune.nn.target_blocks import Classifier as ClassifierBlock
 
 
 class ClassificationPipeline(BasePipeline):
-
     def _target_encoder(self):
         return OneHotLabelEncoder()
 
-class NoisyClassificationPipeline(BasePipeline):
-
-    def _target_encoder(self):
-        return NoisyLabelEncoder()
 
 class Classifier(BaseModel):
     """
@@ -60,27 +48,26 @@ class Classifier(BaseModel):
         all_labels = []
         all_probs = []
         doc_probs = []
-        for _,  _, start_of_doc, end_of_doc, _, proba, _, _ in self.process_long_sequence(zipped_data, **kwargs):
+        for pred_bundle in self.process_long_sequence(zipped_data, **kwargs):
             start, end = 0, None
-            doc_probs.append(proba)
-
-            if end_of_doc:
+            doc_probs.append(pred_bundle["probas"])
+            if pred_bundle["end_of_doc"]:
                 # last chunk in a document
                 mean_pool = np.mean(doc_probs, axis=0)
                 pred = np.argmax(mean_pool)
                 one_hot = np.zeros_like(mean_pool)
                 one_hot[pred] = 1
-                label = self.input_pipeline.label_encoder.inverse_transform([one_hot])
-                label = np.squeeze(label).tolist()
+                label = self.input_pipeline.label_encoder.inverse_transform([one_hot])[
+                    0
+                ]
                 all_labels.append(label)
                 all_probs.append(mean_pool)
                 doc_probs = []
 
         if probas:
             return all_probs
-        else:
-            assert len(all_labels) == len(zipped_data)
-            return np.asarray(all_labels)
+        assert len(all_labels) == len(zipped_data)
+        return all_labels
 
     def _predict_proba(self, zipped_data, **kwargs):
         """
@@ -106,90 +93,10 @@ class Classifier(BaseModel):
             np.asarray(labels) == np.asarray(targets)
         )
 
-    def _target_model(
-        self, *, config, featurizer_state, targets, n_outputs, train=False, reuse=None, **kwargs
-    ):
-        if "explain_out" in featurizer_state:
-            shape = tf.shape(input=featurizer_state["explain_out"])  # batch, seq, hidden
-            flat_explain = tf.reshape(
-                featurizer_state["explain_out"], [shape[0] * shape[1], shape[2]]
-            )
-            hidden = tf.concat((featurizer_state["features"], flat_explain), 0)
-        else:
-            hidden = featurizer_state["features"]
-
-        clf_out = classifier(
-            hidden=hidden,
-            targets=targets,
+    def target_block(self, *, config, n_outputs, **kwargs):
+        return ClassifierBlock(
             n_targets=n_outputs,
-            config=config,
-            train=train,
-            reuse=reuse,
-            **kwargs
+            dropout_rate=config.clf_p_drop,
+            renorm_after_class_weights=config.renorm_after_class_weights,
+            name="classifier",
         )
-        if "explain_out" in featurizer_state:
-            logits = clf_out["logits"]
-            clf_out["logits"] = logits[: shape[0]]
-            clf_out["explanation"] = tf.nn.softmax(
-                tf.reshape(
-                    logits[shape[0] :],
-                    tf.concat((shape[:2], [tf.shape(input=logits)[-1]]), 0),
-                ),
-                -1,
-            )
-        return clf_out
-
-    def explain(self, Xs, context=None):
-        zipped_data = self.input_pipeline.zip_list_to_dict(X=Xs, context=context)
-        explanation = self._inference(
-            zipped_data, predict_keys=[PredictMode.EXPLAIN, PredictMode.NORMAL]
-        )
-        classes = self.input_pipeline.label_encoder.target_labels
-        out = []
-        bases = []
-        preds = []
-        for values in explanation:
-            explain_sample = values[PredictMode.EXPLAIN]
-            preds.append(values[PredictMode.NORMAL])
-            out.append(explain_sample[1:])
-            bases.append(explain_sample[0])
-        processed = finetune_to_indico_explain(
-            Xs, out, self.input_pipeline.text_encoder, attention=False
-        )
-
-        for base, sample, cls in zip(bases, processed, preds):
-            weights = sample["explanation"]
-            weights = np.array([base] + weights[:-1]) - weights
-            n_classes = weights.shape[-1]
-            norm = (
-                np.max([np.abs(np.max(weights, 0)), abs(np.min(weights, 0))], 0)
-                * n_classes
-            )
-            explanation = weights / norm + 1 / n_classes
-
-            sample["explanation"] = {
-                c: explanation[:, i] for i, c in enumerate(classes)
-            }
-            sample["prediction"] = self.input_pipeline.label_encoder.inverse_transform(
-                [cls]
-            )[0]
-
-        return processed
-
-    def _predict_op(self, logits, **kwargs):
-        return tfa.seq2seq.hardmax(logits)
-
-    def _predict_proba_op(self, logits, **kwargs):
-        return tf.nn.softmax(logits, -1)
-
-class NoisyClassifier(Classifier, BaseModel):
-    """
-    Classifies a single document into 1 of N categories, taking a probability
-    distribution over the labels as input (a dictionary with float values).
-
-    :param config: A :py:class:`finetune.config.Settings` object or None (for default config).
-    :param \**kwargs: key-value pairs of config items to override.
-    """
-
-    def _get_input_pipeline(self):
-        return NoisyClassificationPipeline(self.config)

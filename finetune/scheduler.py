@@ -1,17 +1,39 @@
-from collections import OrderedDict
+import functools
 import gc
 import logging
-import functools
+import sys
+from collections import OrderedDict
 
 import psutil
+import pynvml
+import tensorflow as tf
+
+from finetune.base import MODEL_REGISTRY, BaseModel
+from finetune.errors import FinetuneSchedulerError
 from finetune.target_models.sequence_labeling import SequenceLabeler
 
-import tensorflow as tf
-from finetune.base import BaseModel
-from finetune.custom_ops import BytesInUse, BytesLimit, MaxBytesInUse
-from finetune.errors import FinetuneSchedulerError
-
 LOGGER = logging.getLogger("finetune")
+
+
+def BytesInUse():
+    """Generates an op that computes the current memory of a device."""
+    return tf.config.experimental.get_memory_info("GPU:0")["current"]
+
+
+def BytesLimit():
+    pynvml.nvmlInit()
+    handle = pynvml.nvmlDeviceGetHandleByIndex(0)  # GPU 0
+    info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+    return info.total
+
+
+def MaxBytesInUse():
+    """Generates an op that computes the peak memory of a device."""
+    return tf.config.experimental.get_memory_info("GPU:0")["peak"]
+
+
+def is_gpu_available():
+    return len(tf.config.list_physical_devices("GPU")) > 0
 
 
 def bytes_to_meg(x):
@@ -80,19 +102,29 @@ class Scheduler:
     def _memory_for_one_more(self):
         if self.gpu_memory_limit is None:
             return True  # first run
+        if is_gpu_available():
+            in_use = BytesInUse()
+            peak = MaxBytesInUse()
+            if (
+                self.max_above_resting is None
+                or (peak - in_use) > self.max_above_resting
+            ):
+                self.max_above_resting = peak - in_use
 
-        in_use = BytesInUse()
-        peak = MaxBytesInUse()
-        if self.max_above_resting is None or (peak - in_use) > self.max_above_resting:
-            self.max_above_resting = peak - in_use
+            if (
+                self.max_model_size is None
+                or (in_use - self.previous_in_use) > self.max_model_size
+            ):
+                self.max_model_size = in_use - self.previous_in_use
 
-        if (
-            self.max_model_size is None
-            or (in_use - self.previous_in_use) > self.max_model_size
-        ):
-            self.max_model_size = in_use - self.previous_in_use
+            self.previous_in_use = in_use
+        else:
+            LOGGER.info("No GPU available, skipping GPU memory checks.")
+            self.max_above_resting = 0
+            self.max_model_size = 0
+            self.previous_in_use = 0
+            in_use = 0
 
-        self.previous_in_use = in_use
         cpu_percent = psutil.virtual_memory().percent
         LOGGER.info(
             (
@@ -116,7 +148,7 @@ class Scheduler:
     def _close_oldest_model(self):
         if len(self.loaded_models):
             name = self.loaded_models.pop(0)
-            self.model_cache[name].close()
+            self.model_cache[name].close(update_saver=False)
             del self.model_cache[name]
             gc.collect()
         else:
@@ -149,7 +181,9 @@ class Scheduler:
             self.model_cache[resolved_cache_key] = out_model
         else:
             out_model = self.model_cache[resolved_cache_key]
-            self.loaded_models.remove(resolved_cache_key)  # put it back at the end of the queue
+            self.loaded_models.remove(
+                resolved_cache_key
+            )  # put it back at the end of the queue
 
         self.loaded_models.append(resolved_cache_key)
         out_model._cached_predict = True
@@ -160,13 +194,18 @@ class Scheduler:
         if hasattr(model.saver, "variables"):
             del model.saver.variables
             del model.saver.fallback_
-        self.gpu_memory_limit = (
-            BytesLimit()
-        )  # delay this so that any options get applied from finetune.
+        if is_gpu_available():
+            self.gpu_memory_limit = (
+                BytesLimit()
+            )  # delay this so that any options get applied from finetune.
+        else:
+            LOGGER.info("No GPU available, skipping GPU memory limit update.")
+            self.gpu_memory_limit = sys.maxsize
 
     def close_all(self):
         while self.loaded_models:
             self._close_oldest_model()
+        MODEL_REGISTRY.cleanup()
 
     @scheduled
     def predict(self, model_file, x, *args, key=None, model=None, **kwargs):

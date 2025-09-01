@@ -2,9 +2,13 @@ version: "2.3"
 
 services:
   finetune:
+#    privileged: true
     build:
       context: .
-      dockerfile: docker/Dockerfile.gpu
+      dockerfile: Dockerfile
+#    image: finetune-profiling:latest
+    environment:
+      LD_LIBRARY_PATH: /opt/cupti/CUPTI/lib64
     volumes:
       - .:/Finetune
     deploy:
@@ -14,4 +18,3 @@ services:
             - driver: nvidia
               device_ids: ["0"]
               capabilities: [gpu]
-

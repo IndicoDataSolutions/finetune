@@ -1,5 +1,7 @@
 import gc
+
 import tensorflow as tf
+
 
 def cleanup_sessions():
     """

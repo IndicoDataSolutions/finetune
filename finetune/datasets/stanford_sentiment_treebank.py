@@ -1,24 +1,24 @@
-
-import numpy as np
-
-from sklearn.model_selection import train_test_split
 import os
 from pathlib import Path
+
+import numpy as np
+from sklearn.metrics import classification_report
+from sklearn.model_selection import train_test_split
+
 from finetune import Classifier
-from finetune.datasets import Dataset, generic_download
 from finetune.base_models.gpt.model import GPTModel
 from finetune.base_models.oscar.model import GPCModel
-#logging.basicConfig(level=logging.DEBUG)
+from finetune.datasets import Dataset, generic_download
 
-from sklearn.metrics import classification_report
+# logging.basicConfig(level=logging.DEBUG)
+
 
 SST_FILENAME = "SST-binary.csv"
-DATA_PATH = os.path.join('Data', 'Classify', SST_FILENAME)
+DATA_PATH = os.path.join("Data", "Classify", SST_FILENAME)
 CHECKSUM = "02136b7176f44ff8bec6db2665fc769a"
 
 
 class StanfordSentimentTreebank(Dataset):
-
     def __init__(self, filename=None, **kwargs):
         super().__init__(filename=(filename or DATA_PATH), **kwargs)
 
@@ -35,7 +35,7 @@ class StanfordSentimentTreebank(Dataset):
             url="https://s3.amazonaws.com/enso-data/SST-binary.csv",
             text_column="Text",
             target_column="Target",
-            filename=SST_FILENAME
+            filename=SST_FILENAME,
         )
 
 
@@ -45,11 +45,12 @@ if __name__ == "__main__":
     model = Classifier(
         debugging_logs=True,
         summarize_grads=True,
-#        val_interval=1000,
+        #        val_interval=1000,
     )
-    trainX, testX, trainY, testY = train_test_split(dataset.Text.values, dataset.Target.values, test_size=0.3, random_state=42)
+    trainX, testX, trainY, testY = train_test_split(
+        dataset.Text.values, dataset.Target.values, test_size=0.3, random_state=42
+    )
     model.fit(trainX, trainY)
     preds = model.predict(testX)
     print(preds, testY)
     print(classification_report(testY, preds))
-

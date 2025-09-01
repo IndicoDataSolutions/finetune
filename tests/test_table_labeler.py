@@ -1,8 +1,10 @@
-import pytest
 import io
 import logging
-from finetune.util.table_labeler import TableLabeler, TableETL
+
+import pytest
+
 from finetune.scheduler import Scheduler
+from finetune.util.table_labeler import TableETL, TableLabeler
 
 
 def make_labels_predictions(labels):
@@ -281,8 +283,10 @@ Some text after the table"""
 def test_fit_predict(labeled_table_data):
     filename = "tl.jl"
     text, labels, tables = labeled_table_data
-    tl = TableLabeler()
-    tl.fit(text=text * 10, labels=labels * 10, tables=tables * 10)
+    tl = TableLabeler(
+        table_model_config={"n_epochs": 1}, text_model_config={"n_epochs": 1}
+    )
+    tl.fit(text=text, labels=labels, tables=tables)
     tl.save(filename)
     del tl
     shed = Scheduler()
@@ -299,9 +303,11 @@ def test_fit_predict(labeled_table_data):
 def test_fit_predict_with_tabs(labeled_table_data_with_tabs, caplog):
     filename = "tl.jl"
     text, labels, tables = labeled_table_data_with_tabs
-    tl = TableLabeler()
+    tl = TableLabeler(
+        table_model_config={"n_epochs": 1}, text_model_config={"n_epochs": 1}
+    )
     with caplog.at_level(logging.WARNING):
-        tl.fit(text=text * 10, labels=labels * 10, tables=tables * 10)
+        tl.fit(text=text, labels=labels, tables=tables)
         tl.save(filename)
         del tl
         shed = Scheduler()
@@ -320,21 +326,25 @@ def test_assert_predict_batch_size():
 def test_fit_predict_bytes_io(labeled_table_data):
     bytes_io = io.BytesIO()
     text, labels, tables = labeled_table_data
-    tl = TableLabeler()
-    tl.fit(text=text * 10, labels=labels * 10, tables=tables * 10)
+    tl = TableLabeler(
+        table_model_config={"n_epochs": 1}, text_model_config={"n_epochs": 1}
+    )
+    tl.fit(text=text, labels=labels, tables=tables)
     tl.save(bytes_io)
     bytes_io.seek(0)
     del tl
     shed = Scheduler()
     preds = TableLabeler.predict_from_file(
-        model_file_path=bytes_io, text=text, tables=tables, scheduler=shed, cache_key="test_fit_predict_bytes_io"
+        model_file_path=bytes_io,
+        text=text,
+        tables=tables,
+        scheduler=shed,
+        cache_key="test_fit_predict_bytes_io",
     )
-    print([{**p, "confidence": None} for p in preds[0]])
     assert len(preds[0]) == len(labels[0])
     assert set((p["start"], p["end"], p["label"]) for p in preds[0]) == set(
         (l["start"], l["end"], l["label"]) for l in labels[0]
     )
-
 
 
 @pytest.mark.parametrize("drop_labels", [True, False])

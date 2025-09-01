@@ -14,15 +14,14 @@
 # limitations under the License.
 """ Tokenization classes from the original BERT implementation. Modified to add char index info."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
 import collections
 import re
 import unicodedata
-import six
+
 import numpy as np
+import six
 import tensorflow as tf
 
 
@@ -144,7 +143,7 @@ def convert_by_vocab(vocab, items, unk_token=None):
     for item in items:
         if unk_token is not None:
             output.append(vocab.get(item, vocab[unk_token]))
-        else:    
+        else:
             output.append(vocab[item])
     return output
 
@@ -194,12 +193,15 @@ class FullTokenizer(object):
         for token, token_idx in zip(*self.basic_tokenizer.tokenize(text)):
             subtokens = self.wordpiece_tokenizer.tokenize(token, token_idx)[0]
             if subtokens == [self.wordpiece_tokenizer.unk_token]:
-                subtokens = [token] # this will be unked later but it keeps lengths intact
+                subtokens = [
+                    token
+                ]  # this will be unked later but it keeps lengths intact
             split_tokens.extend(subtokens)
-                
+
             token_start = token_idx[0]
             subtoken_ends = (
-                np.cumsum([len(tok.replace("##", "")) for tok in subtokens]) + token_start
+                np.cumsum([len(tok.replace("##", "")) for tok in subtokens])
+                + token_start
             )
 
             token_ends.extend(subtoken_ends)
@@ -208,7 +210,9 @@ class FullTokenizer(object):
         return split_tokens, token_starts, token_ends
 
     def convert_tokens_to_ids(self, tokens):
-        return convert_by_vocab(self.vocab, tokens, unk_token=self.wordpiece_tokenizer.unk_token)
+        return convert_by_vocab(
+            self.vocab, tokens, unk_token=self.wordpiece_tokenizer.unk_token
+        )
 
     def convert_ids_to_tokens(self, ids):
         return convert_by_vocab(self.inv_vocab, ids)

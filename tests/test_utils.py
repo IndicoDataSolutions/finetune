@@ -1,29 +1,24 @@
+import unicodedata
 import unittest
 from collections import Counter
-import pytest
 
 import numpy as np
-import tensorflow as tf
+import pytest
 
-import unicodedata
-
-from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
-from finetune.optimizers.gradient_accumulation import get_grad_accumulation_optimizer
-from finetune.util.imbalance import compute_class_weights
-from finetune.util.optimize_loss import OPTIMIZERS
-from finetune.util.timing import ProgressBar
-from finetune.errors import FinetuneError
-from finetune import Classifier, SequenceLabeler
-from finetune.base_models.gpt.encoder import GPTEncoder
-from finetune.base_models.gpt2.encoder import GPT2Encoder
+from finetune import Classifier
+from finetune.base_models.bert.encoder import BERTEncoder, BERTEncoderMultuilingal
 from finetune.base_models.bert.roberta_encoder import (
-    RoBERTaEncoderV2,
     RoBERTaEncoder,
     RoBERTaEncoderSlow,
+    RoBERTaEncoderV2,
 )
-from finetune.base_models.bert.encoder import BERTEncoderMultuilingal, BERTEncoder
-from finetune.base_models.oscar.encoder import GPCEncoder
+from finetune.base_models.gpt2.encoder import GPT2Encoder
+from finetune.base_models.gpt.encoder import GPTEncoder
+from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
+from finetune.errors import FinetuneError
 from finetune.scheduler import Scheduler
+from finetune.util.imbalance import compute_class_weights
+from finetune.util.timing import ProgressBar
 
 
 class TestGPTEncoder(unittest.TestCase):
@@ -94,10 +89,6 @@ class TestBertEncoderMulti(TestGPTEncoder):
 
 class TestBertEncoder(TestGPTEncoder):
     Encoder = BERTEncoder
-
-
-class TestOscarEncoder(TestGPTEncoder):
-    Encoder = GPCEncoder
 
 
 class TestFinetuneIndicoConverters(unittest.TestCase):
@@ -281,144 +272,50 @@ class TestFinetuneIndicoConverters(unittest.TestCase):
         self.assertEqual(weights[1], 1.0)
 
 
-def body_of_test_gradient_accumulating_optimizer(opt, accumulate_on_cpu):
-    with tf.Graph().as_default():
-        loss = tf.compat.v1.get_variable("loss", shape=1)
-        lr = 0.1
-        opt = get_grad_accumulation_optimizer(opt, 2, accumulate_on_cpu=accumulate_on_cpu)(lr)
-        global_step = tf.compat.v1.train.get_or_create_global_step()
-        if isinstance(opt, tf.keras.optimizers.Optimizer):
-            with tf.control_dependencies(
-                [opt.minimize(lambda: tf.abs(loss), [loss])]
-            ):
-                train_op = global_step.assign_add(1)
-        else:
-            train_op = opt.minimize(tf.abs(loss), global_step=global_step)
+def test_progress_bar():
+    state = {"hook_run": False}
 
-        sess = tf.compat.v1.Session()
-        sess.run(tf.compat.v1.global_variables_initializer())
-        for i in range(100):
-            val_before = sess.run(loss)
-            grad_before = np.sign(val_before)
-            sess.run(train_op)
+    def update_state(timing_dict):
+        nonlocal state
+        state["hook_run"] = True
 
-            val_after1 = sess.run(loss)
-            grad_after1 = np.sign(val_after1)
-            sess.run(train_op)
+    pbar = ProgressBar(range(1000), update_hook=update_state)
+    assert state["hook_run"]
 
-            val_after2 = sess.run(loss)
 
-            gs = sess.run(global_step)
-            assert val_before == val_after1
-            assert val_before - (grad_before + grad_after1) * lr == val_after2
-            assert gs == (i + 1) * 2
+def test_save_single(trained_classifier, save_model_dir):
+    preds_a = pretrained_classifier.predict(["test text"])
+    pretrained_classifier.save(save_model_dir / "a.jl")
+    loaded_model = pretrained_classifier.load(save_model_dir / "a.jl")
+    preds_b = loaded_model.predict(["test text"])
+    shed = Scheduler()
+    preds_c = shed.predict(save_model_dir / "a.jl", ["test text"])
+    assert preds_a == preds_b == preds_c
 
-@pytest.mark.parametrize("accumulate_on_cpu", [True, False])
-def test_gradient_accumulating_optimizer_keras(accumulate_on_cpu):
-    body_of_test_gradient_accumulating_optimizer(tf.keras.optimizers.SGD, accumulate_on_cpu)
 
-@pytest.mark.parametrize("accumulate_on_cpu", [True, False])
-def test_gradient_accumulating_optimizer_compat(accumulate_on_cpu):
-    body_of_test_gradient_accumulating_optimizer(
-        tf.compat.v1.train.GradientDescentOptimizer,
-        accumulate_on_cpu=accumulate_on_cpu
+def test_save_mutliple(trained_sequence_labeler, trained_classifier, save_model_dir):
+    preds_a_1 = pretrained_sequence_labeler.predict(["test text"])
+    preds_b_1 = pretrained_classifier.predict(["test text"])
+    path = save_model_dir / "multiple_models.jl"
+
+    Classifier.save_multiple(
+        path, {"a": trained_sequence_labeler, "b": trained_classifier}
     )
+    shed = Scheduler()
+    preds_a_2 = shed.predict(path, ["test text"], key="a")
+    preds_b_2 = shed.predict(path, ["test text"], key="b")
+    assert preds_a_1 == preds_a_2
+    assert preds_b_1 == preds_b_2
 
 
-class TestProgressBar(unittest.TestCase):
-    def test_progress_bar(self):
-        state = {"hook_run": False}
+def test_save_mutliple_inc_non_model(trained_classifier, save_model_dir):
+    model_a = trained_classifier
+    preds_a_1 = model_a.predict(["test text"])
+    path = save_model_dir / "multiple_models.jl"
+    Classifier.save_multiple(path, {"a": model_a, "a_preds": preds_a_1})
 
-        def update_state(timing_dict):
-            nonlocal state
-            state["hook_run"] = True
-
-        pbar = ProgressBar(range(1000), update_hook=update_state)
-        assert state["hook_run"]
-
-
-class TestOptimizers(unittest.TestCase):
-    @tf.function
-    def test_optimizers(self):
-        for opt_class in OPTIMIZERS.values():
-            with tf.Graph().as_default():
-                loss_var = tf.compat.v1.get_variable("loss", shape=1)
-                loss = tf.abs(loss_var)
-                lr = 0.1
-                opt = opt_class(lr, weight_decay=1e-10, decay_var_list=[loss_var])
-                if isinstance(opt, tf.keras.optimizers.Optimizer):
-                    train_op = opt.minimize(lambda: loss, [loss_var])
-                else:
-                    train_op = opt.minimize(loss)
-
-                sess = tf.compat.v1.Session()
-                sess.run(tf.compat.v1.global_variables_initializer())
-                original_loss = sess.run(loss)
-                for i in range(10):
-                    sess.run(train_op)
-            self.assertLess(sess.run(loss), original_loss)
-
-
-class TestSaveMultiple(unittest.TestCase):
-    
-    def preds_equal(self, a, b):
-        assert len(a) == len(b)
-        for ai, bi in zip(a, b):
-            assert len(ai) == len(bi)
-            for aii, bii in zip(ai, bi):
-                assert aii["text"] == bii["text"]
-                assert aii["start"] == bii["start"]
-                assert aii["end"] == bii["end"]
-                assert len(aii["confidence"]) == len(bii["confidence"])
-                assert aii["confidence"].keys() == bii["confidence"].keys()
-                for k in aii["confidence"].keys():
-                    self.assertAlmostEqual(aii["confidence"][k], bii["confidence"][k])
-
-    def test_save_single(self):
-        model = SequenceLabeler()
-        model.fit(["test text"] * 20, [[{"start": 0, "end": 4, "label": "test"}]] * 20)
-        preds_a = model.predict(["test text"])
-        SequenceLabeler.save_multiple("multiple_models.jl", {"a": model})
-        loaded_model = SequenceLabeler.load("multiple_models.jl", key="a")
-        preds_b = loaded_model.predict(["test text"])
-        shed = Scheduler()
-        preds_c = shed.predict("multiple_models.jl", ["test text"], key="a")
-        assert preds_a[0]  # If this is empty it's not a good test that nothing changed.
-        self.preds_equal(preds_a, preds_b)
-        self.preds_equal(preds_b, preds_c)
-
-    def test_save_mutliple(self):
-        model_a = SequenceLabeler()
-        model_b = SequenceLabeler()
-        model_a.fit(["test text"] * 20, [[{"start": 0, "end": 4, "label": "test"}]] * 20)
-        model_b.fit(["test text"] * 20, [[{"start": 5, "end": 9, "label": "test"}]] * 20)
-
-        preds_a_1 = model_a.predict(["test text"])
-        preds_b_1 = model_b.predict(["test text"])
-        
-        SequenceLabeler.save_multiple("multiple_models.jl", {"a": model_a, "b": model_b})
-        shed = Scheduler()
-        preds_a_2 = shed.predict("multiple_models.jl", ["test text"], key="a")
-        preds_b_2 = shed.predict("multiple_models.jl", ["test text"], key="b")
-        self.preds_equal(preds_a_1, preds_a_2)
-        self.preds_equal(preds_b_1, preds_b_2)
-
-    
-    def test_save_mutliple_inc_non_model(self):
-        model_a = SequenceLabeler()
-        model_a.fit(["test text"] * 20, [[{"start": 0, "end": 4, "label": "test"}]] * 20)
-        preds_a_1 = model_a.predict(["test text"])
-    
-        SequenceLabeler.save_multiple("multiple_models.jl", {"a": model_a, "a_preds": preds_a_1})
-        
-        shed = Scheduler()
-        preds_a_2 = shed.predict("multiple_models.jl", ["test text"], key="a")
-        assert preds_a_1 == SequenceLabeler.load("multiple_models.jl", key="a_preds")
-        self.preds_equal(preds_a_1, preds_a_2)
-
-
-    
-
-
-if __name__ == "__main__":
-    unittest.main()
+    shed = Scheduler()
+    preds_a_2 = shed.predict(path, ["test text"], key="a")
+    assert preds_a_1 == preds_a_2
+    loaded_preds_a_1 = Classifier.load(path, key="a_preds")
+    assert preds_a_1 == loaded_preds_a_1

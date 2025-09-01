@@ -5,25 +5,6 @@ import numpy as np
 from finetune.encoding.input_encoder import get_spacy
 
 
-def assign_associations(associations, none_value, idx_lookup):
-    candidates = dict()
-    for association in associations:
-        for bpe_idx, candidate_idx, candidate_label, candidate_prob in association:
-            if candidate_label == none_value:
-                continue
-            if idx_lookup[bpe_idx] not in candidates:
-                candidates[idx_lookup[bpe_idx]] = []
-            candidates[idx_lookup[bpe_idx]].append(
-                (idx_lookup[candidate_idx], candidate_label, candidate_prob)
-            )
-
-    # TODO some how sample these candidates eg maximum probabilities, to fit some schema
-    candidates = {
-        k: max(v, key=lambda x: x[2]) for k, v in candidates.items()
-    }  # for now just pick maximum prob
-    return candidates
-
-
 def _merge_confidences(annotation):
     """
     Collapse list of confidences down to a single mean confidence.
@@ -60,7 +41,6 @@ def finetune_to_indico_sequence(
     probs=None,
     none_value=None,
     subtoken_predictions=False,
-    associations=None,
     bio_tagging=False,
 ):
     """
@@ -94,18 +74,22 @@ def finetune_to_indico_sequence(
         spacy_docs = get_spacy().pipe(raw_texts)
     else:
         spacy_docs = [None] * len(raw_texts)
-    loop_vals = zip(raw_texts, spacy_docs, subseqs, labels, probs or [None] * len(raw_texts))
-    for doc_idx, (raw_text, spacy_tokens, doc_seq, label_seq, prob_seq) in enumerate(loop_vals):
+    loop_vals = zip(
+        raw_texts, spacy_docs, subseqs, labels, probs or [None] * len(raw_texts)
+    )
+    for raw_text, spacy_tokens, doc_seq, label_seq, prob_seq in loop_vals:
         if not subtoken_predictions:
             spacy_token_starts = np.asarray([token.idx for token in spacy_tokens])
-            spacy_token_ends = np.asarray([token.idx + len(token.text) for token in spacy_tokens])
+            spacy_token_ends = np.asarray(
+                [token.idx + len(token.text) for token in spacy_tokens]
+            )
         doc_annotations = []
         annotation_ranges = set()
         raw_annotation_end = 0
         raw_annotation_start = 0
         subtoken_to_label_idx = []
-        for i, (sub_str, raw_label, confidences) in enumerate(
-            zip(doc_seq, label_seq, prob_seq or [None] * len(doc_seq))
+        for sub_str, raw_label, confidences in zip(
+            doc_seq, label_seq, prob_seq or [None] * len(doc_seq)
         ):
             subtoken_to_label_idx.append(len(doc_annotations))
             if not isinstance(raw_label, tuple):
@@ -117,39 +101,36 @@ def finetune_to_indico_sequence(
 
             for label_idx, label in enumerate(label_list):
                 stripped_text = sub_str.strip()
-                start_of_search = raw_annotation_start if label_idx != 0 else raw_annotation_end 
+                start_of_search = (
+                    raw_annotation_start if label_idx != 0 else raw_annotation_end
+                )
                 if subtoken_predictions:
                     raw_annotation_start = raw_text.find(sub_str, start_of_search)
                     raw_annotation_end = raw_annotation_start + len(sub_str)
                 else:
-                    raw_annotation_start = raw_text.find(
-                        stripped_text, start_of_search
-                    )
+                    raw_annotation_start = raw_text.find(stripped_text, start_of_search)
                     raw_annotation_end = raw_annotation_start + len(stripped_text)
 
                 if raw_annotation_start == -1:
                     warnings.warn(
-                        "Failed to find predicted sequence: {} in text".format(
-                            sub_str
-                        )
+                        "Failed to find predicted sequence: {} in text".format(sub_str)
                     )
                     continue
 
-
                 extended_existing_label = False
-                for item in (doc_annotations if multilabel else doc_annotations[-1:]):
+                for item in doc_annotations if multilabel else doc_annotations[-1:]:
                     # handle case where we extend existing annotation
                     if (
                         # same label
                         item["label"] == label
                         # and only separated by whitespace
                         and item["end"] <= raw_annotation_end
-                        and not raw_text[item["end"]: raw_annotation_start].strip()
+                        and not raw_text[item["end"] : raw_annotation_start].strip()
                         # and not BIO tagging
                         and not bio_tagging
                     ):
                         item["end"] = raw_annotation_end
-                        item["text"] = raw_text[item["start"]: raw_annotation_end]
+                        item["text"] = raw_text[item["start"] : raw_annotation_end]
                         if "confidence" in item and confidences is not None:
                             item["confidence"].append(confidences)
                         extended_existing_label = True
@@ -230,7 +211,7 @@ def overlap_handler(current_annotation, annotation, text, multi_label):
     Scenarios:
         <> --> current_annotation
         [] --> annotation
-        
+
     1) < [ > ]
     2) [ < > ]
     3) < [ ] >
@@ -287,6 +268,7 @@ def overlap_handler(current_annotation, annotation, text, multi_label):
     chunks = [first_chunk, second_chunk, third_chunk]
     chunks = [c for c in chunks if c["start"] != c["end"]]
     return chunks
+
 
 def strip_annotation_whitespace(annotation):
     text = annotation["text"]

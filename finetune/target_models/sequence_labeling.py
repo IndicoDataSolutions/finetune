@@ -1,31 +1,31 @@
 import copy
+import logging
+import math
 import os
 from collections import Counter, defaultdict
-import math
 from typing import Dict, List, Tuple, Union
 
-from finetune.util.memory import cleanup_sessions
-import tensorflow as tf
 import numpy as np
+import tensorflow as tf
 
 from finetune.base import BaseModel
-from finetune.encoding.target_encoders import (
-    SequenceLabelingEncoder,
-    SequenceMultiLabelingEncoder,
-)
-from finetune.nn.target_blocks import sequence_labeler
-from finetune.nn.crf import sequence_decode
+from finetune.encoding.input_encoder import get_spacy, tokenize_context
 from finetune.encoding.sequence_encoder import finetune_to_indico_sequence
-from finetune.encoding.input_encoder import get_spacy
+from finetune.encoding.target_encoders import SequenceLabelingEncoder
 from finetune.input_pipeline import BasePipeline
-from finetune.util.metrics import sequences_overlap
-from finetune.encoding.input_encoder import tokenize_context
+from finetune.nn.target_blocks import SequenceLabeler as SequenceLabelerBlock
+from finetune.util.memory import cleanup_sessions
+
+LOGGER = logging.getLogger("finetune")
+
+
+def sequences_overlap(seq1: dict, seq2: dict):
+    return seq1["start"] <= seq2["end"] and seq1["end"] >= seq2["start"]
 
 
 class SequencePipeline(BasePipeline):
-    def __init__(self, config, multi_label):
+    def __init__(self, config):
         super(SequencePipeline, self).__init__(config)
-        self.multi_label = multi_label
         self.empty_counts = {"empty": 0, "labeled": 0}
 
     def _update_empty_ratio(self, empty):
@@ -48,9 +48,7 @@ class SequencePipeline(BasePipeline):
         If Y is provided, filter out chunks that do not contain any positive
         examples (labels) at a ratio determined by self.config.max_empty_chunk_ratio
         """
-        pad_token = (
-            [self.config.pad_token] if self.multi_label else self.config.pad_token
-        )
+        pad_token = self.config.pad_token
         out_gen = self._text_to_ids(X, pad_token=pad_token)
 
         for out in out_gen:
@@ -82,26 +80,16 @@ class SequencePipeline(BasePipeline):
         for doc, target_arr in encoded_dataset:
             target_arr = np.asarray(target_arr)
             decoded_targets = self.label_encoder.inverse_transform(target_arr)
-            if self.multi_label:
-                for label in decoded_targets:
-                    counter.update(label)
-            else:
-                counter.update(decoded_targets)
+            counter.update(decoded_targets)
         return counter
 
-    def feed_shape_type_def(self):
-        TS = tf.TensorShape
-        types = {"tokens": tf.int32}
-        shapes = {"tokens": TS([None])}
-        types, shapes = self._add_context_info_if_present(types, shapes)
-        target_shape = (
-            [None, self.label_encoder.target_dim] if self.multi_label else [None]
+    def target_def(self, *, concrete_dims):
+        return (
+            tf.int32,
+            tf.TensorShape([self.config.max_length if concrete_dims else None]),
         )
-        return ((types, tf.float32), (shapes, TS(target_shape)))
 
     def _target_encoder(self):
-        if self.multi_label:
-            return SequenceMultiLabelingEncoder(pad_token=self.config.pad_token)
         return SequenceLabelingEncoder(
             pad_token=self.config.pad_token, bio_tagging=self.config.bio_tagging
         )
@@ -224,13 +212,7 @@ class SequenceLabeler(BaseModel):
             setattr(self.config, key, value)
 
     def _get_input_pipeline(self):
-        return SequencePipeline(
-            config=self.config, multi_label=self.config.multi_label_sequences
-        )
-
-    def _initialize(self):
-        self.multi_label = self.config.multi_label_sequences
-        return super()._initialize()
+        return SequencePipeline(config=self.config)
 
     def finetune(
         self,
@@ -238,7 +220,6 @@ class SequenceLabeler(BaseModel):
         Y=None,
         context=None,
         update_hook=None,
-        log_hooks=None,
         X_partial=None,
         Y_partial=None,
     ):
@@ -258,10 +239,6 @@ class SequenceLabeler(BaseModel):
             self.saver.fallback  # retrieve the fallback future.
             self.saver = None
             model_copy = copy.deepcopy(self)
-            if model_copy.config.tensorboard_folder:
-                model_copy.config.tensorboard_folder = os.path.join(
-                    model_copy.config.tensorboard_folder, "ans_run"
-                )
             model_copy._initialize()
             model_copy.input_pipeline.total_epoch_offset = self.config.n_epochs
             self.input_pipeline.current_epoch_offset = self.config.n_epochs
@@ -272,7 +249,9 @@ class SequenceLabeler(BaseModel):
             model_copy.config.auto_negative_sampling = False
             # Cannot have anything that changes pred format here.
             model_copy.config.predict_chunk_markers = False
-            model_copy.finetune(Xs, Y=Y, context=context, update_hook=update_hook)
+            LOGGER.debug("Starting Auto Negative Sampling Initial Train")
+            model_copy.finetune(Xs, Y=Y, context=context)
+            LOGGER.debug("Completed Auto Negative Sampling Initial Train")
             cleanup_sessions()
             initial_run_preds = []
 
@@ -291,11 +270,13 @@ class SequenceLabeler(BaseModel):
             else:
                 outer_batch_size = len(Xs)
 
-            with self.cached_predict():
-                for b_start in range(0, len(Xs), outer_batch_size):
-                    initial_run_preds += model_copy.predict(
-                        Xs[b_start : b_start + outer_batch_size]
-                    )
+            LOGGER.debug("Starting Auto Negative Sampling Prediction")
+            for b_start in range(0, len(Xs), outer_batch_size):
+                initial_run_preds += model_copy.predict(
+                    Xs[b_start : b_start + outer_batch_size]
+                )
+            LOGGER.debug("Completed Auto Negative Sampling Prediction")
+            model_copy.close(update_saver=False)
             del model_copy
             cleanup_sessions()
             # Tag negative predictions with <PAD> label and add to label set
@@ -322,10 +303,9 @@ class SequenceLabeler(BaseModel):
                 # data, which will only have a sample of true labels
                 # TODO Determine if we need something more sophisticated for chunking
                 self.config.max_empty_chunk_ratio = 0.0
+            LOGGER.debug("Starting Final Model train")
 
-        return super().finetune(
-            Xs, Y=Y, context=context, update_hook=update_hook, log_hooks=log_hooks
-        )
+        return super().finetune(Xs, Y=Y, context=context, update_hook=update_hook)
 
     def _pre_chunk_document(
         self, texts: List[str]
@@ -496,17 +476,11 @@ class SequenceLabeler(BaseModel):
         doc_idx = -1
         doc_annotations = []
         raw_text = [data.get("raw_text", data["X"]) for data in zipped_data]
-        for (
-            token_start_idx,
-            token_end_idx,
-            start_of_doc,
-            end_of_doc,
-            label_seq,
-            proba_seq,
-            start,
-            end,
-        ) in predictions:
-            if start_of_doc:
+        for pred_bundle in predictions:
+            label_seq = self.input_pipeline.label_encoder.inverse_transform(
+                pred_bundle["preds"]
+            )
+            if pred_bundle["start_of_doc"]:
                 # if this is the first chunk in a document, start accumulating from scratch
                 doc_subseqs = []
                 doc_labels = []
@@ -517,6 +491,13 @@ class SequenceLabeler(BaseModel):
                 last_end = 0
                 doc_level_probas = []
                 chunk_spans = []
+
+            # This is the index of the start and end of the focused section of the chunk relative to the chunk tokens
+            start = pred_bundle["useful_start"]
+            end = pred_bundle["useful_end"]
+            token_start_idx = pred_bundle["token_start_idx"]
+            token_end_idx = pred_bundle["token_end_idx"]
+            proba_seq = pred_bundle["probas"]
 
             label_seq = label_seq[start:end]
             end_of_token_seq = token_end_idx[start:end]
@@ -564,19 +545,10 @@ class SequenceLabeler(BaseModel):
                     start_idx, last_end
                 )
                 last_end = end_idx
-
-                if self.config.group_bio_tagging:
-                    group_prefix = ""
-                    if label[:3] == "BG-" or label[:3] == "IG-":
-                        group_prefix, label = label[:3], label[3:]
                 if self.config.bio_tagging:
                     bio_prefix = None
                     if label != self.config.pad_token:
                         bio_prefix, label = label[:2], label[2:]
-                if self.config.group_bio_tagging and label != self.config.pad_token:
-                    # Save the group prefix so the grouping target models can
-                    # extract grouping information down the line
-                    label = group_prefix + label
 
                 def _get_label(label):
                     if label[:3] == "BG-" or label[:3] == "IG-":
@@ -590,17 +562,9 @@ class SequenceLabeler(BaseModel):
                     not doc_subseqs
                     or per_token
                     or (self.config.bio_tagging and bio_prefix == "B-")
-                    or (self.config.group_bio_tagging and group_prefix == "BG-")
                     or (
                         label != doc_labels[-1]
-                        and (
-                            # Merge spans if the labels are the same,
-                            # disregarding group BIO tags
-                            # This is safe as we already hard break on BG-, so
-                            # we will only be merging IG- tags
-                            not self.config.group_bio_tagging
-                            or _get_label(label) != _get_label(doc_labels[-1])
-                        )
+                        and _get_label(label) != _get_label(doc_labels[-1])
                     )
                 ):
                     assert start_idx <= end_idx, "Start: {}, End: {}".format(
@@ -623,7 +587,7 @@ class SequenceLabeler(BaseModel):
                     doc_subseqs[-1] = raw_text[doc_idx][doc_starts[-1] : end_idx]
                     doc_probs[-1].append(proba)
 
-            if end_of_doc:
+            if pred_bundle["end_of_doc"]:
                 # last chunk in a document
                 prob_dicts = []
                 for prob_seq in doc_probs:
@@ -632,8 +596,6 @@ class SequenceLabeler(BaseModel):
                     prob_dicts.append(
                         dict(zip(self.input_pipeline.label_encoder.classes_, probs))
                     )
-                    if self.multi_label:
-                        del prob_dicts[-1][self.config.pad_token]
 
                 _, doc_annotations_sample = finetune_to_indico_sequence(
                     raw_texts=[raw_text[doc_idx]],
@@ -642,8 +604,7 @@ class SequenceLabeler(BaseModel):
                     probs=[prob_dicts],
                     none_value=self.config.pad_token,
                     subtoken_predictions=self.config.subtoken_predictions,
-                    bio_tagging=self.config.bio_tagging
-                    or self.config.group_bio_tagging,
+                    bio_tagging=self.config.bio_tagging,
                 )
                 if per_token:
                     doc_annotations.append(
@@ -699,64 +660,12 @@ class SequenceLabeler(BaseModel):
             **kwargs
         )
 
-    def _target_model(
-        self,
-        *,
-        config,
-        featurizer_state,
-        targets,
-        n_outputs,
-        train=False,
-        reuse=None,
-        **kwargs
-    ):
-        return sequence_labeler(
-            hidden=featurizer_state["sequence_features"],
-            targets=targets,
+    def target_block(self, *, config, n_outputs, **kwargs):
+        return SequenceLabelerBlock(
             n_targets=n_outputs,
-            pad_id=config.pad_idx,
-            config=config,
-            train=train,
-            multilabel=config.multi_label_sequences,
-            reuse=reuse,
-            lengths=featurizer_state["lengths"],
-            use_crf=self.config.crf_sequence_labeling,
-            **kwargs
+            dropout_rate=config.clf_p_drop,
+            use_crf=config.crf_sequence_labeling,
+            renorm_after_class_weights=config.renorm_after_class_weights,
+            include_attn=not config.base_model.is_bidirectional,
+            num_attn_heads=config.seq_num_heads,
         )
-
-    def _predict_op(self, logits, **kwargs):
-        trans_mats = kwargs.get("transition_matrix")
-        sequence_length = kwargs.get("sequence_length")
-        if self.config.use_gpu_crf_predict.lower() == "auto":
-            use_gpu_op = self.multi_label
-        else:
-            use_gpu_op = self.config.use_gpu_crf_predict
-
-        if self.multi_label:
-            logits = tf.unstack(logits, axis=-1)
-            label_idxs = []
-            label_probas = []
-            for logits_i, trans_mat_i in zip(logits, trans_mats):
-                idx, prob = sequence_decode(
-                    logits_i,
-                    trans_mat_i,
-                    sequence_length,
-                    use_gpu_op=True,
-                    use_crf=self.config.crf_sequence_labeling,
-                )
-                label_idxs.append(idx)
-                label_probas.append(prob[:, :, 1:])
-            label_idxs = tf.stack(label_idxs, axis=-1)
-            label_probas = tf.stack(label_probas, axis=-1)
-        else:
-            label_idxs, label_probas = sequence_decode(
-                logits,
-                trans_mats,
-                sequence_length,
-                use_gpu_op=False,
-                use_crf=self.config.crf_sequence_labeling,
-            )
-        return label_idxs, label_probas
-
-    def _predict_proba_op(self, logits, **kwargs):
-        return tf.no_op()
