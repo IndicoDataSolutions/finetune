@@ -22,8 +22,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-tf = ["tensorflow==2.19.0"]
-tf_gpu = ["tensorflow-gpu==2.19.0"]
+tf = ["tensorflow==2.20.0"]
+tf_gpu = ["tensorflow-gpu==2.20.0"]
 test = [
     "pytest",
     "bs4",

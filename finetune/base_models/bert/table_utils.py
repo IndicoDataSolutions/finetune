@@ -313,10 +313,10 @@ def slice_by_table_indices(
 
     col_values.set_shape([None, None] + list(inp.shape[2:]))
     return {
-        "seq_lens": col_seq_lens,
+        "seq_lens": tf.cast(col_seq_lens, tf.int32),
         "values": col_values,
         "attn_mask": mask,
-        "pos_ids": pos_ids,
+        "pos_ids": tf.cast(pos_ids, tf.int32),
     }
 
 
@@ -338,19 +338,27 @@ def gather_col_vals(inp, gather_output, eos_pad, bos_pad, pad_val):
             "attn_mask": mask from gather output unmodified,
         }
     """
-    bs = tf.shape(inp)[0]
-    bos_expanded = tf.tile(
-        tf.expand_dims(tf.expand_dims(bos_pad, 0), 0),
-        [bs, 1, *(1 for _ in bos_pad.shape)],
-    )
-    eos_expanded = tf.tile(
-        tf.expand_dims(tf.expand_dims(eos_pad, 0), 0),
-        [bs, 1, *(1 for _ in eos_pad.shape)],
-    )
+    # bs = tf.shape(inp)[0]
+    # bos_expanded = tf.tile(
+    #     tf.expand_dims(tf.expand_dims(bos_pad, 0), 0),
+    #     [bs, 1, *(1 for _ in bos_pad.shape)],
+    # )
+    # eos_expanded = tf.tile(
+    #     tf.expand_dims(tf.expand_dims(eos_pad, 0), 0),
+    #     [bs, 1, *(1 for _ in eos_pad.shape)],
+    # )
+    hidden_dim = inp.shape[2:]
+    batch_size = tf.shape(inp)[0]
+    token_bcast_shape = [batch_size, 1, *hidden_dim]
+    bos_expanded = tf.broadcast_to(bos_pad, token_bcast_shape)
+    eos_expanded = tf.broadcast_to(eos_pad, token_bcast_shape)
+    pad_expanded = tf.broadcast_to(pad_val, token_bcast_shape)
     inp_w_extra_toks = tf.concat(
-        [inp, bos_expanded, eos_expanded, tf.ones_like(eos_expanded) * pad_val], axis=1
+        [inp, bos_expanded, eos_expanded, pad_expanded], axis=1
     )
     values = tf.gather_nd(indices=gather_output["values"], params=inp_w_extra_toks)
+    # output always has the same rank as the input.
+    values = tf.ensure_shape(values, [None for _ in inp.shape])
     return {
         "seq_lens": gather_output["seq_lens"],
         "values": values,
@@ -411,8 +419,8 @@ def get_row_col_values(
             X,
             row_gather,
             context,
-            bos_id=tf.constant(bos_id),
-            eos_id=tf.constant(eos_id),
+            bos_id=tf.convert_to_tensor(bos_id),
+            eos_id=tf.convert_to_tensor(eos_id),
             table_position_type=table_position_type,
             max_row_col_embedding=max_row_col_embedding,
         ),
@@ -420,8 +428,8 @@ def get_row_col_values(
             X,
             col_gather,
             context,
-            bos_id=tf.constant(bos_id),
-            eos_id=tf.constant(eos_id),
+            bos_id=tf.convert_to_tensor(bos_id),
+            eos_id=tf.convert_to_tensor(eos_id),
             table_position_type=table_position_type,
             max_row_col_embedding=max_row_col_embedding,
         ),

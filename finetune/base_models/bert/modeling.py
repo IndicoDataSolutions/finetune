@@ -1002,9 +1002,8 @@ def get_shape_list(tensor, expected_rank=None, name=None):
             be returned as python integers, and dynamic dimensions will be returned
             as tf.Tensor scalars.
     """
-
     shape = tensor.shape.as_list()
-
+    
     non_static_indexes = []
     for index, dim in enumerate(shape):
         if dim is None:
@@ -1193,7 +1192,6 @@ class TwinTransformerModel(tf.keras.layers.Layer):
                 name=f"layer_a_{i}",
             )
             self.blocks_a.append(block_a)
-
             block_b = FullBlock(
                 attention_head_size=attention_head_size_b,
                 num_attention_heads=self.num_attention_heads,
@@ -1398,7 +1396,6 @@ class BaseTwinBertModel(tf.keras.layers.Layer):
             token_type_ids=token_type_ids_b,
             position_ids=pos_ids_b,
         )
-
         # Run the twin transformer
         sequence_output_a, sequence_output_b = self.transformer_model(
             layer_input_a=embedding_output_a,
@@ -1466,7 +1463,55 @@ class TwinBertModel(tf.keras.layers.Layer):
             mixing_inputs=mixing_inputs,
             **kwargs,
         )
+class TableModelBatchPostprocessor:
+    def __init__(self, config=None):
+        self.config = config
 
+    def modify_input_spec(self, input_spec):
+        (types, target_type), (shapes, target_shape) = input_spec
+        gather_shapes = {
+            "seq_lens": tf.TensorShape([None]),
+            "values": tf.TensorShape([None, None, 2]),
+            "attn_mask": tf.TensorShape([None, None, None]),
+            "pos_ids": tf.TensorShape([None, None]),
+        }
+        gather_types = {
+            "seq_lens": tf.int32,
+            "values": tf.int32,
+            "attn_mask": tf.float32,
+            "pos_ids": tf.int32,
+        }
+        shapes["row_gather"] = gather_shapes
+        shapes["col_gather"] = gather_shapes
+        types["row_gather"] = gather_types
+        types["col_gather"] = gather_types
+        return (types, target_type), (shapes, target_shape)
+
+    def postprocess(self, x, y=None):
+        # Extract row/column boundaries from context
+        end_col, end_row, start_col, start_row = tf.unstack(tf.cast(x["context"], tf.int32), num=4, axis=2)
+
+        # Get gather indices for rows and columns
+        row_gather = get_gather_indices(
+            x["tokens"],
+            x["length"],
+            start_row,
+            end_row,
+            other_end=end_col,
+            chunk_tables=self.config.chunk_tables,
+        )
+        col_gather = get_gather_indices(
+            x["tokens"],
+            x["length"],
+            start_col,
+            end_col,
+            other_end=end_row,
+            chunk_tables=self.config.chunk_tables,
+        )
+        x = {**x, "row_gather": row_gather, "col_gather": col_gather}
+        if y is not None:
+            return x, y
+        return x
 
 class TwinBertFeaturizer(tf.keras.layers.Layer):
     """Keras layer wrapper for the twin BERT featurizer functionality."""
@@ -1485,7 +1530,7 @@ class TwinBertFeaturizer(tf.keras.layers.Layer):
         # Just needed to keep keras logs quiet as no variables are directly built on this layer
         super().build(input_shape)
 
-    def call(self, tokens, context, sequence_lengths):
+    def call(self, tokens, context, sequence_lengths, row_gather, col_gather):
         """
         Main featurizer call that processes the input tokens and context.
 
@@ -1497,29 +1542,10 @@ class TwinBertFeaturizer(tf.keras.layers.Layer):
         Returns:
             Dictionary containing features and sequence features
         """
+        tokens = tf.ensure_shape(tokens, [None, None])
+        context = tf.ensure_shape(context, [None, None, 4])
         batch_size = tf.shape(tokens)[0]
         seq_length = tf.shape(tokens)[1]
-
-        # Extract row/column boundaries from context
-        end_col, end_row, start_col, start_row = tf.unstack(context, num=4, axis=2)
-
-        # Get gather indices for rows and columns
-        row_gather = get_gather_indices(
-            tokens,
-            sequence_lengths,
-            start_row,
-            end_row,
-            other_end=end_col,
-            chunk_tables=self.chunk_tables,
-        )
-        col_gather = get_gather_indices(
-            tokens,
-            sequence_lengths,
-            start_col,
-            end_col,
-            other_end=end_row,
-            chunk_tables=self.chunk_tables,
-        )
 
         # Get row/column values for processing
         row_col_values = get_row_col_values(
@@ -1527,8 +1553,8 @@ class TwinBertFeaturizer(tf.keras.layers.Layer):
             context,
             row_gather,
             col_gather,
-            bos_id=self.encoder.start_token,
-            eos_id=self.encoder.end_token,
+            bos_id=tf.ensure_shape(self.encoder.start_token, []),
+            eos_id=tf.ensure_shape(self.encoder.end_token, []),
             table_position_type=self.table_position_type,
             max_row_col_embedding=512,  # Default value
         )
@@ -1655,7 +1681,7 @@ class TableCrossRowColMixing(tf.keras.layers.Layer):
             row_gather,
             bos_pad=self.bos_var,
             eos_pad=self.eos_var,
-            pad_val=1234,
+            pad_val=tf.convert_to_tensor(1234, dtype=self.bos_var.dtype),
         )["values"]
 
         # Scatter row feats into cols arrangement.
@@ -1664,7 +1690,7 @@ class TableCrossRowColMixing(tf.keras.layers.Layer):
             col_gather,
             bos_pad=self.bos_var,
             eos_pad=self.eos_var,
-            pad_val=1234,
+            pad_val=tf.convert_to_tensor(1234, dtype=self.bos_var.dtype),
         )["values"]
 
         return (

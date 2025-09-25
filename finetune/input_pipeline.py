@@ -18,7 +18,6 @@ from finetune.util.input_utils import (
     Chunker,
     InputMode,
     batch_dataset,
-    has_targets,
     wrap_tqdm,
 )
 
@@ -36,12 +35,19 @@ class BasePipeline(metaclass=ABCMeta):
         self._chunker = None
         self.current_epoch_offset = 0
         self.total_epoch_offset = 0
+        self._batch_postprocessor = None
 
     @property
     def text_encoder(self):
         if not hasattr(self, "_text_encoder") or self._text_encoder is None:
             self._text_encoder = self.config.base_model.get_encoder(self.config)
         return self._text_encoder
+
+    @property
+    def batch_postprocessor(self):
+        if not hasattr(self, "_batch_postprocessor") or self._batch_postprocessor is None:
+            self._batch_postprocessor = self.config.base_model.get_batch_postprocessor(self.config)
+        return self._batch_postprocessor
 
     @property
     def dataset_size(self):
@@ -76,7 +82,7 @@ class BasePipeline(metaclass=ABCMeta):
         return (tf.int32, tf.TensorShape([self.target_dim]))
 
     def input_spec(
-        self, *, concrete_dims, include_lengths=True, batched=True, include_targets=True
+        self, *, concrete_dims, include_lengths=True, batched=True, include_targets=True, include_postprocessed=False
     ):
         TS = tf.TensorShape
         types = {"tokens": tf.int32}
@@ -101,6 +107,8 @@ class BasePipeline(metaclass=ABCMeta):
             )
         else:
             output = ((types, target_type), (shapes, target_shape))
+        if include_postprocessed:
+            output = self.batch_postprocessor.modify_input_spec(output)
         if not include_targets:
             (types, _), (shapes, _) = output
             output = (types, shapes)
@@ -108,17 +116,17 @@ class BasePipeline(metaclass=ABCMeta):
 
     def keras_input_def(self, *, concrete_dims, include_targets=False):
         input_types, input_shapes = self.input_spec(
-            concrete_dims=concrete_dims, include_targets=include_targets, batched=False
+            concrete_dims=concrete_dims, include_targets=include_targets, batched=True, include_postprocessed=True
         )
         return tf.nest.map_structure(
-            lambda dtype, shape: tf.keras.Input(shape=shape, dtype=dtype),
+            lambda dtype, shape: tf.keras.Input(batch_shape=shape, dtype=dtype),
             input_types,
             input_shapes,
         )
 
     def keras_input_signature(self, *, concrete_dims, include_targets):
         input_types, input_shapes = self.input_spec(
-            concrete_dims=concrete_dims, include_targets=include_targets
+            concrete_dims=concrete_dims, include_targets=include_targets, include_postprocessed=True
         )
         return tf.nest.map_structure(
             lambda dtype, shape: tf.TensorSpec(shape=shape, dtype=dtype),
@@ -246,6 +254,7 @@ class BasePipeline(metaclass=ABCMeta):
                 table_batching=False,  # We cannot use table batching here because the order of the outputs is impacted.
                 shapes=shapes,
                 drop_remainder=False,
+                batch_postprocessor=self.batch_postprocessor,
             )
         }
 
@@ -306,6 +315,7 @@ class BasePipeline(metaclass=ABCMeta):
             table_batching=self.config.table_batching,
             random_seed=self.config.seed,
             drop_remainder=True,
+            batch_postprocessor=self.batch_postprocessor,
         )
         return {
             "train_dataset": batched_train_dataset,

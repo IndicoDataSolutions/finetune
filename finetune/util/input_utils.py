@@ -1,4 +1,5 @@
 import tensorflow as tf
+import typing as t
 
 from finetune.util.timing import ProgressBar
 
@@ -59,6 +60,7 @@ def batch_dataset(
     table_batching: bool = False,
     random_seed: int = 42,
     drop_remainder: bool = False,
+    batch_postprocessor: t.Callable = None,
 ):
     if isinstance(shapes, tuple):
         shapes = ({**shapes[0], "length": tf.TensorShape([])}, shapes[1])
@@ -74,27 +76,26 @@ def batch_dataset(
             dataset.map(add_length)
             .shuffle(500 if shuffle else 1, seed=random_seed)
             # When we update to tf.2.13 this will change to be a method on the dataset.
-            .apply(
-                tf.data.experimental.bucket_by_sequence_length(
-                    element_length_func=(
-                        lambda item, *_: tf.cast(
-                            tf.maximum(
-                                tf.reduce_sum(
-                                    item["context"][:, 0] - item["context"][:, 2] + 1
-                                ),
-                                tf.reduce_sum(
-                                    item["context"][:, 1] - item["context"][:, 3] + 1
-                                ),
+            .bucket_by_sequence_length(
+                element_length_func=(
+                    lambda item, *_: tf.cast(
+                        tf.maximum(
+                            tf.reduce_sum(
+                                item["context"][:, 0] - item["context"][:, 2] + 1
                             ),
-                            tf.int32,
-                        )
-                    ),
-                    bucket_boundaries=[max_length],
-                    bucket_batch_sizes=[batch_size, 1],
-                    padded_shapes=shapes,
-                    drop_remainder=drop_remainder,
-                )
+                            tf.reduce_sum(
+                                item["context"][:, 1] - item["context"][:, 3] + 1
+                            ),
+                        ),
+                        tf.int32,
+                    )
+                ),
+                bucket_boundaries=[max_length],
+                bucket_batch_sizes=[batch_size, 1],
+                padded_shapes=shapes,
+                drop_remainder=drop_remainder,
             )
+            .map(batch_postprocessor.postprocess)
             .repeat(n_epochs)
             .prefetch(tf.data.AUTOTUNE)
         )
@@ -108,6 +109,7 @@ def batch_dataset(
             .padded_batch(
                 batch_size, padded_shapes=shapes, drop_remainder=drop_remainder
             )
+            .map(batch_postprocessor.postprocess)
             .prefetch(tf.data.AUTOTUNE)
         )
 

@@ -23,6 +23,10 @@ class SourceModel(metaclass=ABCMeta):
         settings.update(cls.settings)
         return settings
 
+    @classmethod
+    def get_batch_postprocessor(cls, config):
+        return None
+
     @property
     @abstractmethod
     def encoder(cls):
