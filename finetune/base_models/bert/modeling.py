@@ -29,6 +29,7 @@ from finetune.base_models.bert.table_utils import (
     get_row_col_values,
     reassemble_sequence_feats,
     scatter_feats,
+    get_target_length,
 )
 from finetune.nn.activations import bert_gelu as gelu
 from finetune.nn.activations import hf_gelu
@@ -70,7 +71,7 @@ class Embedding(tf.keras.layers.Layer):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
         )
-        post_processed.set_shape(embedding_output.shape)
+        post_processed = tf.ensure_shape(post_processed, embedding_output.shape)
         return post_processed
 
 
@@ -391,7 +392,7 @@ class LayerNorm(tf.keras.layers.Layer):
             scale=self.gamma,
             variance_epsilon=variance_epsilon,
         )
-        outputs.set_shape(inputs_shape)
+        outputs = tf.ensure_shape(outputs, inputs_shape)
         return outputs
 
 
@@ -981,8 +982,7 @@ class TransformerModel(tf.keras.layers.Layer):
             )
             if self.recompute_grad and training:
                 block = tf.recompute_grad(block)
-            prev_output = block(prev_output)
-            prev_output.set_shape(block_shape)
+            prev_output = tf.ensure_shape(block(prev_output), block_shape)
         final_output = reshape_from_matrix(prev_output, input_shape)
         return final_output
 
@@ -1469,11 +1469,12 @@ class TableModelBatchPostprocessor:
 
     def modify_input_spec(self, input_spec):
         (types, target_type), (shapes, target_shape) = input_spec
+        table_seq_length = get_target_length()
         gather_shapes = {
             "seq_lens": tf.TensorShape([None]),
-            "values": tf.TensorShape([None, None, 2]),
-            "attn_mask": tf.TensorShape([None, None, None]),
-            "pos_ids": tf.TensorShape([None, None]),
+            "values": tf.TensorShape([None, table_seq_length, 2]),
+            "attn_mask": tf.TensorShape([None, table_seq_length, table_seq_length]),
+            "pos_ids": tf.TensorShape([None, table_seq_length]),
         }
         gather_types = {
             "seq_lens": tf.int32,
@@ -1488,30 +1489,31 @@ class TableModelBatchPostprocessor:
         return (types, target_type), (shapes, target_shape)
 
     def postprocess(self, x, y=None):
-        # Extract row/column boundaries from context
-        end_col, end_row, start_col, start_row = tf.unstack(tf.cast(x["context"], tf.int32), num=4, axis=2)
+        # Should run on cpu anyway but just to be safe.
+        with tf.device("/CPU:0"):
+            end_col, end_row, start_col, start_row = tf.unstack(tf.cast(x["context"], tf.int32), num=4, axis=2)
 
-        # Get gather indices for rows and columns
-        row_gather = get_gather_indices(
-            x["tokens"],
-            x["length"],
-            start_row,
-            end_row,
-            other_end=end_col,
-            chunk_tables=self.config.chunk_tables,
-        )
-        col_gather = get_gather_indices(
-            x["tokens"],
-            x["length"],
-            start_col,
-            end_col,
-            other_end=end_row,
-            chunk_tables=self.config.chunk_tables,
-        )
-        x = {**x, "row_gather": row_gather, "col_gather": col_gather}
-        if y is not None:
-            return x, y
-        return x
+            # Get gather indices for rows and columns
+            row_gather = get_gather_indices(
+                x["tokens"],
+                x["length"],
+                start_row,
+                end_row,
+                other_end=end_col,
+                chunk_tables=self.config.chunk_tables,
+            )
+            col_gather = get_gather_indices(
+                x["tokens"],
+                x["length"],
+                start_col,
+                end_col,
+                other_end=end_row,
+                chunk_tables=self.config.chunk_tables,
+            )
+            x = {**x, "row_gather": row_gather, "col_gather": col_gather}
+            if y is not None:
+                return x, y
+            return x
 
 class TwinBertFeaturizer(tf.keras.layers.Layer):
     """Keras layer wrapper for the twin BERT featurizer functionality."""
@@ -1529,6 +1531,7 @@ class TwinBertFeaturizer(tf.keras.layers.Layer):
     def build(self, input_shape):
         # Just needed to keep keras logs quiet as no variables are directly built on this layer
         super().build(input_shape)
+
 
     def call(self, tokens, context, sequence_lengths, row_gather, col_gather):
         """

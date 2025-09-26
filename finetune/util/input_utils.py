@@ -95,7 +95,7 @@ def batch_dataset(
                 padded_shapes=shapes,
                 drop_remainder=drop_remainder,
             )
-            .map(batch_postprocessor.postprocess)
+            .map(batch_postprocessor.postprocess, num_parallel_calls=tf.data.AUTOTUNE)
             .repeat(n_epochs)
             .prefetch(tf.data.AUTOTUNE)
         )
@@ -103,13 +103,12 @@ def batch_dataset(
     else:
         return (
             dataset.map(add_length)
-            #            .map(expand_seq_to_multiple_of_16)
             .shuffle(500 if shuffle else 1, seed=random_seed)
             .repeat(n_epochs)
             .padded_batch(
                 batch_size, padded_shapes=shapes, drop_remainder=drop_remainder
             )
-            .map(batch_postprocessor.postprocess)
+            .map(batch_postprocessor.postprocess, num_parallel_calls=tf.data.AUTOTUNE)
             .prefetch(tf.data.AUTOTUNE)
         )
 

@@ -66,7 +66,7 @@ def get_gather_indices(X, sequence_lengths, start, end, other_end, chunk_tables)
     )
 
 
-def batch_packing(ragged_input, include_mask=True, base_model_max_length=512):
+def batch_packing(ragged_input, include_mask=True, base_model_max_length=512, training=False):
     """
     Takes a ragged tensor input and re-packs the batches to minimise the batch size without
     impacting the sequence length. Additionally returns a mask to use with self-attention so
@@ -85,7 +85,10 @@ def batch_packing(ragged_input, include_mask=True, base_model_max_length=512):
 
     # If there is some fast way to sort the rows of a ragged tensor we might consider doing this first.
     col_seq_lens = ragged_input.row_lengths()
-    max_length = tf.minimum(tf.reduce_max(col_seq_lens), base_model_max_length)
+    if training:
+        max_length = tf.cast(get_target_length(), tf.int64)
+    else:
+        max_length = tf.minimum(tf.reduce_max(col_seq_lens), base_model_max_length)
 
     def loop_body(l, i):
         temp_ragged = tf.RaggedTensor.from_row_lengths(
@@ -217,6 +220,17 @@ def chunk_ragged_tensor(
     result = tf.concat([first_n_rows_duped, other_rows_reshaped], 1)
     return result
 
+def get_target_length() -> int:
+    return 512
+
+@tf.function(autograph=True)
+def get_target_batch_size(lengths: tf.Tensor) -> int:
+    batch_size = tf.shape(lengths)[0]
+    if batch_size <= 8:
+        return 8
+     # We should never really hit this. But just as a fallback because we are liable to lose data otherwise.
+    tf.print("Patch packing resulted in a batch size of", batch_size, "Which is more than our default target of 8. This will result in slower training.", summarize=-1)
+    return batch_size
 
 def slice_by_table_indices(
     inp,
@@ -230,6 +244,7 @@ def slice_by_table_indices(
     check_len=False,
     include_mask=False,
     chunk_tables=True,
+    training=True
 ):
     """
     Used internally by get_gather_indices - assumes that any pre-processing of adding special tokens is already complete.
@@ -266,11 +281,11 @@ def slice_by_table_indices(
         bos_expanded = tf.tile(bos_pad_ragged, [col_bs, 1, *(1 for _ in bos_pad.shape)])
         eos_expanded = tf.tile(eos_pad_ragged, [col_bs, 1, *(1 for _ in eos_pad.shape)])
         output_ragged = tf.concat([bos_expanded, inp_values, eos_expanded], axis=1)
-
         output_ragged, mask, pos_ids = batch_packing(
             output_ragged,
             include_mask=include_mask,
             base_model_max_length=base_model_max_length,
+            training=training,
         )
         col_seq_lens = output_ragged.row_lengths()
 
@@ -311,12 +326,35 @@ def slice_by_table_indices(
                 mask.set_shape([None, None, None])
             pos_ids = pos_ids[:, :max_length]
 
+    col_seq_lens = tf.cast(col_seq_lens, tf.int32)
+    pos_ids = tf.cast(pos_ids, tf.int32)
+    if training:
+        target_seq_len = get_target_length()
+        target_batch_size = get_target_batch_size(col_seq_lens)
+
+        # Slice values that are too long
+        # Should be unnecessary as we have an effectively dynamic batch_size and fixed seq_len that is already enforced.
+        # col_values = col_values[:target_batch_size, :target_seq_len]
+        # mask = mask[:target_batch_size, :target_seq_len, :target_seq_len]
+        # pos_ids = pos_ids[:target_batch_size, :target_seq_len]
+        # col_seq_lens = tf.minimum(col_seq_lens[:target_batch_size], target_seq_len)
+
+        # Pad any values that are too short.
+        seq_padding = target_seq_len - tf.shape(col_values)[1]
+        batch_padding = target_batch_size - tf.shape(col_values)[0]
+        col_seq_lens = tf.pad(col_seq_lens, [[0, batch_padding]], constant_values=0)
+        col_values_0 = tf.pad(col_values[:, :, 0], [[0, batch_padding], [0, seq_padding]], constant_values=pad_val[0])
+        col_values_1 = tf.pad(col_values[:, :, 1], [[0, batch_padding], [0, seq_padding]], constant_values=pad_val[1])
+        col_values = tf.stack([col_values_0, col_values_1], axis=-1)
+        mask = tf.pad(mask, [[0, batch_padding], [0, seq_padding], [0, seq_padding]], constant_values=0)
+        pos_ids = tf.pad(pos_ids, [[0, batch_padding], [0, seq_padding]], constant_values=0)
+
     col_values.set_shape([None, None] + list(inp.shape[2:]))
     return {
-        "seq_lens": tf.cast(col_seq_lens, tf.int32),
+        "seq_lens": col_seq_lens,
         "values": col_values,
         "attn_mask": mask,
-        "pos_ids": tf.cast(pos_ids, tf.int32),
+        "pos_ids": pos_ids,
     }
 
 
@@ -338,15 +376,6 @@ def gather_col_vals(inp, gather_output, eos_pad, bos_pad, pad_val):
             "attn_mask": mask from gather output unmodified,
         }
     """
-    # bs = tf.shape(inp)[0]
-    # bos_expanded = tf.tile(
-    #     tf.expand_dims(tf.expand_dims(bos_pad, 0), 0),
-    #     [bs, 1, *(1 for _ in bos_pad.shape)],
-    # )
-    # eos_expanded = tf.tile(
-    #     tf.expand_dims(tf.expand_dims(eos_pad, 0), 0),
-    #     [bs, 1, *(1 for _ in eos_pad.shape)],
-    # )
     hidden_dim = inp.shape[2:]
     batch_size = tf.shape(inp)[0]
     token_bcast_shape = [batch_size, 1, *hidden_dim]

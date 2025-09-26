@@ -84,6 +84,9 @@ class BasePipeline(metaclass=ABCMeta):
     def input_spec(
         self, *, concrete_dims, include_lengths=True, batched=True, include_targets=True, include_postprocessed=False
     ):
+        if self.config.table_batching:
+            # A model with table batching cannot have concrete dims because bucketing requires dynamic shapes.
+            concrete_dims = False
         TS = tf.TensorShape
         types = {"tokens": tf.int32}
         shapes = {"tokens": TS([self.config.max_length if concrete_dims else None])}
