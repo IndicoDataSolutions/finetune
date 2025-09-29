@@ -92,9 +92,9 @@ def nested_assert_allclose(a, b, atol=0, rtol=0):
         assert a == b
 
 
-@pytest.mark.skip(
-    reason="Skipping backwards compat tests. They are expensive but should be run manually as and when required."
-)
+# @pytest.mark.skip(
+#     reason="Skipping backwards compat tests. They are expensive but should be run manually as and when required."
+# )
 @pytest.mark.parametrize("bundle_path", BUNDLES)
 def test_backwards_compat_extreme(bundle_path):
     model = SequenceLabeler.load(bundle_path, key="model")

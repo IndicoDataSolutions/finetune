@@ -218,6 +218,7 @@ class BasePipeline(metaclass=ABCMeta):
                 total_epoch_offset=self.total_epoch_offset
                 if tqdm_mode == "train"
                 else 0,
+                extra_data_epochs=self.config.extra_data_epochs if tqdm_mode == "train" else 0,
             ),
             types,
             shapes,

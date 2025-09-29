@@ -25,11 +25,9 @@ import tensorflow as tf
 from finetune.base_models.bert.roberta_encoder import RoBERTaEncoder
 from finetune.base_models.bert.table_utils import (
     gather_col_vals,
-    get_gather_indices,
     get_row_col_values,
     reassemble_sequence_feats,
     scatter_feats,
-    get_target_length,
 )
 from finetune.nn.activations import bert_gelu as gelu
 from finetune.nn.activations import hf_gelu
@@ -1463,57 +1461,7 @@ class TwinBertModel(tf.keras.layers.Layer):
             mixing_inputs=mixing_inputs,
             **kwargs,
         )
-class TableModelBatchPostprocessor:
-    def __init__(self, config=None):
-        self.config = config
 
-    def modify_input_spec(self, input_spec):
-        (types, target_type), (shapes, target_shape) = input_spec
-        table_seq_length = get_target_length()
-        gather_shapes = {
-            "seq_lens": tf.TensorShape([None]),
-            "values": tf.TensorShape([None, table_seq_length, 2]),
-            "attn_mask": tf.TensorShape([None, table_seq_length, table_seq_length]),
-            "pos_ids": tf.TensorShape([None, table_seq_length]),
-        }
-        gather_types = {
-            "seq_lens": tf.int32,
-            "values": tf.int32,
-            "attn_mask": tf.float32,
-            "pos_ids": tf.int32,
-        }
-        shapes["row_gather"] = gather_shapes
-        shapes["col_gather"] = gather_shapes
-        types["row_gather"] = gather_types
-        types["col_gather"] = gather_types
-        return (types, target_type), (shapes, target_shape)
-
-    def postprocess(self, x, y=None):
-        # Should run on cpu anyway but just to be safe.
-        with tf.device("/CPU:0"):
-            end_col, end_row, start_col, start_row = tf.unstack(tf.cast(x["context"], tf.int32), num=4, axis=2)
-
-            # Get gather indices for rows and columns
-            row_gather = get_gather_indices(
-                x["tokens"],
-                x["length"],
-                start_row,
-                end_row,
-                other_end=end_col,
-                chunk_tables=self.config.chunk_tables,
-            )
-            col_gather = get_gather_indices(
-                x["tokens"],
-                x["length"],
-                start_col,
-                end_col,
-                other_end=end_row,
-                chunk_tables=self.config.chunk_tables,
-            )
-            x = {**x, "row_gather": row_gather, "col_gather": col_gather}
-            if y is not None:
-                return x, y
-            return x
 
 class TwinBertFeaturizer(tf.keras.layers.Layer):
     """Keras layer wrapper for the twin BERT featurizer functionality."""
@@ -1601,7 +1549,7 @@ class TwinBertFeaturizer(tf.keras.layers.Layer):
 
         # Return the expected format
         return {
-            # "features": tf.zeros(shape=[batch_size, 768]),
+            "features": tf.zeros(shape=[batch_size, 768]),
             "sequence_features": sequence_features,
         }
 
@@ -1699,17 +1647,4 @@ class TableCrossRowColMixing(tf.keras.layers.Layer):
         return (
             self.adaptor_col(col_feats_reshaped) + row_feats,
             self.adaptor_row(row_feats_reshaped) + col_feats,
-        )
-
-    def _scatter_feats(self, output_shape, sequence_feats, scatter_vals):
-        """Scatter features back to original shape."""
-        input_tensor = tf.zeros(shape=output_shape, dtype=tf.float32)
-        mask = tf.math.less(scatter_vals[:, :, 1], output_shape[1])
-        feats = tf.boolean_mask(sequence_feats, mask)
-        scatter_idxs = tf.boolean_mask(scatter_vals, mask)
-        divide_by = tf.tensor_scatter_nd_add(
-            input_tensor, scatter_idxs, tf.ones_like(feats)
-        )
-        return tf.math.divide_no_nan(
-            tf.tensor_scatter_nd_add(input_tensor, scatter_idxs, feats), divide_by
         )

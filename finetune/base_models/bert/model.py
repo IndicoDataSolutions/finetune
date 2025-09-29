@@ -15,8 +15,8 @@ from finetune.base_models.bert.modeling import (
     LayoutLMModel,
     TwinBertFeaturizer,
     XDocModel,
-    TableModelBatchPostprocessor,
 )
+from finetune.base_models.bert.table_utils import TableModelBatchPostprocessor
 from finetune.base_models.bert.roberta_encoder import (
     RoBERTaEncoder,
     RoBERTaEncoderV2,
@@ -515,6 +515,7 @@ class TableRoBERTa(_BaseBert):
         "include_bos_eos": False,
         "permit_uninitialized": r"mixing_fn_|pos_|kernel|bias",  # TODO: this can be refined.
         "predict_batch_size": 1,
+        "extra_data_epochs": 1, # Just a fudge for now because we draw down one epoch for batch stats.
     }
     required_files = [
         {
