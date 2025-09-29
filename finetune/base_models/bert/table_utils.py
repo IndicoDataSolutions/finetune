@@ -563,7 +563,6 @@ class TableModelBatchPostprocessor:
                 training=training,
                 target_seq_len=target_row_len,
                 target_batch_size=target_row_batch_size,
-                base_model_max_length=self.config.max_length,
             )
             col_gather = build_gather_outputs(
                 X=x["tokens"],
@@ -576,7 +575,6 @@ class TableModelBatchPostprocessor:
                 training=training,
                 target_seq_len=target_col_len,
                 target_batch_size=target_col_batch_size,
-                base_model_max_length=self.config.max_length,
             )
             x = {**x, "row_gather": row_gather, "col_gather": col_gather}
             if y is not None:
@@ -611,7 +609,6 @@ class TableModelBatchPostprocessor:
                             end_row,
                             other_end=end_col,
                             chunk_tables=self.config.chunk_tables,
-                            base_model_max_length=self.config.max_length,
                         )
                         ragged_cols = compute_masked_ragged_indices(
                             x["tokens"],
@@ -620,7 +617,6 @@ class TableModelBatchPostprocessor:
                             end_col,
                             other_end=end_row,
                             chunk_tables=self.config.chunk_tables,
-                            base_model_max_length=self.config.max_length,
                         )
                         return ragged_rows, ragged_cols
 
