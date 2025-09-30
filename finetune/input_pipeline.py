@@ -23,10 +23,11 @@ from finetune.util.input_utils import (
 
 LOGGER = logging.getLogger("finetune")
 
-_SENTINEL = object()
-
 
 class BasePipeline(metaclass=ABCMeta):
+     # We cannot use an object() sentinel here because of the way tensorflow handles it's processes breaks the 'is' check.
+    MISSING_BATCH_POSTPROCESSOR = "missing"
+
     def __init__(self, config):
         self.config = config
         self._text_encoder = None
@@ -37,7 +38,7 @@ class BasePipeline(metaclass=ABCMeta):
         self._chunker = None
         self.current_epoch_offset = 0
         self.total_epoch_offset = 0
-        self._batch_postprocessor = _SENTINEL
+        self._batch_postprocessor = self.MISSING_BATCH_POSTPROCESSOR
 
     @property
     def text_encoder(self):
@@ -47,7 +48,7 @@ class BasePipeline(metaclass=ABCMeta):
 
     @property
     def batch_postprocessor(self):
-        if not hasattr(self, "_batch_postprocessor") or self._batch_postprocessor is _SENTINEL:
+        if not hasattr(self, "_batch_postprocessor") or self._batch_postprocessor == self.MISSING_BATCH_POSTPROCESSOR:
             self._batch_postprocessor = self.config.base_model.get_batch_postprocessor(self.config)
         return self._batch_postprocessor
 
