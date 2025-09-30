@@ -288,7 +288,8 @@ class BaseModel(object, metaclass=ABCMeta):
             # verbose=2 results in one line logged per epoch. These are not always intuitive
             # because their epoch numbers don't align with ours when we're using ANS.
             # However, for now it's nice to get signs of life from keras.
-            verbose=2,
+            # We have to disable it when there will only be a single step due to a bug in keras ProgBar
+            verbose=2 if steps_per_epoch * self.config.n_epochs > 1 else 0,
         )
         # tf.profiler.experimental.stop()
         self._trained = True
