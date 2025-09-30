@@ -388,6 +388,7 @@ class TestTableUtils:
             include_mask=True,
             training=True,
             target_seq_len=8,
+            target_batch_size=1,
         )
         # Expect exactly target_seq_len tokens per row
         assert tf.shape(gi["values"])[1] == 8

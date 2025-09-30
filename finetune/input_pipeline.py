@@ -23,6 +23,8 @@ from finetune.util.input_utils import (
 
 LOGGER = logging.getLogger("finetune")
 
+_SENTINEL = object()
+
 
 class BasePipeline(metaclass=ABCMeta):
     def __init__(self, config):
@@ -35,7 +37,7 @@ class BasePipeline(metaclass=ABCMeta):
         self._chunker = None
         self.current_epoch_offset = 0
         self.total_epoch_offset = 0
-        self._batch_postprocessor = None
+        self._batch_postprocessor = _SENTINEL
 
     @property
     def text_encoder(self):
@@ -45,7 +47,7 @@ class BasePipeline(metaclass=ABCMeta):
 
     @property
     def batch_postprocessor(self):
-        if not hasattr(self, "_batch_postprocessor") or self._batch_postprocessor is None:
+        if not hasattr(self, "_batch_postprocessor") or self._batch_postprocessor is _SENTINEL:
             self._batch_postprocessor = self.config.base_model.get_batch_postprocessor(self.config)
         return self._batch_postprocessor
 
@@ -110,7 +112,7 @@ class BasePipeline(metaclass=ABCMeta):
             )
         else:
             output = ((types, target_type), (shapes, target_shape))
-        if include_postprocessed:
+        if include_postprocessed and self.batch_postprocessor is not None:
             output = self.batch_postprocessor.modify_input_spec(output)
         if not include_targets:
             (types, _), (shapes, _) = output
