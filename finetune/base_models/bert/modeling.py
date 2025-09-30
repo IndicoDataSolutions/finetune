@@ -1001,7 +1001,7 @@ def get_shape_list(tensor, expected_rank=None, name=None):
             as tf.Tensor scalars.
     """
     shape = tensor.shape.as_list()
-    
+
     non_static_indexes = []
     for index, dim in enumerate(shape):
         if dim is None:
@@ -1479,7 +1479,6 @@ class TwinBertFeaturizer(tf.keras.layers.Layer):
     def build(self, input_shape):
         # Just needed to keep keras logs quiet as no variables are directly built on this layer
         super().build(input_shape)
-
 
     def call(self, tokens, context, sequence_lengths, row_gather, col_gather):
         """

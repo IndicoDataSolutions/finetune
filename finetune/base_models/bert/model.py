@@ -1,5 +1,4 @@
 import os
-import functools
 from urllib.parse import urljoin
 
 from finetune.base_models import SourceModel
@@ -16,12 +15,12 @@ from finetune.base_models.bert.modeling import (
     TwinBertFeaturizer,
     XDocModel,
 )
-from finetune.base_models.bert.table_utils import TableModelBatchPostprocessor
 from finetune.base_models.bert.roberta_encoder import (
     RoBERTaEncoder,
     RoBERTaEncoderV2,
     RoBERTaEncoderXDoc,
 )
+from finetune.base_models.bert.table_utils import TableModelBatchPostprocessor
 from finetune.util.context_utils import get_context_doc_rep, get_context_layoutlm
 from finetune.util.download import (
     BERT_BASE_URL,
@@ -515,7 +514,7 @@ class TableRoBERTa(_BaseBert):
         "include_bos_eos": False,
         "permit_uninitialized": r"mixing_fn_|pos_|kernel|bias",  # TODO: this can be refined.
         "predict_batch_size": 1,
-        "extra_data_epochs": 1, # Just a fudge for now because we draw down one epoch for batch stats.
+        "extra_data_epochs": 1,  # Just a fudge for now because we draw down one epoch for batch stats.
     }
     required_files = [
         {

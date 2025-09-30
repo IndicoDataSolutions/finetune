@@ -14,18 +14,13 @@ from sklearn.utils import shuffle as dataset_shuffle
 from finetune.encoding.input_encoder import EncodedOutput, tokenize_context
 from finetune.errors import FinetuneError
 from finetune.util.imbalance import compute_class_weights
-from finetune.util.input_utils import (
-    Chunker,
-    InputMode,
-    batch_dataset,
-    wrap_tqdm,
-)
+from finetune.util.input_utils import Chunker, InputMode, batch_dataset, wrap_tqdm
 
 LOGGER = logging.getLogger("finetune")
 
 
 class BasePipeline(metaclass=ABCMeta):
-     # We cannot use an object() sentinel here because of the way tensorflow handles it's processes breaks the 'is' check.
+    # We cannot use an object() sentinel here because of the way tensorflow handles it's processes breaks the 'is' check.
     MISSING_BATCH_POSTPROCESSOR = "missing"
 
     def __init__(self, config):
@@ -48,8 +43,13 @@ class BasePipeline(metaclass=ABCMeta):
 
     @property
     def batch_postprocessor(self):
-        if not hasattr(self, "_batch_postprocessor") or self._batch_postprocessor == self.MISSING_BATCH_POSTPROCESSOR:
-            self._batch_postprocessor = self.config.base_model.get_batch_postprocessor(self.config)
+        if (
+            not hasattr(self, "_batch_postprocessor")
+            or self._batch_postprocessor == self.MISSING_BATCH_POSTPROCESSOR
+        ):
+            self._batch_postprocessor = self.config.base_model.get_batch_postprocessor(
+                self.config
+            )
         return self._batch_postprocessor
 
     @property
@@ -78,25 +78,35 @@ class BasePipeline(metaclass=ABCMeta):
         if self.config.use_auxiliary_info:
             TS = tf.TensorShape
             types["context"] = tf.float32
-            shapes["context"] = TS([self.config.max_length if concrete_dims else None, self.config.context_dim])
+            shapes["context"] = TS(
+                [
+                    self.config.max_length if concrete_dims else None,
+                    self.config.context_dim,
+                ]
+            )
         return types, shapes
 
     def target_def(self, concrete_dims):
         return (tf.int32, tf.TensorShape([self.target_dim]))
 
     def input_spec(
-        self, *, concrete_dims, include_lengths=True, batched=True, include_targets=True, include_postprocessed=False
+        self,
+        *,
+        concrete_dims,
+        include_lengths=True,
+        batched=True,
+        include_targets=True,
+        include_postprocessed=False
     ):
-        if self.config.table_batching:
-            # A model with table batching cannot have concrete dims because bucketing requires dynamic shapes.
-            concrete_dims = False
         TS = tf.TensorShape
         types = {"tokens": tf.int32}
         shapes = {"tokens": TS([self.config.max_length if concrete_dims else None])}
         if include_lengths:
             types["length"] = tf.int32
             shapes["length"] = TS([])
-        types, shapes = self._add_context_info_if_present(types, shapes, concrete_dims=concrete_dims)
+        types, shapes = self._add_context_info_if_present(
+            types, shapes, concrete_dims=concrete_dims
+        )
         target_type, target_shape = self.target_def(concrete_dims=concrete_dims)
         if batched:
             output = (
@@ -122,7 +132,10 @@ class BasePipeline(metaclass=ABCMeta):
 
     def keras_input_def(self, *, concrete_dims, include_targets=False):
         input_types, input_shapes = self.input_spec(
-            concrete_dims=concrete_dims, include_targets=include_targets, batched=True, include_postprocessed=True
+            concrete_dims=concrete_dims,
+            include_targets=include_targets,
+            batched=True,
+            include_postprocessed=True,
         )
         return tf.nest.map_structure(
             lambda dtype, shape: tf.keras.Input(batch_shape=shape, dtype=dtype),
@@ -132,7 +145,9 @@ class BasePipeline(metaclass=ABCMeta):
 
     def keras_input_signature(self, *, concrete_dims, include_targets):
         input_types, input_shapes = self.input_spec(
-            concrete_dims=concrete_dims, include_targets=include_targets, include_postprocessed=True
+            concrete_dims=concrete_dims,
+            include_targets=include_targets,
+            include_postprocessed=True,
         )
         return tf.nest.map_structure(
             lambda dtype, shape: tf.TensorSpec(shape=shape, dtype=dtype),
@@ -221,7 +236,9 @@ class BasePipeline(metaclass=ABCMeta):
                 total_epoch_offset=self.total_epoch_offset
                 if tqdm_mode == "train"
                 else 0,
-                extra_data_epochs=self.config.extra_data_epochs if tqdm_mode == "train" else 0,
+                extra_data_epochs=self.config.extra_data_epochs
+                if tqdm_mode == "train"
+                else 0,
             ),
             types,
             shapes,

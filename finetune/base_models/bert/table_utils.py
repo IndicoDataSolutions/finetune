@@ -1,6 +1,8 @@
-import tensorflow as tf
-from finetune.nn.activations import bert_gelu as gelu
 import logging
+
+import tensorflow as tf
+
+from finetune.nn.activations import bert_gelu as gelu
 
 LOGGER = logging.getLogger("finetune")
 
@@ -188,7 +190,9 @@ def compute_masked_ragged_indices(
         start_e = tf.expand_dims(start, 0)  # 1, batch, max_len
         end_e = tf.expand_dims(end, 0)  # 1, batch, max_len
         col_masks = tf.math.logical_and(
-            tf.math.logical_and(tf.math.less_equal(start_e, range_), tf.math.less_equal(range_, end_e)),
+            tf.math.logical_and(
+                tf.math.less_equal(start_e, range_), tf.math.less_equal(range_, end_e)
+            ),
             mask,
         )  # num_cols, batch, seq
 
@@ -197,7 +201,7 @@ def compute_masked_ragged_indices(
         scatter_idx_orig = tf.stack([batch_idx, seq_idx], axis=-1)  # batch, seq, 2
 
         inp_expanded = tf.expand_dims(scatter_idx_orig, 0)  # 1, bs, seq, 2
-        
+
         inp_values_i = tf.ragged.boolean_mask(
             tf.tile(inp_expanded, [tf.shape(col_masks)[0], 1, 1, 1]), col_masks
         ).merge_dims(0, 1)
@@ -209,9 +213,11 @@ def compute_masked_ragged_indices(
         )
         if chunk_tables:
             inp_values = chunk_ragged_tensor(
-                inp_values, other_end=other_end, base_model_max_length=base_model_max_length - 2
+                inp_values,
+                other_end=other_end,
+                base_model_max_length=base_model_max_length - 2,
             )  # -2 for EOS and BOS
-                # Prepare BOS/EOS paddings
+            # Prepare BOS/EOS paddings
         bos_pad = tf.convert_to_tensor([0, seq_len + 1])
         eos_pad = tf.convert_to_tensor([0, seq_len])
 
@@ -246,7 +252,13 @@ def build_gather_outputs(
 ):
     with tf.device("cpu"):
         output_ragged = compute_masked_ragged_indices(
-            X, sequence_lengths, start, end, other_end, chunk_tables, base_model_max_length
+            X,
+            sequence_lengths,
+            start,
+            end,
+            other_end,
+            chunk_tables,
+            base_model_max_length,
         )
         pad_val = tf.convert_to_tensor([0, tf.shape(X)[1] + 2])
         output_ragged, mask, pos_ids = batch_packing(
@@ -304,17 +316,27 @@ def build_gather_outputs(
         seq_padding = tf.maximum(target_seq_len - tf.shape(col_values)[1], 0)
         batch_padding = tf.maximum(target_batch_size - tf.shape(col_values)[0], 0)
         pad0 = tf.pad(
-            col_values[:, :target_seq_len, 0], [[0, batch_padding], [0, seq_padding]], constant_values=pad_val[0]
+            col_values[:, :target_seq_len, 0],
+            [[0, batch_padding], [0, seq_padding]],
+            constant_values=pad_val[0],
         )
         pad1 = tf.pad(
-            col_values[:, :target_seq_len, 1], [[0, batch_padding], [0, seq_padding]], constant_values=pad_val[1]
+            col_values[:, :target_seq_len, 1],
+            [[0, batch_padding], [0, seq_padding]],
+            constant_values=pad_val[1],
         )
         col_values = tf.stack([pad0, pad1], axis=-1)
         if include_mask:
             mask = tf.pad(
-                mask[:, :target_seq_len, :target_seq_len], [[0, batch_padding], [0, seq_padding], [0, seq_padding]], constant_values=0
+                mask[:, :target_seq_len, :target_seq_len],
+                [[0, batch_padding], [0, seq_padding], [0, seq_padding]],
+                constant_values=0,
             )
-        pos_ids = tf.pad(pos_ids[:, :target_seq_len], [[0, batch_padding], [0, seq_padding]], constant_values=0)
+        pos_ids = tf.pad(
+            pos_ids[:, :target_seq_len],
+            [[0, batch_padding], [0, seq_padding]],
+            constant_values=0,
+        )
 
     col_values.set_shape([None, None, 2])
     return {
@@ -462,7 +484,6 @@ def scatter_feats(output_shape, sequence_feats, scatter_vals):
     return tf.math.divide_no_nan(
         tf.tensor_scatter_nd_add(input_tensor, scatter_idxs, feats), divide_by
     )  # [text_batch, text_seq, feat_dim]
-   
 
 
 def get_summary_values(inp, gather_vals, input_seq_len):
@@ -520,6 +541,7 @@ def reassemble_sequence_feats(
 
     return feats
 
+
 class TableModelBatchPostprocessor:
     def __init__(self, config=None):
         self.config = config
@@ -545,7 +567,16 @@ class TableModelBatchPostprocessor:
         types["col_gather"] = gather_types
         return (types, target_type), (shapes, target_shape)
 
-    def _postprocess(self, x, y=None, target_row_len=None, target_col_len=None, target_row_batch_size=None, target_col_batch_size=None, training=True):
+    def _postprocess(
+        self,
+        x,
+        y=None,
+        target_row_len=None,
+        target_col_len=None,
+        target_row_batch_size=None,
+        target_col_batch_size=None,
+        training=True,
+    ):
         # Should run on cpu anyway but just to be safe.
         with tf.device("/CPU:0"):
             end_col, end_row, start_col, start_row = tf.unstack(
@@ -593,7 +624,10 @@ class TableModelBatchPostprocessor:
             if mode == "train":
                 # If we already computed stats for this postprocessor, just reuse them
                 if self._cached_stats is None:
-                    LOGGER.info("Running down 1 epoch of the dataset to calculate optimal batch size and sequence length for table model.")
+                    LOGGER.info(
+                        "Running down 1 epoch of the dataset to calculate optimal batch size and sequence length for table model."
+                    )
+
                     def _stats_map(*args):
                         if len(args) == 2:
                             x, _y = args
@@ -620,8 +654,10 @@ class TableModelBatchPostprocessor:
                         )
                         return ragged_rows, ragged_cols
 
-                    ragged_values = (
-                        ds.map(_stats_map, num_parallel_calls=tf.data.AUTOTUNE, deterministic=False)
+                    ragged_values = ds.map(
+                        _stats_map,
+                        num_parallel_calls=tf.data.AUTOTUNE,
+                        deterministic=False,
                     )
 
                     # Compute maxima across the bounded window
@@ -629,10 +665,12 @@ class TableModelBatchPostprocessor:
                     max_col_seq_len = 0
                     for ragged_rows, ragged_cols in ragged_values:
                         max_row_seq_len = max(
-                            max_row_seq_len, int(tf.reduce_max(ragged_rows.row_lengths()).numpy())
+                            max_row_seq_len,
+                            int(tf.reduce_max(ragged_rows.row_lengths()).numpy()),
                         )
                         max_col_seq_len = max(
-                            max_col_seq_len, int(tf.reduce_max(ragged_cols.row_lengths()).numpy())
+                            max_col_seq_len,
+                            int(tf.reduce_max(ragged_cols.row_lengths()).numpy()),
                         )
 
                     # Compute packed batch sizes using those maxima
@@ -665,14 +703,25 @@ class TableModelBatchPostprocessor:
                         int(row_batch_size),
                         int(col_batch_size),
                     )
-                    LOGGER.info(f"Completed calculating stats. Cached stats: {self._cached_stats}")
+                    LOGGER.info(
+                        f"Completed calculating stats. Cached stats: {self._cached_stats}"
+                    )
                 else:
                     LOGGER.info("Reusing cached stats")
 
                 # Unpack cached stats
-                max_row_seq_len, max_col_seq_len, row_batch_size, col_batch_size = self._cached_stats
-                target_col_batch_size = tf.convert_to_tensor(col_batch_size, dtype=tf.int32)
-                target_row_batch_size = tf.convert_to_tensor(row_batch_size, dtype=tf.int32)
+                (
+                    max_row_seq_len,
+                    max_col_seq_len,
+                    row_batch_size,
+                    col_batch_size,
+                ) = self._cached_stats
+                target_col_batch_size = tf.convert_to_tensor(
+                    col_batch_size, dtype=tf.int32
+                )
+                target_row_batch_size = tf.convert_to_tensor(
+                    row_batch_size, dtype=tf.int32
+                )
                 target_col_len = tf.convert_to_tensor(max_col_seq_len, dtype=tf.int32)
                 target_row_len = tf.convert_to_tensor(max_row_seq_len, dtype=tf.int32)
 
@@ -689,7 +738,7 @@ class TableModelBatchPostprocessor:
                         target_col_len=target_col_len,
                         target_row_batch_size=target_row_batch_size,
                         target_col_batch_size=target_col_batch_size,
-                        training=True
+                        training=True,
                     )
 
                 return ds.map(_train_map, num_parallel_calls=tf.data.AUTOTUNE)

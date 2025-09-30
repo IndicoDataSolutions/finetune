@@ -7,11 +7,11 @@ from finetune import SequenceLabeler
 from finetune.base_models import TableRoBERTa
 from finetune.base_models.bert.table_utils import (
     batch_packing,
+    build_gather_outputs,
     chunk_ragged_tensor,
     gather_col_vals,
     get_summary_values,
     scatter_feats,
-    build_gather_outputs,
 )
 
 DATA_PATH = os.path.join("tests", "data", "doc_rep_integration.csv")
@@ -200,7 +200,7 @@ class TestTableUtils:
                     [11],
                     [14],
                     [4, 5, 6, 7],
-               ]
+                ]
             ),
             training=True,
             target_seq_len=10,
@@ -338,8 +338,6 @@ class TestTableUtils:
                 dtype=summary_vals.dtype,
             )
         )
-
-
 
     def test_slice_by_table_indices_chunking(self):
         gi = build_gather_outputs(
