@@ -735,16 +735,16 @@ def register_stdio_fifo(stdout_path: str, stderr_path: str):
     stderr_w = os.open(stderr_path, os.O_WRONLY)
     # By convention file descriptors 1 and 2 are stdout and stderr respectively
     os.dup2(stdout_w, 1)
-    # os.close(stdout_w)
+    os.close(stdout_w)
     os.dup2(stderr_w, 2)
-    # os.close(stderr_w)
+    os.close(stderr_w)
 
 
 def cleanup_stdio_intercept(
     fd_to_stream: t.Dict[int, t.TextIO], fifo_paths: t.List[str]
 ) -> None:
     """Close all file descriptors in the dictionary."""
-    for rfd in fd_to_stream.values():
+    for rfd in fd_to_stream.keys():
         try:
             os.close(rfd)
         except OSError:
