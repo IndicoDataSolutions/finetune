@@ -152,7 +152,7 @@ def wrap_tqdm(
             desc = "Data Preprocessing"
         else:
             desc = "Epoch {}/{}".format(
-                current_epoch + current_epoch_offset + extra_data_epochs,
+                current_epoch + current_epoch_offset - extra_data_epochs,
                 n_epochs + total_epoch_offset - extra_data_epochs,
             )
         for i in ProgressBar(
