@@ -18,6 +18,7 @@ from typing import Dict, List, Mapping, Tuple
 import joblib
 import numpy as np
 import tensorflow as tf
+from tensorflow.python.framework.ops import gradient_registry as tf_gradient_registry
 from tensorflow.python.keras.backend import reset_uids as keras_reset_uids
 
 from finetune.base_models.bert.roberta_encoder import RoBERTaEncoderV2
@@ -88,6 +89,12 @@ class FinetuneRegistry:
         """
         Close all live models and clear dead weakrefs, then clear the Keras session.
         """
+        # There are other registries in the tensorflow.python.framework.ops that we can clear if we need to.
+        tf_gradient_registry._registry = {
+            k: v
+            for k, v in tf_gradient_registry._registry.items()
+            if not k.startswith("CustomGradient")
+        }
         with self._refs_lock:
             for model in self.live_models():
                 model.close()
@@ -721,3 +728,7 @@ class BaseModel(object, metaclass=ABCMeta):
             self.saver.update_variables(self._model)
         del self._model
         self._model = None
+        self.input_pipeline._batch_postprocessor = (
+            self.input_pipeline.MISSING_BATCH_POSTPROCESSOR
+        )
+        self.input_pipeline._text_encoder = None

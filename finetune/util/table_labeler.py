@@ -4,9 +4,12 @@ Finetune-style interface for running a pipeline of table and non-table models.
 import copy
 import functools
 import logging
+import multiprocessing as mp
 import os
+import queue
 import sys
 import tempfile
+import time
 import typing as t
 
 from sequence_metrics.metrics import sequences_overlap
@@ -666,6 +669,32 @@ class TableChunker:
         )
 
 
+def _train_table_in_subprocess(
+    table_model_config: t.Dict[str, t.Any],
+    model_inputs: t.Dict[str, t.Any],
+    chunk_tables: bool,
+    table_model_path: str,
+    classes_queue: "mp.Queue",
+    progress_queue: "mp.Queue",
+):
+    """
+    Train the table model in a subprocess.
+    """
+    table_model = SequenceLabeler(base_model=TableRoBERTa, **(table_model_config or {}))
+    if chunk_tables:
+        model_inputs = TableChunker.from_table_model(table_model).chunk(model_inputs)
+
+    table_model.fit(
+        model_inputs["table_text"],
+        model_inputs["table_labels"],
+        context=model_inputs["table_context"],
+        update_hook=progress_queue.put,
+    )
+    classes_queue.put(table_model.classes)
+    table_model.save(table_model_path)
+    table_model.close(update_saver=False)
+
+
 class TableLabeler:
     def __init__(
         self,
@@ -675,6 +704,7 @@ class TableLabeler:
         drop_table_from_text_preds: bool = True,
         split_preds_to_cells: bool = True,
         chunk_tables: bool = True,
+        train_in_process: bool = True,
     ):
         self.etl = TableETL(
             drop_table_from_text_labels=drop_table_from_text_labels,
@@ -682,12 +712,17 @@ class TableLabeler:
             split_preds_to_cells=split_preds_to_cells,
             chunk_tables=chunk_tables,
         )
-        # Delay construction of these models.
+        # Persist configs for use from a spawned child process.
+        self.table_model_config = table_model_config or {}
+        self.text_model_config = text_model_config or {}
+        self.train_in_process = train_in_process
+
+        # Delay construction of these models in the main process.
         self._get_table_model = functools.partial(
-            SequenceLabeler, base_model=TableRoBERTa, **(table_model_config or {})
+            SequenceLabeler, base_model=TableRoBERTa, **self.table_model_config
         )
         self._get_text_model = functools.partial(
-            SequenceLabeler, **(text_model_config or {})
+            SequenceLabeler, **self.text_model_config
         )
 
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -703,7 +738,7 @@ class TableLabeler:
         # The models are closed by default. We just need this method to keep the API consistent.
         pass
 
-    def _fit_table_model(self, model_inputs, update_hook):
+    def _fit_table_model_local(self, model_inputs, update_hook):
         table_model = self._get_table_model()
         if self.etl.chunk_tables:
             model_inputs = TableChunker.from_table_model(table_model).chunk(
@@ -724,6 +759,63 @@ class TableLabeler:
         table_model.close(update_saver=False)
         del table_model
         MODEL_REGISTRY.cleanup()
+        return model_inputs
+
+    def _fit_table_model_subprocess(
+        self, model_inputs, update_hook, poll_interval_seconds=5
+    ):
+        ctx = mp.get_context("spawn")
+        classes_queue = ctx.Queue()
+        progress_queue = ctx.Queue()
+
+        p = ctx.Process(
+            target=_train_table_in_subprocess,
+            args=(
+                self.table_model_config,
+                model_inputs,
+                self.etl.chunk_tables,
+                self.table_model_path,
+                classes_queue,
+                progress_queue,
+            ),
+        )
+        p.start()
+
+        # Poll for progress updates and forward to update_hook if provided
+        while p.is_alive() or not progress_queue.empty():
+            try:
+                while True:
+                    payload = progress_queue.get_nowait()
+                    if update_hook is not None:
+                        update_hook(payload)
+            except queue.Empty:
+                pass
+            if p.is_alive():
+                time.sleep(poll_interval_seconds)
+        p.join()
+        LOGGER.info("Table Model Training Subprocess Complete")
+        try:
+            progress_queue.close()
+            progress_queue.join_thread()
+        except (OSError, AttributeError, ValueError, AssertionError):
+            pass
+
+        if not os.path.exists(self.table_model_path):
+            raise FinetuneError(
+                "Table model training subprocess did not save the model"
+            )
+
+        if p.exitcode != 0:
+            raise FinetuneError(
+                f"Table model training subprocess exited with code {p.exitcode}"
+            )
+
+        # Collect classes from child
+        self.classes.update(classes_queue.get_nowait())
+
+        del model_inputs["table_text"]
+        del model_inputs["table_labels"]
+        del model_inputs["table_context"]
         return model_inputs
 
     def _fit_text_model(self, model_inputs, update_hook):
@@ -754,9 +846,17 @@ class TableLabeler:
         model_inputs = self.etl.get_table_text_chunks_and_context(
             text=text, tables=tables, labels=labels
         )
-        model_inputs = self._fit_table_model(
-            model_inputs, update_hook=table_update_hook
-        )
+
+        if self.train_in_process:
+            model_inputs = self._fit_table_model_local(
+                model_inputs, update_hook=table_update_hook
+            )
+        else:
+            model_inputs = self._fit_table_model_subprocess(
+                model_inputs, update_hook=table_update_hook
+            )
+
+        # Train text model in main process after table process has fully exited.
         self._fit_text_model(model_inputs, update_hook=text_update_hook)
 
     def save(self, path: str) -> None:
