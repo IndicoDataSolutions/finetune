@@ -25,7 +25,6 @@ import tensorflow as tf
 from finetune.base_models.bert.roberta_encoder import RoBERTaEncoder
 from finetune.base_models.bert.table_utils import (
     gather_col_vals,
-    get_gather_indices,
     get_row_col_values,
     reassemble_sequence_feats,
     scatter_feats,
@@ -70,7 +69,7 @@ class Embedding(tf.keras.layers.Layer):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
         )
-        post_processed.set_shape(embedding_output.shape)
+        post_processed = tf.ensure_shape(post_processed, embedding_output.shape)
         return post_processed
 
 
@@ -391,7 +390,7 @@ class LayerNorm(tf.keras.layers.Layer):
             scale=self.gamma,
             variance_epsilon=variance_epsilon,
         )
-        outputs.set_shape(inputs_shape)
+        outputs = tf.ensure_shape(outputs, inputs_shape)
         return outputs
 
 
@@ -981,8 +980,7 @@ class TransformerModel(tf.keras.layers.Layer):
             )
             if self.recompute_grad and training:
                 block = tf.recompute_grad(block)
-            prev_output = block(prev_output)
-            prev_output.set_shape(block_shape)
+            prev_output = tf.ensure_shape(block(prev_output), block_shape)
         final_output = reshape_from_matrix(prev_output, input_shape)
         return final_output
 
@@ -1002,7 +1000,6 @@ def get_shape_list(tensor, expected_rank=None, name=None):
             be returned as python integers, and dynamic dimensions will be returned
             as tf.Tensor scalars.
     """
-
     shape = tensor.shape.as_list()
 
     non_static_indexes = []
@@ -1193,7 +1190,6 @@ class TwinTransformerModel(tf.keras.layers.Layer):
                 name=f"layer_a_{i}",
             )
             self.blocks_a.append(block_a)
-
             block_b = FullBlock(
                 attention_head_size=attention_head_size_b,
                 num_attention_heads=self.num_attention_heads,
@@ -1398,7 +1394,6 @@ class BaseTwinBertModel(tf.keras.layers.Layer):
             token_type_ids=token_type_ids_b,
             position_ids=pos_ids_b,
         )
-
         # Run the twin transformer
         sequence_output_a, sequence_output_b = self.transformer_model(
             layer_input_a=embedding_output_a,
@@ -1485,7 +1480,7 @@ class TwinBertFeaturizer(tf.keras.layers.Layer):
         # Just needed to keep keras logs quiet as no variables are directly built on this layer
         super().build(input_shape)
 
-    def call(self, tokens, context, sequence_lengths):
+    def call(self, tokens, context, sequence_lengths, row_gather, col_gather):
         """
         Main featurizer call that processes the input tokens and context.
 
@@ -1497,29 +1492,10 @@ class TwinBertFeaturizer(tf.keras.layers.Layer):
         Returns:
             Dictionary containing features and sequence features
         """
+        tokens = tf.ensure_shape(tokens, [None, None])
+        context = tf.ensure_shape(context, [None, None, 4])
         batch_size = tf.shape(tokens)[0]
         seq_length = tf.shape(tokens)[1]
-
-        # Extract row/column boundaries from context
-        end_col, end_row, start_col, start_row = tf.unstack(context, num=4, axis=2)
-
-        # Get gather indices for rows and columns
-        row_gather = get_gather_indices(
-            tokens,
-            sequence_lengths,
-            start_row,
-            end_row,
-            other_end=end_col,
-            chunk_tables=self.chunk_tables,
-        )
-        col_gather = get_gather_indices(
-            tokens,
-            sequence_lengths,
-            start_col,
-            end_col,
-            other_end=end_row,
-            chunk_tables=self.chunk_tables,
-        )
 
         # Get row/column values for processing
         row_col_values = get_row_col_values(
@@ -1527,8 +1503,8 @@ class TwinBertFeaturizer(tf.keras.layers.Layer):
             context,
             row_gather,
             col_gather,
-            bos_id=self.encoder.start_token,
-            eos_id=self.encoder.end_token,
+            bos_id=tf.ensure_shape(self.encoder.start_token, []),
+            eos_id=tf.ensure_shape(self.encoder.end_token, []),
             table_position_type=self.table_position_type,
             max_row_col_embedding=512,  # Default value
         )
@@ -1572,7 +1548,7 @@ class TwinBertFeaturizer(tf.keras.layers.Layer):
 
         # Return the expected format
         return {
-            # "features": tf.zeros(shape=[batch_size, 768]),
+            "features": tf.zeros(shape=[batch_size, 768]),
             "sequence_features": sequence_features,
         }
 
@@ -1655,7 +1631,7 @@ class TableCrossRowColMixing(tf.keras.layers.Layer):
             row_gather,
             bos_pad=self.bos_var,
             eos_pad=self.eos_var,
-            pad_val=1234,
+            pad_val=tf.convert_to_tensor(1234, dtype=self.bos_var.dtype),
         )["values"]
 
         # Scatter row feats into cols arrangement.
@@ -1664,23 +1640,10 @@ class TableCrossRowColMixing(tf.keras.layers.Layer):
             col_gather,
             bos_pad=self.bos_var,
             eos_pad=self.eos_var,
-            pad_val=1234,
+            pad_val=tf.convert_to_tensor(1234, dtype=self.bos_var.dtype),
         )["values"]
 
         return (
             self.adaptor_col(col_feats_reshaped) + row_feats,
             self.adaptor_row(row_feats_reshaped) + col_feats,
-        )
-
-    def _scatter_feats(self, output_shape, sequence_feats, scatter_vals):
-        """Scatter features back to original shape."""
-        input_tensor = tf.zeros(shape=output_shape, dtype=tf.float32)
-        mask = tf.math.less(scatter_vals[:, :, 1], output_shape[1])
-        feats = tf.boolean_mask(sequence_feats, mask)
-        scatter_idxs = tf.boolean_mask(scatter_vals, mask)
-        divide_by = tf.tensor_scatter_nd_add(
-            input_tensor, scatter_idxs, tf.ones_like(feats)
-        )
-        return tf.math.divide_no_nan(
-            tf.tensor_scatter_nd_add(input_tensor, scatter_idxs, feats), divide_by
         )

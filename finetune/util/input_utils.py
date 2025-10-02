@@ -1,3 +1,5 @@
+import typing as t
+
 import tensorflow as tf
 
 from finetune.util.timing import ProgressBar
@@ -59,57 +61,64 @@ def batch_dataset(
     table_batching: bool = False,
     random_seed: int = 42,
     drop_remainder: bool = False,
+    batch_postprocessor: t.Callable = None,
 ):
     if isinstance(shapes, tuple):
         shapes = ({**shapes[0], "length": tf.TensorShape([])}, shapes[1])
+        mode = "train"
     else:
         shapes = {**shapes, "length": tf.TensorShape([])}
+        mode = "predict"
 
     if table_batching:
         assert isinstance(
             shapes, tuple
         ), "You cannot use table batching to predict on tables as order is not guarenteed"
 
-        return (
+        dataset = (
             dataset.map(add_length)
             .shuffle(500 if shuffle else 1, seed=random_seed)
-            # When we update to tf.2.13 this will change to be a method on the dataset.
-            .apply(
-                tf.data.experimental.bucket_by_sequence_length(
-                    element_length_func=(
-                        lambda item, *_: tf.cast(
-                            tf.maximum(
-                                tf.reduce_sum(
-                                    item["context"][:, 0] - item["context"][:, 2] + 1
-                                ),
-                                tf.reduce_sum(
-                                    item["context"][:, 1] - item["context"][:, 3] + 1
-                                ),
+            .bucket_by_sequence_length(
+                element_length_func=(
+                    lambda item, *_: tf.cast(
+                        tf.maximum(
+                            tf.reduce_sum(
+                                item["context"][:, 0] - item["context"][:, 2] + 1
                             ),
-                            tf.int32,
-                        )
-                    ),
-                    bucket_boundaries=[max_length],
-                    bucket_batch_sizes=[batch_size, 1],
-                    padded_shapes=shapes,
-                    drop_remainder=drop_remainder,
-                )
+                            tf.reduce_sum(
+                                item["context"][:, 1] - item["context"][:, 3] + 1
+                            ),
+                        ),
+                        tf.int32,
+                    )
+                ),
+                bucket_boundaries=[max_length],
+                bucket_batch_sizes=[batch_size, 1],
+                padded_shapes=shapes,
+                drop_remainder=drop_remainder,
             )
-            .repeat(n_epochs)
-            .prefetch(tf.data.AUTOTUNE)
         )
+        if batch_postprocessor is not None:
+            dataset = dataset.apply(
+                batch_postprocessor.get_dataset_transform(mode=mode)
+            )
+
+        return dataset.repeat(n_epochs).prefetch(tf.data.AUTOTUNE)
 
     else:
-        return (
+        dataset = (
             dataset.map(add_length)
-            #            .map(expand_seq_to_multiple_of_16)
             .shuffle(500 if shuffle else 1, seed=random_seed)
-            .repeat(n_epochs)
             .padded_batch(
                 batch_size, padded_shapes=shapes, drop_remainder=drop_remainder
             )
-            .prefetch(tf.data.AUTOTUNE)
         )
+        if batch_postprocessor is not None:
+            dataset = dataset.apply(
+                batch_postprocessor.get_dataset_transform(mode=mode)
+            )
+
+        return dataset.repeat(n_epochs).prefetch(tf.data.AUTOTUNE)
 
 
 def wrap_tqdm(
@@ -121,6 +130,7 @@ def wrap_tqdm(
     total_epoch_offset=0,
     quiet=False,
     update_hook=None,
+    extra_data_epochs=0,
 ):
     assert mode in {"train", "predict"}
     if mode == "predict":
@@ -132,13 +142,19 @@ def wrap_tqdm(
         total = dataset_size
     epoch = 1
 
+    n_epochs += extra_data_epochs
+
     def internal_gen():
         nonlocal epoch
-        current_epoch = (epoch - 1) % n_epochs + 1
+        current_epoch = (epoch - 1) % (n_epochs + 1)
         it = iter(gen())
-        desc = "Epoch {}/{}".format(
-            current_epoch + current_epoch_offset, n_epochs + total_epoch_offset
-        )
+        if current_epoch < extra_data_epochs:
+            desc = "Data Preprocessing"
+        else:
+            desc = "Epoch {}/{}".format(
+                current_epoch + current_epoch_offset - extra_data_epochs,
+                n_epochs + total_epoch_offset - extra_data_epochs,
+            )
         for i in ProgressBar(
             it,
             desc=desc,

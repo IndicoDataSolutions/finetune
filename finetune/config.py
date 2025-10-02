@@ -322,6 +322,7 @@ def get_default_config():
         max_row_col_embedding=1024,
         chunk_tables=False,
         table_batching=False,
+        extra_data_epochs=0,
         # chunking_tweaks
         reshuffle_chunks=False,
         predict_chunk_markers=False,

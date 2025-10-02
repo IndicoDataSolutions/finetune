@@ -5,10 +5,14 @@ import copy
 import functools
 import logging
 import os
+import queue
+import select
 import sys
 import tempfile
+import time
 import typing as t
 
+import billiard as mp
 from sequence_metrics.metrics import sequences_overlap
 
 from finetune import SequenceLabeler
@@ -666,6 +670,128 @@ class TableChunker:
         )
 
 
+def _train_table_in_subprocess(
+    table_model_config: t.Dict[str, t.Any],
+    model_inputs: t.Dict[str, t.Any],
+    chunk_tables: bool,
+    table_model_path: str,
+    classes_queue: "mp.Queue",
+    progress_queue: "mp.Queue",
+    stdout_fifo_path: str,
+    stderr_fifo_path: str,
+):
+    """
+    Train the table model in a subprocess.
+    """
+    # Redirect child stdout/stderr to provided FIFO paths
+    register_stdio_fifo(stdout_path=stdout_fifo_path, stderr_path=stderr_fifo_path)
+    table_model = SequenceLabeler(base_model=TableRoBERTa, **(table_model_config or {}))
+    if chunk_tables:
+        model_inputs = TableChunker.from_table_model(table_model).chunk(model_inputs)
+
+    table_model.fit(
+        model_inputs["table_text"],
+        model_inputs["table_labels"],
+        context=model_inputs["table_context"],
+        update_hook=progress_queue.put,
+    )
+    classes_queue.put(table_model.classes)
+    table_model.save(table_model_path)
+    table_model.close(update_saver=False)
+
+
+# The following helpers are celery-compatible way of forwarding stdout/stderr to the parent process.
+# Most of the credit for this goes to GPT-5.
+def setup_stdio_intercept(tmpdir: str):
+    """Create named FIFOs for stdout and stderr.
+
+    Celery/billiard daemonized processes may not support passing FDs reliably.
+    FIFOs avoid FD inheritance issues: we pass paths and open them on each side.
+
+    Returns:
+        stdout_fifo_path, stderr_fifo_path, read_fds, fd_to_stream
+    """
+    stdout_fifo_path = os.path.join(tmpdir, "child_stdout.fifo")
+    stderr_fifo_path = os.path.join(tmpdir, "child_stderr.fifo")
+    for path in (stdout_fifo_path, stderr_fifo_path):
+        if os.path.exists(path):
+            os.remove(path)
+        os.mkfifo(path, 0o600)
+    # Open FIFOs for reading in non-blocking mode on parent side
+    stdout_r = os.open(stdout_fifo_path, os.O_RDONLY | os.O_NONBLOCK)
+    stderr_r = os.open(stderr_fifo_path, os.O_RDONLY | os.O_NONBLOCK)
+    fd_to_stream = {stdout_r: sys.stdout, stderr_r: sys.stderr}
+    return stdout_fifo_path, stderr_fifo_path, fd_to_stream
+
+
+def register_stdio_fifo(stdout_path: str, stderr_path: str):
+    """In child: open FIFO paths for writing and dup2 onto stdout/stderr.
+
+    The open() calls will block until the parent has opened the reading end,
+    which is fine because the parent opens read ends before spawning.
+    """
+    # Open write ends (blocking) and dup2
+    stdout_w = os.open(stdout_path, os.O_WRONLY)
+    stderr_w = os.open(stderr_path, os.O_WRONLY)
+    # By convention file descriptors 1 and 2 are stdout and stderr respectively
+    os.dup2(stdout_w, 1)
+    os.close(stdout_w)
+    os.dup2(stderr_w, 2)
+    os.close(stderr_w)
+
+
+def cleanup_stdio_intercept(
+    fd_to_stream: t.Dict[int, t.TextIO], fifo_paths: t.List[str]
+) -> None:
+    """Close all file descriptors in the dictionary."""
+    for rfd in fd_to_stream.keys():
+        try:
+            os.close(rfd)
+        except OSError:
+            pass
+    for fifo_path in fifo_paths:
+        try:
+            os.remove(fifo_path)
+        except OSError:
+            pass
+
+
+def consume_stdio_intercept(
+    fd_to_stream: t.Dict[int, t.TextIO], bufsize: int = 8192
+) -> None:
+    """Drain any available output from child pipes without blocking.
+
+    Uses select with zero timeout to poll which fds are readable. Reads up to
+    BUFSIZE bytes per fd. On EOF (read returns empty), closes and removes the fd
+    from monitoring. Writes bytes to the mapped sys.stdout/sys.stderr streams.
+    """
+    rlist, _, _ = select.select(fd_to_stream.keys(), [], [], 0)
+    for rfd in rlist:
+        try:
+            data = os.read(rfd, bufsize)
+        except OSError:
+            data = b""
+        if not data:
+            # EOF: stop monitoring this fd
+            try:
+                LOGGER.info("Closing IO forwarding for child process")
+                fd_to_stream.pop(rfd)
+                os.close(rfd)
+            except OSError:
+                pass
+            continue
+        # Best-effort write to the parent's stdout/stderr
+        try:
+            fd_to_stream[rfd].write(data.decode(errors="replace"))
+            fd_to_stream[rfd].flush()
+        except Exception:
+            # Do not crash logging path; continue draining
+            pass
+
+
+# End of STDIO forwarding helpers
+
+
 class TableLabeler:
     def __init__(
         self,
@@ -675,6 +801,7 @@ class TableLabeler:
         drop_table_from_text_preds: bool = True,
         split_preds_to_cells: bool = True,
         chunk_tables: bool = True,
+        train_in_subprocess: bool = True,
     ):
         self.etl = TableETL(
             drop_table_from_text_labels=drop_table_from_text_labels,
@@ -682,12 +809,17 @@ class TableLabeler:
             split_preds_to_cells=split_preds_to_cells,
             chunk_tables=chunk_tables,
         )
-        # Delay construction of these models.
+        # Persist configs for use from a spawned child process.
+        self.table_model_config = table_model_config or {}
+        self.text_model_config = text_model_config or {}
+        self.train_in_subprocess = train_in_subprocess
+
+        # Delay construction of these models in the main process.
         self._get_table_model = functools.partial(
-            SequenceLabeler, base_model=TableRoBERTa, **(table_model_config or {})
+            SequenceLabeler, base_model=TableRoBERTa, **self.table_model_config
         )
         self._get_text_model = functools.partial(
-            SequenceLabeler, **(text_model_config or {})
+            SequenceLabeler, **self.text_model_config
         )
 
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -703,7 +835,7 @@ class TableLabeler:
         # The models are closed by default. We just need this method to keep the API consistent.
         pass
 
-    def _fit_table_model(self, model_inputs, update_hook):
+    def _fit_table_model_local(self, model_inputs, update_hook):
         table_model = self._get_table_model()
         if self.etl.chunk_tables:
             model_inputs = TableChunker.from_table_model(table_model).chunk(
@@ -724,6 +856,72 @@ class TableLabeler:
         table_model.close(update_saver=False)
         del table_model
         MODEL_REGISTRY.cleanup()
+        return model_inputs
+
+    def _fit_table_model_subprocess(
+        self, model_inputs, update_hook, poll_interval_seconds=5
+    ):
+        ctx = mp.get_context("spawn")
+        classes_queue = ctx.Queue()
+        progress_queue = ctx.Queue()
+        stdout_fifo_path, stderr_fifo_path, fd_to_stream = setup_stdio_intercept(
+            self.temp_dir.name
+        )
+
+        p = ctx.Process(
+            target=_train_table_in_subprocess,
+            args=(
+                self.table_model_config,
+                model_inputs,
+                self.etl.chunk_tables,
+                self.table_model_path,
+                classes_queue,
+                progress_queue,
+                stdout_fifo_path,
+                stderr_fifo_path,
+            ),
+        )
+        p.start()
+
+        while p.is_alive() or not progress_queue.empty() or fd_to_stream:
+            try:
+                while True:
+                    payload = progress_queue.get_nowait()
+                    if update_hook is not None:
+                        LOGGER.info("Table model calling update hook")
+                        update_hook(payload)
+            except queue.Empty:
+                pass
+            # Drain any available child output without blocking
+            consume_stdio_intercept(fd_to_stream)
+            if p.is_alive():
+                time.sleep(poll_interval_seconds)
+
+        p.join()
+        LOGGER.info("Table Model Training Subprocess Complete")
+        try:
+            progress_queue.close()
+            progress_queue.join_thread()
+        except (OSError, AttributeError, ValueError):
+            pass
+        cleanup_stdio_intercept(fd_to_stream, [stdout_fifo_path, stderr_fifo_path])
+
+        if not os.path.exists(self.table_model_path):
+            raise FinetuneError(
+                "Table model training subprocess did not save the model"
+            )
+
+        if p.exitcode != 0:
+            raise FinetuneError(
+                f"Table model training subprocess exited with code {p.exitcode}"
+            )
+
+        # Collect classes from child
+        self.classes.update(classes_queue.get_nowait())
+
+        del model_inputs["table_text"]
+        del model_inputs["table_labels"]
+        del model_inputs["table_context"]
         return model_inputs
 
     def _fit_text_model(self, model_inputs, update_hook):
@@ -754,9 +952,17 @@ class TableLabeler:
         model_inputs = self.etl.get_table_text_chunks_and_context(
             text=text, tables=tables, labels=labels
         )
-        model_inputs = self._fit_table_model(
-            model_inputs, update_hook=table_update_hook
-        )
+
+        if self.train_in_subprocess:
+            model_inputs = self._fit_table_model_subprocess(
+                model_inputs, update_hook=table_update_hook
+            )
+        else:
+            model_inputs = self._fit_table_model_local(
+                model_inputs, update_hook=table_update_hook
+            )
+
+        # Train text model in main process after table process has fully exited.
         self._fit_text_model(model_inputs, update_hook=text_update_hook)
 
     def save(self, path: str) -> None:

@@ -20,6 +20,7 @@ from finetune.base_models.bert.roberta_encoder import (
     RoBERTaEncoderV2,
     RoBERTaEncoderXDoc,
 )
+from finetune.base_models.bert.table_utils import TableModelBatchPostprocessor
 from finetune.util.context_utils import get_context_doc_rep, get_context_layoutlm
 from finetune.util.download import (
     BERT_BASE_URL,
@@ -484,14 +485,14 @@ class TableRoBERTa(_BaseBert):
     # Due to use of ragged tensors we cannot support XLA for this model.
     # Wrapping the inner call method in a tf.function with jit_compile=False causes missing gradient errors that I don't understand.
     # Longeer term we should try to refactor this to use a more XLA friendly approach.
-    supports_xla = False
+    supports_xla = True
     settings = {
         **BERT_BASE_PARAMS,
         # Just incase all cells fall into the same buckets this -8 allows us to pack the batches much tighter once we add EOS and BOS
         "max_length": 2048 - 8,
-        "table_batching": True,
+        "table_batching": False,
         "chunk_tables": True,
-        "batch_size": 2,  # When table batching is true this becomes a nominal batch size. Very long docs have batch size = 1
+        "batch_size": 1,  # When table batching is true this becomes a nominal batch size. Very long docs have batch size = 1
         "class_weights": None,
         "n_epochs": 24,
         "epsilon": 1e-8,
@@ -513,6 +514,7 @@ class TableRoBERTa(_BaseBert):
         "include_bos_eos": False,
         "permit_uninitialized": r"mixing_fn_|pos_|kernel|bias",  # TODO: this can be refined.
         "predict_batch_size": 1,
+        "extra_data_epochs": 1,  # Just a fudge for now because we draw down one epoch for batch stats.
     }
     required_files = [
         {
@@ -538,3 +540,7 @@ class TableRoBERTa(_BaseBert):
             "url": urljoin(ROBERTA_BASE_URL, "roberta_encoder.json"),
         },
     ]
+
+    @classmethod
+    def get_batch_postprocessor(cls, config):
+        return TableModelBatchPostprocessor(config=config)

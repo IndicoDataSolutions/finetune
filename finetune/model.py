@@ -36,16 +36,22 @@ def get_keras_model(
 
         def call(self, data, **kwargs):
             LOGGER.debug("Tracing Model Function")
-            features: dict[str, tf.Tensor] = self.featurizer(
-                tokens=data["tokens"],
-                context=data.get("context", None),
-                sequence_lengths=data["length"],
-                **kwargs
-            )
+            # Data contains:
+            # * tokens
+            # * length
+            # * context (optional - only for models with context)
+            # * row_gather (optional - only for the Table Model)
+            # * col_gather (optional - only for the Table Model)
+
+            data = dict(data)  # Keras doesn't like it if we modify the dict in place
+            length = data.pop("length")
+            data["sequence_lengths"] = length
+            data["context"] = data.get("context", None)
+            features: dict[str, tf.Tensor] = self.featurizer(**data, **kwargs)
             # Unpack to include things like lengths
             if self.target_block is not None:
                 target_output: dict[str, tf.Tensor] = self.target_block(
-                    {**features, "length": data["length"]}  # , **data}
+                    {**features, "length": length}
                 )
             else:
                 target_output = {}

@@ -280,14 +280,36 @@ Some text after the table"""
     return text, labels, tables
 
 
-def test_fit_predict(labeled_table_data):
+def test_fit_predict_with_callbacks(labeled_table_data):
     filename = "tl.jl"
     text, labels, tables = labeled_table_data
     tl = TableLabeler(
-        table_model_config={"n_epochs": 1}, text_model_config={"n_epochs": 1}
+        table_model_config={"n_epochs": 1},
+        text_model_config={"n_epochs": 1},
     )
-    tl.fit(text=text, labels=labels, tables=tables)
+    table_update_hook_called_count = 0
+    text_update_hook_called_count = 0
+
+    def table_update_hook(x):
+        nonlocal table_update_hook_called_count
+        table_update_hook_called_count += 1
+        print("Table Update Hook", x)
+
+    def text_update_hook(x):
+        nonlocal text_update_hook_called_count
+        text_update_hook_called_count += 1
+        print("Text Update Hook", x)
+
+    tl.fit(
+        text=text,
+        labels=labels,
+        tables=tables,
+        table_update_hook=table_update_hook,
+        text_update_hook=text_update_hook,
+    )
     tl.save(filename)
+    assert table_update_hook_called_count > 0
+    assert text_update_hook_called_count > 0
     del tl
     shed = Scheduler()
     preds = TableLabeler.predict_from_file(
