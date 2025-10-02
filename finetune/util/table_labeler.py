@@ -801,7 +801,7 @@ class TableLabeler:
         drop_table_from_text_preds: bool = True,
         split_preds_to_cells: bool = True,
         chunk_tables: bool = True,
-        train_in_process: bool = True,
+        train_in_subprocess: bool = True,
     ):
         self.etl = TableETL(
             drop_table_from_text_labels=drop_table_from_text_labels,
@@ -812,7 +812,7 @@ class TableLabeler:
         # Persist configs for use from a spawned child process.
         self.table_model_config = table_model_config or {}
         self.text_model_config = text_model_config or {}
-        self.train_in_process = train_in_process
+        self.train_in_subprocess = train_in_subprocess
 
         # Delay construction of these models in the main process.
         self._get_table_model = functools.partial(
@@ -953,7 +953,7 @@ class TableLabeler:
             text=text, tables=tables, labels=labels
         )
 
-        if self.train_in_process:
+        if self.train_in_subprocess:
             model_inputs = self._fit_table_model_subprocess(
                 model_inputs, update_hook=table_update_hook
             )

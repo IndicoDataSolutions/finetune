@@ -316,26 +316,46 @@ def build_gather_outputs(
         seq_padding = tf.maximum(target_seq_len - tf.shape(col_values)[1], 0)
         batch_padding = tf.maximum(target_batch_size - tf.shape(col_values)[0], 0)
         pad0 = tf.pad(
-            col_values[:, :target_seq_len, 0],
+            col_values[:target_batch_size, :target_seq_len, 0],
             [[0, batch_padding], [0, seq_padding]],
             constant_values=pad_val[0],
         )
         pad1 = tf.pad(
-            col_values[:, :target_seq_len, 1],
+            col_values[:target_batch_size, :target_seq_len, 1],
             [[0, batch_padding], [0, seq_padding]],
             constant_values=pad_val[1],
         )
-        col_values = tf.stack([pad0, pad1], axis=-1)
+        # The ensure shapes will raise an error if the shapes don't match. But we are being
+        # very defensive here so it should be fine and variations will make train time / memory explode
+        # if we get this even slightly wrong.
+        col_values = tf.ensure_shape(
+            tf.stack([pad0, pad1], axis=-1),
+            [target_batch_size, target_seq_len, 2],
+        )
         if include_mask:
-            mask = tf.pad(
-                mask[:, :target_seq_len, :target_seq_len],
-                [[0, batch_padding], [0, seq_padding], [0, seq_padding]],
-                constant_values=0,
+            mask = tf.ensure_shape(
+                tf.pad(
+                    mask[:target_batch_size, :target_seq_len, :target_seq_len],
+                    [[0, batch_padding], [0, seq_padding], [0, seq_padding]],
+                    constant_values=0,
+                ),
+                [target_batch_size, target_seq_len, target_seq_len],
             )
-        pos_ids = tf.pad(
-            pos_ids[:, :target_seq_len],
-            [[0, batch_padding], [0, seq_padding]],
-            constant_values=0,
+        pos_ids = tf.ensure_shape(
+            tf.pad(
+                pos_ids[:target_batch_size, :target_seq_len],
+                [[0, batch_padding], [0, seq_padding]],
+                constant_values=0,
+            ),
+            [target_batch_size, target_seq_len],
+        )
+        col_seq_lens = tf.ensure_shape(
+            tf.pad(
+                col_seq_lens[:target_batch_size],
+                [[0, batch_padding]],
+                constant_values=0,
+            ),
+            [target_batch_size],
         )
 
     col_values.set_shape([None, None, 2])
