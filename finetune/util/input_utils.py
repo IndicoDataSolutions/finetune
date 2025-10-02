@@ -76,8 +76,8 @@ def batch_dataset(
         ), "You cannot use table batching to predict on tables as order is not guarenteed"
 
         dataset = (
-            dataset.map(add_length).shuffle(500 if shuffle else 1, seed=random_seed)
-            # When we update to tf.2.13 this will change to be a method on the dataset.
+            dataset.map(add_length)
+            .shuffle(500 if shuffle else 1, seed=random_seed)
             .bucket_by_sequence_length(
                 element_length_func=(
                     lambda item, *_: tf.cast(
