@@ -73,7 +73,7 @@ class ModernBertModel(_ModernBertBase):
                 "n_epochs": base_n_epochs,
                 "batch_size": 8,
                 "chunk_context": None,
-                "predict_batch_size": 16,
+                "predict_batch_size": 8,
                 "mixed_precision": True,
                 "float_16_predict": True,
                 "lr": base_learning_rate,

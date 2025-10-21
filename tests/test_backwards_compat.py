@@ -1,5 +1,6 @@
 import glob
 import os
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -43,6 +44,20 @@ def test_roberta_default_no_change(get_untrained_sequence_labeler):
     model.save("./test_model.jl")
     model = SequenceLabeler.load("./test_model.jl")
     assert model.config.collapse_whitespace == True
+
+
+def test_table_model_predict_batch_size_override(monkeypatch):
+    model_path = (
+        Path(__file__).parent
+        / "backwards_compat_bundles"
+        / "ModernBertModel_sequence_labeling_crf_True.jl"
+    )
+    model = SequenceLabeler.load(model_path, key="model")
+    try:
+        assert model.config.optimize_for.lower() == "accuracy"
+        assert model.config.predict_batch_size == 8
+    finally:
+        model.close()
 
 
 # TODO: eventually clean this up and push these files to s3.
