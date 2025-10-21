@@ -191,6 +191,7 @@ class BaseModel(object, metaclass=ABCMeta):
         current_predict_batch = config.get("predict_batch_size")
         if (
             override_predict_batch is not None
+            and current_predict_batch is not None
             and override_predict_batch < current_predict_batch
             and hasattr(self, "config")
         ):
