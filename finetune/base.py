@@ -187,6 +187,19 @@ class BaseModel(object, metaclass=ABCMeta):
                 raise ValueError("There is no auto setting for {}".format(ak))
             config[ak] = overrides[ak]
 
+        override_predict_batch = overrides.get("predict_batch_size")
+        current_predict_batch = config.get("predict_batch_size")
+        if (
+            override_predict_batch is not None
+            and current_predict_batch is not None
+            and override_predict_batch < current_predict_batch
+            and hasattr(self, "config")
+        ):
+            LOGGER.info(
+                f"Overriding loaded predict batch size from {current_predict_batch} to the new default of {override_predict_batch}"
+            )
+            self.config["predict_batch_size"] = override_predict_batch
+
         if hasattr(self, "input_pipeline"):
             self.input_pipeline.config = config
 
