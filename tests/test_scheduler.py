@@ -1,9 +1,12 @@
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
+import tensorflow as tf
 
 import finetune.scheduler as scheduler_mod
 from finetune.base_models import SourceModel
+from finetune.base_models.bert.table_utils import TableModelBatchPostprocessor
 from finetune.errors import FinetuneSchedulerError
 from finetune.scheduler import Scheduler
 
@@ -232,3 +235,46 @@ def test_update_memory_limit_uses_per_process_fraction(fake_memory):
     shed._update_memory_limit(model)
 
     assert shed.gpu_memory_limit == 400
+
+
+def test_table_predict_batch_postprocessor_matches_direct_postprocess():
+    config = SimpleNamespace(
+        context_dim=4,
+        chunk_tables=True,
+        predict_batch_size=1,
+        max_length=2048,
+    )
+    postprocessor = TableModelBatchPostprocessor(config=config)
+
+    features = {
+        "tokens": np.array([1, 2, 3, 4], dtype=np.int32),
+        "context": np.array(
+            [
+                [0, 0, 0, 0],
+                [0, 0, 1, 0],
+                [1, 0, 2, 0],
+                [1, 0, 3, 0],
+            ],
+            dtype=np.float32,
+        ),
+    }
+
+    batch = next(
+        postprocessor.iter_predict_batches(iter([features]), predict_batch_size=1)
+    )
+    direct = postprocessor._postprocess(
+        {
+            "tokens": tf.convert_to_tensor([[1, 2, 3, 4]], dtype=tf.int32),
+            "context": tf.convert_to_tensor([features["context"]], dtype=tf.float32),
+            "length": tf.convert_to_tensor([4], dtype=tf.int32),
+        },
+        training=False,
+    )
+
+    for key in ("tokens", "context", "length"):
+        np.testing.assert_array_equal(batch[key].numpy(), direct[key].numpy())
+    for key in ("row_gather", "col_gather"):
+        for inner_key in ("seq_lens", "values", "attn_mask", "pos_ids"):
+            np.testing.assert_array_equal(
+                batch[key][inner_key].numpy(), direct[key][inner_key].numpy()
+            )

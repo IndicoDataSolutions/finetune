@@ -407,9 +407,22 @@ class BaseModel(object, metaclass=ABCMeta):
         def get_zipped_data():
             return iter(zipped_data)
 
-        input_fn = self.input_pipeline.get_dataset_from_generator(
-            get_zipped_data, input_mode=InputMode.PREDICT, update_hook=update_hook
-        )["predict_dataset"]
+        predict_batch_iter = getattr(
+            self.input_pipeline.batch_postprocessor, "iter_predict_batches", None
+        )
+        if predict_batch_iter is not None:
+
+            def feature_iter():
+                for data in get_zipped_data():
+                    yield from self.input_pipeline.text_to_tokens_mask(**data)
+
+            input_fn = predict_batch_iter(
+                feature_iter(), predict_batch_size=self.config.predict_batch_size
+            )
+        else:
+            input_fn = self.input_pipeline.get_dataset_from_generator(
+                get_zipped_data, input_mode=InputMode.PREDICT, update_hook=update_hook
+            )["predict_dataset"]
 
         model = self.model
 
