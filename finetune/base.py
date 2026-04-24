@@ -428,7 +428,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 if v.shape[0] != batch_size or k == "transition_params"
             }
             for i in range(batch_size):
-                progress.update(i)
+                progress.update(1)
                 step_value = {
                     k: pred_numpy[k] if k in not_batched else pred_numpy[k][i]
                     for k in pred_numpy
