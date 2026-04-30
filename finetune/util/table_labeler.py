@@ -441,7 +441,10 @@ class TableChunker:
         max_row = max(r[context_key] for r in context)
         row_spans = [[] for _ in range(max_row + 1)]
         for c in context:
-            row_spans[c[context_key]].append(
+            row_idx = c[context_key]
+            if row_idx < 0:
+                continue
+            row_spans[row_idx].append(
                 {
                     "start": c["start"],
                     "end": c["end"],
@@ -628,8 +631,18 @@ class TableChunker:
         return output_spans
 
     def combine_row_spans(self, row_spans, token_spans):
-        token_starts = [t["start"] for t in token_spans]
-        token_ends = [t["end"] for t in token_spans]
+        token_starts = []
+        token_ends = []
+        token_spans_monotonic = True
+        for token in token_spans:
+            token_start = token["start"]
+            token_end = token["end"]
+            if token_starts and (
+                token_start < token_starts[-1] or token_end < token_ends[-1]
+            ):
+                token_spans_monotonic = False
+            token_starts.append(token_start)
+            token_ends.append(token_end)
         combined_rows = []
         for row in row_spans:
             row_out = []
@@ -640,16 +653,22 @@ class TableChunker:
                     row_out.append(span)
             for row_span in row_out:
                 num_tokens = 0
-                token_idx = bisect.bisect_left(token_ends, row_span["start"])
-                while (
-                    token_idx < len(token_spans)
-                    and token_starts[token_idx] <= row_span["end"]
-                ):
-                    token = token_spans[token_idx]
-                    if overlaps_token(row_span, token):
-                        token["used"] = True
-                        num_tokens += 1
-                    token_idx += 1
+                if token_spans_monotonic:
+                    token_idx = bisect.bisect_left(token_ends, row_span["start"])
+                    while (
+                        token_idx < len(token_spans)
+                        and token_starts[token_idx] <= row_span["end"]
+                    ):
+                        token = token_spans[token_idx]
+                        if overlaps_token(row_span, token):
+                            token["used"] = True
+                            num_tokens += 1
+                        token_idx += 1
+                else:
+                    for token in token_spans:
+                        if overlaps_token(row_span, token):
+                            token["used"] = True
+                            num_tokens += 1
                 row_span["num_tokens"] = num_tokens
                 # Accounts for the fact that cells are duplicated when they span cells.
                 row_span["num_effective_tokens"] = (
