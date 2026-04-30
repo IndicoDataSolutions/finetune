@@ -407,22 +407,9 @@ class BaseModel(object, metaclass=ABCMeta):
         def get_zipped_data():
             return iter(zipped_data)
 
-        predict_batch_iter = getattr(
-            self.input_pipeline.batch_postprocessor, "iter_predict_batches", None
-        )
-        if predict_batch_iter is not None:
-
-            def feature_iter():
-                for data in get_zipped_data():
-                    yield from self.input_pipeline.text_to_tokens_mask(**data)
-
-            input_fn = predict_batch_iter(
-                feature_iter(), predict_batch_size=self.config.predict_batch_size
-            )
-        else:
-            input_fn = self.input_pipeline.get_dataset_from_generator(
-                get_zipped_data, input_mode=InputMode.PREDICT, update_hook=update_hook
-            )["predict_dataset"]
+        input_fn = self.input_pipeline.get_dataset_from_generator(
+            get_zipped_data, input_mode=InputMode.PREDICT, update_hook=update_hook
+        )["predict_dataset"]
 
         model = self.model
 
@@ -441,7 +428,7 @@ class BaseModel(object, metaclass=ABCMeta):
                 if v.shape[0] != batch_size or k == "transition_params"
             }
             for i in range(batch_size):
-                progress.update(1)
+                progress.update(i)
                 step_value = {
                     k: pred_numpy[k] if k in not_batched else pred_numpy[k][i]
                     for k in pred_numpy
