@@ -81,7 +81,7 @@ def fix_spans(
     output_space: str,
 ) -> DocumentSpans:
     """
-    convers a list of spans (anything with a start, end and optionally text, usually labels or context)
+    converts a list of spans (anything with a start, end and optionally text, usually labels or context)
     between 2 character spaces (document and table)
 
     Will do 1 -> many splits when a span spreads across multiple chunks.
@@ -165,7 +165,7 @@ class TableETL:
         self, doc_offsets: t.List[t.Dict[str, int]]
     ) -> TableChunks:
         """
-        Converts the offet list from the table into a Chunk object.
+        Converts the offset list from the table into a Chunk object.
         Storing the mapping from original document to the table-text
         as output by get_table_text.
         """
@@ -685,7 +685,7 @@ class TableChunker:
             )
         for t in token_spans:
             if not t.get("used", False) and not t.get("ws", False):
-                LOGGER.warn(f"Token {t} does not appear in any row spans")
+                LOGGER.warning(f"Token {t} does not appear in any row spans")
         return combined_rows
 
     @classmethod
