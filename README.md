@@ -20,8 +20,8 @@ Finetune currently supports TensorFlow implementations of the following models:
 | Section | Description |
 |-|-|
 | [API Tour](#finetune-api-tour) | Base models, configurables, and more |
-| [Installation](#installation-tour) | How to install using pip or directly from source |
-| [Finetune with Docker](#docker) | Finetune and inference within a Docker Container |
+| [Installation](#installation) | Build with Docker or install from source |
+| [Finetune with Docker](#docker) | Build a container from this repository |
 | [Documentation](https://finetune.indico.io/) | Full API documentation |
 
 # Finetune API Tour
@@ -80,49 +80,54 @@ model.save(path)                   # Serialize the model to disk
 
 # Installation
 
-Finetune can be installed directly from PyPI by using `pip`
+Build from this repository with Docker (recommended), or install from source.
+Use Python 3.12 for a source install to match the Dockerfile.
 
-```
-pip3 install finetune
-```
-
-or installed directly from source:
+Clone the maintained development branch:
 
 ```bash
-git clone -b master https://github.com/IndicoDataSolutions/finetune && cd finetune
-python3 setup.py develop              # symlinks the git directory to your python path
-pip3 install tensorflow-gpu --upgrade # or tensorflow-cpu
-python3 -m spacy download en          # download spacy tokenizer
+git clone --branch development https://github.com/IndicoDataSolutions/finetune.git
+cd finetune
 ```
 
-In order to run `finetune` on your host, you'll need a working copy of tensorflow-gpu >= 1.14.0 and up to date nvidia-driver versions.
+## Docker
 
-You can optionally run the provided test suite to ensure installation completed successfully.
+Install [Docker](https://docs.docker.com/engine/install/), then build the provided Dockerfile:
 
 ```bash
-pip3 install pytest
-pytest
+docker build -t finetune:source .
+docker run --rm -it -v "$PWD:/Finetune" finetune:source bash
 ```
 
+Inside the container, install the mounted source and the spaCy tokenizer:
 
-# Docker
-
-If you'd prefer you can also run `finetune` in a docker container. The bash scripts provided assume you have a functional install of [docker](https://docs.docker.com/install/) and [nvidia-docker](https://github.com/nvidia/nvidia-docker/wiki/Installation-(version-2.0)).
-
-```
-git clone https://github.com/IndicoDataSolutions/finetune && cd finetune
-
-# For usage with NVIDIA GPUs
-./docker/build_gpu_docker.sh      # builds a docker image
-./docker/start_gpu_docker.sh      # starts a docker container in the background, forwards $PWD to /finetune
-
-docker exec -it finetune bash # starts a bash session in the docker container
+```bash
+python -m pip install -e '.[test]'
+python -m spacy download en_core_web_sm
+python -c "import finetune"
 ```
 
-For CPU-only usage:
+For NVIDIA GPU access, install the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+and add `--gpus all` to the `docker run` command.
+The Dockerfile includes TensorFlow 2.20.0 and its CUDA dependencies.
+
+## Install from source
+
+From the cloned repository, create a virtual environment and install the source with TensorFlow:
+
+```bash
+python3.12 -m venv .venv
+. .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e '.[tf,test]'
+python -m spacy download en_core_web_sm
+python -c "import finetune"
 ```
-./docker/build_cpu_docker.sh
-./docker/start_cpu_docker.sh
+
+To run the test suite in either environment:
+
+```bash
+python -m pytest
 ```
 
 # Documentation
