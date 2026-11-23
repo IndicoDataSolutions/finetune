@@ -82,6 +82,7 @@ model.save(path)                   # Serialize the model to disk
 
 Build from this repository with Docker (recommended), or install from source.
 Use Python 3.12 for a source install to match the Dockerfile.
+The current encoder API requires `tokenizers<0.23`; the commands below constrain that dependency.
 
 Clone the maintained development branch:
 
@@ -102,7 +103,7 @@ docker run --rm -it -v "$PWD:/Finetune" finetune:source bash
 Inside the container, install the mounted source and the spaCy tokenizer:
 
 ```bash
-python -m pip install -e '.[test]'
+python -m pip install -e '.[test]' 'tokenizers<0.23'
 python -m spacy download en_core_web_sm
 python -c "import finetune"
 ```
@@ -119,7 +120,7 @@ From the cloned repository, create a virtual environment and install the source 
 python3.12 -m venv .venv
 . .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -e '.[tf,test]'
+python -m pip install -e '.[tf,test]' 'tokenizers<0.23'
 python -m spacy download en_core_web_sm
 python -c "import finetune"
 ```
